@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+release/
+.runtime/
+.artifacts/
+coverage/
+*.tsbuildinfo
+*.log
+alma/
+页面预览效果图/
+docs/

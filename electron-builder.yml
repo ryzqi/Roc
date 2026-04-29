@@ -1,0 +1,14 @@
+appId: com.roc.desktop
+productName: Roc Windows Super Assistant
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  signAndEditExecutable: false
+  target:
+    - dir
+  artifactName: Roc-Windows-Super-Assistant-${version}.${ext}

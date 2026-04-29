@@ -1,0 +1,266 @@
+import { createDeepAgent } from 'deepagents';
+import type {
+  AgentCapabilityCard,
+  AgentCapabilityPreview,
+  AgentRuntimeStatus,
+  AgentSubagentPreview,
+  DeepAgentConfigPreview,
+  EnabledCapabilities,
+  McpServerSnapshot,
+  SkillSnapshot,
+  SkippedCapability
+} from '../../shared/types';
+import type { ConfigService } from './config-service';
+import type { McpService } from './mcp-service';
+import type { SkillService } from './skill-service';
+
+export class AgentService {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly mcpService: McpService,
+    private readonly skillService: SkillService
+  ) {}
+
+  getStatus(): AgentRuntimeStatus {
+    const defaultModelState = this.configService.getDefaultModelState();
+    const defaultModelConfigured = defaultModelState.status === 'ready';
+
+    return {
+      deepAgentsPackage: 'available',
+      deepAgentsApi: {
+        createDeepAgent: typeof createDeepAgent === 'function'
+      },
+      defaultModelConfigured,
+      defaultModelState,
+      memoryAccess: 'memory_service_only',
+      execution: defaultModelConfigured ? 'ready' : 'blocked_until_provider_configured'
+    };
+  }
+
+  getDeepAgentConfigPreview(): DeepAgentConfigPreview {
+    const defaultModelState = this.configService.getDefaultModelState();
+    if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
+      throw this.configService.createDefaultModelError(defaultModelState);
+    }
+
+    return {
+      runnable: false,
+      model: defaultModelState.modelId,
+      memoryAccess: 'memory_service_only',
+      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'],
+      rocTools: ['memory_search', 'memory_get'],
+      todoMapping: {
+        sourceTool: 'write_todos',
+        target: 'task_steps'
+      },
+      interruptOn: {
+        write_file: true,
+        edit_file: true,
+        terminal_command: true,
+        git_operation: true
+      },
+      reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
+    };
+  }
+
+  getCapabilityPreview(requestedCapabilities: EnabledCapabilities): AgentCapabilityPreview {
+    const defaultModelState = this.configService.getDefaultModelState();
+    if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
+      throw this.configService.createDefaultModelError(defaultModelState);
+    }
+
+    const mcpServers = this.mcpService.listServers();
+    const skills = this.skillService.list();
+    const skippedCapabilities: SkippedCapability[] = [];
+    const selectedMcpServers: string[] = [];
+    const selectedSkills: string[] = [];
+    const selectedMcpCards: AgentCapabilityCard[] = [];
+    const selectedSkillCards: AgentCapabilityCard[] = [];
+
+    for (const serverId of requestedCapabilities.mcpServers) {
+      const server = mcpServers.find((item) => item.id === serverId);
+      if (server === undefined) {
+        skippedCapabilities.push({ id: serverId, type: 'mcp_server', reason: 'not_found' });
+        continue;
+      }
+      if (!server.enabled) {
+        skippedCapabilities.push({ id: serverId, type: 'mcp_server', reason: 'disabled' });
+        continue;
+      }
+      selectedMcpServers.push(server.id);
+      selectedMcpCards.push(...this.createMcpToolCards(server));
+    }
+
+    for (const skillId of requestedCapabilities.skills) {
+      const skill = skills.find((item) => item.id === skillId);
+      if (skill === undefined) {
+        skippedCapabilities.push({ id: skillId, type: 'skill', reason: 'not_found' });
+        continue;
+      }
+      if (!skill.enabled) {
+        skippedCapabilities.push({ id: skillId, type: 'skill', reason: 'disabled' });
+        continue;
+      }
+      if (skill.status !== 'ready') {
+        skippedCapabilities.push({ id: skillId, type: 'skill', reason: 'invalid' });
+        continue;
+      }
+      selectedSkills.push(skill.id);
+      selectedSkillCards.push(this.createSkillCard(skill));
+    }
+
+    const webReadCard = this.createWebReadCard();
+    const memoryCards = this.createMemoryCards();
+    const toolCards = [...memoryCards, webReadCard, ...selectedMcpCards];
+
+    return {
+      runnable: false,
+      modelId: defaultModelState.modelId,
+      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'],
+      selectedCapabilities: {
+        mcpServers: selectedMcpServers,
+        skills: selectedSkills
+      },
+      requestedCapabilities,
+      skippedCapabilities,
+      toolCards,
+      skillCards: selectedSkillCards,
+      subagents: this.createSubagents(),
+      interruptOn: this.createInterruptPolicy(selectedMcpCards),
+      untrustedContextPolicy: 'external_content_reference_only',
+      reason: 'Phase 5R 只装配 Agent 能力预览，不执行 Deep Agents run。'
+    };
+  }
+
+  private createMcpToolCards(server: McpServerSnapshot): AgentCapabilityCard[] {
+    const allowedTools = server.allowedTools;
+    if (allowedTools === undefined) {
+      return [];
+    }
+    return allowedTools.map((toolName) => ({
+      id: `mcp:${server.id}:${toolName}`,
+      name: toolName,
+      capabilityType: 'mcp_tool',
+      description: `${server.name} 暴露的 MCP tool wrapper。`,
+      requiredInput: 'tool-specific JSON input',
+      scope: 'external',
+      dependencies: [server.id],
+      sideEffects: ['external_tool_call'],
+      requiresApproval: server.riskLevel !== 'low',
+      supportsLongTermGrant: true,
+      revokeGrantHint: '在能力管理视图撤销该 MCP server 的长期授权。',
+      riskLevel: server.riskLevel ?? 'medium',
+      auditCategory: 'mcp_call',
+      untrustedContext: true
+    }));
+  }
+
+  private createSkillCard(skill: SkillSnapshot): AgentCapabilityCard {
+    return {
+      id: `skill:${skill.id}`,
+      name: skill.name,
+      capabilityType: 'skill',
+      description: skill.description,
+      requiredInput: 'task goal and selected context',
+      scope: 'app',
+      dependencies: [],
+      sideEffects: ['can_trigger_tools_through_agent'],
+      requiresApproval: false,
+      supportsLongTermGrant: true,
+      revokeGrantHint: '在能力管理视图禁用或撤销该 Skill 授权。',
+      riskLevel: 'low',
+      auditCategory: 'skill_loaded',
+      untrustedContext: false,
+      sourcePath: skill.path
+    };
+  }
+
+  private createWebReadCard(): AgentCapabilityCard {
+    return {
+      id: 'web:web_read',
+      name: 'web_read',
+      capabilityType: 'web_read',
+      description: '读取用户给定 URL 或搜索结果 URL 的网页内容。',
+      requiredInput: 'url',
+      scope: 'network',
+      dependencies: ['explicit_url'],
+      sideEffects: ['network_read'],
+      requiresApproval: true,
+      supportsLongTermGrant: true,
+      revokeGrantHint: '在设置页网页与搜索授权中撤销。',
+      riskLevel: 'medium',
+      auditCategory: 'web_read',
+      untrustedContext: true
+    };
+  }
+
+  private createMemoryCards(): AgentCapabilityCard[] {
+    return [
+      {
+        id: 'memory:memory_search',
+        name: 'memory_search',
+        capabilityType: 'memory_tool',
+        description: '检索 Roc 长期记忆和会话回忆索引。',
+        requiredInput: 'query and optional scope',
+        scope: 'memory',
+        dependencies: ['MemoryService'],
+        sideEffects: [],
+        requiresApproval: false,
+        supportsLongTermGrant: false,
+        revokeGrantHint: '记忆工具由 Roc 内置边界提供，不创建长期授权。',
+        riskLevel: 'low',
+        auditCategory: 'memory_operation',
+        untrustedContext: false
+      },
+      {
+        id: 'memory:memory_get',
+        name: 'memory_get',
+        capabilityType: 'memory_tool',
+        description: '读取指定记忆条目的 Markdown 真相源。',
+        requiredInput: 'memory id',
+        scope: 'memory',
+        dependencies: ['MemoryService'],
+        sideEffects: [],
+        requiresApproval: false,
+        supportsLongTermGrant: false,
+        revokeGrantHint: '记忆工具由 Roc 内置边界提供，不创建长期授权。',
+        riskLevel: 'low',
+        auditCategory: 'memory_operation',
+        untrustedContext: false
+      }
+    ];
+  }
+
+  private createSubagents(): AgentSubagentPreview[] {
+    return [
+      {
+        id: 'code-review',
+        name: '代码审查子任务',
+        purpose: '隔离审查上下文并把 findings 回流主任务轨迹。',
+        inheritsSkills: false,
+        tools: ['memory_search', 'memory_get']
+      },
+      {
+        id: 'research',
+        name: '资料检索子任务',
+        purpose: '围绕搜索和网页阅读整理不可信资料摘要。',
+        inheritsSkills: false,
+        tools: ['web_read']
+      }
+    ];
+  }
+
+  private createInterruptPolicy(mcpCards: AgentCapabilityCard[]): Record<string, boolean> {
+    const policy: Record<string, boolean> = {
+      write_file: true,
+      edit_file: true,
+      terminal_command: true,
+      git_operation: true,
+      web_read: true
+    };
+    for (const card of mcpCards) {
+      policy[card.name] = card.requiresApproval;
+    }
+    return policy;
+  }
+}
