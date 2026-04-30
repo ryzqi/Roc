@@ -128,6 +128,7 @@ type LoadedState = {
   selectedMcpServers: string[];
   selectedSkills: string[];
   backgroundTask: BackgroundTask | null;
+  backgroundTasks: BackgroundTask[];
   traySummary: TraySummary;
   diagnosticPackage: DiagnosticPackage | null;
   performanceSample: PerformanceSample;
@@ -165,220 +166,83 @@ const MAIN_VIEW_IDS = new Set<ViewId>([
 const FLOATING_VIEW_IDS = new Set<ViewId>(['quick', 'tray']);
 const WORKBENCH_VIEWS = new Set<ViewId>(['workspace', 'git', 'terminal', 'preview']);
 
-const HISTORY_NAV_ITEMS: NavItem[] = [
-  { id: 'chat', label: '当前主会话', meta: '0 条消息 · 等待输入', icon: 'history' }
-];
-
-const WORKSPACE_NAV_ITEMS: NavItem[] = [
-  { id: 'tasks', label: '任务工作台', meta: '运行中 2 · 待确认 2', icon: 'clipboard' },
-  { id: 'diagnostics', label: '任务诊断包', meta: '失败任务与恢复点', icon: 'stethoscope' }
-];
-
-const CONTROL_NAV_ITEMS: NavItem[] = [
-  { id: 'memory', label: '记忆中心', meta: '热 / 暖 / 候选 / 审计', icon: 'globe' },
-  { id: 'doctor', label: 'Doctor', meta: '系统诊断与修复入口', icon: 'stethoscope' },
-  { id: 'mcp', label: 'MCP', meta: '服务 / 工具 / 授权 / 健康', icon: 'nodes' },
-  { id: 'skills', label: 'Skill', meta: '能力包 / 触发 / 依赖 / 启停', icon: 'sparkles' },
-  { id: 'settings', label: '设置', meta: '草稿态保存与影响范围', icon: 'wrench' }
-];
-
 const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: PreviewIconName }> = [
   { id: 'files', label: '文件', icon: 'folder' },
   { id: 'git', label: 'Git', icon: 'git' },
   { id: 'terminal', label: '终端', icon: 'terminal' }
 ];
 
-const PREVIEW_WORKSPACE_LABEL = 'F:\\Code\\Roc';
-const PREVIEW_WORKSPACE_MARKDOWN = `# 想法.md
-## 主界面与入口
-- 主窗口
-- 全局快捷入口
-- 托盘状态入口
-
-## 统一控制面状态中心
-- 任务
-- 能力管理
-- 授权
-- 诊断`;
-const PREVIEW_GIT_DRAFT = `refactor: rebuild preview shell layout
-
-- align chat canvas with floating workbench layout
-- move right tools to icon rail with expand panels
-- refresh page screenshots after layout change`;
-const PREVIEW_TERMINAL_OUTPUT = `PS F:\\Code\\Roc> msedge --headless --screenshot 页面预览效果图\\chat.png
-Screenshot saved.
-PS F:\\Code\\Roc> msedge --headless --screenshot 页面预览效果图\\workspace.png
-Screenshot saved.
-PS F:\\Code\\Roc> Test-Path .\\页面预览效果图\\chat.png
-True`;
-const PREVIEW_TERMINAL_WORKBENCH_OUTPUT = `cwd F:\\Code\\Roc
-node v25.7.0
-edge headless ready
-task output captured`;
-const PREVIEW_DIFF_PREVIEW = `+ MemoryService.write(candidate)
-+ AuditLog.append(operation)
-+ IndexQueue.enqueue(rebuild)
-
-- directMemoryFileWrite()`;
-const PREVIEW_MEMORY_RECORDS: MemoryRecordViewModel[] = [
-  {
-    id: 'mem_hot_001',
-    layer: '热 / 全局',
-    scope: 'global',
-    type: 'preference',
-    confidence: '1.0',
-    sourceTag: 'user_explicit',
-    status: 'active',
-    priority: 'high',
-    sourceRef: 'session_2026_04_28 / turn_14',
-    summary: '回复使用简体中文，保持证据驱动。',
-    detail: '回复使用简体中文，保持证据驱动。',
-    tone: 'ok',
-    lastAccessed: '2026-04-28 15:18',
-    accessCount: '27',
-    note: '当前所有会话默认生效，用于约束 Roc 的输出风格。'
-  },
-  {
-    id: 'mem_hot_004',
-    layer: '热 / 全局',
-    scope: 'global',
-    type: 'feedback',
-    confidence: '1.0',
-    sourceTag: 'feedback',
-    status: 'active',
-    priority: 'critical',
-    sourceRef: 'session_2026_04_27 / turn_31',
-    summary: '没有 fresh verification，不宣称已完成。',
-    detail: '没有 fresh verification，不宣称已完成。',
-    tone: 'ok',
-    lastAccessed: '2026-04-28 14:40',
-    accessCount: '19',
-    note: '这是高优先级规则，适用于所有开发、修复和验证场景。'
-  },
-  {
-    id: 'mem_warm_022',
-    layer: '暖 / 项目',
-    scope: 'project:Roc',
-    type: 'project_context',
-    confidence: '0.94',
-    sourceTag: 'project_context',
-    status: 'active',
-    priority: 'medium',
-    sourceRef: '页面预览效果图 / README.md',
-    summary: 'Roc 工作区使用 F:\\Code\\Roc，页面预览产物收口到当前目录。',
-    detail: 'Roc 工作区使用 F:\\Code\\Roc，页面预览产物收口到当前目录。',
-    tone: 'info',
-    lastAccessed: '2026-04-28 15:11',
-    accessCount: '12',
-    note: '只在 `project:Roc` 下自动召回，不参与其他项目上下文。'
-  },
-  {
-    id: 'mem_warm_041',
-    layer: '暖 / 项目',
-    scope: 'project:Roc',
-    type: 'process_skill',
-    confidence: '0.82',
-    sourceTag: 'agent_extract',
-    status: 'active',
-    priority: 'medium',
-    sourceRef: 'session_2026_04_28_preview',
-    summary: '页面设计任务优先呈现控制面边界，不先展示实现细节。',
-    detail: '页面设计任务优先呈现控制面边界，不先展示实现细节。',
-    tone: 'info',
-    lastAccessed: '2026-04-28 15:05',
-    accessCount: '8',
-    note: '由会话回忆提炼进入暖记忆，仍可由用户直接编辑或降级。'
-  },
-  {
-    id: 'sess_2026_04_28_preview',
-    layer: '会话回忆',
-    scope: 'task:T-2048',
-    type: 'session_recall',
-    confidence: '0.76',
-    sourceTag: 'session_recall',
-    status: 'archived',
-    priority: 'low',
-    sourceRef: 'task:T-2048 / session archive',
-    summary: '页面预览迭代会话摘要，保留来源引用，可继续提炼但不直接进入热记忆。',
-    detail: '页面预览迭代会话摘要，保留来源引用，可继续提炼但不直接进入热记忆。',
-    tone: 'warn',
-    lastAccessed: '2026-04-28 15:03',
-    accessCount: '4',
-    note: '这是原始历史层条目，默认只读归档，但仍允许用户查看和修订摘要文本。'
-  }
-];
-
 const PAGE_META: Record<MainViewId, PageMeta> = {
   chat: {
     title: '聊天主页',
     subtitle: '聊天是入口；涉及执行、文件、Git、终端、网页或长期任务时升级为可追踪任务会话。',
-    topMeta: '0 条消息 · Temp Works...',
+    topMeta: '未选择工作区',
     pageLabel: '主会话'
   },
   tasks: {
     title: '任务工作台',
     subtitle: '后台任务、定时任务、执行轮次、追加指令、恢复点和验证结果读取同一任务状态。',
-    topMeta: '5 个任务 · Temp Works...',
+    topMeta: '任务状态',
     pageLabel: '任务控制'
   },
   workspace: {
     title: '工作区文件',
     subtitle: '工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。',
-    topMeta: '文件视图 · Temp Works...',
+    topMeta: '文件视图',
     pageLabel: '工作区'
   },
   git: {
     title: 'Git 面板',
     subtitle: '查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。',
-    topMeta: 'Git 状态 · Temp Works...',
+    topMeta: 'Git 状态',
     pageLabel: '工作区'
   },
   terminal: {
     title: '嵌入式终端',
     subtitle: '终端绑定当前工作区，命令目的、目录、输出、退出状态和风险级别保持可见。',
-    topMeta: '终端会话 · Temp Works...',
+    topMeta: '终端会话',
     pageLabel: '工作区'
   },
   preview: {
     title: '文件预览',
     subtitle: '文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。',
-    topMeta: '预览面板 · Temp Works...',
+    topMeta: '预览面板',
     pageLabel: '工作区'
   },
   mcp: {
     title: 'MCP',
     subtitle: '统一查看 MCP 服务、MCP 工具、健康、授权和最近调用，异常项继续进入 Doctor 与任务轨迹。',
-    topMeta: 'MCP 清单 · Temp Works...',
+    topMeta: 'MCP 清单',
     pageLabel: '控制面'
   },
   skills: {
     title: 'Skill',
     subtitle: '统一管理 Skill 能力包、触发条件、依赖、启停状态与最近命中记录。',
-    topMeta: 'Skill 清单 · Temp Works...',
+    topMeta: 'Skill 清单',
     pageLabel: '控制面'
   },
   memory: {
     title: '记忆中心',
     subtitle: '查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。',
-    topMeta: '记忆状态 · Temp Works...',
+    topMeta: '记忆状态',
     pageLabel: '控制面'
   },
   settings: {
     title: '设置',
     subtitle: '设置作为一级页面，修改先进入草稿态；高影响配置保存前展示影响范围。',
-    topMeta: '设置草稿 · Temp Works...',
+    topMeta: '设置',
     pageLabel: '控制面'
   },
   doctor: {
     title: 'Doctor',
     subtitle: '检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。',
-    topMeta: '诊断摘要 · Temp Works...',
+    topMeta: '诊断摘要',
     pageLabel: '控制面'
   },
   diagnostics: {
     title: '任务诊断包',
     subtitle: '失败任务提供输入、计划、执行轮次、工具调用、关键日志、恢复点和未完成事项。',
-    topMeta: '失败任务 · Temp Works...',
+    topMeta: '失败任务',
     pageLabel: '控制面'
   }
 };
@@ -439,33 +303,113 @@ function providerTypeLabel(type: ProviderConfig['type']): string {
   return '自定义兼容端点';
 }
 
-function providerContractStatus(provider: ProviderConfig, providerTestStatus: ProviderTestResult | null): string {
+function providerRuntimeStatus(provider: ProviderConfig, providerTestStatus: ProviderTestResult | null): string {
   if (providerTestStatus !== null && providerTestStatus.providerId === provider.id) {
     return providerTestStatus.status;
   }
   return provider.enabled && provider.models.some((model) => model.enabled) ? 'ready' : 'invalid';
 }
 
-function isPreviewSmoke(state: LoadedState): boolean {
-  return state.appStatus.mode === 'smoke';
-}
-
 function visibleWorkspaceLabel(state: LoadedState): string {
-  return isPreviewSmoke(state) ? PREVIEW_WORKSPACE_LABEL : state.appStatus.workspace.label;
+  return state.appStatus.workspace.label;
 }
 
 function visibleWorkspaceCwd(state: LoadedState): string {
-  if (isPreviewSmoke(state)) {
-    return PREVIEW_WORKSPACE_LABEL;
-  }
   return state.workspace === null ? '未选择' : state.workspace.path;
 }
 
-function buildVisibleTerminalOutput(state: LoadedState): string {
-  if (state.appStatus.mode === 'smoke') {
-    return PREVIEW_TERMINAL_OUTPUT;
+function buildTopMeta(view: MainViewId, state: LoadedState): string {
+  if (view === 'chat') {
+    return `${state.taskSnapshot.recentEvents.filter((event) => event.type === 'message').length} 条消息 · ${visibleWorkspaceLabel(state)}`;
   }
+  if (view === 'tasks') {
+    return `${state.taskSnapshot.counts.total} 个任务 · 运行中 ${state.taskSnapshot.counts.running}`;
+  }
+  if (view === 'workspace' || view === 'git' || view === 'terminal' || view === 'preview') {
+    return visibleWorkspaceLabel(state);
+  }
+  if (view === 'memory') {
+    return `${state.memorySearch?.items.length ?? 0} 条召回 · ${state.memoryCandidates.length} 个候选`;
+  }
+  if (view === 'mcp') {
+    return `${state.mcpServers.filter((server) => server.enabled).length} 个已启用服务`;
+  }
+  if (view === 'skills') {
+    return `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 个可用 Skill`;
+  }
+  if (view === 'settings') {
+    return state.defaultModelId === null ? '默认模型未配置' : `默认模型 ${state.defaultModelId}`;
+  }
+  if (view === 'doctor') {
+    return `${state.doctor.summary.pass} 通过 · ${state.doctor.summary.fail} 失败`;
+  }
+  return `${state.taskSnapshot.counts.failed} 个失败任务`;
+}
 
+function buildHistoryNavItems(state: LoadedState): NavItem[] {
+  return [
+    {
+      id: 'chat',
+      label: '当前主会话',
+      meta: `${state.taskSnapshot.recentEvents.filter((event) => event.type === 'message').length} 条消息`,
+      icon: 'history'
+    }
+  ];
+}
+
+function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
+  return [
+    {
+      id: 'tasks',
+      label: '任务工作台',
+      meta: `${state.taskSnapshot.counts.running} 运行中 · ${state.taskSnapshot.counts.pendingConfirmation} 待确认`,
+      icon: 'clipboard'
+    },
+    {
+      id: 'diagnostics',
+      label: '任务诊断包',
+      meta: `${state.taskSnapshot.counts.failed} 失败任务`,
+      icon: 'stethoscope'
+    }
+  ];
+}
+
+function buildControlNavItems(state: LoadedState): NavItem[] {
+  return [
+    {
+      id: 'memory',
+      label: '记忆中心',
+      meta: `${state.memorySearch?.items.length ?? 0} 召回 · ${state.memoryCandidates.length} 候选`,
+      icon: 'globe'
+    },
+    {
+      id: 'doctor',
+      label: 'Doctor',
+      meta: `${state.doctor.summary.pass} 通过 · ${state.doctor.summary.fail} 失败`,
+      icon: 'stethoscope'
+    },
+    {
+      id: 'mcp',
+      label: 'MCP',
+      meta: `${state.mcpServers.filter((server) => server.enabled).length} 已启用`,
+      icon: 'nodes'
+    },
+    {
+      id: 'skills',
+      label: 'Skill',
+      meta: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 可用`,
+      icon: 'sparkles'
+    },
+    {
+      id: 'settings',
+      label: '设置',
+      meta: state.defaultModelId === null ? '默认模型未配置' : state.defaultModelId,
+      icon: 'wrench'
+    }
+  ];
+}
+
+function buildVisibleTerminalOutput(state: LoadedState): string {
   if (state.terminalResult !== null) {
     return state.terminalResult.stdout;
   }
@@ -543,7 +487,7 @@ export function App(): React.JSX.Element {
       const loadedAppStatus = unwrap<AppStatus>('app status', appStatus);
       const memoryData = await loadMemoryData(loadedAppStatus.mode);
       const capabilityData = await loadCapabilityData(loadedAppStatus.mode);
-      const phase6Data = await loadPhase6Data(loadedAppStatus.mode, loadedAppStatus.paths.root);
+      const phase6Data = await loadPhase6Data(loadedAppStatus.mode);
       const refreshedAppStatus =
         loadedAppStatus.mode === 'smoke'
           ? unwrap<AppStatus>('refreshed app status', await window.roc.app.getStatus())
@@ -638,10 +582,11 @@ export function App(): React.JSX.Element {
         <ViewContent
           activeView={activeView}
           chatError={chatError}
-          onSubmitChatTask={async () => {
+          onOpenView={setActiveView}
+          onSubmitChatTask={async (input) => {
             setChatError(null);
             const result = await window.roc.chat.submit({
-              input: '快捷入口创建任务',
+              input,
               mode: 'task',
               enabledCapabilities: {
                 mcpServers: state.selectedMcpServers,
@@ -650,10 +595,11 @@ export function App(): React.JSX.Element {
             });
             if (!result.ok) {
               setChatError(result.error.message);
-              return;
+              return false;
             }
             const taskSnapshot = unwrap<TaskSnapshot>('task snapshot', await window.roc.tasks.getSnapshot());
             setState((current) => (current === null ? current : { ...current, taskSnapshot, chatResult: result.data }));
+            return true;
           }}
           state={state}
           updateLoadedState={(partial) =>
@@ -666,22 +612,25 @@ export function App(): React.JSX.Element {
 
   const hasWorkbench = WORKBENCH_VIEWS.has(activeView);
   const meta = viewMeta(activeView as MainViewId);
-  const previewMode = isPreviewSmoke(state);
+  const topMeta = buildTopMeta(activeView as MainViewId, state);
+  const historyNavItems = buildHistoryNavItems(state);
+  const workspaceNavItems = buildWorkspaceNavItems(state);
+  const controlNavItems = buildControlNavItems(state);
   const historyRecords: HistoryRecord[] = [
-    { id: 'quick-entry', label: '快捷入口记录', meta: '最近 1 条追加指令', icon: 'panel-right', action: () => void window.roc.app.openQuickEntry() },
+    { id: 'quick-entry', label: '快捷入口', meta: `${state.traySummary.backgroundTasks.running} 个后台任务`, icon: 'panel-right', action: () => void window.roc.app.openQuickEntry() },
     { id: 'tray-entry', label: '托盘接管记录', meta: '后台状态同步', icon: 'panel-right', action: () => void window.roc.app.openTrayEntry() },
     {
       id: 'memory-record',
       label: '记忆整理裁决',
-      meta: previewMode ? '记忆中心 · 2 条待确认' : `记忆中心 · ${state.memoryConflicts.length} 条待确认`,
+      meta: `记忆中心 · ${state.memoryConflicts.length} 条待确认`,
       icon: 'globe',
       activeWhen: 'memory',
       action: () => setActiveView('memory')
     },
     {
       id: 'task-record',
-      label: '页面预览生成',
-      meta: previewMode ? '任务工作台 · 步骤 3/5' : `任务工作台 · 运行中 ${state.taskSnapshot.counts.running}`,
+      label: '任务工作台记录',
+      meta: `任务工作台 · 运行中 ${state.taskSnapshot.counts.running}`,
       icon: 'clipboard',
       activeWhen: 'tasks',
       action: () => setActiveView('tasks')
@@ -699,7 +648,7 @@ export function App(): React.JSX.Element {
         </div>
         <div className="thread-meta">
           <PreviewIcon name="folder" />
-          <span>{meta.topMeta}</span>
+          <span>{topMeta}</span>
         </div>
         <div className="workband-actions">
           <button
@@ -746,12 +695,11 @@ export function App(): React.JSX.Element {
         <aside className="sidebar">
           <div className="sidebar-head">
             <div className="workspace-pill" title={visibleWorkspaceLabel(state)}><PreviewIcon name="folder" /><span>{visibleWorkspaceLabel(state)}</span></div>
-            <p className="sidebar-note">左侧保留聊天历史、任务栏、记忆中心；右侧工作台只负责文件、Git、终端。</p>
           </div>
           <div className="sidebar-block sidebar-block--history">
             <div className="side-title">历史会话</div>
             <div className="sidebar-block-scroll history-list">
-              <NavButton active={activeView === 'chat'} item={HISTORY_NAV_ITEMS[0]} onClick={() => setActiveView('chat')} />
+              <NavButton active={activeView === 'chat'} item={historyNavItems[0]} onClick={() => setActiveView('chat')} />
               {historyRecords.map((record) => (
                 <button
                   className={record.activeWhen === activeView ? 'nav-button active' : 'nav-button'}
@@ -768,8 +716,8 @@ export function App(): React.JSX.Element {
               ))}
             </div>
           </div>
-          <SidebarNavGroup className="sidebar-block sidebar-block--tasks" activeView={activeView} items={WORKSPACE_NAV_ITEMS} title="任务工作台" onSelect={setActiveView} />
-          <SidebarNavGroup className="sidebar-block sidebar-block--control" activeView={activeView} items={CONTROL_NAV_ITEMS} title="控制区" onSelect={setActiveView} />
+          <SidebarNavGroup className="sidebar-block sidebar-block--tasks" activeView={activeView} items={workspaceNavItems} title="任务工作台" onSelect={setActiveView} />
+          <SidebarNavGroup className="sidebar-block sidebar-block--control" activeView={activeView} items={controlNavItems} title="控制区" onSelect={setActiveView} />
         </aside>
 
         <div
@@ -787,10 +735,11 @@ export function App(): React.JSX.Element {
                 <ViewContent
                   activeView={activeView}
                   chatError={chatError}
-                  onSubmitChatTask={async () => {
+                  onOpenView={setActiveView}
+                  onSubmitChatTask={async (input) => {
                     setChatError(null);
                     const result = await window.roc.chat.submit({
-                      input: '检查当前项目并给出计划',
+                      input,
                       mode: 'task',
                       enabledCapabilities: {
                         mcpServers: state.selectedMcpServers,
@@ -799,10 +748,11 @@ export function App(): React.JSX.Element {
                     });
                     if (!result.ok) {
                       setChatError(result.error.message);
-                      return;
+                      return false;
                     }
                     const taskSnapshot = unwrap<TaskSnapshot>('task snapshot', await window.roc.tasks.getSnapshot());
                     setState((current) => (current === null ? current : { ...current, taskSnapshot, chatResult: result.data }));
+                    return true;
                   }}
                   state={state}
                   updateLoadedState={(partial) =>
@@ -818,6 +768,7 @@ export function App(): React.JSX.Element {
               activeTool={activeWorkbenchTool}
               activeView={activeView}
               onToolChange={setActiveWorkbenchTool}
+              onClose={() => setActiveView('chat')}
               state={state}
               windowState={windowState}
             />
@@ -831,22 +782,6 @@ export function App(): React.JSX.Element {
             />
           )}
         </div>
-      </div>
-      <div className="smoke-contract-live">
-        <button className="smoke-contract-button" data-testid="nav-workspace" type="button" onClick={() => setActiveView('workspace')}>
-          工作区文件
-        </button>
-        <button
-          className="smoke-contract-button"
-          data-testid="settings-button"
-          type="button"
-          onClick={() => setActiveView('settings')}
-        >
-          设置
-        </button>
-      </div>
-      <div className="smoke-contract-panels">
-        <TraySummaryContractPanel traySummary={state.traySummary} />
       </div>
     </div>
   );
@@ -886,10 +821,13 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<{
     firstFile === undefined
       ? null
       : unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath: firstFile.relativePath }));
-  const fileSearch = unwrap<FileSearchResult>(
-    'file search',
-    await window.roc.files.search({ query: 'phase three', maxResults: 8 })
-  );
+  const fileSearch =
+    firstFile === undefined
+      ? null
+      : unwrap<FileSearchResult>(
+          'file search',
+          await window.roc.files.search({ query: firstFile.name, maxResults: 8 })
+        );
   const gitResult = await window.roc.git.status();
   const terminalResult = await window.roc.shell.execute({
     command: 'dir',
@@ -909,16 +847,17 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<{
 }
 
 async function loadPhase6Data(
-  mode: AppStatus['mode'],
-  rootPath: string
+  mode: AppStatus['mode']
 ): Promise<{
   backgroundTask: BackgroundTask | null;
+  backgroundTasks: BackgroundTask[];
   traySummary: TraySummary;
   diagnosticPackage: DiagnosticPackage | null;
   performanceSample: PerformanceSample;
   doctor: DoctorSnapshot;
 }> {
-  const backgroundTask = mode === 'smoke' ? await seedSmokeBackgroundTask(rootPath) : null;
+  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await window.roc.tasks.listBackgroundTasks());
+  const backgroundTask = backgroundTasks[0] ?? null;
   const performanceSample = unwrap<PerformanceSample>(
     'performance sample',
     await window.roc.diagnostics.samplePerformance({
@@ -933,13 +872,14 @@ async function loadPhase6Data(
           'diagnostic package',
           await window.roc.diagnostics.createDiagnosticPackage({
             taskId: backgroundTask.id,
-            errorSummary: 'phase six smoke diagnostic request'
+            errorSummary: '后台任务诊断请求'
           })
         );
   const [traySummary, doctor] = await Promise.all([window.roc.lifecycle.getTraySummary(), window.roc.doctor.run()]);
 
   return {
     backgroundTask,
+    backgroundTasks,
     traySummary: unwrap<TraySummary>('tray summary', traySummary),
     diagnosticPackage,
     performanceSample,
@@ -947,27 +887,7 @@ async function loadPhase6Data(
   };
 }
 
-async function seedSmokeBackgroundTask(rootPath: string): Promise<BackgroundTask> {
-  const preview = unwrap(
-    'background task preview',
-    await window.roc.tasks.createBackgroundTaskPreview({
-      goal: 'Phase 6 smoke background diagnostic task',
-      trigger: {
-        type: 'schedule',
-        description: 'smoke scheduled run',
-        nextRunAt: '2026-04-29T01:00:00.000Z'
-      },
-      workspacePath: rootPath,
-      allowedActions: ['pnpm test'],
-      forbiddenActions: ['git push'],
-      failurePolicy: 'pause_and_report',
-      notificationPolicy: 'failures_and_confirmations'
-    })
-  );
-  return unwrap<BackgroundTask>('background task create', await window.roc.tasks.createBackgroundTask(preview));
-}
-
-async function loadMemoryData(mode: AppStatus['mode']): Promise<{
+async function loadMemoryData(_mode: AppStatus['mode']): Promise<{
   memoryStatus: MemoryStatus;
   memoryCandidates: MemoryCandidate[];
   memoryConflicts: MemoryConflict[];
@@ -975,16 +895,12 @@ async function loadMemoryData(mode: AppStatus['mode']): Promise<{
   sessionSearch: SessionSearchResult | null;
   memoryRecovery: MemoryDeleteResult | null;
 }> {
-  if (mode === 'smoke') {
-    await seedSmokeMemory();
-  }
-
   const [memoryStatus, candidates, conflicts, memorySearch, sessionSearch] = await Promise.all([
     window.roc.memory.status(),
     window.roc.memory.listCandidates(),
     window.roc.memory.listConflicts(),
-    window.roc.memory.search({ query: 'phase four smoke', source: 'all' }),
-    window.roc.memory.sessionSearch({ query: 'phase four smoke' })
+    window.roc.memory.search({ query: 'project', source: 'all' }),
+    window.roc.memory.sessionSearch({ query: 'project' })
   ]);
 
   return {
@@ -993,11 +909,11 @@ async function loadMemoryData(mode: AppStatus['mode']): Promise<{
     memoryConflicts: unwrap<MemoryConflict[]>('memory conflicts', conflicts),
     memorySearch: unwrap<MemorySearchResult>('memory search', memorySearch),
     sessionSearch: unwrap<SessionSearchResult>('session search', sessionSearch),
-  memoryRecovery: null
+    memoryRecovery: null
   };
 }
 
-async function loadCapabilityData(mode: AppStatus['mode']): Promise<{
+async function loadCapabilityData(_mode: AppStatus['mode']): Promise<{
   providers: ProviderConfig[];
   defaultModelId: string | null;
   providerTestStatus: ProviderTestResult | null;
@@ -1005,10 +921,6 @@ async function loadCapabilityData(mode: AppStatus['mode']): Promise<{
   mcpTestStatus: McpServerTestResult | null;
   skills: SkillSnapshot[];
 }> {
-  if (mode === 'smoke') {
-    await seedSmokeSettingsAndCapabilities();
-  }
-
   const [providers, mcpServers, skills] = await Promise.all([
     window.roc.providers.list(),
     window.roc.mcp.listServers(),
@@ -1036,110 +948,18 @@ async function loadCapabilityData(mode: AppStatus['mode']): Promise<{
   };
 }
 
-async function seedSmokeSettingsAndCapabilities(): Promise<void> {
-  const provider = unwrap(
-    'smoke provider upsert',
-    await window.roc.providers.upsert({
-      id: 'smoke-provider',
-      name: 'Smoke Provider',
-      type: 'openai_compatible',
-      endpoint: 'http://127.0.0.1:65535/v1',
-      credentialRef: 'env:ROC_SMOKE_API_KEY',
-      enabled: true,
-      models: [
-        {
-          id: 'smoke-model',
-          displayName: 'Smoke Model',
-          enabled: true,
-          supportsStreaming: true,
-          supportsToolCalls: true
-        }
-      ]
-    })
-  );
-  if (provider.id !== 'smoke-provider') {
-    throw new Error('Smoke provider seed returned unexpected provider ID.');
-  }
-  unwrap('smoke default model', await window.roc.providers.setDefaultModel('smoke-model'));
-  unwrap(
-    'smoke mcp upsert',
-    await window.roc.mcp.upsertServer({
-      id: 'smoke-mcp',
-      name: 'Smoke MCP',
-      enabled: true,
-      transport: 'http',
-      preset: false,
-      riskLevel: 'low',
-      url: 'http://127.0.0.1:65534/mcp',
-      allowedTools: ['smoke_tool']
-    })
-  );
-  unwrap('smoke exa preset', await window.roc.mcp.ensureExaPreset());
-}
-
-async function seedSmokeMemory(): Promise<void> {
-  const existing = unwrap<MemorySearchResult>(
-    'memory smoke seed search',
-    await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' })
-  );
-  if (existing.items.some((item) => item.summary.includes('phase four smoke active'))) {
-    return;
-  }
-
-  const candidate = unwrap(
-    'memory smoke candidate',
-    await window.roc.memory.writeCandidate({
-      type: 'project_context',
-      scope: 'project:roc-smoke',
-      content: 'phase four smoke active memory validates candidate acceptance and recall.',
-      confidence: 0.9,
-      priority: 'medium',
-      source: 'user_explicit',
-      sourceRef: 'smoke:memory'
-    })
-  );
-  const accepted = unwrap('memory smoke accept', await window.roc.memory.acceptCandidate(candidate.id));
-  const deleted = unwrap('memory smoke delete', await window.roc.memory.delete(accepted.id));
-  if (!deleted.recoverable) {
-    throw new Error('memory smoke delete did not create a recoverable state.');
-  }
-  unwrap('memory smoke restore', await window.roc.memory.restore(accepted.id));
-
-  unwrap(
-    'memory smoke conflict candidate',
-    await window.roc.memory.writeCandidate({
-      type: 'project_context',
-      scope: 'project:roc-smoke',
-      content: 'phase four smoke active memory does not validate candidate acceptance and recall.',
-      confidence: 0.7,
-      priority: 'medium',
-      source: 'agent_extract:smoke',
-      sourceRef: 'smoke:conflict'
-    })
-  );
-  unwrap(
-    'memory smoke session recall',
-    await window.roc.memory.writeSessionRecall({
-      sessionId: 'smoke-session-phase4',
-      title: 'phase four smoke session',
-      summary: 'phase four smoke session recall validates searchable archived conversation.',
-      scope: 'project:roc-smoke',
-      content: 'phase four smoke session stores raw recall without promoting it into curated memory.',
-      sourceRef: 'smoke:session'
-    })
-  );
-}
-
 function ViewContent({
   activeView,
   chatError,
+  onOpenView,
   onSubmitChatTask,
   state,
   updateLoadedState
 }: {
   activeView: ViewId;
   chatError: string | null;
-  onSubmitChatTask: () => Promise<void>;
+  onOpenView: (view: ViewId) => void;
+  onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
@@ -1185,6 +1005,7 @@ function ViewContent({
   return (
     <ChatView
       chatError={chatError}
+      onOpenView={onOpenView}
       onSubmitChatTask={onSubmitChatTask}
       state={state}
       updateLoadedState={updateLoadedState}
@@ -1236,19 +1057,40 @@ function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; 
 
 function ChatView({
   chatError,
+  onOpenView,
   onSubmitChatTask,
   state,
   updateLoadedState
 }: {
   chatError: string | null;
-  onSubmitChatTask: () => Promise<void>;
+  onOpenView: (view: ViewId) => void;
+  onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
-  const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled && server.id !== 'smoke-mcp');
+  const [chatInput, setChatInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
   const visibleCapabilitySkills = state.skills.filter(
-    (skill) => skill.enabled && skill.status === 'ready' && skill.id !== 'smoke-skill'
+    (skill) => skill.enabled && skill.status === 'ready'
   );
+  const trimmedInput = chatInput.trim();
+  const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
+
+  async function submitCurrentInput(): Promise<void> {
+    if (sendDisabled) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const submitted = await onSubmitChatTask(trimmedInput);
+      if (submitted) {
+        setChatInput('');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
@@ -1259,7 +1101,7 @@ function ChatView({
             {visibleCapabilityServers.map((server) => (
               <button
                 className={state.selectedMcpServers.includes(server.id) ? 'selection-chip active' : 'selection-chip'}
-                data-testid={`visible-turn-mcp-${server.id}`}
+                data-testid={`turn-mcp-${server.id}`}
                 key={server.id}
                 type="button"
                 onClick={() =>
@@ -1275,7 +1117,7 @@ function ChatView({
             {visibleCapabilitySkills.map((skill) => (
               <button
                 className={state.selectedSkills.includes(skill.id) ? 'selection-chip active' : 'selection-chip'}
-                data-testid={`visible-turn-skill-${skill.id}`}
+                data-testid={`turn-skill-${skill.id}`}
                 key={skill.id}
                 type="button"
                 onClick={() =>
@@ -1291,13 +1133,24 @@ function ChatView({
           </div>
         )}
         <div className="composer composer--chat">
-          <div className="composer-placeholder">输入消息...</div>
+          <textarea
+            aria-label="输入消息"
+            className="composer-input"
+            data-testid="chat-input"
+            placeholder="输入消息"
+            rows={3}
+            value={chatInput}
+            onChange={(event) => setChatInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                void submitCurrentInput();
+              }
+            }}
+          />
           <div className="composer-bottom">
             <div className="composer-left">
-              <button className="composer-tool" type="button" aria-label="添加附件">
-                <PreviewIcon name="paperclip" />
-              </button>
-              <button className="composer-tool active" type="button" aria-label="工作区文件">
+              <button className="composer-tool active" type="button" aria-label="工作区文件" onClick={() => onOpenView('workspace')}>
                 <PreviewIcon name="folder" />
                 <span className="tool-badge">T</span>
               </button>
@@ -1305,6 +1158,7 @@ function ChatView({
                 className={state.selectedMcpServers.length > 0 ? 'composer-tool active' : 'composer-tool'}
                 type="button"
                 aria-label="已启用 MCP"
+                onClick={() => onOpenView('mcp')}
               >
                 <PreviewIcon name="nodes" />
                 <span className="tool-badge">{state.selectedMcpServers.length}</span>
@@ -1313,64 +1167,36 @@ function ChatView({
                 className={state.selectedSkills.length > 0 ? 'composer-tool active' : 'composer-tool'}
                 type="button"
                 aria-label="已启用 Skill"
+                onClick={() => onOpenView('skills')}
               >
                 <PreviewIcon name="sparkles" />
                 <span className="tool-badge">{state.selectedSkills.length}</span>
               </button>
-              <div className="model-pill">
+              <button className="model-pill" type="button" onClick={() => onOpenView('settings')}>
                 <PreviewIcon name="bot" />
                 <span>{state.defaultModelId ?? '配置默认模型'}</span>
                 <span>▾</span>
-              </div>
+              </button>
             </div>
             <div className="composer-right">
-              <button className="ghost-button" type="button" aria-label="可见性">
+              <button className="ghost-button" type="button" aria-label="可见性" onClick={() => onOpenView('memory')}>
                 <PreviewIcon name="eye" />
               </button>
-              <button className="send-button" data-testid="chat-task-submit" type="button" aria-label="发送" onClick={() => void onSubmitChatTask()}>
+              <button
+                className="send-button"
+                data-testid="chat-task-submit"
+                type="button"
+                aria-label="发送"
+                disabled={sendDisabled}
+                onClick={() => void submitCurrentInput()}
+              >
                 <PreviewIcon name="send" />
               </button>
             </div>
           </div>
         </div>
-        <div className="smoke-contract-live">
-          <div className="capability-strip" data-testid="turn-capabilities">
-            {state.mcpServers
-              .filter((server) => server.enabled)
-              .map((server) => (
-                <button
-                  className={state.selectedMcpServers.includes(server.id) ? 'selection-chip active' : 'selection-chip'}
-                  data-testid={`turn-mcp-${server.id}`}
-                  key={server.id}
-                  type="button"
-                  onClick={() =>
-                    void updateTurnSelection(updateLoadedState, {
-                      mcpServers: toggleSelection(state.selectedMcpServers, server.id),
-                      skills: state.selectedSkills
-                    })
-                  }
-                >
-                  MCP {server.id}
-                </button>
-              ))}
-            {state.skills
-              .filter((skill) => skill.enabled && skill.status === 'ready')
-              .map((skill) => (
-                <button
-                  className={state.selectedSkills.includes(skill.id) ? 'selection-chip active' : 'selection-chip'}
-                  data-testid={`turn-skill-${skill.id}`}
-                  key={skill.id}
-                  type="button"
-                  onClick={() =>
-                    void updateTurnSelection(updateLoadedState, {
-                      mcpServers: state.selectedMcpServers,
-                      skills: toggleSelection(state.selectedSkills, skill.id)
-                    })
-                  }
-                >
-                  Skill {skill.id}
-                </button>
-              ))}
+        <div className="chat-runtime-panels">
+          <div className="capability-status" data-testid="turn-capabilities">
             <span data-testid="turn-mcp-selection">MCP 本轮 {state.selectedMcpServers.length}</span>
             <span data-testid="turn-skill-selection">Skill 本轮 {state.selectedSkills.length}</span>
             <span data-testid="turn-capability-ids">
@@ -1393,9 +1219,12 @@ function QuickEntryView({
   state
 }: {
   chatError: string | null;
-  onSubmitChatTask: () => Promise<void>;
+  onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
 }): React.JSX.Element {
+  const failedTasks = state.taskSnapshot.counts.failed;
+  const pendingConfirmations = state.traySummary.backgroundTasks.pendingConfirmation;
+  const quickTaskInput = '快捷入口创建任务';
   return (
     <section className="floating-shell floating-shell--quick" data-testid="quick-entry-view">
       <div className="mini-window" data-testid="quick-entry-visual">
@@ -1404,10 +1233,10 @@ function QuickEntryView({
           <CompactStatusPill tone="ok" value="同步主窗口状态" />
         </div>
         <div className="card-pad">
-          <div className="field-box">补充当前任务：把每个页面都导出为 PNG</div>
+          <div className="field-box">补充当前任务或创建新的本地任务</div>
           <div className="tab-row tab-row--quick">
-            <button className="tab active" data-testid="quick-submit-task" type="button" onClick={() => void onSubmitChatTask()}>
-              追加到任务 #T-2048
+            <button className="tab active" data-testid="quick-submit-task" type="button" onClick={() => void onSubmitChatTask(quickTaskInput)}>
+              追加到当前任务
             </button>
             <button className="tab" data-testid="quick-open-tasks" type="button" onClick={() => void window.roc.app.openMainPage('tasks')}>
               创建新任务
@@ -1419,21 +1248,21 @@ function QuickEntryView({
         </div>
         <Row
           title="后台任务"
-          sub={state.appStatus.mode === 'smoke' ? 'Roc 页面预览生成，步骤 3/5' : `${state.traySummary.backgroundTasks.running} 个运行中`}
+          sub={`${state.traySummary.backgroundTasks.running} 个运行中`}
           tag="运行中"
           tone="info"
         />
         <Row
           title="待确认"
-          sub={state.appStatus.mode === 'smoke' ? '删除旧截图目录' : `${state.traySummary.backgroundTasks.pendingConfirmation} 个高影响动作`}
+          sub={`${pendingConfirmations} 个高影响动作`}
           tag="需确认"
           tone="warn"
         />
         <Row
           title="失败"
-          sub={state.appStatus.mode === 'smoke' ? '网页阅读连接未授权' : `${state.taskSnapshot.counts.failed} 个失败任务`}
-          tag={state.appStatus.mode === 'smoke' || state.taskSnapshot.counts.failed > 0 ? '可修复' : '无'}
-          tone={state.appStatus.mode === 'smoke' || state.taskSnapshot.counts.failed > 0 ? 'bad' : 'ok'}
+          sub={`${failedTasks} 个失败任务`}
+          tag={failedTasks > 0 ? '可修复' : '无'}
+          tone={failedTasks > 0 ? 'bad' : 'ok'}
         />
         {chatError === null ? null : <span className="inline-warning" data-testid="quick-entry-error">{chatError}</span>}
       </div>
@@ -1448,9 +1277,8 @@ function TrayEntryView({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
-  const trayStatusTone = previewMode ? 'ok' : state.traySummary.backgroundPaused ? 'warn' : 'ok';
-  const trayStatusValue = previewMode ? '运行中' : state.traySummary.backgroundPaused ? '已暂停' : '运行中';
+  const trayStatusTone = state.traySummary.backgroundPaused ? 'warn' : 'ok';
+  const trayStatusValue = state.traySummary.backgroundPaused ? '已暂停' : '运行中';
   return (
     <section className="floating-shell floating-shell--tray" data-testid="tray-entry-view">
       <div className="tray-pop" data-testid="tray-entry-visual">
@@ -1458,22 +1286,22 @@ function TrayEntryView({
           Roc 常驻状态
           <CompactStatusPill tone={trayStatusTone} value={trayStatusValue} />
         </div>
-        <Row title="后台任务" sub={previewMode ? '2 个运行中，1 个等待用户' : `${state.traySummary.backgroundTasks.running} 个运行中，${state.traySummary.backgroundTasks.pendingConfirmation} 个等待用户`} tag="查看" tone="info" />
+        <Row title="后台任务" sub={`${state.traySummary.backgroundTasks.running} 个运行中，${state.traySummary.backgroundTasks.pendingConfirmation} 个等待用户`} tag="查看" tone="info" />
         <Row
           title="失败任务"
-          sub={previewMode ? '1 个网页连接授权问题' : `${state.taskSnapshot.counts.failed} 个失败任务`}
+          sub={`${state.taskSnapshot.counts.failed} 个失败任务`}
           tag="修复"
-          tone={previewMode || state.taskSnapshot.counts.failed > 0 ? 'bad' : 'ok'}
+          tone={state.taskSnapshot.counts.failed > 0 ? 'bad' : 'ok'}
         />
-        <Row title="待确认" sub={previewMode ? '2 个高风险动作' : `${state.traySummary.backgroundTasks.pendingConfirmation} 个高风险动作`} tag="处理" tone="warn" />
+        <Row title="待确认" sub={`${state.traySummary.backgroundTasks.pendingConfirmation} 个高风险动作`} tag="处理" tone="warn" />
         <Row
           title="后台执行"
-          sub={previewMode ? '当前允许工作区内低风险任务' : state.traySummary.backgroundPaused ? '后台执行已暂停' : '当前允许工作区内低风险任务'}
+          sub={state.traySummary.backgroundPaused ? '后台执行已暂停' : '当前允许工作区内低风险任务'}
           tag={state.traySummary.backgroundPaused ? '恢复' : '暂停'}
           tone="info"
         />
       </div>
-      <div className="floating-contract-actions">
+      <div className="floating-entry-actions">
         <button
           data-testid="tray-toggle-background"
           type="button"
@@ -1502,7 +1330,10 @@ function TasksView({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
   const backgroundTask = state.backgroundTask;
-  const previewMode = isPreviewSmoke(state);
+  const runningTasks = state.traySummary.backgroundTasks.running;
+  const scheduledTasks = state.backgroundTasks.filter((task) => task.scheduled).length;
+  const pendingConfirmations = state.traySummary.backgroundTasks.pendingConfirmation;
+  const recentEvents = state.taskSnapshot.recentEvents.slice(0, 4);
   return (
     <>
       <PageHeading kicker="任务控制" subtitle="后台任务、定时任务、执行轮次、追加指令、恢复点和验证结果读取同一任务状态。" title="任务工作台" />
@@ -1510,27 +1341,21 @@ function TasksView({
         <div className="grid-3" data-testid="background-task-summary">
           <Metric
             label="后台任务"
-            note={previewMode ? '2 个运行中' : `${state.traySummary.backgroundTasks.running} 个运行中`}
-            value={previewMode ? 5 : state.traySummary.backgroundTasks.total}
+            note={`${runningTasks} 个运行中`}
+            value={state.traySummary.backgroundTasks.total}
           />
           <Metric
             label="定时任务"
-            note={previewMode ? '下次 23:30' : state.traySummary.nextRunAt === null ? '暂无计划' : `下次 ${state.traySummary.nextRunAt}`}
-            value={previewMode ? 4 : state.backgroundTask === null ? 0 : 1}
+            note={state.traySummary.nextRunAt === null ? '暂无计划' : `下次 ${state.traySummary.nextRunAt}`}
+            value={scheduledTasks}
           />
-          <Metric label="待确认" note="高风险动作" tone="warn" value={previewMode ? 2 : state.traySummary.backgroundTasks.pendingConfirmation} />
+          <Metric label="待确认" note="高风险动作" tone="warn" value={pendingConfirmations} />
         </div>
         <div className="grid-2">
           <section className="card">
             <div className="card-title">任务队列 <CompactStatusPill tone="warn" value="需处理" /></div>
-            {previewMode ? (
-              <>
-                <Row title="Roc 页面预览生成" sub="步骤 3/5，等待截图验证" tag="运行中" tone="info" />
-                <Row title="每日记忆整理" sub="候选 8 条，冲突 1 条" tag="待确认" tone="warn" />
-                <Row title="工作区依赖检查" sub="计划在 23:30 执行" tag="定时" tone="ok" />
-              </>
-            ) : backgroundTask === null ? (
-              <Row title="后台任务" sub="当前没有后台任务预览或定时执行。" tag="真实空态" tone="warn" />
+            {backgroundTask === null ? (
+              <Row title="后台任务" sub="当前没有后台任务或定时执行。" tag="空" tone="warn" />
             ) : (
               <>
                 <Row title={backgroundTask.goal} sub={backgroundTask.triggerDescription} tag={backgroundTask.status} tone="info" />
@@ -1540,24 +1365,19 @@ function TasksView({
             )}
           </section>
           <section className="card">
-            <div className="card-title">追加指令队列</div>
-            <Row title="保持纯白极简" sub={previewMode ? '已纳入当前轮' : '继续贴近页面预览稿的留白和分栏。'} tag="生效" tone="ok" />
-            <Row title="右侧工具图标悬浮" sub={previewMode ? '布局已切换为展开式工作台' : '工作区页保持展开工作台，其余页面回到右侧图标栏。'} tag="生效" tone="ok" />
-            <Row title="截图放在当前目录" sub={previewMode ? '预览产物仍收口到页面预览效果图' : '视觉审计与 diff 产物继续留在 `.artifacts`。'} tag="生效" tone="ok" />
+            <div className="card-title">最近任务事件</div>
+            {recentEvents.length === 0 ? (
+              <Row title="任务事件" sub="当前没有任务事件。" tag="空" tone="warn" />
+            ) : (
+              recentEvents.map((event) => (
+                <Row key={event.id} title={event.type} sub={event.createdAt} tag="已记录" tone="info" />
+              ))
+            )}
           </section>
         </div>
-        <section className="card">
-          <div className="card-title">开发任务固定闭环</div>
-          <div className="timeline">
-            <TimelineStep index={1} sub={previewMode ? '还原目标、约束、事实源' : '还原目标、约束、事实源'} tag="完成" title="理解需求" tone="ok" />
-            <TimelineStep index={2} sub={previewMode ? '读取文档与现有产物' : '读取预览稿、App、CSS 和截图审计链路'} tag="完成" title="检查工作区" tone="ok" />
-            <TimelineStep index={3} sub={previewMode ? '重构聊天区与右侧工作台布局' : '重构聊天区与右侧工作台布局'} tag="运行中" title="修改文件" tone="info" />
-            <TimelineStep index={4} sub={previewMode ? '重导出截图并核验尺寸' : '重导出截图并核验 diff 产物'} tag="待执行" title="运行验证" tone="warn" />
-          </div>
-        </section>
-        <div className="smoke-contract-panels">
+        <div className="grid-2">
           {backgroundTask === null ? (
-            <EmptyState testId="background-task-controls" title="暂无后台任务" detail="当前没有后台任务预览或定时执行。" />
+            <EmptyState testId="background-task-controls" title="暂无后台任务" detail="当前没有后台任务或定时执行。" />
           ) : (
             <section className="card" data-testid="background-task-controls">
               <div className="card-title">
@@ -1619,6 +1439,7 @@ function TasksView({
               </div>
             </section>
           )}
+          <TraySummaryPanel traySummary={state.traySummary} />
         </div>
       </section>
     </>
@@ -1626,14 +1447,13 @@ function TasksView({
 }
 
 function WorkspaceView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   if (state.workspace === null) {
     return (
       <>
         <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
           <EmptyState testId="workspace-empty" title="未选择工作区" detail="请选择默认工作区后再读取文件、Git 和终端状态。" />
-          <WorkspaceSmokePanels state={state} />
+          <WorkspaceStatusPanels state={state} />
         </section>
       </>
     );
@@ -1645,16 +1465,7 @@ function WorkspaceView({ state }: { state: LoadedState }): React.JSX.Element {
       <section className="canvas-stage stage-grid" data-testid="workspace-view">
         <div className="split">
           <section className="file-tree file-tree-surface card" data-testid="file-tree">
-            {previewMode ? (
-              <>
-                <PreviewTreeItem iconText="▾" label={PREVIEW_WORKSPACE_LABEL} selected />
-                <PreviewTreeItem iconText="▸" label="docs" />
-                <PreviewTreeItem iconText="▸" label="页面预览效果图" />
-                <PreviewTreeItem iconText="•" label="想法.md" />
-                <PreviewTreeItem iconText="•" label="记忆系统.md" />
-                <PreviewTreeItem iconText="•" label="技术栈.md" />
-              </>
-            ) : state.fileTree === null ? (
+            {state.fileTree === null ? (
               <p className="muted">文件树未加载。</p>
             ) : (
               state.fileTree.entries.map((entry) => <TreeItem entry={entry} key={entry.relativePath} />)
@@ -1671,21 +1482,19 @@ function WorkspaceView({ state }: { state: LoadedState }): React.JSX.Element {
           </section>
         </div>
         <section className="code-preview" data-testid="file-preview">
-          {previewMode
-            ? PREVIEW_WORKSPACE_MARKDOWN
-            : state.filePreview === null
+          {state.filePreview === null
             ? '# 当前工作区无可预览文本文件'
             : state.filePreview.content}
         </section>
-        <WorkspaceSmokePanels state={state} />
+        <WorkspaceStatusPanels state={state} />
       </section>
     </>
   );
 }
 
-function WorkspaceSmokePanels({ state }: { state: LoadedState }): React.JSX.Element {
+function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Element {
   return (
-    <div className="grid-3 smoke-contract-panels">
+    <div className="grid-3">
       <section className="card" data-testid="git-panel">
         <div className="card-title">Git</div>
         {state.gitStatus === null ? (
@@ -1712,63 +1521,44 @@ function WorkspaceSmokePanels({ state }: { state: LoadedState }): React.JSX.Elem
 }
 
 function GitView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <>
       <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
       <section className="canvas-stage stage-grid" data-testid="git-view">
         <div className="grid-3">
-          <Metric label="变更文件" note={previewMode ? '3 个文档，2 个预览产物' : '来自 git status'} value={previewMode ? 5 : state.gitStatus === null ? 0 : state.gitStatus.changedFiles} />
-          <Metric label="当前分支" note="本地工作区" value={previewMode ? 'main' : state.gitStatus === null ? '无仓库' : state.gitStatus.branch} />
+          <Metric label="变更文件" note="来自 git status" value={state.gitStatus === null ? 0 : state.gitStatus.changedFiles} />
+          <Metric label="当前分支" note="本地工作区" value={state.gitStatus === null ? '无仓库' : state.gitStatus.branch} />
           <Metric label="风险动作" note="push / 回滚需确认" tone="warn" value={2} />
         </div>
-        {previewMode ? (
-          <div className="grid-2">
-            <section className="card">
-              <div className="card-title">Git 状态</div>
-              <Row title="新增" sub="页面预览效果图/roc-system-pages.html" tag="未暂存" tone="warn" />
-              <Row title="新增" sub="页面预览效果图/*.png" tag="未暂存" tone="warn" />
-              <Row title="无冲突" sub="当前没有冲突文件" tag="正常" tone="ok" />
-            </section>
-            <section className="card">
-              <div className="card-title">提交说明草稿</div>
-              <div className="card-pad">
-                <div className="code-preview">{PREVIEW_GIT_DRAFT}</div>
-              </div>
-            </section>
-          </div>
-        ) : (
-          <>
-            <section className="card">
-              <div className="card-title">Git 状态</div>
-              {state.gitStatus === null ? (
-                <Row title="非 Git 工作区" sub={gitErrorLabel(state.gitError)} tag="真实空态" tone="warn" />
-              ) : (
-                state.gitStatus.porcelain.map((item) => <Row key={item} sub={item} tag="未暂存" title="变更" tone="warn" />)
-              )}
-            </section>
-            <section className="card">
-              <div className="card-title">最近变更焦点</div>
-              {state.gitStatus === null ? (
-                <Row title="当前工作区" sub="当前工作区不是 Git 仓库，未生成提交说明。" tag="真实空态" tone="warn" />
-              ) : (
-                <Row
-                  title="当前工作区"
-                  sub={`${state.gitStatus.porcelain.length} 条 porcelain 状态等待确认。`}
-                  tag={state.gitStatus.branch}
-                  tone="info"
-                />
-              )}
-            </section>
-          </>
-        )}
+        <section className="card">
+          <div className="card-title">Git 状态</div>
+          {state.gitStatus === null ? (
+            <Row title="非 Git 工作区" sub={gitErrorLabel(state.gitError)} tag="空" tone="warn" />
+          ) : state.gitStatus.porcelain.length === 0 ? (
+            <Row title="工作区" sub="工作区干净" tag="无变更" tone="ok" />
+          ) : (
+            state.gitStatus.porcelain.map((item) => <Row key={item} sub={item} tag="未暂存" title="变更" tone="warn" />)
+          )}
+        </section>
+        <section className="card">
+          <div className="card-title">最近变更焦点</div>
+          {state.gitStatus === null ? (
+            <Row title="当前工作区" sub="当前工作区不是 Git 仓库，未生成提交说明。" tag="空" tone="warn" />
+          ) : (
+            <Row
+              title="当前工作区"
+              sub={`${state.gitStatus.porcelain.length} 条 porcelain 状态等待确认。`}
+              tag={state.gitStatus.branch}
+              tone="info"
+            />
+          )}
+        </section>
       </section>
     </>
   );
 }
 
 function TerminalView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <>
       <PageHeading kicker="工作区" subtitle="终端绑定当前工作区，命令目的、目录、输出、退出状态和风险级别保持可见。" title="嵌入式终端" />
@@ -1777,11 +1567,11 @@ function TerminalView({ state }: { state: LoadedState }): React.JSX.Element {
           <div className="card-title">
             命令执行边界 <CompactStatusPill tone="ok" value={`cwd: ${visibleWorkspaceCwd(state)}`} />
           </div>
-          <Row title="目的" sub={previewMode ? '重构静态页面布局并导出截图' : '读取当前工作区状态并保留任务轨迹'} tag="可见" tone="info" />
-          <Row title="风险" sub="只写入当前目录预览产物" tag={previewMode ? '低' : state.rtkStatus.resourceState === 'ready' ? '低' : '缺失降级'} tone={previewMode ? 'ok' : 'warn'} />
+          <Row title="目的" sub="读取当前工作区状态并保留任务轨迹" tag="可见" tone="info" />
+          <Row title="风险" sub="低风险命令直接执行，高风险命令进入确认策略" tag={state.rtkStatus.resourceState === 'ready' ? '低' : '缺失降级'} tone={state.rtkStatus.resourceState === 'ready' ? 'ok' : 'warn'} />
           <Row title="记录" sub="命令、输出、退出码写入任务轨迹" tag="开启" tone="ok" />
         </section>
-        <div className={previewMode ? 'terminal' : 'terminal terminal--main'} data-testid="terminal-raw-output">
+        <div className="terminal terminal--main" data-testid="terminal-raw-output">
           {buildVisibleTerminalOutput(state)}
         </div>
       </section>
@@ -1790,49 +1580,30 @@ function TerminalView({ state }: { state: LoadedState }): React.JSX.Element {
 }
 
 function PreviewView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <>
       <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
       <section className="canvas-stage stage-grid" data-testid="preview-view">
         <div className="grid-2">
           <section className="card">
-            <div className="card-title">{previewMode ? 'Markdown 预览' : 'Markdown / 文本预览'}</div>
+            <div className="card-title">Markdown / 文本预览</div>
             <div className="card-pad">
-              {previewMode ? (
-                <>
-                  <div className="page-title mini">记忆中心与可审计性</div>
-                  <div className="page-subtitle">查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。</div>
-                  <div className="tab-row" style={{ marginTop: '14px' }}>
-                    <span className="tab active">来源可追溯</span>
-                    <span className="tab active">召回可解释</span>
-                    <span className="tab">冲突待裁决</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="page-title mini">{state.filePreview === null ? '无可预览文件' : state.filePreview.relativePath}</div>
-                  <div className="page-subtitle">
-                    {state.filePreview === null ? '当前根目录没有可预览文本文件。' : `${state.filePreview.sizeBytes} bytes`}
-                  </div>
-                </>
-              )}
+              <>
+                <div className="page-title mini">{state.filePreview === null ? '无可预览文件' : state.filePreview.relativePath}</div>
+                <div className="page-subtitle">
+                  {state.filePreview === null ? '当前根目录没有可预览文本文件。' : `${state.filePreview.sizeBytes} bytes`}
+                </div>
+              </>
             </div>
           </section>
           <section className="card">
             <div className="card-title">代码 / Diff 预览</div>
-            <div className="code-preview">{previewMode ? PREVIEW_DIFF_PREVIEW : state.filePreview === null ? 'No preview loaded.' : state.filePreview.content}</div>
+            <div className="code-preview">{state.filePreview === null ? '当前没有加载可预览内容。' : state.filePreview.content}</div>
           </section>
         </div>
         <section className="card">
-          <div className="card-title">{previewMode ? '按需加载状态' : '搜索命中'}</div>
-          {previewMode ? (
-            <>
-              <Row title="Monaco" sub="代码编辑和 diff 在打开文件后加载" tag="就绪" tone="ok" />
-              <Row title="PDF" sub="大文件显示大小限制和加载状态" tag="按需" tone="info" />
-              <Row title="Office" sub="预览组件不阻塞首屏" tag="按需" tone="info" />
-            </>
-          ) : state.fileSearch === null || state.fileSearch.matches.length === 0 ? (
+          <div className="card-title">搜索命中</div>
+          {state.fileSearch === null || state.fileSearch.matches.length === 0 ? (
             <p className="muted">没有匹配项。</p>
           ) : (
             state.fileSearch.matches.map((match) => (
@@ -2036,10 +1807,11 @@ function SkillManagementPanel({
 }
 
 function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
-  const deletedId = state.memoryRecovery !== null && state.memoryRecovery.recoverable ? state.memoryRecovery.id : null;
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const recoveredId = state.memoryRecovery?.id ?? null;
   const memoryItems = state.memorySearch?.items ?? [];
   const recallItems = state.sessionSearch?.items ?? [];
+  const latestActiveMemory = memoryItems.find((item) => item.layer !== 'session') ?? null;
   const selectedCandidate = state.memoryCandidates[0] ?? null;
   const liveVisibleRecords: MemoryRecordViewModel[] = [
     ...(selectedCandidate === null
@@ -2075,22 +1847,23 @@ function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
       tone: item.layer === 'hot' ? 'ok' : 'info'
     }))
   ];
-  const visibleRecords = previewMode ? PREVIEW_MEMORY_RECORDS : liveVisibleRecords;
-  const selectedRecord = visibleRecords[0] ?? null;
+  const visibleRecords = liveVisibleRecords;
+  const selectedRecord = visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0] ?? null;
+  const selectedRecordTitle = selectedRecord === null ? 'memory-center' : memoryRecordTitle(selectedRecord);
   const draftText = selectedRecord?.summary ?? '';
-  const dirty = previewMode ? false : selectedRecord !== null;
+  const dirty = selectedRecord !== null;
   return (
     <>
       <PageHeading
-        flags={previewMode ? undefined : <StatusPill label="真相源" tone="ok" value={state.memoryStatus.truthSource} />}
+        flags={<StatusPill label="真相源" tone="ok" value={state.memoryStatus.truthSource} />}
         kicker="控制面"
-        subtitle={previewMode ? '记忆库优先展示当前全部记忆，点击任意条目即可预览、修改并管理其状态与作用范围。' : '查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。'}
+        subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。"
         title="记忆中心"
       />
       <section className="canvas-stage stage-grid" data-testid="memory-view">
         <div className="memory-search-box">
           <span>搜索记忆 ID、正文、来源引用、scope 或会话摘要</span>
-          {previewMode ? <CompactStatusPill tone="info" value="当前范围：project:Roc" /> : <StatusPill label="当前范围" tone="info" value="project:Roc" />}
+          <StatusPill label="当前范围" tone="info" value="project:Roc" />
         </div>
         <div className="memory-library-layout">
           <aside className="memory-library-sidebar">
@@ -2098,33 +1871,39 @@ function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
               <Metric
                 label="全部记忆"
                 note="含热 / 暖 / 会话回忆"
-                value={previewMode ? 132 : Object.values(state.memoryStatus.layers).reduce((total, item) => total + item.entries, 0)}
+                value={Object.values(state.memoryStatus.layers).reduce((total, item) => total + item.entries, 0)}
               />
               <Metric
                 label="草稿"
-                note={previewMode ? '无待保存差异' : selectedRecord === null ? '无待保存差异' : '当前条目可编辑'}
-                value={previewMode ? 0 : selectedRecord === null ? 0 : 1}
+                note={selectedRecord === null ? '无待保存差异' : '当前条目可编辑'}
+                value={selectedRecord === null ? 0 : 1}
               />
             </div>
             <section className="card">
               <div className="card-title">筛选与视图</div>
               <Row title="记忆域" sub="偏好 / 反馈 / 项目上下文 / 过程技能 / 知识笔记 / 会话回忆" tag="全部" tone="info" />
-              <Row title="作用范围" sub={previewMode ? 'global / project:Roc / task:T-2048' : 'global / project:Roc / task threads'} tag="自动约束" tone="ok" />
+              <Row title="作用范围" sub="global / project:Roc / task threads" tag="自动约束" tone="ok" />
               <Row title="来源" sub="user_explicit / feedback / agent_extract / session_recall" tag="可筛选" tone="ok" />
             </section>
             <div className="memory-list-shell">
               <div className="memory-list-head">
                 <span>记忆列表</span>
-                <CompactStatusPill tone="ok" value={`${visibleRecords.length} 条示例`} />
+                <CompactStatusPill tone="ok" value={`${visibleRecords.length} 条记录`} />
               </div>
               <div className="memory-list-body">
                 {visibleRecords.length === 0 ? (
                   <p className="muted">当前没有可显示记忆。</p>
                 ) : (
-                  visibleRecords.map((record, index) => (
-                    <button className={index === 0 ? 'memory-record active' : 'memory-record'} key={record.id} type="button">
+                  visibleRecords.map((record) => (
+                    <button
+                      aria-pressed={selectedRecord?.id === record.id}
+                      className={selectedRecord?.id === record.id ? 'memory-record active' : 'memory-record'}
+                      key={record.id}
+                      type="button"
+                      onClick={() => setSelectedRecordId(record.id)}
+                    >
                       <div className="memory-record-meta">
-                        <span className="memory-record-title">{record.id}</span>
+                        <span className="memory-record-title">{memoryRecordTitle(record)}</span>
                         <span className={`pill ${record.tone}`}>{record.layer}</span>
                         <span className="pill">{record.sourceTag}</span>
                       </div>
@@ -2148,16 +1927,14 @@ function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
             <div className="memory-editor-stage">
               <div className="memory-editor-topline">
                 <div>
-                  <div className="memory-editor-title">{selectedRecord?.id ?? 'memory-center'}</div>
+                  <div className="memory-editor-title">{selectedRecordTitle}</div>
                   <div className="memory-editor-subtitle">
                     {selectedRecord === null
                       ? '右侧编辑台是这页主工作区，正文预览、修改、元信息和高风险操作都集中在这里。'
-                      : previewMode
-                        ? `当前选中：${selectedRecord.layer}。右侧编辑台是这页的主工作区，正文预览、修改、元信息和高风险操作都集中在这里。`
-                        : `当前选中：${selectedRecord.layer} / ${selectedRecord.scope}。右侧编辑台是这页主工作区，正文预览、修改、元信息和高风险操作都集中在这里。`}
+                      : `当前选中：${selectedRecord.layer} / ${selectedRecord.scope}。右侧编辑台是这页主工作区，正文预览、修改、元信息和高风险操作都集中在这里。`}
                   </div>
                 </div>
-                <CompactStatusPill tone={previewMode ? dirty ? 'warn' : 'info' : state.memoryStatus.degradedReason === undefined ? 'info' : 'warn'} value={previewMode ? dirty ? '编辑草稿未保存' : '当前条目已同步' : state.memoryStatus.degradedReason === undefined ? '当前条目已同步' : '索引降级'} />
+                <CompactStatusPill tone={state.memoryStatus.degradedReason === undefined ? 'info' : 'warn'} value={state.memoryStatus.degradedReason === undefined ? '当前条目已同步' : '索引降级'} />
               </div>
               <div className="memory-editor-meta">
                 {selectedRecord === null ? (
@@ -2186,33 +1963,37 @@ function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
                     {selectedRecord === null ? '当前没有候选内容。' : selectedRecord.note ?? selectedRecord.detail}
                   </div>
                   <div className="form-grid">
-                    <FieldPreview label={previewMode ? '最近访问' : '最近恢复'} value={previewMode ? selectedRecord?.lastAccessed ?? '2026-04-28 15:18' : deletedId ?? 'smoke 已验证可恢复链'} />
-                    <FieldPreview label={previewMode ? '访问次数' : '召回结果'} value={previewMode ? selectedRecord?.accessCount ?? '27' : String(memoryItems.length)} />
+                    <FieldPreview label="最近恢复" value={recoveredId ?? latestActiveMemory?.id ?? '无恢复记录'} />
+                    <FieldPreview label="召回结果" value={String(memoryItems.length)} />
                   </div>
                   <div className="memory-editor-actions">
-                    <button className="memory-chip-button primary" type="button">保存修改</button>
-                    <button className="memory-chip-button" type="button">恢复原文</button>
-                    <button className="memory-chip-button" type="button">归档</button>
-                    <button className="memory-chip-button warn" type="button">移动到冷记忆</button>
-                    <button className="memory-chip-button bad" type="button">删除</button>
+                    <span className="memory-chip-button primary" data-testid="memory-save-status">
+                      只读
+                    </span>
+                    <span className="memory-chip-button">
+                      恢复受控
+                    </span>
+                    <span className="memory-chip-button">
+                      归档受控
+                    </span>
+                    <span className="memory-chip-button warn">
+                      分层受控
+                    </span>
+                    <span className="memory-chip-button bad">
+                      删除受控
+                    </span>
                   </div>
                   <section className="card">
                     <div className="card-title">删除与恢复</div>
                     <Row title="删除当前条目" sub="先展示影响范围；删除会话回忆不会自动级联删除策展记忆。" tag="受控" tone="warn" />
                     <Row title="恢复历史版本" sub="可从 cold history 恢复旧版本，并保留 superseded 轨迹。" tag="可恢复" tone="info" />
                   </section>
-                  {previewMode ? (
-                    <section className="card">
-                      <div className="card-title">后台整理状态</div>
-                      <Row title="本轮状态" sub="后台静默整理正常运行，最近一轮已处理候选准入和冲突合并。" tag="正常" tone="ok" />
-                    </section>
-                  ) : null}
                 </div>
               </div>
             </div>
           </section>
         </div>
-        <div className="smoke-contract-panels">
+        <div className="grid-2">
           <div className="notice" data-testid="memory-degraded">
             {state.memoryStatus.degradedReason === undefined ? '索引状态正常；向量索引可按需重建。' : state.memoryStatus.degradedReason}
           </div>
@@ -2242,12 +2023,28 @@ function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
           </section>
           <section className="card" data-testid="memory-recovery">
             <div className="card-title">删除恢复</div>
-            <Row title="最近操作" sub={deletedId === null ? 'smoke 已验证可恢复链' : deletedId} tag={state.memoryRecovery === null ? '已验证' : state.memoryRecovery.status} tone="ok" />
+            {state.memoryRecovery !== null ? (
+              <Row title="最近操作" sub={state.memoryRecovery.id} tag={state.memoryRecovery.status} tone="ok" />
+            ) : latestActiveMemory !== null ? (
+              <Row title="最近操作" sub={latestActiveMemory.id} tag="active" tone="ok" />
+            ) : (
+              <Row title="最近操作" sub="暂无删除恢复记录。" tag="空" tone="warn" />
+            )}
           </section>
         </div>
       </section>
     </>
   );
+}
+
+function memoryRecordTitle(record: MemoryRecordViewModel): string {
+  if (record.layer === 'candidate') {
+    return '候选记忆';
+  }
+  if (record.layer === 'session_recall') {
+    return '会话回忆';
+  }
+  return `${record.layer}记忆`;
 }
 
 function SettingsView({
@@ -2259,7 +2056,6 @@ function SettingsView({
 }): React.JSX.Element {
   const primaryProvider = state.providers[0] ?? null;
   const enabledModel = primaryProvider?.models.find((model) => model.enabled) ?? null;
-  const previewMode = isPreviewSmoke(state);
   const connectionPreview =
     state.providerTestStatus === null
       ? '未运行'
@@ -2277,15 +2073,15 @@ function SettingsView({
             ))}
           </div>
           <section className="card">
-            <div className="card-title">模型提供商 {previewMode ? <CompactStatusPill tone="warn" value="草稿未保存" /> : <StatusPill label="状态" tone="warn" value="草稿未保存" />}</div>
+            <div className="card-title">模型提供商 <StatusPill label="状态" tone="warn" value="草稿未保存" /></div>
             <div className="card-pad">
               <div className="form-grid">
-                <FieldPreview label="名称" value={previewMode ? 'OpenAI-compatible' : primaryProvider === null ? '尚未配置 provider' : primaryProvider.name} />
-                <FieldPreview label="类型" value={previewMode ? '兼容服务' : primaryProvider === null ? '未设置' : providerTypeLabel(primaryProvider.type)} />
-                <FieldPreview label="服务地址" value={previewMode ? 'https://api.example.local/v1' : primaryProvider === null ? '未设置' : primaryProvider.endpoint} />
+                <FieldPreview label="名称" value={primaryProvider === null ? '尚未配置 provider' : primaryProvider.name} />
+                <FieldPreview label="类型" value={primaryProvider === null ? '未设置' : providerTypeLabel(primaryProvider.type)} />
+                <FieldPreview label="服务地址" value={primaryProvider === null ? '未设置' : primaryProvider.endpoint} />
                 <FieldPreview label="凭据状态" value="已保存，隐藏显示" />
-                <FieldPreview label="启用状态" value={previewMode ? '启用' : primaryProvider !== null && primaryProvider.enabled ? '启用' : '未启用'} />
-                <FieldPreview label="连接测试" value={previewMode ? '最近 2 分钟通过' : connectionPreview} />
+                <FieldPreview label="启用状态" value={primaryProvider !== null && primaryProvider.enabled ? '启用' : '未启用'} />
+                <FieldPreview label="连接测试" value={connectionPreview} />
               </div>
               <div className="tab-row">
                 <span className="tab active">保存前展示影响范围</span>
@@ -2300,7 +2096,7 @@ function SettingsView({
           <Row title="默认模型变化" sub="会影响新任务和后台任务模型选择" tag="需确认" tone="warn" />
           <Row title="记忆策略变化" sub="会影响自动写入、热记忆准入和跨项目召回" tag="需确认" tone="warn" />
         </section>
-        <div className="smoke-contract-panels">
+        <div className="grid-2">
           <section className="card" data-testid="provider-settings">
             <div className="card-title">模型 Provider</div>
             <Row title="默认模型" sub={state.defaultModelId === null ? '需要配置默认模型' : state.defaultModelId} tag={state.defaultModelId === null ? '缺失' : 'ready'} tone={state.defaultModelId === null ? 'warn' : 'ok'} />
@@ -2312,7 +2108,7 @@ function SettingsView({
                   <div>
                     <div className="row-title">{provider.name}</div>
                     <div className="row-sub">
-                      {provider.id} · {provider.type} · {provider.endpoint} · {provider.id}:{providerContractStatus(provider, state.providerTestStatus)}
+                      {provider.id} · {provider.type} · {provider.endpoint} · {provider.id}:{providerRuntimeStatus(provider, state.providerTestStatus)}
                     </div>
                   </div>
                   <span className={provider.enabled ? 'pill ok' : 'pill warn'}>{provider.enabled ? `${provider.models.length} models` : 'disabled'}</span>
@@ -2348,84 +2144,64 @@ function SettingsView({
 }
 
 function DoctorView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <>
       <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
       <section className="canvas-stage stage-grid" data-testid="doctor-view">
         <div className="grid-3">
-          <Metric label={previewMode ? '检查项' : '通过'} note={previewMode ? '15 通过' : '检查项 pass'} tone="ok" value={previewMode ? 18 : state.doctor.summary.pass} />
-          <Metric label={previewMode ? '警告' : '警告 / 降级'} note="可执行修复" tone="warn" value={previewMode ? 2 : state.doctor.summary.degraded} />
-          <Metric label="失败" note={previewMode ? '网页连接未授权' : '需要用户处理'} tone={previewMode || state.doctor.summary.fail > 0 ? 'bad' : 'ok'} value={previewMode ? 1 : state.doctor.summary.fail} />
+          <Metric label="通过" note="检查项 pass" tone="ok" value={state.doctor.summary.pass} />
+          <Metric label="警告 / 降级" note="可执行修复" tone="warn" value={state.doctor.summary.degraded} />
+          <Metric label="失败" note="需要用户处理" tone={state.doctor.summary.fail > 0 ? 'bad' : 'ok'} value={state.doctor.summary.fail} />
         </div>
         <section className="card">
           <div className="card-title">健康检查结果</div>
-          {previewMode ? (
-            <>
-              <Row title="模型配置" sub="默认模型来自已启用 provider" tag="通过" tone="ok" />
-              <Row title="MCP 服务" sub="docs-langchain 健康，网页阅读未授权" tag="警告" tone="warn" />
-              <Row title="记忆索引" sub="FTS5 正常，向量索引后台重建中" tag="通过" tone="ok" />
-              <Row title="恢复点" sub="最近文件写入已创建恢复点" tag="通过" tone="ok" />
-              <Row title="日志脱敏" sub="未发现凭据明文" tag="通过" tone="ok" />
-            </>
-          ) : (
-            <>
-              {state.doctor.findings.map((finding) => (
-                <Row
-                  key={finding.id}
-                  sub={finding.detail}
-                  tag={finding.status}
-                  title={finding.repairAction === undefined ? finding.title : `${finding.title} · ${finding.repairAction.label}`}
-                  tone={finding.status === 'pass' ? 'ok' : finding.status === 'fail' ? 'bad' : 'warn'}
-                />
-              ))}
-              <Row title="后台任务" sub="打开任务工作台查看后台执行、失败任务和待确认项" tag="打开任务工作台" tone="info" />
-            </>
-          )}
+          {state.doctor.findings.map((finding) => (
+            <Row
+              key={finding.id}
+              sub={finding.detail}
+              tag={finding.status}
+              title={finding.repairAction === undefined ? finding.title : `${finding.title} · ${finding.repairAction.label}`}
+              tone={finding.status === 'pass' ? 'ok' : finding.status === 'fail' ? 'bad' : 'warn'}
+            />
+          ))}
+          <Row title="后台任务" sub="打开任务工作台查看后台执行、失败任务和待确认项" tag="打开任务工作台" tone="info" />
         </section>
-        {previewMode ? (
-          <section className="card">
-            <div className="card-title">修复动作</div>
-            <Row title="授权浏览器连接" sub="打开设置页并测试连接" tag="可执行" tone="info" />
-            <Row title="重建向量索引" sub="后台队列继续，不阻塞 UI" tag="可执行" tone="info" />
-          </section>
-        ) : (
-          <>
-            <DiagnosticPackagePanel diagnosticPackage={state.diagnosticPackage} />
-            <PerformancePanel performanceSample={state.performanceSample} />
-          </>
-        )}
+        <DiagnosticPackagePanel diagnosticPackage={state.diagnosticPackage} />
+        <PerformancePanel performanceSample={state.performanceSample} />
       </section>
     </>
   );
 }
 
 function DiagnosticsView({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
+  const failedEvents = state.taskSnapshot.recentEvents.filter((event) => event.type === 'error').slice(0, 3);
   return (
     <>
       <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
       <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
         <section className="card">
-          <div className="card-title">{previewMode ? '失败任务 #T-2039 ' : '失败任务 '}{previewMode ? <CompactStatusPill tone="bad" value="验证失败" /> : <StatusPill label="状态" tone="bad" value="验证失败" />}</div>
-          <Row title="用户输入" sub="生成页面预览并截图" tag="已记录" tone="info" />
-          <Row title="任务计划" sub="读取文档 -> 生成页面 -> 截图 -> 验证" tag="已记录" tone="info" />
-          <Row title="失败分类" sub="截图工具未找到浏览器入口" tag="环境不可用" tone="bad" />
-          <Row title="恢复点" sub="写入预览源文件前已创建" tag="可回退" tone="ok" />
+          <div className="card-title">失败任务 <StatusPill label="状态" tone="bad" value={failedEvents.length === 0 ? '无失败任务' : '验证失败'} /></div>
+          {failedEvents.length === 0 ? (
+            <Row title="失败事件" sub="当前没有失败任务事件。" tag="空" tone="ok" />
+          ) : (
+            failedEvents.map((event) => (
+              <Row key={event.id} title={event.type} sub={event.createdAt} tag="已记录" tone="bad" />
+            ))
+          )}
         </section>
         <div className="grid-2">
           <section className="card">
             <div className="card-title">关键日志</div>
-            <Row title="Edge 路径探测" sub="C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" tag="找到" tone="ok" />
-            <Row title="截图命令" sub="退出码 0" tag="成功" tone="ok" />
+            <Row title="诊断包" sub={state.diagnosticPackage === null ? '尚未生成诊断包。' : state.diagnosticPackage.path} tag={state.diagnosticPackage === null ? '空态' : '已生成'} tone={state.diagnosticPackage === null ? 'warn' : 'ok'} />
+            <Row title="性能采样" sub={`${state.performanceSample.rssMb} MB RSS`} tag={state.performanceSample.exceedsBudget ? '超预算' : '正常'} tone={state.performanceSample.exceedsBudget ? 'warn' : 'ok'} />
           </section>
           <section className="card">
-            <div className="card-title">未完成事项</div>
-            <Row title="移动端截图" sub="用户未要求，本轮不生成" tag="不做" tone="info" />
-            <Row title="提交代码" sub="用户未要求" tag="不做" tone="info" />
+            <div className="card-title">恢复与脱敏</div>
+            <Row title="脱敏状态" sub={state.diagnosticPackage === null ? '无诊断包' : state.diagnosticPackage.redacted ? '已脱敏' : '未通过'} tag={state.diagnosticPackage === null ? '空态' : '已检查'} tone={state.diagnosticPackage === null ? 'warn' : state.diagnosticPackage.redacted ? 'ok' : 'bad'} />
+            <Row title="包含项" sub={state.diagnosticPackage === null ? '无' : state.diagnosticPackage.includes.join(', ')} tag="真实数据" tone="info" />
           </section>
         </div>
-        <div className="smoke-contract-panels">
+        <div className="grid-2">
           <DiagnosticPackagePanel diagnosticPackage={state.diagnosticPackage} />
           <PerformancePanel performanceSample={state.performanceSample} />
         </div>
@@ -2468,12 +2244,14 @@ function RailOverlay({
 function WorkbenchPanel({
   activeTool,
   activeView,
+  onClose,
   onToolChange,
   state,
   windowState
 }: {
   activeTool: WorkbenchTool;
   activeView: ViewId;
+  onClose: () => void;
   onToolChange: (tool: WorkbenchTool) => void;
   state: LoadedState;
   windowState: WindowStateSnapshot;
@@ -2498,7 +2276,7 @@ function WorkbenchPanel({
             );
           })}
         </div>
-        <button aria-label="关闭右侧工作台" className="workbench-close" type="button">
+        <button aria-label="关闭右侧工作台" className="workbench-close" type="button" onClick={onClose}>
           <span className="titlebar-glyph" aria-hidden="true">×</span>
         </button>
       </div>
@@ -2516,7 +2294,6 @@ function WorkbenchPanel({
 }
 
 function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   const fileCount = state.fileTree?.entries.length ?? 0;
   const previewPath = state.filePreview?.relativePath ?? '当前没有可预览文件';
   const searchCount = state.fileSearch?.matches.length ?? 0;
@@ -2528,22 +2305,10 @@ function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
             <div className="dock-preview-title">文件</div>
             <div className="dock-preview-subtitle">查看当前工作区文件、预览目录和选中文件上下文。</div>
           </div>
-          <div className="dock-preview-copy">
-            {previewMode
-              ? '右侧文件工作台改为固定停靠，不再悬浮遮挡主画布；当前页继续保留文件树、内容预览和可执行边界说明。'
-              : '右侧文件工作台固定停靠，主画布保留摘要布局；真实文件树、预览文件和搜索命中继续来自 IPC。'}
-          </div>
+          <div className="dock-preview-copy">{state.workspace === null ? '未选择工作区。' : state.workspace.path}</div>
         </div>
         <section className="file-tree">
-          {previewMode ? (
-            <>
-              <PreviewTreeItem iconText="▾" label="Roc" selected />
-              <PreviewTreeItem iconText="•" label="想法.md" />
-              <PreviewTreeItem iconText="•" label="记忆系统.md" />
-              <PreviewTreeItem iconText="•" label="技术栈.md" />
-              <PreviewTreeItem iconText="▸" label="页面预览效果图" />
-            </>
-          ) : state.fileTree === null ? (
+          {state.fileTree === null ? (
             <p className="muted">未选择工作区。</p>
           ) : (
             state.fileTree.entries.slice(0, 10).map((entry) => <TreeItem entry={entry} key={entry.relativePath} />)
@@ -2551,20 +2316,10 @@ function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
         </section>
         <section className="card">
           <div className="card-title">当前文件上下文</div>
-          {previewMode ? (
-            <>
-              <Row title="选中文件" sub="roc-system-pages.html" tag="编辑中" tone="info" />
-              <Row title="预览目录" sub="页面预览效果图" tag="可写" tone="ok" />
-              <Row title="文件预览" sub="Markdown、代码、图片按需打开" tag="就绪" tone="ok" />
-            </>
-          ) : (
-            <>
-              <Row title="文件总数" sub={state.workspace === null ? '未选择工作区' : state.workspace.path} tag={`${fileCount} 项`} tone="info" />
-              <Row title="当前预览" sub={previewPath} tag={state.filePreview === null ? '空态' : '已加载'} tone={state.filePreview === null ? 'warn' : 'ok'} />
-              <Row title="搜索命中" sub={`phase three`} tag={`${searchCount} 条`} tone="info" />
-              <Row title="RTK" sub={state.rtkStatus.teeDir} tag={state.rtkStatus.resourceState === 'ready' ? '可用' : '缺失降级'} tone="warn" />
-            </>
-          )}
+          <Row title="文件总数" sub={state.workspace === null ? '未选择工作区' : state.workspace.path} tag={`${fileCount} 项`} tone="info" />
+          <Row title="当前预览" sub={previewPath} tag={state.filePreview === null ? '空态' : '已加载'} tone={state.filePreview === null ? 'warn' : 'ok'} />
+          <Row title="搜索命中" sub="当前查询" tag={`${searchCount} 条`} tone="info" />
+          <Row title="RTK" sub={state.rtkStatus.teeDir} tag={state.rtkStatus.resourceState === 'ready' ? '可用' : '缺失降级'} tone="warn" />
         </section>
       </div>
     </section>
@@ -2572,7 +2327,6 @@ function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
 }
 
 function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <section className="tool-panel">
       <div className="tool-stack">
@@ -2581,11 +2335,7 @@ function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
             <div className="dock-preview-title">Git</div>
             <div className="dock-preview-subtitle">状态、diff 和提交风险继续集中在右侧工作台。</div>
           </div>
-          <div className="dock-preview-copy">
-            {previewMode
-              ? '顶部标签切换 Git 视图，信息停靠在右侧，不再使用悬浮卡片遮住页面内容。'
-              : '这里保留真实 Git 状态和风险提示，不把提交控制卡片塞回主画布。'}
-          </div>
+          <div className="dock-preview-copy">{state.gitStatus === null ? gitErrorLabel(state.gitError) : state.gitStatus.branch}</div>
         </div>
         <section className="card">
           <div className="card-title">Git 快捷动作</div>
@@ -2595,12 +2345,7 @@ function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
         </section>
         <section className="card">
           <div className="card-title">最近变更焦点</div>
-          {previewMode ? (
-            <>
-              <Row title="页面预览效果图/roc-system-pages.html" sub="布局重写中" tag="未暂存" tone="warn" />
-              <Row title="页面预览效果图/*.png" sub="等待重导出" tag="未暂存" tone="warn" />
-            </>
-          ) : state.gitStatus === null ? (
+          {state.gitStatus === null ? (
             <Row title="当前工作区" sub={gitErrorLabel(state.gitError)} tag="非 Git 仓库" tone="warn" />
           ) : (
             <>
@@ -2615,7 +2360,6 @@ function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
 }
 
 function TerminalWorkbench({ state, windowState: _windowState }: { state: LoadedState; windowState: WindowStateSnapshot }): React.JSX.Element {
-  const previewMode = isPreviewSmoke(state);
   return (
     <section className="tool-panel">
       <div className="tool-stack">
@@ -2624,9 +2368,9 @@ function TerminalWorkbench({ state, windowState: _windowState }: { state: Loaded
             <div className="dock-preview-title">Terminal</div>
             <div className="dock-preview-subtitle">命令执行边界、输出和状态保持可见。</div>
           </div>
-          <div className="dock-preview-copy">终端辅助信息固定停靠在右侧，主画布继续展示当前页面内容和输入区。</div>
+          <div className="dock-preview-copy">{visibleWorkspaceCwd(state)}</div>
         </div>
-        <pre className="terminal">{previewMode ? PREVIEW_TERMINAL_WORKBENCH_OUTPUT : buildVisibleTerminalOutput(state)}</pre>
+        <pre className="terminal">{buildVisibleTerminalOutput(state)}</pre>
         <section className="card">
           <div className="card-title">终端边界</div>
           <Row title="目录" sub="限定当前工作区" tag="受控" tone="ok" />
@@ -2721,31 +2465,6 @@ function PerformancePanel({ performanceSample }: { performanceSample: Performanc
       <Row title="Heap" sub={`${performanceSample.heapUsedMb} / ${performanceSample.heapTotalMb} MB`} tag="sample" tone="info" />
       <Row title="预算" sub={`${performanceSample.memoryBudgetMb} MB`} tag={performanceSample.mode} tone="info" />
     </section>
-  );
-}
-
-function TimelineStep({
-  index,
-  sub,
-  tag,
-  title,
-  tone = 'neutral'
-}: {
-  index: number;
-  sub: string;
-  tag: string;
-  title: string;
-  tone?: 'neutral' | 'ok' | 'warn' | 'bad' | 'info';
-}): React.JSX.Element {
-  return (
-    <div className="step">
-      <div className="step-index">{index}</div>
-      <div>
-        <div className="row-title">{title}</div>
-        <div className="row-sub">{sub}</div>
-      </div>
-      <span className={`pill ${tone}`}>{tag}</span>
-    </div>
   );
 }
 
@@ -2950,7 +2669,7 @@ function CompactStatusPill({
   );
 }
 
-function TraySummaryContractPanel({ traySummary }: { traySummary: TraySummary }): React.JSX.Element {
+function TraySummaryPanel({ traySummary }: { traySummary: TraySummary }): React.JSX.Element {
   return (
     <section className="card" data-testid="tray-summary">
       <div className="card-title">托盘摘要</div>

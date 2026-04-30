@@ -16,6 +16,26 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
 
+type BackgroundTaskRow = {
+  id: string;
+  thread_id: string;
+  run_id: string;
+  goal: string;
+  status: BackgroundTask['status'];
+  scheduled: number;
+  trigger_description: string;
+  next_run_at: string | null;
+  workspace_path: string;
+  allowed_actions_json: string;
+  forbidden_actions_json: string;
+  failure_policy: BackgroundTask['failurePolicy'];
+  notification_policy: BackgroundTask['notificationPolicy'];
+  risk_level: BackgroundTask['riskLevel'];
+  requires_confirmation: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export class TaskService {
   constructor(private readonly database: DatabaseService) {}
 
@@ -177,6 +197,21 @@ export class TaskService {
       throw this.invalidTransition('后台任务当前状态不能取消。');
     }
     return this.transitionBackgroundTask(task, 'cancelled', 'background_task_cancelled');
+  }
+
+  listBackgroundTasks(): BackgroundTask[] {
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+                requires_confirmation, created_at, updated_at
+         FROM background_tasks
+         ORDER BY updated_at DESC
+         LIMIT 50`
+      )
+      .all() as BackgroundTaskRow[];
+
+    return rows.map((row) => this.backgroundTaskFromRow(row));
   }
 
   getBackgroundTaskSummary(): BackgroundTaskSummary {
@@ -522,27 +557,7 @@ export class TaskService {
          FROM background_tasks
          WHERE id = ?`
       )
-      .get(taskId) as
-      | {
-          id: string;
-          thread_id: string;
-          run_id: string;
-          goal: string;
-          status: BackgroundTask['status'];
-          scheduled: number;
-          trigger_description: string;
-          next_run_at: string | null;
-          workspace_path: string;
-          allowed_actions_json: string;
-          forbidden_actions_json: string;
-          failure_policy: BackgroundTask['failurePolicy'];
-          notification_policy: BackgroundTask['notificationPolicy'];
-          risk_level: BackgroundTask['riskLevel'];
-          requires_confirmation: number;
-          created_at: string;
-          updated_at: string;
-        }
-      | undefined;
+      .get(taskId) as BackgroundTaskRow | undefined;
 
     if (row === undefined) {
       throw new RocDomainError({
@@ -554,6 +569,10 @@ export class TaskService {
       });
     }
 
+    return this.backgroundTaskFromRow(row);
+  }
+
+  private backgroundTaskFromRow(row: BackgroundTaskRow): BackgroundTask {
     return {
       id: row.id,
       threadId: row.thread_id,

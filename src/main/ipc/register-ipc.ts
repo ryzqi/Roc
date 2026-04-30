@@ -60,6 +60,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
     })
   );
   ipcMain.handle(ipcChannels.tasksGetSnapshot, () => wrapIpc(() => services.taskService.getSnapshot()));
+  ipcMain.handle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => services.taskService.listBackgroundTasks()));
   ipcMain.handle(ipcChannels.tasksCreateBackgroundPreview, (_event, request) =>
     wrapIpc(() => services.taskService.createBackgroundTaskPreview(request))
   );

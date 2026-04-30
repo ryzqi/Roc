@@ -1396,6 +1396,32 @@ describe('Roc foundation services', () => {
     }
   });
 
+  it('returns UTF-8 shell output for Chinese workspace filenames', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
+    try {
+      writeFileSync(join(workspaceRoot, '记忆系统.md'), '# 记忆系统\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const result = services.shellExecutionService.execute({
+        command: 'dir',
+        cwd: workspaceRoot,
+        source: 'terminal'
+      });
+
+      expect(result).toMatchObject({
+        command: 'dir',
+        cwd: workspaceRoot,
+        exitCode: 0,
+        usedRtk: false,
+        bypassReason: 'user_terminal_raw_output'
+      });
+      expect(result.stdout).toContain('记忆系统.md');
+      expect(result.stdout).not.toContain('�');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('blocks compound shell commands even when they start with a read-only command', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
     try {

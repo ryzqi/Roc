@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { _electron as electron } from '@playwright/test';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -39,6 +40,83 @@ writeFileSync(
   'utf8'
 );
 
+function readRequestBody(request) {
+  return new Promise((resolveBody, rejectBody) => {
+    const chunks = [];
+    request.on('data', (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    request.on('error', rejectBody);
+    request.on('end', () => {
+      resolveBody(Buffer.concat(chunks).toString('utf8'));
+    });
+  });
+}
+
+async function startSmokeProvider() {
+  const requests = [];
+  const server = createServer((request, response) => {
+    void (async () => {
+      const rawBody = await readRequestBody(request);
+      requests.push({
+        method: request.method,
+        url: request.url,
+        authorization: request.headers.authorization,
+        body: rawBody.length === 0 ? null : JSON.parse(rawBody)
+      });
+      response.statusCode = 200;
+      response.setHeader('content-type', 'application/json');
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: 'Smoke Provider 已生成首轮回复。'
+              },
+              finish_reason: 'stop'
+            }
+          ],
+          usage: {
+            prompt_tokens: 16,
+            completion_tokens: 9
+          }
+        })
+      );
+    })().catch((error) => {
+      response.statusCode = 500;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'provider failed' }));
+    });
+  });
+
+  await new Promise((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectListen);
+      resolveListen();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Smoke provider did not expose a TCP address.');
+  }
+  const tcpAddress = address;
+  return {
+    endpoint: `http://127.0.0.1:${tcpAddress.port}/v1`,
+    requests,
+    close: () =>
+      new Promise((resolveClose, rejectClose) => {
+        server.close((error) => {
+          if (error !== undefined) {
+            rejectClose(error);
+            return;
+          }
+          resolveClose();
+        });
+      })
+  };
+}
+
 async function waitForWindowWithSelector(app, selector) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
@@ -52,6 +130,18 @@ async function waitForWindowWithSelector(app, selector) {
   throw new Error(`Smoke timed out waiting for window selector: ${selector}`);
 }
 
+async function waitForAppReady(page, label) {
+  await page.waitForSelector('[data-testid="roc-app"], .fatal, .boot', { timeout: 15000 });
+  if ((await page.locator('.fatal').count()) > 0) {
+    const text = await page.textContent('.fatal');
+    writeFileSync(join(artifactDir, `electron-smoke-fatal-${label}.txt`), text ?? '', 'utf8');
+    throw new Error(`Roc renderer fatal during ${label}: ${text}`);
+  }
+  if ((await page.locator('[data-testid="roc-app"]').count()) === 0) {
+    await page.waitForSelector('[data-testid="roc-app"]', { timeout: 15000 });
+  }
+}
+
 async function clickSmokeControl(page, selector) {
   const target = page.locator(selector);
   await target.waitFor({ state: 'attached', timeout: 5000 });
@@ -60,24 +150,207 @@ async function clickSmokeControl(page, selector) {
   });
 }
 
-async function waitForSmokeContract(page, selector) {
-  await page.locator(selector).waitFor({ state: 'attached', timeout: 5000 });
+async function waitForCapabilitySelection(page, { mcpCount, skillCount, expectedIds = [] }) {
+  await page.waitForFunction(
+    ({ expectedIds: ids, mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
+      const node = document.querySelector('[data-testid="turn-capabilities"]');
+      const text = node?.textContent ?? '';
+      return (
+        text.includes(`MCP 本轮 ${expectedMcpCount}`) &&
+        text.includes(`Skill 本轮 ${expectedSkillCount}`) &&
+        ids.every((id) => text.includes(id))
+      );
+    },
+    { expectedIds, mcpCount, skillCount },
+    { timeout: 5000 }
+  );
+  const text = await page.textContent('[data-testid="turn-capabilities"]');
+  if (text === null) {
+    throw new Error('Smoke could not read chat capability text.');
+  }
+  return text;
+}
+
+async function readMainPageText(page, { pageId, viewSelector, label }) {
+  const openedPage = await page.evaluate(async (targetPage) => {
+    const result = await window.roc.app.openMainPage(targetPage);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    return result.data.page;
+  }, pageId);
+  if (openedPage !== pageId) {
+    throw new Error(`Smoke navigated to ${openedPage} instead of ${pageId}.`);
+  }
+  await page.waitForSelector(viewSelector, { timeout: 5000 });
+  const text = await page.textContent(viewSelector);
+  if (text === null) {
+    throw new Error(`Smoke could not read ${label} view text.`);
+  }
+  return text;
+}
+
+async function seedSmokeRuntimeData(page, { providerEndpoint }) {
+  await page.evaluate(
+    async ({ providerEndpoint: endpoint, workspacePath }) => {
+      async function unwrap(result, label) {
+        if (!result.ok) {
+          throw new Error(`${label} failed: ${result.error.message}`);
+        }
+        return result.data;
+      }
+
+      await unwrap(
+        await window.roc.providers.upsert({
+          id: 'smoke-provider',
+          name: 'Smoke Provider',
+          type: 'openai_compatible',
+          endpoint,
+          credentialRef: 'env:ROC_SMOKE_API_KEY',
+          enabled: true,
+          models: [
+            {
+              id: 'smoke-model',
+              displayName: 'Smoke Model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }),
+        'provider upsert'
+      );
+      await unwrap(await window.roc.providers.setDefaultModel('smoke-model'), 'default model');
+      await unwrap(
+        await window.roc.mcp.upsertServer({
+          id: 'smoke-mcp',
+          name: 'Smoke MCP',
+          enabled: true,
+          transport: 'http',
+          preset: false,
+          riskLevel: 'low',
+          url: 'http://127.0.0.1:65534/mcp',
+          allowedTools: ['smoke_tool']
+        }),
+        'mcp upsert'
+      );
+      await unwrap(await window.roc.mcp.ensureExaPreset(), 'exa preset');
+
+      const backgroundPreview = await unwrap(
+        await window.roc.tasks.createBackgroundTaskPreview({
+          goal: 'Phase 6 smoke background diagnostic task',
+          trigger: {
+            type: 'schedule',
+            description: 'smoke scheduled run',
+            nextRunAt: '2026-04-29T01:00:00.000Z'
+          },
+          workspacePath,
+          allowedActions: ['pnpm test'],
+          forbiddenActions: ['git push'],
+          failurePolicy: 'pause_and_report',
+          notificationPolicy: 'failures_and_confirmations'
+        }),
+        'background task preview'
+      );
+      await unwrap(await window.roc.tasks.createBackgroundTask(backgroundPreview), 'background task create');
+
+      const existing = await unwrap(
+        await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' }),
+        'memory search'
+      );
+      const existingActiveMemory = existing.items.find((item) =>
+        item.summary.includes('phase four smoke active memory validates candidate acceptance and recall.')
+      );
+      if (existingActiveMemory === undefined) {
+        const candidate = await unwrap(
+          await window.roc.memory.writeCandidate({
+            type: 'project_context',
+            scope: 'project:roc-smoke',
+            content: 'phase four smoke active memory validates candidate acceptance and recall.',
+            confidence: 0.9,
+            priority: 'medium',
+            source: 'user_explicit',
+            sourceRef: 'smoke:memory'
+          }),
+          'memory candidate'
+        );
+        const accepted = await unwrap(await window.roc.memory.acceptCandidate(candidate.id), 'memory accept');
+        const deleted = await unwrap(await window.roc.memory.delete(accepted.id), 'memory delete');
+        if (!deleted.recoverable) {
+          throw new Error('memory delete did not create a recoverable state.');
+        }
+        await unwrap(await window.roc.memory.restore(accepted.id), 'memory restore');
+        await unwrap(
+          await window.roc.memory.writeCandidate({
+            type: 'project_context',
+            scope: 'project:roc-smoke',
+            content: 'phase four smoke active memory does not validate candidate acceptance and recall.',
+            confidence: 0.7,
+            priority: 'medium',
+            source: 'agent_extract:smoke',
+            sourceRef: 'smoke:conflict'
+          }),
+          'memory conflict candidate'
+        );
+        await unwrap(
+          await window.roc.memory.writeSessionRecall({
+            sessionId: 'smoke-session-phase4',
+            title: 'phase four smoke session',
+            summary: 'phase four smoke session recall validates searchable archived conversation.',
+            scope: 'project:roc-smoke',
+            content: 'phase four smoke session stores raw recall without promoting it into curated memory.',
+            sourceRef: 'smoke:session'
+          }),
+          'memory session recall'
+        );
+      }
+    },
+    { providerEndpoint, workspacePath: workspaceRoot }
+  );
+}
+
+function assertNoRuntimeMockText(sections) {
+  const forbidden = [
+    { label: '示例数据标签', pattern: /条示例|示例任务|示例数据/u },
+    { label: '静态页面预览任务', pattern: /Roc 页面预览生成|页面预览生成|页面预览效果图\/roc-system-pages\.html|页面预览效果图\/\*\.png/u },
+    { label: '硬编码预览流程', pattern: /步骤 3\/5|截图工具未找到浏览器入口|生成页面预览并截图/u },
+    { label: '演示 Provider 地址', pattern: /api\.example\.local/u },
+    { label: '预览工作区故事', pattern: /重构静态页面布局|导出截图|把每个页面都导出为 PNG/u },
+    { label: '英文占位语义', pattern: /\bmock\b|\bdemo\b|\bfake\b|\bplaceholder\b|No preview loaded\./iu }
+  ];
+
+  const leaks = [];
+  for (const section of sections) {
+    for (const rule of forbidden) {
+      const match = section.text.match(rule.pattern);
+      if (match !== null) {
+        leaks.push({ section: section.name, rule: rule.label, text: match[0] });
+      }
+    }
+  }
+
+  if (leaks.length > 0) {
+    throw new Error(`Runtime mock/demo text leaked: ${JSON.stringify(leaks, null, 2)}`);
+  }
 }
 
 let app;
+let smokeProvider;
 try {
+  smokeProvider = await startSmokeProvider();
   app = await electron.launch({
     executablePath: smokeTarget.executablePath,
     args: smokeTarget.launchArgs,
     env: {
       ...process.env,
       ROC_SMOKE: '1',
-      ROC_DATA_ROOT: dataRoot
+      ROC_DATA_ROOT: dataRoot,
+      ROC_SMOKE_API_KEY: 'smoke-test-key'
     }
   });
 
   const page = await app.firstWindow();
-  await page.waitForSelector('[data-testid="roc-app"]', { timeout: 15000 });
+  await waitForAppReady(page, 'initial');
   await page.waitForSelector('[data-testid="window-workband"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
   const browserWindow = await app.browserWindow(page);
@@ -116,7 +389,7 @@ try {
     throw new Error(`Skill import mismatch: ${importedSkillId}`);
   }
   await page.reload();
-  await page.waitForSelector('[data-testid="roc-app"]', { timeout: 15000 });
+  await waitForAppReady(page, 'after-skill-import');
   await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
   const selectedWorkspace = await page.evaluate(async (workspacePath) => {
     const result = await window.roc.workspace.select({ path: workspacePath });
@@ -128,14 +401,15 @@ try {
   if (selectedWorkspace !== workspaceRoot) {
     throw new Error(`Workspace selection mismatch: ${selectedWorkspace}`);
   }
+  await seedSmokeRuntimeData(page, { providerEndpoint: smokeProvider.endpoint });
   await page.reload();
-  await page.waitForSelector('[data-testid="roc-app"]', { timeout: 15000 });
+  await waitForAppReady(page, 'after-runtime-seed');
   await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
   await page.click('[data-testid="nav-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="background-task-summary"]', { timeout: 5000 });
-  await waitForSmokeContract(page, '[data-testid="background-task-controls"]');
-  await waitForSmokeContract(page, '[data-testid="background-pause"]');
+  await page.waitForSelector('[data-testid="background-task-controls"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="background-pause"]', { timeout: 5000 });
   const backgroundTaskControlsText = await page.textContent('[data-testid="background-task-controls"]');
   const taskText = await page.textContent('[data-testid="tasks-view"]');
   if (taskText === null) {
@@ -155,12 +429,12 @@ try {
       hasCreatedEvent: snapshot.data.recentEvents.some((item) => item.type === 'background_task_created')
     };
   });
-  await clickSmokeControl(page, '[data-testid="nav-workspace"]');
+  await page.click('button[aria-label="文件"]');
   await page.waitForSelector('[data-testid="workspace-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="file-tree"]', { timeout: 5000 });
-  await waitForSmokeContract(page, '[data-testid="git-panel"]');
-  await waitForSmokeContract(page, '[data-testid="terminal-panel"]');
-  await waitForSmokeContract(page, '[data-testid="rtk-panel"]');
+  await page.waitForSelector('[data-testid="git-panel"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="terminal-panel"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="rtk-panel"]', { timeout: 5000 });
   const workspaceText = await page.textContent('[data-testid="workspace-view"]');
   if (workspaceText === null) {
     throw new Error('Smoke could not read workspace view text.');
@@ -182,15 +456,47 @@ try {
   });
   await page.click('[data-testid="nav-memory"]');
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
-  await waitForSmokeContract(page, '[data-testid="memory-candidates"]');
-  await waitForSmokeContract(page, '[data-testid="memory-conflicts"]');
-  await waitForSmokeContract(page, '[data-testid="memory-search-results"]');
-  await waitForSmokeContract(page, '[data-testid="session-recall-results"]');
-  await waitForSmokeContract(page, '[data-testid="memory-recovery"]');
+  await page.waitForSelector('[data-testid="memory-candidates"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="memory-conflicts"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="memory-search-results"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="session-recall-results"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="memory-recovery"]', { timeout: 5000 });
   const memoryText = await page.textContent('[data-testid="memory-view"]');
+  const memoryRecoveryText = await page.textContent('[data-testid="memory-recovery"]');
   if (memoryText === null) {
     throw new Error('Smoke could not read memory view text.');
   }
+  if (memoryRecoveryText === null) {
+    throw new Error('Smoke could not read memory recovery text.');
+  }
+  const memoryRecoveryApiEvidence = await page.evaluate(async () => {
+    const search = await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' });
+    if (!search.ok) {
+      throw new Error(search.error.message);
+    }
+    const restored = search.data.items.find((item) =>
+      item.summary.includes('phase four smoke active memory validates candidate acceptance and recall')
+    );
+    if (restored === undefined) {
+      throw new Error('No restored smoke memory found after delete/restore seed.');
+    }
+    return { id: restored.id, status: 'active' };
+  });
+  const gitText = await readMainPageText(page, {
+    label: 'git',
+    pageId: 'git',
+    viewSelector: '[data-testid="git-view"]'
+  });
+  const terminalText = await readMainPageText(page, {
+    label: 'terminal',
+    pageId: 'terminal',
+    viewSelector: '[data-testid="terminal-view"]'
+  });
+  const previewText = await readMainPageText(page, {
+    label: 'preview',
+    pageId: 'preview',
+    viewSelector: '[data-testid="preview-view"]'
+  });
   await page.click('[data-testid="nav-mcp"]');
   await page.waitForSelector('[data-testid="mcp-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-management"]', { timeout: 5000 });
@@ -204,9 +510,9 @@ try {
   if (mcpText === null) {
     throw new Error('Smoke could not read MCP view text.');
   }
-  await clickSmokeControl(page, '[data-testid="settings-button"]');
+  await clickSmokeControl(page, '[data-testid="nav-settings"]');
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
-  await waitForSmokeContract(page, '[data-testid="provider-settings"]');
+  await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-default-smoke-provider"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-delete-smoke-provider"]', { timeout: 5000 });
@@ -221,20 +527,14 @@ try {
   await page.waitForSelector('[data-testid="turn-skill-smoke-skill"]', { timeout: 5000 });
   await page.click('[data-testid="turn-mcp-smoke-mcp"]');
   await page.click('[data-testid="turn-skill-smoke-skill"]');
-  const deselectedCapabilityText = await page.textContent('[data-testid="turn-capabilities"]');
-  if (
-    deselectedCapabilityText === null ||
-    !deselectedCapabilityText.includes('MCP 本轮 0') ||
-    !deselectedCapabilityText.includes('Skill 本轮 0')
-  ) {
-    throw new Error('Smoke could not deselect per-turn capabilities.');
-  }
+  await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
   await page.click('[data-testid="turn-mcp-smoke-mcp"]');
   await page.click('[data-testid="turn-skill-smoke-skill"]');
-  const chatCapabilityText = await page.textContent('[data-testid="turn-capabilities"]');
-  if (chatCapabilityText === null) {
-    throw new Error('Smoke could not read chat capability text.');
-  }
+  const chatCapabilityText = await waitForCapabilitySelection(page, {
+    expectedIds: ['smoke-mcp', 'smoke-skill'],
+    mcpCount: 1,
+    skillCount: 1
+  });
   await page.waitForSelector('[data-testid="agent-capability-preview"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="agent-tool-cards"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="agent-subagents"]', { timeout: 5000 });
@@ -262,13 +562,48 @@ try {
       policy: preview.data.untrustedContextPolicy
     };
   });
+  const typedChatPrompt = `Smoke typed user prompt ${Date.now()}`;
+  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
+  await page.fill('[data-testid="chat-input"]', typedChatPrompt);
+  const chatInputEvidence = await page.evaluate(() => {
+    const input = document.querySelector('[data-testid="chat-input"]');
+    if (!(input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement)) {
+      return {
+        exists: input !== null,
+        editable: false,
+        visuallyFramed: false,
+        value: ''
+      };
+    }
+    const style = getComputedStyle(input);
+    const rect = input.getBoundingClientRect();
+    const visuallyFramed =
+      rect.width > 240 &&
+      rect.height > 56 &&
+      style.visibility === 'visible' &&
+      style.opacity !== '0' &&
+      style.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+      !style.borderTop.startsWith('0px none');
+    return {
+      exists: true,
+      editable: !input.disabled && !input.readOnly,
+      visuallyFramed,
+      rect: {
+        width: rect.width,
+        height: rect.height
+      },
+      backgroundColor: style.backgroundColor,
+      borderTop: style.borderTop,
+      value: input.value
+    };
+  });
   await page.click('[data-testid="chat-task-submit"]');
   await page.waitForSelector('[data-testid="chat-result"]', { timeout: 5000 });
   const chatResultText = await page.textContent('[data-testid="chat-result"]');
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
   }
-  const taskCapabilityEvidence = await page.evaluate(async () => {
+  const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
     const snapshot = await window.roc.tasks.getSnapshot();
     if (!snapshot.ok) {
       throw new Error(snapshot.error.message);
@@ -278,10 +613,11 @@ try {
         item.type === 'message' &&
         typeof item.payload === 'object' &&
         item.payload !== null &&
-        item.payload.role === 'user'
+        item.payload.role === 'user' &&
+        item.payload.content === expectedInput
     );
     if (userMessage === undefined) {
-      throw new Error('No task user message event found after chat submit.');
+      throw new Error(`No task user message event found for typed prompt: ${expectedInput}`);
     }
     const assistantMessage = snapshot.data.recentEvents.find(
       (item) =>
@@ -305,14 +641,20 @@ try {
     if (skillLoaded === undefined) {
       throw new Error('No skill_loaded event found after chat submit.');
     }
+    const thread = snapshot.data.threads.find((item) => item.id === userMessage.threadId);
+    if (thread === undefined) {
+      throw new Error(`No task thread found for typed prompt: ${expectedInput}`);
+    }
     return {
+      expectedInput,
+      threadGoal: thread.goal,
       userMessage: userMessage.payload,
       assistantMessage: assistantMessage.payload,
       providerUpdate: providerUpdate.payload,
       manifest: manifest.payload,
       skillLoaded: skillLoaded.payload
     };
-  });
+  }, typedChatPrompt);
   await page.click('[data-testid="nav-doctor"]');
   await page.waitForSelector('[data-testid="doctor-view"]', { timeout: 5000 });
   const doctorText = await page.textContent('[data-testid="doctor-view"]');
@@ -321,8 +663,8 @@ try {
   }
   await page.click('[data-testid="nav-diagnostics"]');
   await page.waitForSelector('[data-testid="diagnostics-view"]', { timeout: 5000 });
-  await waitForSmokeContract(page, '[data-testid="diagnostic-package-status"]');
-  await waitForSmokeContract(page, '[data-testid="performance-sample"]');
+  await page.waitForSelector('[data-testid="diagnostic-package-status"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="performance-sample"]', { timeout: 5000 });
   const diagnosticsText = await page.textContent('[data-testid="diagnostics-view"]');
   if (diagnosticsText === null) {
     throw new Error('Smoke could not read diagnostics view text.');
@@ -365,10 +707,30 @@ try {
   const trayWindow = await waitForWindowWithSelector(app, '[data-testid="tray-entry-view"]');
   await quickWindow.waitForSelector('[data-testid="floating-quick"]', { timeout: 5000 });
   await trayWindow.waitForSelector('[data-testid="floating-tray"]', { timeout: 5000 });
+  const entryButtonEvidence = {
+    quickOpenTasks: false,
+    quickOpenChat: false,
+    quickSubmitTask: false,
+    trayOpenTasks: false,
+    trayToggleBackground: false
+  };
   await quickWindow.click('[data-testid="quick-open-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
+  entryButtonEvidence.quickOpenTasks = true;
+  await quickWindow.click('[data-testid="quick-open-chat"]');
+  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  entryButtonEvidence.quickOpenChat = true;
+  await quickWindow.click('[data-testid="quick-submit-task"]');
+  await quickWindow.waitForSelector('[data-testid="quick-entry-error"], [data-testid="quick-entry-view"]', { timeout: 5000 });
+  entryButtonEvidence.quickSubmitTask = true;
   await trayWindow.click('[data-testid="tray-open-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
+  entryButtonEvidence.trayOpenTasks = true;
+  await trayWindow.click('[data-testid="tray-toggle-background"]');
+  await trayWindow.waitForFunction(() => document.body.textContent?.includes('恢复后台执行') === true, undefined, {
+    timeout: 5000
+  });
+  entryButtonEvidence.trayToggleBackground = true;
   const quickEntryText = await quickWindow.textContent('[data-testid="quick-entry-view"]');
   const trayEntryText = await trayWindow.textContent('[data-testid="tray-entry-view"]');
   if (quickEntryText === null || trayEntryText === null) {
@@ -414,11 +776,93 @@ try {
       return activeView.textContent;
     })()
   }));
+  const buttonInteractionEvidence = {
+    attachmentControlAbsent: false,
+    composerWorkspaceNavigates: false,
+    composerMcpNavigates: false,
+    composerSkillNavigates: false,
+    composerModelNavigates: false,
+    composerMemoryNavigates: false,
+    workbenchGitClickable: false,
+    workbenchTerminalClickable: false,
+    workbenchCloseClickable: false,
+    memoryEditorHasNoDisabledButtons: false,
+    memoryRecordSelectable: false
+  };
+  await page.click('[data-testid="nav-chat"]');
+  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.attachmentControlAbsent = (await page.locator('button[aria-label="添加附件"]').count()) === 0;
+  await page.click('button[aria-label="工作区文件"]');
+  await page.waitForSelector('[data-testid="workspace-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.composerWorkspaceNavigates = true;
+  await page.click('[data-testid="nav-chat"]');
+  await page.click('button[aria-label="已启用 MCP"]');
+  await page.waitForSelector('[data-testid="mcp-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.composerMcpNavigates = true;
+  await page.click('[data-testid="nav-chat"]');
+  await page.click('button[aria-label="已启用 Skill"]');
+  await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.composerSkillNavigates = true;
+  await page.click('[data-testid="nav-chat"]');
+  await page.click('.model-pill');
+  await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.composerModelNavigates = true;
+  await page.click('[data-testid="nav-chat"]');
+  await page.click('button[aria-label="可见性"]');
+  await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.composerMemoryNavigates = true;
+  buttonInteractionEvidence.memoryEditorHasNoDisabledButtons = (await page.locator('.memory-editor-actions button').count()) === 0;
+  const memoryRecordCount = await page.locator('.memory-record').count();
+  if (memoryRecordCount === 1) {
+    buttonInteractionEvidence.memoryRecordSelectable =
+      (await page.locator('.memory-record').first().getAttribute('aria-pressed')) === 'true';
+  } else if (memoryRecordCount > 1) {
+    await page.locator('.memory-record').nth(1).click();
+    await page.waitForFunction(
+      () => document.querySelectorAll('.memory-record')[1]?.getAttribute('aria-pressed') === 'true',
+      undefined,
+      { timeout: 5000 }
+    );
+    buttonInteractionEvidence.memoryRecordSelectable = true;
+  }
+  await page.evaluate(async () => {
+    const result = await window.roc.app.openMainPage('workspace');
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+  });
+  await page.waitForSelector('[data-testid="workspace-view"]', { timeout: 5000 });
+  await page.click('.workbench-tab[data-tool-button="git"]');
+  await page.waitForFunction(() => document.querySelector('.workbench-tab.active')?.textContent?.includes('Git') === true);
+  buttonInteractionEvidence.workbenchGitClickable = true;
+  await page.click('.workbench-tab[data-tool-button="terminal"]');
+  await page.waitForFunction(() => document.querySelector('.workbench-tab.active')?.textContent?.includes('终端') === true);
+  buttonInteractionEvidence.workbenchTerminalClickable = true;
+  await page.click('button[aria-label="关闭右侧工作台"]');
+  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  buttonInteractionEvidence.workbenchCloseClickable = true;
 
   const pageText = await page.textContent('body');
   if (pageText === null) {
     throw new Error('Smoke could not read body text.');
   }
+  assertNoRuntimeMockText([
+    { name: 'body', text: pageText },
+    { name: 'tasks', text: taskText },
+    { name: 'workspace', text: workspaceText },
+    { name: 'memory', text: memoryText },
+    { name: 'memory-recovery', text: memoryRecoveryText },
+    { name: 'git', text: gitText },
+    { name: 'terminal', text: terminalText },
+    { name: 'preview', text: previewText },
+    { name: 'mcp', text: mcpText },
+    { name: 'settings', text: settingsText },
+    { name: 'chat', text: chatResultText },
+    { name: 'doctor', text: doctorText },
+    { name: 'diagnostics', text: diagnosticsText },
+    { name: 'quick-entry', text: quickEntryText },
+    { name: 'tray-entry', text: trayEntryText }
+  ]);
 
   const rendererBoundary = {
     hasRequire: boundary.hasRequire,
@@ -440,7 +884,7 @@ try {
     immersiveWorkbandVisible: workbandBox.height > 0 && workbandBox.y <= 2,
     systemMenuHidden: initialWindowShell.menuBarVisible === false,
     initialWindowNotMaximized: initialWindowShell.maximized === false,
-    mockTextAbsent: !pageText.includes('示例任务'),
+    mockTextAbsent: true,
     smokeTargetKind: smokeTarget.kind,
     smokeTargetPath: smokeTarget.path,
     packagedExeExists: existsSync(packagedExe),
@@ -451,14 +895,15 @@ try {
       backgroundTaskApiEvidence.tray.nextRunAt === '2026-04-29T01:00:00.000Z' &&
       backgroundTaskApiEvidence.hasCreatedEvent,
     traySummaryVisible:
-      pageText.includes('托盘摘要') &&
-      pageText.includes('后台执行') &&
+      taskText.includes('托盘摘要') &&
+      taskText.includes('后台执行') &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
       backgroundTaskApiEvidence.hasCreatedEvent,
     phase6DoctorVisible:
       doctorText.includes('健康检查结果') &&
-      doctorText.includes('模型配置') &&
-      doctorText.includes('修复动作'),
+      doctorText.includes('默认模型配置') &&
+      doctorText.includes('诊断包') &&
+      doctorText.includes('性能采样'),
     diagnosticPackageVisible: diagnosticsText.includes('脱敏') && diagnosticsText.includes('task_snapshot'),
     performanceSampleVisible:
       diagnosticsText.includes('RSS') &&
@@ -475,8 +920,14 @@ try {
       workspaceApiEvidence.search.matches.some(
         (match) => match.relativePath === 'phase-three-notes.txt' && match.preview.includes('phase three smoke workspace')
       ),
-    gitMissingVisible: workspaceText.includes('当前工作区不是 Git 仓库。'),
-    terminalOutputVisible: workspaceText.includes('phase-three-notes.txt'),
+    gitMissingVisible:
+      workspaceText.includes('当前工作区不是 Git 仓库。') &&
+      gitText.includes('非 Git 工作区') &&
+      gitText.includes('空'),
+    terminalOutputVisible:
+      workspaceText.includes('phase-three-notes.txt') &&
+      terminalText.includes('phase-three-notes.txt'),
+    previewFileVisible: previewText.includes('phase-three-notes.txt') && previewText.includes('phase three smoke workspace'),
     rtkMissingVisible:
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&
@@ -485,7 +936,11 @@ try {
     memoryConflictVisible: memoryText.includes('same_type_scope_contradiction_or_duplicate'),
     memoryRecallVisible: memoryText.includes('phase four smoke active memory validates candidate acceptance and recall'),
     sessionRecallVisible: memoryText.includes('phase four smoke session recall validates searchable archived conversation'),
-    memoryRecoveryVisible: memoryText.includes('smoke 已验证可恢复链'),
+    memoryRecoveryVisible:
+      memoryRecoveryText.includes('删除恢复') &&
+      memoryRecoveryText.includes('最近操作') &&
+      memoryRecoveryText.includes(memoryRecoveryApiEvidence.id) &&
+      memoryRecoveryText.includes(memoryRecoveryApiEvidence.status),
     providerConfiguredVisible:
       settingsText.includes('Smoke Provider') &&
       settingsText.includes('smoke-model') &&
@@ -511,6 +966,14 @@ try {
       !quickEntryBoundary.composerVisible &&
       !quickEntryBoundary.hasRequire &&
       !quickEntryBoundary.hasProcess,
+    quickEntryButtonsClickable:
+      quickEntryBoundary.floatingVisible &&
+      entryButtonEvidence.quickOpenTasks &&
+      entryButtonEvidence.quickOpenChat &&
+      entryButtonEvidence.quickSubmitTask &&
+      quickEntryText.includes('追加到当前任务') &&
+      quickEntryText.includes('创建新任务') &&
+      quickEntryText.includes('快速提问'),
     trayEntryVisible:
       entryWindowEvidence.tray &&
       trayEntryText.includes('Roc 常驻状态') &&
@@ -519,6 +982,12 @@ try {
       !trayEntryBoundary.composerVisible &&
       !trayEntryBoundary.hasRequire &&
       !trayEntryBoundary.hasProcess,
+    trayEntryButtonsClickable:
+      trayEntryBoundary.floatingVisible &&
+      entryButtonEvidence.trayOpenTasks &&
+      entryButtonEvidence.trayToggleBackground &&
+      trayEntryText.includes('后台执行') &&
+      trayEntryText.includes('恢复后台执行'),
     appEntryApiExpanded:
       boundary.appKeys.includes('openMainPage') &&
       boundary.appKeys.includes('openQuickEntry') &&
@@ -529,6 +998,11 @@ try {
       chatCapabilityText.includes('Skill 本轮 1') &&
       chatCapabilityText.includes('smoke-mcp') &&
       chatCapabilityText.includes('smoke-skill'),
+    chatInputEditable:
+      chatInputEvidence.exists &&
+      chatInputEvidence.editable &&
+      chatInputEvidence.visuallyFramed &&
+      chatInputEvidence.value === typedChatPrompt,
     agentCapabilityPreviewVisible:
       agentPreviewText.includes('Agent 能力预览') &&
       agentPreviewText.includes('web_read') &&
@@ -551,8 +1025,11 @@ try {
       chatResultText.includes('task_answered') &&
       chatResultText.includes('smoke-provider / smoke-model'),
     taskRunCapabilityStored:
+      taskCapabilityEvidence.expectedInput === typedChatPrompt &&
+      taskCapabilityEvidence.threadGoal === typedChatPrompt &&
       typeof taskCapabilityEvidence.userMessage === 'object' &&
       taskCapabilityEvidence.userMessage !== null &&
+      taskCapabilityEvidence.userMessage.content === typedChatPrompt &&
       Array.isArray(taskCapabilityEvidence.userMessage.enabledCapabilities?.mcpServers) &&
       Array.isArray(taskCapabilityEvidence.userMessage.enabledCapabilities?.skills) &&
       taskCapabilityEvidence.userMessage.enabledCapabilities.mcpServers.includes('smoke-mcp') &&
@@ -618,11 +1095,69 @@ try {
       boundary.lifecycleKeys.includes('resumeBackgroundExecution'),
     diagnosticsApiExpanded:
       boundary.diagnosticsKeys.includes('samplePerformance') &&
-      boundary.diagnosticsKeys.includes('createDiagnosticPackage')
+      boundary.diagnosticsKeys.includes('createDiagnosticPackage'),
+    clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
 
+  const failedChecks = Object.entries({
+    hasRequire: !rendererBoundary.hasRequire,
+    hasProcess: !rendererBoundary.hasProcess,
+    immersiveWorkbandVisible: rendererBoundary.immersiveWorkbandVisible,
+    systemMenuHidden: rendererBoundary.systemMenuHidden,
+    initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
+    mockTextAbsent: rendererBoundary.mockTextAbsent,
+    backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
+    traySummaryVisible: rendererBoundary.traySummaryVisible,
+    phase6DoctorVisible: rendererBoundary.phase6DoctorVisible,
+    diagnosticPackageVisible: rendererBoundary.diagnosticPackageVisible,
+    performanceSampleVisible: rendererBoundary.performanceSampleVisible,
+    phase6DoctorApi: rendererBoundary.phase6DoctorApi,
+    workspaceFileVisible: rendererBoundary.workspaceFileVisible,
+    workspaceSearchVisible: rendererBoundary.workspaceSearchVisible,
+    gitMissingVisible: rendererBoundary.gitMissingVisible,
+    terminalOutputVisible: rendererBoundary.terminalOutputVisible,
+    previewFileVisible: rendererBoundary.previewFileVisible,
+    rtkMissingVisible: rendererBoundary.rtkMissingVisible,
+    memoryCandidateVisible: rendererBoundary.memoryCandidateVisible,
+    memoryConflictVisible: rendererBoundary.memoryConflictVisible,
+    memoryRecallVisible: rendererBoundary.memoryRecallVisible,
+    sessionRecallVisible: rendererBoundary.sessionRecallVisible,
+    memoryRecoveryVisible: rendererBoundary.memoryRecoveryVisible,
+    providerConfiguredVisible: rendererBoundary.providerConfiguredVisible,
+    mcpManagedVisible: rendererBoundary.mcpManagedVisible,
+    skillManagedVisible: rendererBoundary.skillManagedVisible,
+    providerActionsVisible: rendererBoundary.providerActionsVisible,
+    capabilityActionsVisible: rendererBoundary.capabilityActionsVisible,
+    quickEntryVisible: rendererBoundary.quickEntryVisible,
+    quickEntryButtonsClickable: rendererBoundary.quickEntryButtonsClickable,
+    trayEntryVisible: rendererBoundary.trayEntryVisible,
+    trayEntryButtonsClickable: rendererBoundary.trayEntryButtonsClickable,
+    appEntryApiExpanded: rendererBoundary.appEntryApiExpanded,
+    chatCapabilitySelectionVisible: rendererBoundary.chatCapabilitySelectionVisible,
+    chatInputEditable: rendererBoundary.chatInputEditable,
+    agentCapabilityPreviewVisible: rendererBoundary.agentCapabilityPreviewVisible,
+    agentCapabilityPreviewApi: rendererBoundary.agentCapabilityPreviewApi,
+    providerChatResultVisible: rendererBoundary.providerChatResultVisible,
+    taskRunCapabilityStored: rendererBoundary.taskRunCapabilityStored,
+    taskAssistantEventStored: rendererBoundary.taskAssistantEventStored,
+    taskProviderUpdateStored: rendererBoundary.taskProviderUpdateStored,
+    taskManifestStored: rendererBoundary.taskManifestStored,
+    skillLoadedEventStored: rendererBoundary.skillLoadedEventStored,
+    memoryApiExpanded: rendererBoundary.memoryApiExpanded,
+    providersApiExpanded: rendererBoundary.providersApiExpanded,
+    mcpApiExpanded: rendererBoundary.mcpApiExpanded,
+    skillsApiExpanded: rendererBoundary.skillsApiExpanded,
+    agentApiExpanded: rendererBoundary.agentApiExpanded,
+    taskApiExpanded: rendererBoundary.taskApiExpanded,
+    lifecycleApiExpanded: rendererBoundary.lifecycleApiExpanded,
+    diagnosticsApiExpanded: rendererBoundary.diagnosticsApiExpanded,
+    clickableButtonsHandled: rendererBoundary.clickableButtonsHandled
+  })
+    .filter(([, ok]) => !ok)
+    .map(([name]) => name);
+  const passed = failedChecks.length === 0;
   const result = {
-    passed: true,
+    passed,
     dataRoot,
     smokeTarget: {
       kind: smokeTarget.kind,
@@ -630,67 +1165,33 @@ try {
       packagedExeExists: existsSync(packagedExe)
     },
     performanceSample: phase6ApiEvidence.sample,
+    evidence: {
+      chatInputEvidence,
+      buttonInteractionEvidence,
+      entryButtonEvidence,
+      memoryRecoveryText,
+      memoryRecoveryApiEvidence,
+      terminalText,
+      gitText,
+      previewText
+    },
+    failedChecks,
     rendererBoundary,
     checkedAt: new Date().toISOString()
   };
 
   writeFileSync(join(artifactDir, 'electron-smoke.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 
-  if (
-    rendererBoundary.hasRequire ||
-    rendererBoundary.hasProcess ||
-    !rendererBoundary.immersiveWorkbandVisible ||
-    !rendererBoundary.systemMenuHidden ||
-    !rendererBoundary.initialWindowNotMaximized ||
-    !rendererBoundary.mockTextAbsent ||
-    !rendererBoundary.backgroundTaskVisible ||
-    !rendererBoundary.traySummaryVisible ||
-    !rendererBoundary.phase6DoctorVisible ||
-    !rendererBoundary.diagnosticPackageVisible ||
-    !rendererBoundary.performanceSampleVisible ||
-    !rendererBoundary.phase6DoctorApi ||
-    !rendererBoundary.workspaceFileVisible ||
-    !rendererBoundary.workspaceSearchVisible ||
-    !rendererBoundary.gitMissingVisible ||
-    !rendererBoundary.terminalOutputVisible ||
-    !rendererBoundary.rtkMissingVisible ||
-    !rendererBoundary.memoryCandidateVisible ||
-    !rendererBoundary.memoryConflictVisible ||
-    !rendererBoundary.memoryRecallVisible ||
-    !rendererBoundary.sessionRecallVisible ||
-    !rendererBoundary.memoryRecoveryVisible ||
-    !rendererBoundary.providerConfiguredVisible ||
-    !rendererBoundary.mcpManagedVisible ||
-    !rendererBoundary.skillManagedVisible ||
-    !rendererBoundary.providerActionsVisible ||
-    !rendererBoundary.capabilityActionsVisible ||
-    !rendererBoundary.quickEntryVisible ||
-    !rendererBoundary.trayEntryVisible ||
-    !rendererBoundary.appEntryApiExpanded ||
-    !rendererBoundary.chatCapabilitySelectionVisible ||
-    !rendererBoundary.agentCapabilityPreviewVisible ||
-    !rendererBoundary.agentCapabilityPreviewApi ||
-    !rendererBoundary.providerChatResultVisible ||
-    !rendererBoundary.taskRunCapabilityStored ||
-    !rendererBoundary.taskAssistantEventStored ||
-    !rendererBoundary.taskProviderUpdateStored ||
-    !rendererBoundary.taskManifestStored ||
-    !rendererBoundary.skillLoadedEventStored ||
-    !rendererBoundary.memoryApiExpanded ||
-    !rendererBoundary.providersApiExpanded ||
-    !rendererBoundary.mcpApiExpanded ||
-    !rendererBoundary.skillsApiExpanded ||
-    !rendererBoundary.agentApiExpanded ||
-    !rendererBoundary.taskApiExpanded ||
-    !rendererBoundary.lifecycleApiExpanded ||
-    !rendererBoundary.diagnosticsApiExpanded
-  ) {
+  if (!passed) {
     console.error(JSON.stringify(result, null, 2));
     process.exitCode = 1;
   }
 } finally {
   if (app !== undefined) {
     await app.close();
+  }
+  if (smokeProvider !== undefined) {
+    await smokeProvider.close();
   }
   spawnSync('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], {
     cwd: resolve('.'),

@@ -610,7 +610,7 @@ export class MemoryService {
     const loweredQuery = query.toLocaleLowerCase();
     return rows
       .map((row) => ({ row, content: this.readMemoryBody(row.markdown_path) }))
-      .filter(({ content }) => content.toLocaleLowerCase().includes(loweredQuery))
+      .filter(({ row, content }) => `${row.scope}\n${content}`.toLocaleLowerCase().includes(loweredQuery))
       .map(({ row, content }) => ({
         id: row.id,
         layer: row.layer,
@@ -694,7 +694,7 @@ export class MemoryService {
     const loweredQuery = query.toLocaleLowerCase();
     for (const row of fallbackRows) {
       const content = this.readMemoryBody(row.markdown_path);
-      const searchable = `${row.title}\n${row.summary}\n${content}`.toLocaleLowerCase();
+      const searchable = `${row.scope}\n${row.title}\n${row.summary}\n${content}`.toLocaleLowerCase();
       if (searchable.includes(loweredQuery) && !rowsById.has(row.id)) {
         rowsById.set(row.id, row);
       }

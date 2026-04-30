@@ -174,14 +174,6 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
   const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService);
   const agentService = new AgentService(configService, mcpService, skillService);
   const providerRuntimeService = new ProviderRuntimeService(configService);
-  if (process.env.ROC_SMOKE === '1') {
-    providerRuntimeService.setDeterministicResponse({
-      content: 'Smoke Provider 已生成首轮回复。',
-      finishReason: 'stop',
-      promptTokens: 16,
-      completionTokens: 9
-    });
-  }
   const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);

@@ -21,6 +21,8 @@ const highRiskCommandPrefixes = [
   'git clean',
   'git checkout'
 ];
+const powershellUtf8Prefix =
+  '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
 
 export class ShellExecutionService {
   constructor(
@@ -112,9 +114,10 @@ export class ShellExecutionService {
   }
 
   private executePowerShell(command: string, cwd: string): { stdout: string; stderr: string; exitCode: number } {
+    const encodedCommand = `${powershellUtf8Prefix} ${command}`;
     try {
       return {
-        stdout: execFileSync('powershell.exe', ['-NoProfile', '-Command', command], {
+        stdout: execFileSync('powershell.exe', ['-NoProfile', '-Command', encodedCommand], {
           cwd,
           encoding: 'utf8',
           windowsHide: true,

@@ -470,7 +470,7 @@ function createAuditWorkspace() {
   );
   writeFileSync(
     join(workspaceRoot, '页面预览效果图', 'roc-system-pages.html'),
-    '<!doctype html><html><body>preview placeholder</body></html>\n',
+    '<!doctype html><html><body>visual audit workspace file</body></html>\n',
     'utf8'
   );
 
