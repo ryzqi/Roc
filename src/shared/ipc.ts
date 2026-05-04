@@ -20,6 +20,7 @@ import type {
   FileWriteResult,
   FileWriteTextRequest,
   GitDiffStatResult,
+  GitFileOperationRequest,
   GitStatusResult,
   IpcResult,
   McpServerConfig,
@@ -109,12 +110,15 @@ export const ipcChannels = {
   chatSubmit: 'roc:chat:submit',
   workspaceGetCurrent: 'roc:workspace:get-current',
   workspaceSelect: 'roc:workspace:select',
+  workspaceSelectFromDialog: 'roc:workspace:select-from-dialog',
   filesListTree: 'roc:files:list-tree',
   filesSearch: 'roc:files:search',
   filesPreview: 'roc:files:preview',
   filesWriteText: 'roc:files:write-text',
   gitStatus: 'roc:git:status',
   gitDiffStat: 'roc:git:diff-stat',
+  gitStageFile: 'roc:git:stage-file',
+  gitUnstageFile: 'roc:git:unstage-file',
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute'
 } as const;
@@ -204,6 +208,7 @@ export type RocPreloadApi = {
   workspace: {
     getCurrent: () => Promise<IpcResult<Workspace | null>>;
     select: (request: WorkspaceSelectRequest) => Promise<IpcResult<Workspace>>;
+    selectFromDialog: () => Promise<IpcResult<Workspace | null>>;
   };
   files: {
     listTree: (request: FileTreeRequest) => Promise<IpcResult<FileTreeResult>>;
@@ -214,6 +219,8 @@ export type RocPreloadApi = {
   git: {
     status: () => Promise<IpcResult<GitStatusResult>>;
     diffStat: () => Promise<IpcResult<GitDiffStatResult>>;
+    stageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
+    unstageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
   };
   rtk: {
     status: () => Promise<IpcResult<RtkStatus>>;

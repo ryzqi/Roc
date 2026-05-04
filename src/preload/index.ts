@@ -87,7 +87,8 @@ const rocApi: RocPreloadApi = {
   },
   workspace: {
     getCurrent: () => ipcRenderer.invoke(ipcChannels.workspaceGetCurrent),
-    select: (request) => ipcRenderer.invoke(ipcChannels.workspaceSelect, request)
+    select: (request) => ipcRenderer.invoke(ipcChannels.workspaceSelect, request),
+    selectFromDialog: () => ipcRenderer.invoke(ipcChannels.workspaceSelectFromDialog)
   },
   files: {
     listTree: (request) => ipcRenderer.invoke(ipcChannels.filesListTree, request),
@@ -97,7 +98,9 @@ const rocApi: RocPreloadApi = {
   },
   git: {
     status: () => ipcRenderer.invoke(ipcChannels.gitStatus),
-    diffStat: () => ipcRenderer.invoke(ipcChannels.gitDiffStat)
+    diffStat: () => ipcRenderer.invoke(ipcChannels.gitDiffStat),
+    stageFile: (request) => ipcRenderer.invoke(ipcChannels.gitStageFile, request),
+    unstageFile: (request) => ipcRenderer.invoke(ipcChannels.gitUnstageFile, request)
   },
   rtk: {
     status: () => ipcRenderer.invoke(ipcChannels.rtkStatus)

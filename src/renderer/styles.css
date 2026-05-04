@@ -65,7 +65,7 @@ button {
   display: grid;
   width: min(1404px, calc(100vw - 22px));
   height: calc(100vh - 22px);
-  min-height: 860px;
+  min-height: min(860px, calc(100vh - 22px));
   grid-template-rows: 58px 1fr;
   margin: 11px auto;
   overflow: hidden;
@@ -198,6 +198,7 @@ button {
 .status-pill,
 .tool-row,
 .icon-button,
+.workspace-pill,
 .nav-button,
 .composer button,
 .action-row button,
@@ -257,20 +258,33 @@ button {
 .workspace-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: fit-content;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
   max-width: 100%;
-  min-height: 24px;
-  padding: 0;
+  min-height: 34px;
+  padding: 0 0 9px;
+  border: 0;
+  border-bottom: 1px solid rgba(226, 232, 241, 0.96);
+  background: transparent;
   color: var(--ink);
   font-size: 12px;
   font-weight: 650;
+  text-align: left;
 }
 
 .workspace-pill span {
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-pill strong {
+  flex: 0 0 auto;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .sidebar-note {
@@ -418,7 +432,7 @@ button {
 }
 
 .workspace-shell--with-workbench {
-  grid-template-columns: minmax(0, 1fr) 560px;
+  grid-template-columns: minmax(0, 1fr) var(--workbench-width, 560px);
 }
 
 .workspace-main {
@@ -524,7 +538,9 @@ button {
 }
 
 .chat-stage {
+  display: grid;
   min-height: 100%;
+  height: 100%;
   grid-template-rows: minmax(0, 1fr) auto;
   padding: 0;
   border: 0;
@@ -533,8 +549,7 @@ button {
 }
 
 .chat-empty-plane {
-  min-height: 100%;
-  height: 100%;
+  min-height: 0;
   border-radius: 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.992), rgba(254, 254, 255, 1));
 }
@@ -885,13 +900,17 @@ button {
 }
 
 .tree-item {
+  width: 100%;
   min-height: 34px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 14px;
+  border: 0;
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
+  text-align: left;
 }
 
 .tree-item.selected {
@@ -958,6 +977,17 @@ button {
   justify-items: start;
   padding: 22px;
   color: var(--muted);
+}
+
+.action-button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(190, 206, 235, 0.92);
+  border-radius: 999px;
+  background: rgba(242, 247, 255, 0.95);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .empty-state strong {
@@ -1133,6 +1163,8 @@ button {
 .composer-tool:disabled,
 .ghost-button:disabled,
 .send-button:disabled,
+.action-row button:disabled,
+.action-strip button:disabled,
 .memory-chip-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -1279,12 +1311,39 @@ button.model-pill {
 }
 
 .workbench {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border-left: 1px solid rgba(220, 227, 237, 0.94);
   background: transparent;
+}
+
+.workbench-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  z-index: 3;
+  width: 10px;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+
+.workbench-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.workbench-resize-handle:hover::after {
+  background: rgba(98, 132, 188, 0.48);
 }
 
 .workbench-bar {
@@ -1371,6 +1430,55 @@ button.model-pill {
   gap: 22px;
   align-content: start;
   scrollbar-width: none;
+}
+
+.workbench-preview {
+  max-height: 260px;
+}
+
+.git-change-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.terminal-session {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+}
+
+.terminal-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.terminal-command-row input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(204, 216, 232, 0.98);
+  border-radius: 12px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--ink);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.terminal-command-row input:focus {
+  border-color: rgba(98, 132, 188, 0.96);
+  box-shadow: 0 0 0 3px rgba(98, 132, 188, 0.14);
+}
+
+.terminal-command-row button {
+  min-width: 72px;
+  height: 36px;
+  border: 1px solid rgba(190, 206, 235, 0.92);
+  border-radius: 12px;
+  background: rgba(242, 247, 255, 0.95);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .dock-preview-card {

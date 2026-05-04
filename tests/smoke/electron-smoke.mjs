@@ -33,7 +33,24 @@ const smokeTarget =
 const dataRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-'));
 const workspaceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-workspace-'));
 const skillSourceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-skill-'));
+writeFileSync(join(workspaceRoot, '00-overview.txt'), 'workspace overview smoke file\n', 'utf8');
 writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\n', 'utf8');
+function runWorkspaceGit(args) {
+  const result = spawnSync('git', args, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+    windowsHide: true
+  });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+  }
+}
+runWorkspaceGit(['init']);
+runWorkspaceGit(['config', 'user.email', 'roc-smoke@example.test']);
+runWorkspaceGit(['config', 'user.name', 'Roc Smoke']);
+runWorkspaceGit(['add', '00-overview.txt', 'phase-three-notes.txt']);
+runWorkspaceGit(['commit', '-m', 'initial smoke workspace']);
+writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged in git\n', 'utf8');
 writeFileSync(
   join(skillSourceRoot, 'SKILL.md'),
   '---\nname: Smoke Skill\ndescription: Smoke skill validates Phase 5 import.\n---\n\n# Smoke Skill\n',
@@ -353,6 +370,7 @@ try {
   await waitForAppReady(page, 'initial');
   await page.waitForSelector('[data-testid="window-workband"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="workspace-select-button"]', { timeout: 5000 });
   const browserWindow = await app.browserWindow(page);
   const initialWindowShell = {
     menuBarVisible: await browserWindow.evaluate((window) => window.isMenuBarVisible()),
@@ -487,6 +505,55 @@ try {
     pageId: 'git',
     viewSelector: '[data-testid="git-view"]'
   });
+  const workbenchRealToolEvidence = await page.evaluate(async () => {
+    const result = await window.roc.app.openMainPage('workspace');
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    return true;
+  });
+  if (!workbenchRealToolEvidence) {
+    throw new Error('Smoke could not navigate to workspace for workbench tool checks.');
+  }
+  await page.waitForSelector('[data-testid="workspace-view"]', { timeout: 5000 });
+  const filePreviewBeforeClick = await page.textContent('[data-testid="workbench-file-preview"]');
+  await page.click('[data-testid="workbench-file-phase-three-notes.txt"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-file-preview"]')?.textContent?.includes('changed in git') === true);
+  const filePreviewAfterClick = await page.textContent('[data-testid="workbench-file-preview"]');
+  const workbenchWidthBefore = await page.locator('[data-testid="workbench-panel"]').boundingBox();
+  const resizeHandle = await page.locator('[data-testid="workbench-resize-handle"]').boundingBox();
+  if (workbenchWidthBefore === null || resizeHandle === null) {
+    throw new Error('Smoke could not measure workbench resize handle.');
+  }
+  await page.mouse.move(resizeHandle.x + resizeHandle.width / 2, resizeHandle.y + resizeHandle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(resizeHandle.x - 96, resizeHandle.y + resizeHandle.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const workbenchWidthAfter = await page.locator('[data-testid="workbench-panel"]').boundingBox();
+  if (workbenchWidthAfter === null) {
+    throw new Error('Smoke could not measure workbench after resize.');
+  }
+  await page.click('.workbench-tab[data-tool-button="git"]');
+  await page.waitForSelector('[data-testid="workbench-git-changes"]', { timeout: 5000 });
+  const workbenchGitText = await page.textContent('[data-testid="workbench-git-changes"]');
+  await page.click('[data-testid="git-stage-phase-three-notes.txt"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('M  phase-three-notes.txt') === true);
+  const workbenchGitAfterStage = await page.textContent('[data-testid="workbench-git-changes"]');
+  await page.click('[data-testid="git-unstage-phase-three-notes.txt"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes(' M phase-three-notes.txt') === true);
+  const workbenchGitAfterUnstage = await page.textContent('[data-testid="workbench-git-changes"]');
+  await page.click('.workbench-tab[data-tool-button="terminal"]');
+  await page.waitForSelector('[data-testid="terminal-command-input"]', { timeout: 5000 });
+  await page.fill('[data-testid="terminal-command-input"]', 'dir');
+  await page.click('[data-testid="terminal-run-command"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="terminal-live-output"]')?.textContent?.includes('phase-three-notes.txt') === true);
+  const terminalLiveOutput = await page.textContent('[data-testid="terminal-live-output"]');
+  await page.fill('[data-testid="terminal-command-input"]', 'Remove-Item phase-three-notes.txt');
+  await page.click('[data-testid="terminal-run-command"]');
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="terminal-live-output"]')?.textContent?.includes('命令需要确认，未执行。') === true
+  );
+  const terminalBlockedOutput = await page.textContent('[data-testid="terminal-live-output"]');
   const terminalText = await readMainPageText(page, {
     label: 'terminal',
     pageId: 'terminal',
@@ -567,19 +634,44 @@ try {
   await page.fill('[data-testid="chat-input"]', typedChatPrompt);
   const chatInputEvidence = await page.evaluate(() => {
     const input = document.querySelector('[data-testid="chat-input"]');
+    const sendButton = document.querySelector('[data-testid="chat-task-submit"]');
     if (!(input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement)) {
       return {
         exists: input !== null,
         editable: false,
         visuallyFramed: false,
+        sendButtonVisibleInViewport: false,
         value: ''
       };
     }
     const style = getComputedStyle(input);
     const rect = input.getBoundingClientRect();
+    const viewport = {
+      width: window.innerWidth,
+      height: window.innerHeight
+    };
+    const visibleInViewport =
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+        rect.bottom <= viewport.height &&
+        rect.right <= viewport.width;
+    const sendButtonRect = sendButton instanceof HTMLElement ? sendButton.getBoundingClientRect() : null;
+    const sendButtonVisibleInViewport =
+      sendButton instanceof HTMLButtonElement &&
+      !sendButton.disabled &&
+      sendButtonRect !== null &&
+      sendButtonRect.width > 0 &&
+      sendButtonRect.height > 0 &&
+      sendButtonRect.top >= 0 &&
+      sendButtonRect.left >= 0 &&
+      sendButtonRect.bottom <= viewport.height &&
+      sendButtonRect.right <= viewport.width;
     const visuallyFramed =
       rect.width > 240 &&
       rect.height > 56 &&
+      visibleInViewport &&
       style.visibility === 'visible' &&
       style.opacity !== '0' &&
       style.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
@@ -590,8 +682,13 @@ try {
       visuallyFramed,
       rect: {
         width: rect.width,
-        height: rect.height
+        height: rect.height,
+        top: rect.top,
+        bottom: rect.bottom
       },
+      viewport,
+      visibleInViewport,
+      sendButtonVisibleInViewport,
       backgroundColor: style.backgroundColor,
       borderTop: style.borderTop,
       value: input.value
@@ -776,6 +873,30 @@ try {
       return activeView.textContent;
     })()
   }));
+  const workspaceSelectButtonEvidence = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="workspace-select-button"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        exists: button !== null,
+        clickable: false,
+        text: '',
+        visibleInViewport: false
+      };
+    }
+    const rect = button.getBoundingClientRect();
+    return {
+      exists: true,
+      clickable: !button.disabled,
+      text: button.textContent ?? '',
+      visibleInViewport:
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+    };
+  });
   const buttonInteractionEvidence = {
     attachmentControlAbsent: false,
     composerWorkspaceNavigates: false,
@@ -920,14 +1041,32 @@ try {
       workspaceApiEvidence.search.matches.some(
         (match) => match.relativePath === 'phase-three-notes.txt' && match.preview.includes('phase three smoke workspace')
       ),
-    gitMissingVisible:
-      workspaceText.includes('当前工作区不是 Git 仓库。') &&
-      gitText.includes('非 Git 工作区') &&
-      gitText.includes('空'),
+    gitChangesVisible:
+      workspaceText.includes('phase-three-notes.txt') &&
+      gitText.includes('phase-three-notes.txt') &&
+      gitText.includes('变更'),
     terminalOutputVisible:
       workspaceText.includes('phase-three-notes.txt') &&
-      terminalText.includes('phase-three-notes.txt'),
-    previewFileVisible: previewText.includes('phase-three-notes.txt') && previewText.includes('phase three smoke workspace'),
+      terminalLiveOutput?.includes('phase-three-notes.txt') === true,
+    previewFileVisible:
+      previewText.includes('phase-three-notes.txt') &&
+      previewText.includes('phase three smoke workspace') &&
+      filePreviewBeforeClick !== filePreviewAfterClick &&
+      filePreviewAfterClick?.includes('changed in git') === true,
+    workbenchResizable: Math.abs(workbenchWidthAfter.width - workbenchWidthBefore.width) >= 48,
+    workbenchFilePreviewClickable:
+      filePreviewAfterClick?.includes('phase-three-notes.txt') === true &&
+      filePreviewAfterClick.includes('changed in git'),
+    workbenchGitActions:
+      workbenchGitText?.includes('phase-three-notes.txt') === true &&
+      workbenchGitAfterStage?.includes('M  phase-three-notes.txt') === true &&
+      workbenchGitAfterUnstage?.includes(' M phase-three-notes.txt') === true,
+    terminalCommandRunnable:
+      terminalLiveOutput?.includes('> dir') === true &&
+      terminalLiveOutput.includes('phase-three-notes.txt'),
+    terminalFailureClearsStaleOutput:
+      terminalBlockedOutput?.includes('命令需要确认，未执行。') === true &&
+      terminalBlockedOutput.includes('phase-three-notes.txt') === false,
     rtkMissingVisible:
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&
@@ -993,6 +1132,12 @@ try {
       boundary.appKeys.includes('openQuickEntry') &&
       boundary.appKeys.includes('openTrayEntry') &&
       boundary.appKeys.includes('onNavigate'),
+    workspaceSelectButtonVisible:
+      workspaceSelectButtonEvidence.exists &&
+      workspaceSelectButtonEvidence.clickable &&
+      workspaceSelectButtonEvidence.visibleInViewport &&
+      workspaceSelectButtonEvidence.text.includes('选择'),
+    workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
       chatCapabilityText.includes('MCP 本轮 1') &&
       chatCapabilityText.includes('Skill 本轮 1') &&
@@ -1002,6 +1147,7 @@ try {
       chatInputEvidence.exists &&
       chatInputEvidence.editable &&
       chatInputEvidence.visuallyFramed &&
+      chatInputEvidence.sendButtonVisibleInViewport &&
       chatInputEvidence.value === typedChatPrompt,
     agentCapabilityPreviewVisible:
       agentPreviewText.includes('Agent 能力预览') &&
@@ -1114,9 +1260,14 @@ try {
     phase6DoctorApi: rendererBoundary.phase6DoctorApi,
     workspaceFileVisible: rendererBoundary.workspaceFileVisible,
     workspaceSearchVisible: rendererBoundary.workspaceSearchVisible,
-    gitMissingVisible: rendererBoundary.gitMissingVisible,
+    gitChangesVisible: rendererBoundary.gitChangesVisible,
     terminalOutputVisible: rendererBoundary.terminalOutputVisible,
     previewFileVisible: rendererBoundary.previewFileVisible,
+    workbenchResizable: rendererBoundary.workbenchResizable,
+    workbenchFilePreviewClickable: rendererBoundary.workbenchFilePreviewClickable,
+    workbenchGitActions: rendererBoundary.workbenchGitActions,
+    terminalCommandRunnable: rendererBoundary.terminalCommandRunnable,
+    terminalFailureClearsStaleOutput: rendererBoundary.terminalFailureClearsStaleOutput,
     rtkMissingVisible: rendererBoundary.rtkMissingVisible,
     memoryCandidateVisible: rendererBoundary.memoryCandidateVisible,
     memoryConflictVisible: rendererBoundary.memoryConflictVisible,
@@ -1133,6 +1284,8 @@ try {
     trayEntryVisible: rendererBoundary.trayEntryVisible,
     trayEntryButtonsClickable: rendererBoundary.trayEntryButtonsClickable,
     appEntryApiExpanded: rendererBoundary.appEntryApiExpanded,
+    workspaceSelectButtonVisible: rendererBoundary.workspaceSelectButtonVisible,
+    workspaceDialogApiExposed: rendererBoundary.workspaceDialogApiExposed,
     chatCapabilitySelectionVisible: rendererBoundary.chatCapabilitySelectionVisible,
     chatInputEditable: rendererBoundary.chatInputEditable,
     agentCapabilityPreviewVisible: rendererBoundary.agentCapabilityPreviewVisible,
@@ -1167,12 +1320,20 @@ try {
     performanceSample: phase6ApiEvidence.sample,
     evidence: {
       chatInputEvidence,
+      workspaceSelectButtonEvidence,
       buttonInteractionEvidence,
       entryButtonEvidence,
       memoryRecoveryText,
       memoryRecoveryApiEvidence,
       terminalText,
+      terminalLiveOutput,
+      terminalBlockedOutput,
       gitText,
+      workbenchGitText,
+      workbenchGitAfterStage,
+      workbenchGitAfterUnstage,
+      workbenchWidthBefore,
+      workbenchWidthAfter,
       previewText
     },
     failedChecks,

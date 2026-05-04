@@ -1,6 +1,6 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import { wrapIpc } from '../services/errors';
+import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowState } from '../window-shell';
 
@@ -171,12 +171,40 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.workspaceSelect, (_event, request) =>
     wrapIpc(() => services.workspaceService.selectWorkspace(request.path))
   );
+  ipcMain.handle(ipcChannels.workspaceSelectFromDialog, () =>
+    wrapIpc(async () => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: '选择工作区',
+        properties: ['openDirectory']
+      });
+      if (result.canceled) {
+        return null;
+      }
+      const selectedPath = result.filePaths[0];
+      if (selectedPath === undefined) {
+        throw new RocDomainError({
+          code: 'workspace_dialog_empty_selection',
+          message: '没有收到工作区目录。',
+          category: 'validation',
+          retryable: true,
+          userAction: '请重新选择一个目录作为工作区。'
+        });
+      }
+      return services.workspaceService.selectWorkspace(selectedPath);
+    })
+  );
   ipcMain.handle(ipcChannels.filesListTree, (_event, request) => wrapIpc(() => services.fileService.listTree(request)));
   ipcMain.handle(ipcChannels.filesSearch, (_event, request) => wrapIpc(() => services.fileService.search(request)));
   ipcMain.handle(ipcChannels.filesPreview, (_event, request) => wrapIpc(() => services.fileService.readPreview(request)));
   ipcMain.handle(ipcChannels.filesWriteText, (_event, request) => wrapIpc(() => services.fileService.writeTextFile(request)));
   ipcMain.handle(ipcChannels.gitStatus, () => wrapIpc(() => services.gitService.getStatus()));
   ipcMain.handle(ipcChannels.gitDiffStat, () => wrapIpc(() => services.gitService.getDiffStat()));
+  ipcMain.handle(ipcChannels.gitStageFile, (_event, request) =>
+    wrapIpc(() => services.gitService.stageFile(request.relativePath))
+  );
+  ipcMain.handle(ipcChannels.gitUnstageFile, (_event, request) =>
+    wrapIpc(() => services.gitService.unstageFile(request.relativePath))
+  );
   ipcMain.handle(ipcChannels.rtkStatus, () => wrapIpc(() => services.rtkService.getStatus()));
   ipcMain.handle(ipcChannels.shellExecute, (_event, request) =>
     wrapIpc(() => services.shellExecutionService.execute(request))

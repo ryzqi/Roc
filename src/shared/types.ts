@@ -154,12 +154,25 @@ export type GitStatusResult = {
   isRepository: true;
   branch: string;
   porcelain: string[];
+  changes: GitStatusChange[];
   changedFiles: number;
+};
+
+export type GitStatusChange = {
+  porcelain: string;
+  index: string;
+  worktree: string;
+  relativePath: string;
+  originalPath?: string;
 };
 
 export type GitDiffStatResult = {
   workspacePath: string;
   stat: string;
+};
+
+export type GitFileOperationRequest = {
+  relativePath: string;
 };
 
 export type RtkBypassReason =

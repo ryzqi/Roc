@@ -20,7 +20,18 @@ import type { WorkspaceService } from './workspace-service';
 const defaultPreviewBytes = 64 * 1024;
 const defaultListLimit = 200;
 const defaultSearchLimit = 100;
-const ignoredDirectoryNames = new Set(['node_modules', '.git', 'dist', 'release', '.runtime', '.artifacts']);
+const ignoredDirectoryNames = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'out',
+  'release',
+  'coverage',
+  '.cache',
+  '.tmp',
+  '.runtime',
+  '.artifacts'
+]);
 
 export class FileService {
   constructor(
@@ -85,11 +96,14 @@ export class FileService {
     const matches: FileSearchResult['matches'] = [];
     this.visitFiles(workspace.path, (absolutePath) => {
       if (matches.length >= maxResults) {
-        return;
+        return true;
       }
-      const buffer = readFileSync(absolutePath);
+      const buffer = this.readSearchBuffer(absolutePath);
+      if (buffer === null) {
+        return false;
+      }
       if (this.isBinaryBuffer(buffer)) {
-        return;
+        return false;
       }
       const lines = buffer.toString('utf8').split(/\r?\n/);
       for (const [index, line] of lines.entries()) {
@@ -104,9 +118,10 @@ export class FileService {
           preview: line.trim()
         });
         if (matches.length >= maxResults) {
-          break;
+          return true;
         }
       }
+      return false;
     });
 
     return {
@@ -196,21 +211,54 @@ export class FileService {
     return recoveryPoint;
   }
 
-  private visitFiles(root: string, visit: (absolutePath: string) => void): void {
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
+  private visitFiles(root: string, visit: (absolutePath: string) => boolean): boolean {
+    let entries;
+    try {
+      entries = readdirSync(root, { withFileTypes: true });
+    } catch (error) {
+      if (this.isRecoverableFileSystemError(error)) {
+        return false;
+      }
+      throw error;
+    }
+
+    for (const entry of entries) {
       if (entry.isDirectory() && ignoredDirectoryNames.has(entry.name)) {
         continue;
       }
 
       const absolutePath = join(root, entry.name);
       if (entry.isDirectory()) {
-        this.visitFiles(absolutePath, visit);
+        if (this.visitFiles(absolutePath, visit)) {
+          return true;
+        }
         continue;
       }
       if (entry.isFile()) {
-        visit(absolutePath);
+        if (visit(absolutePath)) {
+          return true;
+        }
       }
     }
+    return false;
+  }
+
+  private readSearchBuffer(absolutePath: string): Buffer | null {
+    try {
+      return readFileSync(absolutePath);
+    } catch (error) {
+      if (this.isRecoverableFileSystemError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private isRecoverableFileSystemError(error: unknown): boolean {
+    if (!(error instanceof Error) || !('code' in error)) {
+      return false;
+    }
+    return ['EACCES', 'EBUSY', 'ENOENT', 'ENOTDIR', 'EPERM', 'ELOOP', 'ENAMETOOLONG'].includes(String(error.code));
   }
 
   private normalizeRelativePath(relativePath: string): string {

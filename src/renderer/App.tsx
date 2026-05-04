@@ -13,6 +13,7 @@ import type {
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
+  GitStatusChange,
   GitStatusResult,
   McpServerTestResult,
   McpServerSnapshot,
@@ -92,6 +93,15 @@ type PageMeta = {
 
 type WorkbenchTool = 'files' | 'git' | 'terminal';
 type MainViewId = Exclude<ViewId, 'quick' | 'tray'>;
+type WorkspaceData = {
+  fileTree: FileTreeResult | null;
+  fileSearch: FileSearchResult | null;
+  filePreview: FilePreviewResult | null;
+  gitStatus: GitStatusResult | null;
+  gitError: string | null;
+  terminalResult: ShellExecutionResult | null;
+  terminalError: string | null;
+};
 type MemoryRecordViewModel = {
   id: string;
   layer: string;
@@ -450,9 +460,11 @@ export function App(): React.JSX.Element {
   const [state, setState] = useState<LoadedState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
     parseWorkbenchTool(initialParams.get('tool'), initialView)
   );
+  const [workbenchWidth, setWorkbenchWidth] = useState(560);
   const [windowState, setWindowState] = useState<WindowStateSnapshot>({
     maximized: false,
     minimized: false,
@@ -568,6 +580,37 @@ export function App(): React.JSX.Element {
     syncRendererUrl(activeView, activeWorkbenchTool);
   }, [activeView, activeWorkbenchTool]);
 
+  async function selectWorkspaceFromDialog(): Promise<void> {
+    setWorkspaceSelectError(null);
+    const selected = await window.roc.workspace.selectFromDialog();
+    if (!selected.ok) {
+      setWorkspaceSelectError(selected.error.message);
+      return;
+    }
+    if (selected.data === null) {
+      return;
+    }
+
+    const [appStatus, workspaceData] = await Promise.all([
+      window.roc.app.getStatus(),
+      loadWorkspaceData(selected.data)
+    ]);
+    setState((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            appStatus: unwrap<AppStatus>('app status', appStatus),
+            workspace: selected.data,
+            ...workspaceData
+          }
+    );
+  }
+
+  function updateWorkspaceData(partial: Partial<WorkspaceData>): void {
+    setState((current) => (current === null ? current : { ...current, ...partial }));
+  }
+
   if (error !== null) {
     return <div className="fatal">Roc 启动失败：{error}</div>;
   }
@@ -583,6 +626,7 @@ export function App(): React.JSX.Element {
           activeView={activeView}
           chatError={chatError}
           onOpenView={setActiveView}
+          onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={async (input) => {
             setChatError(null);
             const result = await window.roc.chat.submit({
@@ -694,7 +738,18 @@ export function App(): React.JSX.Element {
       <div className="workspace">
         <aside className="sidebar">
           <div className="sidebar-head">
-            <div className="workspace-pill" title={visibleWorkspaceLabel(state)}><PreviewIcon name="folder" /><span>{visibleWorkspaceLabel(state)}</span></div>
+            <button
+              className="workspace-pill"
+              data-testid="workspace-select-button"
+              title={visibleWorkspaceLabel(state)}
+              type="button"
+              onClick={() => void selectWorkspaceFromDialog()}
+            >
+              <PreviewIcon name="folder" />
+              <span>{visibleWorkspaceLabel(state)}</span>
+              <strong>选择</strong>
+            </button>
+            {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
           </div>
           <div className="sidebar-block sidebar-block--history">
             <div className="side-title">历史会话</div>
@@ -721,6 +776,7 @@ export function App(): React.JSX.Element {
         </aside>
 
         <div
+          style={hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined}
           className={
             activeView === 'chat'
               ? 'workspace-shell workspace-shell--chat'
@@ -736,6 +792,7 @@ export function App(): React.JSX.Element {
                   activeView={activeView}
                   chatError={chatError}
                   onOpenView={setActiveView}
+                  onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={async (input) => {
                     setChatError(null);
                     const result = await window.roc.chat.submit({
@@ -770,6 +827,9 @@ export function App(): React.JSX.Element {
               onToolChange={setActiveWorkbenchTool}
               onClose={() => setActiveView('chat')}
               state={state}
+              updateWorkspaceData={updateWorkspaceData}
+              width={workbenchWidth}
+              onWidthChange={setWorkbenchWidth}
               windowState={windowState}
             />
           ) : (
@@ -794,15 +854,23 @@ function gitErrorLabel(error: string | null): string {
   return error;
 }
 
-async function loadWorkspaceData(workspace: Workspace | null): Promise<{
-  fileTree: FileTreeResult | null;
-  fileSearch: FileSearchResult | null;
-  filePreview: FilePreviewResult | null;
-  gitStatus: GitStatusResult | null;
-  gitError: string | null;
-  terminalResult: ShellExecutionResult | null;
-  terminalError: string | null;
-}> {
+function sanitizeTestId(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.:-]/g, '-');
+}
+
+function gitStatusChanges(status: GitStatusResult): GitStatusChange[] {
+  return status.changes;
+}
+
+function canStageGitChange(change: GitStatusChange): boolean {
+  return change.worktree !== ' ' || change.index === '?' || change.index === '!';
+}
+
+function canUnstageGitChange(change: GitStatusChange): boolean {
+  return change.index !== ' ' && change.index !== '?';
+}
+
+async function loadWorkspaceData(workspace: Workspace | null): Promise<WorkspaceData> {
   if (workspace === null) {
     return {
       fileTree: null,
@@ -821,13 +889,7 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<{
     firstFile === undefined
       ? null
       : unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath: firstFile.relativePath }));
-  const fileSearch =
-    firstFile === undefined
-      ? null
-      : unwrap<FileSearchResult>(
-          'file search',
-          await window.roc.files.search({ query: firstFile.name, maxResults: 8 })
-        );
+  const fileSearch = null;
   const gitResult = await window.roc.git.status();
   const terminalResult = await window.roc.shell.execute({
     command: 'dir',
@@ -952,6 +1014,7 @@ function ViewContent({
   activeView,
   chatError,
   onOpenView,
+  onSelectWorkspace,
   onSubmitChatTask,
   state,
   updateLoadedState
@@ -959,6 +1022,7 @@ function ViewContent({
   activeView: ViewId;
   chatError: string | null;
   onOpenView: (view: ViewId) => void;
+  onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -967,7 +1031,7 @@ function ViewContent({
     return <TasksView state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'workspace') {
-    return <WorkspaceView state={state} />;
+    return <WorkspaceView onSelectWorkspace={onSelectWorkspace} state={state} />;
   }
   if (activeView === 'git') {
     return <GitView state={state} />;
@@ -1446,13 +1510,28 @@ function TasksView({
   );
 }
 
-function WorkspaceView({ state }: { state: LoadedState }): React.JSX.Element {
+function WorkspaceView({
+  onSelectWorkspace,
+  state
+}: {
+  onSelectWorkspace: () => Promise<void>;
+  state: LoadedState;
+}): React.JSX.Element {
   if (state.workspace === null) {
     return (
       <>
         <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
-          <EmptyState testId="workspace-empty" title="未选择工作区" detail="请选择默认工作区后再读取文件、Git 和终端状态。" />
+          <EmptyState
+            action={
+              <button className="action-button" data-testid="workspace-empty-select" type="button" onClick={() => void onSelectWorkspace()}>
+                选择工作区
+              </button>
+            }
+            testId="workspace-empty"
+            title="未选择工作区"
+            detail="请选择默认工作区后再读取文件、Git 和终端状态。"
+          />
           <WorkspaceStatusPanels state={state} />
         </section>
       </>
@@ -2246,18 +2325,48 @@ function WorkbenchPanel({
   activeView,
   onClose,
   onToolChange,
+  onWidthChange,
   state,
+  updateWorkspaceData,
+  width,
   windowState
 }: {
   activeTool: WorkbenchTool;
   activeView: ViewId;
   onClose: () => void;
   onToolChange: (tool: WorkbenchTool) => void;
+  onWidthChange: (width: number) => void;
   state: LoadedState;
+  updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
+  width: number;
   windowState: WindowStateSnapshot;
 }): React.JSX.Element {
+  function startResize(event: React.PointerEvent<HTMLDivElement>): void {
+    const startX = event.clientX;
+    const startWidth = width;
+    const onMove = (moveEvent: PointerEvent): void => {
+      const nextWidth = Math.min(760, Math.max(360, startWidth + startX - moveEvent.clientX));
+      onWidthChange(nextWidth);
+    };
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  }
+
   return (
-    <aside className="workbench">
+    <aside className="workbench" data-testid="workbench-panel">
+      <div
+        aria-label="调节右侧工作台宽度"
+        className="workbench-resize-handle"
+        data-testid="workbench-resize-handle"
+        role="separator"
+        tabIndex={0}
+        onPointerDown={startResize}
+      />
       <div className="workbench-bar">
         <div className="workbench-tabs">
           {WORKBENCH_TOOLS.map((tool) => {
@@ -2282,21 +2391,40 @@ function WorkbenchPanel({
       </div>
       <div className="workbench-panel">
         {activeTool === 'git' ? (
-          <GitWorkbench state={state} />
+          <GitWorkbench state={state} updateWorkspaceData={updateWorkspaceData} />
         ) : activeTool === 'terminal' ? (
-          <TerminalWorkbench state={state} windowState={windowState} />
+          <TerminalWorkbench state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
         ) : (
-          <FilesWorkbench state={state} />
+          <FilesWorkbench state={state} updateWorkspaceData={updateWorkspaceData} />
         )}
       </div>
     </aside>
   );
 }
 
-function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
+function FilesWorkbench({
+  state,
+  updateWorkspaceData
+}: {
+  state: LoadedState;
+  updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
+}): React.JSX.Element {
   const fileCount = state.fileTree?.entries.length ?? 0;
   const previewPath = state.filePreview?.relativePath ?? '当前没有可预览文件';
   const searchCount = state.fileSearch?.matches.length ?? 0;
+  async function openFilePreview(relativePath: string): Promise<void> {
+    const preview = unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath }));
+    let fileSearch: FileSearchResult | null = null;
+    if (preview.kind === 'text') {
+      const firstToken = preview.content.split(/\s+/).find((token) => token.trim().length > 0);
+      if (firstToken !== undefined) {
+        const search = await window.roc.files.search({ query: firstToken, maxResults: 8 });
+        fileSearch = search.ok ? search.data : null;
+      }
+    }
+    updateWorkspaceData({ filePreview: preview, fileSearch });
+  }
+
   return (
     <section className="tool-panel">
       <div className="tool-stack">
@@ -2307,12 +2435,26 @@ function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
           </div>
           <div className="dock-preview-copy">{state.workspace === null ? '未选择工作区。' : state.workspace.path}</div>
         </div>
-        <section className="file-tree">
+        <section className="file-tree" data-testid="workbench-file-tree">
           {state.fileTree === null ? (
             <p className="muted">未选择工作区。</p>
           ) : (
-            state.fileTree.entries.slice(0, 10).map((entry) => <TreeItem entry={entry} key={entry.relativePath} />)
+            state.fileTree.entries.slice(0, 80).map((entry) => (
+              <TreeItem
+                active={state.filePreview?.relativePath === entry.relativePath}
+                entry={entry}
+                key={entry.relativePath}
+                onClick={entry.type === 'file' ? () => void openFilePreview(entry.relativePath) : undefined}
+              />
+            ))
           )}
+        </section>
+        <section className="code-preview workbench-preview" data-testid="workbench-file-preview">
+          {state.filePreview === null
+            ? '当前没有加载可预览内容。'
+            : `${state.filePreview.relativePath}\n\n${
+                state.filePreview.kind === 'binary' ? `二进制文件，大小 ${state.filePreview.sizeBytes} bytes。` : state.filePreview.content
+              }`}
         </section>
         <section className="card">
           <div className="card-title">当前文件上下文</div>
@@ -2326,7 +2468,31 @@ function FilesWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
   );
 }
 
-function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
+function GitWorkbench({
+  state,
+  updateWorkspaceData
+}: {
+  state: LoadedState;
+  updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
+}): React.JSX.Element {
+  async function refreshGitStatus(): Promise<void> {
+    const gitStatus = await window.roc.git.status();
+    updateWorkspaceData({
+      gitStatus: gitStatus.ok ? gitStatus.data : null,
+      gitError: gitStatus.ok ? null : gitStatus.error.message
+    });
+  }
+
+  async function stageFile(relativePath: string): Promise<void> {
+    const gitStatus = unwrap<GitStatusResult>('git stage file', await window.roc.git.stageFile({ relativePath }));
+    updateWorkspaceData({ gitStatus, gitError: null });
+  }
+
+  async function unstageFile(relativePath: string): Promise<void> {
+    const gitStatus = unwrap<GitStatusResult>('git unstage file', await window.roc.git.unstageFile({ relativePath }));
+    updateWorkspaceData({ gitStatus, gitError: null });
+  }
+
   return (
     <section className="tool-panel">
       <div className="tool-stack">
@@ -2338,20 +2504,49 @@ function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
           <div className="dock-preview-copy">{state.gitStatus === null ? gitErrorLabel(state.gitError) : state.gitStatus.branch}</div>
         </div>
         <section className="card">
-          <div className="card-title">Git 快捷动作</div>
-          <Row title="status" sub="查看当前变更" tag="低" tone="ok" />
-          <Row title="diff" sub="查看文件差异" tag="低" tone="ok" />
-          <Row title="push" sub="需要确认" tag="高" tone="bad" />
+          <div className="card-title">Git 常用操作</div>
+          <div className="action-strip">
+            <button type="button" onClick={() => void refreshGitStatus()}>刷新 status</button>
+            <button type="button" disabled={state.gitStatus === null} onClick={() => void refreshGitStatus()}>
+              查看 changes
+            </button>
+          </div>
         </section>
-        <section className="card">
-          <div className="card-title">最近变更焦点</div>
+        <section className="card" data-testid="workbench-git-changes">
+          <div className="card-title">Changes</div>
           {state.gitStatus === null ? (
             <Row title="当前工作区" sub={gitErrorLabel(state.gitError)} tag="非 Git 仓库" tone="warn" />
+          ) : state.gitStatus.porcelain.length === 0 ? (
+            <Row title="工作区" sub={state.gitStatus.workspacePath} tag="干净" tone="ok" />
           ) : (
-            <>
-              <Row title="当前分支" sub={state.gitStatus.workspacePath} tag={state.gitStatus.branch} tone="info" />
-              <Row title="变更文件" sub={state.gitStatus.porcelain.slice(0, 3).join(' | ') || '工作区干净'} tag={`${state.gitStatus.changedFiles} 项`} tone={state.gitStatus.changedFiles > 0 ? 'warn' : 'ok'} />
-            </>
+            gitStatusChanges(state.gitStatus).map((change) => {
+              const safeId = sanitizeTestId(change.relativePath);
+              return (
+                <div className="row action-row git-change-row" key={change.porcelain}>
+                  <div>
+                    <div className="row-title">{change.porcelain}</div>
+                    <div className="row-sub">{change.relativePath}</div>
+                  </div>
+                  <span className="pill warn">{`${change.index}${change.worktree}`}</span>
+                  <button
+                    data-testid={`git-stage-${safeId}`}
+                    disabled={!canStageGitChange(change)}
+                    type="button"
+                    onClick={() => void stageFile(change.relativePath)}
+                  >
+                    暂存
+                  </button>
+                  <button
+                    data-testid={`git-unstage-${safeId}`}
+                    disabled={!canUnstageGitChange(change)}
+                    type="button"
+                    onClick={() => void unstageFile(change.relativePath)}
+                  >
+                    取消暂存
+                  </button>
+                </div>
+              );
+            })
           )}
         </section>
       </div>
@@ -2359,7 +2554,45 @@ function GitWorkbench({ state }: { state: LoadedState }): React.JSX.Element {
   );
 }
 
-function TerminalWorkbench({ state, windowState: _windowState }: { state: LoadedState; windowState: WindowStateSnapshot }): React.JSX.Element {
+function TerminalWorkbench({
+  state,
+  updateWorkspaceData,
+  windowState: _windowState
+}: {
+  state: LoadedState;
+  updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
+  windowState: WindowStateSnapshot;
+}): React.JSX.Element {
+  const [command, setCommand] = useState('dir');
+  const [running, setRunning] = useState(false);
+
+  async function runCommand(): Promise<void> {
+    if (state.workspace === null) {
+      updateWorkspaceData({ terminalResult: null, terminalError: '请先选择工作区。' });
+      return;
+    }
+    const trimmedCommand = command.trim();
+    if (trimmedCommand.length === 0) {
+      updateWorkspaceData({ terminalResult: null, terminalError: '命令不能为空。' });
+      return;
+    }
+    setRunning(true);
+    try {
+      const result = await window.roc.shell.execute({
+        command: trimmedCommand,
+        cwd: state.workspace.path,
+        source: 'terminal'
+      });
+      if (!result.ok) {
+        updateWorkspaceData({ terminalResult: null, terminalError: result.error.message });
+        return;
+      }
+      updateWorkspaceData({ terminalResult: result.data, terminalError: null });
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <section className="tool-panel">
       <div className="tool-stack">
@@ -2370,7 +2603,28 @@ function TerminalWorkbench({ state, windowState: _windowState }: { state: Loaded
           </div>
           <div className="dock-preview-copy">{visibleWorkspaceCwd(state)}</div>
         </div>
-        <pre className="terminal">{buildVisibleTerminalOutput(state)}</pre>
+        <div className="terminal-session">
+          <pre className="terminal" data-testid="terminal-live-output">
+            {state.terminalResult === null
+              ? buildVisibleTerminalOutput(state)
+              : `> ${state.terminalResult.command}\n${state.terminalResult.stdout}${state.terminalResult.stderr}`}
+          </pre>
+          <div className="terminal-command-row">
+            <input
+              data-testid="terminal-command-input"
+              value={command}
+              onChange={(event) => setCommand(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void runCommand();
+                }
+              }}
+            />
+            <button data-testid="terminal-run-command" disabled={running} type="button" onClick={() => void runCommand()}>
+              {running ? '运行中' : '运行'}
+            </button>
+          </div>
+        </div>
         <section className="card">
           <div className="card-title">终端边界</div>
           <Row title="目录" sub="限定当前工作区" tag="受控" tone="ok" />
@@ -2739,9 +2993,26 @@ function ToolRow({
   );
 }
 
-function TreeItem({ entry }: { entry: FileTreeResult['entries'][number] }): React.JSX.Element {
+function TreeItem({
+  active = false,
+  entry,
+  onClick
+}: {
+  active?: boolean;
+  entry: FileTreeResult['entries'][number];
+  onClick?: () => void;
+}): React.JSX.Element {
+  const className = active || entry.type === 'file' ? 'tree-item selected' : 'tree-item';
+  if (onClick !== undefined) {
+    return (
+      <button className={className} data-testid={`workbench-file-${sanitizeTestId(entry.relativePath)}`} type="button" onClick={onClick}>
+        <span>{entry.type === 'directory' ? '▸' : '•'}</span>
+        <span>{entry.relativePath}</span>
+      </button>
+    );
+  }
   return (
-    <div className={entry.type === 'directory' ? 'tree-item' : 'tree-item selected'}>
+    <div className={className}>
       <span>{entry.type === 'directory' ? '▸' : '•'}</span>
       <span>{entry.relativePath}</span>
     </div>
@@ -2765,12 +3036,23 @@ function PreviewTreeItem({
   );
 }
 
-function EmptyState({ title, detail, testId }: { title: string; detail: string; testId: string }): React.JSX.Element {
+function EmptyState({
+  action,
+  title,
+  detail,
+  testId
+}: {
+  action?: React.ReactNode;
+  title: string;
+  detail: string;
+  testId: string;
+}): React.JSX.Element {
   return (
     <div className="empty-state" data-testid={testId}>
       <CircleAlert size={24} />
       <strong>{title}</strong>
       <p>{detail}</p>
+      {action}
     </div>
   );
 }
