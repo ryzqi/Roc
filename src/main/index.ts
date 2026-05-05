@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
 import { buildFloatingWindowOptions, buildMainWindowOptions } from './window-shell';
+import { broadcastToWindows, sendToWindow } from './window-messaging';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
@@ -24,7 +25,7 @@ async function loadRenderer(window: BrowserWindow, params?: URLSearchParams): Pr
 }
 
 function showMainPage(page: string): void {
-  if (mainWindow === null) {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
     return;
   }
   if (mainWindow.isMinimized()) {
@@ -32,7 +33,7 @@ function showMainPage(page: string): void {
   }
   mainWindow.show();
   mainWindow.focus();
-  mainWindow.webContents.send('roc:navigate', page);
+  sendToWindow(mainWindow, 'roc:navigate', page);
 }
 
 async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
@@ -81,11 +82,21 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow(buildMainWindowOptions(preloadPath));
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
   registerIpc(services, mainWindow, {
     openMainPage: showMainPage,
     openQuickEntry: () => openFloatingEntry('quick'),
     openTrayEntry: () => openFloatingEntry('tray')
+  });
+
+  services.terminalSessionService.onOutput((event) => {
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:output', event);
+  });
+  services.terminalSessionService.onExit((event) => {
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:exit', event);
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

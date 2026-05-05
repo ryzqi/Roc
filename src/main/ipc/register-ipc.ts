@@ -205,6 +205,23 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.gitUnstageFile, (_event, request) =>
     wrapIpc(() => services.gitService.unstageFile(request.relativePath))
   );
+  ipcMain.handle(ipcChannels.gitDiscardFile, (_event, request) =>
+    wrapIpc(() => services.gitService.discardFileChanges(request.relativePath))
+  );
+  ipcMain.handle(ipcChannels.gitCommit, (_event, request) => wrapIpc(() => services.gitService.commit(request.message)));
+  ipcMain.handle(ipcChannels.gitPush, () => wrapIpc(() => services.gitService.push()));
+  ipcMain.handle(ipcChannels.terminalCreateSession, (_event, request) =>
+    wrapIpc(() => services.terminalSessionService.createSession(request))
+  );
+  ipcMain.handle(ipcChannels.terminalWriteInput, (_event, request) =>
+    wrapIpc(() => services.terminalSessionService.writeInput(request))
+  );
+  ipcMain.handle(ipcChannels.terminalResize, (_event, request) =>
+    wrapIpc(() => services.terminalSessionService.resize(request))
+  );
+  ipcMain.handle(ipcChannels.terminalCloseSession, (_event, request) =>
+    wrapIpc(() => services.terminalSessionService.closeSession(request))
+  );
   ipcMain.handle(ipcChannels.rtkStatus, () => wrapIpc(() => services.rtkService.getStatus()));
   ipcMain.handle(ipcChannels.shellExecute, (_event, request) =>
     wrapIpc(() => services.shellExecutionService.execute(request))

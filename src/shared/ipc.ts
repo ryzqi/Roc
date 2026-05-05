@@ -19,8 +19,11 @@ import type {
   FileTreeResult,
   FileWriteResult,
   FileWriteTextRequest,
+  GitCommitRequest,
+  GitCommitResult,
   GitDiffStatResult,
   GitFileOperationRequest,
+  GitPushResult,
   GitStatusResult,
   IpcResult,
   McpServerConfig,
@@ -46,6 +49,13 @@ import type {
   ShellExecutionResult,
   SkillImportRequest,
   SkillSnapshot,
+  TerminalSessionCloseRequest,
+  TerminalSessionCreateRequest,
+  TerminalSessionExitEvent,
+  TerminalSessionInputRequest,
+  TerminalSessionOutputEvent,
+  TerminalSessionResizeRequest,
+  TerminalSessionSnapshot,
   TaskSnapshot,
   TraySummary,
   Workspace,
@@ -119,6 +129,13 @@ export const ipcChannels = {
   gitDiffStat: 'roc:git:diff-stat',
   gitStageFile: 'roc:git:stage-file',
   gitUnstageFile: 'roc:git:unstage-file',
+  gitDiscardFile: 'roc:git:discard-file',
+  gitCommit: 'roc:git:commit',
+  gitPush: 'roc:git:push',
+  terminalCreateSession: 'roc:terminal:create-session',
+  terminalWriteInput: 'roc:terminal:write-input',
+  terminalResize: 'roc:terminal:resize',
+  terminalCloseSession: 'roc:terminal:close-session',
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute'
 } as const;
@@ -221,6 +238,17 @@ export type RocPreloadApi = {
     diffStat: () => Promise<IpcResult<GitDiffStatResult>>;
     stageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     unstageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
+    discardFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
+    commit: (request: GitCommitRequest) => Promise<IpcResult<GitCommitResult>>;
+    push: () => Promise<IpcResult<GitPushResult>>;
+  };
+  terminal: {
+    createSession: (request: TerminalSessionCreateRequest) => Promise<IpcResult<TerminalSessionSnapshot>>;
+    writeInput: (request: TerminalSessionInputRequest) => Promise<IpcResult<{ delivered: true }>>;
+    resize: (request: TerminalSessionResizeRequest) => Promise<IpcResult<TerminalSessionSnapshot>>;
+    closeSession: (request: TerminalSessionCloseRequest) => Promise<IpcResult<{ closed: true }>>;
+    onOutput: (callback: (event: TerminalSessionOutputEvent) => void) => () => void;
+    onExit: (callback: (event: TerminalSessionExitEvent) => void) => () => void;
   };
   rtk: {
     status: () => Promise<IpcResult<RtkStatus>>;

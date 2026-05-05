@@ -17,6 +17,7 @@ import { RtkService } from './rtk-service';
 import { ShellExecutionService } from './shell-execution-service';
 import { SkillService } from './skill-service';
 import { TaskService } from './task-service';
+import { TerminalSessionService } from './terminal-session-service';
 import { WorkspaceService } from './workspace-service';
 
 export type AppServices = {
@@ -37,6 +38,7 @@ export type AppServices = {
   workspaceService: WorkspaceService;
   fileService: FileService;
   gitService: GitService;
+  terminalSessionService: TerminalSessionService;
   rtkService: RtkService;
   shellExecutionService: ShellExecutionService;
 };
@@ -71,6 +73,7 @@ export class AppService {
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
     private readonly gitService: GitService,
+    private readonly terminalSessionService: TerminalSessionService,
     private readonly rtkService: RtkService,
     private readonly shellExecutionService: ShellExecutionService,
     private readonly logService: LogService,
@@ -140,6 +143,7 @@ export class AppService {
       workspaceService: this.workspaceService,
       fileService: this.fileService,
       gitService: this.gitService,
+      terminalSessionService: this.terminalSessionService,
       rtkService: this.rtkService,
       shellExecutionService: this.shellExecutionService
     };
@@ -177,6 +181,7 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
   const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
+  const terminalSessionService = new TerminalSessionService(paths, workspaceService);
   const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
   const doctorService = new DoctorService(
     paths,
@@ -208,6 +213,7 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
     workspaceService,
     fileService,
     gitService,
+    terminalSessionService,
     rtkService,
     shellExecutionService,
     logService,
@@ -232,6 +238,7 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
     workspaceService,
     fileService,
     gitService,
+    terminalSessionService,
     rtkService,
     shellExecutionService
   };

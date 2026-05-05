@@ -67,6 +67,15 @@ async function invokeWorkspaceDialogHandler(): Promise<unknown> {
 }
 
 describe('workspace dialog IPC', () => {
+  it('registers terminal session IPC handlers', () => {
+    registerWorkspaceHandlers();
+
+    expect(electronMock.handlers.has(ipcChannels.terminalCreateSession)).toBe(true);
+    expect(electronMock.handlers.has(ipcChannels.terminalWriteInput)).toBe(true);
+    expect(electronMock.handlers.has(ipcChannels.terminalResize)).toBe(true);
+    expect(electronMock.handlers.has(ipcChannels.terminalCloseSession)).toBe(true);
+  });
+
   it('returns null when directory selection is cancelled', async () => {
     registerWorkspaceHandlers();
     electronMock.showOpenDialog.mockResolvedValue({

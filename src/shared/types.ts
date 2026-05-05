@@ -119,10 +119,11 @@ export type FilePreviewRequest = {
 
 export type FilePreviewResult = {
   relativePath: string;
-  kind: 'text' | 'binary';
+  kind: 'text' | 'image' | 'binary';
   content: string;
   truncated: boolean;
   sizeBytes: number;
+  mediaType?: string;
 };
 
 export type FileWriteTextRequest = {
@@ -173,6 +174,25 @@ export type GitDiffStatResult = {
 
 export type GitFileOperationRequest = {
   relativePath: string;
+};
+
+export type GitCommitRequest = {
+  message: string;
+};
+
+export type GitCommitResult = {
+  workspacePath: string;
+  commitMessage: string;
+  commitSha: string;
+  status: GitStatusResult;
+};
+
+export type GitPushResult = {
+  workspacePath: string;
+  remoteName: string;
+  branch: string;
+  status: GitStatusResult;
+  output: string;
 };
 
 export type RtkBypassReason =
@@ -226,6 +246,50 @@ export type ShellExecutionResult = {
   rtkVersion?: string;
   teePath?: string;
   bypassReason?: RtkBypassReason;
+};
+
+export type TerminalSessionId = string;
+export type TerminalSessionStatus = 'starting' | 'ready' | 'exited' | 'error';
+
+export type TerminalSessionCreateRequest = {
+  cwd?: string;
+  cols: number;
+  rows: number;
+};
+
+export type TerminalSessionSnapshot = {
+  id: TerminalSessionId;
+  cwd: string;
+  shell: string;
+  cols: number;
+  rows: number;
+  status: TerminalSessionStatus;
+  exitCode: number | null;
+};
+
+export type TerminalSessionInputRequest = {
+  sessionId: TerminalSessionId;
+  data: string;
+};
+
+export type TerminalSessionResizeRequest = {
+  sessionId: TerminalSessionId;
+  cols: number;
+  rows: number;
+};
+
+export type TerminalSessionCloseRequest = {
+  sessionId: TerminalSessionId;
+};
+
+export type TerminalSessionOutputEvent = {
+  sessionId: TerminalSessionId;
+  data: string;
+};
+
+export type TerminalSessionExitEvent = {
+  sessionId: TerminalSessionId;
+  exitCode: number | null;
 };
 
 export type TaskStatus =

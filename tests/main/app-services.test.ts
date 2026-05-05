@@ -11,6 +11,10 @@ import { RocDomainError, wrapIpc } from '../../src/main/services/errors';
 let root: string;
 let services: AppServices;
 
+function normalizeLineEndings(value: string): string {
+  return value.replaceAll('\r\n', '\n');
+}
+
 type CapturedProviderRequest = {
   method: string | undefined;
   url: string | undefined;
@@ -1248,12 +1252,21 @@ describe('Roc foundation services', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
     try {
       mkdirSync(join(workspaceRoot, 'src'));
+      mkdirSync(join(workspaceRoot, 'assets'));
       writeFileSync(join(workspaceRoot, 'src', 'notes.md'), 'alpha\nphase three boundary\n', 'utf8');
+      writeFileSync(
+        join(workspaceRoot, 'assets', 'pixel.png'),
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG3sAAAAASUVORK5CYII=',
+          'base64'
+        )
+      );
       services.workspaceService.selectWorkspace(workspaceRoot);
 
       const tree = services.fileService.listTree({ relativePath: '' });
       const search = services.fileService.search({ query: 'phase three' });
       const preview = services.fileService.readPreview({ relativePath: 'src/notes.md' });
+      const imagePreview = services.fileService.readPreview({ relativePath: 'assets/pixel.png' });
       const writeResult = services.fileService.writeTextFile({
         relativePath: 'src/notes.md',
         content: 'updated phase three boundary\n',
@@ -1282,6 +1295,10 @@ describe('Roc foundation services', () => {
         truncated: false,
         content: 'alpha\nphase three boundary\n'
       });
+      expect(imagePreview.kind).toBe('image');
+      expect(imagePreview.mediaType).toBe('image/png');
+      expect(imagePreview.content.startsWith('data:image/png;base64,')).toBe(true);
+      expect(imagePreview.sizeBytes).toBeGreaterThan(0);
       expect(writeResult.recoveryPoint.relativePath).toBe('src/notes.md');
       expect(recoverySnapshot).toBe('alpha\nphase three boundary\n');
       expect(updatedContent).toBe('updated phase three boundary\n');
@@ -1460,6 +1477,202 @@ describe('Roc foundation services', () => {
 
       expect(() => services.gitService.stageFile('../outside.txt')).toThrow(RocDomainError);
       expect(() => services.gitService.stageFile('nested/../outside.txt')).toThrow('Git 文件路径必须在当前工作区内。');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('commits staged changes and returns clean status', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-commit-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      services.gitService.stageFile('notes.txt');
+      const committed = services.gitService.commit('update notes');
+
+      expect(committed.commitMessage).toBe('update notes');
+      expect(committed.commitSha).toMatch(/^[0-9a-f]{40}$/);
+      expect(committed.status.changedFiles).toBe(0);
+      expect(committed.status.porcelain).toEqual([]);
+      expect(runGit(['log', '-1', '--pretty=%s']).trim()).toBe('update notes');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails commit with empty message', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-commit-empty-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      expect(() => services.gitService.commit('   ')).toThrow('提交说明不能为空。');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('discards worktree-only file changes', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-discard-worktree-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const discarded = services.gitService.discardFileChanges('notes.txt');
+
+      expect(discarded.porcelain).toEqual([]);
+      expect(normalizeLineEndings(readFileSync(join(workspaceRoot, 'notes.txt'), 'utf8'))).toBe('initial\n');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('discards staged and worktree file changes together', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-discard-staged-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed once\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed twice\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const discarded = services.gitService.discardFileChanges('notes.txt');
+
+      expect(discarded.porcelain).toEqual([]);
+      expect(normalizeLineEndings(readFileSync(join(workspaceRoot, 'notes.txt'), 'utf8'))).toBe('initial\n');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects Git discard outside the selected workspace', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-discard-boundary-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      expect(() => services.gitService.discardFileChanges('../outside.txt')).toThrow(RocDomainError);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns structured git push errors when no remote is configured', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-push-missing-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const pushResult = await wrapIpc(() => services.gitService.push());
+
+      expect(pushResult).toEqual({
+        ok: false,
+        error: {
+          code: 'git_push_remote_missing',
+          message: '当前分支没有配置远端。',
+          category: 'not_found',
+          retryable: false,
+          userAction: '请先为当前分支配置远端后再 push。'
+        }
+      });
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

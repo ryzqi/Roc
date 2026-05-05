@@ -100,7 +100,26 @@ const rocApi: RocPreloadApi = {
     status: () => ipcRenderer.invoke(ipcChannels.gitStatus),
     diffStat: () => ipcRenderer.invoke(ipcChannels.gitDiffStat),
     stageFile: (request) => ipcRenderer.invoke(ipcChannels.gitStageFile, request),
-    unstageFile: (request) => ipcRenderer.invoke(ipcChannels.gitUnstageFile, request)
+    unstageFile: (request) => ipcRenderer.invoke(ipcChannels.gitUnstageFile, request),
+    discardFile: (request) => ipcRenderer.invoke(ipcChannels.gitDiscardFile, request),
+    commit: (request) => ipcRenderer.invoke(ipcChannels.gitCommit, request),
+    push: () => ipcRenderer.invoke(ipcChannels.gitPush)
+  },
+  terminal: {
+    createSession: (request) => ipcRenderer.invoke(ipcChannels.terminalCreateSession, request),
+    writeInput: (request) => ipcRenderer.invoke(ipcChannels.terminalWriteInput, request),
+    resize: (request) => ipcRenderer.invoke(ipcChannels.terminalResize, request),
+    closeSession: (request) => ipcRenderer.invoke(ipcChannels.terminalCloseSession, request),
+    onOutput: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on('roc:terminal:output', listener);
+      return () => ipcRenderer.off('roc:terminal:output', listener);
+    },
+    onExit: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on('roc:terminal:exit', listener);
+      return () => ipcRenderer.off('roc:terminal:exit', listener);
+    }
   },
   rtk: {
     status: () => ipcRenderer.invoke(ipcChannels.rtkStatus)

@@ -1,7 +1,28 @@
 import {
+  ArrowDown,
+  ArrowUp,
+  Archive,
   CircleAlert,
+  Code2,
+  File,
+  FileArchive,
+  FileAudio2,
+  FileCog,
+  FileImage,
+  FileJson2,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  FileVideo2,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
 import type {
   AgentRuntimeStatus,
   AgentCapabilityPreview,
@@ -13,7 +34,9 @@ import type {
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
+  GitCommitResult,
   GitStatusChange,
+  GitPushResult,
   GitStatusResult,
   McpServerTestResult,
   McpServerSnapshot,
@@ -27,13 +50,17 @@ import type {
   ProviderTestResult,
   RtkStatus,
   SessionSearchResult,
-  ShellExecutionResult,
   SkillSnapshot,
+  TerminalSessionExitEvent,
+  TerminalSessionOutputEvent,
+  TerminalSessionSnapshot,
   TaskSnapshot,
   TraySummary,
   WindowStateSnapshot,
   Workspace
 } from '../shared/types';
+import { getStartupLoadIntent } from './startup-load-policy';
+import '@xterm/xterm/css/xterm.css';
 
 type ViewId =
   | 'chat'
@@ -99,8 +126,39 @@ type WorkspaceData = {
   filePreview: FilePreviewResult | null;
   gitStatus: GitStatusResult | null;
   gitError: string | null;
-  terminalResult: ShellExecutionResult | null;
+  gitLastCommit: GitCommitResult | null;
+  gitLastPush: GitPushResult | null;
   terminalError: string | null;
+  terminalSession: TerminalSessionSnapshot | null;
+};
+type MemoryData = {
+  memoryStatus: MemoryStatus;
+  memoryCandidates: MemoryCandidate[];
+  memoryConflicts: MemoryConflict[];
+  memorySearch: MemorySearchResult | null;
+  sessionSearch: SessionSearchResult | null;
+  memoryRecovery: MemoryDeleteResult | null;
+};
+type CapabilityData = {
+  providers: ProviderConfig[];
+  defaultModelId: string | null;
+  mcpServers: McpServerSnapshot[];
+  skills: SkillSnapshot[];
+};
+type TaskSurfaceData = {
+  backgroundTask: BackgroundTask | null;
+  backgroundTasks: BackgroundTask[];
+  traySummary: TraySummary;
+};
+type OperationsData = {
+  diagnosticPackage: DiagnosticPackage | null;
+  performanceSample: PerformanceSample;
+  doctor: DoctorSnapshot;
+};
+type LazyLoadState = {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  error: string | null;
+  key: string | null;
 };
 type MemoryRecordViewModel = {
   id: string;
@@ -152,12 +210,96 @@ type LoadedState = {
   filePreview: FilePreviewResult | null;
   gitStatus: GitStatusResult | null;
   gitError: string | null;
+  gitLastCommit: GitCommitResult | null;
+  gitLastPush: GitPushResult | null;
   rtkStatus: RtkStatus;
-  terminalResult: ShellExecutionResult | null;
   terminalError: string | null;
+  terminalSession: TerminalSessionSnapshot | null;
 };
 
 type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
+
+function emptyWorkspaceData(): WorkspaceData {
+  return {
+    fileTree: null,
+    fileSearch: null,
+    filePreview: null,
+    gitStatus: null,
+    gitError: null,
+    gitLastCommit: null,
+    gitLastPush: null,
+    terminalError: null,
+    terminalSession: null
+  };
+}
+
+function emptyMemoryData(): MemoryData {
+  return {
+    memoryStatus: {
+      root: '',
+      truthSource: 'markdown',
+      indexSource: 'sqlite',
+      vectorIndex: {
+        enabled: false,
+        healthy: false,
+        status: 'not_configured'
+      },
+      fullTextIndex: {
+        enabled: false,
+        healthy: false,
+        status: 'degraded'
+      },
+      layers: {
+        hot: { entries: 0, characters: 0, path: '' },
+        warm: { entries: 0, characters: 0, path: '' },
+        cold: { entries: 0, characters: 0, path: '' },
+        session: { entries: 0, characters: 0, path: '' },
+        candidate: { entries: 0, characters: 0, path: '' }
+      },
+      degradedReason: '记忆页面尚未加载。'
+    },
+    memoryCandidates: [],
+    memoryConflicts: [],
+    memorySearch: null,
+    sessionSearch: null,
+    memoryRecovery: null
+  };
+}
+
+function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
+  return {
+    diagnosticPackage: null,
+    performanceSample: {
+      id: '',
+      sampledAt: '',
+      mode,
+      uptimeSeconds: 0,
+      rssMb: 0,
+      heapUsedMb: 0,
+      heapTotalMb: 0,
+      memoryBudgetMb: 300,
+      exceedsBudget: false
+    },
+    doctor: {
+      generatedAt: '',
+      summary: {
+        pass: 0,
+        fail: 0,
+        degraded: 0,
+        skipped: 0
+      },
+      findings: []
+    }
+  };
+}
+
+function idleLazyLoadState(key: string | null = null): LazyLoadState {
+  return {
+    status: 'idle',
+    error: null,
+    key
+  };
+}
 
 const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
@@ -174,7 +316,7 @@ const MAIN_VIEW_IDS = new Set<ViewId>([
   'diagnostics'
 ]);
 const FLOATING_VIEW_IDS = new Set<ViewId>(['quick', 'tray']);
-const WORKBENCH_VIEWS = new Set<ViewId>(['workspace', 'git', 'terminal', 'preview']);
+const WORKBENCH_VIEWS = new Set<ViewId>(['chat', 'workspace', 'git', 'terminal', 'preview']);
 
 const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: PreviewIconName }> = [
   { id: 'files', label: '文件', icon: 'folder' },
@@ -285,10 +427,10 @@ function isFloatingView(view: ViewId): boolean {
   return FLOATING_VIEW_IDS.has(view);
 }
 
-function syncRendererUrl(view: ViewId, tool: WorkbenchTool): void {
+function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean): void {
   const url = new URL(window.location.href);
   url.searchParams.set('page', view);
-  if (WORKBENCH_VIEWS.has(view)) {
+  if (workbenchVisible || (view !== 'chat' && WORKBENCH_VIEWS.has(view))) {
     url.searchParams.set('tool', tool);
   } else {
     url.searchParams.delete('tool');
@@ -419,14 +561,6 @@ function buildControlNavItems(state: LoadedState): NavItem[] {
   ];
 }
 
-function buildVisibleTerminalOutput(state: LoadedState): string {
-  if (state.terminalResult !== null) {
-    return state.terminalResult.stdout;
-  }
-
-  return state.terminalError ?? '终端尚未生成输出。';
-}
-
 function unwrap<T>(label: string, result: IpcLikeResult<T>): T {
   if (result.ok) {
     return result.data;
@@ -445,11 +579,10 @@ async function updateTurnSelection(
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   enabledCapabilities: { mcpServers: string[]; skills: string[] }
 ): Promise<void> {
-  const result = await window.roc.agent.getCapabilityPreview(enabledCapabilities);
   updateLoadedState({
     selectedMcpServers: enabledCapabilities.mcpServers,
     selectedSkills: enabledCapabilities.skills,
-    agentCapabilityPreview: unwrap<AgentCapabilityPreview>('agent capability preview', result)
+    agentCapabilityPreview: null
   });
 }
 
@@ -464,12 +597,18 @@ export function App(): React.JSX.Element {
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
     parseWorkbenchTool(initialParams.get('tool'), initialView)
   );
+  const [workbenchVisible, setWorkbenchVisible] = useState(
+    initialView === 'chat' ? initialParams.has('tool') : WORKBENCH_VIEWS.has(initialView)
+  );
   const [workbenchWidth, setWorkbenchWidth] = useState(560);
   const [windowState, setWindowState] = useState<WindowStateSnapshot>({
     maximized: false,
     minimized: false,
     fullscreen: false
   });
+  const [workspaceLoadState, setWorkspaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
+  const [memoryLoadState, setMemoryLoadState] = useState<LazyLoadState>(idleLazyLoadState());
+  const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
 
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
@@ -478,6 +617,7 @@ export function App(): React.JSX.Element {
         return;
       }
       setActiveView(view);
+      setWorkbenchVisible(view !== 'chat' && WORKBENCH_VIEWS.has(view));
     });
   }, []);
 
@@ -495,11 +635,9 @@ export function App(): React.JSX.Element {
       ]);
 
       const loadedWorkspace = unwrap<Workspace | null>('workspace', workspace);
-      const workspaceData = await loadWorkspaceData(loadedWorkspace);
       const loadedAppStatus = unwrap<AppStatus>('app status', appStatus);
-      const memoryData = await loadMemoryData(loadedAppStatus.mode);
       const capabilityData = await loadCapabilityData(loadedAppStatus.mode);
-      const phase6Data = await loadPhase6Data(loadedAppStatus.mode);
+      const taskSurfaceData = await loadTaskSurfaceData();
       const refreshedAppStatus =
         loadedAppStatus.mode === 'smoke'
           ? unwrap<AppStatus>('refreshed app status', await window.roc.app.getStatus())
@@ -510,16 +648,6 @@ export function App(): React.JSX.Element {
           : unwrap<AgentRuntimeStatus>('agent', agent);
       const selectedMcpServers = capabilityData.mcpServers.filter((server) => server.enabled).map((server) => server.id);
       const selectedSkills = capabilityData.skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.id);
-      const agentCapabilityPreview =
-        loadedAgent.execution === 'ready'
-          ? unwrap<AgentCapabilityPreview>(
-              'agent capability preview',
-              await window.roc.agent.getCapabilityPreview({
-                mcpServers: selectedMcpServers,
-                skills: selectedSkills
-              })
-            )
-          : null;
 
       if (cancelled) {
         return;
@@ -529,22 +657,23 @@ export function App(): React.JSX.Element {
       setState({
         appStatus: refreshedAppStatus,
         taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
-        ...memoryData,
         providers: capabilityData.providers,
         defaultModelId: capabilityData.defaultModelId,
-        providerTestStatus: capabilityData.providerTestStatus,
+        providerTestStatus: null,
         mcpServers: capabilityData.mcpServers,
-        mcpTestStatus: capabilityData.mcpTestStatus,
+        mcpTestStatus: null,
         skills: capabilityData.skills,
         selectedMcpServers,
         selectedSkills,
-        ...phase6Data,
+        ...taskSurfaceData,
+        ...emptyOperationsData(refreshedAppStatus.mode),
         agent: loadedAgent,
-        agentCapabilityPreview,
+        agentCapabilityPreview: null,
         chatResult: null,
         workspace: loadedWorkspace,
         rtkStatus: unwrap<RtkStatus>('rtk status', rtkStatus),
-        ...workspaceData
+        ...emptyWorkspaceData(),
+        ...emptyMemoryData()
       });
     }
 
@@ -558,8 +687,230 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    if (activeView === 'chat') {
+      return;
+    }
     setActiveWorkbenchTool(defaultWorkbenchTool(activeView));
   }, [activeView]);
+
+  const currentWorkspace = state?.workspace ?? null;
+  const currentAppMode = state?.appStatus.mode ?? null;
+  const currentAgentExecution = state?.agent.execution ?? null;
+  const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
+  const currentSelectedSkills = state?.selectedSkills ?? [];
+
+  useEffect(() => {
+    if (state === null) {
+      return;
+    }
+    if (currentAgentExecution !== 'ready' || (currentSelectedMcpServers.length === 0 && currentSelectedSkills.length === 0)) {
+      setState((current) =>
+        current === null || current.agentCapabilityPreview === null
+          ? current
+          : {
+              ...current,
+              agentCapabilityPreview: null
+            }
+      );
+      return;
+    }
+
+    let cancelled = false;
+    void window.roc.agent
+      .getCapabilityPreview({
+        mcpServers: currentSelectedMcpServers,
+        skills: currentSelectedSkills
+      })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) =>
+          current === null
+            ? current
+            : {
+                ...current,
+                agentCapabilityPreview: unwrap<AgentCapabilityPreview>('agent capability preview', result)
+              }
+        );
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAgentExecution, currentSelectedMcpServers, currentSelectedSkills]);
+
+  useEffect(() => {
+    if (state === null) {
+      return;
+    }
+
+    const loadIntent = getStartupLoadIntent({
+      activeView,
+      activeWorkbenchTool,
+      workbenchVisible
+    });
+    if (!loadIntent.targets.has('workspace')) {
+      return;
+    }
+
+    const workspaceKey = currentWorkspace?.id ?? 'no-workspace';
+    if (workspaceLoadState.key === workspaceKey && workspaceLoadState.status !== 'idle') {
+      return;
+    }
+
+    let cancelled = false;
+    setWorkspaceLoadState({
+      status: 'loading',
+      error: null,
+      key: workspaceKey
+    });
+    void loadWorkspaceData(currentWorkspace)
+      .then((workspaceData) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => (current === null ? current : { ...current, ...workspaceData }));
+        setWorkspaceLoadState({
+          status: 'ready',
+          error: null,
+          key: workspaceKey
+        });
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setWorkspaceLoadState({
+          status: 'error',
+          error: loadError instanceof Error ? loadError.message : 'workspace data failed to load.',
+          key: workspaceKey
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeView,
+    activeWorkbenchTool,
+    currentWorkspace,
+    workbenchVisible
+  ]);
+
+  useEffect(() => {
+    if (currentAppMode === null) {
+      return;
+    }
+
+    const loadIntent = getStartupLoadIntent({
+      activeView,
+      activeWorkbenchTool,
+      workbenchVisible
+    });
+    if (!loadIntent.targets.has('memory')) {
+      return;
+    }
+    const memoryKey = currentAppMode;
+    if (memoryLoadState.key === memoryKey && memoryLoadState.status !== 'idle') {
+      return;
+    }
+
+    let cancelled = false;
+    setMemoryLoadState({
+      status: 'loading',
+      error: null,
+      key: memoryKey
+    });
+    void loadMemoryData(currentAppMode)
+      .then((memoryData) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => (current === null ? current : { ...current, ...memoryData }));
+        setMemoryLoadState({
+          status: 'ready',
+          error: null,
+          key: memoryKey
+        });
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setMemoryLoadState({
+          status: 'error',
+          error: loadError instanceof Error ? loadError.message : 'memory data failed to load.',
+          key: memoryKey
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, activeWorkbenchTool, currentAppMode, workbenchVisible]);
+
+  useEffect(() => {
+    if (currentAppMode === null) {
+      return;
+    }
+
+    const loadIntent = getStartupLoadIntent({
+      activeView,
+      activeWorkbenchTool,
+      workbenchVisible
+    });
+    if (!loadIntent.targets.has('operations')) {
+      return;
+    }
+    const operationsKey = currentAppMode;
+    if (operationsLoadState.key === operationsKey && operationsLoadState.status !== 'idle') {
+      return;
+    }
+
+    let cancelled = false;
+    setOperationsLoadState({
+      status: 'loading',
+      error: null,
+      key: operationsKey
+    });
+    void loadOperationsData(currentAppMode)
+      .then((operationsData) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => (current === null ? current : { ...current, ...operationsData }));
+        setOperationsLoadState({
+          status: 'ready',
+          error: null,
+          key: operationsKey
+        });
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setOperationsLoadState({
+          status: 'error',
+          error: loadError instanceof Error ? loadError.message : 'operations data failed to load.',
+          key: operationsKey
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeView,
+    activeWorkbenchTool,
+    currentAppMode,
+    workbenchVisible
+  ]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -577,8 +928,8 @@ export function App(): React.JSX.Element {
   }, [activeView, activeWorkbenchTool]);
 
   useEffect(() => {
-    syncRendererUrl(activeView, activeWorkbenchTool);
-  }, [activeView, activeWorkbenchTool]);
+    syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
+  }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
   async function selectWorkspaceFromDialog(): Promise<void> {
     setWorkspaceSelectError(null);
@@ -595,11 +946,16 @@ export function App(): React.JSX.Element {
       window.roc.app.getStatus(),
       loadWorkspaceData(selected.data)
     ]);
+    setWorkspaceLoadState({
+      status: 'ready',
+      error: null,
+      key: selected.data.id
+    });
     setState((current) =>
       current === null
         ? current
         : {
-            ...current,
+          ...current,
             appStatus: unwrap<AppStatus>('app status', appStatus),
             workspace: selected.data,
             ...workspaceData
@@ -607,9 +963,9 @@ export function App(): React.JSX.Element {
     );
   }
 
-  function updateWorkspaceData(partial: Partial<WorkspaceData>): void {
+  const updateWorkspaceData = useCallback((partial: Partial<WorkspaceData>): void => {
     setState((current) => (current === null ? current : { ...current, ...partial }));
-  }
+  }, []);
 
   if (error !== null) {
     return <div className="fatal">Roc 启动失败：{error}</div>;
@@ -625,7 +981,9 @@ export function App(): React.JSX.Element {
         <ViewContent
           activeView={activeView}
           chatError={chatError}
+          memoryLoadState={memoryLoadState}
           onOpenView={setActiveView}
+          operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={async (input) => {
             setChatError(null);
@@ -649,12 +1007,13 @@ export function App(): React.JSX.Element {
           updateLoadedState={(partial) =>
             setState((current) => (current === null ? current : { ...current, ...partial }))
           }
+          workspaceLoadState={workspaceLoadState}
         />
       </main>
     );
   }
 
-  const hasWorkbench = WORKBENCH_VIEWS.has(activeView);
+  const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const meta = viewMeta(activeView as MainViewId);
   const topMeta = buildTopMeta(activeView as MainViewId, state);
   const historyNavItems = buildHistoryNavItems(state);
@@ -779,7 +1138,9 @@ export function App(): React.JSX.Element {
           style={hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined}
           className={
             activeView === 'chat'
-              ? 'workspace-shell workspace-shell--chat'
+              ? hasWorkbench
+                ? 'workspace-shell workspace-shell--chat'
+                : 'workspace-shell workspace-shell--chat-collapsed'
               : hasWorkbench
                 ? 'workspace-shell workspace-shell--with-workbench'
                 : 'workspace-shell'
@@ -791,7 +1152,9 @@ export function App(): React.JSX.Element {
                 <ViewContent
                   activeView={activeView}
                   chatError={chatError}
+                  memoryLoadState={memoryLoadState}
                   onOpenView={setActiveView}
+                  operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={async (input) => {
                     setChatError(null);
@@ -815,32 +1178,39 @@ export function App(): React.JSX.Element {
                   updateLoadedState={(partial) =>
                     setState((current) => (current === null ? current : { ...current, ...partial }))
                   }
+                  workspaceLoadState={workspaceLoadState}
                 />
               </div>
             </section>
           </main>
 
+          <RailOverlay
+            activeTool={activeWorkbenchTool}
+            activeView={activeView}
+            workbenchVisible={hasWorkbench}
+            onOpenToolView={(tool) => {
+              setActiveWorkbenchTool(tool);
+              setActiveView('chat');
+              setWorkbenchVisible(true);
+            }}
+          />
           {hasWorkbench ? (
             <WorkbenchPanel
               activeTool={activeWorkbenchTool}
               activeView={activeView}
               onToolChange={setActiveWorkbenchTool}
-              onClose={() => setActiveView('chat')}
+              onClose={() => {
+                setActiveView('chat');
+                setWorkbenchVisible(false);
+              }}
               state={state}
               updateWorkspaceData={updateWorkspaceData}
+              workspaceLoadState={workspaceLoadState}
               width={workbenchWidth}
               onWidthChange={setWorkbenchWidth}
               windowState={windowState}
             />
-          ) : (
-            <RailOverlay
-              activeView={activeView}
-              onOpenToolView={(view, tool) => {
-                setActiveWorkbenchTool(tool);
-                setActiveView(view);
-              }}
-            />
-          )}
+          ) : null}
         </div>
       </div>
     </div>
@@ -854,8 +1224,153 @@ function gitErrorLabel(error: string | null): string {
   return error;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function sanitizeTestId(value: string): string {
   return value.replace(/[^A-Za-z0-9_.:-]/g, '-');
+}
+
+function parentRelativePath(relativePath: string): string | null {
+  const parts = relativePath.split('/').filter((part) => part.length > 0);
+  if (parts.length <= 1) {
+    return null;
+  }
+  return parts.slice(0, -1).join('/');
+}
+
+function fileLabel(relativePath: string): string {
+  const parts = relativePath.split('/').filter((part) => part.length > 0);
+  return parts.at(-1) ?? relativePath;
+}
+
+function fileExtension(relativePath: string): string {
+  const label = fileLabel(relativePath);
+  const dotIndex = label.lastIndexOf('.');
+  if (dotIndex <= 0 || dotIndex === label.length - 1) {
+    return '';
+  }
+  return label.slice(dotIndex + 1).toLowerCase();
+}
+
+type TreeNode = {
+  entry: FileTreeResult['entries'][number];
+  depth: number;
+};
+
+function flattenTreeEntries(
+  entries: FileTreeResult['entries'],
+  expandedDirectories: Set<string>,
+  childEntries: Record<string, FileTreeResult['entries']>
+): TreeNode[] {
+  const rootEntries = [...entries].sort(compareFileEntries);
+  const nodes: TreeNode[] = [];
+
+  function visit(list: FileTreeResult['entries'], depth: number): void {
+    for (const entry of list) {
+      nodes.push({ entry, depth });
+      if (entry.type !== 'directory' || !expandedDirectories.has(entry.relativePath)) {
+        continue;
+      }
+      const children = childEntries[entry.relativePath];
+      if (children === undefined) {
+        continue;
+      }
+      visit([...children].sort(compareFileEntries), depth + 1);
+    }
+  }
+
+  visit(rootEntries, 0);
+  return nodes;
+}
+
+function compareFileEntries(left: FileTreeResult['entries'][number], right: FileTreeResult['entries'][number]): number {
+  if (left.type !== right.type) {
+    return left.type === 'directory' ? -1 : 1;
+  }
+  return left.name.localeCompare(right.name, 'zh-Hans-CN');
+}
+
+function fileTypeLabel(preview: FilePreviewResult | null): string {
+  if (preview === null) {
+    return '未加载';
+  }
+  if (preview.kind === 'image') {
+    return preview.mediaType ?? '图片';
+  }
+  if (preview.kind === 'binary') {
+    return '二进制文件';
+  }
+  const extension = fileExtension(preview.relativePath);
+  return extension.length === 0 ? '文本文件' : `${extension.toUpperCase()} 文件`;
+}
+
+function fileTreeIcon(entry: FileTreeResult['entries'][number], active: boolean, expanded: boolean): React.JSX.Element {
+  const className = active ? 'tree-item-file-icon tree-item-file-icon--active' : 'tree-item-file-icon';
+  if (entry.type === 'directory') {
+    const DirectoryIcon = expanded ? FolderOpen : Folder;
+    return <DirectoryIcon className={className} size={16} strokeWidth={1.8} />;
+  }
+  const extension = fileExtension(entry.relativePath);
+  const lowerName = entry.name.toLowerCase();
+  if (['md', 'txt', 'log'].includes(extension)) {
+    return <FileText className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(extension)) {
+    return <Code2 className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (extension === 'json') {
+    return <FileJson2 className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) {
+    return <FileImage className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['css', 'scss', 'sass', 'less'].includes(extension)) {
+    return <FileType2 className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['toml', 'yaml', 'yml', 'ini', 'env', 'conf'].includes(extension) || lowerName.includes('config')) {
+    return <FileCog className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {
+    return <FileArchive className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(extension)) {
+    return <FileAudio2 className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(extension)) {
+    return <FileVideo2 className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['csv', 'tsv', 'xlsx', 'xls', 'doc', 'docx', 'pdf'].includes(extension)) {
+    return <FileSpreadsheet className={className} size={16} strokeWidth={1.8} />;
+  }
+  if (['exe', 'dll', 'bin', 'dat', 'db'].includes(extension)) {
+    return <Archive className={className} size={16} strokeWidth={1.8} />;
+  }
+  return <File className={className} size={16} strokeWidth={1.8} />;
+}
+
+function isImagePreview(preview: FilePreviewResult | null): preview is FilePreviewResult & { kind: 'image'; mediaType: string } {
+  return preview !== null && preview.kind === 'image' && typeof preview.mediaType === 'string';
+}
+
+function previewTextBody(preview: FilePreviewResult | null): string {
+  if (preview === null) {
+    return '当前没有加载可预览内容。';
+  }
+  if (preview.kind === 'binary') {
+    return `二进制文件，大小 ${preview.sizeBytes} bytes。`;
+  }
+  if (preview.kind === 'image') {
+    return `图片文件，大小 ${preview.sizeBytes} bytes。`;
+  }
+  return preview.content;
 }
 
 function gitStatusChanges(status: GitStatusResult): GitStatusChange[] {
@@ -870,17 +1385,13 @@ function canUnstageGitChange(change: GitStatusChange): boolean {
   return change.index !== ' ' && change.index !== '?';
 }
 
+function canDiscardGitChange(change: GitStatusChange): boolean {
+  return change.index !== '?';
+}
+
 async function loadWorkspaceData(workspace: Workspace | null): Promise<WorkspaceData> {
   if (workspace === null) {
-    return {
-      fileTree: null,
-      fileSearch: null,
-      filePreview: null,
-      gitStatus: null,
-      gitError: null,
-      terminalResult: null,
-      terminalError: null
-    };
+    return emptyWorkspaceData();
   }
 
   const fileTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath: '' }));
@@ -891,11 +1402,6 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<Workspace
       : unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath: firstFile.relativePath }));
   const fileSearch = null;
   const gitResult = await window.roc.git.status();
-  const terminalResult = await window.roc.shell.execute({
-    command: 'dir',
-    cwd: workspace.path,
-    source: 'terminal'
-  });
 
   return {
     fileTree,
@@ -903,21 +1409,26 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<Workspace
     filePreview,
     gitStatus: gitResult.ok ? gitResult.data : null,
     gitError: gitResult.ok ? null : gitResult.error.message,
-    terminalResult: terminalResult.ok ? terminalResult.data : null,
-    terminalError: terminalResult.ok ? null : terminalResult.error.message
+    gitLastCommit: null,
+    gitLastPush: null,
+    terminalError: null,
+    terminalSession: null
   };
 }
 
-async function loadPhase6Data(
-  mode: AppStatus['mode']
-): Promise<{
-  backgroundTask: BackgroundTask | null;
-  backgroundTasks: BackgroundTask[];
-  traySummary: TraySummary;
-  diagnosticPackage: DiagnosticPackage | null;
-  performanceSample: PerformanceSample;
-  doctor: DoctorSnapshot;
-}> {
+async function loadTaskSurfaceData(): Promise<TaskSurfaceData> {
+  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await window.roc.tasks.listBackgroundTasks());
+  const backgroundTask = backgroundTasks[0] ?? null;
+  const traySummary = unwrap<TraySummary>('tray summary', await window.roc.lifecycle.getTraySummary());
+
+  return {
+    backgroundTask,
+    backgroundTasks,
+    traySummary
+  };
+}
+
+async function loadOperationsData(mode: AppStatus['mode']): Promise<OperationsData> {
   const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await window.roc.tasks.listBackgroundTasks());
   const backgroundTask = backgroundTasks[0] ?? null;
   const performanceSample = unwrap<PerformanceSample>(
@@ -937,26 +1448,16 @@ async function loadPhase6Data(
             errorSummary: '后台任务诊断请求'
           })
         );
-  const [traySummary, doctor] = await Promise.all([window.roc.lifecycle.getTraySummary(), window.roc.doctor.run()]);
+  const doctor = unwrap<DoctorSnapshot>('doctor', await window.roc.doctor.run());
 
   return {
-    backgroundTask,
-    backgroundTasks,
-    traySummary: unwrap<TraySummary>('tray summary', traySummary),
     diagnosticPackage,
     performanceSample,
-    doctor: unwrap<DoctorSnapshot>('doctor', doctor)
+    doctor
   };
 }
 
-async function loadMemoryData(_mode: AppStatus['mode']): Promise<{
-  memoryStatus: MemoryStatus;
-  memoryCandidates: MemoryCandidate[];
-  memoryConflicts: MemoryConflict[];
-  memorySearch: MemorySearchResult | null;
-  sessionSearch: SessionSearchResult | null;
-  memoryRecovery: MemoryDeleteResult | null;
-}> {
+async function loadMemoryData(_mode: AppStatus['mode']): Promise<MemoryData> {
   const [memoryStatus, candidates, conflicts, memorySearch, sessionSearch] = await Promise.all([
     window.roc.memory.status(),
     window.roc.memory.listCandidates(),
@@ -975,14 +1476,7 @@ async function loadMemoryData(_mode: AppStatus['mode']): Promise<{
   };
 }
 
-async function loadCapabilityData(_mode: AppStatus['mode']): Promise<{
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  providerTestStatus: ProviderTestResult | null;
-  mcpServers: McpServerSnapshot[];
-  mcpTestStatus: McpServerTestResult | null;
-  skills: SkillSnapshot[];
-}> {
+async function loadCapabilityData(_mode: AppStatus['mode']): Promise<CapabilityData> {
   const [providers, mcpServers, skills] = await Promise.all([
     window.roc.providers.list(),
     window.roc.mcp.listServers(),
@@ -991,21 +1485,11 @@ async function loadCapabilityData(_mode: AppStatus['mode']): Promise<{
   const providerData = unwrap<{ providers: ProviderConfig[]; defaultModelId: string | null }>('providers', providers);
   const loadedMcpServers = unwrap<McpServerSnapshot[]>('mcp servers', mcpServers);
   const loadedSkills = unwrap<SkillSnapshot[]>('skills', skills);
-  const providerTestStatus =
-    providerData.providers.length === 0
-      ? null
-      : unwrap<ProviderTestResult>('provider test', await window.roc.providers.test(providerData.providers[0].id));
-  const mcpTestStatus =
-    loadedMcpServers.length === 0
-      ? null
-      : unwrap<McpServerTestResult>('mcp test', await window.roc.mcp.testServer(loadedMcpServers[0].id));
 
   return {
     providers: providerData.providers,
     defaultModelId: providerData.defaultModelId,
-    providerTestStatus,
     mcpServers: loadedMcpServers,
-    mcpTestStatus,
     skills: loadedSkills
   };
 }
@@ -1013,34 +1497,40 @@ async function loadCapabilityData(_mode: AppStatus['mode']): Promise<{
 function ViewContent({
   activeView,
   chatError,
+  memoryLoadState,
   onOpenView,
+  operationsLoadState,
   onSelectWorkspace,
   onSubmitChatTask,
   state,
-  updateLoadedState
+  updateLoadedState,
+  workspaceLoadState
 }: {
   activeView: ViewId;
   chatError: string | null;
+  memoryLoadState: LazyLoadState;
   onOpenView: (view: ViewId) => void;
+  operationsLoadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
+  workspaceLoadState: LazyLoadState;
 }): React.JSX.Element {
   if (activeView === 'tasks') {
     return <TasksView state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'workspace') {
-    return <WorkspaceView onSelectWorkspace={onSelectWorkspace} state={state} />;
+    return <WorkspaceView loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />;
   }
   if (activeView === 'git') {
-    return <GitView state={state} />;
+    return <GitView loadState={workspaceLoadState} state={state} />;
   }
   if (activeView === 'terminal') {
     return <TerminalView state={state} />;
   }
   if (activeView === 'preview') {
-    return <PreviewView state={state} />;
+    return <PreviewView loadState={workspaceLoadState} state={state} />;
   }
   if (activeView === 'mcp') {
     return <McpView state={state} updateLoadedState={updateLoadedState} />;
@@ -1049,16 +1539,16 @@ function ViewContent({
     return <SkillsView state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'memory') {
-    return <MemoryView state={state} />;
+    return <MemoryView loadState={memoryLoadState} state={state} />;
   }
   if (activeView === 'settings') {
     return <SettingsView state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'doctor') {
-    return <DoctorView state={state} />;
+    return <DoctorView loadState={operationsLoadState} state={state} />;
   }
   if (activeView === 'diagnostics') {
-    return <DiagnosticsView state={state} />;
+    return <DiagnosticsView loadState={operationsLoadState} state={state} />;
   }
   if (activeView === 'quick') {
     return <QuickEntryView chatError={chatError} onSubmitChatTask={onSubmitChatTask} state={state} />;
@@ -1511,9 +2001,11 @@ function TasksView({
 }
 
 function WorkspaceView({
+  loadState,
   onSelectWorkspace,
   state
 }: {
+  loadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
   state: LoadedState;
 }): React.JSX.Element {
@@ -1532,6 +2024,30 @@ function WorkspaceView({
             title="未选择工作区"
             detail="请选择默认工作区后再读取文件、Git 和终端状态。"
           />
+          <WorkspaceStatusPanels state={state} />
+        </section>
+      </>
+    );
+  }
+
+  if (loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+        <section className="canvas-stage stage-grid" data-testid="workspace-view">
+          <EmptyState testId="workspace-loading" title="工作区数据加载中" detail="正在读取文件树、首个预览和 Git 状态。" />
+          <WorkspaceStatusPanels state={state} />
+        </section>
+      </>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+        <section className="canvas-stage stage-grid" data-testid="workspace-view">
+          <EmptyState testId="workspace-load-error" title="工作区数据加载失败" detail={loadState.error ?? '未提供错误信息。'} />
           <WorkspaceStatusPanels state={state} />
         </section>
       </>
@@ -1572,6 +2088,12 @@ function WorkspaceView({
 }
 
 function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Element {
+  const terminalLabel =
+    state.terminalSession === null
+      ? state.workspace === null
+        ? '未建立会话'
+        : '打开终端后建立会话'
+      : `${state.terminalSession.shell} · ${state.terminalSession.cols}×${state.terminalSession.rows}`;
   return (
     <div className="grid-3">
       <section className="card" data-testid="git-panel">
@@ -1584,11 +2106,12 @@ function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Ele
       </section>
       <section className="card" data-testid="terminal-panel">
         <div className="card-title">终端</div>
-        {state.terminalResult === null ? (
-          <p className="muted">{state.terminalError}</p>
-        ) : (
-          <pre className="terminal">{state.terminalResult.stdout}</pre>
-        )}
+        <Row
+          title={state.terminalSession === null ? '未连接' : state.terminalSession.status}
+          sub={state.terminalError ?? terminalLabel}
+          tag={state.terminalSession === null ? '空态' : '会话'}
+          tone={state.terminalSession === null ? 'warn' : 'ok'}
+        />
       </section>
       <section className="card" data-testid="rtk-panel">
         <div className="card-title">RTK</div>
@@ -1599,7 +2122,35 @@ function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Ele
   );
 }
 
-function GitView({ state }: { state: LoadedState }): React.JSX.Element {
+function GitView({
+  loadState,
+  state
+}: {
+  loadState: LazyLoadState;
+  state: LoadedState;
+}): React.JSX.Element {
+  if (state.workspace !== null && loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
+        <section className="canvas-stage stage-grid" data-testid="git-view">
+          <EmptyState testId="git-loading" title="Git 状态加载中" detail="正在读取当前工作区的 Git 状态。" />
+        </section>
+      </>
+    );
+  }
+
+  if (state.workspace !== null && loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
+        <section className="canvas-stage stage-grid" data-testid="git-view">
+          <EmptyState testId="git-load-error" title="Git 状态加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        </section>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
@@ -1651,14 +2202,61 @@ function TerminalView({ state }: { state: LoadedState }): React.JSX.Element {
           <Row title="记录" sub="命令、输出、退出码写入任务轨迹" tag="开启" tone="ok" />
         </section>
         <div className="terminal terminal--main" data-testid="terminal-raw-output">
-          {buildVisibleTerminalOutput(state)}
+          {state.workspace === null
+            ? '未选择工作区。'
+            : state.terminalSession === null
+              ? '在聊天页右侧打开 Terminal 后建立真实终端会话。'
+              : `${state.terminalSession.shell} ${state.terminalSession.cols}x${state.terminalSession.rows} (${state.terminalSession.status})`}
         </div>
       </section>
     </>
   );
 }
 
-function PreviewView({ state }: { state: LoadedState }): React.JSX.Element {
+function PreviewView({
+  loadState,
+  state
+}: {
+  loadState: LazyLoadState;
+  state: LoadedState;
+}): React.JSX.Element {
+  if (state.workspace !== null && loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
+        <section className="canvas-stage stage-grid" data-testid="preview-view">
+          <EmptyState testId="preview-loading" title="文件预览加载中" detail="正在准备首个可预览文件和搜索上下文。" />
+        </section>
+      </>
+    );
+  }
+
+  if (state.workspace !== null && loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
+        <section className="canvas-stage stage-grid" data-testid="preview-view">
+          <EmptyState testId="preview-load-error" title="文件预览加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        </section>
+      </>
+    );
+  }
+
+  const previewBody = previewTextBody(state.filePreview);
+  const previewStage =
+    isImagePreview(state.filePreview) ? (
+      <div className="workbench-file-image-stage">
+        <img
+          alt={state.filePreview.relativePath}
+          className="workbench-file-image-preview"
+          data-testid="preview-view-image"
+          src={state.filePreview.content}
+        />
+      </div>
+    ) : (
+      <div className="code-preview">{state.filePreview === null ? '当前没有加载可预览内容。' : state.filePreview.content}</div>
+    );
+
   return (
     <>
       <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
@@ -1672,12 +2270,17 @@ function PreviewView({ state }: { state: LoadedState }): React.JSX.Element {
                 <div className="page-subtitle">
                   {state.filePreview === null ? '当前根目录没有可预览文本文件。' : `${state.filePreview.sizeBytes} bytes`}
                 </div>
+                {state.filePreview === null ? null : state.filePreview.kind === 'image' ? (
+                  <p className="muted">图片预览已加载。</p>
+                ) : (
+                  <p className="muted">{previewBody}</p>
+                )}
               </>
             </div>
           </section>
           <section className="card">
             <div className="card-title">代码 / Diff 预览</div>
-            <div className="code-preview">{state.filePreview === null ? '当前没有加载可预览内容。' : state.filePreview.content}</div>
+            {previewStage}
           </section>
         </div>
         <section className="card">
@@ -1885,8 +2488,36 @@ function SkillManagementPanel({
   );
 }
 
-function MemoryView({ state }: { state: LoadedState }): React.JSX.Element {
+function MemoryView({
+  loadState,
+  state
+}: {
+  loadState: LazyLoadState;
+  state: LoadedState;
+}): React.JSX.Element {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+
+  if (loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。" title="记忆中心" />
+        <section className="canvas-stage stage-grid" data-testid="memory-view">
+          <EmptyState testId="memory-loading" title="记忆中心加载中" detail="正在读取记忆状态、候选、冲突和召回结果。" />
+        </section>
+      </>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。" title="记忆中心" />
+        <section className="canvas-stage stage-grid" data-testid="memory-view">
+          <EmptyState testId="memory-load-error" title="记忆中心加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        </section>
+      </>
+    );
+  }
   const recoveredId = state.memoryRecovery?.id ?? null;
   const memoryItems = state.memorySearch?.items ?? [];
   const recallItems = state.sessionSearch?.items ?? [];
@@ -2222,7 +2853,35 @@ function SettingsView({
   );
 }
 
-function DoctorView({ state }: { state: LoadedState }): React.JSX.Element {
+function DoctorView({
+  loadState,
+  state
+}: {
+  loadState: LazyLoadState;
+  state: LoadedState;
+}): React.JSX.Element {
+  if (loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
+        <section className="canvas-stage stage-grid" data-testid="doctor-view">
+          <EmptyState testId="doctor-loading" title="Doctor 检查中" detail="正在运行健康检查并汇总诊断结果。" />
+        </section>
+      </>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
+        <section className="canvas-stage stage-grid" data-testid="doctor-view">
+          <EmptyState testId="doctor-load-error" title="Doctor 加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        </section>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
@@ -2252,7 +2911,35 @@ function DoctorView({ state }: { state: LoadedState }): React.JSX.Element {
   );
 }
 
-function DiagnosticsView({ state }: { state: LoadedState }): React.JSX.Element {
+function DiagnosticsView({
+  loadState,
+  state
+}: {
+  loadState: LazyLoadState;
+  state: LoadedState;
+}): React.JSX.Element {
+  if (loadState.status === 'loading') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
+        <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
+          <EmptyState testId="diagnostics-loading" title="诊断数据加载中" detail="正在生成诊断包并采集性能样本。" />
+        </section>
+      </>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <>
+        <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
+        <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
+          <EmptyState testId="diagnostics-load-error" title="诊断数据加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        </section>
+      </>
+    );
+  }
+
   const failedEvents = state.taskSnapshot.recentEvents.filter((event) => event.type === 'error').slice(0, 3);
   return (
     <>
@@ -2290,26 +2977,29 @@ function DiagnosticsView({ state }: { state: LoadedState }): React.JSX.Element {
 }
 
 function RailOverlay({
+  activeTool,
   activeView,
+  workbenchVisible,
   onOpenToolView
 }: {
+  activeTool: WorkbenchTool;
   activeView: ViewId;
-  onOpenToolView: (view: ViewId, tool: WorkbenchTool) => void;
+  workbenchVisible: boolean;
+  onOpenToolView: (tool: WorkbenchTool) => void;
 }): React.JSX.Element {
   return (
     <aside className={activeView === 'chat' ? 'rail-overlay rail-overlay--chat' : 'rail-overlay'}>
       <div className={activeView === 'chat' ? 'rail rail--chat' : 'rail'}>
         {WORKBENCH_TOOLS.map((tool) => {
-          const nextView: ViewId = tool.id === 'files' ? 'workspace' : tool.id;
           return (
             <button
               aria-label={tool.label}
-              aria-pressed={activeView === nextView}
+              aria-pressed={activeView === 'chat' && workbenchVisible && activeTool === tool.id}
               className="rail-button"
               data-tool-button={tool.id}
               key={tool.id}
               type="button"
-              onClick={() => onOpenToolView(nextView, tool.id)}
+              onClick={() => onOpenToolView(tool.id)}
             >
               <PreviewIcon name={tool.icon} />
             </button>
@@ -2328,6 +3018,7 @@ function WorkbenchPanel({
   onWidthChange,
   state,
   updateWorkspaceData,
+  workspaceLoadState,
   width,
   windowState
 }: {
@@ -2338,6 +3029,7 @@ function WorkbenchPanel({
   onWidthChange: (width: number) => void;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
+  workspaceLoadState: LazyLoadState;
   width: number;
   windowState: WindowStateSnapshot;
 }): React.JSX.Element {
@@ -2391,11 +3083,11 @@ function WorkbenchPanel({
       </div>
       <div className="workbench-panel">
         {activeTool === 'git' ? (
-          <GitWorkbench state={state} updateWorkspaceData={updateWorkspaceData} />
+          <GitWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
         ) : activeTool === 'terminal' ? (
           <TerminalWorkbench state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
         ) : (
-          <FilesWorkbench state={state} updateWorkspaceData={updateWorkspaceData} />
+          <FilesWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
         )}
       </div>
     </aside>
@@ -2403,147 +3095,481 @@ function WorkbenchPanel({
 }
 
 function FilesWorkbench({
+  loadState,
   state,
   updateWorkspaceData
 }: {
+  loadState: LazyLoadState;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
 }): React.JSX.Element {
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set());
+  const [directoryChildren, setDirectoryChildren] = useState<Record<string, FileTreeResult['entries']>>({});
+  const [directoryLoadingPath, setDirectoryLoadingPath] = useState<string | null>(null);
+  const [filePaneWidth, setFilePaneWidth] = useState(304);
   const fileCount = state.fileTree?.entries.length ?? 0;
   const previewPath = state.filePreview?.relativePath ?? '当前没有可预览文件';
   const searchCount = state.fileSearch?.matches.length ?? 0;
+  const previewInfo = state.filePreview === null ? '未加载文件' : `${fileTypeLabel(state.filePreview)} · ${formatBytes(state.filePreview.sizeBytes)}`;
+
+  useEffect(() => {
+    setExpandedDirectories(new Set());
+    setDirectoryChildren({});
+    setDirectoryLoadingPath(null);
+    setFilePaneWidth(304);
+  }, [state.workspace?.path]);
+
   async function openFilePreview(relativePath: string): Promise<void> {
     const preview = unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath }));
-    let fileSearch: FileSearchResult | null = null;
-    if (preview.kind === 'text') {
-      const firstToken = preview.content.split(/\s+/).find((token) => token.trim().length > 0);
-      if (firstToken !== undefined) {
-        const search = await window.roc.files.search({ query: firstToken, maxResults: 8 });
-        fileSearch = search.ok ? search.data : null;
+    updateWorkspaceData({ filePreview: preview, fileSearch: null });
+  }
+
+  async function toggleDirectory(relativePath: string): Promise<void> {
+    if (expandedDirectories.has(relativePath)) {
+      setExpandedDirectories((current) => {
+        const next = new Set(current);
+        next.delete(relativePath);
+        return next;
+      });
+      return;
+    }
+
+    if (directoryChildren[relativePath] === undefined) {
+      setDirectoryLoadingPath(relativePath);
+      try {
+        const childTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath }));
+        setDirectoryChildren((current) => ({ ...current, [relativePath]: childTree.entries }));
+      } finally {
+        setDirectoryLoadingPath((current) => (current === relativePath ? null : current));
       }
     }
-    updateWorkspaceData({ filePreview: preview, fileSearch });
+    setExpandedDirectories((current) => new Set(current).add(relativePath));
+  }
+
+  useEffect(() => {
+    if (state.filePreview === null) {
+      return;
+    }
+    const parentPath = parentRelativePath(state.filePreview.relativePath);
+    if (parentPath === null) {
+      return;
+    }
+    setExpandedDirectories((current) => {
+      if (current.has(parentPath)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(parentPath);
+      return next;
+    });
+  }, [state.filePreview?.relativePath]);
+
+  if (state.workspace === null) {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-files-empty" title="未选择工作区" detail="请先选择工作区，再打开文件工作台。" />
+      </section>
+    );
+  }
+
+  if (loadState.status === 'loading') {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-files-loading" title="文件工作台加载中" detail="正在读取文件树和首个预览。" />
+      </section>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-files-load-error" title="文件工作台加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+      </section>
+    );
+  }
+
+  const previewBody = previewTextBody(state.filePreview);
+  const treeNodes = state.fileTree === null ? [] : flattenTreeEntries(state.fileTree.entries, expandedDirectories, directoryChildren);
+  const previewPanel =
+    state.filePreview === null ? (
+      <div className="workbench-file-empty" data-testid="workbench-file-preview">
+        <strong>尚未选中文件</strong>
+        <p>从左侧文件树选择一个文件后，这里会显示原内容、图片或不可直接阅读的说明。</p>
+      </div>
+    ) : isImagePreview(state.filePreview) ? (
+      <div className="workbench-file-image-stage" data-testid="workbench-file-preview">
+        <div className="workbench-file-image-board">
+          <img
+            alt={state.filePreview.relativePath}
+            className="workbench-file-image-preview"
+            data-testid="workbench-file-image-preview"
+            src={state.filePreview.content}
+          />
+        </div>
+      </div>
+    ) : state.filePreview.kind === 'binary' ? (
+      <div className="workbench-file-empty" data-testid="workbench-file-preview">
+        <strong>该文件不能直接作为文本阅读</strong>
+        <p>当前文件属于二进制内容。请在外部工具中打开，或使用 Git / 文件操作继续处理。</p>
+      </div>
+    ) : (
+      <pre className="workbench-file-preview" data-testid="workbench-file-preview">
+        {previewBody}
+      </pre>
+    );
+
+  function startFilePaneResize(event: React.PointerEvent<HTMLDivElement>): void {
+    const startX = event.clientX;
+    const startWidth = filePaneWidth;
+    const onMove = (moveEvent: PointerEvent): void => {
+      const nextWidth = Math.min(440, Math.max(228, startWidth + moveEvent.clientX - startX));
+      setFilePaneWidth(nextWidth);
+    };
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
   }
 
   return (
-    <section className="tool-panel">
-      <div className="tool-stack">
-        <div className="dock-preview-card">
-          <div>
-            <div className="dock-preview-title">文件</div>
-            <div className="dock-preview-subtitle">查看当前工作区文件、预览目录和选中文件上下文。</div>
+    <section className="tool-panel workbench-surface workbench-surface--files">
+      <div className="workbench-files" style={{ '--file-pane-width': `${filePaneWidth}px` } as React.CSSProperties}>
+        <section className="workbench-sidebar-pane workbench-sidebar-pane--files">
+          <header className="pane-header">
+            <div>
+              <div className="pane-title">EXPLORER</div>
+              <div className="pane-subtitle">
+                {fileCount} 项{directoryLoadingPath === null ? '' : ' · 正在展开目录'}
+              </div>
+            </div>
+            <CompactStatusPill tone="info" value={state.fileTree?.truncated ? '已截断' : '工作区内'} />
+          </header>
+          <div className="workbench-sidebar-summary">
+            <span>{state.workspace.displayName}</span>
+            <span>{searchCount} 条搜索命中</span>
           </div>
-          <div className="dock-preview-copy">{state.workspace === null ? '未选择工作区。' : state.workspace.path}</div>
-        </div>
-        <section className="file-tree" data-testid="workbench-file-tree">
-          {state.fileTree === null ? (
-            <p className="muted">未选择工作区。</p>
-          ) : (
-            state.fileTree.entries.slice(0, 80).map((entry) => (
-              <TreeItem
-                active={state.filePreview?.relativePath === entry.relativePath}
-                entry={entry}
-                key={entry.relativePath}
-                onClick={entry.type === 'file' ? () => void openFilePreview(entry.relativePath) : undefined}
-              />
-            ))
-          )}
+          <section className="workbench-file-tree" data-testid="workbench-file-tree">
+            {state.fileTree === null ? (
+              <p className="muted">文件树未加载。</p>
+            ) : (
+              treeNodes.slice(0, 240).map(({ entry, depth }) => (
+                <TreeItem
+                  active={state.filePreview?.relativePath === entry.relativePath}
+                  depth={depth}
+                  expanded={expandedDirectories.has(entry.relativePath)}
+                  entry={entry}
+                  key={entry.relativePath}
+                  loading={directoryLoadingPath === entry.relativePath}
+                  onClick={
+                    entry.type === 'file' ? () => void openFilePreview(entry.relativePath) : () => void toggleDirectory(entry.relativePath)
+                  }
+                />
+              ))
+            )}
+          </section>
         </section>
-        <section className="code-preview workbench-preview" data-testid="workbench-file-preview">
-          {state.filePreview === null
-            ? '当前没有加载可预览内容。'
-            : `${state.filePreview.relativePath}\n\n${
-                state.filePreview.kind === 'binary' ? `二进制文件，大小 ${state.filePreview.sizeBytes} bytes。` : state.filePreview.content
-              }`}
-        </section>
-        <section className="card">
-          <div className="card-title">当前文件上下文</div>
-          <Row title="文件总数" sub={state.workspace === null ? '未选择工作区' : state.workspace.path} tag={`${fileCount} 项`} tone="info" />
-          <Row title="当前预览" sub={previewPath} tag={state.filePreview === null ? '空态' : '已加载'} tone={state.filePreview === null ? 'warn' : 'ok'} />
-          <Row title="搜索命中" sub="当前查询" tag={`${searchCount} 条`} tone="info" />
-          <Row title="RTK" sub={state.rtkStatus.teeDir} tag={state.rtkStatus.resourceState === 'ready' ? '可用' : '缺失降级'} tone="warn" />
+        <div
+          aria-label="调节文件树宽度"
+          className="workbench-file-splitter"
+          data-testid="workbench-file-splitter"
+          role="separator"
+          tabIndex={0}
+          onPointerDown={startFilePaneResize}
+        />
+        <section className="workbench-content-pane">
+          <header className="pane-header pane-header--content">
+            <div>
+              <div className="pane-path">{previewPath}</div>
+              <div className="pane-subtitle">直接展示当前文件原内容</div>
+            </div>
+            <div className="pane-subtitle pane-subtitle--content">{previewInfo}</div>
+          </header>
+          <div className="workbench-file-meta-strip">
+            <span>{state.filePreview === null ? '未加载路径' : state.filePreview.relativePath}</span>
+            <span>{state.filePreview === null ? '0 B' : formatBytes(state.filePreview.sizeBytes)}</span>
+            <span>{state.filePreview === null ? '未加载' : state.filePreview.kind === 'image' ? '图片预览' : state.filePreview.kind === 'binary' ? '二进制提示' : '文本阅读'}</span>
+          </div>
+          <div className={state.filePreview?.kind === 'text' ? 'workbench-file-body workbench-file-body--code' : 'workbench-file-body'}>
+            {previewPanel}
+          </div>
+          <footer className="workbench-footer-bar">
+            <span>{state.workspace.path}</span>
+            <span>{fileCount} 项</span>
+            <span>{searchCount} 条搜索命中</span>
+          </footer>
         </section>
       </div>
     </section>
   );
 }
 
+function buildGitChangeStateLabel(change: GitStatusChange): string {
+  if (change.index !== ' ' && change.worktree !== ' ') {
+    return '已暂存 + 工作区修改';
+  }
+  if (change.index !== ' ') {
+    return '已暂存';
+  }
+  return '工作区修改';
+}
+
 function GitWorkbench({
+  loadState,
   state,
   updateWorkspaceData
 }: {
+  loadState: LazyLoadState;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
 }): React.JSX.Element {
+  const [commitMessage, setCommitMessage] = useState('');
+  const [pendingAction, setPendingAction] = useState<'refresh' | 'stage' | 'unstage' | 'discard' | 'commit' | 'push' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   async function refreshGitStatus(): Promise<void> {
+    setPendingAction('refresh');
+    setActionError(null);
     const gitStatus = await window.roc.git.status();
     updateWorkspaceData({
       gitStatus: gitStatus.ok ? gitStatus.data : null,
       gitError: gitStatus.ok ? null : gitStatus.error.message
     });
+    if (!gitStatus.ok) {
+      setActionError(gitStatus.error.message);
+    }
+    setPendingAction(null);
   }
 
   async function stageFile(relativePath: string): Promise<void> {
-    const gitStatus = unwrap<GitStatusResult>('git stage file', await window.roc.git.stageFile({ relativePath }));
-    updateWorkspaceData({ gitStatus, gitError: null });
+    setPendingAction('stage');
+    setActionError(null);
+    const result = await window.roc.git.stageFile({ relativePath });
+    if (result.ok) {
+      updateWorkspaceData({ gitStatus: result.data, gitError: null });
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
   }
 
   async function unstageFile(relativePath: string): Promise<void> {
-    const gitStatus = unwrap<GitStatusResult>('git unstage file', await window.roc.git.unstageFile({ relativePath }));
-    updateWorkspaceData({ gitStatus, gitError: null });
+    setPendingAction('unstage');
+    setActionError(null);
+    const result = await window.roc.git.unstageFile({ relativePath });
+    if (result.ok) {
+      updateWorkspaceData({ gitStatus: result.data, gitError: null });
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
   }
 
+  async function discardFile(relativePath: string): Promise<void> {
+    setPendingAction('discard');
+    setActionError(null);
+    const result = await window.roc.git.discardFile({ relativePath });
+    if (result.ok) {
+      updateWorkspaceData({ gitStatus: result.data, gitError: null });
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  async function commitChanges(): Promise<void> {
+    setPendingAction('commit');
+    setActionError(null);
+    const result = await window.roc.git.commit({ message: commitMessage });
+    if (result.ok) {
+      updateWorkspaceData({
+        gitStatus: result.data.status,
+        gitError: null,
+        gitLastCommit: result.data
+      });
+      setCommitMessage('');
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  async function pushChanges(): Promise<void> {
+    setPendingAction('push');
+    setActionError(null);
+    const result = await window.roc.git.push();
+    if (result.ok) {
+      updateWorkspaceData({
+        gitStatus: result.data.status,
+        gitError: null,
+        gitLastPush: result.data
+      });
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  if (state.workspace === null) {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-git-empty" title="未选择工作区" detail="请先选择工作区，再打开 Git 工作台。" />
+      </section>
+    );
+  }
+
+  if (loadState.status === 'loading') {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-git-loading" title="Git 工作台加载中" detail="正在读取当前工作区的 Git 状态。" />
+      </section>
+    );
+  }
+
+  if (loadState.status === 'error') {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-git-load-error" title="Git 工作台加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+      </section>
+    );
+  }
+
+  if (state.gitStatus === null) {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState
+          testId="workbench-git-empty"
+          title="当前工作区不是 Git 仓库"
+          detail={gitErrorLabel(state.gitError)}
+        />
+      </section>
+    );
+  }
+
+  const stagedCount = gitStatusChanges(state.gitStatus).filter((change) => change.index !== ' ').length;
+  const dirtyCount = gitStatusChanges(state.gitStatus).filter((change) => change.worktree !== ' ').length;
+  const actionBusy = pendingAction !== null;
+
   return (
-    <section className="tool-panel">
-      <div className="tool-stack">
-        <div className="dock-preview-card">
-          <div>
-            <div className="dock-preview-title">Git</div>
-            <div className="dock-preview-subtitle">状态、diff 和提交风险继续集中在右侧工作台。</div>
-          </div>
-          <div className="dock-preview-copy">{state.gitStatus === null ? gitErrorLabel(state.gitError) : state.gitStatus.branch}</div>
-        </div>
-        <section className="card">
-          <div className="card-title">Git 常用操作</div>
-          <div className="action-strip">
-            <button type="button" onClick={() => void refreshGitStatus()}>刷新 status</button>
-            <button type="button" disabled={state.gitStatus === null} onClick={() => void refreshGitStatus()}>
-              查看 changes
+    <section className="tool-panel workbench-surface workbench-surface--git">
+      <div className="workbench-git">
+        <header className="git-header">
+          <div className="git-branch-line">
+            <div className="git-branch-pill">
+              <GitBranch size={16} />
+              <span>{state.gitStatus.branch}</span>
+            </div>
+            <button
+              className="icon-ghost-button"
+              aria-label="刷新 Git 状态"
+              disabled={actionBusy}
+              type="button"
+              onClick={() => void refreshGitStatus()}
+            >
+              <RefreshCw size={16} />
             </button>
           </div>
-        </section>
-        <section className="card" data-testid="workbench-git-changes">
-          <div className="card-title">Changes</div>
-          {state.gitStatus === null ? (
-            <Row title="当前工作区" sub={gitErrorLabel(state.gitError)} tag="非 Git 仓库" tone="warn" />
-          ) : state.gitStatus.porcelain.length === 0 ? (
-            <Row title="工作区" sub={state.gitStatus.workspacePath} tag="干净" tone="ok" />
+          <div className="git-summary-line">
+            <span>{stagedCount} 已暂存</span>
+            <span>{dirtyCount} 未暂存</span>
+            <span>{state.gitStatus.changedFiles} 个文件变更</span>
+          </div>
+          <div className="git-scope-note">
+            当前开放真实 `commit`、`push` 与文件级回滚；不包含批量暂存、分支管理或历史提交级回退。
+          </div>
+          <div className="git-compose-row">
+            <input
+              className="git-commit-input"
+              data-testid="workbench-git-commit-message"
+              disabled={actionBusy}
+              placeholder="输入本次提交说明"
+              type="text"
+              value={commitMessage}
+              onChange={(event) => setCommitMessage(event.target.value)}
+            />
+            <button
+              className="action-button action-button--git"
+              data-testid="workbench-git-commit"
+              disabled={actionBusy}
+              type="button"
+              onClick={() => void commitChanges()}
+            >
+              提交
+            </button>
+            <button
+              className="action-button action-button--git-secondary"
+              data-testid="workbench-git-push"
+              disabled={actionBusy}
+              type="button"
+              onClick={() => void pushChanges()}
+            >
+              Push
+            </button>
+          </div>
+          {actionError === null ? null : (
+            <span className="inline-warning" data-testid="workbench-git-action-error">
+              {actionError}
+            </span>
+          )}
+          {state.gitLastCommit === null && state.gitLastPush === null ? null : (
+            <div className="git-last-result">
+              {state.gitLastCommit === null ? null : <span>最近提交：{state.gitLastCommit.commitMessage}</span>}
+              {state.gitLastPush === null ? null : <span>最近 Push：{state.gitLastPush.remoteName}/{state.gitLastPush.branch}</span>}
+            </div>
+          )}
+        </header>
+        <section className="git-changes-pane" data-testid="workbench-git-changes">
+          <div className="git-section-header">
+            <span>Changes ({state.gitStatus.changedFiles})</span>
+          </div>
+          {state.gitStatus.porcelain.length === 0 ? (
+            <p className="muted">工作区干净。</p>
           ) : (
             gitStatusChanges(state.gitStatus).map((change) => {
               const safeId = sanitizeTestId(change.relativePath);
               return (
-                <div className="row action-row git-change-row" key={change.porcelain}>
-                  <div>
-                    <div className="row-title">{change.porcelain}</div>
-                    <div className="row-sub">{change.relativePath}</div>
+                <div className="git-change-card" key={change.porcelain}>
+                  <label className="git-change-meta">
+                    <input type="checkbox" readOnly checked={change.index !== ' '} />
+                    <span className="git-change-code">{change.porcelain}</span>
+                    <span className="git-change-path">{change.relativePath}</span>
+                  </label>
+                  <div className="git-change-side">
+                    <span className="git-change-state">{buildGitChangeStateLabel(change)}</span>
+                    <div className="git-change-actions">
+                      <button
+                        data-testid={`git-discard-${safeId}`}
+                        disabled={!canDiscardGitChange(change) || actionBusy}
+                        type="button"
+                        onClick={() => void discardFile(change.relativePath)}
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                      <button
+                        data-testid={`git-stage-${safeId}`}
+                        disabled={!canStageGitChange(change) || actionBusy}
+                        type="button"
+                        onClick={() => void stageFile(change.relativePath)}
+                      >
+                        <ArrowUp size={15} />
+                      </button>
+                      <button
+                        data-testid={`git-unstage-${safeId}`}
+                        disabled={!canUnstageGitChange(change) || actionBusy}
+                        type="button"
+                        onClick={() => void unstageFile(change.relativePath)}
+                      >
+                        <ArrowDown size={15} />
+                      </button>
+                    </div>
                   </div>
-                  <span className="pill warn">{`${change.index}${change.worktree}`}</span>
-                  <button
-                    data-testid={`git-stage-${safeId}`}
-                    disabled={!canStageGitChange(change)}
-                    type="button"
-                    onClick={() => void stageFile(change.relativePath)}
-                  >
-                    暂存
-                  </button>
-                  <button
-                    data-testid={`git-unstage-${safeId}`}
-                    disabled={!canUnstageGitChange(change)}
-                    type="button"
-                    onClick={() => void unstageFile(change.relativePath)}
-                  >
-                    取消暂存
-                  </button>
                 </div>
               );
             })
@@ -2563,73 +3589,179 @@ function TerminalWorkbench({
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
   windowState: WindowStateSnapshot;
 }): React.JSX.Element {
-  const [command, setCommand] = useState('dir');
-  const [running, setRunning] = useState(false);
+  const terminalHostRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const sessionRef = useRef<TerminalSessionSnapshot | null>(null);
 
-  async function runCommand(): Promise<void> {
-    if (state.workspace === null) {
-      updateWorkspaceData({ terminalResult: null, terminalError: '请先选择工作区。' });
-      return;
-    }
-    const trimmedCommand = command.trim();
-    if (trimmedCommand.length === 0) {
-      updateWorkspaceData({ terminalResult: null, terminalError: '命令不能为空。' });
-      return;
-    }
-    setRunning(true);
-    try {
-      const result = await window.roc.shell.execute({
-        command: trimmedCommand,
-        cwd: state.workspace.path,
-        source: 'terminal'
+  useEffect(() => {
+    if (state.workspace === null || terminalHostRef.current === null) {
+      updateWorkspaceData({
+        terminalSession: null,
+        terminalError: state.workspace === null ? '请先选择工作区。' : null
       });
-      if (!result.ok) {
-        updateWorkspaceData({ terminalResult: null, terminalError: result.error.message });
+      return;
+    }
+
+    const terminal = new Terminal({
+      convertEol: true,
+      cursorBlink: true,
+      fontFamily: '"Cascadia Mono", Consolas, monospace',
+      fontSize: 12,
+      theme: {
+        background: '#101726',
+        foreground: '#dce4ef'
+      }
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(terminalHostRef.current);
+    fitAddon.fit();
+    terminal.focus();
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    let disposed = false;
+
+    const onOutputDispose = window.roc.terminal.onOutput((event: TerminalSessionOutputEvent) => {
+      if (event.sessionId !== sessionRef.current?.id) {
         return;
       }
-      updateWorkspaceData({ terminalResult: result.data, terminalError: null });
-    } finally {
-      setRunning(false);
-    }
+      terminal.write(event.data);
+    });
+    const onExitDispose = window.roc.terminal.onExit((event: TerminalSessionExitEvent) => {
+      if (event.sessionId !== sessionRef.current?.id) {
+        return;
+      }
+      updateWorkspaceData({
+        terminalSession: sessionRef.current === null
+          ? null
+          : {
+              ...sessionRef.current,
+              status: 'exited',
+              exitCode: event.exitCode
+            },
+        terminalError: `终端会话已退出，退出码 ${event.exitCode}。`
+      });
+      terminal.write(`\r\n[session exited: ${event.exitCode}]\r\n`);
+    });
+
+    void window.roc.terminal
+      .createSession({
+        cwd: state.workspace.path,
+        cols: Math.max(80, Math.floor((terminalHostRef.current.clientWidth || 720) / 9)),
+        rows: Math.max(24, Math.floor((terminalHostRef.current.clientHeight || 420) / 18))
+      })
+      .then((result) => {
+        if (!result.ok || disposed) {
+          if (!result.ok) {
+            updateWorkspaceData({ terminalSession: null, terminalError: result.error.message });
+          }
+          return;
+        }
+        sessionRef.current = result.data;
+        updateWorkspaceData({ terminalSession: result.data, terminalError: null });
+        fitAddon.fit();
+        const nextCols = Math.max(20, terminal.cols);
+        const nextRows = Math.max(5, terminal.rows);
+        void window.roc.terminal.resize({
+          sessionId: result.data.id,
+          cols: nextCols,
+          rows: nextRows
+        }).then((resizeResult) => {
+          if (resizeResult.ok && sessionRef.current?.id === resizeResult.data.id) {
+            sessionRef.current = resizeResult.data;
+            updateWorkspaceData({ terminalSession: resizeResult.data });
+          }
+        });
+      });
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (terminalRef.current === null || fitAddonRef.current === null) {
+        return;
+      }
+      fitAddonRef.current.fit();
+      if (sessionRef.current === null) {
+        return;
+      }
+      void window.roc.terminal.resize({
+        sessionId: sessionRef.current.id,
+        cols: Math.max(20, terminalRef.current.cols),
+        rows: Math.max(5, terminalRef.current.rows)
+      }).then((result) => {
+        if (result.ok && sessionRef.current?.id === result.data.id) {
+          sessionRef.current = result.data;
+          updateWorkspaceData({ terminalSession: result.data });
+        }
+      });
+    });
+    resizeObserver.observe(terminalHostRef.current);
+
+    const keyDisposable = terminal.onData((data) => {
+      if (sessionRef.current === null) {
+        return;
+      }
+      void window.roc.terminal.writeInput({
+        sessionId: sessionRef.current.id,
+        data
+      });
+    });
+
+    return () => {
+      disposed = true;
+      resizeObserver.disconnect();
+      keyDisposable.dispose();
+      onOutputDispose();
+      onExitDispose();
+      const sessionId = sessionRef.current?.id;
+      if (sessionId !== undefined) {
+        void window.roc.terminal.closeSession({ sessionId });
+      }
+      sessionRef.current = null;
+      terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, [state.workspace?.path, updateWorkspaceData]);
+
+  if (state.workspace === null) {
+    return (
+      <section className="tool-panel workbench-surface">
+        <EmptyState testId="workbench-terminal-empty" title="未选择工作区" detail="请先选择工作区，再打开真实终端。" />
+      </section>
+    );
   }
 
   return (
-    <section className="tool-panel">
-      <div className="tool-stack">
-        <div className="dock-preview-card">
-          <div>
-            <div className="dock-preview-title">Terminal</div>
-            <div className="dock-preview-subtitle">命令执行边界、输出和状态保持可见。</div>
+    <section className="tool-panel workbench-surface workbench-surface--terminal">
+      <div className="workbench-terminal">
+        <header className="terminal-header">
+          <div className="terminal-heading">
+            <div className="pane-title">Terminal</div>
+            <div className="terminal-subtitle">右侧持续会话 · {state.workspace.path}</div>
           </div>
-          <div className="dock-preview-copy">{visibleWorkspaceCwd(state)}</div>
-        </div>
-        <div className="terminal-session">
-          <pre className="terminal" data-testid="terminal-live-output">
-            {state.terminalResult === null
-              ? buildVisibleTerminalOutput(state)
-              : `> ${state.terminalResult.command}\n${state.terminalResult.stdout}${state.terminalResult.stderr}`}
-          </pre>
-          <div className="terminal-command-row">
-            <input
-              data-testid="terminal-command-input"
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  void runCommand();
-                }
-              }}
-            />
-            <button data-testid="terminal-run-command" disabled={running} type="button" onClick={() => void runCommand()}>
-              {running ? '运行中' : '运行'}
-            </button>
+          <div className="terminal-meta" data-testid="terminal-session-scope">
+            <span className="terminal-badge">{state.terminalSession?.shell ?? 'PowerShell'}</span>
+            <span className="terminal-badge">{state.terminalSession === null ? 'starting' : state.terminalSession.status}</span>
+            <span className="terminal-badge">工作区绑定</span>
+          </div>
+        </header>
+        <div className="terminal-shell-frame">
+          <div className="terminal-shell-topline">
+            <span className="terminal-dot terminal-dot--danger" />
+            <span className="terminal-dot terminal-dot--warn" />
+            <span className="terminal-dot terminal-dot--ok" />
+            <span className="terminal-shell-title">{state.workspace.displayName}</span>
+          </div>
+          <div className="terminal-xterm-shell" data-testid="terminal-session-surface">
+            <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
           </div>
         </div>
-        <section className="card">
-          <div className="card-title">终端边界</div>
-          <Row title="目录" sub="限定当前工作区" tag="受控" tone="ok" />
-          <Row title="高风险命令" sub="仍然进入确认策略" tag="开启" tone="warn" />
-        </section>
+        <footer className="workbench-footer-bar">
+          <span>{state.terminalSession?.cwd ?? state.workspace.path}</span>
+          <span>{state.terminalSession === null ? '建立会话中' : `${state.terminalSession.cols}×${state.terminalSession.rows}`}</span>
+          <span>{state.terminalError ?? '真实持续会话'}</span>
+        </footer>
       </div>
     </section>
   );
@@ -2995,26 +4127,43 @@ function ToolRow({
 
 function TreeItem({
   active = false,
+  depth = 0,
+  expanded = false,
   entry,
+  loading = false,
   onClick
 }: {
   active?: boolean;
+  depth?: number;
+  expanded?: boolean;
   entry: FileTreeResult['entries'][number];
+  loading?: boolean;
   onClick?: () => void;
 }): React.JSX.Element {
-  const className = active || entry.type === 'file' ? 'tree-item selected' : 'tree-item';
+  const className = active ? 'tree-item selected' : 'tree-item';
+  const label = fileLabel(entry.relativePath);
+  const expander = entry.type === 'directory' ? (loading ? '…' : expanded ? '▾' : '▸') : null;
+  const icon = fileTreeIcon(entry, active, expanded);
   if (onClick !== undefined) {
     return (
-      <button className={className} data-testid={`workbench-file-${sanitizeTestId(entry.relativePath)}`} type="button" onClick={onClick}>
-        <span>{entry.type === 'directory' ? '▸' : '•'}</span>
-        <span>{entry.relativePath}</span>
+      <button
+        className={className}
+        data-testid={`${entry.type === 'directory' ? 'workbench-directory' : 'workbench-file'}-${sanitizeTestId(entry.relativePath)}`}
+        style={{ paddingLeft: `${14 + depth * 16}px` }}
+        type="button"
+        onClick={onClick}
+      >
+        <span className="tree-item-expander">{expander}</span>
+        <span className="tree-item-icon">{icon}</span>
+        <span className="tree-item-label">{label}</span>
       </button>
     );
   }
   return (
-    <div className={className}>
-      <span>{entry.type === 'directory' ? '▸' : '•'}</span>
-      <span>{entry.relativePath}</span>
+    <div className={className} style={{ paddingLeft: `${14 + depth * 16}px` }}>
+      <span className="tree-item-expander">{expander}</span>
+      <span className="tree-item-icon">{icon}</span>
+      <span className="tree-item-label">{label}</span>
     </div>
   );
 }

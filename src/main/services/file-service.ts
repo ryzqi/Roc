@@ -20,6 +20,15 @@ import type { WorkspaceService } from './workspace-service';
 const defaultPreviewBytes = 64 * 1024;
 const defaultListLimit = 200;
 const defaultSearchLimit = 100;
+const imageMediaTypes = new Map<string, string>([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.bmp', 'image/bmp'],
+  ['.svg', 'image/svg+xml']
+]);
 const ignoredDirectoryNames = new Set([
   'node_modules',
   '.git',
@@ -147,6 +156,17 @@ export class FileService {
 
     const maxBytes = this.positiveLimit(request.maxBytes, defaultPreviewBytes);
     const buffer = readFileSync(absolutePath);
+    const imageMediaType = this.imageMediaTypeForPath(relativePath);
+    if (imageMediaType !== null) {
+      return {
+        relativePath,
+        kind: 'image',
+        mediaType: imageMediaType,
+        content: `data:${imageMediaType};base64,${buffer.toString('base64')}`,
+        truncated: false,
+        sizeBytes: buffer.byteLength
+      };
+    }
     if (this.isBinaryBuffer(buffer)) {
       return {
         relativePath,
@@ -291,5 +311,15 @@ export class FileService {
 
   private isBinaryBuffer(buffer: Buffer): boolean {
     return buffer.subarray(0, 4096).includes(0);
+  }
+
+  private imageMediaTypeForPath(relativePath: string): string | null {
+    const normalized = relativePath.toLowerCase();
+    for (const [extension, mediaType] of imageMediaTypes.entries()) {
+      if (normalized.endsWith(extension)) {
+        return mediaType;
+      }
+    }
+    return null;
   }
 }

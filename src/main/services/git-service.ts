@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import type { GitDiffStatResult, GitStatusChange, GitStatusResult } from '../../shared/types';
+import type { GitCommitResult, GitDiffStatResult, GitPushResult, GitStatusChange, GitStatusResult } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { WorkspaceService } from './workspace-service';
 
@@ -55,6 +55,96 @@ export class GitService {
     return this.getStatus();
   }
 
+  discardFileChanges(relativePath: string): GitStatusResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedPath = this.normalizeGitPath(relativePath);
+    this.workspaceService.resolveInsideWorkspace(normalizedPath);
+    const currentStatus = this.getStatus();
+    const change = currentStatus.changes.find((item) => item.relativePath === normalizedPath);
+    if (change === undefined) {
+      throw new RocDomainError({
+        code: 'git_file_change_missing',
+        message: '当前文件没有可回滚的 Git 变更。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请选择一个存在未提交变更的文件。'
+      });
+    }
+    if (change.index !== ' ' && change.index !== '?') {
+      this.runGit(workspace.path, ['restore', '--staged', '--worktree', '--', normalizedPath]);
+      return this.getStatus();
+    }
+    if (change.worktree !== ' ' || change.index === '?') {
+      this.runGit(workspace.path, ['restore', '--worktree', '--', normalizedPath]);
+      return this.getStatus();
+    }
+    throw new RocDomainError({
+      code: 'git_file_change_missing',
+      message: '当前文件没有可回滚的 Git 变更。',
+      category: 'not_found',
+      retryable: false,
+      userAction: '请选择一个存在未提交变更的文件。'
+    });
+  }
+
+  commit(message: string): GitCommitResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedMessage = message.trim();
+    if (normalizedMessage.length === 0) {
+      throw new RocDomainError({
+        code: 'git_commit_message_empty',
+        message: '提交说明不能为空。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请输入本次提交的说明后再提交。'
+      });
+    }
+    const before = this.getStatus();
+    if (before.changedFiles === 0) {
+      throw new RocDomainError({
+        code: 'git_commit_no_changes',
+        message: '当前没有可提交的变更。',
+        category: 'conflict',
+        retryable: false,
+        userAction: '请先修改或暂存文件后再提交。'
+      });
+    }
+    this.runGit(workspace.path, ['commit', '-m', normalizedMessage]);
+    const commitSha = this.runGit(workspace.path, ['rev-parse', 'HEAD']).trim();
+    return {
+      workspacePath: workspace.path,
+      commitMessage: normalizedMessage,
+      commitSha,
+      status: this.getStatus()
+    };
+  }
+
+  push(): GitPushResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const branch = this.runGit(workspace.path, ['branch', '--show-current']).trim();
+    const remoteName = this.readGitConfigValue(workspace.path, `branch.${branch}.remote`);
+    if (remoteName.length === 0) {
+      throw new RocDomainError({
+        code: 'git_push_remote_missing',
+        message: '当前分支没有配置远端。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请先为当前分支配置远端后再 push。'
+      });
+    }
+    const output = this.runGit(workspace.path, ['push']);
+    return {
+      workspacePath: workspace.path,
+      remoteName,
+      branch,
+      status: this.getStatus(),
+      output
+    };
+  }
+
   private ensureGitRepository(workspacePath: string): void {
     if (!existsSync(join(workspacePath, '.git'))) {
       throw new RocDomainError({
@@ -68,11 +158,16 @@ export class GitService {
   }
 
   private runGit(cwd: string, args: string[]): string {
-    return execFileSync('git', args, {
-      cwd,
-      encoding: 'utf8',
-      windowsHide: true
-    });
+    try {
+      return execFileSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } catch (error) {
+      throw this.toGitCommandError(args, error);
+    }
   }
 
   private getStatusChanges(cwd: string): GitStatusChange[] {
@@ -126,5 +221,44 @@ export class GitService {
       });
     }
     return normalizedPath;
+  }
+
+  private readGitConfigValue(cwd: string, key: string): string {
+    try {
+      return execFileSync('git', ['config', key], {
+        cwd,
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }).trim();
+    } catch {
+      return '';
+    }
+  }
+
+  private toGitCommandError(args: string[], error: unknown): RocDomainError {
+    const stderr =
+      typeof error === 'object' &&
+      error !== null &&
+      'stderr' in error &&
+      typeof (error as { stderr?: unknown }).stderr === 'string'
+        ? (error as { stderr: string }).stderr.trim()
+        : '';
+    const stdout =
+      typeof error === 'object' &&
+      error !== null &&
+      'stdout' in error &&
+      typeof (error as { stdout?: unknown }).stdout === 'string'
+        ? (error as { stdout: string }).stdout.trim()
+        : '';
+    const detail = stderr || stdout;
+    const commandText = `git ${args.join(' ')}`;
+    return new RocDomainError({
+      code: 'git_command_failed',
+      message: detail.length > 0 ? detail : `${commandText} 执行失败。`,
+      category: 'external',
+      retryable: false,
+      userAction: '请检查 Git 仓库状态、远端配置或认证信息后重试。'
+    });
   }
 }
