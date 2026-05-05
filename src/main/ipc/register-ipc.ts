@@ -202,6 +202,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.gitStageFile, (_event, request) =>
     wrapIpc(() => services.gitService.stageFile(request.relativePath))
   );
+  ipcMain.handle(ipcChannels.gitStageFiles, (_event, request) =>
+    wrapIpc(() => services.gitService.stageFiles(request.relativePaths))
+  );
   ipcMain.handle(ipcChannels.gitUnstageFile, (_event, request) =>
     wrapIpc(() => services.gitService.unstageFile(request.relativePath))
   );
@@ -210,6 +213,13 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   );
   ipcMain.handle(ipcChannels.gitCommit, (_event, request) => wrapIpc(() => services.gitService.commit(request.message)));
   ipcMain.handle(ipcChannels.gitPush, () => wrapIpc(() => services.gitService.push()));
+  ipcMain.handle(ipcChannels.gitListBranches, () => wrapIpc(() => services.gitService.listBranches()));
+  ipcMain.handle(ipcChannels.gitCreateBranch, (_event, request) =>
+    wrapIpc(() => services.gitService.createBranch(request.name, request.checkoutAfterCreate))
+  );
+  ipcMain.handle(ipcChannels.gitCheckoutBranch, (_event, request) =>
+    wrapIpc(() => services.gitService.checkoutBranch(request.name))
+  );
   ipcMain.handle(ipcChannels.terminalCreateSession, (_event, request) =>
     wrapIpc(() => services.terminalSessionService.createSession(request))
   );

@@ -36,6 +36,7 @@ const skillSourceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-skill-'));
 mkdirSync(join(workspaceRoot, 'assets'));
 writeFileSync(join(workspaceRoot, '00-overview.txt'), 'workspace overview smoke file\n', 'utf8');
 writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\n', 'utf8');
+writeFileSync(join(workspaceRoot, 'batch-stage.txt'), 'batch stage smoke workspace\n', 'utf8');
 writeFileSync(
   join(workspaceRoot, 'assets', 'smoke-image.png'),
   Buffer.from(
@@ -56,9 +57,10 @@ function runWorkspaceGit(args) {
 runWorkspaceGit(['init']);
 runWorkspaceGit(['config', 'user.email', 'roc-smoke@example.test']);
 runWorkspaceGit(['config', 'user.name', 'Roc Smoke']);
-runWorkspaceGit(['add', '00-overview.txt', 'phase-three-notes.txt', 'assets/smoke-image.png']);
+runWorkspaceGit(['add', '00-overview.txt', 'phase-three-notes.txt', 'batch-stage.txt', 'assets/smoke-image.png']);
 runWorkspaceGit(['commit', '-m', 'initial smoke workspace']);
 writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged in git\n', 'utf8');
+writeFileSync(join(workspaceRoot, 'batch-stage.txt'), 'batch stage smoke workspace\nchanged in batch\n', 'utf8');
 const remoteRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-remote-'));
 runWorkspaceGit(['init', '--bare', remoteRoot]);
 runWorkspaceGit(['remote', 'add', 'origin', remoteRoot]);
@@ -409,6 +411,13 @@ try {
 
   const page = await app.firstWindow();
   await waitForAppReady(page, 'initial');
+  await page.addInitScript(() => {
+    globalThis.__rocConfirmMessages = [];
+    window.confirm = (message) => {
+      globalThis.__rocConfirmMessages.push(String(message));
+      return true;
+    };
+  });
   await page.waitForSelector('[data-testid="window-workband"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="workspace-select-button"]', { timeout: 5000 });
@@ -613,43 +622,106 @@ try {
   const gitCommitMessageCount = await page.locator('[data-testid="workbench-git-commit-message"]').count();
   const gitRefreshPrimaryCount = await page.locator('[aria-label="刷新 Git 状态"]').count();
   const gitRefreshSecondaryCount = await page.locator('[aria-label="刷新变更列表"]').count();
+  const gitBatchStageCount = await page.locator('[data-testid="git-stage-selected"]').count();
+  const gitBranchSelectCount = await page.locator('[data-testid="git-branch-select"]').count();
+  const initialGitBranch = await page.textContent('[data-testid="git-current-branch"]');
+  const gitHeaderEvidence = await page.evaluate(() => ({
+    stats: Array.from(document.querySelectorAll('.git-summary-stat')).map((element) => element.textContent?.trim() ?? ''),
+    groups: Array.from(document.querySelectorAll('.git-control-group-title')).map((element) => element.textContent?.trim() ?? '')
+  }));
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   const workbenchGitSelectionText = await page.textContent('[data-testid="workbench-git-selection"]');
   const workbenchGitSelectionPath = await page.textContent('[data-testid="workbench-git-selection-path"]');
   const workbenchGitSelectionPreview = await page.textContent('[data-testid="workbench-git-selection-preview"]');
-  await page.click('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
+  await page.click('[data-testid="git-select-toggle-phase-three-notes.txt"]');
+  await page.click('[data-testid="git-select-toggle-batch-stage.txt"]');
   await page.waitForFunction(() => {
-    const toggle = document.querySelector('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
-    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
-    const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
-    return toggle instanceof HTMLInputElement && toggle.checked && changes.includes('M  phase-three-notes.txt') && detail.includes('已暂存');
+    const text = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+    return text.includes('2 已选择');
   });
-  const workbenchGitAfterStage = await page.textContent('[data-testid="workbench-git-changes"]');
-  const workbenchGitSelectionAfterStage = await page.textContent('[data-testid="workbench-git-selection"]');
-  await page.click('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
+  const workbenchGitSelectedCountAfterManual = await page.textContent('[data-testid="git-selected-count"]');
+  await page.click('[data-testid="git-clear-selection"]');
   await page.waitForFunction(() => {
-    const toggle = document.querySelector('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
+    const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+    return selectedCount.includes('0 已选择');
+  });
+  await page.click('[data-testid="git-select-all"]');
+  await page.waitForFunction(() => {
+    const noteToggle = document.querySelector('[data-testid="git-select-toggle-phase-three-notes.txt"]');
+    const batchToggle = document.querySelector('[data-testid="git-select-toggle-batch-stage.txt"]');
+    const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+    return (
+      noteToggle instanceof HTMLInputElement &&
+      batchToggle instanceof HTMLInputElement &&
+      noteToggle.checked &&
+      batchToggle.checked &&
+      selectedCount.includes('2 已选择')
+    );
+  });
+  const workbenchGitSelectedCountAfterAll = await page.textContent('[data-testid="git-selected-count"]');
+  await page.click('[data-testid="git-stage-selected"]');
+  await page.waitForFunction(() => {
     const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
     const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
-    return toggle instanceof HTMLInputElement && !toggle.checked && changes.includes(' M phase-three-notes.txt') && detail.includes('工作区修改');
+    const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+    return (
+      changes.includes('M  phase-three-notes.txt') &&
+      changes.includes('M  batch-stage.txt') &&
+      detail.includes('已暂存') &&
+      selectedCount.includes('2 已选择')
+    );
+  });
+  const workbenchGitAfterBatchStage = await page.textContent('[data-testid="workbench-git-changes"]');
+  const workbenchGitSelectionAfterStage = await page.textContent('[data-testid="workbench-git-selection"]');
+  await page.click('[data-testid="git-stage-toggle-batch-stage.txt"]');
+  await page.waitForFunction(() => {
+    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
+    return changes.includes(' M batch-stage.txt');
   });
   const workbenchGitAfterUnstage = await page.textContent('[data-testid="workbench-git-changes"]');
-  await page.click('[data-testid="git-discard-phase-three-notes.txt"]');
+  await page.click('[data-testid="git-discard-batch-stage.txt"]');
   await page.waitForFunction(() => {
     const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
-    const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
-    return !changes.includes('phase-three-notes.txt') && detail.includes('尚未选中文件');
+    const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+    return !changes.includes('batch-stage.txt') && selectedCount.includes('1 已选择');
   });
   const workbenchGitAfterDiscard = await page.textContent('[data-testid="workbench-git-changes"]');
   const workbenchGitSelectionAfterDiscard = await page.textContent('[data-testid="workbench-git-selection"]');
+  await page.click('[data-testid="git-discard-phase-three-notes.txt"]');
+  await page.waitForFunction(() => {
+    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
+    return changes.includes('工作区干净。');
+  });
+  await page.fill('[data-testid="git-branch-create-input"]', 'feature/smoke-branch');
+  await page.click('[data-testid="git-branch-create"]');
+  await page.waitForFunction(() => {
+    const branch = document.querySelector('[data-testid="git-current-branch"]')?.textContent ?? '';
+    return branch.includes('feature/smoke-branch');
+  });
+  const gitCurrentBranchAfterCreate = await page.textContent('[data-testid="git-current-branch"]');
+  await page.selectOption('[data-testid="git-branch-select"]', initialGitBranch?.trim() ?? 'master');
+  await page.click('[data-testid="git-branch-checkout"]');
+  await page.waitForFunction(
+    (expectedBranch) => {
+      const branch = document.querySelector('[data-testid="git-current-branch"]')?.textContent ?? '';
+      return branch.includes(expectedBranch);
+    },
+    initialGitBranch?.trim() ?? 'master'
+  );
+  const gitCurrentBranchAfterCheckout = await page.textContent('[data-testid="git-current-branch"]');
+  const confirmMessages = await page.evaluate(() => globalThis.__rocConfirmMessages ?? []);
   writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged after commit\n', 'utf8');
   await page.click('[aria-label="刷新 Git 状态"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('phase-three-notes.txt') === true);
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   await page.click('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('M  phase-three-notes.txt') === true);
+  await page.waitForFunction(() => {
+    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
+    const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
+    return changes.includes('phase-three-notes.txt') && detail.includes('已暂存');
+  });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke commit');
   await page.click('[data-testid="workbench-git-commit"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
@@ -660,7 +732,11 @@ try {
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   await page.click('[data-testid="git-stage-toggle-phase-three-notes.txt"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('M  phase-three-notes.txt') === true);
+  await page.waitForFunction(() => {
+    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
+    const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
+    return changes.includes('phase-three-notes.txt') && detail.includes('已暂存');
+  });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke push commit');
   await page.click('[data-testid="workbench-git-commit"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
@@ -685,11 +761,15 @@ try {
     const frame = document.querySelector('.terminal-shell-frame');
     const badges = Array.from(document.querySelectorAll('.terminal-badge')).map((element) => element.textContent ?? '');
     const scope = document.querySelector('[data-testid="terminal-session-scope"]')?.textContent ?? '';
+    const headerNote = document.querySelector('.terminal-header-note')?.textContent ?? '';
+    const footerSegments = Array.from(document.querySelectorAll('.terminal-status-bar span')).map((element) => element.textContent?.trim() ?? '');
     if (!(frame instanceof HTMLElement)) {
       return {
         frameVisible: false,
         badgeCount: badges.length,
         scope,
+        headerNote,
+        footerSegments,
         borderRadius: '',
         boxShadow: '',
         backgroundColor: ''
@@ -700,6 +780,8 @@ try {
       frameVisible: true,
       badgeCount: badges.length,
       scope,
+      headerNote,
+      footerSegments,
       borderRadius: frameStyle.borderRadius,
       boxShadow: frameStyle.boxShadow,
       backgroundColor: frameStyle.backgroundColor
@@ -1332,18 +1414,38 @@ try {
     workbenchGitControlsVisible:
       gitCommitButtonCount === 1 &&
       gitCommitMessageCount === 1 &&
-      gitRefreshPrimaryCount + gitRefreshSecondaryCount === 1,
+      gitRefreshPrimaryCount + gitRefreshSecondaryCount === 1 &&
+      gitBatchStageCount === 1 &&
+      gitBranchSelectCount === 1,
+    workbenchGitVisualHierarchy:
+      gitHeaderEvidence.stats.length === 3 &&
+      gitHeaderEvidence.stats.some((item) => item.includes('已暂存')) &&
+      gitHeaderEvidence.stats.some((item) => item.includes('未暂存')) &&
+      gitHeaderEvidence.stats.some((item) => item.includes('总变更')) &&
+      gitHeaderEvidence.groups.length === 2 &&
+      gitHeaderEvidence.groups.includes('分支') &&
+      gitHeaderEvidence.groups.includes('提交'),
     workbenchGitSelection:
       workbenchGitSelectionText?.includes('phase-three-notes.txt') === true &&
       workbenchGitSelectionPath?.includes('phase-three-notes.txt') === true &&
       workbenchGitSelectionPreview?.includes('changed in git') === true &&
       workbenchGitSelectionAfterStage?.includes('已暂存') === true &&
-      workbenchGitSelectionAfterDiscard?.includes('尚未选中文件') === true,
+      workbenchGitSelectionAfterDiscard?.includes('phase-three-notes.txt') === true,
     workbenchGitActions:
       workbenchGitText?.includes('phase-three-notes.txt') === true &&
-      workbenchGitAfterStage?.includes('M  phase-three-notes.txt') === true &&
-      workbenchGitAfterUnstage?.includes(' M phase-three-notes.txt') === true &&
-      workbenchGitAfterDiscard?.includes('phase-three-notes.txt') !== true &&
+      workbenchGitAfterBatchStage?.includes('M  phase-three-notes.txt') === true &&
+      workbenchGitAfterBatchStage?.includes('M  batch-stage.txt') === true &&
+      workbenchGitSelectedCountAfterManual?.includes('2 已选择') === true &&
+      workbenchGitSelectedCountAfterAll?.includes('2 已选择') === true &&
+      workbenchGitAfterUnstage?.includes(' M batch-stage.txt') === true &&
+      workbenchGitAfterDiscard?.includes('batch-stage.txt') !== true &&
+      gitCurrentBranchAfterCreate?.includes('feature/smoke-branch') === true &&
+      initialGitBranch !== null &&
+      gitCurrentBranchAfterCheckout?.includes(initialGitBranch.trim()) === true &&
+      Array.isArray(confirmMessages) &&
+      confirmMessages.some((message) => String(message).includes('feature/smoke-branch')) &&
+      initialGitBranch !== null &&
+      confirmMessages.some((message) => String(message).includes(initialGitBranch.trim())) &&
       gitLastCommitText?.includes('最近提交：smoke commit') === true &&
       gitLastPushText?.includes('最近 Push：origin/') === true,
     terminalCommandRunnable:
@@ -1358,6 +1460,11 @@ try {
       terminalWorkbenchStyleEvidence.scope.includes('工作区绑定') &&
       terminalWorkbenchStyleEvidence.borderRadius !== '0px' &&
       terminalWorkbenchStyleEvidence.boxShadow !== 'none',
+    terminalWorkbenchHierarchy:
+      terminalWorkbenchStyleEvidence.headerNote.includes('工作区绑定') &&
+      terminalWorkbenchStyleEvidence.footerSegments.length === 3 &&
+      terminalWorkbenchStyleEvidence.footerSegments.some((item) => item.includes('真实持续会话') || item.includes('终端会话已退出')) &&
+      !terminalWorkbenchStyleEvidence.headerNote.includes(workspaceRoot),
     rtkMissingVisible:
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&
@@ -1582,10 +1689,12 @@ try {
     workbenchFilePreviewClickable: rendererBoundary.workbenchFilePreviewClickable,
     workbenchFileSplitterResizable: rendererBoundary.workbenchFileSplitterResizable,
     workbenchGitControlsVisible: rendererBoundary.workbenchGitControlsVisible,
+    workbenchGitVisualHierarchy: rendererBoundary.workbenchGitVisualHierarchy,
     workbenchGitActions: rendererBoundary.workbenchGitActions,
     terminalCommandRunnable: rendererBoundary.terminalCommandRunnable,
     terminalSessionPersistent: rendererBoundary.terminalSessionPersistent,
     terminalWorkbenchStyled: rendererBoundary.terminalWorkbenchStyled,
+    terminalWorkbenchHierarchy: rendererBoundary.terminalWorkbenchHierarchy,
     rtkMissingVisible: rendererBoundary.rtkMissingVisible,
     memoryCandidateVisible: rendererBoundary.memoryCandidateVisible,
     memoryConflictVisible: rendererBoundary.memoryConflictVisible,
@@ -1656,7 +1765,7 @@ try {
       terminalWorkbenchStyleEvidence,
       gitText,
       workbenchGitText,
-      workbenchGitAfterStage,
+      workbenchGitAfterBatchStage,
       workbenchGitAfterUnstage,
       workbenchWidthBefore,
       workbenchWidthAfter,

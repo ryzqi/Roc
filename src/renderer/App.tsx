@@ -34,6 +34,8 @@ import type {
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
+  GitBranchListResult,
+  GitBranchMutationResult,
   GitCommitResult,
   GitStatusChange,
   GitPushResult,
@@ -125,6 +127,7 @@ type WorkspaceData = {
   fileSearch: FileSearchResult | null;
   filePreview: FilePreviewResult | null;
   gitStatus: GitStatusResult | null;
+  gitBranches: GitBranchListResult | null;
   gitError: string | null;
   gitSelectedPath: string | null;
   gitSelectedPreview: FilePreviewResult | null;
@@ -211,6 +214,7 @@ type LoadedState = {
   fileSearch: FileSearchResult | null;
   filePreview: FilePreviewResult | null;
   gitStatus: GitStatusResult | null;
+  gitBranches: GitBranchListResult | null;
   gitError: string | null;
   gitSelectedPath: string | null;
   gitSelectedPreview: FilePreviewResult | null;
@@ -229,6 +233,7 @@ function emptyWorkspaceData(): WorkspaceData {
     fileSearch: null,
     filePreview: null,
     gitStatus: null,
+    gitBranches: null,
     gitError: null,
     gitSelectedPath: null,
     gitSelectedPreview: null,
@@ -1190,16 +1195,18 @@ export function App(): React.JSX.Element {
             </section>
           </main>
 
-          <RailOverlay
-            activeTool={activeWorkbenchTool}
-            activeView={activeView}
-            workbenchVisible={hasWorkbench}
-            onOpenToolView={(tool) => {
-              setActiveWorkbenchTool(tool);
-              setActiveView('chat');
-              setWorkbenchVisible(true);
-            }}
-          />
+          {activeView === 'chat' ? (
+            <RailOverlay
+              activeTool={activeWorkbenchTool}
+              activeView={activeView}
+              workbenchVisible={hasWorkbench}
+              onOpenToolView={(tool) => {
+                setActiveWorkbenchTool(tool);
+                setActiveView('chat');
+                setWorkbenchVisible(true);
+              }}
+            />
+          ) : null}
           {hasWorkbench ? (
             <WorkbenchPanel
               activeTool={activeWorkbenchTool}
@@ -1408,13 +1415,15 @@ async function loadWorkspaceData(workspace: Workspace | null): Promise<Workspace
       : unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath: firstFile.relativePath }));
   const fileSearch = null;
   const gitResult = await window.roc.git.status();
+  const gitBranchesResult = gitResult.ok ? await window.roc.git.listBranches() : null;
 
   return {
     fileTree,
     fileSearch,
     filePreview,
     gitStatus: gitResult.ok ? gitResult.data : null,
-    gitError: gitResult.ok ? null : gitResult.error.message,
+    gitBranches: gitBranchesResult !== null && gitBranchesResult.ok ? gitBranchesResult.data : null,
+    gitError: gitResult.ok ? (gitBranchesResult !== null && !gitBranchesResult.ok ? gitBranchesResult.error.message : null) : gitResult.error.message,
     gitSelectedPath: null,
     gitSelectedPreview: null,
     gitLastCommit: null,
@@ -2140,7 +2149,7 @@ function GitView({
   if (state.workspace !== null && loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
+        <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
         <section className="canvas-stage stage-grid" data-testid="git-view">
           <EmptyState testId="git-loading" title="Git 状态加载中" detail="正在读取当前工作区的 Git 状态。" />
         </section>
@@ -2151,7 +2160,7 @@ function GitView({
   if (state.workspace !== null && loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
+        <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
         <section className="canvas-stage stage-grid" data-testid="git-view">
           <EmptyState testId="git-load-error" title="Git 状态加载失败" detail={loadState.error ?? '未提供错误信息。'} />
         </section>
@@ -2161,12 +2170,12 @@ function GitView({
 
   return (
     <>
-      <PageHeading kicker="工作区" subtitle="查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。" title="Git 面板" />
+      <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
       <section className="canvas-stage stage-grid" data-testid="git-view">
         <div className="grid-3">
           <Metric label="变更文件" note="来自 git status" value={state.gitStatus === null ? 0 : state.gitStatus.changedFiles} />
           <Metric label="当前分支" note="本地工作区" value={state.gitStatus === null ? '无仓库' : state.gitStatus.branch} />
-          <Metric label="风险动作" note="push / 回滚需确认" tone="warn" value={2} />
+          <Metric label="风险动作" note="分支切换 / 创建后切换需确认" tone="warn" value={2} />
         </div>
         <section className="card">
           <div className="card-title">Git 状态</div>
@@ -2185,7 +2194,7 @@ function GitView({
           ) : (
             <Row
               title="当前工作区"
-              sub={`${state.gitStatus.porcelain.length} 条 porcelain 状态等待确认。`}
+              sub={`${state.gitStatus.porcelain.length} 条变更可进入批量暂存或分支联动。`}
               tag={state.gitStatus.branch}
               tone="info"
             />
@@ -3361,12 +3370,24 @@ function GitWorkbench({
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
 }): React.JSX.Element {
   const [commitMessage, setCommitMessage] = useState('');
-  const [pendingAction, setPendingAction] = useState<'refresh' | 'stage' | 'unstage' | 'discard' | 'commit' | 'push' | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    'refresh' | 'stage' | 'unstage' | 'stage-batch' | 'discard' | 'commit' | 'push' | 'branch-create' | 'branch-checkout' | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [branchDraft, setBranchDraft] = useState('');
+  const [checkoutAfterCreate, setCheckoutAfterCreate] = useState(true);
+  const [branchTarget, setBranchTarget] = useState('');
 
   const changes = state.gitStatus === null ? [] : gitStatusChanges(state.gitStatus);
   const selectedPath = findNextGitSelection(changes, state.gitSelectedPath);
   const selectedChange = selectedPath === null ? null : changes.find((change) => change.relativePath === selectedPath) ?? null;
+  const branchInfo = state.gitBranches;
+  const currentBranch = branchInfo?.currentBranch ?? state.gitStatus?.branch ?? '';
+  const selectableChanges = changes;
+  const selectedPathSet = new Set(selectedPaths);
+  const selectedCount = selectedPaths.length;
+  const allSelectableSelected = selectableChanges.length > 0 && selectableChanges.every((change) => selectedPathSet.has(change.relativePath));
 
   useEffect(() => {
     if (state.gitSelectedPath === selectedPath) {
@@ -3386,6 +3407,33 @@ function GitWorkbench({
       updateWorkspaceData({ gitSelectedPath: selectedPath });
     }
   }, [selectedPath, state.gitSelectedPath, state.gitSelectedPreview, updateWorkspaceData]);
+
+  useEffect(() => {
+    if (changes.length === 0) {
+      if (selectedPaths.length > 0) {
+        setSelectedPaths([]);
+      }
+      return;
+    }
+    const available = new Set(changes.map((change) => change.relativePath));
+    const nextSelected = selectedPaths.filter((relativePath) => available.has(relativePath));
+    if (nextSelected.length === selectedPaths.length) {
+      return;
+    }
+    setSelectedPaths(nextSelected);
+  }, [changes, selectedPaths]);
+
+  useEffect(() => {
+    if (branchInfo === null) {
+      if (branchTarget !== '') {
+        setBranchTarget('');
+      }
+      return;
+    }
+    if (branchTarget === '' || !branchInfo.branches.some((branch) => branch.name === branchTarget)) {
+      setBranchTarget(branchInfo.currentBranch);
+    }
+  }, [branchInfo, branchTarget]);
 
   async function selectGitFile(relativePath: string): Promise<void> {
     updateWorkspaceData({
@@ -3407,7 +3455,7 @@ function GitWorkbench({
     }
   }
 
-  function applyGitStatusResult(status: GitStatusResult, preferredPath: string | null): void {
+  async function applyGitStatusResult(status: GitStatusResult, preferredPath: string | null): Promise<void> {
     const nextSelectedPath = findNextGitSelection(status.changes, preferredPath);
     updateWorkspaceData({
       gitStatus: status,
@@ -3415,29 +3463,72 @@ function GitWorkbench({
       gitSelectedPath: nextSelectedPath,
       gitSelectedPreview: nextSelectedPath === preferredPath ? state.gitSelectedPreview : null
     });
-    if (nextSelectedPath !== null && nextSelectedPath !== preferredPath) {
-      void selectGitFile(nextSelectedPath);
-    }
     if (nextSelectedPath === null) {
       updateWorkspaceData({ gitSelectedPreview: null });
+      return;
     }
+    try {
+      const preview = unwrap<FilePreviewResult>('git selected file preview', await window.roc.files.preview({ relativePath: nextSelectedPath }));
+      updateWorkspaceData({
+        gitSelectedPath: nextSelectedPath,
+        gitSelectedPreview: preview
+      });
+    } catch (selectionError) {
+      setActionError(selectionError instanceof Error ? selectionError.message : '当前 Git 文件预览加载失败。');
+      updateWorkspaceData({
+        gitSelectedPath: nextSelectedPath,
+        gitSelectedPreview: null
+      });
+    }
+  }
+
+  function applyBranchMutationResult(result: GitBranchMutationResult): void {
+    updateWorkspaceData({
+      gitBranches: result.branchInfo
+    });
+  }
+
+  function toggleSelectedPath(relativePath: string, checked: boolean): void {
+    setSelectedPaths((current) => {
+      if (checked) {
+        return current.includes(relativePath) ? current : [...current, relativePath];
+      }
+      return current.filter((path) => path !== relativePath);
+    });
+  }
+
+  function selectAllGitChanges(): void {
+    setSelectedPaths(selectableChanges.map((change) => change.relativePath));
+  }
+
+  function clearSelectedGitChanges(): void {
+    setSelectedPaths([]);
+  }
+
+  async function refreshGitWorkspace(): Promise<void> {
+    const [gitStatus, branches] = await Promise.all([window.roc.git.status(), window.roc.git.listBranches()]);
+    if (gitStatus.ok && branches.ok) {
+      updateWorkspaceData({
+        gitBranches: branches.data
+      });
+      await applyGitStatusResult(gitStatus.data, state.gitSelectedPath);
+      return;
+    }
+    const message = !gitStatus.ok ? gitStatus.error.message : !branches.ok ? branches.error.message : 'Git 状态刷新失败。';
+    updateWorkspaceData({
+      gitStatus: gitStatus.ok ? gitStatus.data : null,
+      gitBranches: branches.ok ? branches.data : null,
+      gitError: message,
+      gitSelectedPath: null,
+      gitSelectedPreview: null
+    });
+    setActionError(message);
   }
 
   async function refreshGitStatus(): Promise<void> {
     setPendingAction('refresh');
     setActionError(null);
-    const gitStatus = await window.roc.git.status();
-    if (gitStatus.ok) {
-      applyGitStatusResult(gitStatus.data, state.gitSelectedPath);
-    } else {
-      updateWorkspaceData({
-        gitStatus: null,
-        gitError: gitStatus.error.message,
-        gitSelectedPath: null,
-        gitSelectedPreview: null
-      });
-      setActionError(gitStatus.error.message);
-    }
+    await refreshGitWorkspace();
     setPendingAction(null);
   }
 
@@ -3446,7 +3537,7 @@ function GitWorkbench({
     setActionError(null);
     const result = await window.roc.git.stageFile({ relativePath });
     if (result.ok) {
-      applyGitStatusResult(result.data, relativePath);
+      await applyGitStatusResult(result.data, relativePath);
     } else {
       updateWorkspaceData({ gitError: result.error.message });
       setActionError(result.error.message);
@@ -3459,7 +3550,20 @@ function GitWorkbench({
     setActionError(null);
     const result = await window.roc.git.unstageFile({ relativePath });
     if (result.ok) {
-      applyGitStatusResult(result.data, relativePath);
+      await applyGitStatusResult(result.data, relativePath);
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  async function stageSelectedFiles(): Promise<void> {
+    setPendingAction('stage-batch');
+    setActionError(null);
+    const result = await window.roc.git.stageFiles({ relativePaths: selectedPaths });
+    if (result.ok) {
+      await applyGitStatusResult(result.data, state.gitSelectedPath);
     } else {
       updateWorkspaceData({ gitError: result.error.message });
       setActionError(result.error.message);
@@ -3472,7 +3576,7 @@ function GitWorkbench({
     setActionError(null);
     const result = await window.roc.git.discardFile({ relativePath });
     if (result.ok) {
-      applyGitStatusResult(result.data, relativePath);
+      await applyGitStatusResult(result.data, relativePath);
     } else {
       updateWorkspaceData({ gitError: result.error.message });
       setActionError(result.error.message);
@@ -3492,6 +3596,7 @@ function GitWorkbench({
         gitSelectedPreview: null,
         gitLastCommit: result.data
       });
+      setSelectedPaths([]);
       setCommitMessage('');
     } else {
       updateWorkspaceData({ gitError: result.error.message });
@@ -3505,17 +3610,70 @@ function GitWorkbench({
     setActionError(null);
     const result = await window.roc.git.push();
     if (result.ok) {
-      const nextSelectedPath = findNextGitSelection(result.data.status.changes, state.gitSelectedPath);
       updateWorkspaceData({
-        gitStatus: result.data.status,
-        gitError: null,
-        gitSelectedPath: nextSelectedPath,
-        gitSelectedPreview: nextSelectedPath === state.gitSelectedPath ? state.gitSelectedPreview : null,
         gitLastPush: result.data
       });
-      if (nextSelectedPath !== null && nextSelectedPath !== state.gitSelectedPath) {
-        void selectGitFile(nextSelectedPath);
-      }
+      await applyGitStatusResult(result.data.status, state.gitSelectedPath);
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  async function createBranch(): Promise<void> {
+    const gitStatus = state.gitStatus;
+    if (gitStatus === null) {
+      return;
+    }
+    const branchName = branchDraft.trim();
+    const workspacePath = gitStatus.workspacePath;
+    if (
+      !window.confirm(
+        checkoutAfterCreate
+          ? `确认在工作区 ${workspacePath} 创建并切换到分支 ${branchName} 吗？`
+          : `确认在工作区 ${workspacePath} 创建分支 ${branchName} 吗？`
+      )
+    ) {
+      return;
+    }
+    setPendingAction('branch-create');
+    setActionError(null);
+    const result = await window.roc.git.createBranch({
+      name: branchName,
+      checkoutAfterCreate
+    });
+    if (result.ok) {
+      applyBranchMutationResult(result.data);
+      setBranchTarget(result.data.branchInfo.currentBranch);
+      setBranchDraft('');
+      await applyGitStatusResult(result.data.status, state.gitSelectedPath);
+    } else {
+      updateWorkspaceData({ gitError: result.error.message });
+      setActionError(result.error.message);
+    }
+    setPendingAction(null);
+  }
+
+  async function checkoutBranch(): Promise<void> {
+    const gitStatus = state.gitStatus;
+    if (gitStatus === null) {
+      return;
+    }
+    if (branchTarget.length === 0 || branchTarget === currentBranch) {
+      return;
+    }
+    const workspacePath = gitStatus.workspacePath;
+    if (!window.confirm(`确认在工作区 ${workspacePath} 切换到分支 ${branchTarget} 吗？`)) {
+      return;
+    }
+    setPendingAction('branch-checkout');
+    setActionError(null);
+    const result = await window.roc.git.checkoutBranch({ name: branchTarget });
+    if (result.ok) {
+      applyBranchMutationResult(result.data);
+      setBranchTarget(result.data.branchInfo.currentBranch);
+      await applyGitStatusResult(result.data.status, state.gitSelectedPath);
     } else {
       updateWorkspaceData({ gitError: result.error.message });
       setActionError(result.error.message);
@@ -3564,8 +3722,7 @@ function GitWorkbench({
   const actionBusy = pendingAction !== null;
   const selectionStatus = selectedChange === null ? null : buildGitChangeStateLabel(selectedChange);
   const selectionPreview = state.gitSelectedPreview;
-  const selectionPreviewBody =
-    selectionPreview === null ? '' : previewTextBody(selectionPreview);
+  const selectionPreviewBody = selectionPreview === null ? '' : previewTextBody(selectionPreview);
   const selectionPreviewPanel =
     selectedChange === null ? (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
@@ -3624,57 +3781,132 @@ function GitWorkbench({
     <section className="tool-panel workbench-surface workbench-surface--git">
       <div className="workbench-git">
         <header className="git-header">
-          <div className="git-branch-line">
-            <div className="git-branch-pill">
-              <GitBranch size={16} />
-              <span>{state.gitStatus.branch}</span>
+          <div className="git-primary-bar">
+            <div className="git-branch-line">
+              <div className="git-branch-pill" data-testid="git-current-branch">
+                <GitBranch size={16} />
+                <span>{currentBranch}</span>
+              </div>
+              <button
+                className="icon-ghost-button"
+                aria-label="刷新 Git 状态"
+                disabled={actionBusy}
+                type="button"
+                onClick={() => void refreshGitStatus()}
+              >
+                <RefreshCw size={16} />
+              </button>
             </div>
-            <button
-              className="icon-ghost-button"
-              aria-label="刷新 Git 状态"
-              disabled={actionBusy}
-              type="button"
-              onClick={() => void refreshGitStatus()}
-            >
-              <RefreshCw size={16} />
-            </button>
+            <div className="git-summary-line">
+              <div className="git-summary-stat">
+                <span className="git-summary-stat-label">已暂存</span>
+                <strong>{stagedCount}</strong>
+              </div>
+              <div className="git-summary-stat">
+                <span className="git-summary-stat-label">未暂存</span>
+                <strong>{dirtyCount}</strong>
+              </div>
+              <div className="git-summary-stat">
+                <span className="git-summary-stat-label">总变更</span>
+                <strong>{state.gitStatus.changedFiles}</strong>
+              </div>
+            </div>
           </div>
-          <div className="git-summary-line">
-            <span>{stagedCount} 已暂存</span>
-            <span>{dirtyCount} 未暂存</span>
-            <span>{state.gitStatus.changedFiles} 个文件变更</span>
-          </div>
-          <div className="git-scope-note">
-            当前开放真实 `commit`、`push` 与文件级回滚；不包含批量暂存、分支管理或历史提交级回退。
-          </div>
-          <div className="git-compose-row">
-            <input
-              className="git-commit-input"
-              data-testid="workbench-git-commit-message"
-              disabled={actionBusy}
-              placeholder="输入本次提交说明"
-              type="text"
-              value={commitMessage}
-              onChange={(event) => setCommitMessage(event.target.value)}
-            />
-            <button
-              className="action-button action-button--git"
-              data-testid="workbench-git-commit"
-              disabled={actionBusy}
-              type="button"
-              onClick={() => void commitChanges()}
-            >
-              提交
-            </button>
-            <button
-              className="action-button action-button--git-secondary"
-              data-testid="workbench-git-push"
-              disabled={actionBusy}
-              type="button"
-              onClick={() => void pushChanges()}
-            >
-              Push
-            </button>
+          <div className="git-control-grid">
+            <section className="git-control-group">
+              <div className="git-control-group-title">分支</div>
+              <div className="git-branch-controls" data-testid="git-branch-controls">
+                <label className="git-branch-picker">
+                  <span>本地分支</span>
+                  <select
+                    data-testid="git-branch-select"
+                    disabled={actionBusy || branchInfo === null}
+                    value={branchTarget}
+                    onChange={(event) => setBranchTarget(event.target.value)}
+                  >
+                    {(branchInfo?.branches ?? []).map((branch) => (
+                      <option key={branch.name} value={branch.name}>
+                        {branch.current ? `* ${branch.name}` : branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="action-button action-button--git-secondary"
+                  data-testid="git-branch-checkout"
+                  disabled={actionBusy || branchTarget.length === 0 || branchTarget === currentBranch}
+                  type="button"
+                  onClick={() => void checkoutBranch()}
+                >
+                  切换分支
+                </button>
+              </div>
+              <div className="git-branch-create-row">
+                <input
+                  className="git-commit-input"
+                  data-testid="git-branch-create-input"
+                  disabled={actionBusy}
+                  placeholder="输入新的本地分支名"
+                  type="text"
+                  value={branchDraft}
+                  onChange={(event) => setBranchDraft(event.target.value)}
+                />
+                <label className="git-branch-checkbox">
+                  <input
+                    checked={checkoutAfterCreate}
+                    data-testid="git-branch-create-checkout"
+                    disabled={actionBusy}
+                    type="checkbox"
+                    onChange={(event) => setCheckoutAfterCreate(event.target.checked)}
+                  />
+                  <span>创建后立即切换</span>
+                </label>
+                <button
+                  className="action-button action-button--git-secondary"
+                  data-testid="git-branch-create"
+                  disabled={actionBusy || branchDraft.trim().length === 0}
+                  type="button"
+                  onClick={() => void createBranch()}
+                >
+                  新建分支
+                </button>
+              </div>
+            </section>
+            <section className="git-control-group">
+              <div className="git-control-group-title">提交</div>
+              <div className="git-compose-row">
+                <input
+                  className="git-commit-input"
+                  data-testid="workbench-git-commit-message"
+                  disabled={actionBusy}
+                  placeholder="输入本次提交说明"
+                  type="text"
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.target.value)}
+                />
+                <button
+                  className="action-button action-button--git"
+                  data-testid="workbench-git-commit"
+                  disabled={actionBusy}
+                  type="button"
+                  onClick={() => void commitChanges()}
+                >
+                  提交
+                </button>
+                <button
+                  className="action-button action-button--git-secondary"
+                  data-testid="workbench-git-push"
+                  disabled={actionBusy}
+                  type="button"
+                  onClick={() => void pushChanges()}
+                >
+                  Push
+                </button>
+              </div>
+              <div className="git-scope-note">
+                保留真实 commit、push、批量暂存、分支切换/新建与文件级回滚；不包含分支删除、历史回退或 hunk 级暂存。
+              </div>
+            </section>
           </div>
           {actionError === null ? null : (
             <span className="inline-warning" data-testid="workbench-git-action-error">
@@ -3691,6 +3923,36 @@ function GitWorkbench({
         <section className="git-changes-pane" data-testid="workbench-git-changes">
           <div className="git-section-header">
             <span>Changes ({state.gitStatus.changedFiles})</span>
+            <span data-testid="git-selected-count">{selectedCount} 已选择</span>
+          </div>
+          <div className="git-batch-actions">
+            <button
+              className="action-button action-button--git-secondary"
+              data-testid="git-select-all"
+              disabled={actionBusy || selectableChanges.length === 0 || allSelectableSelected}
+              type="button"
+              onClick={selectAllGitChanges}
+            >
+              全选
+            </button>
+            <button
+              className="action-button action-button--git-secondary"
+              data-testid="git-clear-selection"
+              disabled={actionBusy || selectedCount === 0}
+              type="button"
+              onClick={clearSelectedGitChanges}
+            >
+              清空选择
+            </button>
+            <button
+              className="action-button action-button--git"
+              data-testid="git-stage-selected"
+              disabled={actionBusy || selectedCount === 0}
+              type="button"
+              onClick={() => void stageSelectedFiles()}
+            >
+              批量暂存
+            </button>
           </div>
           <div className="git-selection-slot">{selectionPreviewPanel}</div>
           {state.gitStatus.porcelain.length === 0 ? (
@@ -3700,6 +3962,7 @@ function GitWorkbench({
               const safeId = sanitizeTestId(change.relativePath);
               const checked = canUnstageGitChange(change);
               const active = selectedPath === change.relativePath;
+              const batchSelected = selectedPathSet.has(change.relativePath);
               return (
                 <div className={active ? 'git-change-card selected' : 'git-change-card'} key={change.porcelain}>
                   <button
@@ -3710,11 +3973,11 @@ function GitWorkbench({
                     onClick={() => void selectGitFile(change.relativePath)}
                   >
                     <input
-                      checked={checked}
-                      data-testid={`git-stage-toggle-${safeId}`}
-                      disabled={actionBusy || (!canStageGitChange(change) && !canUnstageGitChange(change))}
+                      checked={batchSelected}
+                      data-testid={`git-select-toggle-${safeId}`}
+                      disabled={actionBusy}
                       type="checkbox"
-                      onChange={() => void (checked ? unstageFile(change.relativePath) : stageFile(change.relativePath))}
+                      onChange={(event) => toggleSelectedPath(change.relativePath, event.target.checked)}
                       onClick={(event) => {
                         event.stopPropagation();
                       }}
@@ -3725,6 +3988,14 @@ function GitWorkbench({
                   <div className="git-change-side">
                     <span className="git-change-state">{buildGitChangeStateLabel(change)}</span>
                     <div className="git-change-actions">
+                      <button
+                        data-testid={`git-stage-toggle-${safeId}`}
+                        disabled={actionBusy || (!canStageGitChange(change) && !canUnstageGitChange(change))}
+                        type="button"
+                        onClick={() => void (checked ? unstageFile(change.relativePath) : stageFile(change.relativePath))}
+                      >
+                        {checked ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
+                      </button>
                       <button
                         data-testid={`git-discard-${safeId}`}
                         disabled={!canDiscardGitChange(change) || actionBusy}
@@ -3787,11 +4058,37 @@ function TerminalWorkbench({
     const terminal = new Terminal({
       convertEol: true,
       cursorBlink: true,
-      fontFamily: '"Cascadia Mono", Consolas, monospace',
-      fontSize: 12,
+      cursorStyle: 'bar',
+      cursorWidth: 2,
+      fontFamily: '"Cascadia Mono", "JetBrains Mono", Consolas, monospace',
+      fontSize: 13,
+      lineHeight: 1.35,
+      letterSpacing: 0,
+      scrollback: 5000,
+      allowProposedApi: true,
+      minimumContrastRatio: 4.5,
       theme: {
-        background: '#101726',
-        foreground: '#dce4ef'
+        background: '#0b121f',
+        foreground: '#dce4ef',
+        cursor: '#7aa7ff',
+        cursorAccent: '#0b121f',
+        selectionBackground: 'rgba(122, 167, 255, 0.28)',
+        black: '#1f2430',
+        red: '#e06c75',
+        green: '#98c379',
+        yellow: '#e5c07b',
+        blue: '#61afef',
+        magenta: '#c678dd',
+        cyan: '#56b6c2',
+        white: '#dce4ef',
+        brightBlack: '#5c6773',
+        brightRed: '#ef8a96',
+        brightGreen: '#b4d39a',
+        brightYellow: '#f0d399',
+        brightBlue: '#82c0f5',
+        brightMagenta: '#d7a3e8',
+        brightCyan: '#7fcdd5',
+        brightWhite: '#ffffff'
       }
     });
     const fitAddon = new FitAddon();
@@ -3913,18 +4210,27 @@ function TerminalWorkbench({
     );
   }
 
+  const terminalStatusLabel = state.terminalSession === null ? 'starting' : state.terminalSession.status;
+  const terminalFooterStatus = state.terminalError ?? '真实持续会话';
+  const terminalFooterTone =
+    state.terminalError !== null ? 'error' : state.terminalSession === null ? 'warn' : 'ok';
+
   return (
     <section className="tool-panel workbench-surface workbench-surface--terminal">
       <div className="workbench-terminal">
         <header className="terminal-header">
           <div className="terminal-heading">
             <div className="pane-title">Terminal</div>
-            <div className="terminal-subtitle">右侧持续会话 · {state.workspace.path}</div>
+            <div className="terminal-subtitle">{state.workspace.displayName}</div>
+            <div className="terminal-header-note">工作区绑定的持续会话，完整路径收敛到底部状态栏。</div>
           </div>
           <div className="terminal-meta" data-testid="terminal-session-scope">
-            <span className="terminal-badge">{state.terminalSession?.shell ?? 'PowerShell'}</span>
-            <span className="terminal-badge">{state.terminalSession === null ? 'starting' : state.terminalSession.status}</span>
-            <span className="terminal-badge">工作区绑定</span>
+            <span className="terminal-badge" data-role="shell">{state.terminalSession?.shell ?? 'PowerShell'}</span>
+            <span className="terminal-badge" data-role="state" data-state={terminalStatusLabel}>
+              <span className="terminal-badge-dot" aria-hidden="true" />
+              {terminalStatusLabel}
+            </span>
+            <span className="terminal-badge" data-role="bind">工作区绑定</span>
           </div>
         </header>
         <div className="terminal-shell-frame">
@@ -3938,10 +4244,10 @@ function TerminalWorkbench({
             <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
           </div>
         </div>
-        <footer className="workbench-footer-bar">
-          <span>{state.terminalSession?.cwd ?? state.workspace.path}</span>
-          <span>{state.terminalSession === null ? '建立会话中' : `${state.terminalSession.cols}×${state.terminalSession.rows}`}</span>
-          <span>{state.terminalError ?? '真实持续会话'}</span>
+        <footer className="workbench-footer-bar terminal-status-bar">
+          <span data-role="path">{state.terminalSession?.cwd ?? state.workspace.path}</span>
+          <span data-role="size">{state.terminalSession === null ? '建立会话中' : `${state.terminalSession.cols}×${state.terminalSession.rows}`}</span>
+          <span data-role="status" data-tone={terminalFooterTone}>{terminalFooterStatus}</span>
         </footer>
       </div>
     </section>

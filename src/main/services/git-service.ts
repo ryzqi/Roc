@@ -1,7 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import type { GitCommitResult, GitDiffStatResult, GitPushResult, GitStatusChange, GitStatusResult } from '../../shared/types';
+import type {
+  GitBranchListResult,
+  GitBranchMutationResult,
+  GitBranchSummary,
+  GitCommitResult,
+  GitDiffStatResult,
+  GitPushResult,
+  GitStatusChange,
+  GitStatusResult
+} from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { WorkspaceService } from './workspace-service';
 
@@ -43,6 +52,17 @@ export class GitService {
     const normalizedPath = this.normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     this.runGit(workspace.path, ['add', '--', normalizedPath]);
+    return this.getStatus();
+  }
+
+  stageFiles(relativePaths: string[]): GitStatusResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedPaths = this.normalizeGitPaths(relativePaths);
+    for (const normalizedPath of normalizedPaths) {
+      this.workspaceService.resolveInsideWorkspace(normalizedPath);
+    }
+    this.runGit(workspace.path, ['add', '--', ...normalizedPaths]);
     return this.getStatus();
   }
 
@@ -145,6 +165,50 @@ export class GitService {
     };
   }
 
+  listBranches(): GitBranchListResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    return this.readBranchList(workspace.path);
+  }
+
+  createBranch(name: string, checkoutAfterCreate: boolean): GitBranchMutationResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedBranchName = this.normalizeBranchName(name);
+    this.runGit(workspace.path, ['branch', '--list', normalizedBranchName]);
+    this.runGit(workspace.path, ['branch', normalizedBranchName]);
+    if (checkoutAfterCreate) {
+      this.runGit(workspace.path, ['checkout', normalizedBranchName]);
+    }
+    return {
+      workspacePath: workspace.path,
+      branchInfo: this.readBranchList(workspace.path),
+      status: this.getStatus()
+    };
+  }
+
+  checkoutBranch(name: string): GitBranchMutationResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedBranchName = this.normalizeBranchName(name);
+    const branchInfo = this.readBranchList(workspace.path);
+    if (!branchInfo.branches.some((branch) => branch.name === normalizedBranchName)) {
+      throw new RocDomainError({
+        code: 'git_branch_missing',
+        message: `本地分支不存在：${normalizedBranchName}`,
+        category: 'not_found',
+        retryable: false,
+        userAction: '请选择一个已存在的本地分支，或先新建分支。'
+      });
+    }
+    this.runGit(workspace.path, ['checkout', normalizedBranchName]);
+    return {
+      workspacePath: workspace.path,
+      branchInfo: this.readBranchList(workspace.path),
+      status: this.getStatus()
+    };
+  }
+
   private ensureGitRepository(workspacePath: string): void {
     if (!existsSync(join(workspacePath, '.git'))) {
       throw new RocDomainError({
@@ -199,6 +263,23 @@ export class GitService {
     return changes;
   }
 
+  private readBranchList(cwd: string): GitBranchListResult {
+    const currentBranch = this.runGit(cwd, ['branch', '--show-current']).trim();
+    const branchLines = this.runGit(cwd, ['branch', '--format=%(refname:short)'])
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const branches: GitBranchSummary[] = branchLines.map((name) => ({
+      name,
+      current: name === currentBranch
+    }));
+    return {
+      workspacePath: cwd,
+      currentBranch,
+      branches
+    };
+  }
+
   private normalizeGitPath(relativePath: string): string {
     const normalizedPath = relativePath.trim().replaceAll('\\', '/');
     if (normalizedPath.length === 0 || normalizedPath === '.') {
@@ -221,6 +302,42 @@ export class GitService {
       });
     }
     return normalizedPath;
+  }
+
+  private normalizeGitPaths(relativePaths: string[]): string[] {
+    if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
+      throw new RocDomainError({
+        code: 'git_file_paths_empty',
+        message: '批量暂存至少需要一个文件路径。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请先选择至少一个变更文件后再执行批量暂存。'
+      });
+    }
+    return relativePaths.map((relativePath) => this.normalizeGitPath(relativePath));
+  }
+
+  private normalizeBranchName(name: string): string {
+    const normalizedName = name.trim();
+    if (normalizedName.length === 0) {
+      throw new RocDomainError({
+        code: 'git_branch_name_empty',
+        message: '分支名不能为空。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请输入有效的本地分支名后再继续。'
+      });
+    }
+    if (normalizedName.includes('..') || normalizedName.includes('\\') || normalizedName.startsWith('/') || normalizedName.endsWith('/')) {
+      throw new RocDomainError({
+        code: 'git_branch_name_invalid',
+        message: '分支名不合法。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请使用 Git 允许的本地分支名。'
+      });
+    }
+    return normalizedName;
   }
 
   private readGitConfigValue(cwd: string, key: string): string {

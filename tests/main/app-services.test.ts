@@ -1375,6 +1375,40 @@ describe('Roc foundation services', () => {
     }
   });
 
+  it('stages multiple changed workspace files through GitService', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-stage-files-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      writeFileSync(join(workspaceRoot, 'todo.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt', 'todo.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed notes\n', 'utf8');
+      writeFileSync(join(workspaceRoot, 'todo.txt'), 'changed todo\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const staged = services.gitService.stageFiles(['notes.txt', 'todo.txt']);
+
+      expect(staged.porcelain).toContain('M  notes.txt');
+      expect(staged.porcelain).toContain('M  todo.txt');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports changed Git files with unquoted operation paths', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-space-'));
     const runGit = (args: string[]): void => {
@@ -1477,6 +1511,8 @@ describe('Roc foundation services', () => {
 
       expect(() => services.gitService.stageFile('../outside.txt')).toThrow(RocDomainError);
       expect(() => services.gitService.stageFile('nested/../outside.txt')).toThrow('Git 文件路径必须在当前工作区内。');
+      expect(() => services.gitService.stageFiles([])).toThrow('批量暂存至少需要一个文件路径。');
+      expect(() => services.gitService.stageFiles(['../outside.txt'])).toThrow('Git 文件路径必须在当前工作区内。');
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
@@ -1673,6 +1709,154 @@ describe('Roc foundation services', () => {
           userAction: '请先为当前分支配置远端后再 push。'
         }
       });
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('lists local branches and marks the current branch', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-branches-list-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      runGit(['branch', 'feature/git-workbench']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const branchInfo = services.gitService.listBranches();
+
+      expect(branchInfo.currentBranch.length).toBeGreaterThan(0);
+      expect(branchInfo.branches).toContainEqual(
+        expect.objectContaining({
+          name: branchInfo.currentBranch,
+          current: true
+        })
+      );
+      expect(branchInfo.branches).toContainEqual(
+        expect.objectContaining({
+          name: 'feature/git-workbench',
+          current: false
+        })
+      );
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('creates a local branch and optionally checks it out', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-branch-create-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const created = services.gitService.createBranch('feature/batch-stage', true);
+
+      expect(created.branchInfo.currentBranch).toBe('feature/batch-stage');
+      expect(created.branchInfo.branches).toContainEqual(
+        expect.objectContaining({
+          name: 'feature/batch-stage',
+          current: true
+        })
+      );
+      expect(created.status.branch).toBe('feature/batch-stage');
+      expect(runGit(['branch', '--show-current']).trim()).toBe('feature/batch-stage');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('checks out an existing local branch', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-branch-checkout-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      runGit(['branch', 'feature/switch-target']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const switched = services.gitService.checkoutBranch('feature/switch-target');
+
+      expect(switched.branchInfo.currentBranch).toBe('feature/switch-target');
+      expect(switched.status.branch).toBe('feature/switch-target');
+      expect(runGit(['branch', '--show-current']).trim()).toBe('feature/switch-target');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails to create a branch when the local branch already exists', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-branch-duplicate-'));
+    const runGit = (args: string[]): string => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+      return result.stdout;
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      runGit(['branch', 'feature/existing']);
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      expect(() => services.gitService.createBranch('feature/existing', false)).toThrow(RocDomainError);
+      expect(() => services.gitService.createBranch('feature/existing', false)).toThrow(/already exists|已存在/u);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

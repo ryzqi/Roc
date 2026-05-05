@@ -100,10 +100,14 @@ const rocApi: RocPreloadApi = {
     status: () => ipcRenderer.invoke(ipcChannels.gitStatus),
     diffStat: () => ipcRenderer.invoke(ipcChannels.gitDiffStat),
     stageFile: (request) => ipcRenderer.invoke(ipcChannels.gitStageFile, request),
+    stageFiles: (request) => ipcRenderer.invoke(ipcChannels.gitStageFiles, request),
     unstageFile: (request) => ipcRenderer.invoke(ipcChannels.gitUnstageFile, request),
     discardFile: (request) => ipcRenderer.invoke(ipcChannels.gitDiscardFile, request),
     commit: (request) => ipcRenderer.invoke(ipcChannels.gitCommit, request),
-    push: () => ipcRenderer.invoke(ipcChannels.gitPush)
+    push: () => ipcRenderer.invoke(ipcChannels.gitPush),
+    listBranches: () => ipcRenderer.invoke(ipcChannels.gitListBranches),
+    createBranch: (request) => ipcRenderer.invoke(ipcChannels.gitCreateBranch, request),
+    checkoutBranch: (request) => ipcRenderer.invoke(ipcChannels.gitCheckoutBranch, request)
   },
   terminal: {
     createSession: (request) => ipcRenderer.invoke(ipcChannels.terminalCreateSession, request),

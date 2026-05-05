@@ -176,8 +176,38 @@ export type GitFileOperationRequest = {
   relativePath: string;
 };
 
+export type GitBatchFileOperationRequest = {
+  relativePaths: string[];
+};
+
 export type GitCommitRequest = {
   message: string;
+};
+
+export type GitBranchSummary = {
+  name: string;
+  current: boolean;
+};
+
+export type GitBranchListResult = {
+  workspacePath: string;
+  currentBranch: string;
+  branches: GitBranchSummary[];
+};
+
+export type GitCreateBranchRequest = {
+  name: string;
+  checkoutAfterCreate: boolean;
+};
+
+export type GitCheckoutBranchRequest = {
+  name: string;
+};
+
+export type GitBranchMutationResult = {
+  workspacePath: string;
+  branchInfo: GitBranchListResult;
+  status: GitStatusResult;
 };
 
 export type GitCommitResult = {

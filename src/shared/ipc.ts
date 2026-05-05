@@ -19,8 +19,13 @@ import type {
   FileTreeResult,
   FileWriteResult,
   FileWriteTextRequest,
+  GitBatchFileOperationRequest,
+  GitBranchListResult,
+  GitBranchMutationResult,
+  GitCheckoutBranchRequest,
   GitCommitRequest,
   GitCommitResult,
+  GitCreateBranchRequest,
   GitDiffStatResult,
   GitFileOperationRequest,
   GitPushResult,
@@ -128,10 +133,14 @@ export const ipcChannels = {
   gitStatus: 'roc:git:status',
   gitDiffStat: 'roc:git:diff-stat',
   gitStageFile: 'roc:git:stage-file',
+  gitStageFiles: 'roc:git:stage-files',
   gitUnstageFile: 'roc:git:unstage-file',
   gitDiscardFile: 'roc:git:discard-file',
   gitCommit: 'roc:git:commit',
   gitPush: 'roc:git:push',
+  gitListBranches: 'roc:git:list-branches',
+  gitCreateBranch: 'roc:git:create-branch',
+  gitCheckoutBranch: 'roc:git:checkout-branch',
   terminalCreateSession: 'roc:terminal:create-session',
   terminalWriteInput: 'roc:terminal:write-input',
   terminalResize: 'roc:terminal:resize',
@@ -237,10 +246,14 @@ export type RocPreloadApi = {
     status: () => Promise<IpcResult<GitStatusResult>>;
     diffStat: () => Promise<IpcResult<GitDiffStatResult>>;
     stageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
+    stageFiles: (request: GitBatchFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     unstageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     discardFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     commit: (request: GitCommitRequest) => Promise<IpcResult<GitCommitResult>>;
     push: () => Promise<IpcResult<GitPushResult>>;
+    listBranches: () => Promise<IpcResult<GitBranchListResult>>;
+    createBranch: (request: GitCreateBranchRequest) => Promise<IpcResult<GitBranchMutationResult>>;
+    checkoutBranch: (request: GitCheckoutBranchRequest) => Promise<IpcResult<GitBranchMutationResult>>;
   };
   terminal: {
     createSession: (request: TerminalSessionCreateRequest) => Promise<IpcResult<TerminalSessionSnapshot>>;

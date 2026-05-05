@@ -432,7 +432,7 @@ button {
 }
 
 .workspace-shell--with-workbench {
-  grid-template-columns: minmax(0, 1fr) 56px var(--workbench-width, 560px);
+  grid-template-columns: minmax(0, 1fr) var(--workbench-width, 560px);
 }
 
 .workspace-shell--chat {
@@ -1741,10 +1741,17 @@ button.model-pill {
 
 .git-header {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   padding: 18px 18px 14px;
   border-bottom: 1px solid rgba(226, 232, 241, 0.96);
-  background: rgba(250, 252, 255, 0.98);
+  background:
+    linear-gradient(180deg, rgba(252, 254, 255, 0.98), rgba(247, 250, 254, 0.96)),
+    rgba(250, 252, 255, 0.98);
+}
+
+.git-primary-bar {
+  display: grid;
+  gap: 12px;
 }
 
 .git-branch-line {
@@ -1758,25 +1765,120 @@ button.model-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(217, 226, 238, 0.96);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
   color: #304865;
   font-size: 14px;
   font-weight: 600;
 }
 
+.git-branch-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .git-summary-line {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.git-summary-stat {
+  display: grid;
+  gap: 4px;
+  min-height: 68px;
+  padding: 12px 14px;
+  border: 1px solid rgba(220, 228, 239, 0.96);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.git-summary-stat-label {
+  color: #7c8ea8;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.git-summary-stat strong {
+  color: #22364e;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.git-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.git-control-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(221, 229, 240, 0.96);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.git-control-group-title {
+  color: #506784;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.git-branch-controls,
+.git-branch-create-row,
+.git-batch-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
-  color: #7485a1;
-  font-size: 11px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.git-branch-picker,
+.git-branch-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f728f;
+  font-size: 12px;
+}
+
+.git-branch-picker select {
+  min-height: 38px;
+  min-width: 188px;
+  padding: 0 12px;
+  border: 1px solid rgba(213, 223, 236, 0.98);
+  border-radius: 14px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.98);
+  color: #22354f;
+  font-size: 13px;
+}
+
+.git-branch-picker select:focus {
+  border-color: rgba(98, 132, 188, 0.96);
+  box-shadow: 0 0 0 3px rgba(98, 132, 188, 0.12);
+}
+
+.git-branch-checkbox input[type='checkbox'] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: #4f79b9;
 }
 
 .git-scope-note {
-  padding: 10px 12px;
-  border: 1px solid rgba(223, 230, 240, 0.94);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #617492;
+  padding: 0;
+  color: #6a7c96;
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1818,6 +1920,7 @@ button.model-pill {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  padding-top: 2px;
   color: #6b7f9b;
   font-size: 11px;
 }
@@ -1830,7 +1933,7 @@ button.model-pill {
 }
 
 .git-section-header {
-  min-height: 34px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1853,6 +1956,11 @@ button.model-pill {
   border: 1px solid rgba(222, 229, 239, 0.96);
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(249, 251, 255, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.git-selection-slot .git-selection-empty,
+.git-selection-slot .git-selection-panel {
+  box-shadow: 0 12px 30px rgba(34, 53, 82, 0.07);
 }
 
 .git-selection-header {
@@ -1914,16 +2022,25 @@ button.model-pill {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(235, 240, 246, 0.96);
+  padding: 12px 14px;
+  border: 1px solid rgba(231, 237, 245, 0.96);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
 }
 
 .git-change-card.selected {
-  background: rgba(242, 247, 253, 0.9);
+  border-color: rgba(168, 190, 223, 0.98);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(247, 250, 255, 0.98));
+  box-shadow: 0 12px 28px rgba(46, 83, 139, 0.1);
+}
+
+.git-change-card:has(input[type='checkbox']:checked):not(.selected) {
+  border-color: rgba(188, 205, 229, 0.96);
+  background: rgba(245, 249, 255, 0.92);
 }
 
 .git-change-card:last-child {
-  border-bottom: 0;
+  border-bottom: 1px solid rgba(231, 237, 245, 0.96);
 }
 
 .git-change-meta {
@@ -1990,6 +2107,12 @@ button.model-pill {
   color: #5d7394;
 }
 
+.git-batch-actions .action-button,
+.git-branch-controls .action-button,
+.git-branch-create-row .action-button {
+  min-width: 92px;
+}
+
 .git-change-actions button:disabled {
   opacity: 0.46;
 }
@@ -1998,27 +2121,37 @@ button.model-pill {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   background:
-    radial-gradient(circle at top left, rgba(104, 136, 189, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(243, 247, 252, 0.98), rgba(248, 250, 253, 0.95));
+    radial-gradient(circle at top left, rgba(104, 136, 189, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(27, 52, 94, 0.1), transparent 24%),
+    linear-gradient(180deg, rgba(240, 245, 252, 0.98), rgba(247, 250, 254, 0.95));
 }
 
 .terminal-header {
-  min-height: 58px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
+  gap: 16px;
+  padding: 14px 18px 12px;
   border-bottom: 1px solid rgba(226, 232, 241, 0.96);
-  background: rgba(250, 252, 255, 0.98);
+  background: rgba(248, 251, 255, 0.92);
 }
 
 .terminal-heading {
   min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .terminal-subtitle {
-  color: #6f819d;
+  color: #304865;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.terminal-header-note {
+  color: #7285a2;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2047,13 +2180,13 @@ button.model-pill {
 
 .terminal-shell-frame {
   min-height: 0;
-  margin: 18px 18px 14px;
+  margin: 14px 18px 12px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid rgba(22, 30, 45, 0.76);
-  border-radius: 22px;
+  border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 24px 56px rgba(16, 23, 38, 0.24);
+  box-shadow: 0 28px 64px rgba(16, 23, 38, 0.26);
   background: linear-gradient(180deg, rgba(17, 25, 41, 0.98), rgba(10, 17, 31, 0.98));
 }
 
@@ -2092,6 +2225,10 @@ button.model-pill {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.03em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terminal-xterm-shell {
@@ -2106,11 +2243,207 @@ button.model-pill {
   width: 100%;
   height: 100%;
   min-height: 420px;
-  padding: 16px 18px;
+  padding: 18px 20px;
 }
 
 .terminal-xterm-host .xterm {
   height: 100%;
+}
+
+.terminal-status-bar {
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+  border-top: 0;
+  color: #647894;
+}
+
+.terminal-status-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === 终端页面美化（基于既有 .terminal-* 增强） === */
+
+.terminal-header {
+  background:
+    linear-gradient(180deg, rgba(252, 254, 255, 0.96), rgba(243, 247, 253, 0.92)),
+    rgba(248, 251, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.terminal-badge {
+  position: relative;
+  gap: 6px;
+  padding: 0 11px;
+  letter-spacing: 0.02em;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.terminal-badge[data-role='shell'] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(243, 247, 253, 0.94));
+  color: #44597a;
+  border-color: rgba(208, 220, 238, 0.96);
+}
+
+.terminal-badge[data-role='bind'] {
+  color: #3d6cb0;
+  background: rgba(232, 240, 254, 0.85);
+  border-color: rgba(167, 195, 238, 0.95);
+}
+
+.terminal-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+  flex: 0 0 auto;
+  animation: terminal-badge-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes terminal-badge-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.18); opacity: 0.55; }
+}
+
+.terminal-badge[data-role='state'] {
+  font-weight: 600;
+}
+
+.terminal-badge[data-role='state'][data-state='running'] {
+  color: #1f7a4d;
+  background: rgba(213, 245, 226, 0.85);
+  border-color: rgba(122, 200, 158, 0.9);
+}
+
+.terminal-badge[data-role='state'][data-state='starting'],
+.terminal-badge[data-role='state'][data-state='spawning'] {
+  color: #8a5b16;
+  background: rgba(253, 240, 211, 0.92);
+  border-color: rgba(228, 192, 122, 0.96);
+}
+
+.terminal-badge[data-role='state'][data-state='exited'],
+.terminal-badge[data-role='state'][data-state='error'],
+.terminal-badge[data-role='state'][data-state='closed'] {
+  color: #a93434;
+  background: rgba(254, 224, 224, 0.92);
+  border-color: rgba(232, 152, 152, 0.96);
+}
+
+.terminal-badge[data-role='state'][data-state='exited'] .terminal-badge-dot,
+.terminal-badge[data-role='state'][data-state='error'] .terminal-badge-dot,
+.terminal-badge[data-role='state'][data-state='closed'] .terminal-badge-dot {
+  animation: none;
+  opacity: 0.85;
+}
+
+.terminal-shell-frame {
+  position: relative;
+  animation: terminal-frame-enter 280ms ease-out both;
+  box-shadow:
+    0 28px 64px rgba(16, 23, 38, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.terminal-shell-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 24%);
+}
+
+@keyframes terminal-frame-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.terminal-dot {
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.terminal-shell-topline:hover .terminal-dot {
+  filter: brightness(1.18);
+}
+
+.terminal-shell-title {
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+
+.terminal-xterm-shell {
+  position: relative;
+}
+
+.terminal-xterm-shell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(122, 167, 255, 0.18);
+  border-radius: 999px;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(122, 167, 255, 0.36);
+}
+
+.terminal-status-bar span[data-role='path'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-status-bar span[data-role='path']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #7aa7ff;
+  flex: 0 0 auto;
+}
+
+.terminal-status-bar span[data-role='size'] {
+  color: #768ba8;
+  font-variant-numeric: tabular-nums;
+}
+
+.terminal-status-bar span[data-role='status'] {
+  font-weight: 600;
+}
+
+.terminal-status-bar span[data-role='status'][data-tone='ok'] {
+  color: #2f8a5d;
+}
+
+.terminal-status-bar span[data-role='status'][data-tone='warn'] {
+  color: #b07a1e;
+}
+
+.terminal-status-bar span[data-role='status'][data-tone='error'] {
+  color: #c34d4d;
 }
 
 .tab-row {
@@ -2568,6 +2901,39 @@ button.model-pill {
   .workbench-files {
     grid-template-columns: 1fr;
     grid-template-rows: 260px minmax(0, 1fr);
+  }
+
+  .git-control-grid,
+  .git-summary-line {
+    grid-template-columns: 1fr;
+  }
+
+  .git-compose-row {
+    grid-template-columns: 1fr;
+  }
+
+  .git-change-card,
+  .terminal-header,
+  .terminal-status-bar {
+    align-items: flex-start;
+  }
+
+  .git-change-card,
+  .git-change-side {
+    flex-direction: column;
+  }
+
+  .git-change-side {
+    align-items: flex-start;
+  }
+
+  .terminal-header,
+  .terminal-status-bar {
+    flex-direction: column;
+  }
+
+  .terminal-meta {
+    justify-content: flex-start;
   }
 
   .app-shell .mini-window,
