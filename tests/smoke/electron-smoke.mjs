@@ -761,14 +761,14 @@ try {
     const frame = document.querySelector('.terminal-shell-frame');
     const badges = Array.from(document.querySelectorAll('.terminal-badge')).map((element) => element.textContent ?? '');
     const scope = document.querySelector('[data-testid="terminal-session-scope"]')?.textContent ?? '';
-    const headerNote = document.querySelector('.terminal-header-note')?.textContent ?? '';
+    const terminalSubtitle = document.querySelector('.terminal-subtitle')?.textContent ?? '';
     const footerSegments = Array.from(document.querySelectorAll('.terminal-status-bar span')).map((element) => element.textContent?.trim() ?? '');
     if (!(frame instanceof HTMLElement)) {
       return {
         frameVisible: false,
         badgeCount: badges.length,
         scope,
-        headerNote,
+        terminalSubtitle,
         footerSegments,
         borderRadius: '',
         boxShadow: '',
@@ -780,7 +780,7 @@ try {
       frameVisible: true,
       badgeCount: badges.length,
       scope,
-      headerNote,
+      terminalSubtitle,
       footerSegments,
       borderRadius: frameStyle.borderRadius,
       boxShadow: frameStyle.boxShadow,
@@ -1461,10 +1461,10 @@ try {
       terminalWorkbenchStyleEvidence.borderRadius !== '0px' &&
       terminalWorkbenchStyleEvidence.boxShadow !== 'none',
     terminalWorkbenchHierarchy:
-      terminalWorkbenchStyleEvidence.headerNote.includes('工作区绑定') &&
+      terminalWorkbenchStyleEvidence.terminalSubtitle.length > 0 &&
       terminalWorkbenchStyleEvidence.footerSegments.length === 3 &&
       terminalWorkbenchStyleEvidence.footerSegments.some((item) => item.includes('真实持续会话') || item.includes('终端会话已退出')) &&
-      !terminalWorkbenchStyleEvidence.headerNote.includes(workspaceRoot),
+      !terminalWorkbenchStyleEvidence.terminalSubtitle.includes(workspaceRoot),
     rtkMissingVisible:
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&

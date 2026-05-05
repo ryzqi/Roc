@@ -115,7 +115,6 @@ type HistoryRecord = {
 
 type PageMeta = {
   title: string;
-  subtitle: string;
   topMeta: string;
   pageLabel: string;
 };
@@ -338,73 +337,61 @@ const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: PreviewIc
 const PAGE_META: Record<MainViewId, PageMeta> = {
   chat: {
     title: '聊天主页',
-    subtitle: '聊天是入口；涉及执行、文件、Git、终端、网页或长期任务时升级为可追踪任务会话。',
     topMeta: '未选择工作区',
     pageLabel: '主会话'
   },
   tasks: {
     title: '任务工作台',
-    subtitle: '后台任务、定时任务、执行轮次、追加指令、恢复点和验证结果读取同一任务状态。',
     topMeta: '任务状态',
     pageLabel: '任务控制'
   },
   workspace: {
     title: '工作区文件',
-    subtitle: '工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。',
     topMeta: '文件视图',
     pageLabel: '工作区'
   },
   git: {
     title: 'Git 面板',
-    subtitle: '查看状态、diff、历史和提交；push、回滚、批量暂存等动作进入确认策略。',
     topMeta: 'Git 状态',
     pageLabel: '工作区'
   },
   terminal: {
     title: '嵌入式终端',
-    subtitle: '终端绑定当前工作区，命令目的、目录、输出、退出状态和风险级别保持可见。',
     topMeta: '终端会话',
     pageLabel: '工作区'
   },
   preview: {
     title: '文件预览',
-    subtitle: '文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。',
     topMeta: '预览面板',
     pageLabel: '工作区'
   },
   mcp: {
     title: 'MCP',
-    subtitle: '统一查看 MCP 服务、MCP 工具、健康、授权和最近调用，异常项继续进入 Doctor 与任务轨迹。',
     topMeta: 'MCP 清单',
     pageLabel: '控制面'
   },
   skills: {
     title: 'Skill',
-    subtitle: '统一管理 Skill 能力包、触发条件、依赖、启停状态与最近命中记录。',
     topMeta: 'Skill 清单',
     pageLabel: '控制面'
   },
   memory: {
     title: '记忆中心',
-    subtitle: '查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。',
     topMeta: '记忆状态',
     pageLabel: '控制面'
   },
   settings: {
     title: '设置',
-    subtitle: '设置作为一级页面，修改先进入草稿态；高影响配置保存前展示影响范围。',
     topMeta: '设置',
     pageLabel: '控制面'
   },
   doctor: {
     title: 'Doctor',
-    subtitle: '检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。',
     topMeta: '诊断摘要',
     pageLabel: '控制面'
   },
   diagnostics: {
     title: '任务诊断包',
-    subtitle: '失败任务提供输入、计划、执行轮次、工具调用、关键日志、恢复点和未完成事项。',
     topMeta: '失败任务',
     pageLabel: '控制面'
   }
@@ -1907,7 +1894,7 @@ function TasksView({
   const recentEvents = state.taskSnapshot.recentEvents.slice(0, 4);
   return (
     <>
-      <PageHeading kicker="任务控制" subtitle="后台任务、定时任务、执行轮次、追加指令、恢复点和验证结果读取同一任务状态。" title="任务工作台" />
+      <PageHeading kicker="任务控制" title="任务工作台" />
       <section className="canvas-stage stage-grid" data-testid="tasks-view">
         <div className="grid-3" data-testid="background-task-summary">
           <Metric
@@ -1948,7 +1935,7 @@ function TasksView({
         </div>
         <div className="grid-2">
           {backgroundTask === null ? (
-            <EmptyState testId="background-task-controls" title="暂无后台任务" detail="当前没有后台任务或定时执行。" />
+            <EmptyState testId="background-task-controls" title="暂无后台任务" />
           ) : (
             <section className="card" data-testid="background-task-controls">
               <div className="card-title">
@@ -2029,7 +2016,7 @@ function WorkspaceView({
   if (state.workspace === null) {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+        <PageHeading kicker="工作区" title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
           <EmptyState
             action={
@@ -2039,7 +2026,6 @@ function WorkspaceView({
             }
             testId="workspace-empty"
             title="未选择工作区"
-            detail="请选择默认工作区后再读取文件、Git 和终端状态。"
           />
           <WorkspaceStatusPanels state={state} />
         </section>
@@ -2050,9 +2036,9 @@ function WorkspaceView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+        <PageHeading kicker="工作区" title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
-          <EmptyState testId="workspace-loading" title="工作区数据加载中" detail="正在读取文件树、首个预览和 Git 状态。" />
+          <EmptyState testId="workspace-loading" title="工作区数据加载中" tone="loading" />
           <WorkspaceStatusPanels state={state} />
         </section>
       </>
@@ -2062,9 +2048,9 @@ function WorkspaceView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+        <PageHeading kicker="工作区" title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
-          <EmptyState testId="workspace-load-error" title="工作区数据加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="workspace-load-error" title="工作区数据加载失败" tone="error" />
           <WorkspaceStatusPanels state={state} />
         </section>
       </>
@@ -2073,7 +2059,7 @@ function WorkspaceView({
 
   return (
     <>
-      <PageHeading kicker="工作区" subtitle="工作区是默认执行边界；文件浏览、搜索、预览、编辑和高风险操作都进入任务轨迹。" title="工作区文件" />
+      <PageHeading kicker="工作区" title="工作区文件" />
       <section className="canvas-stage stage-grid" data-testid="workspace-view">
         <div className="split">
           <section className="file-tree file-tree-surface card" data-testid="file-tree">
@@ -2149,9 +2135,9 @@ function GitView({
   if (state.workspace !== null && loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
+        <PageHeading kicker="工作区" title="Git 面板" />
         <section className="canvas-stage stage-grid" data-testid="git-view">
-          <EmptyState testId="git-loading" title="Git 状态加载中" detail="正在读取当前工作区的 Git 状态。" />
+          <EmptyState testId="git-loading" title="Git 状态加载中" tone="loading" />
         </section>
       </>
     );
@@ -2160,9 +2146,9 @@ function GitView({
   if (state.workspace !== null && loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
+        <PageHeading kicker="工作区" title="Git 面板" />
         <section className="canvas-stage stage-grid" data-testid="git-view">
-          <EmptyState testId="git-load-error" title="Git 状态加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="git-load-error" title="Git 状态加载失败" tone="error" />
         </section>
       </>
     );
@@ -2170,7 +2156,7 @@ function GitView({
 
   return (
     <>
-      <PageHeading kicker="工作区" subtitle="查看状态、分支、提交与批量暂存；分支切换和创建后切换进入显式确认。" title="Git 面板" />
+      <PageHeading kicker="工作区" title="Git 面板" />
       <section className="canvas-stage stage-grid" data-testid="git-view">
         <div className="grid-3">
           <Metric label="变更文件" note="来自 git status" value={state.gitStatus === null ? 0 : state.gitStatus.changedFiles} />
@@ -2208,7 +2194,7 @@ function GitView({
 function TerminalView({ state }: { state: LoadedState }): React.JSX.Element {
   return (
     <>
-      <PageHeading kicker="工作区" subtitle="终端绑定当前工作区，命令目的、目录、输出、退出状态和风险级别保持可见。" title="嵌入式终端" />
+      <PageHeading kicker="工作区" title="嵌入式终端" />
       <section className="canvas-stage stage-grid" data-testid="terminal-view">
         <section className="card">
           <div className="card-title">
@@ -2240,9 +2226,9 @@ function PreviewView({
   if (state.workspace !== null && loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
+        <PageHeading kicker="工作区" title="文件预览" />
         <section className="canvas-stage stage-grid" data-testid="preview-view">
-          <EmptyState testId="preview-loading" title="文件预览加载中" detail="正在准备首个可预览文件和搜索上下文。" />
+          <EmptyState testId="preview-loading" title="文件预览加载中" tone="loading" />
         </section>
       </>
     );
@@ -2251,9 +2237,9 @@ function PreviewView({
   if (state.workspace !== null && loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
+        <PageHeading kicker="工作区" title="文件预览" />
         <section className="canvas-stage stage-grid" data-testid="preview-view">
-          <EmptyState testId="preview-load-error" title="文件预览加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="preview-load-error" title="文件预览加载失败" tone="error" />
         </section>
       </>
     );
@@ -2276,7 +2262,7 @@ function PreviewView({
 
   return (
     <>
-      <PageHeading kicker="工作区" subtitle="文本、代码、Markdown、PDF、Office 和图片按需加载，大文件有明确限制和提示。" title="文件预览" />
+      <PageHeading kicker="工作区" title="文件预览" />
       <section className="canvas-stage stage-grid" data-testid="preview-view">
         <div className="grid-2">
           <section className="card">
@@ -2330,7 +2316,7 @@ function McpView({
 }): React.JSX.Element {
   return (
     <>
-      <PageHeading kicker="控制面" subtitle="统一查看 MCP 服务、MCP 工具、健康、授权和最近调用，异常项继续进入 Doctor 与任务轨迹。" title="MCP" />
+      <PageHeading kicker="控制面" title="MCP" />
       <section className="canvas-stage stage-grid" data-testid="mcp-view">
         <div className="grid-3">
           <Metric label="MCP 服务" note={`${state.mcpServers.filter((server) => server.enabled).length} 个已启用`} value={state.mcpServers.length} />
@@ -2353,7 +2339,7 @@ function SkillsView({
 }): React.JSX.Element {
   return (
     <>
-      <PageHeading kicker="控制面" subtitle="统一管理 Skill 能力包、触发条件、依赖、启停状态与最近命中记录。" title="Skill" />
+      <PageHeading kicker="控制面" title="Skill" />
       <section className="canvas-stage stage-grid" data-testid="skills-view">
         <div className="grid-3">
           <Metric label="Skill 总数" note={`${state.skills.filter((skill) => skill.enabled).length} 个已启用`} value={state.skills.length} />
@@ -2517,9 +2503,9 @@ function MemoryView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。" title="记忆中心" />
+        <PageHeading kicker="控制面" title="记忆中心" />
         <section className="canvas-stage stage-grid" data-testid="memory-view">
-          <EmptyState testId="memory-loading" title="记忆中心加载中" detail="正在读取记忆状态、候选、冲突和召回结果。" />
+          <EmptyState testId="memory-loading" title="记忆中心加载中" tone="loading" />
         </section>
       </>
     );
@@ -2528,9 +2514,9 @@ function MemoryView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。" title="记忆中心" />
+        <PageHeading kicker="控制面" title="记忆中心" />
         <section className="canvas-stage stage-grid" data-testid="memory-view">
-          <EmptyState testId="memory-load-error" title="记忆中心加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="memory-load-error" title="记忆中心加载失败" tone="error" />
         </section>
       </>
     );
@@ -2584,7 +2570,6 @@ function MemoryView({
       <PageHeading
         flags={<StatusPill label="真相源" tone="ok" value={state.memoryStatus.truthSource} />}
         kicker="控制面"
-        subtitle="查看、搜索、筛选、编辑、合并、禁用、恢复、删除、归档和手动触发整理。"
         title="记忆中心"
       />
       <section className="canvas-stage stage-grid" data-testid="memory-view">
@@ -2646,8 +2631,7 @@ function MemoryView({
             </div>
             <section className="card">
               <div className="card-title">后台静默整理</div>
-              <Row title="默认行为" sub="候选、冲突与升降级由模型后台静默处理。" tag="自动" tone="ok" />
-              <p className="memory-side-note">这里只保留状态提示，不再展示一整块后台整理结果。</p>
+              <Row title="默认行为" tag="自动" tone="ok" />
             </section>
           </aside>
           <section className="memory-library-workspace">
@@ -2655,11 +2639,9 @@ function MemoryView({
               <div className="memory-editor-topline">
                 <div>
                   <div className="memory-editor-title">{selectedRecordTitle}</div>
-                  <div className="memory-editor-subtitle">
-                    {selectedRecord === null
-                      ? '右侧编辑台是这页主工作区，正文预览、修改、元信息和高风险操作都集中在这里。'
-                      : `当前选中：${selectedRecord.layer} / ${selectedRecord.scope}。右侧编辑台是这页主工作区，正文预览、修改、元信息和高风险操作都集中在这里。`}
-                  </div>
+                  {selectedRecord === null ? null : (
+                    <div className="memory-editor-subtitle">{`${selectedRecord.layer} / ${selectedRecord.scope}`}</div>
+                  )}
                 </div>
                 <CompactStatusPill tone={state.memoryStatus.degradedReason === undefined ? 'info' : 'warn'} value={state.memoryStatus.degradedReason === undefined ? '当前条目已同步' : '索引降级'} />
               </div>
@@ -2791,7 +2773,7 @@ function SettingsView({
         : state.providerTestStatus.status;
   return (
     <>
-      <PageHeading kicker="控制面" subtitle="设置作为一级页面，修改先进入草稿态；高影响配置保存前展示影响范围。" title="设置" />
+      <PageHeading kicker="控制面" title="设置" />
       <section className="canvas-stage stage-grid" data-testid="settings-view">
         <div className="split">
           <div className="settings-list">
@@ -2880,9 +2862,9 @@ function DoctorView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
+        <PageHeading kicker="控制面" title="Doctor" />
         <section className="canvas-stage stage-grid" data-testid="doctor-view">
-          <EmptyState testId="doctor-loading" title="Doctor 检查中" detail="正在运行健康检查并汇总诊断结果。" />
+          <EmptyState testId="doctor-loading" title="Doctor 检查中" tone="loading" />
         </section>
       </>
     );
@@ -2891,9 +2873,9 @@ function DoctorView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
+        <PageHeading kicker="控制面" title="Doctor" />
         <section className="canvas-stage stage-grid" data-testid="doctor-view">
-          <EmptyState testId="doctor-load-error" title="Doctor 加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="doctor-load-error" title="Doctor 加载失败" tone="error" />
         </section>
       </>
     );
@@ -2901,7 +2883,7 @@ function DoctorView({
 
   return (
     <>
-      <PageHeading kicker="控制面" subtitle="检查模型、工具、MCP、Skill、工作区、记忆索引、后台队列、托盘和恢复点。" title="Doctor" />
+      <PageHeading kicker="控制面" title="Doctor" />
       <section className="canvas-stage stage-grid" data-testid="doctor-view">
         <div className="grid-3">
           <Metric label="通过" note="检查项 pass" tone="ok" value={state.doctor.summary.pass} />
@@ -2938,9 +2920,9 @@ function DiagnosticsView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
+        <PageHeading kicker="控制面" title="任务诊断包" />
         <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
-          <EmptyState testId="diagnostics-loading" title="诊断数据加载中" detail="正在生成诊断包并采集性能样本。" />
+          <EmptyState testId="diagnostics-loading" title="诊断数据加载中" tone="loading" />
         </section>
       </>
     );
@@ -2949,9 +2931,9 @@ function DiagnosticsView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
+        <PageHeading kicker="控制面" title="任务诊断包" />
         <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
-          <EmptyState testId="diagnostics-load-error" title="诊断数据加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+          <EmptyState testId="diagnostics-load-error" title="诊断数据加载失败" tone="error" />
         </section>
       </>
     );
@@ -2960,7 +2942,7 @@ function DiagnosticsView({
   const failedEvents = state.taskSnapshot.recentEvents.filter((event) => event.type === 'error').slice(0, 3);
   return (
     <>
-      <PageHeading kicker="控制面" subtitle="失败任务、关键日志、脱敏包和性能采样集中展示。" title="任务诊断包" />
+      <PageHeading kicker="控制面" title="任务诊断包" />
       <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
         <section className="card">
           <div className="card-title">失败任务 <StatusPill label="状态" tone="bad" value={failedEvents.length === 0 ? '无失败任务' : '验证失败'} /></div>
@@ -3184,7 +3166,7 @@ function FilesWorkbench({
   if (state.workspace === null) {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-files-empty" title="未选择工作区" detail="请先选择工作区，再打开文件工作台。" />
+        <EmptyState testId="workbench-files-empty" title="未选择工作区" />
       </section>
     );
   }
@@ -3192,7 +3174,7 @@ function FilesWorkbench({
   if (loadState.status === 'loading') {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-files-loading" title="文件工作台加载中" detail="正在读取文件树和首个预览。" />
+        <EmptyState testId="workbench-files-loading" title="文件工作台加载中" tone="loading" />
       </section>
     );
   }
@@ -3200,7 +3182,7 @@ function FilesWorkbench({
   if (loadState.status === 'error') {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-files-load-error" title="文件工作台加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        <EmptyState testId="workbench-files-load-error" title="文件工作台加载失败" tone="error" />
       </section>
     );
   }
@@ -3300,7 +3282,6 @@ function FilesWorkbench({
           <header className="pane-header pane-header--content">
             <div>
               <div className="pane-path">{previewPath}</div>
-              <div className="pane-subtitle">直接展示当前文件原内容</div>
             </div>
             <div className="pane-subtitle pane-subtitle--content">{previewInfo}</div>
           </header>
@@ -3684,7 +3665,7 @@ function GitWorkbench({
   if (state.workspace === null) {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-empty" title="未选择工作区" detail="请先选择工作区，再打开 Git 工作台。" />
+        <EmptyState testId="workbench-git-empty" title="未选择工作区" />
       </section>
     );
   }
@@ -3692,7 +3673,7 @@ function GitWorkbench({
   if (loadState.status === 'loading') {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-loading" title="Git 工作台加载中" detail="正在读取当前工作区的 Git 状态。" />
+        <EmptyState testId="workbench-git-loading" title="Git 工作台加载中" tone="loading" />
       </section>
     );
   }
@@ -3700,7 +3681,7 @@ function GitWorkbench({
   if (loadState.status === 'error') {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-load-error" title="Git 工作台加载失败" detail={loadState.error ?? '未提供错误信息。'} />
+        <EmptyState testId="workbench-git-load-error" title="Git 工作台加载失败" tone="error" />
       </section>
     );
   }
@@ -3711,7 +3692,7 @@ function GitWorkbench({
         <EmptyState
           testId="workbench-git-empty"
           title="当前工作区不是 Git 仓库"
-          detail={gitErrorLabel(state.gitError)}
+          tone="error"
         />
       </section>
     );
@@ -3902,9 +3883,6 @@ function GitWorkbench({
                 >
                   Push
                 </button>
-              </div>
-              <div className="git-scope-note">
-                保留真实 commit、push、批量暂存、分支切换/新建与文件级回滚；不包含分支删除、历史回退或 hunk 级暂存。
               </div>
             </section>
           </div>
@@ -4205,7 +4183,7 @@ function TerminalWorkbench({
   if (state.workspace === null) {
     return (
       <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-terminal-empty" title="未选择工作区" detail="请先选择工作区，再打开真实终端。" />
+        <EmptyState testId="workbench-terminal-empty" title="未选择工作区" />
       </section>
     );
   }
@@ -4222,7 +4200,6 @@ function TerminalWorkbench({
           <div className="terminal-heading">
             <div className="pane-title">Terminal</div>
             <div className="terminal-subtitle">{state.workspace.displayName}</div>
-            <div className="terminal-header-note">工作区绑定的持续会话，完整路径收敛到底部状态栏。</div>
           </div>
           <div className="terminal-meta" data-testid="terminal-session-scope">
             <span className="terminal-badge" data-role="shell">{state.terminalSession?.shell ?? 'PowerShell'}</span>
@@ -4356,12 +4333,10 @@ function FieldPreview({ label, value }: { label: string; value: string }): React
 function PageHeading({
   flags,
   kicker,
-  subtitle,
   title
 }: {
   flags?: React.ReactNode;
   kicker: string;
-  subtitle: string;
   title: string;
 }): React.JSX.Element {
   return (
@@ -4369,7 +4344,6 @@ function PageHeading({
       <div className="page-copy">
         <div className="page-kicker">{kicker}</div>
         <h1 className="page-title">{title}</h1>
-        <p className="page-subtitle">{subtitle}</p>
       </div>
       <div className="page-flags">
         {flags ?? (
@@ -4564,11 +4538,12 @@ function Metric({
   tone?: 'neutral' | 'ok' | 'warn' | 'bad';
   value: number | string;
 }): React.JSX.Element {
+  const toneClass = tone === 'neutral' ? '' : ` metric--${tone}`;
   return (
-    <div className={`metric ${tone}`}>
+    <div className={`metric${toneClass}`}>
       <strong>{value}</strong>
       <span>{label}</span>
-      <span className="row-sub">{note}</span>
+      <small>{note}</small>
     </div>
   );
 }
@@ -4579,7 +4554,7 @@ function Row({
   title,
   tone = 'neutral'
 }: {
-  sub: string;
+  sub?: string;
   tag: string;
   title: string;
   tone?: 'neutral' | 'ok' | 'warn' | 'bad' | 'info';
@@ -4588,7 +4563,7 @@ function Row({
     <div className="row">
       <div>
         <div className="row-title">{title}</div>
-        <div className="row-sub">{sub}</div>
+        {sub === undefined ? null : <div className="row-sub">{sub}</div>}
       </div>
       <span className={`pill ${tone}`}>{tag}</span>
     </div>
@@ -4675,19 +4650,21 @@ function PreviewTreeItem({
 function EmptyState({
   action,
   title,
-  detail,
-  testId
+  testId,
+  tone = 'idle'
 }: {
   action?: React.ReactNode;
   title: string;
-  detail: string;
   testId: string;
+  tone?: 'idle' | 'loading' | 'error';
 }): React.JSX.Element {
+  const Icon = tone === 'loading' ? RefreshCw : CircleAlert;
   return (
-    <div className="empty-state" data-testid={testId}>
-      <CircleAlert size={24} />
+    <div className={`empty-state empty-state--${tone}`} data-testid={testId}>
+      <span className="empty-state-icon">
+        <Icon size={24} />
+      </span>
       <strong>{title}</strong>
-      <p>{detail}</p>
       {action}
     </div>
   );
