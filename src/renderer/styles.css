@@ -1841,6 +1841,74 @@ button.model-pill {
   font-weight: 700;
 }
 
+.git-selection-slot {
+  margin-bottom: 14px;
+}
+
+.git-selection-panel,
+.git-selection-empty {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(222, 229, 239, 0.96);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(249, 251, 255, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.git-selection-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.git-selection-title {
+  color: #20344e;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.git-selection-subtitle,
+.git-selection-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #7183a0;
+  font-size: 11px;
+}
+
+.git-selection-body {
+  min-height: 0;
+}
+
+.git-selection-preview {
+  margin: 0;
+  min-height: 80px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(241, 246, 252, 0.92);
+  color: #30455f;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.git-selection-empty strong {
+  color: #24374f;
+  font-size: 13px;
+}
+
+.git-selection-empty p {
+  margin: 0;
+  color: #6f819d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .git-change-card {
   display: flex;
   align-items: center;
@@ -1848,6 +1916,10 @@ button.model-pill {
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid rgba(235, 240, 246, 0.96);
+}
+
+.git-change-card.selected {
+  background: rgba(242, 247, 253, 0.9);
 }
 
 .git-change-card:last-child {
@@ -1859,7 +1931,20 @@ button.model-pill {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #24364c;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-change-meta input[type='checkbox'] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: #4f79b9;
+  cursor: pointer;
 }
 
 .git-change-code {
