@@ -1288,6 +1288,78 @@ try {
         rect.right <= window.innerWidth
     };
   });
+  const sidebarScrollEvidenceBefore = await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar');
+    const controlBlock = document.querySelector('.sidebar-block--control');
+    const settingsButton = Array.from(document.querySelectorAll('.nav-button')).find((node) => node.textContent?.includes('设置'));
+    if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
+      return {
+        sidebarExists: sidebar !== null,
+        controlBlockExists: controlBlock !== null,
+        settingsExists: settingsButton !== undefined,
+        clientHeight: null,
+        scrollHeight: null,
+        scrollTop: null,
+        settingsVisible: false,
+        probeApplied: false
+      };
+    }
+    controlBlock.style.marginTop = '520px';
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const settingsRect = settingsButton.getBoundingClientRect();
+    return {
+      sidebarExists: true,
+      controlBlockExists: true,
+      settingsExists: true,
+      clientHeight: sidebar.clientHeight,
+      scrollHeight: sidebar.scrollHeight,
+      scrollTop: sidebar.scrollTop,
+      settingsVisible:
+        settingsRect.top >= sidebarRect.top &&
+        settingsRect.bottom <= sidebarRect.bottom &&
+        settingsRect.height > 0 &&
+        settingsRect.width > 0,
+      probeApplied: true
+    };
+  });
+  await page.hover('.sidebar');
+  await page.mouse.wheel(0, 640);
+  await page.waitForTimeout(150);
+  const sidebarScrollEvidenceAfter = await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar');
+    const controlBlock = document.querySelector('.sidebar-block--control');
+    const settingsButton = Array.from(document.querySelectorAll('.nav-button')).find((node) => node.textContent?.includes('设置'));
+    if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
+      return {
+        sidebarExists: sidebar !== null,
+        controlBlockExists: controlBlock !== null,
+        settingsExists: settingsButton !== undefined,
+        clientHeight: null,
+        scrollHeight: null,
+        scrollTop: null,
+        settingsVisible: false,
+        probeApplied: false
+      };
+    }
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const settingsRect = settingsButton.getBoundingClientRect();
+    const result = {
+      sidebarExists: true,
+      controlBlockExists: true,
+      settingsExists: true,
+      clientHeight: sidebar.clientHeight,
+      scrollHeight: sidebar.scrollHeight,
+      scrollTop: sidebar.scrollTop,
+      settingsVisible:
+        settingsRect.top >= sidebarRect.top &&
+        settingsRect.bottom <= sidebarRect.bottom &&
+        settingsRect.height > 0 &&
+        settingsRect.width > 0,
+      probeApplied: true
+    };
+    controlBlock.style.marginTop = '';
+    return result;
+  });
   const buttonInteractionEvidence = {
     attachmentPickerVisible: false,
     attachmentSelectionVisible: false,
@@ -1675,6 +1747,19 @@ try {
       workspaceSelectButtonEvidence.clickable &&
       workspaceSelectButtonEvidence.visibleInViewport &&
       workspaceSelectButtonEvidence.text.includes('选择'),
+    sidebarScrollableToSettings:
+      sidebarScrollEvidenceBefore.sidebarExists &&
+      sidebarScrollEvidenceBefore.controlBlockExists &&
+      sidebarScrollEvidenceBefore.settingsExists &&
+      sidebarScrollEvidenceBefore.probeApplied &&
+      sidebarScrollEvidenceAfter.probeApplied &&
+      typeof sidebarScrollEvidenceBefore.clientHeight === 'number' &&
+      typeof sidebarScrollEvidenceBefore.scrollHeight === 'number' &&
+      sidebarScrollEvidenceBefore.scrollHeight > sidebarScrollEvidenceBefore.clientHeight &&
+      typeof sidebarScrollEvidenceBefore.scrollTop === 'number' &&
+      typeof sidebarScrollEvidenceAfter.scrollTop === 'number' &&
+      sidebarScrollEvidenceAfter.scrollTop > sidebarScrollEvidenceBefore.scrollTop &&
+      sidebarScrollEvidenceAfter.settingsVisible,
     workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
       chatCapabilityText.includes('MCP 本轮 1') &&
@@ -1876,6 +1961,7 @@ try {
     trayEntryButtonsClickable: rendererBoundary.trayEntryButtonsClickable,
     appEntryApiExpanded: rendererBoundary.appEntryApiExpanded,
     workspaceSelectButtonVisible: rendererBoundary.workspaceSelectButtonVisible,
+    sidebarScrollableToSettings: rendererBoundary.sidebarScrollableToSettings,
     workspaceDialogApiExposed: rendererBoundary.workspaceDialogApiExposed,
     chatCapabilitySelectionVisible: rendererBoundary.chatCapabilitySelectionVisible,
     chatCollapsedRailLayoutVisible: rendererBoundary.chatCollapsedRailLayoutVisible,

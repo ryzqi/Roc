@@ -256,7 +256,8 @@ button {
   gap: 14px;
   border-right: 1px solid rgba(223, 230, 239, 0.92);
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
