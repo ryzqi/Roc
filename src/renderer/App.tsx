@@ -4175,33 +4175,17 @@ function TerminalWorkbench({
   }
 
   const terminalStatusLabel = state.terminalSession === null ? 'starting' : state.terminalSession.status;
-  const terminalFooterStatus = state.terminalError ?? '真实持续会话';
-  const terminalFooterTone =
-    state.terminalError !== null ? 'error' : state.terminalSession === null ? 'warn' : 'ok';
+  const terminalFooterStatus = state.terminalError;
 
   return (
     <section className="tool-panel workbench-surface workbench-surface--terminal">
       <div className="workbench-terminal">
-        <header className="terminal-header">
-          <div className="terminal-heading">
-            <div className="pane-title">Terminal</div>
-            <div className="terminal-subtitle">{state.workspace.displayName}</div>
-          </div>
-          <div className="terminal-meta" data-testid="terminal-session-scope">
-            <span className="terminal-badge" data-role="shell">{state.terminalSession?.shell ?? 'PowerShell'}</span>
-            <span className="terminal-badge" data-role="state" data-state={terminalStatusLabel}>
-              <span className="terminal-badge-dot" aria-hidden="true" />
-              {terminalStatusLabel}
-            </span>
-            <span className="terminal-badge" data-role="bind">工作区绑定</span>
-          </div>
-        </header>
         <div className="terminal-shell-frame">
           <div className="terminal-shell-topline">
             <span className="terminal-dot terminal-dot--danger" />
             <span className="terminal-dot terminal-dot--warn" />
             <span className="terminal-dot terminal-dot--ok" />
-            <span className="terminal-shell-title">{state.workspace.displayName}</span>
+            <span className="terminal-shell-title">{state.terminalSession?.shell ?? 'PowerShell'}</span>
           </div>
           <div className="terminal-xterm-shell" data-testid="terminal-session-surface">
             <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
@@ -4209,8 +4193,7 @@ function TerminalWorkbench({
         </div>
         <footer className="workbench-footer-bar terminal-status-bar">
           <span data-role="path">{state.terminalSession?.cwd ?? state.workspace.path}</span>
-          <span data-role="size">{state.terminalSession === null ? '建立会话中' : `${state.terminalSession.cols}×${state.terminalSession.rows}`}</span>
-          <span data-role="status" data-tone={terminalFooterTone}>{terminalFooterStatus}</span>
+          {terminalFooterStatus === null ? null : <span data-role="status" data-state={terminalStatusLabel}>{terminalFooterStatus}</span>}
         </footer>
       </div>
     </section>

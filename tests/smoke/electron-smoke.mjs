@@ -185,14 +185,8 @@ async function waitForTerminalSessionReady(page) {
   await page.waitForFunction(
     () => {
       const host = document.querySelector('[data-testid="terminal-xterm"]');
-      const footer = document.querySelector('[data-testid="workbench-panel"] .workbench-footer-bar');
-      const footerText = footer?.textContent ?? '';
-      return (
-        host !== null &&
-        footerText.includes('真实持续会话') &&
-        footerText.includes('×') &&
-        !footerText.includes('建立会话中')
-      );
+      const surface = document.querySelector('[data-testid="terminal-session-surface"]');
+      return host !== null && surface !== null;
     },
     undefined,
     { timeout: 10000 }
@@ -809,6 +803,9 @@ try {
     const scope = document.querySelector('[data-testid="terminal-session-scope"]')?.textContent ?? '';
     const terminalSubtitle = document.querySelector('.terminal-subtitle')?.textContent ?? '';
     const footerSegments = Array.from(document.querySelectorAll('.terminal-status-bar span')).map((element) => element.textContent?.trim() ?? '');
+    const header = document.querySelector('.terminal-header');
+    const xtermShell = document.querySelector('.terminal-xterm-shell');
+    const workbenchTerminal = document.querySelector('.workbench-terminal');
     if (!(frame instanceof HTMLElement)) {
       return {
         frameVisible: false,
@@ -816,18 +813,30 @@ try {
         scope,
         terminalSubtitle,
         footerSegments,
+        headerExists: header !== null,
+        xtermShellExists: xtermShell !== null,
+        shellFillRatio: null,
         borderRadius: '',
         boxShadow: '',
         backgroundColor: ''
       };
     }
     const frameStyle = getComputedStyle(frame);
+    const frameBox = frame.getBoundingClientRect();
+    const shellBox = xtermShell instanceof HTMLElement ? xtermShell.getBoundingClientRect() : null;
+    const workbenchBox = workbenchTerminal instanceof HTMLElement ? workbenchTerminal.getBoundingClientRect() : null;
     return {
       frameVisible: true,
       badgeCount: badges.length,
       scope,
       terminalSubtitle,
       footerSegments,
+      headerExists: header !== null,
+      xtermShellExists: xtermShell !== null,
+      shellFillRatio:
+        shellBox === null || workbenchBox === null || workbenchBox.height === 0
+          ? null
+          : Number(((frameBox.height / workbenchBox.height) * 100).toFixed(2)),
       borderRadius: frameStyle.borderRadius,
       boxShadow: frameStyle.boxShadow,
       backgroundColor: frameStyle.backgroundColor
@@ -1520,15 +1529,19 @@ try {
       terminalSecondOutput?.includes('phase-three-notes.txt') === true,
     terminalWorkbenchStyled:
       terminalWorkbenchStyleEvidence.frameVisible &&
-      terminalWorkbenchStyleEvidence.badgeCount >= 3 &&
-      terminalWorkbenchStyleEvidence.scope.includes('工作区绑定') &&
       terminalWorkbenchStyleEvidence.borderRadius !== '0px' &&
-      terminalWorkbenchStyleEvidence.boxShadow !== 'none',
+      terminalWorkbenchStyleEvidence.boxShadow !== 'none' &&
+      terminalWorkbenchStyleEvidence.xtermShellExists &&
+      terminalWorkbenchStyleEvidence.shellFillRatio !== null &&
+      terminalWorkbenchStyleEvidence.shellFillRatio >= 90,
     terminalWorkbenchHierarchy:
-      terminalWorkbenchStyleEvidence.terminalSubtitle.length > 0 &&
-      terminalWorkbenchStyleEvidence.footerSegments.length === 3 &&
-      terminalWorkbenchStyleEvidence.footerSegments.some((item) => item.includes('真实持续会话') || item.includes('终端会话已退出')) &&
-      !terminalWorkbenchStyleEvidence.terminalSubtitle.includes(workspaceRoot),
+      terminalWorkbenchStyleEvidence.headerExists === false &&
+      terminalWorkbenchStyleEvidence.badgeCount === 0 &&
+      terminalWorkbenchStyleEvidence.scope.length === 0 &&
+      terminalWorkbenchStyleEvidence.terminalSubtitle.length === 0 &&
+      terminalWorkbenchStyleEvidence.footerSegments.length === 1 &&
+      !terminalWorkbenchStyleEvidence.footerSegments.some((item) => item.includes('真实持续会话')) &&
+      !terminalWorkbenchStyleEvidence.footerSegments.some((item) => item.includes('×')),
     rtkMissingVisible:
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&
