@@ -1409,6 +1409,43 @@ describe('Roc foundation services', () => {
     }
   });
 
+  it('returns unified diff text for a selected changed Git file', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-diff-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed\n', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const diff = services.gitService.getFileDiff('notes.txt');
+
+      expect(diff).toMatchObject({
+        workspacePath: workspaceRoot,
+        relativePath: 'notes.txt'
+      });
+      expect(normalizeLineEndings(diff.patch)).toContain('diff --git a/notes.txt b/notes.txt');
+      expect(normalizeLineEndings(diff.patch)).toContain('-initial');
+      expect(normalizeLineEndings(diff.patch)).toContain('+changed');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports changed Git files with unquoted operation paths', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-space-'));
     const runGit = (args: string[]): void => {

@@ -7,6 +7,7 @@ import type {
   GitBranchSummary,
   GitCommitResult,
   GitDiffStatResult,
+  GitFileDiffResult,
   GitPushResult,
   GitStatusChange,
   GitStatusResult
@@ -43,6 +44,35 @@ export class GitService {
     return {
       workspacePath: workspace.path,
       stat: this.runGit(workspace.path, ['diff', '--stat'])
+    };
+  }
+
+  getFileDiff(relativePath: string): GitFileDiffResult {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedPath = this.normalizeGitPath(relativePath);
+    this.workspaceService.resolveInsideWorkspace(normalizedPath);
+    const change = this.getStatus().changes.find((item) => item.relativePath === normalizedPath);
+    if (change === undefined) {
+      throw new RocDomainError({
+        code: 'git_file_change_missing',
+        message: '当前文件没有可预览的 Git 变更。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请选择一个存在未提交变更的文件。'
+      });
+    }
+    const patch =
+      change.index === '?'
+        ? this.runGitAllowingDiffExitCode(workspace.path, ['diff', '--no-index', '--unified=1', '--', '/dev/null', normalizedPath])
+        : change.index !== ' ' && change.worktree === ' '
+          ? this.runGit(workspace.path, ['diff', '--cached', '--find-renames', '--unified=1', '--', normalizedPath])
+          : this.runGit(workspace.path, ['diff', '--find-renames', '--unified=1', '--', normalizedPath]);
+
+    return {
+      workspacePath: workspace.path,
+      relativePath: normalizedPath,
+      patch
     };
   }
 
@@ -232,6 +262,33 @@ export class GitService {
     } catch (error) {
       throw this.toGitCommandError(args, error);
     }
+  }
+
+  private runGitAllowingDiffExitCode(cwd: string, args: string[]): string {
+    try {
+      return execFileSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } catch (error) {
+      if (this.isGitDiffExitCodeOne(error)) {
+        return error.stdout;
+      }
+      throw this.toGitCommandError(args, error);
+    }
+  }
+
+  private isGitDiffExitCodeOne(error: unknown): error is { status: number; stdout: string } {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      (error as { status?: unknown }).status === 1 &&
+      'stdout' in error &&
+      typeof (error as { stdout?: unknown }).stdout === 'string'
+    );
   }
 
   private getStatusChanges(cwd: string): GitStatusChange[] {

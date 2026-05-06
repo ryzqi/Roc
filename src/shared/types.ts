@@ -183,6 +183,12 @@ export type GitDiffStatResult = {
   stat: string;
 };
 
+export type GitFileDiffResult = {
+  workspacePath: string;
+  relativePath: string;
+  patch: string;
+};
+
 export type GitFileOperationRequest = {
   relativePath: string;
 };

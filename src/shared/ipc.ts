@@ -27,6 +27,7 @@ import type {
   GitCommitResult,
   GitCreateBranchRequest,
   GitDiffStatResult,
+  GitFileDiffResult,
   GitFileOperationRequest,
   GitPushResult,
   GitStatusResult,
@@ -137,6 +138,7 @@ export const ipcChannels = {
   filesWriteText: 'roc:files:write-text',
   gitStatus: 'roc:git:status',
   gitDiffStat: 'roc:git:diff-stat',
+  gitFileDiff: 'roc:git:file-diff',
   gitStageFile: 'roc:git:stage-file',
   gitStageFiles: 'roc:git:stage-files',
   gitUnstageFile: 'roc:git:unstage-file',
@@ -253,6 +255,7 @@ export type RocPreloadApi = {
   git: {
     status: () => Promise<IpcResult<GitStatusResult>>;
     diffStat: () => Promise<IpcResult<GitDiffStatResult>>;
+    fileDiff: (request: GitFileOperationRequest) => Promise<IpcResult<GitFileDiffResult>>;
     stageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     stageFiles: (request: GitBatchFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;
     unstageFile: (request: GitFileOperationRequest) => Promise<IpcResult<GitStatusResult>>;

@@ -228,6 +228,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.filesWriteText, (_event, request) => wrapIpc(() => services.fileService.writeTextFile(request)));
   ipcMain.handle(ipcChannels.gitStatus, () => wrapIpc(() => services.gitService.getStatus()));
   ipcMain.handle(ipcChannels.gitDiffStat, () => wrapIpc(() => services.gitService.getDiffStat()));
+  ipcMain.handle(ipcChannels.gitFileDiff, (_event, request) =>
+    wrapIpc(() => services.gitService.getFileDiff(request.relativePath))
+  );
   ipcMain.handle(ipcChannels.gitStageFile, (_event, request) =>
     wrapIpc(() => services.gitService.stageFile(request.relativePath))
   );

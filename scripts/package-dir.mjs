@@ -5,6 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const electronVersion = '41.3.0';
+const projectRoot = resolve('.');
 const electronBuilderCache = resolve('.runtime/electron-builder-cache');
 mkdirSync(electronBuilderCache, { recursive: true });
 let exitCode = 0;
@@ -39,7 +40,17 @@ function run(command, args, options = { exitOnFailure: true }) {
 
 try {
   run('pnpm', ['build']);
-  run('pnpm', ['exec', 'electron-rebuild', '--force', '--only', 'better-sqlite3', '--version', electronVersion]);
+  run('pnpm', [
+    'exec',
+    'electron-rebuild',
+    '--force',
+    '--only',
+    'better-sqlite3',
+    '--version',
+    electronVersion,
+    '--module-dir',
+    projectRoot
+  ]);
   exitCode = run('pnpm', ['exec', 'electron-builder', '--dir', '--config', 'electron-builder.yml'], {
     exitOnFailure: false
   });

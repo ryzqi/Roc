@@ -102,6 +102,7 @@ const rocApi: RocPreloadApi = {
   git: {
     status: () => ipcRenderer.invoke(ipcChannels.gitStatus),
     diffStat: () => ipcRenderer.invoke(ipcChannels.gitDiffStat),
+    fileDiff: (request) => ipcRenderer.invoke(ipcChannels.gitFileDiff, request),
     stageFile: (request) => ipcRenderer.invoke(ipcChannels.gitStageFile, request),
     stageFiles: (request) => ipcRenderer.invoke(ipcChannels.gitStageFiles, request),
     unstageFile: (request) => ipcRenderer.invoke(ipcChannels.gitUnstageFile, request),

@@ -12,7 +12,6 @@
     "test:watch": "vitest",
     "package:dir": "node scripts/package-dir.mjs",
     "smoke:electron": "node scripts/smoke-electron.mjs",
-    "visual:audit": "node scripts/visual-audit-electron.mjs",
     "verify:paths": "node scripts/verify-paths.mjs"
   },
   "dependencies": {
@@ -32,6 +31,7 @@
     "lucide-react": "1.11.0",
     "motion": "12.38.0",
     "node-pty": "1.1.0",
+    "react-diff-view": "3.3.3",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "zod": "4.3.6"
