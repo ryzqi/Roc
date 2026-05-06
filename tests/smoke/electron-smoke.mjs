@@ -643,12 +643,21 @@ try {
   await page.waitForSelector('[data-testid="workbench-file-image-preview"]', { timeout: 5000 });
   const imagePreviewEvidence = await page.evaluate(() => {
     const image = document.querySelector('[data-testid="workbench-file-image-preview"]');
+    const board = document.querySelector('.workbench-file-image-board');
     const src = image?.getAttribute('src') ?? '';
     const alt = image?.getAttribute('alt') ?? '';
+    const imageStyle = image instanceof HTMLElement ? getComputedStyle(image) : null;
+    const boardStyle = board instanceof HTMLElement ? getComputedStyle(board) : null;
     return {
       exists: image !== null,
       src,
-      alt
+      alt,
+      boardExists: board !== null,
+      imageBorderTopWidth: imageStyle?.borderTopWidth ?? '',
+      imageBorderRadius: imageStyle?.borderRadius ?? '',
+      imageBoxShadow: imageStyle?.boxShadow ?? '',
+      boardBorderTopWidth: boardStyle?.borderTopWidth ?? '',
+      boardBackgroundImage: boardStyle?.backgroundImage ?? ''
     };
   });
   const filePreviewStatsEvidence = await page.evaluate(() => {
@@ -1593,6 +1602,11 @@ try {
       imagePreviewEvidence.exists &&
       imagePreviewEvidence.src.startsWith('data:image/png;base64,') &&
       imagePreviewEvidence.alt.includes('assets/smoke-image.png'),
+    workbenchImagePreviewFrameless:
+      !imagePreviewEvidence.boardExists &&
+      imagePreviewEvidence.imageBorderTopWidth === '0px' &&
+      imagePreviewEvidence.imageBorderRadius === '0px' &&
+      imagePreviewEvidence.imageBoxShadow === 'none',
     workbenchPreviewModeRemoved: workbenchPreviewModeButtonCount === 0 && workbenchCodeModeButtonCount === 0,
     workbenchFileSplitterResizable: Math.abs(filePaneWidthAfter.width - filePaneWidthBefore.width) >= 40,
     explorerHeaderTrimmed: explorerHideButtonCountBefore === 0 && explorerRefreshButtonCountBefore === 0,
@@ -1929,6 +1943,7 @@ try {
     previewFileVisible: rendererBoundary.previewFileVisible,
     workbenchDirectoryExpandable: rendererBoundary.workbenchDirectoryExpandable,
     workbenchImagePreviewVisible: rendererBoundary.workbenchImagePreviewVisible,
+    workbenchImagePreviewFrameless: rendererBoundary.workbenchImagePreviewFrameless,
     workbenchPreviewModeRemoved: rendererBoundary.workbenchPreviewModeRemoved,
     explorerHeaderTrimmed: rendererBoundary.explorerHeaderTrimmed,
     chatWorkbenchLayoutVisible: rendererBoundary.chatWorkbenchLayoutVisible,

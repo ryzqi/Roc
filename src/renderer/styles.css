@@ -1928,33 +1928,13 @@ button.model-pill {
     radial-gradient(circle at top, rgba(131, 160, 198, 0.1), transparent 48%);
 }
 
-.workbench-file-image-board {
-  width: min(100%, 720px);
-  min-height: 280px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28px;
-  border: 1px solid rgba(220, 227, 237, 0.96);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 254, 0.98)),
-    repeating-linear-gradient(
-      45deg,
-      rgba(234, 239, 246, 0.42) 0,
-      rgba(234, 239, 246, 0.42) 10px,
-      rgba(255, 255, 255, 0.82) 10px,
-      rgba(255, 255, 255, 0.82) 20px
-    );
-}
-
 .workbench-file-image-preview {
   max-width: 100%;
   max-height: 100%;
-  border: 1px solid rgba(218, 226, 237, 0.96);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(250, 252, 255, 0.96), rgba(255, 255, 255, 1));
-  box-shadow: 0 18px 44px rgba(28, 47, 83, 0.12);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .workbench-footer-bar {

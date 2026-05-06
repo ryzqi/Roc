@@ -3367,14 +3367,12 @@ function FilesWorkbench({
       </div>
     ) : isImagePreview(state.filePreview) ? (
       <div className="workbench-file-image-stage" data-testid="workbench-file-preview">
-        <div className="workbench-file-image-board">
-          <img
-            alt={state.filePreview.relativePath}
-            className="workbench-file-image-preview"
-            data-testid="workbench-file-image-preview"
-            src={state.filePreview.content}
-          />
-        </div>
+        <img
+          alt={state.filePreview.relativePath}
+          className="workbench-file-image-preview"
+          data-testid="workbench-file-image-preview"
+          src={state.filePreview.content}
+        />
       </div>
     ) : state.filePreview.kind === 'binary' ? (
       <div className="workbench-file-empty" data-testid="workbench-file-preview">
