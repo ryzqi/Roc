@@ -3106,10 +3106,7 @@ function FilesWorkbench({
   const [directoryChildren, setDirectoryChildren] = useState<Record<string, FileTreeResult['entries']>>({});
   const [directoryLoadingPath, setDirectoryLoadingPath] = useState<string | null>(null);
   const [filePaneWidth, setFilePaneWidth] = useState(304);
-  const fileCount = state.fileTree?.entries.length ?? 0;
   const previewPath = state.filePreview?.relativePath ?? '当前没有可预览文件';
-  const searchCount = state.fileSearch?.matches.length ?? 0;
-  const previewInfo = state.filePreview === null ? '未加载文件' : `${fileTypeLabel(state.filePreview)} · ${formatBytes(state.filePreview.sizeBytes)}`;
 
   useEffect(() => {
     setExpandedDirectories(new Set());
@@ -3240,15 +3237,12 @@ function FilesWorkbench({
           <header className="pane-header">
             <div>
               <div className="pane-title">EXPLORER</div>
-              <div className="pane-subtitle">
-                {fileCount} 项{directoryLoadingPath === null ? '' : ' · 正在展开目录'}
-              </div>
+              {directoryLoadingPath === null ? null : <div className="pane-subtitle">正在展开目录</div>}
             </div>
             <CompactStatusPill tone="info" value={state.fileTree?.truncated ? '已截断' : '工作区内'} />
           </header>
           <div className="workbench-sidebar-summary">
             <span>{state.workspace.displayName}</span>
-            <span>{searchCount} 条搜索命中</span>
           </div>
           <section className="workbench-file-tree" data-testid="workbench-file-tree">
             {state.fileTree === null ? (
@@ -3283,20 +3277,12 @@ function FilesWorkbench({
             <div>
               <div className="pane-path">{previewPath}</div>
             </div>
-            <div className="pane-subtitle pane-subtitle--content">{previewInfo}</div>
           </header>
-          <div className="workbench-file-meta-strip">
-            <span>{state.filePreview === null ? '未加载路径' : state.filePreview.relativePath}</span>
-            <span>{state.filePreview === null ? '0 B' : formatBytes(state.filePreview.sizeBytes)}</span>
-            <span>{state.filePreview === null ? '未加载' : state.filePreview.kind === 'image' ? '图片预览' : state.filePreview.kind === 'binary' ? '二进制提示' : '文本阅读'}</span>
-          </div>
           <div className={state.filePreview?.kind === 'text' ? 'workbench-file-body workbench-file-body--code' : 'workbench-file-body'}>
             {previewPanel}
           </div>
           <footer className="workbench-footer-bar">
             <span>{state.workspace.path}</span>
-            <span>{fileCount} 项</span>
-            <span>{searchCount} 条搜索命中</span>
           </footer>
         </section>
       </div>

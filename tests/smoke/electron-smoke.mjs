@@ -576,18 +576,29 @@ try {
     const header = document.querySelector('.workbench-content-pane .pane-header--content');
     const metaStrip = document.querySelector('.workbench-file-meta-strip');
     const body = document.querySelector('.workbench-file-body');
-    if (!(header instanceof HTMLElement) || !(metaStrip instanceof HTMLElement) || !(body instanceof HTMLElement)) {
+    if (!(header instanceof HTMLElement) || !(body instanceof HTMLElement)) {
       return {
         headerExists: header instanceof HTMLElement,
         metaStripExists: metaStrip instanceof HTMLElement,
         bodyExists: body instanceof HTMLElement,
+        metaStripHeight: null,
         gapAfterHeader: null,
         gapAfterMetaStrip: null
       };
     }
     const headerBox = header.getBoundingClientRect();
-    const metaStripBox = metaStrip.getBoundingClientRect();
     const bodyBox = body.getBoundingClientRect();
+    if (!(metaStrip instanceof HTMLElement)) {
+      return {
+        headerExists: true,
+        metaStripExists: false,
+        bodyExists: true,
+        metaStripHeight: null,
+        gapAfterHeader: Math.round(bodyBox.top - headerBox.bottom),
+        gapAfterMetaStrip: null
+      };
+    }
+    const metaStripBox = metaStrip.getBoundingClientRect();
     return {
       headerExists: true,
       metaStripExists: true,
@@ -610,6 +621,16 @@ try {
       exists: image !== null,
       src,
       alt
+    };
+  });
+  const filePreviewStatsEvidence = await page.evaluate(() => {
+    const contentHeaderText = document.querySelector('.workbench-content-pane .pane-subtitle--content')?.textContent?.trim() ?? '';
+    const metaStripText = document.querySelector('.workbench-file-meta-strip')?.textContent?.trim() ?? '';
+    const footerText = document.querySelector('.workbench-content-pane .workbench-footer-bar')?.textContent?.trim() ?? '';
+    return {
+      contentHeaderText,
+      metaStripText,
+      footerText
     };
   });
   const workbenchPreviewModeButtonCount = await page.locator('[data-testid="workbench-file-preview-mode-preview"]').count();
@@ -1438,13 +1459,22 @@ try {
       filePreviewAfterClick.includes('changed in git'),
     workbenchPreviewLayoutCompact:
       filePreviewLayoutEvidence.headerExists &&
-      filePreviewLayoutEvidence.metaStripExists &&
       filePreviewLayoutEvidence.bodyExists &&
-      filePreviewLayoutEvidence.metaStripHeight <= 48 &&
-      filePreviewLayoutEvidence.gapAfterHeader !== null &&
-      filePreviewLayoutEvidence.gapAfterMetaStrip !== null &&
-      filePreviewLayoutEvidence.gapAfterHeader <= 2 &&
-      filePreviewLayoutEvidence.gapAfterMetaStrip <= 2,
+      ((filePreviewLayoutEvidence.metaStripExists &&
+        filePreviewLayoutEvidence.metaStripHeight !== null &&
+        filePreviewLayoutEvidence.metaStripHeight <= 48 &&
+        filePreviewLayoutEvidence.gapAfterHeader !== null &&
+        filePreviewLayoutEvidence.gapAfterMetaStrip !== null &&
+        filePreviewLayoutEvidence.gapAfterHeader <= 2 &&
+        filePreviewLayoutEvidence.gapAfterMetaStrip <= 2) ||
+        (!filePreviewLayoutEvidence.metaStripExists &&
+          filePreviewLayoutEvidence.gapAfterHeader !== null &&
+          filePreviewLayoutEvidence.gapAfterHeader <= 2)),
+    workbenchPreviewStatsRemoved:
+      filePreviewStatsEvidence.contentHeaderText.length === 0 &&
+      filePreviewStatsEvidence.metaStripText.length === 0 &&
+      !filePreviewStatsEvidence.footerText.includes('条搜索命中') &&
+      !/\d+\s*项/u.test(filePreviewStatsEvidence.footerText),
     workbenchGitControlsVisible:
       gitCommitButtonCount === 1 &&
       gitCommitMessageCount === 1 &&
@@ -1722,6 +1752,7 @@ try {
     workbenchResizable: rendererBoundary.workbenchResizable,
     workbenchFilePreviewClickable: rendererBoundary.workbenchFilePreviewClickable,
     workbenchPreviewLayoutCompact: rendererBoundary.workbenchPreviewLayoutCompact,
+    workbenchPreviewStatsRemoved: rendererBoundary.workbenchPreviewStatsRemoved,
     workbenchFileSplitterResizable: rendererBoundary.workbenchFileSplitterResizable,
     workbenchGitControlsVisible: rendererBoundary.workbenchGitControlsVisible,
     workbenchGitVisualHierarchy: rendererBoundary.workbenchGitVisualHierarchy,
@@ -1800,6 +1831,7 @@ try {
       terminalWorkbenchStyleEvidence,
       gitText,
       filePreviewLayoutEvidence,
+      filePreviewStatsEvidence,
       workbenchGitText,
       workbenchGitAfterBatchStage,
       workbenchGitAfterUnstage,
