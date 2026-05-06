@@ -600,10 +600,15 @@ try {
   await page.click('[data-testid="workbench-file-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-file-preview"]')?.textContent?.includes('changed in git') === true);
   const filePreviewAfterClick = await page.textContent('[data-testid="workbench-file-preview"]');
+  await page.click('[data-testid="workbench-file-00-overview.txt"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-file-preview"]')?.textContent?.includes('overview') === true);
   const filePreviewLayoutEvidence = await page.evaluate(() => {
     const header = document.querySelector('.workbench-content-pane .pane-header--content');
     const metaStrip = document.querySelector('.workbench-file-meta-strip');
     const body = document.querySelector('.workbench-file-body');
+    const preview = document.querySelector('[data-testid="workbench-file-preview"]');
+    const footer = document.querySelector('.workbench-content-pane .workbench-footer-bar');
+    const footerText = footer instanceof HTMLElement ? footer.textContent?.trim() ?? '' : '';
     if (!(header instanceof HTMLElement) || !(body instanceof HTMLElement)) {
       return {
         headerExists: header instanceof HTMLElement,
@@ -611,11 +616,32 @@ try {
         bodyExists: body instanceof HTMLElement,
         metaStripHeight: null,
         gapAfterHeader: null,
-        gapAfterMetaStrip: null
+        gapAfterMetaStrip: null,
+        previewExists: preview instanceof HTMLElement,
+        footerExists: footer instanceof HTMLElement,
+        footerText,
+        contentGapToBody: null
       };
+    }
+    let contentBottom = null;
+    if (preview instanceof HTMLElement) {
+      const range = document.createRange();
+      range.selectNodeContents(preview);
+      const rangeBox = range.getBoundingClientRect();
+      if (rangeBox.height > 0) {
+        contentBottom = rangeBox.bottom;
+      } else {
+        const childBoxes = Array.from(preview.children)
+          .map((element) => element.getBoundingClientRect())
+          .filter((rect) => rect.height > 0);
+        if (childBoxes.length > 0) {
+          contentBottom = Math.max(...childBoxes.map((rect) => rect.bottom));
+        }
+      }
     }
     const headerBox = header.getBoundingClientRect();
     const bodyBox = body.getBoundingClientRect();
+    const visibleBodyBottom = Math.min(bodyBox.bottom, window.innerHeight);
     if (!(metaStrip instanceof HTMLElement)) {
       return {
         headerExists: true,
@@ -623,7 +649,11 @@ try {
         bodyExists: true,
         metaStripHeight: null,
         gapAfterHeader: Math.round(bodyBox.top - headerBox.bottom),
-        gapAfterMetaStrip: null
+        gapAfterMetaStrip: null,
+        previewExists: preview instanceof HTMLElement,
+        footerExists: footer instanceof HTMLElement,
+        footerText,
+        contentGapToBody: contentBottom === null ? null : Math.round(visibleBodyBottom - contentBottom)
       };
     }
     const metaStripBox = metaStrip.getBoundingClientRect();
@@ -633,7 +663,11 @@ try {
       bodyExists: true,
       metaStripHeight: Math.round(metaStripBox.height),
       gapAfterHeader: Math.round(metaStripBox.top - headerBox.bottom),
-      gapAfterMetaStrip: Math.round(bodyBox.top - metaStripBox.bottom)
+      gapAfterMetaStrip: Math.round(bodyBox.top - metaStripBox.bottom),
+      previewExists: preview instanceof HTMLElement,
+      footerExists: footer instanceof HTMLElement,
+      footerText,
+      contentGapToBody: contentBottom === null ? null : Math.round(visibleBodyBottom - contentBottom)
     };
   });
   await page.click('[data-testid="workbench-directory-assets"]');
@@ -1658,6 +1692,12 @@ try {
         (!filePreviewLayoutEvidence.metaStripExists &&
           filePreviewLayoutEvidence.gapAfterHeader !== null &&
           filePreviewLayoutEvidence.gapAfterHeader <= 2)),
+    workbenchPreviewNoLargeTrailingGap:
+      filePreviewLayoutEvidence.previewExists &&
+      !filePreviewLayoutEvidence.footerExists &&
+      !filePreviewLayoutEvidence.footerText.includes('F:\\Code\\Roc') &&
+      filePreviewLayoutEvidence.contentGapToBody !== null &&
+      filePreviewLayoutEvidence.contentGapToBody <= 48,
     workbenchPreviewStatsRemoved:
       filePreviewStatsEvidence.contentHeaderText.length === 0 &&
       filePreviewStatsEvidence.metaStripText.length === 0 &&
@@ -1980,6 +2020,7 @@ try {
     workbenchResizable: rendererBoundary.workbenchResizable,
     workbenchFilePreviewClickable: rendererBoundary.workbenchFilePreviewClickable,
     workbenchPreviewLayoutCompact: rendererBoundary.workbenchPreviewLayoutCompact,
+    workbenchPreviewNoLargeTrailingGap: rendererBoundary.workbenchPreviewNoLargeTrailingGap,
     workbenchPreviewStatsRemoved: rendererBoundary.workbenchPreviewStatsRemoved,
     workbenchFileSplitterResizable: rendererBoundary.workbenchFileSplitterResizable,
     workbenchGitControlsVisible: rendererBoundary.workbenchGitControlsVisible,

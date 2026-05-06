@@ -1793,7 +1793,8 @@ button.model-pill {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, max-content);
+  align-content: start;
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -1909,6 +1910,10 @@ button.model-pill {
 
 .workbench-file-body {
   min-height: 0;
+  max-height: 100%;
+  align-content: start;
+  display: grid;
+  grid-auto-rows: max-content;
   overflow: auto;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
 }
@@ -1918,9 +1923,8 @@ button.model-pill {
 }
 
 .workbench-file-preview {
-  min-height: 100%;
   margin: 0;
-  padding: 24px 24px 40px;
+  padding: 24px 24px 12px;
   color: #202a38;
   background: transparent;
   font-size: 13px;
@@ -1930,11 +1934,10 @@ button.model-pill {
 }
 
 .workbench-file-empty {
-  min-height: 100%;
   display: grid;
   align-content: start;
   gap: 8px;
-  padding: 28px 24px;
+  padding: 28px 24px 16px;
   color: #536882;
   font-size: 13px;
   line-height: 1.65;
@@ -1956,7 +1959,6 @@ button.model-pill {
 }
 
 .workbench-file-image-stage {
-  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;

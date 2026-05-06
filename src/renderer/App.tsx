@@ -3500,9 +3500,6 @@ function FilesWorkbench({
           <div className={state.filePreview?.kind === 'text' ? 'workbench-file-body workbench-file-body--code' : 'workbench-file-body'}>
             {previewPanel}
           </div>
-          <footer className="workbench-footer-bar">
-            <span>{state.workspace.path}</span>
-          </footer>
         </section>
       </div>
     </section>
