@@ -572,6 +572,31 @@ try {
   await page.click('[data-testid="workbench-file-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-file-preview"]')?.textContent?.includes('changed in git') === true);
   const filePreviewAfterClick = await page.textContent('[data-testid="workbench-file-preview"]');
+  const filePreviewLayoutEvidence = await page.evaluate(() => {
+    const header = document.querySelector('.workbench-content-pane .pane-header--content');
+    const metaStrip = document.querySelector('.workbench-file-meta-strip');
+    const body = document.querySelector('.workbench-file-body');
+    if (!(header instanceof HTMLElement) || !(metaStrip instanceof HTMLElement) || !(body instanceof HTMLElement)) {
+      return {
+        headerExists: header instanceof HTMLElement,
+        metaStripExists: metaStrip instanceof HTMLElement,
+        bodyExists: body instanceof HTMLElement,
+        gapAfterHeader: null,
+        gapAfterMetaStrip: null
+      };
+    }
+    const headerBox = header.getBoundingClientRect();
+    const metaStripBox = metaStrip.getBoundingClientRect();
+    const bodyBox = body.getBoundingClientRect();
+    return {
+      headerExists: true,
+      metaStripExists: true,
+      bodyExists: true,
+      metaStripHeight: Math.round(metaStripBox.height),
+      gapAfterHeader: Math.round(metaStripBox.top - headerBox.bottom),
+      gapAfterMetaStrip: Math.round(bodyBox.top - metaStripBox.bottom)
+    };
+  });
   await page.click('[data-testid="workbench-directory-assets"]');
   await page.waitForSelector('[data-testid="workbench-file-assets-smoke-image.png"]', { timeout: 5000 });
   const directoryExpandEvidence = (await page.locator('[data-testid="workbench-file-assets-smoke-image.png"]').count()) > 0;
@@ -1411,6 +1436,15 @@ try {
     workbenchFilePreviewClickable:
       filePreviewBeforeClick !== filePreviewAfterClick &&
       filePreviewAfterClick.includes('changed in git'),
+    workbenchPreviewLayoutCompact:
+      filePreviewLayoutEvidence.headerExists &&
+      filePreviewLayoutEvidence.metaStripExists &&
+      filePreviewLayoutEvidence.bodyExists &&
+      filePreviewLayoutEvidence.metaStripHeight <= 48 &&
+      filePreviewLayoutEvidence.gapAfterHeader !== null &&
+      filePreviewLayoutEvidence.gapAfterMetaStrip !== null &&
+      filePreviewLayoutEvidence.gapAfterHeader <= 2 &&
+      filePreviewLayoutEvidence.gapAfterMetaStrip <= 2,
     workbenchGitControlsVisible:
       gitCommitButtonCount === 1 &&
       gitCommitMessageCount === 1 &&
@@ -1687,6 +1721,7 @@ try {
     chatWorkbenchLayoutVisible: rendererBoundary.chatWorkbenchLayoutVisible,
     workbenchResizable: rendererBoundary.workbenchResizable,
     workbenchFilePreviewClickable: rendererBoundary.workbenchFilePreviewClickable,
+    workbenchPreviewLayoutCompact: rendererBoundary.workbenchPreviewLayoutCompact,
     workbenchFileSplitterResizable: rendererBoundary.workbenchFileSplitterResizable,
     workbenchGitControlsVisible: rendererBoundary.workbenchGitControlsVisible,
     workbenchGitVisualHierarchy: rendererBoundary.workbenchGitVisualHierarchy,
@@ -1764,6 +1799,7 @@ try {
       terminalLiveOutput,
       terminalWorkbenchStyleEvidence,
       gitText,
+      filePreviewLayoutEvidence,
       workbenchGitText,
       workbenchGitAfterBatchStage,
       workbenchGitAfterUnstage,
