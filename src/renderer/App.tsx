@@ -3692,6 +3692,20 @@ function GitWorkbench({
     }
   }, [branchInfo, branchTarget]);
 
+  const selectionFiles = useMemo<GitDiffFileData[]>(() => {
+    if (state.gitSelectedPreview === null) {
+      return [];
+    }
+    const normalized = normalizeGitDiffText(state.gitSelectedPreview.patch);
+    return parseDiff(normalized, { nearbySequences: 'zip' });
+  }, [state.gitSelectedPreview]);
+  const selectedDiffFile = useMemo(() => {
+    if (selectedChange === null || state.gitSelectedPreview === null) {
+      return null;
+    }
+    return selectGitDiffFile(selectionFiles, selectedChange.relativePath);
+  }, [selectionFiles, selectedChange, state.gitSelectedPreview]);
+
   async function selectGitFile(relativePath: string): Promise<void> {
     updateWorkspaceData({
       gitSelectedPath: relativePath,
@@ -3966,19 +3980,6 @@ function GitWorkbench({
   const visibleBranches = branchSwitcherModel.visibleBranches;
   const selectionStatus = selectedChange === null ? null : buildGitChangeStateLabel(selectedChange);
   const selectionPreview = state.gitSelectedPreview;
-  const selectionFiles = useMemo<GitDiffFileData[]>(() => {
-    if (selectionPreview === null) {
-      return [];
-    }
-    const normalized = normalizeGitDiffText(selectionPreview.patch);
-    return parseDiff(normalized, { nearbySequences: 'zip' });
-  }, [selectionPreview]);
-  const selectedDiffFile = useMemo(() => {
-    if (selectedChange === null || selectionPreview === null) {
-      return null;
-    }
-    return selectGitDiffFile(selectionFiles, selectedChange.relativePath);
-  }, [selectionFiles, selectedChange, selectionPreview]);
   const selectionPreviewPanel =
     selectedChange === null ? (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
