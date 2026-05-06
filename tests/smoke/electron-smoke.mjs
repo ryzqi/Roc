@@ -427,6 +427,26 @@ try {
   if (workbandBox.y > 2) {
     throw new Error(`Immersive workband is not aligned to window top: y=${workbandBox.y}`);
   }
+  const appShellFrameEvidence = await page.evaluate(() => {
+    const appShell = document.querySelector('[data-testid="roc-app"]');
+    if (!(appShell instanceof HTMLElement)) {
+      return {
+        exists: false,
+        gapTop: null,
+        gapRight: null,
+        gapBottom: null,
+        gapLeft: null
+      };
+    }
+    const rect = appShell.getBoundingClientRect();
+    return {
+      exists: true,
+      gapTop: Math.round(rect.top),
+      gapRight: Math.round(window.innerWidth - rect.right),
+      gapBottom: Math.round(window.innerHeight - rect.bottom),
+      gapLeft: Math.round(rect.left)
+    };
+  });
   await page.click('[data-testid="window-toggle-maximize"]');
   const maximizedAfterClick = await browserWindow.evaluate((window) => window.isMaximized());
   if (!maximizedAfterClick) {
@@ -1750,6 +1770,16 @@ try {
     diagnosticsApiExpanded:
       boundary.diagnosticsKeys.includes('samplePerformance') &&
       boundary.diagnosticsKeys.includes('createDiagnosticPackage'),
+    appShellFlushToWindow:
+      appShellFrameEvidence.exists &&
+      appShellFrameEvidence.gapTop !== null &&
+      appShellFrameEvidence.gapRight !== null &&
+      appShellFrameEvidence.gapBottom !== null &&
+      appShellFrameEvidence.gapLeft !== null &&
+      appShellFrameEvidence.gapTop <= 1 &&
+      appShellFrameEvidence.gapRight <= 1 &&
+      appShellFrameEvidence.gapBottom <= 1 &&
+      appShellFrameEvidence.gapLeft <= 1,
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
@@ -1760,6 +1790,7 @@ try {
     immersiveWorkbandVisible: rendererBoundary.immersiveWorkbandVisible,
     systemMenuHidden: rendererBoundary.systemMenuHidden,
     initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
+    appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
     windowDragWorks: rendererBoundary.windowDragWorks,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,

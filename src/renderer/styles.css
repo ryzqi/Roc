@@ -85,11 +85,11 @@ button {
 .app-shell {
   position: relative;
   display: grid;
-  width: min(1404px, calc(100vw - 22px));
-  height: calc(100vh - 22px);
-  min-height: min(860px, calc(100vh - 22px));
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
   grid-template-rows: 58px 1fr;
-  margin: 11px auto;
+  margin: 0;
   overflow: hidden;
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 254, 0.98));
@@ -97,8 +97,8 @@ button {
 }
 
 .app-shell--smoke {
-  height: calc(100vh - 11px);
-  margin: 0 auto 11px;
+  height: 100vh;
+  margin: 0;
 }
 
 .window-workband {
