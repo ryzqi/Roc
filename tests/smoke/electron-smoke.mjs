@@ -1373,7 +1373,13 @@ try {
     attachmentPickerVisible: false,
     attachmentSelectionVisible: false,
     toolPopoverVisible: false,
+    toolPopoverBatchActionsVisible: false,
+    toolSelectAllWorks: false,
+    toolClearAllWorks: false,
     skillPopoverVisible: false,
+    skillPopoverBatchActionsVisible: false,
+    skillSelectAllWorks: false,
+    skillClearAllWorks: false,
     modelPopoverVisible: false,
     composerOnlyHasSendOnRight: false,
     workbenchGitClickable: false,
@@ -1393,11 +1399,35 @@ try {
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="chat-tool-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.toolPopoverVisible =
-    ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('ripgrep 搜索');
+    ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('当前可用工具');
+  buttonInteractionEvidence.toolPopoverBatchActionsVisible =
+    ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('全选') &&
+    ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('取消全选');
+  await page.click('[data-testid="chat-tool-select-all"]');
+  await waitForCapabilitySelection(page, { expectedIds: ['smoke-mcp'], mcpCount: 1, skillCount: 1 });
+  buttonInteractionEvidence.toolSelectAllWorks =
+    ((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-mcp');
+  await page.hover('[data-testid="chat-tool-trigger"]');
+  await page.click('[data-testid="chat-tool-clear-all"]');
+  await waitForCapabilitySelection(page, { skillCount: 1, mcpCount: 0 });
+  buttonInteractionEvidence.toolClearAllWorks =
+    !((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-mcp');
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="chat-skill-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.skillPopoverVisible =
-    ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('Smoke Skill');
+    ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('当前可用技能');
+  buttonInteractionEvidence.skillPopoverBatchActionsVisible =
+    ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('全选') &&
+    ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('取消全选');
+  await page.click('[data-testid="chat-skill-select-all"]');
+  await waitForCapabilitySelection(page, { expectedIds: ['smoke-skill'], mcpCount: 0, skillCount: 1 });
+  buttonInteractionEvidence.skillSelectAllWorks =
+    ((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-skill');
+  await page.hover('[data-testid="chat-skill-trigger"]');
+  await page.click('[data-testid="chat-skill-clear-all"]');
+  await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
+  buttonInteractionEvidence.skillClearAllWorks =
+    !((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-skill');
   await page.hover('[data-testid="chat-model-trigger"]');
   await page.waitForSelector('[data-testid="chat-model-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.modelPopoverVisible =

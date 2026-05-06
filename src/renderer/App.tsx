@@ -84,6 +84,10 @@ type ViewId =
 type PreviewIconName =
   | 'bot'
   | 'clipboard'
+  | 'checklist'
+  | 'panel-capture'
+  | 'tray-upload'
+  | 'stack'
   | 'eye'
   | 'folder'
   | 'git'
@@ -1702,6 +1706,8 @@ function ChatView({
   const visibleCapabilitySkills = state.skills.filter(
     (skill) => skill.enabled && skill.status === 'ready'
   );
+  const allVisibleMcpSelected = visibleCapabilityServers.length > 0 && visibleCapabilityServers.every((server) => state.selectedMcpServers.includes(server.id));
+  const allVisibleSkillsSelected = visibleCapabilitySkills.length > 0 && visibleCapabilitySkills.every((skill) => state.selectedSkills.includes(skill.id));
   const enabledModels = state.providers
     .filter((provider) => provider.enabled)
     .flatMap((provider) =>
@@ -1736,6 +1742,20 @@ function ChatView({
       return;
     }
     setSelectedAttachments(selection.data.filePaths);
+  }
+
+  async function setVisibleMcpSelection(nextSelected: string[]): Promise<void> {
+    await updateTurnSelection(updateLoadedState, {
+      mcpServers: nextSelected,
+      skills: state.selectedSkills
+    });
+  }
+
+  async function setVisibleSkillSelection(nextSelected: string[]): Promise<void> {
+    await updateTurnSelection(updateLoadedState, {
+      mcpServers: state.selectedMcpServers,
+      skills: nextSelected
+    });
   }
 
   return (
@@ -1777,7 +1797,7 @@ function ChatView({
                 aria-label="上传文件"
                 onClick={() => void selectAttachmentsFromDialog()}
               >
-                <PreviewIcon name="paperclip" />
+                <PreviewIcon name="tray-upload" />
                 {selectedAttachments.length === 0 ? null : <span className="tool-badge">{selectedAttachments.length}</span>}
               </button>
               <div
@@ -1786,30 +1806,40 @@ function ChatView({
                 onMouseLeave={() => setActiveComposerPopover((current) => (current === 'tools' ? null : current))}
               >
                 <button
-                  className={state.selectedMcpServers.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                  className={state.selectedMcpServers.length > 0 ? 'composer-tool composer-tool--tools active' : 'composer-tool composer-tool--tools'}
                   data-testid="chat-tool-trigger"
                   type="button"
                   aria-label="工具"
                 >
-                  <PreviewIcon name="nodes" />
+                  <PreviewIcon name="stack" />
                   <span className="tool-badge">{state.selectedMcpServers.length}</span>
                 </button>
                 {activeComposerPopover !== 'tools' ? null : (
                   <div className="composer-popover" data-testid="chat-tool-popover">
                     <div className="composer-popover-head">
                       <span>工具</span>
-                      <strong>本轮选择</strong>
+                      <strong>{visibleCapabilityServers.length} 个可用</strong>
                     </div>
-                    <div className="composer-popover-copy">允许 Agent 在下一次回复中使用所选工具。</div>
+                    <div className="composer-popover-copy">展示当前可用工具，并选择本轮要启用的项。</div>
+                    <div className="composer-popover-actions">
+                      <button
+                        className="composer-choice composer-choice--action"
+                        data-testid="chat-tool-select-all"
+                        type="button"
+                        onClick={() => void setVisibleMcpSelection(visibleCapabilityServers.map((server) => server.id))}
+                      >
+                        全选
+                      </button>
+                      <button
+                        className="composer-choice composer-choice--action"
+                        data-testid="chat-tool-clear-all"
+                        type="button"
+                        onClick={() => void setVisibleMcpSelection([])}
+                      >
+                        取消全选
+                      </button>
+                    </div>
                     <div className="composer-popover-list">
-                      <button className="composer-choice composer-choice--mode" type="button">
-                        <span>自动</span>
-                        <small>让 Agent 自动选择最相关的工具。</small>
-                      </button>
-                      <button className="composer-choice" type="button">
-                        <span>ripgrep 搜索</span>
-                        <small>在项目文件中执行 ripgrep 搜索。</small>
-                      </button>
                       {visibleCapabilityServers.map((server) => (
                         <button
                           className={state.selectedMcpServers.includes(server.id) ? 'composer-choice active' : 'composer-choice'}
@@ -1837,21 +1867,39 @@ function ChatView({
                 onMouseLeave={() => setActiveComposerPopover((current) => (current === 'skills' ? null : current))}
               >
                 <button
-                  className={state.selectedSkills.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                  className={state.selectedSkills.length > 0 ? 'composer-tool composer-tool--skills active' : 'composer-tool composer-tool--skills'}
                   data-testid="chat-skill-trigger"
                   type="button"
                   aria-label="技能"
                 >
-                  <PreviewIcon name="sparkles" />
+                  <PreviewIcon name="checklist" />
                   <span className="tool-badge">{state.selectedSkills.length}</span>
                 </button>
                 {activeComposerPopover !== 'skills' ? null : (
                   <div className="composer-popover" data-testid="chat-skill-popover">
                     <div className="composer-popover-head">
                       <span>技能</span>
-                      <strong>本轮选择</strong>
+                      <strong>{visibleCapabilitySkills.length} 个可用</strong>
                     </div>
-                    <div className="composer-popover-copy">AI 自动选择相关技能，也可以手动启用。</div>
+                    <div className="composer-popover-copy">展示当前可用技能，并选择本轮要启用的项。</div>
+                    <div className="composer-popover-actions">
+                      <button
+                        className="composer-choice composer-choice--action"
+                        data-testid="chat-skill-select-all"
+                        type="button"
+                        onClick={() => void setVisibleSkillSelection(visibleCapabilitySkills.map((skill) => skill.id))}
+                      >
+                        全选
+                      </button>
+                      <button
+                        className="composer-choice composer-choice--action"
+                        data-testid="chat-skill-clear-all"
+                        type="button"
+                        onClick={() => void setVisibleSkillSelection([])}
+                      >
+                        取消全选
+                      </button>
+                    </div>
                     <div className="composer-popover-list">
                       {visibleCapabilitySkills.map((skill) => (
                         <button
@@ -1879,8 +1927,8 @@ function ChatView({
                 onMouseEnter={() => setActiveComposerPopover('models')}
                 onMouseLeave={() => setActiveComposerPopover((current) => (current === 'models' ? null : current))}
               >
-                <button className="model-pill" data-testid="chat-model-trigger" type="button" aria-label="模型">
-                  <PreviewIcon name="bot" />
+                <button className="model-pill model-pill--composer" data-testid="chat-model-trigger" type="button" aria-label="模型">
+                  <PreviewIcon name="panel-capture" />
                   <span>{state.defaultModelId ?? '配置默认模型'}</span>
                   <span>▾</span>
                 </button>
@@ -4506,6 +4554,35 @@ function PreviewIcon({ name }: { name: PreviewIconName }): React.JSX.Element {
           <path d="M9 5.5h6"></path>
           <path d="M9 10h6"></path>
           <path d="M9 14h4"></path>
+        </svg>
+      );
+    case 'checklist':
+      return (
+        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 5h12"></path>
+          <path d="M6 12h12"></path>
+          <path d="M6 19h12"></path>
+          <path d="M9 5.5l1.2 1.2L12.5 4.4"></path>
+          <path d="M9 12.5l1.2 1.2L12.5 11.4"></path>
+          <path d="M9 19.5l1.2 1.2L12.5 18.4"></path>
+        </svg>
+      );
+    case 'panel-capture':
+      return (
+        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+          <path d="M8 9h8"></path>
+          <path d="M8 13h5"></path>
+          <path d="M15.5 14.5l2 2"></path>
+        </svg>
+      );
+    case 'tray-upload':
+      return (
+        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 15.5v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"></path>
+          <path d="M12 5v10"></path>
+          <path d="M8.5 8.5L12 5l3.5 3.5"></path>
+          <path d="M7 15h10"></path>
         </svg>
       );
     case 'git':
