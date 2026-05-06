@@ -1,5 +1,5 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
-import type { WindowStateSnapshot } from '../shared/types';
+import type { WindowBoundsSnapshot, WindowStateSnapshot } from '../shared/types';
 
 export function buildMainWindowOptions(preloadPath: string): BrowserWindowConstructorOptions {
   return {
@@ -48,5 +48,17 @@ export function getWindowState(window: Pick<BrowserWindow, 'isMaximized' | 'isMi
     maximized: window.isMaximized(),
     minimized: window.isMinimized(),
     fullscreen: window.isFullScreen()
+  };
+}
+
+export function getWindowBounds(
+  window: Pick<BrowserWindow, 'getBounds'>
+): WindowBoundsSnapshot {
+  const bounds = window.getBounds();
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height
   };
 }

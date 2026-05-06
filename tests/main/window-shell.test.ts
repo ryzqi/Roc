@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMainWindowOptions, getWindowState } from '../../src/main/window-shell';
+import { buildMainWindowOptions, getWindowBounds, getWindowState } from '../../src/main/window-shell';
 
 describe('immersive window shell', () => {
   it('builds a frameless window with hidden system menu bar', () => {
@@ -24,6 +24,24 @@ describe('immersive window shell', () => {
       maximized: true,
       minimized: false,
       fullscreen: false
+    });
+  });
+
+  it('maps BrowserWindow bounds into renderer-safe bounds snapshot', () => {
+    const bounds = getWindowBounds({
+      getBounds: () => ({
+        x: 120,
+        y: 80,
+        width: 1320,
+        height: 860
+      })
+    });
+
+    expect(bounds).toEqual({
+      x: 120,
+      y: 80,
+      width: 1320,
+      height: 860
     });
   });
 });

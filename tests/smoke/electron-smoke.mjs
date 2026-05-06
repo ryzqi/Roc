@@ -437,6 +437,20 @@ try {
   if (restoredAfterClick) {
     throw new Error('Smoke could not restore frameless window.');
   }
+  const boundsBeforeDrag = await browserWindow.evaluate((window) => window.getBounds());
+  await page.mouse.move(workbandBox.x + workbandBox.width / 2, workbandBox.y + workbandBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(workbandBox.x + workbandBox.width / 2 + 140, workbandBox.y + workbandBox.height / 2 + 36, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const boundsAfterDrag = await browserWindow.evaluate((window) => window.getBounds());
+  const windowDragEvidence = {
+    before: boundsBeforeDrag,
+    after: boundsAfterDrag,
+    moved:
+      Math.abs(boundsAfterDrag.x - boundsBeforeDrag.x) >= 24 ||
+      Math.abs(boundsAfterDrag.y - boundsBeforeDrag.y) >= 24
+  };
   const importedSkillId = await page.evaluate(async (sourcePath) => {
     const result = await window.roc.skills.importSkill({
       sourcePath,
@@ -1736,6 +1750,7 @@ try {
     diagnosticsApiExpanded:
       boundary.diagnosticsKeys.includes('samplePerformance') &&
       boundary.diagnosticsKeys.includes('createDiagnosticPackage'),
+    windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
 
@@ -1745,6 +1760,7 @@ try {
     immersiveWorkbandVisible: rendererBoundary.immersiveWorkbandVisible,
     systemMenuHidden: rendererBoundary.systemMenuHidden,
     initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
+    windowDragWorks: rendererBoundary.windowDragWorks,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
     traySummaryVisible: rendererBoundary.traySummaryVisible,

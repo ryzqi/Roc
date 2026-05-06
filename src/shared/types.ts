@@ -59,6 +59,13 @@ export type WindowStateSnapshot = {
   fullscreen: boolean;
 };
 
+export type WindowBoundsSnapshot = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type WorkspaceTrustState = 'trusted' | 'limited' | 'blocked';
 
 export type Workspace = {

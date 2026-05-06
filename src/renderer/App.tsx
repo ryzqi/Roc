@@ -58,6 +58,7 @@ import type {
   TerminalSessionSnapshot,
   TaskSnapshot,
   TraySummary,
+  WindowBoundsSnapshot,
   WindowStateSnapshot,
   Workspace
 } from '../shared/types';
@@ -607,6 +608,13 @@ export function App(): React.JSX.Element {
   const [workspaceLoadState, setWorkspaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [memoryLoadState, setMemoryLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
+  const windowDragRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
@@ -929,6 +937,58 @@ export function App(): React.JSX.Element {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
+  useEffect(() => {
+    return () => {
+      windowDragRef.current = null;
+    };
+  }, []);
+
+  function finishWindowDrag(pointerId?: number): void {
+    const dragSession = windowDragRef.current;
+    if (dragSession === null) {
+      return;
+    }
+    if (pointerId !== undefined && dragSession.pointerId !== pointerId) {
+      return;
+    }
+    windowDragRef.current = null;
+  }
+
+  function continueWindowDrag(clientX: number, clientY: number): void {
+    const dragSession = windowDragRef.current;
+    if (dragSession === null || windowState.maximized || windowState.fullscreen) {
+      return;
+    }
+    const nextBounds: WindowBoundsSnapshot = {
+      x: Math.round(clientX - dragSession.offsetX),
+      y: Math.round(clientY - dragSession.offsetY),
+      width: dragSession.width,
+      height: dragSession.height
+    };
+    void window.roc.window.setBounds(nextBounds);
+  }
+
+  function startWindowDrag(event: React.PointerEvent<HTMLElement>): void {
+    if (event.button !== 0 || windowState.maximized || windowState.fullscreen) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Element && target.closest('.workband-actions') !== null) {
+      return;
+    }
+    event.preventDefault();
+    void window.roc.window.getBounds().then((result) => {
+      const bounds = unwrap<WindowBoundsSnapshot>('window bounds', result);
+      windowDragRef.current = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - bounds.x,
+        offsetY: event.clientY - bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      };
+    });
+  }
+
   async function selectWorkspaceFromDialog(): Promise<void> {
     setWorkspaceSelectError(null);
     const selected = await window.roc.workspace.selectFromDialog();
@@ -1040,7 +1100,25 @@ export function App(): React.JSX.Element {
 
   return (
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
-      <header className="window-workband" data-testid="window-workband">
+      <header
+        className="window-workband"
+        data-testid="window-workband"
+        onPointerDown={startWindowDrag}
+        onPointerMove={(event) => {
+          continueWindowDrag(event.screenX, event.screenY);
+        }}
+        onPointerUp={(event) => {
+          finishWindowDrag(event.pointerId);
+        }}
+        onPointerCancel={(event) => {
+          finishWindowDrag(event.pointerId);
+        }}
+        onPointerLeave={(event) => {
+          if ((event.buttons & 1) === 0) {
+            finishWindowDrag(event.pointerId);
+          }
+        }}
+      >
         <div className="workband-drag-region">
           <div className="brand">
             <div className="brand-mark">R</div>

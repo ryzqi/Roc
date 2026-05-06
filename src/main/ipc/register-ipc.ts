@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
-import { getWindowState } from '../window-shell';
+import { getWindowBounds, getWindowState } from '../window-shell';
 
 export type AppWindowControls = {
   openMainPage: (page: string) => void;
@@ -37,6 +37,13 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
     })
   );
   ipcMain.handle(ipcChannels.windowGetState, () => wrapIpc(() => getWindowState(mainWindow)));
+  ipcMain.handle(ipcChannels.windowGetBounds, () => wrapIpc(() => getWindowBounds(mainWindow)));
+  ipcMain.handle(ipcChannels.windowSetBounds, (_event, bounds) =>
+    wrapIpc(() => {
+      mainWindow.setBounds(bounds);
+      return getWindowBounds(mainWindow);
+    })
+  );
   ipcMain.handle(ipcChannels.windowMinimize, () =>
     wrapIpc(() => {
       mainWindow.minimize();
