@@ -1257,6 +1257,7 @@ button {
   min-height: 168px;
   gap: 12px;
   padding: 16px;
+  overflow: visible;
 }
 
 .composer-placeholder {
@@ -1295,6 +1296,26 @@ button {
   color: #657792;
 }
 
+.chat-attachment-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-attachment-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(242, 246, 251, 0.98);
+  border: 1px solid rgba(214, 223, 236, 0.96);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .chat-runtime-panels {
   display: grid;
   gap: 10px;
@@ -1326,6 +1347,10 @@ button {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.composer-popover-anchor {
+  position: relative;
 }
 
 .composer-tool {
@@ -1395,28 +1420,87 @@ button.model-pill {
   cursor: pointer;
 }
 
-.ghost-button {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
+.composer-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  z-index: 12;
+  width: 338px;
+  max-height: 420px;
+  padding: 16px 14px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(210, 220, 234, 0.96);
+  background: rgba(248, 251, 255, 0.985);
+  box-shadow: 0 24px 56px rgba(19, 38, 70, 0.16);
+  display: grid;
+  gap: 12px;
+}
+
+.composer-popover--wide {
+  width: 452px;
+}
+
+.composer-popover-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(221, 228, 238, 0.96);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.98);
-  color: var(--muted);
-  transition: transform var(--transition-base), box-shadow var(--transition-base), color var(--transition-base);
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.ghost-button:hover {
-  transform: translateY(-1px);
-  color: var(--accent);
-  box-shadow: var(--shadow-button-hover);
+.composer-popover-head strong {
+  color: #6b84ad;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.ghost-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.composer-popover-copy {
+  color: #7086a8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.composer-popover-list {
+  max-height: 284px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.composer-choice {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(219, 227, 239, 0.96);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  text-align: left;
+  display: grid;
+  gap: 4px;
+}
+
+.composer-choice span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.composer-choice small {
+  color: #7287a7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.composer-choice.active,
+.composer-choice:hover {
+  background: rgba(231, 239, 248, 0.98);
+  border-color: rgba(188, 204, 228, 0.98);
+}
+
+.composer-choice--mode {
+  background: rgba(236, 243, 249, 0.98);
 }
 
 .send-button {

@@ -64,6 +64,7 @@ import type {
   TaskSnapshot,
   TraySummary,
   Workspace,
+  FileDialogSelection,
   WorkspaceSelectRequest,
   WindowBoundsSnapshot,
   WindowStateSnapshot
@@ -129,6 +130,7 @@ export const ipcChannels = {
   workspaceGetCurrent: 'roc:workspace:get-current',
   workspaceSelect: 'roc:workspace:select',
   workspaceSelectFromDialog: 'roc:workspace:select-from-dialog',
+  filesSelectFromDialog: 'roc:files:select-from-dialog',
   filesListTree: 'roc:files:list-tree',
   filesSearch: 'roc:files:search',
   filesPreview: 'roc:files:preview',
@@ -242,6 +244,7 @@ export type RocPreloadApi = {
     selectFromDialog: () => Promise<IpcResult<Workspace | null>>;
   };
   files: {
+    selectFromDialog: () => Promise<IpcResult<FileDialogSelection | null>>;
     listTree: (request: FileTreeRequest) => Promise<IpcResult<FileTreeResult>>;
     search: (request: FileSearchRequest) => Promise<IpcResult<FileSearchResult>>;
     preview: (request: FilePreviewRequest) => Promise<IpcResult<FilePreviewResult>>;

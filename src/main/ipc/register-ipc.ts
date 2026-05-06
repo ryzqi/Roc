@@ -200,6 +200,28 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       return services.workspaceService.selectWorkspace(selectedPath);
     })
   );
+  ipcMain.handle(ipcChannels.filesSelectFromDialog, () =>
+    wrapIpc(async () => {
+      if (process.env.ROC_SMOKE === '1') {
+        const smokeWorkspace = services.workspaceService.getCurrentWorkspace();
+        if (smokeWorkspace !== null) {
+          return {
+            filePaths: [`${smokeWorkspace.path}\\phase-three-notes.txt`]
+          };
+        }
+      }
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: '选择文件',
+        properties: ['openFile', 'multiSelections']
+      });
+      if (result.canceled) {
+        return null;
+      }
+      return {
+        filePaths: result.filePaths
+      };
+    })
+  );
   ipcMain.handle(ipcChannels.filesListTree, (_event, request) => wrapIpc(() => services.fileService.listTree(request)));
   ipcMain.handle(ipcChannels.filesSearch, (_event, request) => wrapIpc(() => services.fileService.search(request)));
   ipcMain.handle(ipcChannels.filesPreview, (_event, request) => wrapIpc(() => services.fileService.readPreview(request)));

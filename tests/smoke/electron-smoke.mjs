@@ -957,12 +957,18 @@ try {
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="turn-capability-ids"]', { timeout: 5000 });
+  await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="turn-mcp-smoke-mcp"]', { timeout: 5000 });
+  await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="turn-skill-smoke-skill"]', { timeout: 5000 });
+  await page.hover('[data-testid="chat-tool-trigger"]');
   await page.click('[data-testid="turn-mcp-smoke-mcp"]');
+  await page.hover('[data-testid="chat-skill-trigger"]');
   await page.click('[data-testid="turn-skill-smoke-skill"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
+  await page.hover('[data-testid="chat-tool-trigger"]');
   await page.click('[data-testid="turn-mcp-smoke-mcp"]');
+  await page.hover('[data-testid="chat-skill-trigger"]');
   await page.click('[data-testid="turn-skill-smoke-skill"]');
   const chatCapabilityText = await waitForCapabilitySelection(page, {
     expectedIds: ['smoke-mcp', 'smoke-skill'],
@@ -1283,12 +1289,12 @@ try {
     };
   });
   const buttonInteractionEvidence = {
-    attachmentControlAbsent: false,
-    composerWorkspaceNavigates: false,
-    composerMcpNavigates: false,
-    composerSkillNavigates: false,
-    composerModelNavigates: false,
-    composerMemoryNavigates: false,
+    attachmentPickerVisible: false,
+    attachmentSelectionVisible: false,
+    toolPopoverVisible: false,
+    skillPopoverVisible: false,
+    modelPopoverVisible: false,
+    composerOnlyHasSendOnRight: false,
     workbenchGitClickable: false,
     workbenchTerminalClickable: false,
     workbenchCloseClickable: false,
@@ -1297,26 +1303,34 @@ try {
   };
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.attachmentControlAbsent = (await page.locator('button[aria-label="添加附件"]').count()) === 0;
-  await page.click('button[aria-label="工作区文件"]');
-  await page.waitForSelector('[data-testid="workspace-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.composerWorkspaceNavigates = true;
-  await page.click('[data-testid="nav-chat"]');
-  await page.click('button[aria-label="已启用 MCP"]');
-  await page.waitForSelector('[data-testid="mcp-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.composerMcpNavigates = true;
-  await page.click('[data-testid="nav-chat"]');
-  await page.click('button[aria-label="已启用 Skill"]');
-  await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.composerSkillNavigates = true;
-  await page.click('[data-testid="nav-chat"]');
-  await page.click('.model-pill');
-  await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.composerModelNavigates = true;
-  await page.click('[data-testid="nav-chat"]');
-  await page.click('button[aria-label="可见性"]');
+  await page.hover('[data-testid="chat-attachment-trigger"]');
+  buttonInteractionEvidence.attachmentPickerVisible = (await page.locator('[data-testid="chat-attachment-trigger"]').count()) === 1;
+  await page.click('[data-testid="chat-attachment-trigger"]');
+  await page.waitForSelector('[data-testid="chat-attachment-pill"]', { timeout: 5000 });
+  buttonInteractionEvidence.attachmentSelectionVisible =
+    ((await page.textContent('[data-testid="chat-attachment-pill"]')) ?? '').includes('phase-three-notes.txt');
+  await page.hover('[data-testid="chat-tool-trigger"]');
+  await page.waitForSelector('[data-testid="chat-tool-popover"]', { timeout: 5000 });
+  buttonInteractionEvidence.toolPopoverVisible =
+    ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('ripgrep 搜索');
+  await page.hover('[data-testid="chat-skill-trigger"]');
+  await page.waitForSelector('[data-testid="chat-skill-popover"]', { timeout: 5000 });
+  buttonInteractionEvidence.skillPopoverVisible =
+    ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('Smoke Skill');
+  await page.hover('[data-testid="chat-model-trigger"]');
+  await page.waitForSelector('[data-testid="chat-model-popover"]', { timeout: 5000 });
+  buttonInteractionEvidence.modelPopoverVisible =
+    ((await page.textContent('[data-testid="chat-model-popover"]')) ?? '').includes('smoke-model');
+  buttonInteractionEvidence.composerOnlyHasSendOnRight = await page.evaluate(() => {
+    const composerRight = document.querySelector('.composer-right');
+    if (!(composerRight instanceof HTMLElement)) {
+      return false;
+    }
+    const buttons = Array.from(composerRight.querySelectorAll('button'));
+    return buttons.length === 1 && buttons[0]?.getAttribute('data-testid') === 'chat-task-submit';
+  });
+  await page.click('[data-testid="nav-memory"]');
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
-  buttonInteractionEvidence.composerMemoryNavigates = true;
   buttonInteractionEvidence.memoryEditorHasNoDisabledButtons = (await page.locator('.memory-editor-actions button').count()) === 0;
   const memoryRecordCount = await page.locator('.memory-record').count();
   if (memoryRecordCount === 1) {

@@ -93,6 +93,7 @@ const rocApi: RocPreloadApi = {
     selectFromDialog: () => ipcRenderer.invoke(ipcChannels.workspaceSelectFromDialog)
   },
   files: {
+    selectFromDialog: () => ipcRenderer.invoke(ipcChannels.filesSelectFromDialog),
     listTree: (request) => ipcRenderer.invoke(ipcChannels.filesListTree, request),
     search: (request) => ipcRenderer.invoke(ipcChannels.filesSearch, request),
     preview: (request) => ipcRenderer.invoke(ipcChannels.filesPreview, request),

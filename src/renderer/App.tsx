@@ -1695,11 +1695,23 @@ function ChatView({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
   const [chatInput, setChatInput] = useState('');
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [activeComposerPopover, setActiveComposerPopover] = useState<'tools' | 'skills' | 'models' | null>(null);
   const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
   const visibleCapabilitySkills = state.skills.filter(
     (skill) => skill.enabled && skill.status === 'ready'
   );
+  const enabledModels = state.providers
+    .filter((provider) => provider.enabled)
+    .flatMap((provider) =>
+      provider.models
+        .filter((model) => model.enabled)
+        .map((model) => ({
+          id: model.id,
+          label: `${provider.name} / ${model.displayName}`
+        }))
+    );
   const trimmedInput = chatInput.trim();
   const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
 
@@ -1718,52 +1730,34 @@ function ChatView({
     }
   }
 
+  async function selectAttachmentsFromDialog(): Promise<void> {
+    const selection = await window.roc.files.selectFromDialog();
+    if (!selection.ok || selection.data === null) {
+      return;
+    }
+    setSelectedAttachments(selection.data.filePaths);
+  }
+
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
       <div className="chat-empty-plane" aria-label="聊天主画布"></div>
       <div className="chat-bottom-stack">
-        {visibleCapabilityServers.length === 0 && visibleCapabilitySkills.length === 0 ? null : (
-          <div className="capability-strip capability-strip--visible">
-            {visibleCapabilityServers.map((server) => (
-              <button
-                className={state.selectedMcpServers.includes(server.id) ? 'selection-chip active' : 'selection-chip'}
-                data-testid={`turn-mcp-${server.id}`}
-                key={server.id}
-                type="button"
-                onClick={() =>
-                  void updateTurnSelection(updateLoadedState, {
-                    mcpServers: toggleSelection(state.selectedMcpServers, server.id),
-                    skills: state.selectedSkills
-                  })
-                }
-              >
-                MCP {server.id}
-              </button>
-            ))}
-            {visibleCapabilitySkills.map((skill) => (
-              <button
-                className={state.selectedSkills.includes(skill.id) ? 'selection-chip active' : 'selection-chip'}
-                data-testid={`turn-skill-${skill.id}`}
-                key={skill.id}
-                type="button"
-                onClick={() =>
-                  void updateTurnSelection(updateLoadedState, {
-                    mcpServers: state.selectedMcpServers,
-                    skills: toggleSelection(state.selectedSkills, skill.id)
-                  })
-                }
-              >
-                Skill {skill.id}
-              </button>
-            ))}
-          </div>
-        )}
         <div className="composer composer--chat">
+          {selectedAttachments.length === 0 ? null : (
+            <div className="chat-attachment-strip">
+              {selectedAttachments.map((path) => (
+                <span className="chat-attachment-pill" data-testid="chat-attachment-pill" key={path}>
+                  <PreviewIcon name="paperclip" />
+                  <span>{path.split(/[/\\]/).at(-1) ?? path}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <textarea
             aria-label="输入消息"
             className="composer-input"
             data-testid="chat-input"
-            placeholder="输入消息"
+            placeholder="输入消息..."
             rows={3}
             value={chatInput}
             onChange={(event) => setChatInput(event.target.value)}
@@ -1776,38 +1770,149 @@ function ChatView({
           />
           <div className="composer-bottom">
             <div className="composer-left">
-              <button className="composer-tool active" type="button" aria-label="工作区文件" onClick={() => onOpenView('workspace')}>
-                <PreviewIcon name="folder" />
-                <span className="tool-badge">T</span>
-              </button>
               <button
-                className={state.selectedMcpServers.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                className={selectedAttachments.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                data-testid="chat-attachment-trigger"
                 type="button"
-                aria-label="已启用 MCP"
-                onClick={() => onOpenView('mcp')}
+                aria-label="上传文件"
+                onClick={() => void selectAttachmentsFromDialog()}
               >
-                <PreviewIcon name="nodes" />
-                <span className="tool-badge">{state.selectedMcpServers.length}</span>
+                <PreviewIcon name="paperclip" />
+                {selectedAttachments.length === 0 ? null : <span className="tool-badge">{selectedAttachments.length}</span>}
               </button>
-              <button
-                className={state.selectedSkills.length > 0 ? 'composer-tool active' : 'composer-tool'}
-                type="button"
-                aria-label="已启用 Skill"
-                onClick={() => onOpenView('skills')}
+              <div
+                className="composer-popover-anchor"
+                onMouseEnter={() => setActiveComposerPopover('tools')}
+                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'tools' ? null : current))}
               >
-                <PreviewIcon name="sparkles" />
-                <span className="tool-badge">{state.selectedSkills.length}</span>
-              </button>
-              <button className="model-pill" type="button" onClick={() => onOpenView('settings')}>
-                <PreviewIcon name="bot" />
-                <span>{state.defaultModelId ?? '配置默认模型'}</span>
-                <span>▾</span>
-              </button>
+                <button
+                  className={state.selectedMcpServers.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                  data-testid="chat-tool-trigger"
+                  type="button"
+                  aria-label="工具"
+                >
+                  <PreviewIcon name="nodes" />
+                  <span className="tool-badge">{state.selectedMcpServers.length}</span>
+                </button>
+                {activeComposerPopover !== 'tools' ? null : (
+                  <div className="composer-popover" data-testid="chat-tool-popover">
+                    <div className="composer-popover-head">
+                      <span>工具</span>
+                      <strong>本轮选择</strong>
+                    </div>
+                    <div className="composer-popover-copy">允许 Agent 在下一次回复中使用所选工具。</div>
+                    <div className="composer-popover-list">
+                      <button className="composer-choice composer-choice--mode" type="button">
+                        <span>自动</span>
+                        <small>让 Agent 自动选择最相关的工具。</small>
+                      </button>
+                      <button className="composer-choice" type="button">
+                        <span>ripgrep 搜索</span>
+                        <small>在项目文件中执行 ripgrep 搜索。</small>
+                      </button>
+                      {visibleCapabilityServers.map((server) => (
+                        <button
+                          className={state.selectedMcpServers.includes(server.id) ? 'composer-choice active' : 'composer-choice'}
+                          data-testid={`turn-mcp-${server.id}`}
+                          key={server.id}
+                          type="button"
+                          onClick={() =>
+                            void updateTurnSelection(updateLoadedState, {
+                              mcpServers: toggleSelection(state.selectedMcpServers, server.id),
+                              skills: state.selectedSkills
+                            })
+                          }
+                        >
+                          <span>{server.name}</span>
+                          <small>{server.allowedTools?.join(', ') || 'ripgrep 搜索'}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div
+                className="composer-popover-anchor"
+                onMouseEnter={() => setActiveComposerPopover('skills')}
+                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'skills' ? null : current))}
+              >
+                <button
+                  className={state.selectedSkills.length > 0 ? 'composer-tool active' : 'composer-tool'}
+                  data-testid="chat-skill-trigger"
+                  type="button"
+                  aria-label="技能"
+                >
+                  <PreviewIcon name="sparkles" />
+                  <span className="tool-badge">{state.selectedSkills.length}</span>
+                </button>
+                {activeComposerPopover !== 'skills' ? null : (
+                  <div className="composer-popover" data-testid="chat-skill-popover">
+                    <div className="composer-popover-head">
+                      <span>技能</span>
+                      <strong>本轮选择</strong>
+                    </div>
+                    <div className="composer-popover-copy">AI 自动选择相关技能，也可以手动启用。</div>
+                    <div className="composer-popover-list">
+                      {visibleCapabilitySkills.map((skill) => (
+                        <button
+                          className={state.selectedSkills.includes(skill.id) ? 'composer-choice active' : 'composer-choice'}
+                          data-testid={`turn-skill-${skill.id}`}
+                          key={skill.id}
+                          type="button"
+                          onClick={() =>
+                            void updateTurnSelection(updateLoadedState, {
+                              mcpServers: state.selectedMcpServers,
+                              skills: toggleSelection(state.selectedSkills, skill.id)
+                            })
+                          }
+                        >
+                          <span>{skill.name}</span>
+                          <small>{skill.description}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div
+                className="composer-popover-anchor"
+                onMouseEnter={() => setActiveComposerPopover('models')}
+                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'models' ? null : current))}
+              >
+                <button className="model-pill" data-testid="chat-model-trigger" type="button" aria-label="模型">
+                  <PreviewIcon name="bot" />
+                  <span>{state.defaultModelId ?? '配置默认模型'}</span>
+                  <span>▾</span>
+                </button>
+                {activeComposerPopover !== 'models' ? null : (
+                  <div className="composer-popover composer-popover--wide" data-testid="chat-model-popover">
+                    <div className="composer-popover-head">
+                      <span>模型</span>
+                      <strong>默认模型</strong>
+                    </div>
+                    <div className="composer-popover-list">
+                      {enabledModels.map((model) => (
+                        <button
+                          className={state.defaultModelId === model.id ? 'composer-choice active' : 'composer-choice'}
+                          key={model.id}
+                          type="button"
+                          onClick={() => {
+                            void window.roc.providers.setDefaultModel(model.id).then(async () => {
+                              const providers = unwrap<{ providers: ProviderConfig[]; defaultModelId: string | null }>('providers', await window.roc.providers.list());
+                              updateLoadedState({ providers: providers.providers, defaultModelId: providers.defaultModelId });
+                            });
+                          }}
+                        >
+                          <span>{model.label}</span>
+                          <small>{model.id}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="composer-right">
-              <button className="ghost-button" type="button" aria-label="可见性" onClick={() => onOpenView('memory')}>
-                <PreviewIcon name="eye" />
-              </button>
               <button
                 className="send-button"
                 data-testid="chat-task-submit"

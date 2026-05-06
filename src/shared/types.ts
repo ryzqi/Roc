@@ -81,6 +81,10 @@ export type WorkspaceSelectRequest = {
   path: string;
 };
 
+export type FileDialogSelection = {
+  filePaths: string[];
+};
+
 export type FileEntry = {
   name: string;
   relativePath: string;
