@@ -282,6 +282,7 @@ button {
 .sidebar-head {
   display: grid;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .workspace-pill {
@@ -325,6 +326,7 @@ button {
 
 .sidebar-block {
   min-height: 0;
+  flex: 0 0 auto;
   display: grid;
   gap: 8px;
   padding: 16px 0 0;
@@ -382,6 +384,13 @@ button {
 .nav-list {
   display: grid;
   gap: 8px;
+}
+
+.history-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .nav-button {

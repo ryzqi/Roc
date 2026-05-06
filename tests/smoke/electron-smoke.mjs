@@ -1111,12 +1111,27 @@ try {
     }
     return {
       expectedInput,
+      threadTitle: thread.title,
       threadGoal: thread.goal,
       userMessage: userMessage.payload,
       assistantMessage: assistantMessage.payload,
       providerUpdate: providerUpdate.payload,
       manifest: manifest.payload,
       skillLoaded: skillLoaded.payload
+    };
+  }, typedChatPrompt);
+  const historySidebarEvidence = await page.evaluate((expectedTitle) => {
+    const historyList = document.querySelector('.history-list');
+    const text = historyList?.textContent ?? '';
+    return {
+      exists: historyList !== null,
+      text,
+      hasExpectedThreadTitle: text.includes(expectedTitle),
+      hasCurrentSessionLabel: text.includes('当前主会话'),
+      hasQuickEntryLabel: text.includes('快捷入口'),
+      hasTrayEntryLabel: text.includes('托盘接管记录'),
+      hasMemoryRecordLabel: text.includes('记忆整理裁决'),
+      hasTaskRecordLabel: text.includes('任务工作台记录')
     };
   }, typedChatPrompt);
   await page.click('[data-testid="nav-doctor"]');
@@ -1732,6 +1747,14 @@ try {
       taskCapabilityEvidence.skillLoaded !== null &&
       taskCapabilityEvidence.skillLoaded.skillId === 'smoke-skill' &&
       taskCapabilityEvidence.skillLoaded.enabledBy === 'turn_selection',
+    historySidebarShowsRealThreads:
+      historySidebarEvidence.exists &&
+      historySidebarEvidence.hasExpectedThreadTitle &&
+      !historySidebarEvidence.hasCurrentSessionLabel &&
+      !historySidebarEvidence.hasQuickEntryLabel &&
+      !historySidebarEvidence.hasTrayEntryLabel &&
+      !historySidebarEvidence.hasMemoryRecordLabel &&
+      !historySidebarEvidence.hasTaskRecordLabel,
     memoryApiExpanded:
       boundary.memoryKeys.includes('listCandidates') &&
       boundary.memoryKeys.includes('listConflicts') &&
@@ -1793,6 +1816,7 @@ try {
     appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
     windowDragWorks: rendererBoundary.windowDragWorks,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
+    historySidebarShowsRealThreads: rendererBoundary.historySidebarShowsRealThreads,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
     traySummaryVisible: rendererBoundary.traySummaryVisible,
     phase6DoctorVisible: rendererBoundary.phase6DoctorVisible,

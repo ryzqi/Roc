@@ -105,13 +105,11 @@ type NavItem = {
   icon: PreviewIconName;
 };
 
-type HistoryRecord = {
+type HistoryItem = {
   id: string;
   label: string;
   meta: string;
   icon: PreviewIconName;
-  activeWhen?: ViewId;
-  action?: () => void;
 };
 
 type PageMeta = {
@@ -501,11 +499,23 @@ function buildHistoryNavItems(state: LoadedState): NavItem[] {
   return [
     {
       id: 'chat',
-      label: '当前主会话',
+      label: '当前对话',
       meta: `${state.taskSnapshot.recentEvents.filter((event) => event.type === 'message').length} 条消息`,
       icon: 'history'
     }
   ];
+}
+
+function buildHistoryItems(state: LoadedState): HistoryItem[] {
+  const backgroundThreadIds = new Set(state.backgroundTasks.map((task) => task.threadId));
+  return state.taskSnapshot.threads
+    .filter((thread) => !backgroundThreadIds.has(thread.id))
+    .map((thread) => ({
+      id: thread.id,
+      label: thread.title,
+      meta: thread.updatedAt.replace('T', ' ').slice(0, 16),
+      icon: 'history'
+    }));
 }
 
 function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
@@ -1075,28 +1085,9 @@ export function App(): React.JSX.Element {
   const meta = viewMeta(activeView as MainViewId);
   const topMeta = buildTopMeta(activeView as MainViewId, state);
   const historyNavItems = buildHistoryNavItems(state);
+  const historyItems = buildHistoryItems(state);
   const workspaceNavItems = buildWorkspaceNavItems(state);
   const controlNavItems = buildControlNavItems(state);
-  const historyRecords: HistoryRecord[] = [
-    { id: 'quick-entry', label: '快捷入口', meta: `${state.traySummary.backgroundTasks.running} 个后台任务`, icon: 'panel-right', action: () => void window.roc.app.openQuickEntry() },
-    { id: 'tray-entry', label: '托盘接管记录', meta: '后台状态同步', icon: 'panel-right', action: () => void window.roc.app.openTrayEntry() },
-    {
-      id: 'memory-record',
-      label: '记忆整理裁决',
-      meta: `记忆中心 · ${state.memoryConflicts.length} 条待确认`,
-      icon: 'globe',
-      activeWhen: 'memory',
-      action: () => setActiveView('memory')
-    },
-    {
-      id: 'task-record',
-      label: '任务工作台记录',
-      meta: `任务工作台 · 运行中 ${state.taskSnapshot.counts.running}`,
-      icon: 'clipboard',
-      activeWhen: 'tasks',
-      action: () => setActiveView('tasks')
-    }
-  ];
 
   return (
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
@@ -1186,24 +1177,23 @@ export function App(): React.JSX.Element {
             </button>
             {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
           </div>
+          <SidebarNavGroup activeView={activeView} items={historyNavItems} title="对话" onSelect={setActiveView} />
           <div className="sidebar-block sidebar-block--history">
             <div className="side-title">历史会话</div>
             <div className="sidebar-block-scroll history-list">
-              <NavButton active={activeView === 'chat'} item={historyNavItems[0]} onClick={() => setActiveView('chat')} />
-              {historyRecords.map((record) => (
-                <button
-                  className={record.activeWhen === activeView ? 'nav-button active' : 'nav-button'}
-                  key={record.id}
-                  type="button"
-                  onClick={record.action}
-                >
-                  <PreviewIcon name={record.icon} />
-                  <span className="nav-copy">
-                    <span className="nav-label">{record.label}</span>
-                    <span className="nav-meta">{record.meta}</span>
-                  </span>
-                </button>
-              ))}
+              {historyItems.length === 0 ? (
+                <div className="history-empty">暂无历史会话</div>
+              ) : (
+                historyItems.map((item) => (
+                  <button className="nav-button" key={item.id} type="button" onClick={() => setActiveView('chat')}>
+                    <PreviewIcon name={item.icon} />
+                    <span className="nav-copy">
+                      <span className="nav-label">{item.label}</span>
+                      <span className="nav-meta">{item.meta}</span>
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
           <SidebarNavGroup className="sidebar-block sidebar-block--tasks" activeView={activeView} items={workspaceNavItems} title="任务工作台" onSelect={setActiveView} />
