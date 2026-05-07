@@ -188,6 +188,12 @@ async function clickSmokeControl(page, selector) {
   });
 }
 
+async function clickComposerPopoverChoice(page, triggerSelector, choiceSelector) {
+  await page.hover(triggerSelector);
+  await page.waitForSelector(choiceSelector, { timeout: 5000 });
+  await clickSmokeControl(page, choiceSelector);
+}
+
 async function waitForTerminalSessionReady(page) {
   await page.waitForFunction(
     () => {
@@ -200,25 +206,54 @@ async function waitForTerminalSessionReady(page) {
   );
 }
 
-async function waitForCapabilitySelection(page, { mcpCount, skillCount, expectedIds = [] }) {
+async function waitForCapabilitySelection(page, { mcpCount, skillCount, expectedMcpIds = [], expectedSkillIds = [] }) {
   await page.waitForFunction(
-    ({ expectedIds: ids, mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
-      const node = document.querySelector('[data-testid="turn-capabilities"]');
-      const text = node?.textContent ?? '';
-      return (
-        text.includes(`MCP 本轮 ${expectedMcpCount}`) &&
-        text.includes(`Skill 本轮 ${expectedSkillCount}`) &&
-        ids.every((id) => text.includes(id))
-      );
+    ({ mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
+      const toolText = document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '';
+      const skillText = document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '';
+      return toolText.includes(String(expectedMcpCount)) && skillText.includes(String(expectedSkillCount));
     },
-    { expectedIds, mcpCount, skillCount },
+    { mcpCount, skillCount },
     { timeout: 5000 }
   );
-  const text = await page.textContent('[data-testid="turn-capabilities"]');
-  if (text === null) {
-    throw new Error('Smoke could not read chat capability text.');
+
+  if (expectedMcpIds.length > 0) {
+    await page.hover('[data-testid="chat-tool-trigger"]');
+    await page.waitForFunction(
+      ({ ids }) =>
+        ids.every((id) => {
+          const node = document.querySelector(`[data-testid="turn-mcp-${id}"]`);
+          return node instanceof HTMLElement && node.classList.contains('active');
+        }),
+      { ids: expectedMcpIds },
+      { timeout: 5000 }
+    );
   }
-  return text;
+
+  if (expectedSkillIds.length > 0) {
+    await page.hover('[data-testid="chat-skill-trigger"]');
+    await page.waitForFunction(
+      ({ ids }) =>
+        ids.every((id) => {
+          const node = document.querySelector(`[data-testid="turn-skill-${id}"]`);
+          return node instanceof HTMLElement && node.classList.contains('active');
+        }),
+      { ids: expectedSkillIds },
+      { timeout: 5000 }
+    );
+  }
+
+  const triggerEvidence = await page.evaluate(() => {
+    return {
+      toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
+      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? ''
+    };
+  });
+  return {
+    ...triggerEvidence,
+    mcpActiveIds: expectedMcpIds,
+    skillActiveIds: expectedSkillIds
+  };
 }
 
 async function waitForTextContent(page, selector, expectedText, timeout = 5000) {
@@ -419,7 +454,7 @@ try {
     };
   });
   await page.waitForSelector('[data-testid="window-workband"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="workspace-select-button"]', { timeout: 5000 });
   const browserWindow = await app.browserWindow(page);
   const initialWindowShell = {
@@ -492,7 +527,7 @@ try {
   }
   await page.reload();
   await waitForAppReady(page, 'after-skill-import');
-  await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   const selectedWorkspace = await page.evaluate(async (workspacePath) => {
     const result = await window.roc.workspace.select({ path: workspacePath });
     if (!result.ok) {
@@ -506,7 +541,7 @@ try {
   await seedSmokeRuntimeData(page, { providerEndpoint: smokeProvider.endpoint });
   await page.reload();
   await waitForAppReady(page, 'after-runtime-seed');
-  await page.waitForSelector('[data-testid="turn-capabilities"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   await page.click('[data-testid="nav-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="background-task-summary"]', { timeout: 5000 });
@@ -1047,22 +1082,19 @@ try {
   }
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="turn-capability-ids"]', { timeout: 5000 });
+  await waitForCapabilitySelection(page, { mcpCount: 1, skillCount: 1 });
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="turn-mcp-smoke-mcp"]', { timeout: 5000 });
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="turn-skill-smoke-skill"]', { timeout: 5000 });
-  await page.hover('[data-testid="chat-tool-trigger"]');
-  await page.click('[data-testid="turn-mcp-smoke-mcp"]');
-  await page.hover('[data-testid="chat-skill-trigger"]');
-  await page.click('[data-testid="turn-skill-smoke-skill"]');
+  await clickComposerPopoverChoice(page, '[data-testid="chat-tool-trigger"]', '[data-testid="turn-mcp-smoke-mcp"]');
+  await clickComposerPopoverChoice(page, '[data-testid="chat-skill-trigger"]', '[data-testid="turn-skill-smoke-skill"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
-  await page.hover('[data-testid="chat-tool-trigger"]');
-  await page.click('[data-testid="turn-mcp-smoke-mcp"]');
-  await page.hover('[data-testid="chat-skill-trigger"]');
-  await page.click('[data-testid="turn-skill-smoke-skill"]');
-  const chatCapabilityText = await waitForCapabilitySelection(page, {
-    expectedIds: ['smoke-mcp', 'smoke-skill'],
+  await clickComposerPopoverChoice(page, '[data-testid="chat-tool-trigger"]', '[data-testid="turn-mcp-smoke-mcp"]');
+  await clickComposerPopoverChoice(page, '[data-testid="chat-skill-trigger"]', '[data-testid="turn-skill-smoke-skill"]');
+  const chatCapabilityEvidence = await waitForCapabilitySelection(page, {
+    expectedMcpIds: ['smoke-mcp'],
+    expectedSkillIds: ['smoke-skill'],
     mcpCount: 1,
     skillCount: 1
   });
@@ -1105,6 +1137,9 @@ try {
         editable: false,
         visuallyFramed: false,
         sendButtonVisibleInViewport: false,
+        bottomExplanationsAbsent: false,
+        inputSettledAtBottom: false,
+        resultAboveInput: false,
         value: ''
       };
     }
@@ -1122,6 +1157,16 @@ try {
         rect.bottom <= viewport.height &&
         rect.right <= viewport.width;
     const sendButtonRect = sendButton instanceof HTMLElement ? sendButton.getBoundingClientRect() : null;
+    const composer = input.closest('.composer');
+    const composerRect = composer instanceof HTMLElement ? composer.getBoundingClientRect() : null;
+    const chatView = document.querySelector('[data-testid="chat-view"]');
+    const chatViewRect = chatView instanceof HTMLElement ? chatView.getBoundingClientRect() : null;
+    const bottomStack = document.querySelector('.chat-bottom-stack');
+    const bottomStackChildren = bottomStack instanceof HTMLElement ? Array.from(bottomStack.children) : [];
+    const bottomExplanationsAbsent =
+      document.querySelector('[data-testid="turn-capabilities"]') === null &&
+      bottomStackChildren.length === 1 &&
+      bottomStackChildren[0] === composer;
     const sendButtonVisibleInViewport =
       sendButton instanceof HTMLButtonElement &&
       !sendButton.disabled &&
@@ -1155,6 +1200,15 @@ try {
       sendButtonVisibleInViewport,
       backgroundColor: style.backgroundColor,
       borderTop: style.borderTop,
+      bottomExplanationsAbsent,
+      composerBottomGapToViewport: composerRect === null ? null : Math.round(viewport.height - composerRect.bottom),
+      inputSettledAtBottom:
+        composerRect !== null &&
+        chatViewRect !== null &&
+        composerRect.bottom <= chatViewRect.bottom &&
+        chatViewRect.bottom - composerRect.bottom <= 4 &&
+        viewport.height - composerRect.bottom <= 10,
+      resultAboveInput: true,
       value: input.value
     };
   });
@@ -1164,6 +1218,18 @@ try {
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
   }
+  const chatResultLayoutEvidence = await page.evaluate(() => {
+    const input = document.querySelector('[data-testid="chat-input"]');
+    const result = document.querySelector('[data-testid="chat-result"]');
+    if (!(input instanceof HTMLElement) || !(result instanceof HTMLElement)) {
+      return {
+        resultAboveInput: false
+      };
+    }
+    return {
+      resultAboveInput: result.getBoundingClientRect().bottom <= input.getBoundingClientRect().top
+    };
+  });
   const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
     const snapshot = await window.roc.tasks.getSnapshot();
     if (!snapshot.ok) {
@@ -1486,14 +1552,14 @@ try {
     ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('全选') &&
     ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('取消全选');
   await page.click('[data-testid="chat-tool-select-all"]');
-  await waitForCapabilitySelection(page, { expectedIds: ['smoke-mcp'], mcpCount: 1, skillCount: 1 });
+  await waitForCapabilitySelection(page, { expectedMcpIds: ['smoke-mcp'], mcpCount: 1, skillCount: 1 });
   buttonInteractionEvidence.toolSelectAllWorks =
-    ((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-mcp');
+    await page.locator('[data-testid="turn-mcp-smoke-mcp"].active').count() === 1;
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.click('[data-testid="chat-tool-clear-all"]');
   await waitForCapabilitySelection(page, { skillCount: 1, mcpCount: 0 });
   buttonInteractionEvidence.toolClearAllWorks =
-    !((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-mcp');
+    await page.locator('[data-testid="turn-mcp-smoke-mcp"].active').count() === 0;
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="chat-skill-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.skillPopoverVisible =
@@ -1502,14 +1568,14 @@ try {
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('全选') &&
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('取消全选');
   await page.click('[data-testid="chat-skill-select-all"]');
-  await waitForCapabilitySelection(page, { expectedIds: ['smoke-skill'], mcpCount: 0, skillCount: 1 });
+  await waitForCapabilitySelection(page, { expectedSkillIds: ['smoke-skill'], mcpCount: 0, skillCount: 1 });
   buttonInteractionEvidence.skillSelectAllWorks =
-    ((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-skill');
+    await page.locator('[data-testid="turn-skill-smoke-skill"].active').count() === 1;
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.click('[data-testid="chat-skill-clear-all"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
   buttonInteractionEvidence.skillClearAllWorks =
-    !((await page.textContent('[data-testid="turn-capability-ids"]')) ?? '').includes('smoke-skill');
+    await page.locator('[data-testid="turn-skill-smoke-skill"].active').count() === 0;
   await page.hover('[data-testid="chat-model-trigger"]');
   await page.waitForSelector('[data-testid="chat-model-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.modelPopoverVisible =
@@ -1909,10 +1975,10 @@ try {
       sidebarScrollEvidenceAfter.settingsVisible,
     workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
-      chatCapabilityText.includes('MCP 本轮 1') &&
-      chatCapabilityText.includes('Skill 本轮 1') &&
-      chatCapabilityText.includes('smoke-mcp') &&
-      chatCapabilityText.includes('smoke-skill'),
+      chatCapabilityEvidence.toolTriggerText.includes('1') &&
+      chatCapabilityEvidence.skillTriggerText.includes('1') &&
+      chatCapabilityEvidence.mcpActiveIds.includes('smoke-mcp') &&
+      chatCapabilityEvidence.skillActiveIds.includes('smoke-skill'),
     chatCollapsedRailLayoutVisible:
       collapsedChatLayoutBeforeOpen.shellExists &&
       collapsedChatLayoutBeforeOpen.railExists &&
@@ -1937,6 +2003,8 @@ try {
       chatInputEvidence.editable &&
       chatInputEvidence.visuallyFramed &&
       chatInputEvidence.sendButtonVisibleInViewport &&
+      chatInputEvidence.bottomExplanationsAbsent &&
+      chatInputEvidence.inputSettledAtBottom &&
       chatInputEvidence.value === typedChatPrompt,
     agentCapabilityPreviewVisible:
       agentPreviewText.includes('Agent 能力预览') &&
@@ -1958,7 +2026,8 @@ try {
     providerChatResultVisible:
       chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
       chatResultText.includes('task_answered') &&
-      chatResultText.includes('smoke-provider / smoke-model'),
+      chatResultText.includes('smoke-provider / smoke-model') &&
+      chatResultLayoutEvidence.resultAboveInput,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === typedChatPrompt &&
       taskCapabilityEvidence.threadGoal === typedChatPrompt &&

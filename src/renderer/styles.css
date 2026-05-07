@@ -247,6 +247,10 @@ button {
   padding: 0 20px 20px;
 }
 
+.workspace--chat {
+  padding-bottom: 4px;
+}
+
 .sidebar {
   min-width: 0;
   min-height: 0;
@@ -494,8 +498,9 @@ button {
 }
 
 .workspace-main--chat {
-  gap: 12px;
-  padding: 10px 0 14px 24px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  padding: 10px 0 4px 24px;
 }
 
 .canvas {
@@ -597,11 +602,22 @@ button {
   min-height: 0;
   border-radius: 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.992), rgba(254, 254, 255, 1));
+  overflow: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 8px 0 6px;
+}
+
+.chat-feedback-stack {
+  width: min(100%, 860px);
+  display: grid;
+  gap: 12px;
 }
 
 .chat-bottom-stack {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .capability-strip--visible {
@@ -1315,19 +1331,6 @@ button {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
-}
-
-.chat-runtime-panels {
-  display: grid;
-  gap: 10px;
-}
-
-.capability-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .composer-bottom {

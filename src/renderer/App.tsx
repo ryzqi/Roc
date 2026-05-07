@@ -1173,7 +1173,7 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <div className="workspace">
+      <div className={activeView === 'chat' ? 'workspace workspace--chat' : 'workspace'}>
         <aside className="sidebar">
           <div className="sidebar-head">
             <button
@@ -1768,7 +1768,14 @@ function ChatView({
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
-      <div className="chat-empty-plane" aria-label="聊天主画布"></div>
+      <div className="chat-empty-plane" aria-label="聊天主画布">
+        <div className="chat-feedback-stack">
+          {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
+          {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
+          {state.agentCapabilityPreview === null ? null : <AgentCapabilityPreviewPanel preview={state.agentCapabilityPreview} />}
+          {state.chatResult === null ? null : <ChatResultPanel result={state.chatResult} />}
+        </div>
+      </div>
       <div className="chat-bottom-stack">
         <div className="composer composer--chat">
           {selectedAttachments.length === 0 ? null : (
@@ -1982,19 +1989,6 @@ function ChatView({
             </div>
           </div>
         </div>
-        <div className="chat-runtime-panels">
-          <div className="capability-status" data-testid="turn-capabilities">
-            <span data-testid="turn-mcp-selection">MCP 本轮 {state.selectedMcpServers.length}</span>
-            <span data-testid="turn-skill-selection">Skill 本轮 {state.selectedSkills.length}</span>
-            <span data-testid="turn-capability-ids">
-              {[...state.selectedMcpServers, ...state.selectedSkills].join(', ')}
-            </span>
-          </div>
-          {state.chatResult === null ? null : <ChatResultPanel result={state.chatResult} />}
-          {state.agentCapabilityPreview === null ? null : <AgentCapabilityPreviewPanel preview={state.agentCapabilityPreview} />}
-        </div>
-        {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
-        {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
       </div>
     </section>
   );
