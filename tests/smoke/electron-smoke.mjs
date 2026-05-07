@@ -800,6 +800,10 @@ try {
   const gitHeaderEvidence = await page.evaluate(() => ({
     splitColumns: document.querySelector('.workbench-git--split') instanceof HTMLElement ? getComputedStyle(document.querySelector('.workbench-git--split')).gridTemplateColumns : ''
   }));
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="workbench-git-selection-path"]')?.textContent?.includes('phase-three-notes.txt') === true,
+    { timeout: 5000 }
+  );
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   const workbenchGitSelectionText = await page.textContent('[data-testid="workbench-git-selection"]');

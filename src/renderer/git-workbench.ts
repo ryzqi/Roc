@@ -20,6 +20,13 @@ type GitSelectablePath = {
   relativePath: string;
 };
 
+type GitDiffPreviewRequestInput = {
+  failedPath: string | null;
+  loadingPath: string | null;
+  selectedPath: string | null;
+  selectedPreview: { relativePath: string } | null;
+};
+
 export function clampGitSplitWidth(width: number): number {
   return Math.min(GIT_SPLIT_MAX_WIDTH, Math.max(GIT_SPLIT_MIN_WIDTH, Math.round(width)));
 }
@@ -49,6 +56,27 @@ export function buildGitSelectionModel<T extends GitSelectablePath>(changes: T[]
     selectedCount: selectedPaths.length,
     allSelectableSelected: changes.length > 0 && changes.every((change) => selectedPathSet.has(change.relativePath))
   };
+}
+
+export function buildGitDiffPreviewRequest({
+  failedPath,
+  loadingPath,
+  selectedPath,
+  selectedPreview
+}: GitDiffPreviewRequestInput): { relativePath: string } | null {
+  if (selectedPath === null) {
+    return null;
+  }
+  if (loadingPath === selectedPath) {
+    return null;
+  }
+  if (failedPath === selectedPath) {
+    return null;
+  }
+  if (selectedPreview !== null && selectedPreview.relativePath === selectedPath) {
+    return null;
+  }
+  return { relativePath: selectedPath };
 }
 
 export function buildGitBranchSwitcherModel({

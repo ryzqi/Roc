@@ -52,7 +52,7 @@ export class GitService {
     this.ensureGitRepository(workspace.path);
     const normalizedPath = this.normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
-    const change = this.getStatus().changes.find((item) => item.relativePath === normalizedPath);
+    const change = this.getStatusChanges(workspace.path).find((item) => item.relativePath === normalizedPath);
     if (change === undefined) {
       throw new RocDomainError({
         code: 'git_file_change_missing',

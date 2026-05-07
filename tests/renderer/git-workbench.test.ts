@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGitBranchSwitcherModel,
   buildGitCommitButtonState,
+  buildGitDiffPreviewRequest,
   buildGitSelectionModel,
   clampGitSplitWidth,
   selectAllGitChanges
@@ -86,5 +87,52 @@ describe('git workbench helpers', () => {
         commitMessage: 'feat: update notes'
       }).enabled
     ).toBe(false);
+  });
+
+  it('requests the selected file diff when the first selected path has no preview yet', () => {
+    expect(
+      buildGitDiffPreviewRequest({
+        failedPath: null,
+        loadingPath: null,
+        selectedPath: 'src/renderer/App.tsx',
+        selectedPreview: null
+      })
+    ).toEqual({
+      relativePath: 'src/renderer/App.tsx'
+    });
+  });
+
+  it('requests the selected file diff when the current preview belongs to a stale path', () => {
+    expect(
+      buildGitDiffPreviewRequest({
+        failedPath: null,
+        loadingPath: null,
+        selectedPath: 'src/renderer/styles.css',
+        selectedPreview: {
+          relativePath: 'src/renderer/App.tsx'
+        }
+      })
+    ).toEqual({
+      relativePath: 'src/renderer/styles.css'
+    });
+  });
+
+  it('does not duplicate a selected file diff request while loading or after a failed attempt', () => {
+    expect(
+      buildGitDiffPreviewRequest({
+        failedPath: null,
+        loadingPath: 'src/renderer/App.tsx',
+        selectedPath: 'src/renderer/App.tsx',
+        selectedPreview: null
+      })
+    ).toBe(null);
+    expect(
+      buildGitDiffPreviewRequest({
+        failedPath: 'src/renderer/App.tsx',
+        loadingPath: null,
+        selectedPath: 'src/renderer/App.tsx',
+        selectedPreview: null
+      })
+    ).toBe(null);
   });
 });

@@ -97,6 +97,10 @@ try {
 
   await page.locator('button[data-tool-button="git"]').first().click();
   await page.waitForSelector('[data-testid="workbench-git-changes"]', { timeout: 5000 });
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="workbench-git-selection-path"]')?.textContent?.includes('long-diff.txt') === true,
+    { timeout: 5000 }
+  );
   await page.click('[data-testid="git-select-long-diff.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-selection-path"]')?.textContent?.includes('long-diff.txt') === true);
 
@@ -161,7 +165,7 @@ try {
     throw new Error(`Git diff body should not keep its own vertical scroll after fix: ${JSON.stringify(diffLayoutEvidence)}`);
   }
 
-  if (Math.abs(diffLayoutEvidence.diffBottomVsScrollBottom) > 3) {
+  if (diffLayoutEvidence.diffBottomVsScrollBottom > 3) {
     throw new Error(`Git diff bottom is not reachable by scrolling: ${JSON.stringify(diffLayoutEvidence)}`);
   }
 } finally {

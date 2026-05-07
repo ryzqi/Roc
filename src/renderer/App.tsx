@@ -66,6 +66,7 @@ import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGi
 import {
   buildGitBranchSwitcherModel,
   buildGitCommitButtonState,
+  buildGitDiffPreviewRequest,
   buildGitSelectionModel,
   clampGitSplitWidth,
   GIT_SPLIT_DEFAULT_WIDTH,
@@ -3631,7 +3632,10 @@ function GitWorkbench({
   const [branchSearch, setBranchSearch] = useState('');
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [gitPaneWidth, setGitPaneWidth] = useState(GIT_SPLIT_DEFAULT_WIDTH);
+  const [loadingGitDiffPath, setLoadingGitDiffPath] = useState<string | null>(null);
+  const [failedGitDiffPath, setFailedGitDiffPath] = useState<string | null>(null);
   const diffParseCacheRef = useRef(new Map<string, GitDiffFileData[]>());
+  const diffPreviewRequestIdRef = useRef(0);
 
   const changes = state.gitStatus === null ? [] : gitStatusChanges(state.gitStatus);
   const selectedPath = findNextGitSelection(changes, state.gitSelectedPath);
@@ -3657,9 +3661,22 @@ function GitWorkbench({
       return;
     }
     if (state.gitSelectedPath !== selectedPath) {
-      updateWorkspaceData({ gitSelectedPath: selectedPath });
+      updateWorkspaceData({ gitSelectedPath: selectedPath, gitSelectedPreview: null });
     }
   }, [selectedPath, state.gitSelectedPath, state.gitSelectedPreview, updateWorkspaceData]);
+
+  useEffect(() => {
+    const request = buildGitDiffPreviewRequest({
+      failedPath: failedGitDiffPath,
+      loadingPath: loadingGitDiffPath,
+      selectedPath,
+      selectedPreview: state.gitSelectedPreview
+    });
+    if (request === null) {
+      return;
+    }
+    void loadGitDiffPreview(request.relativePath);
+  }, [failedGitDiffPath, loadingGitDiffPath, selectedPath, state.gitSelectedPreview]);
 
   useEffect(() => {
     if (changes.length === 0) {
@@ -3688,45 +3705,69 @@ function GitWorkbench({
     }
   }, [branchInfo, branchTarget]);
 
+  const selectionPreview =
+    selectedChange === null || state.gitSelectedPreview === null || state.gitSelectedPreview.relativePath !== selectedChange.relativePath
+      ? null
+      : state.gitSelectedPreview;
+
   const selectionFiles = useMemo<GitDiffFileData[]>(() => {
-    if (state.gitSelectedPreview === null) {
+    if (selectionPreview === null) {
       return [];
     }
-    const cacheKey = buildGitDiffCacheKey(state.gitSelectedPreview);
+    const cacheKey = buildGitDiffCacheKey(selectionPreview);
     const cachedFiles = diffParseCacheRef.current.get(cacheKey);
     if (cachedFiles !== undefined) {
       return cachedFiles;
     }
-    const normalized = normalizeGitDiffText(state.gitSelectedPreview.patch);
+    const normalized = normalizeGitDiffText(selectionPreview.patch);
     const files = parseDiff(normalized, { nearbySequences: 'zip' });
     diffParseCacheRef.current.set(cacheKey, files);
     return files;
-  }, [state.gitSelectedPreview]);
+  }, [selectionPreview]);
   const selectedDiffFile = useMemo(() => {
-    if (selectedChange === null || state.gitSelectedPreview === null) {
+    if (selectedChange === null || selectionPreview === null) {
       return null;
     }
     return selectGitDiffFile(selectionFiles, selectedChange.relativePath);
-  }, [selectionFiles, selectedChange, state.gitSelectedPreview]);
+  }, [selectionFiles, selectedChange, selectionPreview]);
 
-  async function selectGitFile(relativePath: string): Promise<void> {
-    updateWorkspaceData({
-      gitSelectedPath: relativePath,
-      gitSelectedPreview: null
-    });
+  async function loadGitDiffPreview(relativePath: string): Promise<void> {
+    const requestId = diffPreviewRequestIdRef.current + 1;
+    diffPreviewRequestIdRef.current = requestId;
+    setLoadingGitDiffPath(relativePath);
+    setFailedGitDiffPath((current) => (current === relativePath ? null : current));
+    setActionError(null);
     try {
       const preview = unwrap<GitFileDiffResult>('git selected file diff', await window.roc.git.fileDiff({ relativePath }));
+      if (diffPreviewRequestIdRef.current !== requestId) {
+        return;
+      }
       updateWorkspaceData({
         gitSelectedPath: relativePath,
         gitSelectedPreview: preview
       });
+      setLoadingGitDiffPath(null);
+      setFailedGitDiffPath((current) => (current === relativePath ? null : current));
     } catch (selectionError) {
+      if (diffPreviewRequestIdRef.current !== requestId) {
+        return;
+      }
+      setLoadingGitDiffPath(null);
+      setFailedGitDiffPath(relativePath);
       setActionError(selectionError instanceof Error ? selectionError.message : '当前 Git Diff 加载失败。');
       updateWorkspaceData({
         gitSelectedPath: relativePath,
         gitSelectedPreview: null
       });
     }
+  }
+
+  async function selectGitFile(relativePath: string): Promise<void> {
+    updateWorkspaceData({
+      gitSelectedPath: relativePath,
+      gitSelectedPreview: null
+    });
+    await loadGitDiffPreview(relativePath);
   }
 
   async function applyGitStatusResult(status: GitStatusResult, preferredPath: string | null): Promise<void> {
@@ -3741,19 +3782,7 @@ function GitWorkbench({
       updateWorkspaceData({ gitSelectedPreview: null });
       return;
     }
-    try {
-      const preview = unwrap<GitFileDiffResult>('git selected file diff', await window.roc.git.fileDiff({ relativePath: nextSelectedPath }));
-      updateWorkspaceData({
-        gitSelectedPath: nextSelectedPath,
-        gitSelectedPreview: preview
-      });
-    } catch (selectionError) {
-      setActionError(selectionError instanceof Error ? selectionError.message : '当前 Git Diff 加载失败。');
-      updateWorkspaceData({
-        gitSelectedPath: nextSelectedPath,
-        gitSelectedPreview: null
-      });
-    }
+    await loadGitDiffPreview(nextSelectedPath);
   }
 
   function applyBranchMutationResult(result: GitBranchMutationResult): void {
@@ -3990,12 +4019,16 @@ function GitWorkbench({
   });
   const visibleBranches = branchSwitcherModel.visibleBranches;
   const selectionStatus = selectedChange === null ? null : buildGitChangeStateLabel(selectedChange);
-  const selectionPreview = state.gitSelectedPreview;
   const selectionPreviewPanel =
     selectedChange === null ? (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
         <strong>尚未选中文件</strong>
         <p>{gitSelectionEmptyMessage(state)}</p>
+      </div>
+    ) : failedGitDiffPath === selectedChange.relativePath && loadingGitDiffPath !== selectedChange.relativePath ? (
+      <div className="git-selection-empty" data-testid="workbench-git-selection">
+        <strong>{selectedChange.relativePath}</strong>
+        <p>当前文件 diff 加载失败。</p>
       </div>
     ) : selectionPreview === null ? (
       <div className="git-selection-empty" data-testid="workbench-git-selection">
