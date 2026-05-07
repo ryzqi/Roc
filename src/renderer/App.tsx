@@ -62,7 +62,7 @@ import type {
   Workspace
 } from '../shared/types';
 import { getStartupLoadIntent } from './startup-load-policy';
-import { buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
+import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
 import {
   buildGitBranchSwitcherModel,
   buildGitSelectionModel,
@@ -3636,6 +3636,7 @@ function GitWorkbench({
   const [branchSearch, setBranchSearch] = useState('');
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [gitPaneWidth, setGitPaneWidth] = useState(GIT_SPLIT_DEFAULT_WIDTH);
+  const diffParseCacheRef = useRef(new Map<string, GitDiffFileData[]>());
 
   const changes = state.gitStatus === null ? [] : gitStatusChanges(state.gitStatus);
   const selectedPath = findNextGitSelection(changes, state.gitSelectedPath);
@@ -3696,8 +3697,15 @@ function GitWorkbench({
     if (state.gitSelectedPreview === null) {
       return [];
     }
+    const cacheKey = buildGitDiffCacheKey(state.gitSelectedPreview);
+    const cachedFiles = diffParseCacheRef.current.get(cacheKey);
+    if (cachedFiles !== undefined) {
+      return cachedFiles;
+    }
     const normalized = normalizeGitDiffText(state.gitSelectedPreview.patch);
-    return parseDiff(normalized, { nearbySequences: 'zip' });
+    const files = parseDiff(normalized, { nearbySequences: 'zip' });
+    diffParseCacheRef.current.set(cacheKey, files);
+    return files;
   }, [state.gitSelectedPreview]);
   const selectedDiffFile = useMemo(() => {
     if (selectedChange === null || state.gitSelectedPreview === null) {
@@ -4012,11 +4020,10 @@ function GitWorkbench({
           <span>{selectedDiffFile.type}</span>
         </div>
         <div className="git-diff-body">
-          <div className="git-diff-scroll">
+          <div className="git-diff-scroll" data-testid="workbench-git-selection-preview">
             <Diff
               diffType={selectedDiffFile.type}
               hunks={selectedDiffFile.hunks}
-              optimizeSelection
               viewType="unified"
             >
               {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}

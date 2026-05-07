@@ -2052,6 +2052,7 @@ button.model-pill {
 .workbench-git--split {
   display: grid;
   grid-template-columns: var(--git-pane-width, 410px) 12px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   background: #f4f6fa;
 }
@@ -2354,6 +2355,9 @@ button.model-pill {
 
 .git-selection-slot {
   margin: 0;
+  min-height: 0;
+  display: grid;
+  overflow: hidden;
 }
 
 .git-diff-panel,
@@ -2367,7 +2371,10 @@ button.model-pill {
 }
 
 .git-diff-panel {
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
   padding: 0;
+  overflow: hidden;
 }
 
 .git-diff-header {
@@ -2389,8 +2396,8 @@ button.model-pill {
 
 .git-diff-body {
   min-height: 0;
-  flex: 1;
-  overflow: auto;
+  display: grid;
+  overflow: hidden;
   padding: 0 8px 8px;
 }
 
@@ -2400,7 +2407,8 @@ button.model-pill {
 
 .git-diff-scroll {
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 0 8px 8px;
 }
 
@@ -2439,6 +2447,7 @@ button.model-pill {
 @media (max-width: 1180px) {
   .workbench-git--split {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .workbench-git-splitter {

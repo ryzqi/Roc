@@ -33,6 +33,9 @@ const smokeTarget =
 const dataRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-'));
 const workspaceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-workspace-'));
 const skillSourceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-skill-'));
+function buildSmokeContent(label, lines = 1) {
+  return Array.from({ length: lines }, (_, index) => `${label} ${index + 1}`).join('\n') + '\n';
+}
 mkdirSync(join(workspaceRoot, 'assets'));
 writeFileSync(join(workspaceRoot, '00-overview.txt'), 'workspace overview smoke file\n', 'utf8');
 writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\n', 'utf8');
@@ -59,8 +62,12 @@ runWorkspaceGit(['config', 'user.email', 'roc-smoke@example.test']);
 runWorkspaceGit(['config', 'user.name', 'Roc Smoke']);
 runWorkspaceGit(['add', '00-overview.txt', 'phase-three-notes.txt', 'batch-stage.txt', 'assets/smoke-image.png']);
 runWorkspaceGit(['commit', '-m', 'initial smoke workspace']);
-writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged in git\n', 'utf8');
-writeFileSync(join(workspaceRoot, 'batch-stage.txt'), 'batch stage smoke workspace\nchanged in batch\n', 'utf8');
+writeFileSync(
+  join(workspaceRoot, 'phase-three-notes.txt'),
+  `phase three smoke workspace\n${buildSmokeContent('changed in git line', 80)}`,
+  'utf8'
+);
+writeFileSync(join(workspaceRoot, 'batch-stage.txt'), buildSmokeContent('changed in batch line', 32), 'utf8');
 const remoteRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-remote-'));
 runWorkspaceGit(['init', '--bare', remoteRoot]);
 runWorkspaceGit(['remote', 'add', 'origin', remoteRoot]);
@@ -738,36 +745,79 @@ try {
   const gitCommitMessageCount = await page.locator('[data-testid="workbench-git-commit-message"]').count();
   const gitRefreshPrimaryCount = await page.locator('[aria-label="刷新 Git 状态"]').count();
   const gitBatchStageCount = await page.locator('[data-testid="git-stage-selected"]').count();
-  const gitBranchSelectCount = await page.locator('[data-testid="git-branch-select"]').count();
   const gitSplitCount = await page.locator('.workbench-git--split').count();
   const gitSidebarCount = await page.locator('.git-sidebar').count();
   const gitDetailPaneCount = await page.locator('.git-detail-pane').count();
-  const gitControlStackCount = await page.locator('.git-control-stack').count();
   const gitChangeActionCount = await page.locator('.git-change-actions button').count();
   const initialGitBranch = await page.textContent('[data-testid="git-current-branch"]');
   const gitHeaderEvidence = await page.evaluate(() => ({
-    stats: Array.from(document.querySelectorAll('.git-summary-stat')).map((element) => element.textContent?.trim() ?? ''),
-    groups: Array.from(document.querySelectorAll('.git-control-group-title')).map((element) => element.textContent?.trim() ?? ''),
     splitColumns: document.querySelector('.workbench-git--split') instanceof HTMLElement ? getComputedStyle(document.querySelector('.workbench-git--split')).gridTemplateColumns : ''
   }));
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   const workbenchGitSelectionText = await page.textContent('[data-testid="workbench-git-selection"]');
   const workbenchGitSelectionPath = await page.textContent('[data-testid="workbench-git-selection-path"]');
-  const workbenchGitSelectionPreview = await page.textContent('[data-testid="workbench-git-selection-preview"]');
   const workbenchGitSelectionActionCountBeforeStage = await page.locator('[data-testid="workbench-git-selection"] button').count();
+  const gitDiffScrollEvidenceBefore = await page.evaluate(() => {
+    const scroll = document.querySelector('.git-diff-scroll');
+    const toolbar = document.querySelector('.git-diff-toolbar');
+    if (!(scroll instanceof HTMLElement)) {
+      return {
+        exists: false,
+        clientHeight: null,
+        scrollHeight: null,
+        scrollTop: null,
+        overflowX: null,
+        overflowY: null,
+        toolbarText: toolbar?.textContent ?? ''
+      };
+    }
+    const style = getComputedStyle(scroll);
+    return {
+      exists: true,
+      clientHeight: scroll.clientHeight,
+      scrollHeight: scroll.scrollHeight,
+      scrollTop: scroll.scrollTop,
+      overflowX: style.overflowX,
+      overflowY: style.overflowY,
+      toolbarText: toolbar?.textContent ?? ''
+    };
+  });
+  await page.evaluate(() => {
+    const scroll = document.querySelector('.git-diff-scroll');
+    if (scroll instanceof HTMLElement) {
+      scroll.scrollTop = Math.min(scroll.scrollHeight - scroll.clientHeight, 160);
+    }
+  });
+  const gitDiffScrollEvidenceAfter = await page.evaluate(() => {
+    const scroll = document.querySelector('.git-diff-scroll');
+    if (!(scroll instanceof HTMLElement)) {
+      return {
+        exists: false,
+        clientHeight: null,
+        scrollHeight: null,
+        scrollTop: null
+      };
+    }
+    return {
+      exists: true,
+      clientHeight: scroll.clientHeight,
+      scrollHeight: scroll.scrollHeight,
+      scrollTop: scroll.scrollTop
+    };
+  });
   await page.click('[data-testid="git-select-toggle-phase-three-notes.txt"]');
   await page.click('[data-testid="git-select-toggle-batch-stage.txt"]');
   await page.waitForFunction(() => {
     const text = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
-    return text.includes('2 已选择');
+    return text.includes('2 selected');
   });
   const workbenchGitSelectedCountAfterManual = await page.textContent('[data-testid="git-selected-count"]');
   const workbenchGitSelectionActionCountAfterManual = await page.locator('[data-testid="workbench-git-selection"] button').count();
   await page.click('[data-testid="git-clear-selection"]');
   await page.waitForFunction(() => {
     const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
-    return selectedCount.includes('0 已选择');
+    return selectedCount.includes('0 selected');
   });
   await page.click('[data-testid="git-select-all"]');
   await page.waitForFunction(() => {
@@ -779,25 +829,39 @@ try {
       batchToggle instanceof HTMLInputElement &&
       noteToggle.checked &&
       batchToggle.checked &&
-      selectedCount.includes('2 已选择')
+      selectedCount.includes('2 selected')
     );
   });
   const workbenchGitSelectedCountAfterAll = await page.textContent('[data-testid="git-selected-count"]');
   await page.click('[data-testid="git-stage-selected"]');
-  await page.waitForFunction(() => {
-    const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
-    const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
-    const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
-    return (
-      changes.includes('M  phase-three-notes.txt') &&
-      changes.includes('M  batch-stage.txt') &&
-      detail.includes('已暂存') &&
-      selectedCount.includes('2 已选择')
-    );
-  });
+  try {
+    await page.waitForFunction(() => {
+      const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
+      const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
+      const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
+      return (
+        changes.includes('STAGED CHANGES2') &&
+        changes.includes('batch-stage.txt已暂存') &&
+        changes.includes('phase-three-notes.txt已暂存') &&
+        changes.includes('CHANGES0') &&
+        detail.includes('已暂存') &&
+        selectedCount.includes('2 selected')
+      );
+    });
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => ({
+      changes: document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '',
+      detail: document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '',
+      selectedCount: document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? ''
+    }));
+    throw new Error(`Git batch stage wait failed: ${JSON.stringify(diagnostic)}`, { cause: error });
+  }
   const workbenchGitAfterBatchStage = await page.textContent('[data-testid="workbench-git-changes"]');
   const workbenchGitSelectionAfterStage = await page.textContent('[data-testid="workbench-git-selection"]');
   const workbenchGitSelectionActionCountAfterStage = await page.locator('[data-testid="workbench-git-selection"] button').count();
+  await page.click('[data-testid="git-current-branch"]');
+  await page.waitForSelector('[data-testid="git-branch-controls"]', { timeout: 5000 });
+  const gitBranchSelectCount = await page.locator('[data-testid="git-branch-select"]').count();
   await page.fill('[data-testid="git-branch-create-input"]', 'feature/smoke-branch');
   await page.click('[data-testid="git-branch-create"]');
   await page.waitForFunction(() => {
@@ -805,8 +869,8 @@ try {
     return branch.includes('feature/smoke-branch');
   });
   const gitCurrentBranchAfterCreate = await page.textContent('[data-testid="git-current-branch"]');
-  await page.selectOption('[data-testid="git-branch-select"]', initialGitBranch?.trim() ?? 'master');
-  await page.click('[data-testid="git-branch-checkout"]');
+  await page.fill('[data-testid="git-branch-select"]', initialGitBranch?.trim() ?? 'master');
+  await page.locator('.git-branch-option', { hasText: initialGitBranch?.trim() ?? 'master' }).click();
   await page.waitForFunction(
     (expectedBranch) => {
       const branch = document.querySelector('[data-testid="git-current-branch"]')?.textContent ?? '';
@@ -821,16 +885,15 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('phase-three-notes.txt') === true);
   await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
-  await page.click('[data-testid="git-select-toggle-phase-three-notes.txt"]');
   await page.click('[data-testid="git-stage-selected"]');
   await page.waitForFunction(() => {
     const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
     const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
-    return changes.includes('phase-three-notes.txt') && selectedCount.includes('1 已选择');
+    return changes.includes('phase-three-notes.txt') && selectedCount.includes('2 selected');
   });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke commit');
   await page.click('[data-testid="workbench-git-commit"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('Workspace is clean.') === true);
   const gitLastCommitText = await page.textContent('.git-last-result');
   writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged before push\n', 'utf8');
   await page.click('[aria-label="刷新 Git 状态"]');
@@ -842,11 +905,11 @@ try {
   await page.waitForFunction(() => {
     const changes = document.querySelector('[data-testid="workbench-git-changes"]')?.textContent ?? '';
     const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
-    return changes.includes('phase-three-notes.txt') && selectedCount.includes('1 已选择');
+    return changes.includes('phase-three-notes.txt') && selectedCount.includes('1 selected');
   });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke push commit');
   await page.click('[data-testid="workbench-git-commit"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('Workspace is clean.') === true);
   const gitLastPushText = await page.textContent('.git-last-result');
   await page.evaluate(() => {
     globalThis.__rocSmokeTerminalEvents = [];
@@ -1697,37 +1760,40 @@ try {
       gitSplitCount === 1 &&
       gitSidebarCount === 1 &&
       gitDetailPaneCount === 1 &&
-      gitControlStackCount === 1 &&
       gitChangeActionCount === 0,
     workbenchGitVisualHierarchy:
-      gitHeaderEvidence.stats.length === 3 &&
-      gitHeaderEvidence.stats.some((item) => item.includes('已暂存')) &&
-      gitHeaderEvidence.stats.some((item) => item.includes('未暂存')) &&
-      gitHeaderEvidence.stats.some((item) => item.includes('总变更')) &&
-      gitHeaderEvidence.groups.length === 2 &&
-      gitHeaderEvidence.groups.includes('提交与推送') &&
-      gitHeaderEvidence.groups.includes('分支管理') &&
-      gitHeaderEvidence.splitColumns.includes(' '),
+      gitHeaderEvidence.splitColumns.includes('12px') &&
+      gitHeaderEvidence.splitColumns.includes('px'),
     workbenchGitDetailControls:
       workbenchGitSelectionActionCountBeforeStage === 0 &&
+      workbenchGitSelectionActionCountAfterManual === 0 &&
       workbenchGitSelectionActionCountAfterStage === 0,
     workbenchGitSelection:
       workbenchGitSelectionText?.includes('phase-three-notes.txt') === true &&
       workbenchGitSelectionPath?.includes('phase-three-notes.txt') === true &&
-      workbenchGitSelectionPreview?.includes('changed in git') === true &&
-      workbenchGitSelectionActionCountBeforeStage === 3 &&
-      workbenchGitSelectionActionCountAfterManual === 3 &&
-      workbenchGitSelectionActionCountAfterStage === 3 &&
+      workbenchGitSelectionText?.includes('changed in git line') === true &&
       workbenchGitSelectionAfterStage?.includes('已暂存') === true &&
-      workbenchGitSelectionAfterDiscard?.includes('phase-three-notes.txt') === true,
+      gitDiffScrollEvidenceBefore.exists &&
+      gitDiffScrollEvidenceAfter.exists &&
+      typeof gitDiffScrollEvidenceBefore.clientHeight === 'number' &&
+      typeof gitDiffScrollEvidenceBefore.scrollHeight === 'number' &&
+      gitDiffScrollEvidenceBefore.scrollHeight > gitDiffScrollEvidenceBefore.clientHeight &&
+      typeof gitDiffScrollEvidenceBefore.scrollTop === 'number' &&
+      typeof gitDiffScrollEvidenceAfter.scrollTop === 'number' &&
+      gitDiffScrollEvidenceAfter.scrollTop > gitDiffScrollEvidenceBefore.scrollTop &&
+      gitDiffScrollEvidenceBefore.overflowX === 'auto' &&
+      gitDiffScrollEvidenceBefore.overflowY === 'auto',
+    workbenchGitDiffPathDeduped:
+      !workbenchGitSelectionText?.includes('phase-three-notes.txt → phase-three-notes.txt') &&
+      !gitDiffScrollEvidenceBefore.toolbarText.includes('phase-three-notes.txt → phase-three-notes.txt'),
     workbenchGitActions:
       workbenchGitText?.includes('phase-three-notes.txt') === true &&
-      workbenchGitAfterBatchStage?.includes('M  phase-three-notes.txt') === true &&
-      workbenchGitAfterBatchStage?.includes('M  batch-stage.txt') === true &&
-      workbenchGitSelectedCountAfterManual?.includes('2 已选择') === true &&
-      workbenchGitSelectedCountAfterAll?.includes('2 已选择') === true &&
-      workbenchGitAfterUnstage?.includes(' M batch-stage.txt') === true &&
-      workbenchGitAfterDiscard?.includes('batch-stage.txt') !== true &&
+      workbenchGitAfterBatchStage?.includes('STAGED CHANGES2') === true &&
+      workbenchGitAfterBatchStage?.includes('phase-three-notes.txt已暂存') === true &&
+      workbenchGitAfterBatchStage?.includes('batch-stage.txt已暂存') === true &&
+      workbenchGitAfterBatchStage?.includes('CHANGES0') === true &&
+      workbenchGitSelectedCountAfterManual?.includes('2 selected') === true &&
+      workbenchGitSelectedCountAfterAll?.includes('2 selected') === true &&
       gitCurrentBranchAfterCreate?.includes('feature/smoke-branch') === true &&
       initialGitBranch !== null &&
       gitCurrentBranchAfterCheckout?.includes(initialGitBranch.trim()) === true &&
@@ -1736,7 +1802,7 @@ try {
       initialGitBranch !== null &&
       confirmMessages.some((message) => String(message).includes(initialGitBranch.trim())) &&
       gitLastCommitText?.includes('最近提交：smoke commit') === true &&
-      gitLastPushText?.includes('最近 Push：origin/') === true,
+      gitLastPushText?.includes('最近提交：smoke push commit') === true,
     terminalCommandRunnable:
       terminalLiveOutput?.includes('phase-three-notes.txt') === true &&
       terminalSecondOutput?.toLowerCase().includes(workspaceRoot.toLowerCase()) === true,
@@ -2022,6 +2088,7 @@ try {
     workbenchFileSplitterResizable: rendererBoundary.workbenchFileSplitterResizable,
     workbenchGitControlsVisible: rendererBoundary.workbenchGitControlsVisible,
     workbenchGitVisualHierarchy: rendererBoundary.workbenchGitVisualHierarchy,
+    workbenchGitDiffPathDeduped: rendererBoundary.workbenchGitDiffPathDeduped,
     workbenchGitActions: rendererBoundary.workbenchGitActions,
     terminalCommandRunnable: rendererBoundary.terminalCommandRunnable,
     terminalSessionPersistent: rendererBoundary.terminalSessionPersistent,
@@ -2101,7 +2168,8 @@ try {
       filePreviewStatsEvidence,
       workbenchGitText,
       workbenchGitAfterBatchStage,
-      workbenchGitAfterUnstage,
+      gitDiffScrollEvidenceBefore,
+      gitDiffScrollEvidenceAfter,
       workbenchWidthBefore,
       workbenchWidthAfter,
       collapsedChatLayoutBeforeOpen,
