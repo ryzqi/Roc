@@ -477,6 +477,35 @@ export type TraySummary = {
   updatedAt: string;
 };
 
+export type AppSettings = {
+  schemaVersion: 1;
+  defaultWorkspace: string | null;
+  startup: {
+    openAtLogin: boolean;
+    minimizeToTray: boolean;
+  };
+  notifications: {
+    lowDistraction: boolean;
+  };
+  appearance: {
+    theme: 'light';
+  };
+  memory: {
+    candidateReviewMode: 'manual';
+    warmRecallEnabled: boolean;
+  };
+};
+
+export type PermissionsConfig = {
+  schemaVersion: 1;
+  grants: unknown[];
+};
+
+export type ShortcutsConfig = {
+  schemaVersion: 1;
+  shortcuts: unknown[];
+};
+
 export type ProviderType = 'openai_compatible' | 'anthropic_compatible' | 'ollama' | 'custom';
 
 export type ProviderModel = {
@@ -528,6 +557,20 @@ export type ProvidersConfig = {
   schemaVersion: 1;
   defaultModelId: string | null;
   providers: ProviderConfig[];
+};
+
+export type McpServersConfig = {
+  schemaVersion: 1;
+  servers: McpServerConfig[];
+};
+
+export type RocSettingsDocument = {
+  schemaVersion: 2;
+  settings: AppSettings;
+  providers: ProvidersConfig;
+  mcp: McpServersConfig;
+  permissions: PermissionsConfig;
+  shortcuts: ShortcutsConfig;
 };
 
 export type DefaultModelState = {
@@ -824,6 +867,20 @@ export type SkillSnapshot = {
   description: string;
   status: 'ready' | 'invalid';
   lastError?: string | null;
+};
+
+export type SettingsSnapshot = {
+  settings: AppSettings;
+  providers: ProviderConfig[];
+  defaultModelId: string | null;
+  mcpServers: McpServerSnapshot[];
+  skills: SkillSnapshot[];
+};
+
+export type SettingsSaveRequest = {
+  settings: AppSettings;
+  providers: ProviderConfig[];
+  defaultModelId: string | null;
 };
 
 export type SkillImportRequest = {

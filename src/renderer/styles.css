@@ -3045,13 +3045,23 @@ button.model-pill {
 }
 
 .settings-item {
+  width: 100%;
   min-height: 46px;
   display: flex;
   align-items: center;
   padding: 0 14px;
+  border: 0;
   border-bottom: 1px solid rgba(238, 242, 247, 0.96);
+  background: transparent;
   color: var(--muted);
   font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-item:hover {
+  color: var(--ink);
+  background: rgba(248, 250, 253, 0.98);
 }
 
 .settings-item.active {
@@ -3067,6 +3077,57 @@ button.model-pill {
 .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.settings-panel-stack,
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-actions button,
+.settings-form input,
+.settings-form select,
+.settings-form textarea {
+  border: 1px solid rgba(214, 223, 235, 0.96);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.settings-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.settings-form input,
+.settings-form select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.settings-form textarea {
+  min-height: 94px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.checkbox-field {
+  align-content: start;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 18px;
+  min-height: 18px;
 }
 
 .field {

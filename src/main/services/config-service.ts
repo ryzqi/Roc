@@ -1,11 +1,22 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { DefaultModelState, ProviderConfig, ProviderTestResult, ProvidersConfig } from '../../shared/types';
+import type {
+  AppSettings,
+  DefaultModelState,
+  McpServerConfig,
+  McpServersConfig,
+  PermissionsConfig,
+  ProviderConfig,
+  ProviderTestResult,
+  ProvidersConfig,
+  RocSettingsDocument,
+  SettingsSaveRequest
+} from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 
-const SettingsSchema = z.object({
+const SettingsSchema: z.ZodType<AppSettings> = z.object({
   schemaVersion: z.literal(1),
   defaultWorkspace: z.string().nullable(),
   startup: z.object({
@@ -48,8 +59,51 @@ const ProvidersSchema: z.ZodType<ProvidersConfig> = z.object({
   providers: z.array(ProviderSchema)
 });
 
-export type RocSettings = z.infer<typeof SettingsSchema>;
+const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  enabled: z.boolean(),
+  transport: z.enum(['stdio', 'http', 'sse']),
+  preset: z.boolean(),
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  url: z.string().min(1).optional(),
+  command: z.string().min(1).optional(),
+  allowedTools: z.array(z.string().min(1))
+});
+
+const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
+  schemaVersion: z.literal(1),
+  servers: z.array(McpServerSchema)
+});
+
+const PermissionsConfigSchema: z.ZodType<PermissionsConfig> = z.object({
+  schemaVersion: z.literal(1),
+  grants: z.array(z.unknown())
+});
+
+const ShortcutsConfigSchema = z.object({
+  schemaVersion: z.literal(1),
+  shortcuts: z.array(z.unknown())
+});
+
+const SettingsSaveRequestSchema: z.ZodType<SettingsSaveRequest> = z.object({
+  settings: SettingsSchema,
+  providers: z.array(ProviderSchema),
+  defaultModelId: z.string().nullable()
+});
+
+const SettingsDocumentSchema: z.ZodType<RocSettingsDocument> = z.object({
+  schemaVersion: z.literal(2),
+  settings: SettingsSchema,
+  providers: ProvidersSchema,
+  mcp: McpServersConfigSchema,
+  permissions: PermissionsConfigSchema,
+  shortcuts: ShortcutsConfigSchema
+});
+
+export type RocSettings = AppSettings;
 export type RocProviders = z.infer<typeof ProvidersSchema>;
+export type RocMcpConfig = z.infer<typeof McpServersConfigSchema>;
 
 const defaultSettings: RocSettings = {
   schemaVersion: 1,
@@ -76,38 +130,83 @@ const defaultProviders: RocProviders = {
   providers: []
 };
 
+const defaultMcpConfig: RocMcpConfig = {
+  schemaVersion: 1,
+  servers: []
+};
+
+const defaultPermissions: PermissionsConfig = {
+  schemaVersion: 1,
+  grants: []
+};
+
+const defaultShortcuts = {
+  schemaVersion: 1 as const,
+  shortcuts: []
+};
+
 export class ConfigService {
   constructor(private readonly paths: RocPaths) {}
 
   initialize(): void {
-    this.ensureJson('settings.json', defaultSettings);
-    this.ensureJson('providers.json', defaultProviders);
-    this.ensureJson('mcp.servers.json', { schemaVersion: 1, servers: [] });
-    this.ensureJson('permissions.json', { schemaVersion: 1, grants: [] });
-    this.ensureJson('shortcuts.json', { schemaVersion: 1, shortcuts: [] });
+    this.ensureSettingsDocument();
     this.ensureText('rtk.toml', "root = \"%USERPROFILE%\\\\.roc\\\\rtk\"\n");
-    this.getSettings();
-    this.getProviders();
+    this.getSettingsDocument();
   }
 
   getSettings(): RocSettings {
-    const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
-    return SettingsSchema.parse(parsed);
+    return this.getSettingsDocument().settings;
   }
 
   saveSettings(settings: RocSettings): void {
-    const parsed = SettingsSchema.parse(settings);
-    writeFileSync(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    const document = this.getSettingsDocument();
+    this.writeSettingsDocument({
+      ...document,
+      settings: SettingsSchema.parse(settings)
+    });
   }
 
   getProviders(): RocProviders {
-    const parsed = JSON.parse(readFileSync(this.filePath('providers.json'), 'utf8')) as unknown;
-    return ProvidersSchema.parse(parsed);
+    return this.getSettingsDocument().providers;
   }
 
   saveProviders(providers: RocProviders): void {
-    const parsed = ProvidersSchema.parse(providers);
-    writeFileSync(this.filePath('providers.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    const document = this.getSettingsDocument();
+    this.writeSettingsDocument({
+      ...document,
+      providers: ProvidersSchema.parse(providers)
+    });
+  }
+
+  getMcpConfig(): RocMcpConfig {
+    return this.getSettingsDocument().mcp;
+  }
+
+  saveMcpConfig(config: RocMcpConfig): void {
+    const document = this.getSettingsDocument();
+    this.writeSettingsDocument({
+      ...document,
+      mcp: McpServersConfigSchema.parse(config)
+    });
+  }
+
+  saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
+    const parsed = SettingsSaveRequestSchema.parse(request);
+    const document = this.getSettingsDocument();
+    this.writeSettingsDocument({
+      ...document,
+      settings: parsed.settings,
+      providers: {
+        schemaVersion: 1,
+        defaultModelId: parsed.defaultModelId,
+        providers: parsed.providers
+      }
+    });
+    return {
+      settings: parsed.settings,
+      providers: parsed.providers,
+      defaultModelId: parsed.defaultModelId
+    };
   }
 
   upsertProvider(provider: ProviderConfig): ProviderConfig {
@@ -244,7 +343,54 @@ export class ConfigService {
   }
 
   getDefaultModelState(): DefaultModelState {
-    const providersConfig = this.getProviders();
+    return this.defaultModelStateFor(this.getProviders());
+  }
+
+  hasDefaultModel(): boolean {
+    return this.getDefaultModelState().status === 'ready';
+  }
+
+  createDefaultModelError(state = this.getDefaultModelState()): RocDomainError {
+    return new RocDomainError({
+      code: state.status === 'missing' ? 'default_model_missing' : 'default_model_invalid',
+      message: state.reason,
+      category: 'validation',
+      retryable: false,
+      userAction: '请在设置页选择一个已启用 provider 下的已启用模型。'
+    });
+  }
+
+  private ensureSettingsDocument(): void {
+    const rawSettings = this.readJsonIfExists('settings.json');
+    if (rawSettings !== undefined && this.looksLikeSettingsDocument(rawSettings)) {
+      this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
+      return;
+    }
+    this.writeSettingsDocument(this.migrateLegacySettingsDocument(rawSettings));
+  }
+
+  private migrateLegacySettingsDocument(rawSettings: unknown | undefined): RocSettingsDocument {
+    return {
+      schemaVersion: 2,
+      settings: rawSettings === undefined ? defaultSettings : SettingsSchema.parse(rawSettings),
+      providers: this.readLegacyConfig('providers.json', ProvidersSchema, defaultProviders),
+      mcp: this.readLegacyConfig('mcp.servers.json', McpServersConfigSchema, defaultMcpConfig),
+      permissions: this.readLegacyConfig('permissions.json', PermissionsConfigSchema, defaultPermissions),
+      shortcuts: this.readLegacyConfig('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
+    };
+  }
+
+  private getSettingsDocument(): RocSettingsDocument {
+    const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
+    return SettingsDocumentSchema.parse(parsed);
+  }
+
+  private writeSettingsDocument(document: RocSettingsDocument): void {
+    const parsed = SettingsDocumentSchema.parse(document);
+    writeFileSync(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  }
+
+  private defaultModelStateFor(providersConfig: RocProviders): DefaultModelState {
     if (providersConfig.defaultModelId === null) {
       return {
         status: 'missing',
@@ -291,25 +437,20 @@ export class ConfigService {
     };
   }
 
-  hasDefaultModel(): boolean {
-    return this.getDefaultModelState().status === 'ready';
+  private readLegacyConfig<T>(name: string, schema: z.ZodType<T>, fallback: T): T {
+    const parsed = this.readJsonIfExists(name);
+    if (parsed === undefined) {
+      return fallback;
+    }
+    return schema.parse(parsed);
   }
 
-  createDefaultModelError(state = this.getDefaultModelState()): RocDomainError {
-    return new RocDomainError({
-      code: state.status === 'missing' ? 'default_model_missing' : 'default_model_invalid',
-      message: state.reason,
-      category: 'validation',
-      retryable: false,
-      userAction: '请在设置页选择一个已启用 provider 下的已启用模型。'
-    });
-  }
-
-  private ensureJson(name: string, value: unknown): void {
+  private readJsonIfExists(name: string): unknown | undefined {
     const target = this.filePath(name);
     if (!existsSync(target)) {
-      writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      return undefined;
     }
+    return JSON.parse(readFileSync(target, 'utf8')) as unknown;
   }
 
   private ensureText(name: string, value: string): void {
@@ -317,6 +458,16 @@ export class ConfigService {
     if (!existsSync(target)) {
       writeFileSync(target, value, 'utf8');
     }
+  }
+
+  private looksLikeSettingsDocument(value: unknown): value is RocSettingsDocument {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+    if (!('schemaVersion' in value) || (value as { schemaVersion?: unknown }).schemaVersion !== 2) {
+      return false;
+    }
+    return 'settings' in value && 'providers' in value && 'mcp' in value;
   }
 
   private filePath(name: string): string {

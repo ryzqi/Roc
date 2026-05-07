@@ -15,10 +15,20 @@ function normalizeLineEndings(value: string): string {
   return value.replaceAll('\r\n', '\n');
 }
 
+function readHeader(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value.join(', ');
+  }
+  return value;
+}
+
 type CapturedProviderRequest = {
   method: string | undefined;
   url: string | undefined;
   authorization: string | undefined;
+  xApiKey: string | undefined;
+  anthropicVersion: string | undefined;
+  contentType: string | undefined;
   rawBody: string;
   body: unknown;
 };
@@ -51,7 +61,10 @@ async function startFakeProvider(responseBody: unknown, statusCode: number): Pro
       requests.push({
         method: request.method,
         url: request.url,
-        authorization: request.headers.authorization,
+        authorization: readHeader(request.headers.authorization),
+        xApiKey: readHeader(request.headers['x-api-key']),
+        anthropicVersion: readHeader(request.headers['anthropic-version']),
+        contentType: readHeader(request.headers['content-type']),
         rawBody,
         body: parsedBody
       });
@@ -118,8 +131,11 @@ afterEach(() => {
 describe('Roc foundation services', () => {
   it('creates the .roc directory tree and config files', () => {
     expect(existsSync(join(root, 'config', 'settings.json'))).toBe(true);
-    expect(existsSync(join(root, 'config', 'providers.json'))).toBe(true);
-    expect(existsSync(join(root, 'config', 'mcp.servers.json'))).toBe(true);
+    expect(existsSync(join(root, 'config', 'providers.json'))).toBe(false);
+    expect(existsSync(join(root, 'config', 'mcp.servers.json'))).toBe(false);
+    expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"schemaVersion": 2');
+    expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"providers"');
+    expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"mcp"');
     expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
     expect(existsSync(join(root, 'tasks', 'recovery'))).toBe(true);
     expect(existsSync(join(root, 'rtk', 'tee'))).toBe(true);
@@ -568,52 +584,100 @@ describe('Roc foundation services', () => {
     });
   });
 
-  it('returns unsupported Provider execution errors without pretending success', async () => {
-    services.configService.saveProviders({
-      schemaVersion: 1,
-      defaultModelId: 'anthropic-model',
-      providers: [
-        {
-          id: 'provider-anthropic',
-          name: 'Anthropic compatible',
-          type: 'anthropic_compatible',
-          endpoint: 'https://anthropic.example.test',
-          credentialRef: 'credential:provider-anthropic',
-          enabled: true,
-          models: [
-            {
-              id: 'anthropic-model',
-              displayName: 'Anthropic model',
-              enabled: true,
-              supportsStreaming: true,
-              supportsToolCalls: true
-            }
-          ]
+  it('executes Anthropic-compatible live Messages calls through an env credentialRef', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        content: [
+          {
+            type: 'text',
+            text: 'Anthropic fake response.'
+          }
+        ],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 31,
+          output_tokens: 7
         }
-      ]
-    });
+      },
+      200
+    );
+    const previousApiKey = process.env.ROC_TEST_ANTHROPIC_API_KEY;
+    process.env.ROC_TEST_ANTHROPIC_API_KEY = 'sk-ant-live-test-secret';
 
-    const result = await wrapIpc(() =>
-      services.chatService.submit({
-        input: '测试不支持的 provider',
+    try {
+      liveServices.appService.initialize();
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: 'anthropic-model',
+        providers: [
+          {
+            id: 'provider-anthropic',
+            name: 'Anthropic compatible',
+            type: 'anthropic_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'env:ROC_TEST_ANTHROPIC_API_KEY',
+            enabled: true,
+            models: [
+              {
+                id: 'anthropic-model',
+                displayName: 'Anthropic model',
+                enabled: true,
+                supportsStreaming: false,
+                supportsToolCalls: false
+              }
+            ]
+          }
+        ]
+      });
+
+      const result = await liveServices.chatService.submit({
+        input: '请调用 Anthropic provider',
         mode: 'chat',
         enabledCapabilities: {
-          mcpServers: [],
-          skills: []
+          mcpServers: ['docs-http'],
+          skills: ['project-review']
         }
-      })
-    );
+      });
 
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: 'provider_type_unsupported',
-        message: '当前 Provider 类型尚未支持聊天执行。',
-        category: 'external',
-        retryable: false,
-        userAction: '请先使用 OpenAI-compatible Provider，或等待后续 Provider 映射支持。'
+      expect(result).toMatchObject({
+        status: 'answered',
+        providerId: 'provider-anthropic',
+        modelId: 'anthropic-model',
+        assistantMessage: 'Anthropic fake response.'
+      });
+      expect(fakeProvider.requests).toHaveLength(1);
+      expect(fakeProvider.requests[0]).toMatchObject({
+        method: 'POST',
+        url: '/v1/messages',
+        xApiKey: 'sk-ant-live-test-secret',
+        anthropicVersion: '2023-06-01',
+        contentType: 'application/json'
+      });
+      expect(fakeProvider.requests[0]?.authorization).toBeUndefined();
+      expect(fakeProvider.requests[0]?.body).toMatchObject({
+        model: 'anthropic-model',
+        stream: false,
+        max_tokens: 4096,
+        system: expect.stringContaining('tools_not_invoked=true'),
+        messages: [
+          {
+            role: 'user',
+            content: '请调用 Anthropic provider'
+          }
+        ]
+      });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      if (previousApiKey === undefined) {
+        delete process.env.ROC_TEST_ANTHROPIC_API_KEY;
+      } else {
+        process.env.ROC_TEST_ANTHROPIC_API_KEY = previousApiKey;
       }
-    });
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
   });
 
   it('redacts Provider failures and records failed task execution events', async () => {
@@ -2183,6 +2247,93 @@ describe('Roc foundation services', () => {
       modelId: null,
       providerId: null,
       reason: '未配置默认模型。'
+    });
+  });
+
+  it('keeps multiple OpenAI-compatible and Anthropic-compatible providers as independent default-model choices', () => {
+    services.configService.upsertProvider({
+      id: 'provider-openai-a',
+      name: 'OpenAI A',
+      type: 'openai_compatible',
+      endpoint: 'https://openai-a.example.test/v1',
+      credentialRef: 'env:OPENAI_A_KEY',
+      enabled: true,
+      models: [
+        {
+          id: 'openai-a-model',
+          displayName: 'OpenAI A model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    });
+    services.configService.upsertProvider({
+      id: 'provider-openai-b',
+      name: 'OpenAI B',
+      type: 'openai_compatible',
+      endpoint: 'https://openai-b.example.test/v1',
+      credentialRef: 'env:OPENAI_B_KEY',
+      enabled: true,
+      models: [
+        {
+          id: 'openai-b-model',
+          displayName: 'OpenAI B model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: false
+        }
+      ]
+    });
+    services.configService.upsertProvider({
+      id: 'provider-anthropic-a',
+      name: 'Anthropic A',
+      type: 'anthropic_compatible',
+      endpoint: 'https://anthropic-a.example.test/v1',
+      credentialRef: 'env:ANTHROPIC_A_KEY',
+      enabled: true,
+      models: [
+        {
+          id: 'anthropic-a-model',
+          displayName: 'Anthropic A model',
+          enabled: true,
+          supportsStreaming: false,
+          supportsToolCalls: false
+        }
+      ]
+    });
+    services.configService.upsertProvider({
+      id: 'provider-anthropic-b',
+      name: 'Anthropic B',
+      type: 'anthropic_compatible',
+      endpoint: 'https://anthropic-b.example.test/v1',
+      credentialRef: 'env:ANTHROPIC_B_KEY',
+      enabled: true,
+      models: [
+        {
+          id: 'anthropic-b-model',
+          displayName: 'Anthropic B model',
+          enabled: true,
+          supportsStreaming: false,
+          supportsToolCalls: false
+        }
+      ]
+    });
+
+    const config = services.configService.getProviders();
+    services.configService.setDefaultModel('anthropic-b-model');
+
+    expect(config.providers.map((provider) => `${provider.type}:${provider.id}`)).toEqual([
+      'openai_compatible:provider-openai-a',
+      'openai_compatible:provider-openai-b',
+      'anthropic_compatible:provider-anthropic-a',
+      'anthropic_compatible:provider-anthropic-b'
+    ]);
+    expect(services.configService.getDefaultModelState()).toEqual({
+      status: 'ready',
+      modelId: 'anthropic-b-model',
+      providerId: 'provider-anthropic-b',
+      reason: '默认模型可用。'
     });
   });
 

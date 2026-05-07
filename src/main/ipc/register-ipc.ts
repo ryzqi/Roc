@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
+import type { SettingsSnapshot } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowBounds, getWindowState } from '../window-shell';
@@ -9,6 +10,17 @@ export type AppWindowControls = {
   openQuickEntry: () => Promise<void>;
   openTrayEntry: () => Promise<void>;
 };
+
+function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
+  const providers = services.configService.getProviders();
+  return {
+    settings: services.configService.getSettings(),
+    providers: providers.providers,
+    defaultModelId: providers.defaultModelId,
+    mcpServers: services.mcpService.listServers(),
+    skills: services.skillService.list()
+  };
+}
 
 export function registerIpc(services: AppServices, mainWindow: BrowserWindow, controls: AppWindowControls): void {
   ipcMain.handle(ipcChannels.appGetStatus, () => wrapIpc(() => services.appService.getStatus()));
@@ -120,28 +132,16 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.memoryRestore, (_event, id: string) =>
     wrapIpc(() => services.memoryService.restoreMemory(id))
   );
-  ipcMain.handle(ipcChannels.providersList, () =>
+  ipcMain.handle(ipcChannels.settingsGet, () => wrapIpc(() => buildSettingsSnapshot(services)));
+  ipcMain.handle(ipcChannels.settingsSave, (_event, settings) =>
     wrapIpc(() => {
-      const providers = services.configService.getProviders();
-      return {
-        providers: providers.providers,
-        defaultModelId: providers.defaultModelId
-      };
+      services.configService.saveSettingsSnapshot(settings);
+      return buildSettingsSnapshot(services);
     })
   );
-  ipcMain.handle(ipcChannels.providersUpsert, (_event, provider) =>
-    wrapIpc(() => services.configService.upsertProvider(provider))
+  ipcMain.handle(ipcChannels.settingsTestProvider, (_event, id: string) =>
+    wrapIpc(() => services.configService.testProvider(id))
   );
-  ipcMain.handle(ipcChannels.providersDelete, (_event, id: string) =>
-    wrapIpc(() => {
-      services.configService.deleteProvider(id);
-      return { deleted: true as const };
-    })
-  );
-  ipcMain.handle(ipcChannels.providersSetDefaultModel, (_event, modelId: string | null) =>
-    wrapIpc(() => services.configService.setDefaultModel(modelId))
-  );
-  ipcMain.handle(ipcChannels.providersTest, (_event, id: string) => wrapIpc(() => services.configService.testProvider(id)));
   ipcMain.handle(ipcChannels.mcpListServers, () => wrapIpc(() => services.mcpService.listServers()));
   ipcMain.handle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));
   ipcMain.handle(ipcChannels.mcpUpsertServer, (_event, server) => wrapIpc(() => services.mcpService.upsertServer(server)));

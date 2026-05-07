@@ -32,6 +32,17 @@ type OpenAiCompatibleRequestBody = {
   }>;
 };
 
+type AnthropicCompatibleRequestBody = {
+  model: string;
+  stream: false;
+  max_tokens: 4096;
+  system: string;
+  messages: Array<{
+    role: 'user';
+    content: string;
+  }>;
+};
+
 const providerRequestTimeoutMs = 30_000;
 
 export class ProviderRuntimeService {
@@ -62,13 +73,13 @@ export class ProviderRuntimeService {
     }
 
     const resolved = this.resolveDefaultProvider();
-    if (resolved.provider.type !== 'openai_compatible') {
+    if (resolved.provider.type !== 'openai_compatible' && resolved.provider.type !== 'anthropic_compatible') {
       throw new RocDomainError({
         code: 'provider_type_unsupported',
         message: '当前 Provider 类型尚未支持聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible Provider，或等待后续 Provider 映射支持。'
+        userAction: '请先使用 OpenAI-compatible 或 Anthropic-compatible Provider。'
       });
     }
 
@@ -77,12 +88,16 @@ export class ProviderRuntimeService {
     let response: ProviderTransportResponse;
     try {
       if (this.deterministicTransport === null) {
-        response = await this.executeOpenAiCompatible({
+        const transportRequest = {
           provider: resolved.provider,
           modelId: resolved.modelId,
           input,
           capabilitySummary
-        });
+        };
+        response =
+          resolved.provider.type === 'openai_compatible'
+            ? await this.executeOpenAiCompatible(transportRequest)
+            : await this.executeAnthropicCompatible(transportRequest);
       } else {
         response = await this.deterministicTransport({
           provider: resolved.provider,
@@ -193,6 +208,73 @@ export class ProviderRuntimeService {
         });
       }
       return this.parseOpenAiCompatibleResponse(responseText);
+    } catch (error) {
+      if (error instanceof RocDomainError) {
+        throw error;
+      }
+      if (this.isAbortError(error)) {
+        throw new RocDomainError({
+          code: 'provider_request_timeout',
+          message: 'Provider 请求超时。',
+          category: 'external',
+          retryable: true,
+          userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
+        });
+      }
+      throw new RocDomainError({
+        code: 'provider_network_error',
+        message: error instanceof Error ? `Provider 网络请求失败：${this.redact(error.message)}` : 'Provider 网络请求失败。',
+        category: 'external',
+        retryable: true,
+        userAction: '请检查 Provider 网络、endpoint 和本机代理设置后重试。'
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async executeAnthropicCompatible(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {
+    const apiKey = this.resolveCredential(request.provider.credentialRef);
+    const url = this.buildMessagesUrl(request.provider.endpoint);
+    const body: AnthropicCompatibleRequestBody = {
+      model: request.modelId,
+      stream: false,
+      max_tokens: 4096,
+      system: `Roc capability boundary: ${request.capabilitySummary}`,
+      messages: [
+        {
+          role: 'user',
+          content: request.input
+        }
+      ]
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, providerRequestTimeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new RocDomainError({
+          code: 'provider_http_error',
+          message: this.createHttpErrorMessage(response.status, responseText),
+          category: 'external',
+          retryable: this.isRetryableHttpStatus(response.status),
+          userAction: '请检查 Provider endpoint、凭据、模型名称和服务状态后重试。'
+        });
+      }
+      return this.parseAnthropicCompatibleResponse(responseText);
     } catch (error) {
       if (error instanceof RocDomainError) {
         throw error;
@@ -331,6 +413,14 @@ export class ProviderRuntimeService {
   }
 
   private buildChatCompletionsUrl(endpoint: string): string {
+    return this.buildProviderUrl(endpoint, 'chat/completions');
+  }
+
+  private buildMessagesUrl(endpoint: string): string {
+    return this.buildProviderUrl(endpoint, 'messages');
+  }
+
+  private buildProviderUrl(endpoint: string, suffix: 'chat/completions' | 'messages'): string {
     const trimmed = endpoint.trim();
     if (trimmed.length === 0) {
       throw new RocDomainError({
@@ -364,14 +454,14 @@ export class ProviderRuntimeService {
         userAction: '请在设置页配置 http 或 https Provider endpoint。'
       });
     }
-    if (url.pathname.endsWith('/chat/completions')) {
+    if (url.pathname.endsWith(`/${suffix}`)) {
       return url.toString();
     }
     if (url.pathname.endsWith('/')) {
-      url.pathname = `${url.pathname}chat/completions`;
+      url.pathname = `${url.pathname}${suffix}`;
       return url.toString();
     }
-    url.pathname = `${url.pathname}/chat/completions`;
+    url.pathname = `${url.pathname}/${suffix}`;
     return url.toString();
   }
 
@@ -430,6 +520,61 @@ export class ProviderRuntimeService {
     };
   }
 
+  private parseAnthropicCompatibleResponse(responseText: string): ProviderTransportResponse {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(responseText) as unknown;
+    } catch {
+      throw new RocDomainError({
+        code: 'provider_response_malformed',
+        message: 'Provider 返回了无法解析的 JSON。',
+        category: 'external',
+        retryable: true,
+        userAction: '请稍后重试，或检查 Provider 是否兼容 Anthropic Messages 响应格式。'
+      });
+    }
+
+    if (!this.isRecord(parsed)) {
+      throw this.createAnthropicMalformedResponseError();
+    }
+    const content = parsed.content;
+    if (!Array.isArray(content) || content.length === 0) {
+      throw this.createAnthropicMalformedResponseError();
+    }
+    const textParts: string[] = [];
+    for (const part of content) {
+      if (!this.isRecord(part)) {
+        throw this.createAnthropicMalformedResponseError();
+      }
+      if (part.type === 'text' && typeof part.text === 'string') {
+        textParts.push(part.text);
+      }
+    }
+    if (textParts.length === 0) {
+      throw this.createAnthropicMalformedResponseError();
+    }
+
+    let finishReason = 'unknown';
+    if (typeof parsed.stop_reason === 'string' && parsed.stop_reason.trim().length > 0) {
+      finishReason = parsed.stop_reason;
+    }
+
+    const usage = parsed.usage;
+    let promptTokens: number | undefined;
+    let completionTokens: number | undefined;
+    if (this.isRecord(usage)) {
+      promptTokens = this.readOptionalToken(usage.input_tokens);
+      completionTokens = this.readOptionalToken(usage.output_tokens);
+    }
+
+    return {
+      content: textParts.join('\n'),
+      finishReason,
+      promptTokens,
+      completionTokens
+    };
+  }
+
   private createHttpErrorMessage(status: number, responseText: string): string {
     const trimmed = responseText.trim();
     if (trimmed.length === 0) {
@@ -478,6 +623,16 @@ export class ProviderRuntimeService {
       category: 'external',
       retryable: true,
       userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 OpenAI chat completions。'
+    });
+  }
+
+  private createAnthropicMalformedResponseError(): RocDomainError {
+    return new RocDomainError({
+      code: 'provider_response_malformed',
+      message: 'Provider 响应不符合 Anthropic Messages 格式。',
+      category: 'external',
+      retryable: true,
+      userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 Anthropic Messages。'
     });
   }
 

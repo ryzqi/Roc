@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeStatus,
   AgentCapabilityPreview,
+  AppSettings,
   AppStatus,
   BackgroundTask,
   BackgroundTaskPreview,
@@ -44,7 +45,6 @@ import type {
   MemoryStatus,
   PerformanceSample,
   PerformanceSampleRequest,
-  ProviderConfig,
   ProviderTestResult,
   RtkStatus,
   SessionRecallEntry,
@@ -53,6 +53,8 @@ import type {
   SessionSearchResult,
   ShellExecutionRequest,
   ShellExecutionResult,
+  SettingsSaveRequest,
+  SettingsSnapshot,
   SkillImportRequest,
   SkillSnapshot,
   TerminalSessionCloseRequest,
@@ -107,11 +109,9 @@ export const ipcChannels = {
   memorySessionSearch: 'roc:memory:session-search',
   memoryDelete: 'roc:memory:delete',
   memoryRestore: 'roc:memory:restore',
-  providersList: 'roc:providers:list',
-  providersUpsert: 'roc:providers:upsert',
-  providersDelete: 'roc:providers:delete',
-  providersSetDefaultModel: 'roc:providers:set-default-model',
-  providersTest: 'roc:providers:test',
+  settingsGet: 'roc:settings:get',
+  settingsSave: 'roc:settings:save',
+  settingsTestProvider: 'roc:settings:test-provider',
   mcpListServers: 'roc:mcp:list-servers',
   mcpEnsureExaPreset: 'roc:mcp:ensure-exa-preset',
   mcpUpsertServer: 'roc:mcp:upsert-server',
@@ -221,12 +221,10 @@ export type RocPreloadApi = {
     setEnabled: (request: { id: string; enabled: boolean }) => Promise<IpcResult<SkillSnapshot>>;
     deleteSkill: (id: string) => Promise<IpcResult<{ deleted: true }>>;
   };
-  providers: {
-    list: () => Promise<IpcResult<{ providers: ProviderConfig[]; defaultModelId: string | null }>>;
-    upsert: (provider: ProviderConfig) => Promise<IpcResult<ProviderConfig>>;
-    delete: (id: string) => Promise<IpcResult<{ deleted: true }>>;
-    setDefaultModel: (modelId: string | null) => Promise<IpcResult<import('./types').DefaultModelState>>;
-    test: (id: string) => Promise<IpcResult<ProviderTestResult>>;
+  settings: {
+    get: () => Promise<IpcResult<SettingsSnapshot>>;
+    save: (settings: SettingsSaveRequest) => Promise<IpcResult<SettingsSnapshot>>;
+    testProvider: (id: string) => Promise<IpcResult<ProviderTestResult>>;
   };
   doctor: {
     getLatest: () => Promise<IpcResult<DoctorSnapshot>>;

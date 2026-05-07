@@ -1,9 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { z } from 'zod';
-import type { McpServerConfig, McpServerSnapshot, McpServerTestResult } from '../../shared/types';
+import type { McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
 import { RocDomainError } from './errors';
-import type { RocPaths } from './paths';
+import type { ConfigService } from './config-service';
 
 const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   id: z.string().min(1),
@@ -17,15 +15,8 @@ const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   allowedTools: z.array(z.string().min(1))
 });
 
-const McpConfigSchema = z.object({
-  schemaVersion: z.literal(1),
-  servers: z.array(McpServerSchema)
-});
-
-type McpConfig = z.infer<typeof McpConfigSchema>;
-
 export class McpService {
-  constructor(private readonly paths: RocPaths) {}
+  constructor(private readonly configService: ConfigService) {}
 
   listServers(): McpServerSnapshot[] {
     const config = this.readConfig();
@@ -137,14 +128,16 @@ export class McpService {
     };
   }
 
-  private readConfig(): McpConfig {
-    const parsed = JSON.parse(readFileSync(this.filePath(), 'utf8')) as unknown;
-    return McpConfigSchema.parse(parsed);
+  private readConfig(): McpServersConfig {
+    return this.configService.getMcpConfig();
   }
 
-  private writeConfig(config: McpConfig): void {
-    const parsed = McpConfigSchema.parse(config);
-    writeFileSync(this.filePath(), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  private writeConfig(config: McpServersConfig): void {
+    const parsed = {
+      schemaVersion: 1 as const,
+      servers: z.array(McpServerSchema).parse(config.servers)
+    };
+    this.configService.saveMcpConfig(parsed);
   }
 
   private validateTransportFields(server: McpServerConfig): void {
@@ -190,9 +183,5 @@ export class McpService {
       });
     }
     return trimmed;
-  }
-
-  private filePath(): string {
-    return join(this.paths.configDir, 'mcp.servers.json');
   }
 }

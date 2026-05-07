@@ -68,12 +68,10 @@ const rocApi: RocPreloadApi = {
     setEnabled: (request) => ipcRenderer.invoke(ipcChannels.skillsSetEnabled, request),
     deleteSkill: (id) => ipcRenderer.invoke(ipcChannels.skillsDelete, id)
   },
-  providers: {
-    list: () => ipcRenderer.invoke(ipcChannels.providersList),
-    upsert: (provider) => ipcRenderer.invoke(ipcChannels.providersUpsert, provider),
-    delete: (id) => ipcRenderer.invoke(ipcChannels.providersDelete, id),
-    setDefaultModel: (modelId) => ipcRenderer.invoke(ipcChannels.providersSetDefaultModel, modelId),
-    test: (id) => ipcRenderer.invoke(ipcChannels.providersTest, id)
+  settings: {
+    get: () => ipcRenderer.invoke(ipcChannels.settingsGet),
+    save: (settings) => ipcRenderer.invoke(ipcChannels.settingsSave, settings),
+    testProvider: (id) => ipcRenderer.invoke(ipcChannels.settingsTestProvider, id)
   },
   doctor: {
     getLatest: () => ipcRenderer.invoke(ipcChannels.doctorGetLatest),

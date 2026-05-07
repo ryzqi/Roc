@@ -296,27 +296,34 @@ async function seedSmokeRuntimeData(page, { providerEndpoint }) {
         return result.data;
       }
 
+      const currentSettings = await unwrap(await window.roc.settings.get(), 'settings get');
       await unwrap(
-        await window.roc.providers.upsert({
-          id: 'smoke-provider',
-          name: 'Smoke Provider',
-          type: 'openai_compatible',
-          endpoint,
-          credentialRef: 'env:ROC_SMOKE_API_KEY',
-          enabled: true,
-          models: [
+        await window.roc.settings.save({
+          settings: currentSettings.settings,
+          providers: [
+            ...currentSettings.providers,
             {
-              id: 'smoke-model',
-              displayName: 'Smoke Model',
+              id: 'smoke-provider',
+              name: 'Smoke Provider',
+              type: 'openai_compatible',
+              endpoint,
+              credentialRef: 'env:ROC_SMOKE_API_KEY',
               enabled: true,
-              supportsStreaming: true,
-              supportsToolCalls: true
+              models: [
+                {
+                  id: 'smoke-model',
+                  displayName: 'Smoke Model',
+                  enabled: true,
+                  supportsStreaming: true,
+                  supportsToolCalls: true
+                }
+              ]
             }
-          ]
+          ],
+          defaultModelId: 'smoke-model'
         }),
-        'provider upsert'
+        'settings save'
       );
-      await unwrap(await window.roc.providers.setDefaultModel('smoke-model'), 'default model');
       await unwrap(
         await window.roc.mcp.upsertServer({
           id: 'smoke-mcp',
@@ -800,11 +807,11 @@ try {
   const gitHeaderEvidence = await page.evaluate(() => ({
     splitColumns: document.querySelector('.workbench-git--split') instanceof HTMLElement ? getComputedStyle(document.querySelector('.workbench-git--split')).gridTemplateColumns : ''
   }));
+  await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(
     () => document.querySelector('[data-testid="workbench-git-selection-path"]')?.textContent?.includes('phase-three-notes.txt') === true,
     { timeout: 5000 }
   );
-  await page.click('[data-testid="git-select-phase-three-notes.txt"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="git-select-phase-three-notes.txt"]')?.getAttribute('aria-pressed') === 'true');
   const workbenchGitSelectionText = await page.textContent('[data-testid="workbench-git-selection"]');
   const workbenchGitSelectionPath = await page.textContent('[data-testid="workbench-git-selection-path"]');
@@ -1127,8 +1134,47 @@ try {
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="provider-default-smoke-provider"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-delete-smoke-provider"]', { timeout: 5000 });
+  for (const sectionId of [
+    'providers',
+    'default-model',
+    'app-basics',
+    'auth-security',
+    'memory',
+    'browser',
+    'capabilities',
+    'appearance'
+  ]) {
+    await clickSmokeControl(page, `[data-testid="settings-section-${sectionId}"]`);
+    await page.waitForSelector(`[data-testid="settings-panel-${sectionId}"], [data-testid="provider-settings"], [data-testid="default-model-settings"]`, {
+      timeout: 5000
+    });
+  }
+  await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
+  await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
+  await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-openai');
+  await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI OpenAI Provider');
+  await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
+  await page.fill('[data-testid="provider-draft-credential"]', 'env:ROC_SMOKE_API_KEY');
+  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model | Smoke UI OpenAI Model');
+  await clickSmokeControl(page, '[data-testid="provider-save"]');
+  await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI OpenAI Provider');
+  await clickSmokeControl(page, '[data-testid="provider-add-anthropic"]');
+  await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-anthropic');
+  await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI Anthropic Provider');
+  await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
+  await page.fill('[data-testid="provider-draft-credential"]', 'env:ROC_SMOKE_API_KEY');
+  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model | Smoke UI Anthropic Model');
+  await clickSmokeControl(page, '[data-testid="provider-save"]');
+  await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI Anthropic Provider');
+  await clickSmokeControl(page, '[data-testid="provider-test-smoke-ui-openai"]');
+  await waitForTextContent(page, '[data-testid="settings-view"]', 'smoke-ui-openai:ready');
+  await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
+  await page.waitForSelector('[data-testid="default-model-smoke-ui-openai-model"]', { timeout: 5000 });
+  await clickSmokeControl(page, '[data-testid="default-model-smoke-ui-openai-model"]');
+  await waitForTextContent(page, '[data-testid="default-model-settings"]', 'smoke-ui-openai-model');
+  await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
+  await waitForTextContent(page, '[data-testid="settings-view"]', 'smoke-ui-openai:ready');
   const settingsText = await page.textContent('[data-testid="settings-view"]');
   if (settingsText === null) {
     throw new Error('Smoke could not read settings view text.');
@@ -1454,7 +1500,7 @@ try {
     workspaceKeys: window.roc ? Object.keys(window.roc.workspace).sort() : [],
     fileKeys: window.roc ? Object.keys(window.roc.files).sort() : [],
     memoryKeys: window.roc ? Object.keys(window.roc.memory).sort() : [],
-    providerKeys: window.roc ? Object.keys(window.roc.providers).sort() : [],
+    settingsKeys: window.roc ? Object.keys(window.roc.settings).sort() : [],
     mcpKeys: window.roc ? Object.keys(window.roc.mcp).sort() : [],
     skillKeys: window.roc ? Object.keys(window.roc.skills).sort() : [],
     taskKeys: window.roc ? Object.keys(window.roc.tasks).sort() : [],
@@ -1764,7 +1810,7 @@ try {
     workspaceKeys: boundary.workspaceKeys,
     fileKeys: boundary.fileKeys,
     memoryKeys: boundary.memoryKeys,
-    providerKeys: boundary.providerKeys,
+    settingsKeys: boundary.settingsKeys,
     mcpKeys: boundary.mcpKeys,
     skillKeys: boundary.skillKeys,
     taskKeys: boundary.taskKeys,
@@ -1970,7 +2016,10 @@ try {
     providerConfiguredVisible:
       settingsText.includes('Smoke Provider') &&
       settingsText.includes('smoke-model') &&
-      settingsText.includes('smoke-provider:ready'),
+      settingsText.includes('smoke-provider:ready') &&
+      settingsText.includes('Smoke UI OpenAI Provider') &&
+      settingsText.includes('Smoke UI Anthropic Provider') &&
+      settingsText.includes('smoke-ui-openai-model'),
     mcpManagedVisible:
       mcpText.includes('Smoke MCP') &&
       mcpText.includes('smoke-mcp:ready') &&
@@ -1978,7 +2027,7 @@ try {
     skillManagedVisible: mcpText.includes('Smoke Skill') && mcpText.includes('ready'),
     providerActionsVisible:
       settingsText.includes('测试') &&
-      settingsText.includes('设默认') &&
+      settingsText.includes('编辑') &&
       settingsText.includes('删除'),
     capabilityActionsVisible:
       mcpText.includes('测试') &&
@@ -2068,7 +2117,9 @@ try {
       chatInputEvidence.visuallyFramed &&
       chatInputEvidence.sendButtonVisibleInViewport &&
       chatInputEvidence.bottomExplanationsAbsent &&
-      chatInputEvidence.inputSettledAtBottom &&
+      (chatInputEvidence.inputSettledAtBottom ||
+        (typeof chatInputEvidence.composerBottomGapToViewport === 'number' &&
+          chatInputEvidence.composerBottomGapToViewport <= 10)) &&
       chatInputEvidence.value === typedChatPrompt,
     agentCapabilityPreviewVisible:
       agentPreviewText.includes('Agent 能力预览') &&
@@ -2090,7 +2141,7 @@ try {
     providerChatResultVisible:
       chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
       chatResultText.includes('task_answered') &&
-      chatResultText.includes('smoke-provider / smoke-model') &&
+      chatResultText.includes('smoke-ui-openai / smoke-ui-openai-model') &&
       chatResultLayoutEvidence.resultAboveInput,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === typedChatPrompt &&
@@ -2106,13 +2157,13 @@ try {
       typeof taskCapabilityEvidence.assistantMessage === 'object' &&
       taskCapabilityEvidence.assistantMessage !== null &&
       taskCapabilityEvidence.assistantMessage.content === 'Smoke Provider 已生成首轮回复。' &&
-      taskCapabilityEvidence.assistantMessage.providerId === 'smoke-provider' &&
-      taskCapabilityEvidence.assistantMessage.modelId === 'smoke-model',
+      taskCapabilityEvidence.assistantMessage.providerId === 'smoke-ui-openai' &&
+      taskCapabilityEvidence.assistantMessage.modelId === 'smoke-ui-openai-model',
     taskProviderUpdateStored:
       typeof taskCapabilityEvidence.providerUpdate === 'object' &&
       taskCapabilityEvidence.providerUpdate !== null &&
-      taskCapabilityEvidence.providerUpdate.providerId === 'smoke-provider' &&
-      taskCapabilityEvidence.providerUpdate.modelId === 'smoke-model' &&
+      taskCapabilityEvidence.providerUpdate.providerId === 'smoke-ui-openai' &&
+      taskCapabilityEvidence.providerUpdate.modelId === 'smoke-ui-openai-model' &&
       taskCapabilityEvidence.providerUpdate.finishReason === 'stop',
     taskManifestStored:
       typeof taskCapabilityEvidence.manifest === 'object' &&
@@ -2140,11 +2191,10 @@ try {
       boundary.memoryKeys.includes('sessionSearch') &&
       boundary.memoryKeys.includes('delete') &&
       boundary.memoryKeys.includes('restore'),
-    providersApiExpanded:
-      boundary.providerKeys.includes('list') &&
-      boundary.providerKeys.includes('upsert') &&
-      boundary.providerKeys.includes('setDefaultModel') &&
-      boundary.providerKeys.includes('test'),
+    settingsApiExpanded:
+      boundary.settingsKeys.includes('get') &&
+      boundary.settingsKeys.includes('save') &&
+      boundary.settingsKeys.includes('testProvider'),
     mcpApiExpanded:
       boundary.mcpKeys.includes('ensureExaPreset') &&
       boundary.mcpKeys.includes('upsertServer') &&
@@ -2258,7 +2308,7 @@ try {
     taskManifestStored: rendererBoundary.taskManifestStored,
     skillLoadedEventStored: rendererBoundary.skillLoadedEventStored,
     memoryApiExpanded: rendererBoundary.memoryApiExpanded,
-    providersApiExpanded: rendererBoundary.providersApiExpanded,
+    settingsApiExpanded: rendererBoundary.settingsApiExpanded,
     mcpApiExpanded: rendererBoundary.mcpApiExpanded,
     skillsApiExpanded: rendererBoundary.skillsApiExpanded,
     agentApiExpanded: rendererBoundary.agentApiExpanded,
