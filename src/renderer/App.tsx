@@ -65,6 +65,7 @@ import { getStartupLoadIntent } from './startup-load-policy';
 import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
 import {
   buildGitBranchSwitcherModel,
+  buildGitCommitButtonState,
   buildGitSelectionModel,
   clampGitSplitWidth,
   GIT_SPLIT_DEFAULT_WIDTH,
@@ -3819,6 +3820,9 @@ function GitWorkbench({
   }
 
   async function commitChanges(): Promise<void> {
+    if (!commitButtonState.enabled) {
+      return;
+    }
     setPendingAction('commit');
     setActionError(null);
     const result = await window.roc.git.commit({ message: commitMessage });
@@ -3974,6 +3978,11 @@ function GitWorkbench({
   const stagedCount = gitStatusChanges(state.gitStatus).filter((change) => canUnstageGitChange(change)).length;
   const dirtyCount = gitStatusChanges(state.gitStatus).filter((change) => change.worktree !== ' ').length;
   const actionBusy = pendingAction !== null;
+  const commitButtonState = buildGitCommitButtonState({
+    actionBusy,
+    changedFiles: state.gitStatus.changedFiles,
+    commitMessage
+  });
   const branchSwitcherModel = buildGitBranchSwitcherModel({
     actionBusy,
     branchInfo,
@@ -4041,9 +4050,9 @@ function GitWorkbench({
               onChange={(event) => setCommitMessage(event.target.value)}
             />
             <button
-              className="git-commit-button"
+              className={commitButtonState.enabled ? 'git-commit-button git-commit-button--ready' : 'git-commit-button'}
               data-testid="workbench-git-commit"
-              disabled={actionBusy}
+              disabled={!commitButtonState.enabled}
               type="button"
               onClick={() => void commitChanges()}
             >

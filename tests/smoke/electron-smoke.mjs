@@ -784,6 +784,18 @@ try {
   const gitSidebarCount = await page.locator('.git-sidebar').count();
   const gitDetailPaneCount = await page.locator('.git-detail-pane').count();
   const gitChangeActionCount = await page.locator('.git-change-actions button').count();
+  const gitCommitInitialState = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="workbench-git-commit"]');
+    const message = document.querySelector('[data-testid="workbench-git-commit-message"]');
+    if (!(button instanceof HTMLButtonElement) || !(message instanceof HTMLTextAreaElement)) {
+      return null;
+    }
+    return {
+      className: button.className,
+      disabled: button.disabled,
+      value: message.value
+    };
+  });
   const initialGitBranch = await page.textContent('[data-testid="git-current-branch"]');
   const gitHeaderEvidence = await page.evaluate(() => ({
     splitColumns: document.querySelector('.workbench-git--split') instanceof HTMLElement ? getComputedStyle(document.querySelector('.workbench-git--split')).gridTemplateColumns : ''
@@ -927,9 +939,46 @@ try {
     return changes.includes('phase-three-notes.txt') && selectedCount.includes('2 selected');
   });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke commit');
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[data-testid="workbench-git-commit"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    return button.disabled === false && button.classList.contains('git-commit-button--ready');
+  });
+  const gitCommitReadyState = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="workbench-git-commit"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return null;
+    }
+    return {
+      className: button.className,
+      disabled: button.disabled
+    };
+  });
   await page.click('[data-testid="workbench-git-commit"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('Workspace is clean.') === true);
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[data-testid="workbench-git-commit"]');
+    const message = document.querySelector('[data-testid="workbench-git-commit-message"]');
+    if (!(button instanceof HTMLButtonElement) || !(message instanceof HTMLTextAreaElement)) {
+      return false;
+    }
+    return button.disabled === true && !button.classList.contains('git-commit-button--ready') && message.value === '';
+  });
   const gitLastCommitText = await page.textContent('.git-last-result');
+  const gitCommitResetState = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="workbench-git-commit"]');
+    const message = document.querySelector('[data-testid="workbench-git-commit-message"]');
+    if (!(button instanceof HTMLButtonElement) || !(message instanceof HTMLTextAreaElement)) {
+      return null;
+    }
+    return {
+      className: button.className,
+      disabled: button.disabled,
+      value: message.value
+    };
+  });
   writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\nchanged before push\n', 'utf8');
   await page.click('[aria-label="刷新 Git 状态"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('phase-three-notes.txt') === true);
@@ -1854,12 +1903,19 @@ try {
       !gitDiffScrollEvidenceBefore.toolbarText.includes('phase-three-notes.txt → phase-three-notes.txt'),
     workbenchGitActions:
       workbenchGitText?.includes('phase-three-notes.txt') === true &&
+      gitCommitInitialState !== null &&
+      gitCommitInitialState.disabled === true &&
+      gitCommitInitialState.value === '' &&
+      !gitCommitInitialState.className.includes('git-commit-button--ready') &&
       workbenchGitAfterBatchStage?.includes('STAGED CHANGES2') === true &&
       workbenchGitAfterBatchStage?.includes('phase-three-notes.txt已暂存') === true &&
       workbenchGitAfterBatchStage?.includes('batch-stage.txt已暂存') === true &&
       workbenchGitAfterBatchStage?.includes('CHANGES0') === true &&
       workbenchGitSelectedCountAfterManual?.includes('2 selected') === true &&
       workbenchGitSelectedCountAfterAll?.includes('2 selected') === true &&
+      gitCommitReadyState !== null &&
+      gitCommitReadyState.disabled === false &&
+      gitCommitReadyState.className.includes('git-commit-button--ready') &&
       gitCurrentBranchAfterCreate?.includes('feature/smoke-branch') === true &&
       initialGitBranch !== null &&
       gitCurrentBranchAfterCheckout?.includes(initialGitBranch.trim()) === true &&
@@ -1868,6 +1924,10 @@ try {
       initialGitBranch !== null &&
       confirmMessages.some((message) => String(message).includes(initialGitBranch.trim())) &&
       gitLastCommitText?.includes('最近提交：smoke commit') === true &&
+      gitCommitResetState !== null &&
+      gitCommitResetState.disabled === true &&
+      gitCommitResetState.value === '' &&
+      !gitCommitResetState.className.includes('git-commit-button--ready') &&
       gitLastPushText?.includes('最近提交：smoke push commit') === true,
     terminalCommandRunnable:
       terminalLiveOutput?.includes('phase-three-notes.txt') === true &&

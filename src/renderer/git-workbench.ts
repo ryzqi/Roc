@@ -10,6 +10,12 @@ type GitBranchSwitcherModelInput = {
   branchSearch: string;
 };
 
+type GitCommitButtonStateInput = {
+  actionBusy: boolean;
+  changedFiles: number;
+  commitMessage: string;
+};
+
 type GitSelectablePath = {
   relativePath: string;
 };
@@ -20,6 +26,18 @@ export function clampGitSplitWidth(width: number): number {
 
 export function selectAllGitChanges<T extends GitSelectablePath>(changes: T[]): string[] {
   return changes.map((change) => change.relativePath);
+}
+
+export function buildGitCommitButtonState({
+  actionBusy,
+  changedFiles,
+  commitMessage
+}: GitCommitButtonStateInput): {
+  enabled: boolean;
+} {
+  return {
+    enabled: !actionBusy && changedFiles > 0 && commitMessage.trim().length > 0
+  };
 }
 
 export function buildGitSelectionModel<T extends GitSelectablePath>(changes: T[], selectedPaths: string[]): {

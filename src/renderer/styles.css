@@ -2081,7 +2081,7 @@ button.model-pill {
 }
 
 .git-commit-message {
-  min-height: 140px;
+  min-height: 124px;
   padding: 14px 16px;
   border: 1px solid rgba(221, 229, 239, 1);
   border-radius: 10px;
@@ -2102,11 +2102,26 @@ button.model-pill {
   padding: 0 14px;
   border: 0;
   border-radius: 8px;
-  background: #9fd3a9;
-  color: #ffffff;
+  background: #d7e2da;
+  color: #708175;
   font-size: 15px;
   font-weight: 700;
+  cursor: not-allowed;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.git-commit-button:disabled {
+  opacity: 1;
+}
+
+.git-commit-button--ready {
+  background: #9fd3a9;
+  color: #ffffff;
   cursor: pointer;
+  box-shadow: 0 12px 24px rgba(83, 145, 97, 0.24);
 }
 
 .git-sidebar-toolbar,
