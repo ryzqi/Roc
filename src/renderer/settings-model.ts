@@ -12,6 +12,12 @@ import type {
   SettingsSnapshot,
   SkillSnapshot
 } from '../shared/types';
+import {
+  fixedNvidiaBaseUrl,
+  fixedNvidiaProviderId,
+  fixedNvidiaProviderName,
+  normalizeFixedNvidiaProvider
+} from '../shared/provider-defaults';
 
 export type SettingsSectionId =
   | 'providers'
@@ -27,7 +33,8 @@ export type SettingsSection = {
   label: string;
 };
 
-export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible'>;
+export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible' | 'nvidia'>;
+export type CreatableProviderType = Extract<EditableProviderType, 'openai_compatible' | 'anthropic_compatible'>;
 
 export type ProviderDraft = {
   mode: 'create' | 'edit';
@@ -38,6 +45,10 @@ export type ProviderDraft = {
   apiKey: string;
   enabled: boolean;
   modelsText: string;
+  modelId: string;
+  temperature: string;
+  maxTokens: string;
+  thinking: boolean;
 };
 
 export type EnabledModelOption = {
@@ -67,7 +78,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'capabilities', label: '能力入口' }
 ];
 
-const editableProviderTypes: readonly EditableProviderType[] = ['openai_compatible', 'anthropic_compatible'];
+const editableProviderTypes: readonly EditableProviderType[] = ['openai_compatible', 'anthropic_compatible', 'nvidia'];
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export function selectSettingsSection(current: SettingsSectionId, requested: string): SettingsSectionId {
@@ -81,6 +92,26 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
   if (!editableProviderTypes.includes(type)) {
     throw new Error(`Unsupported provider draft type: ${type}`);
   }
+  if (type === 'nvidia') {
+    const normalized = normalizeFixedNvidiaProvider(provider);
+    const currentModel = normalized.models.find((model) => model.enabled) ?? normalized.models[0] ?? null;
+    return {
+      mode: 'edit',
+      id: fixedNvidiaProviderId,
+      name: fixedNvidiaProviderName,
+      type: 'nvidia',
+      endpoint: fixedNvidiaBaseUrl,
+      apiKey: '',
+      enabled: normalized.enabled,
+      modelsText: '',
+      modelId: currentModel?.id ?? '',
+      temperature:
+        typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
+      maxTokens:
+        typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
+      thinking: normalized.options?.thinking === true
+    };
+  }
   if (provider === undefined) {
     return {
       mode: 'create',
@@ -90,7 +121,11 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       endpoint: '',
       apiKey: '',
       enabled: true,
-      modelsText: ''
+      modelsText: '',
+      modelId: '',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
     };
   }
   if (!editableProviderTypes.includes(provider.type as EditableProviderType)) {
@@ -104,7 +139,11 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     endpoint: provider.endpoint,
     apiKey: '',
     enabled: provider.enabled,
-    modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n')
+    modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+    modelId: '',
+    temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
+    maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
+    thinking: provider.options?.thinking === true
   };
 }
 
@@ -175,6 +214,35 @@ export function assertProviderCreateIdAvailable(
 }
 
 export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
+  const options = buildProviderOptionsFromDraft(draft);
+  if (draft.type === 'nvidia') {
+    const modelId = draft.modelId.trim();
+    if (modelId.length === 0) {
+      throw new Error('NVIDIA 模型 ID 不能为空。');
+    }
+    const provider = normalizeFixedNvidiaProvider({
+      id: fixedNvidiaProviderId,
+      name: fixedNvidiaProviderName,
+      type: 'nvidia',
+      endpoint: fixedNvidiaBaseUrl,
+      credentialRef: `secret:${fixedNvidiaProviderId}`,
+      enabled: draft.enabled,
+      models: [
+        {
+          id: modelId,
+          displayName: modelId,
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options
+    });
+    return options === undefined
+      ? { ...provider, options: undefined }
+      : provider;
+  }
+
   const id = resolveProviderDraftId(draft);
   const name = draft.name.trim();
   const endpoint = draft.endpoint.trim();
@@ -195,7 +263,36 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
     endpoint,
     credentialRef: `secret:${id}`,
     enabled: draft.enabled,
-    models
+    models,
+    options
+  };
+}
+
+function parseOptionalNumber(value: string, label: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} 必须是数字。`);
+  }
+  return parsed;
+}
+
+function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['options'] {
+  const temperature = parseOptionalNumber(draft.temperature, 'Temperature');
+  const maxTokens = parseOptionalNumber(draft.maxTokens, 'Max tokens');
+  if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens <= 0)) {
+    throw new Error('Max tokens 必须是正整数。');
+  }
+  if (temperature === undefined && maxTokens === undefined && draft.thinking === false) {
+    return undefined;
+  }
+  return {
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(maxTokens === undefined ? {} : { maxTokens }),
+    ...(draft.thinking ? { thinking: true } : {})
   };
 }
 
@@ -218,6 +315,11 @@ export type ProviderTypeMeta = {
 };
 
 export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
+  if (type === 'nvidia') {
+    return {
+      defaultBaseUrl: fixedNvidiaBaseUrl
+    };
+  }
   if (type === 'anthropic_compatible') {
     return {
       defaultBaseUrl: 'https://api.anthropic.com'

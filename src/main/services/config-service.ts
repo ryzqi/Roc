@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { createFixedNvidiaProviderConfig, isFixedProvider, normalizeFixedNvidiaProvider } from '../../shared/provider-defaults';
 import type {
   AppSettings,
   DefaultModelState,
@@ -157,7 +158,7 @@ const defaultSettings: RocSettings = {
 const defaultProviders: RocProviders = {
   schemaVersion: 1,
   defaultModelId: null,
-  providers: []
+  providers: [createFixedNvidiaProviderConfig()]
 };
 
 const defaultMcpConfig: RocMcpConfig = {
@@ -203,14 +204,15 @@ export class ConfigService {
   }
 
   getProviders(): RocProviders {
-    return this.getSettingsDocument().providers;
+    return this.normalizeProvidersConfig(this.getSettingsDocument().providers);
   }
 
   saveProviders(providers: RocProviders): void {
     const document = this.getSettingsDocument();
+    const normalizedProviders = this.normalizeProvidersConfig(ProvidersSchema.parse(providers));
     this.writeSettingsDocument({
       ...document,
-      providers: ProvidersSchema.parse(providers)
+      providers: normalizedProviders
     });
   }
 
@@ -240,25 +242,22 @@ export class ConfigService {
 
   saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
     const parsed = SettingsSaveRequestSchema.parse(request);
-    const nextDefaultModelId = this.sanitizeDefaultModelIdForDisabledProviders(
-      parsed.providers,
-      parsed.defaultModelId
-    );
+    const normalizedProviders = this.normalizeProvidersConfig({
+      schemaVersion: 1,
+      defaultModelId: parsed.defaultModelId,
+      providers: parsed.providers
+    });
     const document = this.getSettingsDocument();
     this.writeSettingsDocument({
       ...document,
       settings: parsed.settings,
-      providers: {
-        schemaVersion: 1,
-        defaultModelId: nextDefaultModelId,
-        providers: parsed.providers
-      },
+      providers: normalizedProviders,
       permissions: parsed.permissions
     });
     return {
       settings: parsed.settings,
-      providers: parsed.providers,
-      defaultModelId: nextDefaultModelId,
+      providers: normalizedProviders.providers,
+      defaultModelId: normalizedProviders.defaultModelId,
       permissions: parsed.permissions
     };
   }
@@ -291,6 +290,17 @@ export class ConfigService {
         retryable: false,
         userAction: '请刷新设置页后重试。'
       });
+    }
+    if (isFixedProvider(id)) {
+      this.saveProviders({
+        schemaVersion: 1,
+        defaultModelId:
+          config.defaultModelId !== null && provider.models.some((model) => model.id === config.defaultModelId)
+            ? null
+            : config.defaultModelId,
+        providers: config.providers.map((item) => (item.id === id ? createFixedNvidiaProviderConfig() : item))
+      });
+      return;
     }
     const deletedModelIds = new Set(provider.models.map((model) => model.id));
     const nextDefaultModelId =
@@ -544,11 +554,11 @@ export class ConfigService {
       };
     });
 
-    return ProvidersSchema.parse({
+    return this.normalizeProvidersConfig(ProvidersSchema.parse({
       schemaVersion: 1,
       defaultModelId: typeof value.defaultModelId === 'string' ? value.defaultModelId : null,
       providers: upgradedProviders
-    });
+    }));
   }
 
   private upgradeLegacyPermissions(raw: unknown): RocPermissions {
@@ -620,6 +630,41 @@ export class ConfigService {
 
   private filePath(name: string): string {
     return join(this.paths.configDir, name);
+  }
+
+  private normalizeProvidersConfig(config: RocProviders): RocProviders {
+    const normalizedProviders: ProviderConfig[] = [];
+    let nvidiaFound = false;
+
+    for (const provider of config.providers) {
+      if (provider.type === 'nvidia' || isFixedProvider(provider.id)) {
+        if (!nvidiaFound) {
+          normalizedProviders.push(normalizeFixedNvidiaProvider(provider));
+          nvidiaFound = true;
+        }
+        continue;
+      }
+      normalizedProviders.push(provider);
+    }
+
+    if (!nvidiaFound) {
+      normalizedProviders.unshift(createFixedNvidiaProviderConfig());
+    }
+
+    const orderedProviders = [
+      ...normalizedProviders.filter((provider) => isFixedProvider(provider.id)),
+      ...normalizedProviders.filter((provider) => !isFixedProvider(provider.id))
+    ];
+    const nextDefaultModelId = this.sanitizeDefaultModelIdForDisabledProviders(
+      orderedProviders,
+      config.defaultModelId
+    );
+
+    return {
+      schemaVersion: 1,
+      defaultModelId: nextDefaultModelId,
+      providers: orderedProviders
+    };
   }
 
   private requireText(value: string, code: string, message: string, userAction: string): string {

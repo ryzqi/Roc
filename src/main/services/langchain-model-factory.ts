@@ -2,12 +2,12 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOpenAI } from '@langchain/openai';
+import { fixedNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ProviderConfig, ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import type { SecretService } from './secret-service';
 
-const fixedNvidiaBaseUrl = 'https://integrate.api.nvidia.com/v1';
 const langChainRequestTimeoutMs = 30_000;
 
 export type LangChainModelRuntime = {

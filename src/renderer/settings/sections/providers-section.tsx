@@ -5,9 +5,10 @@ import type {
   ProviderSecretStatus,
   ProviderTestResult
 } from '../../../shared/types';
+import { isFixedProvider } from '../../../shared/provider-defaults';
 import {
   providerTypeMeta,
-  type EditableProviderType,
+  type CreatableProviderType,
   type ProviderDraft
 } from '../../settings-model';
 
@@ -67,7 +68,7 @@ export function ProvidersSection({
   onEditProvider: (provider: ProviderConfig) => void;
   onSaveProviderDraft: () => Promise<void>;
   onSetProviderSecret: (providerId: string, plaintext: string) => Promise<void>;
-  onStartNewProvider: (type: EditableProviderType) => void;
+  onStartNewProvider: (type: CreatableProviderType) => void;
   onTestProvider: (providerId: string) => Promise<void>;
   onUpdateDraft: (partial: Partial<ProviderDraft>) => void;
   providers: ProviderConfig[];
@@ -76,7 +77,7 @@ export function ProvidersSection({
   secretBusyProviderId: string | null;
 }): React.JSX.Element {
   const [search, setSearch] = useState('');
-  const providerTypeOptions: Array<{ type: EditableProviderType; label: string }> = [
+  const providerTypeOptions: Array<{ type: CreatableProviderType; label: string }> = [
     { type: 'openai_compatible', label: 'OpenAI-compatible' },
     { type: 'anthropic_compatible', label: 'Anthropic-compatible' }
   ];
@@ -95,6 +96,7 @@ export function ProvidersSection({
     () => providers.find((provider) => provider.id === draft.id) ?? null,
     [providers, draft.id]
   );
+  const fixedProviderSelected = selectedProvider !== null && isFixedProvider(selectedProvider.id);
 
   const meta = providerTypeMeta(draft.type);
   const isCreating = draft.mode === 'create';
@@ -211,6 +213,7 @@ export function ProvidersSection({
               >
                 {runtimeStatus === 'ready' ? 'Active' : 'Inactive'}
               </span>
+              {fixedProviderSelected ? <span className="provider-status-pill active">Fixed</span> : null}
             </div>
             <div className="provider-detail-controls">
               {selectedProvider === null ? null : (
@@ -272,17 +275,19 @@ export function ProvidersSection({
               </div>
             </div>
           ) : null}
-          <div className="form-grid">
-            <label className="field">
-              <span>名称</span>
-              <input
-                data-testid="provider-draft-name"
-                onChange={(event) => onUpdateDraft({ name: event.currentTarget.value })}
-                placeholder="e.g. My OpenAI"
-                value={draft.name}
-              />
-            </label>
-          </div>
+          {draft.type === 'nvidia' ? null : (
+            <div className="form-grid">
+              <label className="field">
+                <span>名称</span>
+                <input
+                  data-testid="provider-draft-name"
+                  onChange={(event) => onUpdateDraft({ name: event.currentTarget.value })}
+                  placeholder="e.g. My OpenAI"
+                  value={draft.name}
+                />
+              </label>
+            </div>
+          )}
           <label className="field">
             <span>API Key</span>
             <div className="provider-secret-input">
@@ -318,30 +323,81 @@ export function ProvidersSection({
             )}
           </label>
           <label className="field">
-            <span>Base URL</span>
+            <span>{draft.type === 'nvidia' ? '固定端点' : 'Base URL'}</span>
             <input
               data-testid="provider-draft-endpoint"
               onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
               placeholder={meta.defaultBaseUrl}
+              readOnly={draft.type === 'nvidia'}
               value={draft.endpoint}
             />
-            <span className="field-hint">留空将回退到默认 {meta.defaultBaseUrl}</span>
+            <span className="field-hint">
+              {draft.type === 'nvidia' ? 'NVIDIA Provider 固定使用官方 OpenAI-compatible 端点。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
+            </span>
           </label>
-          <label className="field">
-            <span>模型列表</span>
-            <textarea
-              data-testid="provider-draft-models"
-              onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
-              placeholder="一行一个,格式:modelId | displayName"
-              rows={4}
-              value={draft.modelsText}
-            />
-          </label>
+          {draft.type === 'nvidia' ? (
+            <>
+              <label className="field">
+                <span>模型 ID</span>
+                <input
+                  data-testid="provider-draft-model-id"
+                  onChange={(event) => onUpdateDraft({ modelId: event.currentTarget.value })}
+                  placeholder="moonshotai/kimi-k2.6"
+                  value={draft.modelId}
+                />
+              </label>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Temperature</span>
+                  <input
+                    data-testid="provider-draft-temperature"
+                    inputMode="decimal"
+                    onChange={(event) => onUpdateDraft({ temperature: event.currentTarget.value })}
+                    placeholder="1.0"
+                    value={draft.temperature}
+                  />
+                </label>
+                <label className="field">
+                  <span>Max tokens</span>
+                  <input
+                    data-testid="provider-draft-max-tokens"
+                    inputMode="numeric"
+                    onChange={(event) => onUpdateDraft({ maxTokens: event.currentTarget.value })}
+                    placeholder="16384"
+                    value={draft.maxTokens}
+                  />
+                </label>
+              </div>
+              <label className="provider-detail-toggle provider-detail-toggle--inline">
+                <input
+                  checked={draft.thinking}
+                  data-testid="provider-draft-thinking"
+                  onChange={(event) => onUpdateDraft({ thinking: event.currentTarget.checked })}
+                  type="checkbox"
+                />
+                <span className="provider-detail-toggle-track" aria-hidden="true">
+                  <span className="provider-detail-toggle-thumb" />
+                </span>
+                <span>启用 thinking / reasoning</span>
+              </label>
+            </>
+          ) : (
+            <label className="field">
+              <span>模型列表</span>
+              <textarea
+                data-testid="provider-draft-models"
+                onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
+                placeholder="一行一个,格式:modelId | displayName"
+                rows={4}
+                value={draft.modelsText}
+              />
+            </label>
+          )}
           <div className="provider-detail-actions">
             <button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} type="button">
-              保存 Provider
+              {draft.type === 'nvidia' ? '保存 NVIDIA 配置' : '保存 Provider'}
             </button>
-            {selectedProvider === null ? null : (
+            {selectedProvider === null || fixedProviderSelected ? null : (
               <button
                 className="provider-detail-delete"
                 data-testid={`provider-delete-${selectedProvider.id}`}

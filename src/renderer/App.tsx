@@ -83,6 +83,7 @@ import {
   buildSettingsSaveRequest,
   setDefaultModelInSettingsSaveRequest
 } from './settings-model';
+import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
 import { SettingsView } from './settings';
 import { SettingsModal } from './settings/settings-modal';
 import '@xterm/xterm/css/xterm.css';
@@ -587,6 +588,7 @@ export function App(): React.JSX.Element {
   const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [state, setState] = useState<LoadedState | null>(null);
+  const [chatRunState, setChatRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
@@ -648,6 +650,19 @@ export function App(): React.JSX.Element {
       });
     });
   }, [refreshTaskState]);
+
+  useEffect(() => {
+    return window.roc.chat.onRunEvent((event) => {
+      setChatRunState((current) => applyChatRunEvent(current, event));
+      if (event.type === 'run_failed') {
+        setChatError(event.message);
+        return;
+      }
+      if (event.type === 'run_started') {
+        setChatError(null);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -721,6 +736,26 @@ export function App(): React.JSX.Element {
   const currentAgentExecution = state?.agent.execution ?? null;
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
+
+  const startTaskRun = useCallback(
+    async (input: string): Promise<boolean> => {
+      setChatError(null);
+      const result = await window.roc.chat.startRun({
+        input,
+        mode: 'task',
+        enabledCapabilities: {
+          mcpServers: currentSelectedMcpServers,
+          skills: currentSelectedSkills
+        }
+      });
+      if (!result.ok) {
+        setChatError(result.error.message);
+        return false;
+      }
+      return true;
+    },
+    [currentSelectedMcpServers, currentSelectedSkills]
+  );
 
   useEffect(() => {
     if (state === null) {
@@ -1056,28 +1091,12 @@ export function App(): React.JSX.Element {
         <ViewContent
           activeView={activeView}
           chatError={chatError}
+          chatRunState={chatRunState}
           memoryLoadState={memoryLoadState}
           onOpenView={setActiveView}
           operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
-          onSubmitChatTask={async (input) => {
-            setChatError(null);
-            const result = await window.roc.chat.submit({
-              input,
-              mode: 'task',
-              enabledCapabilities: {
-                mcpServers: state.selectedMcpServers,
-                skills: state.selectedSkills
-              }
-            });
-            if (!result.ok) {
-              setChatError(result.error.message);
-              return false;
-            }
-            const taskSnapshot = unwrap<TaskSnapshot>('task snapshot', await window.roc.tasks.getSnapshot());
-            setState((current) => (current === null ? current : { ...current, taskSnapshot, chatResult: result.data }));
-            return true;
-          }}
+          onSubmitChatTask={startTaskRun}
           state={state}
           updateLoadedState={(partial) =>
             setState((current) => (current === null ? current : { ...current, ...partial }))
@@ -1237,28 +1256,12 @@ export function App(): React.JSX.Element {
                 <ViewContent
                   activeView={activeView}
                   chatError={chatError}
+                  chatRunState={chatRunState}
                   memoryLoadState={memoryLoadState}
                   onOpenView={setActiveView}
                   operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
-                  onSubmitChatTask={async (input) => {
-                    setChatError(null);
-                    const result = await window.roc.chat.submit({
-                      input,
-                      mode: 'task',
-                      enabledCapabilities: {
-                        mcpServers: state.selectedMcpServers,
-                        skills: state.selectedSkills
-                      }
-                    });
-                    if (!result.ok) {
-                      setChatError(result.error.message);
-                      return false;
-                    }
-                    const taskSnapshot = unwrap<TaskSnapshot>('task snapshot', await window.roc.tasks.getSnapshot());
-                    setState((current) => (current === null ? current : { ...current, taskSnapshot, chatResult: result.data }));
-                    return true;
-                  }}
+                  onSubmitChatTask={startTaskRun}
                   state={state}
                   updateLoadedState={(partial) =>
                     setState((current) => (current === null ? current : { ...current, ...partial }))
@@ -1600,6 +1603,7 @@ async function loadSettingsState(): Promise<{
 function ViewContent({
   activeView,
   chatError,
+  chatRunState,
   memoryLoadState,
   onOpenView,
   operationsLoadState,
@@ -1611,6 +1615,7 @@ function ViewContent({
 }: {
   activeView: ViewId;
   chatError: string | null;
+  chatRunState: ChatRunState;
   memoryLoadState: LazyLoadState;
   onOpenView: (view: ViewId) => void;
   operationsLoadState: LazyLoadState;
@@ -1659,6 +1664,7 @@ function ViewContent({
   return (
     <ChatView
       chatError={chatError}
+      chatRunState={chatRunState}
       onOpenView={onOpenView}
       onSubmitChatTask={onSubmitChatTask}
       state={state}
@@ -1711,12 +1717,14 @@ function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; 
 
 function ChatView({
   chatError,
+  chatRunState,
   onOpenView,
   onSubmitChatTask,
   state,
   updateLoadedState
 }: {
   chatError: string | null;
+  chatRunState: ChatRunState;
   onOpenView: (view: ViewId) => void;
   onSubmitChatTask: (input: string) => Promise<boolean>;
   state: LoadedState;
@@ -1800,7 +1808,7 @@ function ChatView({
           {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
           {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
           {state.agentCapabilityPreview === null ? null : <AgentCapabilityPreviewPanel preview={state.agentCapabilityPreview} />}
-          {state.chatResult === null ? null : <ChatResultPanel result={state.chatResult} />}
+          {chatRunState.status === 'idle' ? null : <ChatRunPanel state={chatRunState} />}
         </div>
       </div>
       <div className="chat-bottom-stack">
@@ -4452,6 +4460,62 @@ function AgentCapabilityPreviewPanel({ preview }: { preview: AgentCapabilityPrev
         </div>
       )}
     </section>
+  );
+}
+
+function ChatRunPanel({ state }: { state: ChatRunState }): React.JSX.Element {
+  const statusLabel =
+    state.status === 'running'
+      ? 'streaming'
+      : state.status === 'completed'
+        ? 'completed'
+        : state.status === 'failed'
+          ? 'failed'
+          : 'idle';
+  return (
+    <div className="chat-run-card" data-testid="chat-run">
+      <div className="chat-result-header">
+        <strong data-testid="chat-run-status">{statusLabel}</strong>
+        <span data-testid="chat-run-model">
+          {state.providerId ?? '未配置'} / {state.modelId ?? '未配置'}
+        </span>
+      </div>
+      <p data-testid="chat-run-message">{state.assistantMessage || (state.status === 'running' ? '正在生成回复…' : '暂无回复内容。')}</p>
+      {state.reasoning.length === 0 ? null : (
+        <div className="chat-run-reasoning" data-testid="chat-run-reasoning">
+          <strong>Reasoning</strong>
+          <p>{state.reasoning}</p>
+        </div>
+      )}
+      {state.todos.length === 0 ? null : (
+        <div className="chat-run-list" data-testid="chat-run-todos">
+          {state.todos.map((todo) => (
+            <span className="pill" key={`${todo.content}:${todo.status}`}>
+              {todo.status} · {todo.content}
+            </span>
+          ))}
+        </div>
+      )}
+      {state.subagents.length === 0 ? null : (
+        <div className="chat-run-list" data-testid="chat-run-subagents">
+          {state.subagents.map((subagent) => (
+            <span className="pill" key={`${subagent.subagent}:${subagent.status}`}>
+              {subagent.subagent} · {subagent.status}
+            </span>
+          ))}
+        </div>
+      )}
+      {state.errorMessage === null ? null : (
+        <span className="inline-warning" data-testid="chat-run-error">
+          {state.errorMessage}
+        </span>
+      )}
+      <div className="chat-result-meta">
+        <span>{state.threadId ?? '无 thread'}</span>
+        <span>{state.durationMs === null ? '运行中' : `${state.durationMs} ms`}</span>
+        <span>{state.summary ?? 'deepagents streaming'}</span>
+      </div>
+    </div>
   );
 }
 

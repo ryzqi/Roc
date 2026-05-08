@@ -79,13 +79,31 @@ describe('settings model helpers', () => {
       endpoint: '',
       apiKey: '',
       enabled: true,
-      modelsText: ''
+      modelsText: '',
+      modelId: '',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
     });
     expect(createProviderDraft('anthropic_compatible')).toMatchObject({
       mode: 'create',
       apiKey: '',
       type: 'anthropic_compatible',
       enabled: true
+    });
+    expect(createProviderDraft('nvidia')).toEqual({
+      mode: 'edit',
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      apiKey: '',
+      enabled: true,
+      modelsText: '',
+      modelId: '',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
     });
   });
 
@@ -138,6 +156,40 @@ describe('settings model helpers', () => {
           supportsToolCalls: true
         }
       ]
+    });
+  });
+
+  it('builds the fixed NVIDIA provider config from model id and NVIDIA options', () => {
+    const draft = {
+      ...createProviderDraft('nvidia'),
+      modelId: 'moonshotai/kimi-k2.6',
+      apiKey: 'nvapi-test',
+      temperature: '0.4',
+      maxTokens: '16384',
+      thinking: true
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      credentialRef: 'secret:nvidia',
+      enabled: true,
+      models: [
+        {
+          id: 'moonshotai/kimi-k2.6',
+          displayName: 'moonshotai/kimi-k2.6',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: {
+        temperature: 0.4,
+        maxTokens: 16384,
+        thinking: true
+      }
     });
   });
 

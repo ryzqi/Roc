@@ -21,7 +21,7 @@ import {
   selectSettingsSection,
   SETTINGS_SECTIONS,
   upsertProviderInSettingsSaveRequest,
-  type EditableProviderType,
+  type CreatableProviderType,
   type LoadedSettingsState,
   type ProviderDraft,
   type SettingsSectionId
@@ -65,9 +65,7 @@ export function SettingsView({
   updateLoadedState: SettingsViewUpdate;
 }): React.JSX.Element {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('providers');
-  const [providerDraft, setProviderDraft] = useState<ProviderDraft>(() =>
-    createProviderDraft('openai_compatible')
-  );
+  const [providerDraft, setProviderDraft] = useState<ProviderDraft>(() => createInitialProviderDraft(state.providers));
   const [providerDraftError, setProviderDraftError] = useState<string | null>(null);
   const [secretBusyProviderId, setSecretBusyProviderId] = useState<string | null>(null);
   const [exaTestLabel, setExaTestLabel] = useState<string>('未测试');
@@ -108,15 +106,19 @@ export function SettingsView({
     setProviderDraftError(null);
   }, []);
 
-  const startNewProvider = useCallback((type: EditableProviderType): void => {
+  const startNewProvider = useCallback((type: CreatableProviderType): void => {
     setProviderDraft(createProviderDraft(type));
     setProviderDraftError(null);
     setActiveSection('providers');
   }, []);
 
   const editProvider = useCallback((provider: ProviderConfig): void => {
-    if (provider.type !== 'openai_compatible' && provider.type !== 'anthropic_compatible') {
-      setProviderDraftError('当前设置页只编辑 OpenAI-compatible 和 Anthropic-compatible provider。');
+    if (
+      provider.type !== 'openai_compatible' &&
+      provider.type !== 'anthropic_compatible' &&
+      provider.type !== 'nvidia'
+    ) {
+      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible 和 NVIDIA provider。');
       return;
     }
     setProviderDraft(createProviderDraft(provider.type, provider));
@@ -183,6 +185,7 @@ export function SettingsView({
         )
       );
       updateLoadedState(applySettingsSnapshot(saved));
+      setProviderDraft(createInitialProviderDraft(saved.providers));
     },
     [buildBaseSaveRequest, updateLoadedState]
   );
@@ -390,4 +393,12 @@ export function SettingsView({
       </section>
     </>
   );
+}
+
+function createInitialProviderDraft(providers: ProviderConfig[]): ProviderDraft {
+  const nvidia = providers.find((provider) => provider.id === 'nvidia');
+  if (nvidia !== undefined) {
+    return createProviderDraft('nvidia', nvidia);
+  }
+  return createProviderDraft('openai_compatible');
 }
