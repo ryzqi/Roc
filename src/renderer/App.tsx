@@ -48,13 +48,13 @@ import type {
   MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
+  PermissionsConfig,
   ProviderConfig,
-  ProviderType,
+  ProviderSecretStatus,
   ProviderTestResult,
   RtkStatus,
   SessionSearchResult,
   SettingsSnapshot,
-  SettingsSaveRequest,
   SkillSnapshot,
   TerminalSessionExitEvent,
   TerminalSessionOutputEvent,
@@ -79,17 +79,9 @@ import {
 import {
   applySettingsSnapshot,
   buildSettingsSaveRequest,
-  buildEnabledModelOptions,
-  buildProviderConfigFromDraft,
-  createProviderDraft,
-  deleteProviderFromSettingsSaveRequest,
-  setDefaultModelInSettingsSaveRequest,
-  selectSettingsSection,
-  SETTINGS_SECTIONS,
-  upsertProviderInSettingsSaveRequest,
-  type ProviderDraft,
-  type SettingsSectionId
+  setDefaultModelInSettingsSaveRequest
 } from './settings-model';
+import { SettingsView } from './settings';
 import '@xterm/xterm/css/xterm.css';
 import 'react-diff-view/style/index.css';
 
@@ -219,6 +211,8 @@ type LoadedState = {
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  providerSecretStatus: ProviderSecretStatus[];
+  permissions: PermissionsConfig;
   providerTestStatus: ProviderTestResult | null;
   mcpServers: McpServerSnapshot[];
   mcpTestStatus: McpServerTestResult | null;
@@ -464,26 +458,6 @@ function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: bo
 
 function viewMeta(view: MainViewId): PageMeta {
   return PAGE_META[view];
-}
-
-function providerTypeLabel(type: ProviderConfig['type']): string {
-  if (type === 'openai_compatible') {
-    return '兼容服务';
-  }
-  if (type === 'anthropic_compatible') {
-    return 'Anthropic 兼容';
-  }
-  if (type === 'ollama') {
-    return 'Ollama';
-  }
-  return '自定义兼容端点';
-}
-
-function providerRuntimeStatus(provider: ProviderConfig, providerTestStatus: ProviderTestResult | null): string {
-  if (providerTestStatus !== null && providerTestStatus.providerId === provider.id) {
-    return providerTestStatus.status;
-  }
-  return provider.enabled && provider.models.some((model) => model.enabled) ? 'ready' : 'invalid';
 }
 
 function visibleWorkspaceLabel(state: LoadedState): string {
@@ -1574,9 +1548,11 @@ async function loadSettingsState(): Promise<{
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  providerSecretStatus: ProviderSecretStatus[];
+  permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
-  providerTestStatus: null;
+  providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
 }> {
   const snapshot = unwrap<SettingsSnapshot>('settings snapshot', await window.roc.settings.get());
@@ -1631,7 +1607,13 @@ function ViewContent({
     return <MemoryView loadState={memoryLoadState} state={state} />;
   }
   if (activeView === 'settings') {
-    return <SettingsView state={state} updateLoadedState={updateLoadedState} />;
+    return (
+      <SettingsView
+        onNavigate={(target) => onOpenView(target)}
+        state={state}
+        updateLoadedState={updateLoadedState}
+      />
+    );
   }
   if (activeView === 'doctor') {
     return <DoctorView loadState={operationsLoadState} state={state} />;
@@ -1971,7 +1953,8 @@ function ChatView({
                                   buildSettingsSaveRequest({
                                     settings: state.settings,
                                     providers: state.providers,
-                                    defaultModelId: state.defaultModelId
+                                    defaultModelId: state.defaultModelId,
+                                    permissions: state.permissions
                                   }),
                                   model.id
                                 )
@@ -2994,428 +2977,6 @@ function memoryRecordTitle(record: MemoryRecordViewModel): string {
   return `${record.layer}记忆`;
 }
 
-function SettingsView({
-  state,
-  updateLoadedState
-}: {
-  state: LoadedState;
-  updateLoadedState: (partial: Partial<LoadedState>) => void;
-}): React.JSX.Element {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('providers');
-  const [providerDraft, setProviderDraft] = useState<ProviderDraft>(() => createProviderDraft('openai_compatible'));
-  const [providerDraftError, setProviderDraftError] = useState<string | null>(null);
-  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(state.settings);
-  const [settingsStatus, setSettingsStatus] = useState<string>('未修改');
-  const enabledModelOptions = buildEnabledModelOptions(state.providers);
-
-  function currentSettingsSaveRequest(): SettingsSaveRequest {
-    return buildSettingsSaveRequest({
-      settings: state.settings,
-      providers: state.providers,
-      defaultModelId: state.defaultModelId
-    });
-  }
-
-  function updateProviderDraft(partial: Partial<ProviderDraft>): void {
-    setProviderDraft((current) => ({
-      ...current,
-      ...partial
-    }));
-    setProviderDraftError(null);
-  }
-
-  function startNewProvider(type: Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible'>): void {
-    setProviderDraft(createProviderDraft(type));
-    setProviderDraftError(null);
-    setActiveSection('providers');
-  }
-
-  function editProvider(provider: ProviderConfig): void {
-    if (provider.type !== 'openai_compatible' && provider.type !== 'anthropic_compatible') {
-      setProviderDraftError('当前设置页只编辑 OpenAI-compatible 和 Anthropic-compatible provider。');
-      return;
-    }
-    setProviderDraft(createProviderDraft(provider.type, provider));
-    setProviderDraftError(null);
-    setActiveSection('providers');
-  }
-
-  async function saveProviderDraft(): Promise<void> {
-    let provider: ProviderConfig;
-    try {
-      provider = buildProviderConfigFromDraft(providerDraft);
-    } catch (error) {
-      setProviderDraftError(error instanceof Error ? error.message : 'Provider 草稿无效。');
-      return;
-    }
-
-    const saved = unwrap<SettingsSnapshot>(
-      'settings save',
-      await window.roc.settings.save(upsertProviderInSettingsSaveRequest(currentSettingsSaveRequest(), provider))
-    );
-    updateLoadedState(applySettingsSnapshot(saved));
-    setProviderDraft(createProviderDraft(providerDraft.type, provider));
-    setProviderDraftError(null);
-  }
-
-  async function deleteProvider(providerId: string): Promise<void> {
-    const saved = unwrap<SettingsSnapshot>(
-      'settings save',
-      await window.roc.settings.save(deleteProviderFromSettingsSaveRequest(currentSettingsSaveRequest(), providerId))
-    );
-    updateLoadedState(applySettingsSnapshot(saved));
-  }
-
-  async function setDefaultModel(modelId: string | null): Promise<void> {
-    const saved = unwrap<SettingsSnapshot>(
-      'settings save',
-      await window.roc.settings.save(setDefaultModelInSettingsSaveRequest(currentSettingsSaveRequest(), modelId))
-    );
-    updateLoadedState(applySettingsSnapshot(saved));
-  }
-
-  async function testProvider(providerId: string): Promise<void> {
-    const result = unwrap<ProviderTestResult>('provider test', await window.roc.settings.testProvider(providerId));
-    updateLoadedState({ providerTestStatus: result });
-  }
-
-  async function saveSettingsDraft(): Promise<void> {
-    const saved = unwrap<SettingsSnapshot>(
-      'settings save',
-      await window.roc.settings.save(
-        buildSettingsSaveRequest({
-          settings: settingsDraft,
-          providers: state.providers,
-          defaultModelId: state.defaultModelId
-        })
-      )
-    );
-    setSettingsDraft(saved.settings);
-    updateLoadedState(applySettingsSnapshot(saved));
-    setSettingsStatus('已保存');
-  }
-
-  function selectSection(sectionId: string): void {
-    setActiveSection((current) => selectSettingsSection(current, sectionId));
-  }
-
-  function renderProviderPanel(): React.JSX.Element {
-    return (
-      <>
-        <section className="card" data-testid="provider-settings">
-          <div className="card-title">模型 Provider <StatusPill label="数量" tone="info" value={String(state.providers.length)} /></div>
-          <div className="card-pad settings-form">
-            <div className="settings-actions">
-              <button data-testid="provider-add-openai" type="button" onClick={() => startNewProvider('openai_compatible')}>
-                新增 OpenAI-compatible
-              </button>
-              <button data-testid="provider-add-anthropic" type="button" onClick={() => startNewProvider('anthropic_compatible')}>
-                新增 Anthropic-compatible
-              </button>
-            </div>
-            <div className="form-grid">
-              <label className="field">
-                <span>Provider ID</span>
-                <input
-                  data-testid="provider-draft-id"
-                  value={providerDraft.id}
-                  onChange={(event) => updateProviderDraft({ id: event.currentTarget.value })}
-                />
-              </label>
-              <label className="field">
-                <span>名称</span>
-                <input
-                  data-testid="provider-draft-name"
-                  value={providerDraft.name}
-                  onChange={(event) => updateProviderDraft({ name: event.currentTarget.value })}
-                />
-              </label>
-              <label className="field">
-                <span>类型</span>
-                <select
-                  data-testid="provider-draft-type"
-                  value={providerDraft.type}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    if (value === 'openai_compatible' || value === 'anthropic_compatible') {
-                      updateProviderDraft({ type: value });
-                    }
-                  }}
-                >
-                  <option value="openai_compatible">OpenAI-compatible</option>
-                  <option value="anthropic_compatible">Anthropic-compatible</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Endpoint</span>
-                <input
-                  data-testid="provider-draft-endpoint"
-                  value={providerDraft.endpoint}
-                  onChange={(event) => updateProviderDraft({ endpoint: event.currentTarget.value })}
-                />
-              </label>
-              <label className="field">
-                <span>凭据引用</span>
-                <input
-                  data-testid="provider-draft-credential"
-                  value={providerDraft.credentialRef}
-                  onChange={(event) => updateProviderDraft({ credentialRef: event.currentTarget.value })}
-                />
-              </label>
-              <label className="field checkbox-field">
-                <span>启用</span>
-                <input
-                  checked={providerDraft.enabled}
-                  data-testid="provider-draft-enabled"
-                  type="checkbox"
-                  onChange={(event) => updateProviderDraft({ enabled: event.currentTarget.checked })}
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>模型列表</span>
-              <textarea
-                data-testid="provider-draft-models"
-                rows={4}
-                value={providerDraft.modelsText}
-                onChange={(event) => updateProviderDraft({ modelsText: event.currentTarget.value })}
-              />
-            </label>
-            <div className="settings-actions">
-              <button data-testid="provider-save" type="button" onClick={() => void saveProviderDraft()}>
-                保存 Provider
-              </button>
-              <span className={providerDraftError === null ? 'pill ok' : 'pill warn'} data-testid="provider-draft-status">
-                {providerDraftError === null ? providerDraft.mode : providerDraftError}
-              </span>
-            </div>
-          </div>
-        </section>
-        <section className="card">
-          <div className="card-title">已配置 Provider</div>
-          {state.providers.length === 0 ? (
-            <Row title="模型提供商" sub="尚未配置 provider" tag="blocked" tone="warn" />
-          ) : (
-            state.providers.map((provider) => (
-              <div className="row action-row" key={provider.id}>
-                <div>
-                  <div className="row-title">{provider.name}</div>
-                  <div className="row-sub">
-                    {provider.id} · {providerTypeLabel(provider.type)} · {provider.endpoint} · {provider.models.map((model) => model.id).join(', ')} · {provider.id}:{providerRuntimeStatus(provider, state.providerTestStatus)}
-                  </div>
-                </div>
-                <span className={provider.enabled ? 'pill ok' : 'pill warn'}>
-                  {provider.enabled ? `${provider.models.length} models` : 'disabled'}
-                </span>
-                <button data-testid={`provider-test-${provider.id}`} type="button" onClick={() => void testProvider(provider.id)}>
-                  测试
-                </button>
-                <button data-testid={`provider-edit-${provider.id}`} type="button" onClick={() => editProvider(provider)}>
-                  编辑
-                </button>
-                <button data-testid={`provider-delete-${provider.id}`} type="button" onClick={() => void deleteProvider(provider.id)}>
-                  删除
-                </button>
-              </div>
-            ))
-          )}
-        </section>
-      </>
-    );
-  }
-
-  function renderDefaultModelPanel(): React.JSX.Element {
-    return (
-      <section className="card" data-testid="default-model-settings">
-        <div className="card-title">默认模型 <StatusPill label="当前" tone={state.defaultModelId === null ? 'warn' : 'ok'} value={state.defaultModelId === null ? '缺失' : state.defaultModelId} /></div>
-        {enabledModelOptions.length === 0 ? (
-          <Row title="默认模型" sub="没有来自已启用 provider 的已启用模型。" tag="blocked" tone="warn" />
-        ) : (
-          enabledModelOptions.map((option) => (
-            <div className="row action-row" key={`${option.providerId}:${option.modelId}`}>
-              <div>
-                <div className="row-title">{option.label}</div>
-                <div className="row-sub">{option.providerId}:{option.modelId}</div>
-              </div>
-              <span className={state.defaultModelId === option.modelId ? 'pill ok' : 'pill info'}>
-                {state.defaultModelId === option.modelId ? '默认' : '可选'}
-              </span>
-              <button
-                data-testid={`default-model-${option.modelId}`}
-                type="button"
-                onClick={() => void setDefaultModel(option.modelId)}
-              >
-                设为默认
-              </button>
-            </div>
-          ))
-        )}
-        <div className="settings-actions">
-          <button data-testid="default-model-clear" type="button" onClick={() => void setDefaultModel(null)}>
-            清除默认
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  function renderSettingsPersistencePanel(): React.JSX.Element {
-    const section = SETTINGS_SECTIONS.find((item) => item.id === activeSection);
-    if (section === undefined) {
-      throw new Error(`Unknown settings section: ${activeSection}`);
-    }
-    return (
-      <section className="card" data-testid={`settings-panel-${activeSection}`}>
-        <div className="card-title">{section.label} <StatusPill label="settings.json" tone="info" value={settingsStatus} /></div>
-        <div className="card-pad settings-form">
-          <div className="form-grid">
-            <label className="field checkbox-field">
-              <span>开机启动</span>
-              <input
-                checked={settingsDraft.startup.openAtLogin}
-                type="checkbox"
-                onChange={(event) => {
-                  setSettingsDraft((current) => ({
-                    ...current,
-                    startup: {
-                      ...current.startup,
-                      openAtLogin: event.currentTarget.checked
-                    }
-                  }));
-                  setSettingsStatus('未保存');
-                }}
-              />
-            </label>
-            <label className="field checkbox-field">
-              <span>最小化到托盘</span>
-              <input
-                checked={settingsDraft.startup.minimizeToTray}
-                type="checkbox"
-                onChange={(event) => {
-                  setSettingsDraft((current) => ({
-                    ...current,
-                    startup: {
-                      ...current.startup,
-                      minimizeToTray: event.currentTarget.checked
-                    }
-                  }));
-                  setSettingsStatus('未保存');
-                }}
-              />
-            </label>
-            <label className="field checkbox-field">
-              <span>低打扰通知</span>
-              <input
-                checked={settingsDraft.notifications.lowDistraction}
-                type="checkbox"
-                onChange={(event) => {
-                  setSettingsDraft((current) => ({
-                    ...current,
-                    notifications: {
-                      lowDistraction: event.currentTarget.checked
-                    }
-                  }));
-                  setSettingsStatus('未保存');
-                }}
-              />
-            </label>
-            <label className="field checkbox-field">
-              <span>热记忆召回</span>
-              <input
-                checked={settingsDraft.memory.warmRecallEnabled}
-                type="checkbox"
-                onChange={(event) => {
-                  setSettingsDraft((current) => ({
-                    ...current,
-                    memory: {
-                      ...current.memory,
-                      warmRecallEnabled: event.currentTarget.checked
-                    }
-                  }));
-                  setSettingsStatus('未保存');
-                }}
-              />
-            </label>
-          </div>
-          <div className="settings-actions">
-            <button data-testid="settings-save" type="button" onClick={() => void saveSettingsDraft()}>
-              保存 settings.json
-            </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  function renderStatusPanel(): React.JSX.Element {
-    if (activeSection === 'auth-security') {
-      return (
-        <section className="card" data-testid="settings-panel-auth-security">
-          <div className="card-title">授权与安全</div>
-          <Row title="Provider 凭据" sub="当前仅保存 env:VAR_NAME 引用，不保存 API key 明文。" tag="env only" tone="ok" />
-          <Row title="高风险操作" sub="权限与 shell 执行仍由现有边界统一控制。" tag="受控" tone="info" />
-        </section>
-      );
-    }
-    if (activeSection === 'browser') {
-      return (
-        <section className="card" data-testid="settings-panel-browser">
-          <div className="card-title">网页与浏览器</div>
-          <Row title="浏览器入口" sub="当前没有可保存后端配置。" tag="状态展示" tone="info" />
-        </section>
-      );
-    }
-    if (activeSection === 'capabilities') {
-      return (
-        <section className="card" data-testid="settings-panel-capabilities">
-          <div className="card-title">能力入口</div>
-          <Row title="MCP" sub={`${state.mcpServers.filter((server) => server.enabled).length} 个已启用服务`} tag="真实状态" tone="ok" />
-          <Row title="Skill" sub={`${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 个可用 Skill`} tag="真实状态" tone="ok" />
-        </section>
-      );
-    }
-    return renderSettingsPersistencePanel();
-  }
-
-  function renderActivePanel(): React.JSX.Element {
-    if (activeSection === 'providers') {
-      return renderProviderPanel();
-    }
-    if (activeSection === 'default-model') {
-      return renderDefaultModelPanel();
-    }
-    return renderStatusPanel();
-  }
-
-  return (
-    <>
-      <PageHeading kicker="控制面" title="设置" />
-      <section className="canvas-stage stage-grid" data-testid="settings-view">
-        <div className="split">
-          <div className="settings-list">
-            {SETTINGS_SECTIONS.map((item) => (
-              <button
-                className={activeSection === item.id ? 'settings-item active' : 'settings-item'}
-                data-testid={`settings-section-${item.id}`}
-                key={item.id}
-                type="button"
-                onClick={() => selectSection(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="settings-panel-stack">{renderActivePanel()}</div>
-        </div>
-        <section className="card">
-          <div className="card-title">高影响变更预览</div>
-          <Row title="默认模型变化" sub="会影响新任务和后台任务模型选择" tag="需确认" tone="warn" />
-          <Row title="记忆策略变化" sub="会影响热记忆准入和跨项目召回" tag="需确认" tone="warn" />
-        </section>
-      </section>
-    </>
-  );
-}
 
 function DoctorView({
   loadState,

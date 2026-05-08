@@ -71,7 +71,9 @@ const rocApi: RocPreloadApi = {
   settings: {
     get: () => ipcRenderer.invoke(ipcChannels.settingsGet),
     save: (settings) => ipcRenderer.invoke(ipcChannels.settingsSave, settings),
-    testProvider: (id) => ipcRenderer.invoke(ipcChannels.settingsTestProvider, id)
+    testProvider: (id) => ipcRenderer.invoke(ipcChannels.settingsTestProvider, id),
+    setProviderSecret: (request) => ipcRenderer.invoke(ipcChannels.settingsSetProviderSecret, request),
+    clearProviderSecret: (providerId) => ipcRenderer.invoke(ipcChannels.settingsClearProviderSecret, providerId)
   },
   doctor: {
     getLatest: () => ipcRenderer.invoke(ipcChannels.doctorGetLatest),

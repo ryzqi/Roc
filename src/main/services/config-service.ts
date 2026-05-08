@@ -16,8 +16,10 @@ import type {
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 
+const PROVIDER_CREDENTIAL_REF_PATTERN = /^secret:[A-Za-z0-9_-]+$/;
+
 const SettingsSchema: z.ZodType<AppSettings> = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   defaultWorkspace: z.string().nullable(),
   startup: z.object({
     openAtLogin: z.boolean(),
@@ -26,12 +28,13 @@ const SettingsSchema: z.ZodType<AppSettings> = z.object({
   notifications: z.object({
     lowDistraction: z.boolean()
   }),
-  appearance: z.object({
-    theme: z.literal('light')
-  }),
+  globalHotkey: z.string().nullable(),
   memory: z.object({
-    candidateReviewMode: z.literal('manual'),
-    warmRecallEnabled: z.boolean()
+    candidateReviewMode: z.enum(['manual', 'auto_after_approval']),
+    warmRecallEnabled: z.boolean(),
+    sessionRetentionDays: z.union([z.literal(30), z.literal(90), z.literal(180)]),
+    crossScopeRecall: z.enum(['explicit_only', 'expanded_with_label']),
+    coldAutoForgetDays: z.union([z.literal(90), z.literal(180), z.literal(365), z.null()])
   })
 });
 
@@ -43,12 +46,20 @@ const ProviderModelSchema = z.object({
   supportsToolCalls: z.boolean()
 });
 
+const ProviderCredentialRefSchema = z
+  .string()
+  .nullable()
+  .refine(
+    (value) => value === null || PROVIDER_CREDENTIAL_REF_PATTERN.test(value),
+    'Provider 凭据引用必须为 secret:<providerId> 或 null。'
+  );
+
 const ProviderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   type: z.enum(['openai_compatible', 'anthropic_compatible', 'ollama', 'custom']),
   endpoint: z.string().min(1),
-  credentialRef: z.string().nullable(),
+  credentialRef: ProviderCredentialRefSchema,
   enabled: z.boolean(),
   models: z.array(ProviderModelSchema)
 });
@@ -76,8 +87,16 @@ const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
   servers: z.array(McpServerSchema)
 });
 
+const PermissionConfirmationSchema = z.enum(['always_confirm', 'never_confirm']);
+
 const PermissionsConfigSchema: z.ZodType<PermissionsConfig> = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
+  defaultConfirmations: z.object({
+    workspaceOutsideWrite: PermissionConfirmationSchema,
+    gitPush: PermissionConfirmationSchema,
+    memoryDelete: PermissionConfirmationSchema,
+    workspaceOutsideShell: PermissionConfirmationSchema
+  }),
   grants: z.array(z.unknown())
 });
 
@@ -89,11 +108,12 @@ const ShortcutsConfigSchema = z.object({
 const SettingsSaveRequestSchema: z.ZodType<SettingsSaveRequest> = z.object({
   settings: SettingsSchema,
   providers: z.array(ProviderSchema),
-  defaultModelId: z.string().nullable()
+  defaultModelId: z.string().nullable(),
+  permissions: PermissionsConfigSchema
 });
 
 const SettingsDocumentSchema: z.ZodType<RocSettingsDocument> = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   settings: SettingsSchema,
   providers: ProvidersSchema,
   mcp: McpServersConfigSchema,
@@ -104,9 +124,10 @@ const SettingsDocumentSchema: z.ZodType<RocSettingsDocument> = z.object({
 export type RocSettings = AppSettings;
 export type RocProviders = z.infer<typeof ProvidersSchema>;
 export type RocMcpConfig = z.infer<typeof McpServersConfigSchema>;
+export type RocPermissions = PermissionsConfig;
 
 const defaultSettings: RocSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   defaultWorkspace: null,
   startup: {
     openAtLogin: false,
@@ -115,12 +136,13 @@ const defaultSettings: RocSettings = {
   notifications: {
     lowDistraction: true
   },
-  appearance: {
-    theme: 'light'
-  },
+  globalHotkey: null,
   memory: {
     candidateReviewMode: 'manual',
-    warmRecallEnabled: true
+    warmRecallEnabled: true,
+    sessionRetentionDays: 90,
+    crossScopeRecall: 'explicit_only',
+    coldAutoForgetDays: 90
   }
 };
 
@@ -136,7 +158,13 @@ const defaultMcpConfig: RocMcpConfig = {
 };
 
 const defaultPermissions: PermissionsConfig = {
-  schemaVersion: 1,
+  schemaVersion: 2,
+  defaultConfirmations: {
+    workspaceOutsideWrite: 'always_confirm',
+    gitPush: 'always_confirm',
+    memoryDelete: 'always_confirm',
+    workspaceOutsideShell: 'always_confirm'
+  },
   grants: []
 };
 
@@ -190,6 +218,18 @@ export class ConfigService {
     });
   }
 
+  getPermissions(): RocPermissions {
+    return this.getSettingsDocument().permissions;
+  }
+
+  savePermissions(permissions: RocPermissions): void {
+    const document = this.getSettingsDocument();
+    this.writeSettingsDocument({
+      ...document,
+      permissions: PermissionsConfigSchema.parse(permissions)
+    });
+  }
+
   saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
     const parsed = SettingsSaveRequestSchema.parse(request);
     const document = this.getSettingsDocument();
@@ -200,12 +240,14 @@ export class ConfigService {
         schemaVersion: 1,
         defaultModelId: parsed.defaultModelId,
         providers: parsed.providers
-      }
+      },
+      permissions: parsed.permissions
     });
     return {
       settings: parsed.settings,
       providers: parsed.providers,
-      defaultModelId: parsed.defaultModelId
+      defaultModelId: parsed.defaultModelId,
+      permissions: parsed.permissions
     };
   }
 
@@ -362,21 +404,36 @@ export class ConfigService {
 
   private ensureSettingsDocument(): void {
     const rawSettings = this.readJsonIfExists('settings.json');
-    if (rawSettings !== undefined && this.looksLikeSettingsDocument(rawSettings)) {
+    if (rawSettings !== undefined && this.looksLikeCurrentDocument(rawSettings)) {
       this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
       return;
     }
-    this.writeSettingsDocument(this.migrateLegacySettingsDocument(rawSettings));
+    if (rawSettings !== undefined && this.looksLikeLegacyDocumentV2(rawSettings)) {
+      this.writeSettingsDocument(this.migrateLegacyV2Document(rawSettings as Record<string, unknown>));
+      return;
+    }
+    this.writeSettingsDocument(this.migrateLegacySplitFiles(rawSettings));
   }
 
-  private migrateLegacySettingsDocument(rawSettings: unknown | undefined): RocSettingsDocument {
+  private migrateLegacySplitFiles(rawSettings: unknown | undefined): RocSettingsDocument {
     return {
-      schemaVersion: 2,
-      settings: rawSettings === undefined ? defaultSettings : SettingsSchema.parse(rawSettings),
-      providers: this.readLegacyConfig('providers.json', ProvidersSchema, defaultProviders),
-      mcp: this.readLegacyConfig('mcp.servers.json', McpServersConfigSchema, defaultMcpConfig),
-      permissions: this.readLegacyConfig('permissions.json', PermissionsConfigSchema, defaultPermissions),
-      shortcuts: this.readLegacyConfig('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
+      schemaVersion: 3,
+      settings: rawSettings === undefined ? defaultSettings : this.upgradeLegacySettings(rawSettings),
+      providers: this.upgradeLegacyProviders(this.readLegacyConfig('providers.json', defaultProviders)),
+      mcp: this.readLegacyConfigStrict('mcp.servers.json', McpServersConfigSchema, defaultMcpConfig),
+      permissions: this.upgradeLegacyPermissions(this.readJsonIfExists('permissions.json')),
+      shortcuts: this.readLegacyConfigStrict('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
+    };
+  }
+
+  private migrateLegacyV2Document(raw: Record<string, unknown>): RocSettingsDocument {
+    return {
+      schemaVersion: 3,
+      settings: this.upgradeLegacySettings(raw.settings),
+      providers: this.upgradeLegacyProviders(raw.providers ?? defaultProviders),
+      mcp: McpServersConfigSchema.parse(raw.mcp ?? defaultMcpConfig),
+      permissions: this.upgradeLegacyPermissions(raw.permissions),
+      shortcuts: ShortcutsConfigSchema.parse(raw.shortcuts ?? defaultShortcuts)
     };
   }
 
@@ -437,7 +494,107 @@ export class ConfigService {
     };
   }
 
-  private readLegacyConfig<T>(name: string, schema: z.ZodType<T>, fallback: T): T {
+  private upgradeLegacySettings(raw: unknown): RocSettings {
+    if (raw === null || typeof raw !== 'object') {
+      return defaultSettings;
+    }
+    const value = raw as Record<string, unknown>;
+    const startup = (value.startup ?? {}) as Record<string, unknown>;
+    const notifications = (value.notifications ?? {}) as Record<string, unknown>;
+    const memory = (value.memory ?? {}) as Record<string, unknown>;
+
+    const upgraded: RocSettings = {
+      schemaVersion: 2,
+      defaultWorkspace: typeof value.defaultWorkspace === 'string' ? value.defaultWorkspace : null,
+      startup: {
+        openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false,
+        minimizeToTray: typeof startup.minimizeToTray === 'boolean' ? startup.minimizeToTray : true
+      },
+      notifications: {
+        lowDistraction: typeof notifications.lowDistraction === 'boolean' ? notifications.lowDistraction : true
+      },
+      globalHotkey: typeof value.globalHotkey === 'string' && value.globalHotkey.length > 0 ? value.globalHotkey : null,
+      memory: {
+        candidateReviewMode: memory.candidateReviewMode === 'auto_after_approval' ? 'auto_after_approval' : 'manual',
+        warmRecallEnabled: typeof memory.warmRecallEnabled === 'boolean' ? memory.warmRecallEnabled : true,
+        sessionRetentionDays:
+          memory.sessionRetentionDays === 30 || memory.sessionRetentionDays === 180
+            ? (memory.sessionRetentionDays as 30 | 180)
+            : 90,
+        crossScopeRecall:
+          memory.crossScopeRecall === 'expanded_with_label' ? 'expanded_with_label' : 'explicit_only',
+        coldAutoForgetDays: this.upgradeColdAutoForget(memory.coldAutoForgetDays)
+      }
+    };
+
+    return SettingsSchema.parse(upgraded);
+  }
+
+  private upgradeColdAutoForget(value: unknown): RocSettings['memory']['coldAutoForgetDays'] {
+    if (value === null) {
+      return null;
+    }
+    if (value === 90 || value === 180 || value === 365) {
+      return value;
+    }
+    return 90;
+  }
+
+  private upgradeLegacyProviders(raw: unknown): RocProviders {
+    if (raw === null || typeof raw !== 'object') {
+      return defaultProviders;
+    }
+    const value = raw as Record<string, unknown>;
+    const providersList = Array.isArray(value.providers) ? value.providers : [];
+    const upgradedProviders: ProviderConfig[] = providersList.map((entry) => {
+      const provider = entry as ProviderConfig;
+      const credentialRef = provider.credentialRef;
+      const upgradedRef =
+        typeof credentialRef === 'string' && PROVIDER_CREDENTIAL_REF_PATTERN.test(credentialRef)
+          ? credentialRef
+          : null;
+      return {
+        ...provider,
+        credentialRef: upgradedRef
+      };
+    });
+
+    return ProvidersSchema.parse({
+      schemaVersion: 1,
+      defaultModelId: typeof value.defaultModelId === 'string' ? value.defaultModelId : null,
+      providers: upgradedProviders
+    });
+  }
+
+  private upgradeLegacyPermissions(raw: unknown): RocPermissions {
+    if (raw === null || raw === undefined || typeof raw !== 'object') {
+      return defaultPermissions;
+    }
+    const value = raw as Record<string, unknown>;
+    const incoming = (value.defaultConfirmations ?? {}) as Record<string, unknown>;
+    return PermissionsConfigSchema.parse({
+      schemaVersion: 2,
+      defaultConfirmations: {
+        workspaceOutsideWrite:
+          incoming.workspaceOutsideWrite === 'never_confirm' ? 'never_confirm' : 'always_confirm',
+        gitPush: incoming.gitPush === 'never_confirm' ? 'never_confirm' : 'always_confirm',
+        memoryDelete: incoming.memoryDelete === 'never_confirm' ? 'never_confirm' : 'always_confirm',
+        workspaceOutsideShell:
+          incoming.workspaceOutsideShell === 'never_confirm' ? 'never_confirm' : 'always_confirm'
+      },
+      grants: Array.isArray(value.grants) ? value.grants : []
+    });
+  }
+
+  private readLegacyConfig(name: string, fallback: RocProviders): unknown {
+    const parsed = this.readJsonIfExists(name);
+    if (parsed === undefined) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  private readLegacyConfigStrict<T>(name: string, schema: z.ZodType<T>, fallback: T): T {
     const parsed = this.readJsonIfExists(name);
     if (parsed === undefined) {
       return fallback;
@@ -460,14 +617,20 @@ export class ConfigService {
     }
   }
 
-  private looksLikeSettingsDocument(value: unknown): value is RocSettingsDocument {
+  private looksLikeCurrentDocument(value: unknown): value is RocSettingsDocument {
     if (typeof value !== 'object' || value === null) {
       return false;
     }
-    if (!('schemaVersion' in value) || (value as { schemaVersion?: unknown }).schemaVersion !== 2) {
+    const record = value as { schemaVersion?: unknown };
+    return record.schemaVersion === 3;
+  }
+
+  private looksLikeLegacyDocumentV2(value: unknown): boolean {
+    if (typeof value !== 'object' || value === null) {
       return false;
     }
-    return 'settings' in value && 'providers' in value && 'mcp' in value;
+    const record = value as { schemaVersion?: unknown; settings?: unknown; providers?: unknown };
+    return record.schemaVersion === 2 && 'settings' in record && 'providers' in record;
   }
 
   private filePath(name: string): string {

@@ -1,6 +1,7 @@
 import type { EnabledCapabilities, ProviderConfig, ProviderExecutionResult } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
+import type { SecretService } from './secret-service';
 
 export type ProviderRuntimeRequest = {
   input: string;
@@ -48,7 +49,10 @@ const providerRequestTimeoutMs = 30_000;
 export class ProviderRuntimeService {
   private deterministicTransport: ProviderTransport | null = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly secretService: SecretService
+  ) {}
 
   setDeterministicResponse(response: ProviderTransportResponse): void {
     this.deterministicTransport = () => response;
@@ -166,7 +170,7 @@ export class ProviderRuntimeService {
   }
 
   private async executeOpenAiCompatible(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {
-    const apiKey = this.resolveCredential(request.provider.credentialRef);
+    const apiKey = this.resolveCredential(request.provider);
     const url = this.buildChatCompletionsUrl(request.provider.endpoint);
     const body: OpenAiCompatibleRequestBody = {
       model: request.modelId,
@@ -234,7 +238,7 @@ export class ProviderRuntimeService {
   }
 
   private async executeAnthropicCompatible(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {
-    const apiKey = this.resolveCredential(request.provider.credentialRef);
+    const apiKey = this.resolveCredential(request.provider);
     const url = this.buildMessagesUrl(request.provider.endpoint);
     const body: AnthropicCompatibleRequestBody = {
       model: request.modelId,
@@ -348,14 +352,15 @@ export class ProviderRuntimeService {
       .replace(/(api[_-]?key|token|password|credential)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[REDACTED]');
   }
 
-  private resolveCredential(credentialRef: string | null): string {
+  private resolveCredential(provider: ProviderConfig): string {
+    const credentialRef = provider.credentialRef;
     if (credentialRef === null) {
       throw new RocDomainError({
         code: 'provider_credential_missing',
         message: 'Provider 缺少凭据引用。',
         category: 'validation',
         retryable: false,
-        userAction: '请在设置页为 Provider 配置凭据后再重试。'
+        userAction: '请在设置页为 Provider 录入 API Key 后再重试。'
       });
     }
 
@@ -366,47 +371,56 @@ export class ProviderRuntimeService {
         message: 'Provider 凭据引用不能为空。',
         category: 'validation',
         retryable: false,
-        userAction: '请在设置页重新配置 Provider 凭据引用。'
+        userAction: '请在设置页重新配置 Provider 凭据。'
       });
     }
-    if (!trimmed.startsWith('env:')) {
+    if (!trimmed.startsWith('secret:')) {
       throw new RocDomainError({
         code: 'provider_credential_ref_unsupported',
-        message: '当前 live Provider 只支持 env:VAR_NAME 凭据引用。',
+        message: 'Provider 凭据引用必须为 secret:<providerId>。',
         category: 'validation',
         retryable: false,
-        userAction: '请把 Provider 凭据引用配置为 env:VAR_NAME，或等待后续安全凭据存储支持。'
+        userAction: '请在设置页为 Provider 录入 API Key 以生成加密凭据。'
       });
     }
 
-    const envName = trimmed.slice('env:'.length).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(envName)) {
+    const referencedProviderId = trimmed.slice('secret:'.length).trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(referencedProviderId)) {
       throw new RocDomainError({
         code: 'provider_credential_ref_invalid',
-        message: 'Provider 环境变量凭据引用格式无效。',
+        message: 'Provider 凭据引用的 providerId 含有不允许的字符。',
         category: 'validation',
         retryable: false,
-        userAction: '请使用 env:VAR_NAME 格式配置 Provider 凭据引用。'
+        userAction: '请使用 secret:<providerId> 形式的凭据引用。'
+      });
+    }
+    if (referencedProviderId !== provider.id) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_mismatch',
+        message: 'Provider 凭据引用的 providerId 与 Provider 不匹配。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页重新录入该 Provider 的 API Key。'
       });
     }
 
-    const value = process.env[envName];
-    if (value === undefined || value.trim().length === 0) {
+    const value = this.secretService.getProviderSecret(provider.id);
+    if (value.trim().length === 0) {
       throw new RocDomainError({
         code: 'provider_credential_unavailable',
-        message: `Provider 凭据环境变量 ${envName} 不存在或为空。`,
+        message: 'Provider 凭据为空。',
         category: 'validation',
         retryable: false,
-        userAction: '请在启动 Roc 前设置对应环境变量，或重新配置 Provider 凭据引用。'
+        userAction: '请在设置页重新录入该 Provider 的 API Key。'
       });
     }
     if (/[\r\n]/.test(value)) {
       throw new RocDomainError({
         code: 'provider_credential_ref_invalid',
-        message: `Provider 凭据环境变量 ${envName} 包含非法换行字符。`,
+        message: 'Provider 凭据中包含非法换行字符。',
         category: 'validation',
         retryable: false,
-        userAction: '请重新设置不含换行的 Provider 凭据环境变量。'
+        userAction: '请重新录入不含换行的 Provider API Key。'
       });
     }
     return value;

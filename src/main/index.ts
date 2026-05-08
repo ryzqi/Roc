@@ -1,7 +1,8 @@
-import { BrowserWindow, Menu, app, shell } from 'electron';
+import { BrowserWindow, Menu, app, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
+import type { SafeStorageBackend } from './services/secret-service';
 import { buildFloatingWindowOptions, buildMainWindowOptions } from './window-shell';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 
@@ -73,10 +74,14 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
 }
 
 async function createWindow(): Promise<void> {
-  const services = createAppServices(process.env.ROC_DATA_ROOT, {
-    version: app.getVersion(),
-    isPackaged: app.isPackaged
-  });
+  const services = createAppServices(
+    process.env.ROC_DATA_ROOT,
+    {
+      version: app.getVersion(),
+      isPackaged: app.isPackaged
+    },
+    createElectronSafeStorageBackend()
+  );
   services.appService.initialize();
 
   mainWindow = new BrowserWindow(buildMainWindowOptions(preloadPath));
@@ -127,3 +132,11 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+function createElectronSafeStorageBackend(): SafeStorageBackend {
+  return {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encryptString: (plaintext) => safeStorage.encryptString(plaintext),
+    decryptString: (encrypted) => safeStorage.decryptString(encrypted)
+  };
+}

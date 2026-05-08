@@ -133,7 +133,7 @@ describe('Roc foundation services', () => {
     expect(existsSync(join(root, 'config', 'settings.json'))).toBe(true);
     expect(existsSync(join(root, 'config', 'providers.json'))).toBe(false);
     expect(existsSync(join(root, 'config', 'mcp.servers.json'))).toBe(false);
-    expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"schemaVersion": 2');
+    expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"schemaVersion": 3');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"providers"');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"mcp"');
     expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
@@ -366,7 +366,7 @@ describe('Roc foundation services', () => {
           name: 'OpenAI compatible',
           type: 'openai_compatible',
           endpoint: 'https://api.example.test/v1',
-          credentialRef: 'credential:provider-openai',
+          credentialRef: 'secret:provider-openai',
           enabled: true,
           models: [
             {
@@ -397,7 +397,7 @@ describe('Roc foundation services', () => {
           name: 'OpenAI compatible',
           type: 'openai_compatible',
           endpoint: 'https://api.example.test/v1',
-          credentialRef: 'credential:provider-openai',
+          credentialRef: 'secret:provider-openai',
           enabled: true,
           models: [
             {
@@ -430,7 +430,7 @@ describe('Roc foundation services', () => {
           name: 'OpenAI compatible',
           type: 'openai_compatible',
           endpoint: 'https://api.example.test/v1',
-          credentialRef: 'credential:provider-openai',
+          credentialRef: 'secret:provider-openai',
           enabled: true,
           models: [
             {
@@ -497,7 +497,7 @@ describe('Roc foundation services', () => {
           name: 'OpenAI compatible',
           type: 'openai_compatible',
           endpoint: 'https://api.example.test/v1',
-          credentialRef: 'credential:provider-openai',
+          credentialRef: 'secret:provider-openai',
           enabled: true,
           models: [
             {
@@ -584,7 +584,7 @@ describe('Roc foundation services', () => {
     });
   });
 
-  it('executes Anthropic-compatible live Messages calls through an env credentialRef', async () => {
+  it('executes Anthropic-compatible live Messages calls through a safeStorage credential', async () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);
     const fakeProvider = await startFakeProvider(
@@ -603,11 +603,10 @@ describe('Roc foundation services', () => {
       },
       200
     );
-    const previousApiKey = process.env.ROC_TEST_ANTHROPIC_API_KEY;
-    process.env.ROC_TEST_ANTHROPIC_API_KEY = 'sk-ant-live-test-secret';
 
     try {
       liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-anthropic', 'sk-ant-live-test-secret');
       liveServices.configService.saveProviders({
         schemaVersion: 1,
         defaultModelId: 'anthropic-model',
@@ -617,7 +616,7 @@ describe('Roc foundation services', () => {
             name: 'Anthropic compatible',
             type: 'anthropic_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_ANTHROPIC_API_KEY',
+            credentialRef: 'secret:provider-anthropic',
             enabled: true,
             models: [
               {
@@ -671,11 +670,6 @@ describe('Roc foundation services', () => {
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_ANTHROPIC_API_KEY;
-      } else {
-        process.env.ROC_TEST_ANTHROPIC_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -699,7 +693,7 @@ describe('Roc foundation services', () => {
           name: 'OpenAI compatible',
           type: 'openai_compatible',
           endpoint: 'https://api.example.test/v1',
-          credentialRef: 'credential:provider-openai',
+          credentialRef: 'secret:provider-openai',
           enabled: true,
           models: [
             {
@@ -748,7 +742,7 @@ describe('Roc foundation services', () => {
     expect(JSON.stringify(errorEvent?.payload)).not.toContain('sk-secret-value');
   });
 
-  it('executes OpenAI-compatible live chat completions through an env credentialRef', async () => {
+  it('executes OpenAI-compatible live chat completions through a safeStorage credential', async () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);
     const fakeProvider = await startFakeProvider(
@@ -770,11 +764,10 @@ describe('Roc foundation services', () => {
       },
       200
     );
-    const previousApiKey = process.env.ROC_TEST_PROVIDER_API_KEY;
-    process.env.ROC_TEST_PROVIDER_API_KEY = 'sk-live-test-secret';
 
     try {
       liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
       liveServices.configService.saveProviders({
         schemaVersion: 1,
         defaultModelId: 'live-model',
@@ -784,7 +777,7 @@ describe('Roc foundation services', () => {
             name: 'Live OpenAI compatible',
             type: 'openai_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_PROVIDER_API_KEY',
+            credentialRef: 'secret:provider-live-openai',
             enabled: true,
             models: [
               {
@@ -837,89 +830,48 @@ describe('Roc foundation services', () => {
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_PROVIDER_API_KEY;
-      } else {
-        process.env.ROC_TEST_PROVIDER_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
 
-  it('rejects unsupported live credential refs without sending a Provider request', async () => {
+  it('rejects providers saved with non-secret credential refs at the schema boundary', () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);
-    const fakeProvider = await startFakeProvider(
-      {
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'This response should not be requested.'
-            },
-            finish_reason: 'stop'
-          }
-        ]
-      },
-      200
-    );
 
     try {
       liveServices.appService.initialize();
-      liveServices.configService.saveProviders({
-        schemaVersion: 1,
-        defaultModelId: 'live-model',
-        providers: [
-          {
-            id: 'provider-live-openai',
-            name: 'Live OpenAI compatible',
-            type: 'openai_compatible',
-            endpoint: fakeProvider.endpoint,
-            credentialRef: 'credential:provider-live-openai',
-            enabled: true,
-            models: [
-              {
-                id: 'live-model',
-                displayName: 'Live model',
-                enabled: true,
-                supportsStreaming: true,
-                supportsToolCalls: true
-              }
-            ]
-          }
-        ]
-      });
-
-      const result = await wrapIpc(() =>
-        liveServices.chatService.submit({
-          input: '不应发出 live 请求',
-          mode: 'chat',
-          enabledCapabilities: {
-            mcpServers: [],
-            skills: []
-          }
+      expect(() =>
+        liveServices.configService.saveProviders({
+          schemaVersion: 1,
+          defaultModelId: 'live-model',
+          providers: [
+            {
+              id: 'provider-live-openai',
+              name: 'Live OpenAI compatible',
+              type: 'openai_compatible',
+              endpoint: 'https://example.test/v1',
+              credentialRef: 'env:LEGACY_KEY',
+              enabled: true,
+              models: [
+                {
+                  id: 'live-model',
+                  displayName: 'Live model',
+                  enabled: true,
+                  supportsStreaming: true,
+                  supportsToolCalls: true
+                }
+              ]
+            }
+          ]
         })
-      );
-
-      expect(result).toEqual({
-        ok: false,
-        error: {
-          code: 'provider_credential_ref_unsupported',
-          message: '当前 live Provider 只支持 env:VAR_NAME 凭据引用。',
-          category: 'validation',
-          retryable: false,
-          userAction: '请把 Provider 凭据引用配置为 env:VAR_NAME，或等待后续安全凭据存储支持。'
-        }
-      });
-      expect(fakeProvider.requests).toHaveLength(0);
+      ).toThrow();
     } finally {
       liveServices.databaseService.close();
-      await fakeProvider.close();
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
 
-  it('fails live Provider calls when credentialRef is missing or env credential is unavailable', async () => {
+  it('fails live Provider calls when credentialRef is missing or the safeStorage secret is unavailable', async () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);
     const fakeProvider = await startFakeProvider(
@@ -936,8 +888,6 @@ describe('Roc foundation services', () => {
       },
       200
     );
-    const previousApiKey = process.env.ROC_TEST_PROVIDER_API_KEY;
-    delete process.env.ROC_TEST_PROVIDER_API_KEY;
 
     try {
       liveServices.appService.initialize();
@@ -985,7 +935,7 @@ describe('Roc foundation services', () => {
             name: 'Live OpenAI compatible',
             type: 'openai_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_PROVIDER_API_KEY',
+            credentialRef: 'secret:provider-live-openai',
             enabled: true,
             models: [
               {
@@ -999,9 +949,9 @@ describe('Roc foundation services', () => {
           }
         ]
       });
-      const missingEnv = await wrapIpc(() =>
+      const missingSecret = await wrapIpc(() =>
         liveServices.chatService.submit({
-          input: '缺少 env secret',
+          input: '缺少 secret',
           mode: 'chat',
           enabledCapabilities: {
             mcpServers: [],
@@ -1017,28 +967,23 @@ describe('Roc foundation services', () => {
           message: 'Provider 缺少凭据引用。',
           category: 'validation',
           retryable: false,
-          userAction: '请在设置页为 Provider 配置凭据后再重试。'
+          userAction: '请在设置页为 Provider 录入 API Key 后再重试。'
         }
       });
-      expect(missingEnv).toEqual({
+      expect(missingSecret).toEqual({
         ok: false,
         error: {
           code: 'provider_credential_unavailable',
-          message: 'Provider 凭据环境变量 ROC_TEST_PROVIDER_API_KEY 不存在或为空。',
+          message: 'Provider 凭据未存储。',
           category: 'validation',
           retryable: false,
-          userAction: '请在启动 Roc 前设置对应环境变量，或重新配置 Provider 凭据引用。'
+          userAction: '请在设置页为该 Provider 录入 API Key 后再发起调用。'
         }
       });
       expect(fakeProvider.requests).toHaveLength(0);
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_PROVIDER_API_KEY;
-      } else {
-        process.env.ROC_TEST_PROVIDER_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -1060,12 +1005,11 @@ describe('Roc foundation services', () => {
       },
       200
     );
-    const previousApiKey = process.env.ROC_TEST_PROVIDER_API_KEY;
-    process.env.ROC_TEST_PROVIDER_API_KEY = 'sk-live-test-secret';
     await fakeProvider.close();
 
     try {
       liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
       liveServices.configService.saveProviders({
         schemaVersion: 1,
         defaultModelId: 'live-model',
@@ -1075,7 +1019,7 @@ describe('Roc foundation services', () => {
             name: 'Live OpenAI compatible',
             type: 'openai_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_PROVIDER_API_KEY',
+            credentialRef: 'secret:provider-live-openai',
             enabled: true,
             models: [
               {
@@ -1114,11 +1058,6 @@ describe('Roc foundation services', () => {
       expect(result.error.message).not.toContain('sk-live-test-secret');
     } finally {
       liveServices.databaseService.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_PROVIDER_API_KEY;
-      } else {
-        process.env.ROC_TEST_PROVIDER_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -1134,11 +1073,10 @@ describe('Roc foundation services', () => {
       },
       401
     );
-    const previousApiKey = process.env.ROC_TEST_PROVIDER_API_KEY;
-    process.env.ROC_TEST_PROVIDER_API_KEY = 'sk-live-test-secret';
 
     try {
       liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
       liveServices.configService.saveProviders({
         schemaVersion: 1,
         defaultModelId: 'live-model',
@@ -1148,7 +1086,7 @@ describe('Roc foundation services', () => {
             name: 'Live OpenAI compatible',
             type: 'openai_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_PROVIDER_API_KEY',
+            credentialRef: 'secret:provider-live-openai',
             enabled: true,
             models: [
               {
@@ -1193,11 +1131,6 @@ describe('Roc foundation services', () => {
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_PROVIDER_API_KEY;
-      } else {
-        process.env.ROC_TEST_PROVIDER_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -1206,11 +1139,10 @@ describe('Roc foundation services', () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);
     const fakeProvider = await startFakeProvider({ choices: [{}] }, 200);
-    const previousApiKey = process.env.ROC_TEST_PROVIDER_API_KEY;
-    process.env.ROC_TEST_PROVIDER_API_KEY = 'sk-live-test-secret';
 
     try {
       liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
       liveServices.configService.saveProviders({
         schemaVersion: 1,
         defaultModelId: 'live-model',
@@ -1220,7 +1152,7 @@ describe('Roc foundation services', () => {
             name: 'Live OpenAI compatible',
             type: 'openai_compatible',
             endpoint: fakeProvider.endpoint,
-            credentialRef: 'env:ROC_TEST_PROVIDER_API_KEY',
+            credentialRef: 'secret:provider-live-openai',
             enabled: true,
             models: [
               {
@@ -1259,11 +1191,6 @@ describe('Roc foundation services', () => {
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
-      if (previousApiKey === undefined) {
-        delete process.env.ROC_TEST_PROVIDER_API_KEY;
-      } else {
-        process.env.ROC_TEST_PROVIDER_API_KEY = previousApiKey;
-      }
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -1977,7 +1904,7 @@ describe('Roc foundation services', () => {
             name: 'OpenAI compatible',
             type: 'openai_compatible',
             endpoint: 'https://api.example.test/v1',
-            credentialRef: 'credential:provider-openai',
+            credentialRef: 'secret:provider-openai',
             enabled: true,
             models: [
               {
@@ -2212,7 +2139,7 @@ describe('Roc foundation services', () => {
       name: 'Local OpenAI-compatible',
       type: 'openai_compatible',
       endpoint: 'http://127.0.0.1:11434/v1',
-      credentialRef: 'credential:provider-local',
+      credentialRef: 'secret:provider-local',
       enabled: true,
       models: [
         {
@@ -2227,7 +2154,7 @@ describe('Roc foundation services', () => {
     const testResult = services.configService.testProvider(provider.id);
     services.configService.setDefaultModel('model-tools');
 
-    expect(provider.credentialRef).toBe('credential:provider-local');
+    expect(provider.credentialRef).toBe('secret:provider-local');
     expect(testResult).toMatchObject({
       providerId: 'provider-local',
       status: 'ready',
@@ -2256,7 +2183,7 @@ describe('Roc foundation services', () => {
       name: 'OpenAI A',
       type: 'openai_compatible',
       endpoint: 'https://openai-a.example.test/v1',
-      credentialRef: 'env:OPENAI_A_KEY',
+      credentialRef: 'secret:provider-openai-a',
       enabled: true,
       models: [
         {
@@ -2273,7 +2200,7 @@ describe('Roc foundation services', () => {
       name: 'OpenAI B',
       type: 'openai_compatible',
       endpoint: 'https://openai-b.example.test/v1',
-      credentialRef: 'env:OPENAI_B_KEY',
+      credentialRef: 'secret:provider-openai-b',
       enabled: true,
       models: [
         {
@@ -2290,7 +2217,7 @@ describe('Roc foundation services', () => {
       name: 'Anthropic A',
       type: 'anthropic_compatible',
       endpoint: 'https://anthropic-a.example.test/v1',
-      credentialRef: 'env:ANTHROPIC_A_KEY',
+      credentialRef: 'secret:provider-anthropic-a',
       enabled: true,
       models: [
         {
@@ -2307,7 +2234,7 @@ describe('Roc foundation services', () => {
       name: 'Anthropic B',
       type: 'anthropic_compatible',
       endpoint: 'https://anthropic-b.example.test/v1',
-      credentialRef: 'env:ANTHROPIC_B_KEY',
+      credentialRef: 'secret:provider-anthropic-b',
       enabled: true,
       models: [
         {

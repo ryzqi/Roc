@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import type { SettingsSnapshot } from '../../shared/types';
+import type { ProviderSecretSetRequest, SettingsSnapshot } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowBounds, getWindowState } from '../window-shell';
@@ -12,11 +12,16 @@ export type AppWindowControls = {
 };
 
 function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
-  const providers = services.configService.getProviders();
+  const providersConfig = services.configService.getProviders();
+  const providerSecretStatus = services.secretService.listSecretStatuses(
+    providersConfig.providers.map((provider) => provider.id)
+  );
   return {
     settings: services.configService.getSettings(),
-    providers: providers.providers,
-    defaultModelId: providers.defaultModelId,
+    providers: providersConfig.providers,
+    defaultModelId: providersConfig.defaultModelId,
+    providerSecretStatus,
+    permissions: services.configService.getPermissions(),
     mcpServers: services.mcpService.listServers(),
     skills: services.skillService.list()
   };
@@ -141,6 +146,18 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   );
   ipcMain.handle(ipcChannels.settingsTestProvider, (_event, id: string) =>
     wrapIpc(() => services.configService.testProvider(id))
+  );
+  ipcMain.handle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
+    wrapIpc(() => {
+      services.secretService.setProviderSecret(request.providerId, request.plaintext);
+      return { providerId: request.providerId, stored: true as const };
+    })
+  );
+  ipcMain.handle(ipcChannels.settingsClearProviderSecret, (_event, providerId: string) =>
+    wrapIpc(() => {
+      services.secretService.clearProviderSecret(providerId);
+      return { providerId, stored: false as const };
+    })
   );
   ipcMain.handle(ipcChannels.mcpListServers, () => wrapIpc(() => services.mcpService.listServers()));
   ipcMain.handle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));

@@ -477,8 +477,13 @@ export type TraySummary = {
   updatedAt: string;
 };
 
+export type MemoryCandidateReviewMode = 'manual' | 'auto_after_approval';
+export type MemorySessionRetentionDays = 30 | 90 | 180;
+export type MemoryCrossScopeRecall = 'explicit_only' | 'expanded_with_label';
+export type MemoryColdAutoForgetDays = 90 | 180 | 365 | null;
+
 export type AppSettings = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   defaultWorkspace: string | null;
   startup: {
     openAtLogin: boolean;
@@ -487,17 +492,26 @@ export type AppSettings = {
   notifications: {
     lowDistraction: boolean;
   };
-  appearance: {
-    theme: 'light';
-  };
+  globalHotkey: string | null;
   memory: {
-    candidateReviewMode: 'manual';
+    candidateReviewMode: MemoryCandidateReviewMode;
     warmRecallEnabled: boolean;
+    sessionRetentionDays: MemorySessionRetentionDays;
+    crossScopeRecall: MemoryCrossScopeRecall;
+    coldAutoForgetDays: MemoryColdAutoForgetDays;
   };
 };
 
+export type PermissionConfirmationPolicy = 'always_confirm' | 'never_confirm';
+
 export type PermissionsConfig = {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  defaultConfirmations: {
+    workspaceOutsideWrite: PermissionConfirmationPolicy;
+    gitPush: PermissionConfirmationPolicy;
+    memoryDelete: PermissionConfirmationPolicy;
+    workspaceOutsideShell: PermissionConfirmationPolicy;
+  };
   grants: unknown[];
 };
 
@@ -565,7 +579,7 @@ export type McpServersConfig = {
 };
 
 export type RocSettingsDocument = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   settings: AppSettings;
   providers: ProvidersConfig;
   mcp: McpServersConfig;
@@ -869,10 +883,17 @@ export type SkillSnapshot = {
   lastError?: string | null;
 };
 
+export type ProviderSecretStatus = {
+  providerId: string;
+  stored: boolean;
+};
+
 export type SettingsSnapshot = {
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  providerSecretStatus: ProviderSecretStatus[];
+  permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
 };
@@ -881,6 +902,22 @@ export type SettingsSaveRequest = {
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  permissions: PermissionsConfig;
+};
+
+export type ProviderSecretSetRequest = {
+  providerId: string;
+  plaintext: string;
+};
+
+export type ProviderSecretSetResult = {
+  providerId: string;
+  stored: true;
+};
+
+export type ProviderSecretClearResult = {
+  providerId: string;
+  stored: false;
 };
 
 export type SkillImportRequest = {

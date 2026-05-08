@@ -298,8 +298,16 @@ async function seedSmokeRuntimeData(page, { providerEndpoint }) {
 
       const currentSettings = await unwrap(await window.roc.settings.get(), 'settings get');
       await unwrap(
+        await window.roc.settings.setProviderSecret({
+          providerId: 'smoke-provider',
+          plaintext: 'sk-smoke-seed-secret'
+        }),
+        'settings set provider secret'
+      );
+      await unwrap(
         await window.roc.settings.save({
           settings: currentSettings.settings,
+          permissions: currentSettings.permissions,
           providers: [
             ...currentSettings.providers,
             {
@@ -307,7 +315,7 @@ async function seedSmokeRuntimeData(page, { providerEndpoint }) {
               name: 'Smoke Provider',
               type: 'openai_compatible',
               endpoint,
-              credentialRef: 'env:ROC_SMOKE_API_KEY',
+              credentialRef: 'secret:smoke-provider',
               enabled: true,
               models: [
                 {
@@ -1142,8 +1150,7 @@ try {
     'auth-security',
     'memory',
     'browser',
-    'capabilities',
-    'appearance'
+    'capabilities'
   ]) {
     await clickSmokeControl(page, `[data-testid="settings-section-${sectionId}"]`);
     await page.waitForSelector(`[data-testid="settings-panel-${sectionId}"], [data-testid="provider-settings"], [data-testid="default-model-settings"]`, {
@@ -1155,18 +1162,24 @@ try {
   await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-openai');
   await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI OpenAI Provider');
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-credential"]', 'env:ROC_SMOKE_API_KEY');
   await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model | Smoke UI OpenAI Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI OpenAI Provider');
+  await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-openai"]', { timeout: 5000 });
+  await page.fill('[data-testid="provider-secret-input-smoke-ui-openai"]', 'sk-smoke-ui-openai');
+  await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-openai"]');
+  await waitForTextContent(page, '[data-testid="provider-secret-status-smoke-ui-openai"]', '凭据已存储');
   await clickSmokeControl(page, '[data-testid="provider-add-anthropic"]');
   await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-anthropic');
   await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI Anthropic Provider');
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-credential"]', 'env:ROC_SMOKE_API_KEY');
   await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model | Smoke UI Anthropic Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI Anthropic Provider');
+  await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-anthropic"]', { timeout: 5000 });
+  await page.fill('[data-testid="provider-secret-input-smoke-ui-anthropic"]', 'sk-smoke-ui-anthropic');
+  await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-anthropic"]');
+  await waitForTextContent(page, '[data-testid="provider-secret-status-smoke-ui-anthropic"]', '凭据已存储');
   await clickSmokeControl(page, '[data-testid="provider-test-smoke-ui-openai"]');
   await waitForTextContent(page, '[data-testid="settings-view"]', 'smoke-ui-openai:ready');
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');

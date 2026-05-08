@@ -45,6 +45,9 @@ import type {
   MemoryStatus,
   PerformanceSample,
   PerformanceSampleRequest,
+  ProviderSecretClearResult,
+  ProviderSecretSetRequest,
+  ProviderSecretSetResult,
   ProviderTestResult,
   RtkStatus,
   SessionRecallEntry,
@@ -112,6 +115,8 @@ export const ipcChannels = {
   settingsGet: 'roc:settings:get',
   settingsSave: 'roc:settings:save',
   settingsTestProvider: 'roc:settings:test-provider',
+  settingsSetProviderSecret: 'roc:settings:set-provider-secret',
+  settingsClearProviderSecret: 'roc:settings:clear-provider-secret',
   mcpListServers: 'roc:mcp:list-servers',
   mcpEnsureExaPreset: 'roc:mcp:ensure-exa-preset',
   mcpUpsertServer: 'roc:mcp:upsert-server',
@@ -225,6 +230,8 @@ export type RocPreloadApi = {
     get: () => Promise<IpcResult<SettingsSnapshot>>;
     save: (settings: SettingsSaveRequest) => Promise<IpcResult<SettingsSnapshot>>;
     testProvider: (id: string) => Promise<IpcResult<ProviderTestResult>>;
+    setProviderSecret: (request: ProviderSecretSetRequest) => Promise<IpcResult<ProviderSecretSetResult>>;
+    clearProviderSecret: (providerId: string) => Promise<IpcResult<ProviderSecretClearResult>>;
   };
   doctor: {
     getLatest: () => Promise<IpcResult<DoctorSnapshot>>;

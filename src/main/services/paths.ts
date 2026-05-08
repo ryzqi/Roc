@@ -17,6 +17,7 @@ export class RocPaths {
   readonly terminalDir: string;
   readonly rtkDir: string;
   readonly toolsDir: string;
+  readonly secretsDir: string;
 
   constructor(root = join(homedir(), '.roc')) {
     this.root = root;
@@ -32,6 +33,7 @@ export class RocPaths {
     this.terminalDir = join(root, 'terminal');
     this.rtkDir = join(root, 'rtk');
     this.toolsDir = join(root, 'tools');
+    this.secretsDir = join(root, 'secrets');
   }
 
   ensureTree(): void {
@@ -59,7 +61,8 @@ export class RocPaths {
       join(this.rtkDir, 'audit'),
       this.logsDir,
       this.diagnosticsDir,
-      this.toolsDir
+      this.toolsDir,
+      this.secretsDir
     ];
 
     for (const dir of dirs) {

@@ -1,8 +1,12 @@
 import type {
   AppSettings,
   McpServerSnapshot,
+  PermissionConfirmationPolicy,
+  PermissionsConfig,
   ProviderConfig,
   ProviderModel,
+  ProviderSecretStatus,
+  ProviderTestResult,
   ProviderType,
   SettingsSaveRequest,
   SettingsSnapshot,
@@ -16,21 +20,21 @@ export type SettingsSectionId =
   | 'auth-security'
   | 'memory'
   | 'browser'
-  | 'capabilities'
-  | 'appearance';
+  | 'capabilities';
 
 export type SettingsSection = {
   id: SettingsSectionId;
   label: string;
 };
 
+export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible'>;
+
 export type ProviderDraft = {
   mode: 'create' | 'edit';
   id: string;
   name: string;
-  type: Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible'>;
+  type: EditableProviderType;
   endpoint: string;
-  credentialRef: string;
   enabled: boolean;
   modelsText: string;
 };
@@ -41,6 +45,17 @@ export type EnabledModelOption = {
   label: string;
 };
 
+export type ImpactSeverity = 'info' | 'high';
+
+export type ImpactRow = {
+  sectionId: SettingsSectionId;
+  field: string;
+  before: string;
+  after: string;
+  impact: string;
+  severity: ImpactSeverity;
+};
+
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'providers', label: '模型提供商' },
   { id: 'default-model', label: '默认模型' },
@@ -48,11 +63,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'auth-security', label: '授权与安全' },
   { id: 'memory', label: '记忆策略' },
   { id: 'browser', label: '网页与浏览器' },
-  { id: 'capabilities', label: '能力入口' },
-  { id: 'appearance', label: '外观与语言' }
+  { id: 'capabilities', label: '能力入口' }
 ];
 
-const providerTypes = ['openai_compatible', 'anthropic_compatible'] as const;
+const editableProviderTypes: readonly EditableProviderType[] = ['openai_compatible', 'anthropic_compatible'];
 
 export function selectSettingsSection(current: SettingsSectionId, requested: string): SettingsSectionId {
   if (SETTINGS_SECTIONS.some((section) => section.id === requested)) {
@@ -61,11 +75,8 @@ export function selectSettingsSection(current: SettingsSectionId, requested: str
   return current;
 }
 
-export function createProviderDraft(
-  type: Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible'>,
-  provider?: ProviderConfig
-): ProviderDraft {
-  if (!providerTypes.includes(type)) {
+export function createProviderDraft(type: EditableProviderType, provider?: ProviderConfig): ProviderDraft {
+  if (!editableProviderTypes.includes(type)) {
     throw new Error(`Unsupported provider draft type: ${type}`);
   }
   if (provider === undefined) {
@@ -75,21 +86,19 @@ export function createProviderDraft(
       name: '',
       type,
       endpoint: '',
-      credentialRef: 'env:',
       enabled: true,
       modelsText: ''
     };
   }
-  if (provider.type !== 'openai_compatible' && provider.type !== 'anthropic_compatible') {
+  if (!editableProviderTypes.includes(provider.type as EditableProviderType)) {
     throw new Error(`Unsupported provider edit type: ${provider.type}`);
   }
   return {
     mode: 'edit',
     id: provider.id,
     name: provider.name,
-    type: provider.type,
+    type: provider.type as EditableProviderType,
     endpoint: provider.endpoint,
-    credentialRef: provider.credentialRef === null ? 'env:' : provider.credentialRef,
     enabled: provider.enabled,
     modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n')
   };
@@ -120,22 +129,23 @@ export function parseProviderModelDraft(modelsText: string): ProviderModel[] {
     });
 }
 
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
   const id = draft.id.trim();
   const name = draft.name.trim();
   const endpoint = draft.endpoint.trim();
-  const credentialRef = draft.credentialRef.trim();
   if (id.length === 0) {
     throw new Error('Provider ID 不能为空。');
+  }
+  if (!PROVIDER_ID_PATTERN.test(id)) {
+    throw new Error('Provider ID 只允许字母、数字、下划线和短横线。');
   }
   if (name.length === 0) {
     throw new Error('Provider 名称不能为空。');
   }
   if (endpoint.length === 0) {
     throw new Error('Provider endpoint 不能为空。');
-  }
-  if (credentialRef.length === 0 || credentialRef === 'env:') {
-    throw new Error('Provider 凭据引用必须使用 env:VAR_NAME。');
   }
   const models = parseProviderModelDraft(draft.modelsText);
   if (models.length === 0) {
@@ -146,7 +156,7 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
     name,
     type: draft.type,
     endpoint,
-    credentialRef,
+    credentialRef: `secret:${id}`,
     enabled: draft.enabled,
     models
   };
@@ -166,19 +176,25 @@ export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledMo
     );
 }
 
-export function applySettingsSnapshot(snapshot: SettingsSnapshot): {
+export type LoadedSettingsState = {
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  providerSecretStatus: ProviderSecretStatus[];
+  permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
-  providerTestStatus: null;
+  providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
-} {
+};
+
+export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSettingsState {
   return {
     settings: snapshot.settings,
     providers: snapshot.providers,
     defaultModelId: snapshot.defaultModelId,
+    providerSecretStatus: snapshot.providerSecretStatus,
+    permissions: snapshot.permissions,
     mcpServers: snapshot.mcpServers,
     skills: snapshot.skills,
     providerTestStatus: null,
@@ -190,15 +206,20 @@ export function buildSettingsSaveRequest(data: {
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
+  permissions: PermissionsConfig;
 }): SettingsSaveRequest {
   return {
     settings: data.settings,
     providers: data.providers,
-    defaultModelId: data.defaultModelId
+    defaultModelId: data.defaultModelId,
+    permissions: data.permissions
   };
 }
 
-export function upsertProviderInSettingsSaveRequest(request: SettingsSaveRequest, provider: ProviderConfig): SettingsSaveRequest {
+export function upsertProviderInSettingsSaveRequest(
+  request: SettingsSaveRequest,
+  provider: ProviderConfig
+): SettingsSaveRequest {
   const existingIndex = request.providers.findIndex((item) => item.id === provider.id);
   return {
     ...request,
@@ -209,7 +230,10 @@ export function upsertProviderInSettingsSaveRequest(request: SettingsSaveRequest
   };
 }
 
-export function deleteProviderFromSettingsSaveRequest(request: SettingsSaveRequest, providerId: string): SettingsSaveRequest {
+export function deleteProviderFromSettingsSaveRequest(
+  request: SettingsSaveRequest,
+  providerId: string
+): SettingsSaveRequest {
   const deletedProvider = request.providers.find((provider) => provider.id === providerId);
   if (deletedProvider === undefined) {
     return request;
@@ -218,13 +242,222 @@ export function deleteProviderFromSettingsSaveRequest(request: SettingsSaveReque
   return {
     ...request,
     providers: request.providers.filter((provider) => provider.id !== providerId),
-    defaultModelId: request.defaultModelId !== null && deletedModelIds.has(request.defaultModelId) ? null : request.defaultModelId
+    defaultModelId:
+      request.defaultModelId !== null && deletedModelIds.has(request.defaultModelId)
+        ? null
+        : request.defaultModelId
   };
 }
 
-export function setDefaultModelInSettingsSaveRequest(request: SettingsSaveRequest, modelId: string | null): SettingsSaveRequest {
+export function setDefaultModelInSettingsSaveRequest(
+  request: SettingsSaveRequest,
+  modelId: string | null
+): SettingsSaveRequest {
   return {
     ...request,
     defaultModelId: modelId
   };
+}
+
+const memoryFieldImpactCopy: Record<keyof AppSettings['memory'], string> = {
+  candidateReviewMode: '会影响候选记忆是否需要人工确认才能进入有效记忆。',
+  warmRecallEnabled: '会影响暖记忆是否在任务中按需召回。',
+  sessionRetentionDays: '会影响会话回忆的保留期，过期后会被自动清理。',
+  crossScopeRecall: '会影响跨项目、跨任务的记忆召回是否需要显式扩大范围。',
+  coldAutoForgetDays: '会影响冷记忆的自动遗忘策略。'
+};
+
+const permissionConfirmationCopy: Record<keyof PermissionsConfig['defaultConfirmations'], string> = {
+  workspaceOutsideWrite: '会影响 agent 写入工作区外文件时是否始终要求确认。',
+  gitPush: '会影响 git push 是否始终要求确认。',
+  memoryDelete: '会影响删除记忆条目是否始终要求确认。',
+  workspaceOutsideShell: '会影响在工作区外执行命令时是否始终要求确认。'
+};
+
+const confirmationCopy: Record<PermissionConfirmationPolicy, string> = {
+  always_confirm: '始终确认',
+  never_confirm: '不确认'
+};
+
+const candidateModeCopy: Record<AppSettings['memory']['candidateReviewMode'], string> = {
+  manual: '人工审阅',
+  auto_after_approval: '已确认后自动准入'
+};
+
+const crossScopeCopy: Record<AppSettings['memory']['crossScopeRecall'], string> = {
+  explicit_only: '仅显式扩大范围',
+  expanded_with_label: '默认扩大并标注来源'
+};
+
+function describeMemoryValue<K extends keyof AppSettings['memory']>(
+  field: K,
+  value: AppSettings['memory'][K]
+): string {
+  if (field === 'candidateReviewMode') {
+    return candidateModeCopy[value as AppSettings['memory']['candidateReviewMode']];
+  }
+  if (field === 'crossScopeRecall') {
+    return crossScopeCopy[value as AppSettings['memory']['crossScopeRecall']];
+  }
+  if (field === 'coldAutoForgetDays') {
+    const days = value as AppSettings['memory']['coldAutoForgetDays'];
+    return days === null ? '不自动遗忘' : `${days} 天`;
+  }
+  if (field === 'sessionRetentionDays') {
+    return `${value as number} 天`;
+  }
+  if (field === 'warmRecallEnabled') {
+    return value === true ? '已启用' : '已关闭';
+  }
+  return String(value);
+}
+
+function pushIfChanged<T>(
+  rows: ImpactRow[],
+  sectionId: SettingsSectionId,
+  field: string,
+  before: T,
+  after: T,
+  impact: string,
+  severity: ImpactSeverity,
+  format: (value: T) => string = (value) => String(value)
+): void {
+  if (before === after) {
+    return;
+  }
+  rows.push({
+    sectionId,
+    field,
+    before: format(before),
+    after: format(after),
+    impact,
+    severity
+  });
+}
+
+export type ImpactSourceState = {
+  settings: AppSettings;
+  permissions: PermissionsConfig;
+  defaultModelId: string | null;
+};
+
+export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceState): ImpactRow[] {
+  const rows: ImpactRow[] = [];
+
+  pushIfChanged(
+    rows,
+    'default-model',
+    'defaultModelId',
+    base.defaultModelId,
+    draft.defaultModelId,
+    '会影响新任务和后台任务的模型选择，未配置时聊天和任务入口会进入阻断状态。',
+    'high',
+    (value) => (value === null ? '未配置' : value)
+  );
+
+  pushIfChanged(
+    rows,
+    'app-basics',
+    'defaultWorkspace',
+    base.settings.defaultWorkspace,
+    draft.settings.defaultWorkspace,
+    '会影响新任务的默认执行边界，工作区外动作仍需显式确认。',
+    'info',
+    (value) => (value === null ? '未选择' : value)
+  );
+
+  pushIfChanged(
+    rows,
+    'app-basics',
+    'startup.openAtLogin',
+    base.settings.startup.openAtLogin,
+    draft.settings.startup.openAtLogin,
+    '会影响 Roc 是否随系统登录启动。',
+    'info',
+    (value) => (value ? '开机启动' : '不开机启动')
+  );
+
+  pushIfChanged(
+    rows,
+    'app-basics',
+    'startup.minimizeToTray',
+    base.settings.startup.minimizeToTray,
+    draft.settings.startup.minimizeToTray,
+    '会影响关闭主窗口后是否驻留托盘。',
+    'info',
+    (value) => (value ? '最小化到托盘' : '直接退出')
+  );
+
+  pushIfChanged(
+    rows,
+    'app-basics',
+    'notifications.lowDistraction',
+    base.settings.notifications.lowDistraction,
+    draft.settings.notifications.lowDistraction,
+    '会影响 Roc 主动通知的频率与范围。',
+    'info',
+    (value) => (value ? '低打扰' : '常规')
+  );
+
+  pushIfChanged(
+    rows,
+    'app-basics',
+    'globalHotkey',
+    base.settings.globalHotkey,
+    draft.settings.globalHotkey,
+    '会影响全局快捷入口；本版本仅保存键位字符串，未注册系统级快捷键。',
+    'info',
+    (value) => (value === null || value.length === 0 ? '未设置' : value)
+  );
+
+  for (const field of Object.keys(base.settings.memory) as Array<keyof AppSettings['memory']>) {
+    const before = base.settings.memory[field];
+    const after = draft.settings.memory[field];
+    if (before === after) {
+      continue;
+    }
+    rows.push({
+      sectionId: 'memory',
+      field: `memory.${field}`,
+      before: describeMemoryValue(field, before),
+      after: describeMemoryValue(field, after),
+      impact: memoryFieldImpactCopy[field],
+      severity: 'high'
+    });
+  }
+
+  for (const field of Object.keys(base.permissions.defaultConfirmations) as Array<
+    keyof PermissionsConfig['defaultConfirmations']
+  >) {
+    const before = base.permissions.defaultConfirmations[field];
+    const after = draft.permissions.defaultConfirmations[field];
+    if (before === after) {
+      continue;
+    }
+    rows.push({
+      sectionId: 'auth-security',
+      field: `defaultConfirmations.${field}`,
+      before: confirmationCopy[before],
+      after: confirmationCopy[after],
+      impact: permissionConfirmationCopy[field],
+      severity: 'high'
+    });
+  }
+
+  return rows;
+}
+
+export function dirtySectionIds(rows: readonly ImpactRow[]): SettingsSectionId[] {
+  const result = new Set<SettingsSectionId>();
+  for (const row of rows) {
+    result.add(row.sectionId);
+  }
+  return Array.from(result);
+}
+
+export function findSecretStatus(
+  statuses: readonly ProviderSecretStatus[],
+  providerId: string
+): ProviderSecretStatus | null {
+  return statuses.find((entry) => entry.providerId === providerId) ?? null;
 }

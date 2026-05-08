@@ -14,6 +14,7 @@ import { MemoryService } from './memory-service';
 import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
 import { RtkService } from './rtk-service';
+import { SecretService, type SafeStorageBackend } from './secret-service';
 import { ShellExecutionService } from './shell-execution-service';
 import { SkillService } from './skill-service';
 import { TaskService } from './task-service';
@@ -41,6 +42,7 @@ export type AppServices = {
   terminalSessionService: TerminalSessionService;
   rtkService: RtkService;
   shellExecutionService: ShellExecutionService;
+  secretService: SecretService;
 };
 
 export type RuntimeEnvironment = {
@@ -128,7 +130,7 @@ export class AppService {
     };
   }
 
-  get services(): Omit<AppServices, 'appService' | 'paths' | 'configService' | 'databaseService'> {
+  get services(): Omit<AppServices, 'appService' | 'paths' | 'configService' | 'databaseService' | 'secretService'> {
     return {
       memoryService: this.memoryService,
       taskService: this.taskService,
@@ -163,7 +165,11 @@ export class AppService {
   }
 }
 
-export function createAppServices(root?: string, runtimeEnvironment = defaultRuntimeEnvironment): AppServices {
+export function createAppServices(
+  root?: string,
+  runtimeEnvironment = defaultRuntimeEnvironment,
+  safeStorageBackend: SafeStorageBackend = createInMemorySafeStorageBackend()
+): AppServices {
   const paths = new RocPaths(root);
   const configService = new ConfigService(paths);
   const databaseService = new DatabaseService(paths);
@@ -177,7 +183,8 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
   const rtkService = new RtkService(paths);
   const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService);
   const agentService = new AgentService(configService, mcpService, skillService);
-  const providerRuntimeService = new ProviderRuntimeService(configService);
+  const secretService = new SecretService(paths, safeStorageBackend);
+  const providerRuntimeService = new ProviderRuntimeService(configService, secretService);
   const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
@@ -240,6 +247,21 @@ export function createAppServices(root?: string, runtimeEnvironment = defaultRun
     gitService,
     terminalSessionService,
     rtkService,
-    shellExecutionService
+    shellExecutionService,
+    secretService
+  };
+}
+
+function createInMemorySafeStorageBackend(): SafeStorageBackend {
+  return {
+    isEncryptionAvailable: () => true,
+    encryptString: (plaintext) => Buffer.from(`roc-test:${plaintext}`, 'utf8'),
+    decryptString: (encrypted) => {
+      const text = encrypted.toString('utf8');
+      if (!text.startsWith('roc-test:')) {
+        throw new Error('Encrypted payload was not produced by the in-memory safe storage backend.');
+      }
+      return text.slice('roc-test:'.length);
+    }
   };
 }
