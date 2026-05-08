@@ -520,7 +520,13 @@ export type ShortcutsConfig = {
   shortcuts: unknown[];
 };
 
-export type ProviderType = 'openai_compatible' | 'anthropic_compatible' | 'ollama' | 'custom';
+export type ProviderType = 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'ollama' | 'custom';
+
+export type ProviderOptions = {
+  temperature?: number;
+  maxTokens?: number;
+  thinking?: boolean;
+};
 
 export type ProviderModel = {
   id: string;
@@ -538,6 +544,7 @@ export type ProviderConfig = {
   credentialRef: string | null;
   enabled: boolean;
   models: ProviderModel[];
+  options?: ProviderOptions;
 };
 
 export type ProviderTestResult = {

@@ -6,6 +6,7 @@ import type {
 } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
+import { LangChainModelFactory } from './langchain-model-factory';
 import type { SecretService } from './secret-service';
 
 export type ProviderRuntimeRequest = {
@@ -57,7 +58,8 @@ export class ProviderRuntimeService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly secretService: SecretService
+    private readonly secretService: SecretService,
+    private readonly langChainModelFactory: LangChainModelFactory
   ) {}
 
   setDeterministicResponse(response: ProviderTransportResponse): void {
@@ -232,21 +234,23 @@ export class ProviderRuntimeService {
   private async executeTransportRequest(
     request: ProviderTransportRequest
   ): Promise<ProviderTransportResponse> {
-    if (request.provider.type !== 'openai_compatible' && request.provider.type !== 'anthropic_compatible') {
+    if (
+      request.provider.type !== 'openai_compatible' &&
+      request.provider.type !== 'anthropic_compatible' &&
+      request.provider.type !== 'nvidia'
+    ) {
       throw new RocDomainError({
         code: 'provider_type_unsupported',
         message: '当前 Provider 类型尚未支持测试或聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible 或 Anthropic-compatible Provider。'
+        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible 或 NVIDIA Provider。'
       });
     }
     if (this.deterministicTransport !== null) {
       return await this.deterministicTransport(request);
     }
-    return request.provider.type === 'openai_compatible'
-      ? await this.executeOpenAiCompatible(request)
-      : await this.executeAnthropicCompatible(request);
+    return await this.executeLangChainRequest(request);
   }
 
   private requireResponseContent(response: ProviderTransportResponse): string {
@@ -261,6 +265,65 @@ export class ProviderRuntimeService {
       });
     }
     return content;
+  }
+
+  private async executeLangChainRequest(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {
+    try {
+      const runtime = await this.langChainModelFactory.createModelForProvider(request.provider, request.modelId, {
+        streaming: false
+      });
+      const message = await runtime.model.invoke(
+        this.langChainModelFactory.buildPromptMessages(request.input, request.capabilitySummary)
+      );
+      const content = this.readMessageText(message.content);
+      const finishReason = this.readFinishReason(message.response_metadata);
+      if (content.trim().length === 0 && finishReason === null) {
+        throw this.createMalformedResponseErrorForProvider(request.provider);
+      }
+      const usageMetadata = this.isRecord(message.usage_metadata) ? message.usage_metadata : null;
+
+      return {
+        content,
+        finishReason: finishReason ?? 'stop',
+        promptTokens: this.readOptionalToken(usageMetadata?.input_tokens),
+        completionTokens: this.readOptionalToken(usageMetadata?.output_tokens)
+      };
+    } catch (error) {
+      throw this.toLangChainProviderError(error);
+    }
+  }
+
+  private readMessageText(content: unknown): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return '';
+    }
+    return content
+      .map((block) => {
+        if (typeof block === 'string') {
+          return block;
+        }
+        if (this.isRecord(block) && typeof block.text === 'string') {
+          return block.text;
+        }
+        return '';
+      })
+      .join('');
+  }
+
+  private readFinishReason(metadata: unknown): string | null {
+    if (!this.isRecord(metadata)) {
+      return null;
+    }
+    if (typeof metadata.finish_reason === 'string' && metadata.finish_reason.trim().length > 0) {
+      return metadata.finish_reason;
+    }
+    if (typeof metadata.stop_reason === 'string' && metadata.stop_reason.trim().length > 0) {
+      return metadata.stop_reason;
+    }
+    return null;
   }
 
   private async executeOpenAiCompatible(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {
@@ -428,6 +491,58 @@ export class ProviderRuntimeService {
       });
     }
 
+    return new RocDomainError({
+      code: 'provider_execution_failed',
+      message: 'Provider 执行失败。',
+      category: 'external',
+      retryable: true,
+      userAction: '请检查 Provider 网络、凭据和模型配置后重试。'
+    });
+  }
+
+  private toLangChainProviderError(error: unknown): RocDomainError {
+    if (error instanceof RocDomainError) {
+      return error;
+    }
+    if (this.isRecord(error)) {
+      const status = this.readOptionalHttpStatus(error.status);
+      if (status !== null) {
+        return new RocDomainError({
+          code: 'provider_http_error',
+          message: this.createHttpErrorMessage(status, this.extractLangChainErrorDetail(error)),
+          category: 'external',
+          retryable: this.isRetryableHttpStatus(status),
+          userAction: '请检查 Provider endpoint、凭据、模型名称和服务状态后重试。'
+        });
+      }
+    }
+    if (error instanceof Error) {
+      if (this.isLangChainTimeoutError(error)) {
+        return new RocDomainError({
+          code: 'provider_request_timeout',
+          message: 'Provider 请求超时。',
+          category: 'external',
+          retryable: true,
+          userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
+        });
+      }
+      if (this.isLangChainNetworkError(error)) {
+        return new RocDomainError({
+          code: 'provider_network_error',
+          message: `Provider 网络请求失败：${this.redact(error.message)}`,
+          category: 'external',
+          retryable: true,
+          userAction: '请检查 Provider 网络、endpoint 和本机代理设置后重试。'
+        });
+      }
+      return new RocDomainError({
+        code: 'provider_execution_failed',
+        message: this.redact(error.message),
+        category: 'external',
+        retryable: true,
+        userAction: '请检查 Provider 网络、凭据和模型配置后重试。'
+      });
+    }
     return new RocDomainError({
       code: 'provider_execution_failed',
       message: 'Provider 执行失败。',
@@ -724,6 +839,45 @@ export class ProviderRuntimeService {
     return undefined;
   }
 
+  private readOptionalHttpStatus(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) {
+      return value;
+    }
+    return null;
+  }
+
+  private extractLangChainErrorDetail(error: Record<string, unknown>): string {
+    const nestedError = error.error;
+    if (this.isRecord(nestedError)) {
+      const nestedMessage = this.extractNestedErrorMessage(nestedError);
+      if (nestedMessage !== null) {
+        return nestedMessage;
+      }
+    }
+    if (typeof error.message === 'string') {
+      return error.message.replace(/\s+Troubleshooting URL:[\s\S]*$/u, '').trim();
+    }
+    return '';
+  }
+
+  private extractNestedErrorMessage(value: Record<string, unknown>): string | null {
+    if (typeof value.message === 'string' && value.message.trim().length > 0) {
+      return value.message.trim();
+    }
+    if (this.isRecord(value.error)) {
+      return this.extractNestedErrorMessage(value.error);
+    }
+    return null;
+  }
+
+  private isLangChainTimeoutError(error: Error): boolean {
+    return /timeout|timed out/i.test(error.message);
+  }
+
+  private isLangChainNetworkError(error: Error): boolean {
+    return /connection error/i.test(error.message) || this.isRecord(error.cause) || /fetch failed/i.test(error.message);
+  }
+
   private createMalformedResponseError(): RocDomainError {
     return new RocDomainError({
       code: 'provider_response_malformed',
@@ -742,6 +896,12 @@ export class ProviderRuntimeService {
       retryable: true,
       userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 Anthropic Messages。'
     });
+  }
+
+  private createMalformedResponseErrorForProvider(provider: ProviderConfig): RocDomainError {
+    return provider.type === 'anthropic_compatible'
+      ? this.createAnthropicMalformedResponseError()
+      : this.createMalformedResponseError();
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

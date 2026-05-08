@@ -53,14 +53,23 @@ const ProviderCredentialRefSchema = z
     'Provider 凭据引用必须为 secret:<providerId> 或 null。'
   );
 
+const ProviderOptionsSchema = z
+  .object({
+    temperature: z.number().finite().optional(),
+    maxTokens: z.number().int().positive().optional(),
+    thinking: z.boolean().optional()
+  })
+  .optional();
+
 const ProviderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  type: z.enum(['openai_compatible', 'anthropic_compatible', 'ollama', 'custom']),
+  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'ollama', 'custom']),
   endpoint: z.string().min(1),
   credentialRef: ProviderCredentialRefSchema,
   enabled: z.boolean(),
-  models: z.array(ProviderModelSchema)
+  models: z.array(ProviderModelSchema),
+  options: ProviderOptionsSchema
 });
 
 const ProvidersSchema: z.ZodType<ProvidersConfig> = z.object({

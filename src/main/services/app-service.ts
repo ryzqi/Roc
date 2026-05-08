@@ -9,6 +9,7 @@ import { FileService } from './file-service';
 import { GitService } from './git-service';
 import { LifecycleService } from './lifecycle-service';
 import { LogService } from './log-service';
+import { LangChainModelFactory } from './langchain-model-factory';
 import { McpService } from './mcp-service';
 import { MemoryService } from './memory-service';
 import { RocPaths } from './paths';
@@ -34,6 +35,7 @@ export type AppServices = {
   skillService: SkillService;
   doctorService: DoctorService;
   agentService: AgentService;
+  langChainModelFactory: LangChainModelFactory;
   providerRuntimeService: ProviderRuntimeService;
   chatService: ChatService;
   workspaceService: WorkspaceService;
@@ -70,6 +72,7 @@ export class AppService {
     private readonly skillService: SkillService,
     private readonly doctorService: DoctorService,
     private readonly agentService: AgentService,
+    private readonly langChainModelFactory: LangChainModelFactory,
     private readonly providerRuntimeService: ProviderRuntimeService,
     private readonly chatService: ChatService,
     private readonly workspaceService: WorkspaceService,
@@ -140,6 +143,7 @@ export class AppService {
       skillService: this.skillService,
       doctorService: this.doctorService,
       agentService: this.agentService,
+      langChainModelFactory: this.langChainModelFactory,
       providerRuntimeService: this.providerRuntimeService,
       chatService: this.chatService,
       workspaceService: this.workspaceService,
@@ -184,7 +188,8 @@ export function createAppServices(
   const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService);
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
-  const providerRuntimeService = new ProviderRuntimeService(configService, secretService);
+  const langChainModelFactory = new LangChainModelFactory(configService, secretService);
+  const providerRuntimeService = new ProviderRuntimeService(configService, secretService, langChainModelFactory);
   const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
@@ -215,6 +220,7 @@ export function createAppServices(
     skillService,
     doctorService,
     agentService,
+    langChainModelFactory,
     providerRuntimeService,
     chatService,
     workspaceService,
@@ -240,6 +246,7 @@ export function createAppServices(
     skillService,
     doctorService,
     agentService,
+    langChainModelFactory,
     providerRuntimeService,
     chatService,
     workspaceService,
