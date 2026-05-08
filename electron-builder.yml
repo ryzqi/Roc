@@ -1,5 +1,5 @@
 appId: com.roc.desktop
-productName: Roc Windows Super Assistant
+productName: Roc
 npmRebuild: false
 directories:
   output: release
@@ -13,7 +13,8 @@ beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
 afterAllArtifactBuild: ./scripts/builder-hooks/after-all-artifact-build.mjs
 win:
+  executableName: Roc
   signAndEditExecutable: false
   target:
     - dir
-  artifactName: Roc-Windows-Super-Assistant-${version}.${ext}
+  artifactName: Roc-${version}.${ext}

@@ -4089,7 +4089,7 @@ button.model-pill {
 .provider-secret-input input {
   flex: 1 1 auto;
   min-height: 38px;
-  padding: 0 40px 0 12px;
+  padding: 0 44px 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-strong);
@@ -4102,17 +4102,28 @@ button.model-pill {
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  display: inline-grid;
-  place-items: center;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  overflow: hidden;
 }
 
+.provider-secret-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.provider-secret-toggle.active,
 .provider-secret-toggle:hover {
   background: var(--accent-soft);
   color: var(--accent);

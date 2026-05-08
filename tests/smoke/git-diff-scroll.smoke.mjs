@@ -8,7 +8,7 @@ import { _electron as electron } from '@playwright/test';
 const artifactDir = resolve('.artifacts/git-diff-scroll');
 mkdirSync(artifactDir, { recursive: true });
 
-const packagedExe = resolve('release/win-unpacked/Roc Windows Super Assistant.exe');
+const packagedExe = resolve('release/win-unpacked/Roc.exe');
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget =

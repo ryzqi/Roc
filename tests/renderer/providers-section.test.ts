@@ -6,7 +6,7 @@ import { ProvidersSection } from '../../src/renderer/settings/sections/providers
 import { createProviderDraft } from '../../src/renderer/settings-model';
 
 describe('providers section', () => {
-  it('uses a single add button and keeps API key inside the create form', () => {
+  it('uses a single add button, keeps API key inside the create form, and renders icon-only secret toggle', () => {
     const html = renderToStaticMarkup(
       React.createElement(ProvidersSection, {
         draft: createProviderDraft('openai_compatible'),
@@ -31,7 +31,12 @@ describe('providers section', () => {
     expect(html).toContain('data-testid="provider-draft-type-openai_compatible"');
     expect(html).toContain('data-testid="provider-draft-type-anthropic_compatible"');
     expect(html).toContain('data-testid="provider-draft-api-key"');
+    expect(html).toContain('class="provider-secret-toggle"');
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).not.toContain('>显示<');
+    expect(html).not.toContain('>隐藏<');
     expect(html).not.toContain('data-testid="provider-draft-id"');
+    expect(html).not.toContain('data-testid="provider-draft-status"');
     expect(html).not.toContain('OpenAI compatible chat completions endpoint');
     expect(html).not.toContain('Anthropic compatible /messages endpoint');
     expect(html).not.toContain('保存 Provider 后可录入 API Key。');
@@ -79,5 +84,30 @@ describe('providers section', () => {
     expect(html).toContain('data-testid="provider-draft-api-key"');
     expect(html).toContain(`data-testid="provider-secret-clear-${provider.id}"`);
     expect(html).not.toContain(`data-testid="provider-secret-save-${provider.id}"`);
+    expect(html).not.toContain('data-testid="provider-draft-status"');
+  });
+
+  it('keeps draft status visible when rendering a provider validation error', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('openai_compatible'),
+        draftError: 'API Key 是必填项。',
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [],
+        providerSecretStatus: [],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-status"');
+    expect(html).toContain('API Key 是必填项。');
   });
 });

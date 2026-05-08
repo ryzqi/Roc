@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 
 const artifactDir = resolve('.artifacts/wave1');
 mkdirSync(artifactDir, { recursive: true });
-const packagedExe = resolve('release/win-unpacked/Roc Windows Super Assistant.exe');
+const packagedExe = resolve('release/win-unpacked/Roc.exe');
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget =
@@ -1223,7 +1223,7 @@ try {
   providerSettingsEvidence.editWithoutApiKeyAllowed =
     smokeProviderEditState.providerName === renamedSmokeProviderName &&
     smokeProviderEditState.secretStored &&
-    smokeProviderEditState.statusText === 'edit';
+    smokeProviderEditState.statusText === null;
   await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
   const openaiProviderName = 'Smoke UI OpenAI';
   await page.fill('[data-testid="provider-draft-name"]', openaiProviderName);

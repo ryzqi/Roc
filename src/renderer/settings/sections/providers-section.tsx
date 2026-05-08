@@ -28,6 +28,22 @@ function ProviderAvatar({ provider }: { provider: ProviderConfig | null }): Reac
   return <span className="provider-avatar">{seed}</span>;
 }
 
+function ProviderSecretToggleIcon(): React.JSX.Element {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path
+        d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <circle cx="12" cy="12" fill="none" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function ProvidersSection({
   draft,
   draftError,
@@ -233,12 +249,13 @@ export function ProvidersSection({
                 value={draft.apiKey}
               />
               <button
-                className="provider-secret-toggle"
                 aria-label={revealApiKey ? '隐藏 API Key' : '显示 API Key'}
+                aria-pressed={revealApiKey}
+                className={revealApiKey ? 'provider-secret-toggle active' : 'provider-secret-toggle'}
                 onClick={() => setRevealApiKey((current) => !current)}
                 type="button"
               >
-                {revealApiKey ? '隐藏' : '显示'}
+                <ProviderSecretToggleIcon />
               </button>
             </div>
             {selectedProvider === null || !stored ? null : (
@@ -288,12 +305,11 @@ export function ProvidersSection({
                 删除
               </button>
             )}
-            <span
-              className={draftError === null ? 'pill ok' : 'pill warn'}
-              data-testid="provider-draft-status"
-            >
-              {draftError === null ? draft.mode : draftError}
-            </span>
+            {draftError === null ? null : (
+              <span className="pill warn" data-testid="provider-draft-status">
+                {draftError}
+              </span>
+            )}
           </div>
         </div>
       </div>
