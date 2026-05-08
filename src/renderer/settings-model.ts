@@ -176,6 +176,30 @@ export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledMo
     );
 }
 
+export type ProviderTypeMeta = {
+  subtitle: string;
+  apiKeyHelpUrl: string;
+  apiKeyHelpLabel: string;
+  defaultBaseUrl: string;
+};
+
+export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
+  if (type === 'anthropic_compatible') {
+    return {
+      subtitle: 'Anthropic compatible /messages endpoint',
+      apiKeyHelpUrl: 'https://console.anthropic.com/settings/keys',
+      apiKeyHelpLabel: 'Anthropic Console API Keys',
+      defaultBaseUrl: 'https://api.anthropic.com'
+    };
+  }
+  return {
+    subtitle: 'OpenAI compatible chat completions endpoint',
+    apiKeyHelpUrl: 'https://platform.openai.com/api-keys',
+    apiKeyHelpLabel: 'OpenAI API Keys',
+    defaultBaseUrl: 'https://api.openai.com/v1'
+  };
+}
+
 export type LoadedSettingsState = {
   settings: AppSettings;
   providers: ProviderConfig[];

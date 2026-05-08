@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type React from 'react';
 import type {
   ProviderConfig,
@@ -6,32 +6,26 @@ import type {
   ProviderTestResult
 } from '../../../shared/types';
 import {
+  providerTypeMeta,
   type EditableProviderType,
   type ProviderDraft
 } from '../../settings-model';
-import { FieldRow, InfoRow, StatusPill } from '../atoms';
 
 function providerTypeLabel(type: ProviderConfig['type']): string {
   if (type === 'openai_compatible') {
-    return '兼容服务';
+    return 'Custom Provider';
   }
   if (type === 'anthropic_compatible') {
-    return 'Anthropic 兼容';
+    return 'Custom ACP Provider';
   }
   if (type === 'ollama') {
     return 'Ollama';
   }
-  return '自定义兼容端点';
+  return 'Custom Endpoint';
 }
 
-function providerRuntimeStatus(
-  provider: ProviderConfig,
-  providerTestStatus: ProviderTestResult | null
-): string {
-  if (providerTestStatus !== null && providerTestStatus.providerId === provider.id) {
-    return providerTestStatus.status;
-  }
-  return provider.enabled && provider.models.some((model) => model.enabled) ? 'ready' : 'invalid';
+function providerHasReadyModel(provider: ProviderConfig): boolean {
+  return provider.enabled && provider.models.some((model) => model.enabled);
 }
 
 function findSecret(
@@ -39,6 +33,12 @@ function findSecret(
   providerId: string
 ): ProviderSecretStatus | null {
   return statuses.find((entry) => entry.providerId === providerId) ?? null;
+}
+
+function ProviderAvatar({ provider }: { provider: ProviderConfig | null }): React.JSX.Element {
+  const fallback = '?';
+  const seed = provider === null ? fallback : provider.name.trim().charAt(0).toUpperCase() || fallback;
+  return <span className="provider-avatar">{seed}</span>;
 }
 
 function ProviderSecretEditor({
@@ -55,53 +55,66 @@ function ProviderSecretEditor({
   stored: boolean;
 }): React.JSX.Element {
   const [value, setValue] = useState('');
+  const [reveal, setReveal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
     <div className="provider-secret-editor">
-      <input
-        autoComplete="off"
-        data-testid={`provider-secret-input-${providerId}`}
-        onChange={(event) => {
-          setValue(event.currentTarget.value);
-          setError(null);
-        }}
-        placeholder={stored ? '输入新 API Key 以替换已存储凭据' : '输入 API Key 后点击保存'}
-        type="password"
-        value={value}
-      />
-      <button
-        data-testid={`provider-secret-save-${providerId}`}
-        disabled={busy || value.length === 0}
-        onClick={async () => {
-          try {
-            await onSave(value);
-            setValue('');
+      <div className="provider-secret-input">
+        <input
+          autoComplete="off"
+          data-testid={`provider-secret-input-${providerId}`}
+          onChange={(event) => {
+            setValue(event.currentTarget.value);
             setError(null);
-          } catch (saveError) {
-            setError(saveError instanceof Error ? saveError.message : 'API Key 保存失败。');
-          }
-        }}
-        type="button"
-      >
-        保存 API Key
-      </button>
-      {stored ? (
+          }}
+          placeholder={stored ? '已有凭据。输入新值以替换' : 'Enter your API key'}
+          type={reveal ? 'text' : 'password'}
+          value={value}
+        />
         <button
-          data-testid={`provider-secret-clear-${providerId}`}
-          disabled={busy}
+          className="provider-secret-toggle"
+          aria-label={reveal ? '隐藏 API Key' : '显示 API Key'}
+          onClick={() => setReveal((current) => !current)}
+          type="button"
+        >
+          {reveal ? '隐藏' : '显示'}
+        </button>
+      </div>
+      <div className="provider-secret-actions">
+        <button
+          data-testid={`provider-secret-save-${providerId}`}
+          disabled={busy || value.length === 0}
           onClick={async () => {
             try {
-              await onClear();
+              await onSave(value);
+              setValue('');
               setError(null);
-            } catch (clearError) {
-              setError(clearError instanceof Error ? clearError.message : 'API Key 清除失败。');
+            } catch (saveError) {
+              setError(saveError instanceof Error ? saveError.message : 'API Key 保存失败。');
             }
           }}
           type="button"
         >
-          清除
+          保存 API Key
         </button>
-      ) : null}
+        {stored ? (
+          <button
+            data-testid={`provider-secret-clear-${providerId}`}
+            disabled={busy}
+            onClick={async () => {
+              try {
+                await onClear();
+                setError(null);
+              } catch (clearError) {
+                setError(clearError instanceof Error ? clearError.message : 'API Key 清除失败。');
+              }
+            }}
+            type="button"
+          >
+            清除
+          </button>
+        ) : null}
+      </div>
       {error === null ? null : (
         <span className="provider-secret-error" data-testid={`provider-secret-error-${providerId}`}>
           {error}
@@ -142,88 +155,209 @@ export function ProvidersSection({
   providerTestStatus: ProviderTestResult | null;
   secretBusyProviderId: string | null;
 }): React.JSX.Element {
+  const [search, setSearch] = useState('');
+
+  const filteredProviders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q.length === 0) {
+      return providers;
+    }
+    return providers.filter((provider) =>
+      provider.name.toLowerCase().includes(q) || provider.id.toLowerCase().includes(q)
+    );
+  }, [providers, search]);
+
+  const selectedProvider = useMemo(
+    () => providers.find((provider) => provider.id === draft.id) ?? null,
+    [providers, draft.id]
+  );
+
+  const meta = providerTypeMeta(draft.type);
+  const isCreating = draft.mode === 'create';
+  const stored = selectedProvider === null
+    ? false
+    : findSecret(providerSecretStatus, selectedProvider.id)?.stored === true;
+  const busy = secretBusyProviderId !== null && secretBusyProviderId === selectedProvider?.id;
+
+  const runtimeStatus = (() => {
+    if (selectedProvider === null) {
+      return null;
+    }
+    if (providerTestStatus !== null && providerTestStatus.providerId === selectedProvider.id) {
+      return providerTestStatus.status;
+    }
+    return providerHasReadyModel(selectedProvider) ? 'ready' : 'invalid';
+  })();
+
   return (
-    <>
-      <section className="card" data-testid="provider-settings">
-        <div className="card-title">
-          模型 Provider <StatusPill label="数量" tone="info" value={String(providers.length)} />
+    <section className="card" data-testid="provider-settings">
+      <div className="provider-toolbar">
+        <input
+          className="provider-search"
+          data-testid="provider-search"
+          onChange={(event) => setSearch(event.currentTarget.value)}
+          placeholder="搜索提供商..."
+          type="search"
+          value={search}
+        />
+        <div className="provider-toolbar-actions">
+          <button
+            data-testid="provider-add-anthropic"
+            onClick={() => onStartNewProvider('anthropic_compatible')}
+            type="button"
+          >
+            Add Custom ACP Provider
+          </button>
+          <button
+            className="primary"
+            data-testid="provider-add-openai"
+            onClick={() => onStartNewProvider('openai_compatible')}
+            type="button"
+          >
+            Add Custom Provider
+          </button>
         </div>
-        <div className="card-pad settings-form">
-          <div className="settings-actions">
-            <button
-              data-testid="provider-add-openai"
-              onClick={() => onStartNewProvider('openai_compatible')}
-              type="button"
-            >
-              新增 OpenAI-compatible
-            </button>
-            <button
-              data-testid="provider-add-anthropic"
-              onClick={() => onStartNewProvider('anthropic_compatible')}
-              type="button"
-            >
-              新增 Anthropic-compatible
-            </button>
-          </div>
+      </div>
+      <div className="provider-split">
+        <aside className="provider-list" data-testid="provider-list">
+          {filteredProviders.length === 0 ? (
+            <div className="provider-list-empty">尚未配置 Provider</div>
+          ) : (
+            filteredProviders.map((provider) => {
+              const ready = providerHasReadyModel(provider);
+              const isActive = selectedProvider?.id === provider.id;
+              return (
+                <button
+                  className={isActive ? 'provider-list-item active' : 'provider-list-item'}
+                  data-testid={`provider-list-item-${provider.id}`}
+                  key={provider.id}
+                  onClick={() => onEditProvider(provider)}
+                  type="button"
+                >
+                  <ProviderAvatar provider={provider} />
+                  <span className="provider-list-name">{provider.name}</span>
+                  <span
+                    className={ready ? 'provider-status-dot ready' : 'provider-status-dot idle'}
+                    aria-label={ready ? '已就绪' : '未启用'}
+                  />
+                </button>
+              );
+            })
+          )}
+        </aside>
+        <div className="provider-detail" data-testid="provider-detail">
+          <header className="provider-detail-header">
+            <div className="provider-detail-title">
+              <h3>{draft.name.trim().length === 0 ? (isCreating ? '新建 Provider' : draft.id) : draft.name}</h3>
+              <span
+                className={runtimeStatus === 'ready' ? 'provider-status-pill active' : 'provider-status-pill inactive'}
+                data-testid="provider-detail-status"
+              >
+                {runtimeStatus === 'ready' ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <div className="provider-detail-controls">
+              {selectedProvider === null ? null : (
+                <button
+                  className="provider-detail-test"
+                  data-testid={`provider-test-${selectedProvider.id}`}
+                  onClick={() => void onTestProvider(selectedProvider.id)}
+                  title="测试 Provider"
+                  type="button"
+                  aria-label="测试 Provider"
+                >
+                  ⚡
+                </button>
+              )}
+              <label className="provider-detail-toggle">
+                <input
+                  checked={draft.enabled}
+                  data-testid="provider-draft-enabled"
+                  onChange={(event) => onUpdateDraft({ enabled: event.currentTarget.checked })}
+                  type="checkbox"
+                />
+                <span className="provider-detail-toggle-track" aria-hidden="true">
+                  <span className="provider-detail-toggle-thumb" />
+                </span>
+              </label>
+            </div>
+          </header>
+          <p className="provider-detail-subtitle">{providerTypeLabel(draft.type)} - {meta.subtitle}</p>
           <div className="form-grid">
-            <FieldRow label="Provider ID">
+            <label className="field">
+              <span>Provider ID</span>
               <input
                 data-testid="provider-draft-id"
+                disabled={!isCreating}
                 onChange={(event) => onUpdateDraft({ id: event.currentTarget.value })}
+                placeholder="e.g. my-openai"
                 value={draft.id}
               />
-            </FieldRow>
-            <FieldRow label="名称">
+            </label>
+            <label className="field">
+              <span>名称</span>
               <input
                 data-testid="provider-draft-name"
                 onChange={(event) => onUpdateDraft({ name: event.currentTarget.value })}
+                placeholder="e.g. My OpenAI"
                 value={draft.name}
-              />
-            </FieldRow>
-            <FieldRow label="类型">
-              <select
-                data-testid="provider-draft-type"
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  if (value === 'openai_compatible' || value === 'anthropic_compatible') {
-                    onUpdateDraft({ type: value });
-                  }
-                }}
-                value={draft.type}
-              >
-                <option value="openai_compatible">OpenAI-compatible</option>
-                <option value="anthropic_compatible">Anthropic-compatible</option>
-              </select>
-            </FieldRow>
-            <FieldRow label="Endpoint">
-              <input
-                data-testid="provider-draft-endpoint"
-                onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
-                value={draft.endpoint}
-              />
-            </FieldRow>
-            <label className="field checkbox-field">
-              <span>启用</span>
-              <input
-                checked={draft.enabled}
-                data-testid="provider-draft-enabled"
-                onChange={(event) => onUpdateDraft({ enabled: event.currentTarget.checked })}
-                type="checkbox"
               />
             </label>
           </div>
-          <FieldRow hint="一行一个模型，格式：modelId | displayName" label="模型列表">
+          <div className="provider-detail-section">
+            <span className="provider-detail-label">API Key</span>
+            {selectedProvider === null ? (
+              <p className="card-hint">先填写 ID/名称/Endpoint/模型并保存草稿,再为该 Provider 录入 API Key。</p>
+            ) : (
+              <ProviderSecretEditor
+                busy={busy}
+                onClear={() => onClearProviderSecret(selectedProvider.id)}
+                onSave={(plaintext) => onSetProviderSecret(selectedProvider.id, plaintext)}
+                providerId={selectedProvider.id}
+                stored={stored}
+              />
+            )}
+            <p className="card-hint">
+              Get your API key from{' '}
+              <a href={meta.apiKeyHelpUrl} target="_blank" rel="noreferrer noopener">
+                {meta.apiKeyHelpLabel}
+              </a>
+            </p>
+          </div>
+          <label className="field">
+            <span>Base URL</span>
+            <input
+              data-testid="provider-draft-endpoint"
+              onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
+              placeholder={meta.defaultBaseUrl}
+              value={draft.endpoint}
+            />
+            <span className="field-hint">留空将回退到默认 {meta.defaultBaseUrl}</span>
+          </label>
+          <label className="field">
+            <span>模型列表</span>
             <textarea
               data-testid="provider-draft-models"
               onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
+              placeholder="一行一个,格式:modelId | displayName"
               rows={4}
               value={draft.modelsText}
             />
-          </FieldRow>
-          <div className="settings-actions">
+          </label>
+          <div className="provider-detail-actions">
             <button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} type="button">
               保存 Provider
             </button>
+            {selectedProvider === null ? null : (
+              <button
+                className="provider-detail-delete"
+                data-testid={`provider-delete-${selectedProvider.id}`}
+                onClick={() => void onDeleteProvider(selectedProvider.id)}
+                type="button"
+              >
+                删除
+              </button>
+            )}
             <span
               className={draftError === null ? 'pill ok' : 'pill warn'}
               data-testid="provider-draft-status"
@@ -231,76 +365,8 @@ export function ProvidersSection({
               {draftError === null ? draft.mode : draftError}
             </span>
           </div>
-          <p className="card-hint">
-            Provider 凭据现在使用本机加密存储（Electron safeStorage）。新 Provider 保存后，请在下方列表中为对应条目录入 API Key。
-          </p>
         </div>
-      </section>
-      <section className="card">
-        <div className="card-title">已配置 Provider</div>
-        {providers.length === 0 ? (
-          <InfoRow sub="尚未配置 provider" tag="blocked" title="模型提供商" tone="warn" />
-        ) : (
-          providers.map((provider) => {
-            const secret = findSecret(providerSecretStatus, provider.id);
-            const stored = secret?.stored === true;
-            const busy = secretBusyProviderId === provider.id;
-            return (
-              <div className="provider-row" key={provider.id}>
-                <div className="provider-row-head">
-                  <div className="provider-row-meta">
-                    <div className="row-title">{provider.name}</div>
-                    <div className="row-sub">
-                      {provider.id} · {providerTypeLabel(provider.type)} · {provider.endpoint} ·{' '}
-                      {provider.models.map((model) => model.id).join(', ')} · {provider.id}:
-                      {providerRuntimeStatus(provider, providerTestStatus)}
-                    </div>
-                  </div>
-                  <span
-                    className={stored ? 'pill ok' : 'pill warn'}
-                    data-testid={`provider-secret-status-${provider.id}`}
-                  >
-                    {stored ? '凭据已存储' : '凭据未存储'}
-                  </span>
-                  <span className={provider.enabled ? 'pill ok' : 'pill warn'}>
-                    {provider.enabled ? `${provider.models.length} models` : 'disabled'}
-                  </span>
-                  <div className="provider-row-buttons">
-                    <button
-                      data-testid={`provider-test-${provider.id}`}
-                      onClick={() => void onTestProvider(provider.id)}
-                      type="button"
-                    >
-                      测试
-                    </button>
-                    <button
-                      data-testid={`provider-edit-${provider.id}`}
-                      onClick={() => onEditProvider(provider)}
-                      type="button"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      data-testid={`provider-delete-${provider.id}`}
-                      onClick={() => void onDeleteProvider(provider.id)}
-                      type="button"
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-                <ProviderSecretEditor
-                  busy={busy}
-                  onClear={() => onClearProviderSecret(provider.id)}
-                  onSave={(plaintext) => onSetProviderSecret(provider.id, plaintext)}
-                  providerId={provider.id}
-                  stored={stored}
-                />
-              </div>
-            );
-          })
-        )}
-      </section>
-    </>
+      </div>
+    </section>
   );
 }

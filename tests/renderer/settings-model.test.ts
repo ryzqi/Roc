@@ -19,6 +19,7 @@ import {
   setDefaultModelInSettingsSaveRequest,
   selectSettingsSection,
   SETTINGS_SECTIONS,
+  providerTypeMeta,
   upsertProviderInSettingsSaveRequest
 } from '../../src/renderer/settings-model';
 
@@ -373,5 +374,19 @@ describe('settings model helpers', () => {
     expect(rows.find((row) => row.field === 'defaultWorkspace')?.severity).toBe('info');
     expect(rows.find((row) => row.field === 'memory.warmRecallEnabled')?.after).toBe('已关闭');
     expect(rows.find((row) => row.field === 'defaultConfirmations.gitPush')?.severity).toBe('high');
+  });
+
+  it('providerTypeMeta returns OpenAI defaults for openai_compatible', () => {
+    const meta = providerTypeMeta('openai_compatible');
+    expect(meta.subtitle).toContain('OpenAI');
+    expect(meta.apiKeyHelpUrl).toBe('https://platform.openai.com/api-keys');
+    expect(meta.defaultBaseUrl).toBe('https://api.openai.com/v1');
+  });
+
+  it('providerTypeMeta returns Anthropic defaults for anthropic_compatible', () => {
+    const meta = providerTypeMeta('anthropic_compatible');
+    expect(meta.subtitle).toContain('Anthropic');
+    expect(meta.apiKeyHelpUrl).toBe('https://console.anthropic.com/settings/keys');
+    expect(meta.defaultBaseUrl).toBe('https://api.anthropic.com');
   });
 });
