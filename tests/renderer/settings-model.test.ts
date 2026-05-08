@@ -77,11 +77,13 @@ describe('settings model helpers', () => {
       name: '',
       type: 'openai_compatible',
       endpoint: '',
+      apiKey: '',
       enabled: true,
       modelsText: ''
     });
     expect(createProviderDraft('anthropic_compatible')).toMatchObject({
       mode: 'create',
+      apiKey: '',
       type: 'anthropic_compatible',
       enabled: true
     });
@@ -116,6 +118,7 @@ describe('settings model helpers', () => {
       ...createProviderDraft('anthropic_compatible'),
       name: 'Anthropic East',
       endpoint: 'https://anthropic.example.test/v1',
+      apiKey: 'sk-anthropic-east',
       modelsText: 'claude-sonnet-4-5 | Claude Sonnet 4.5'
     };
 
@@ -157,6 +160,11 @@ describe('settings model helpers', () => {
       ]
     };
 
+    expect(createProviderDraft('anthropic_compatible', provider)).toMatchObject({
+      mode: 'edit',
+      id: 'anthropic-east',
+      apiKey: ''
+    });
     expect(buildProviderConfigFromDraft(createProviderDraft('anthropic_compatible', provider))).toEqual(provider);
   });
 
@@ -431,14 +439,14 @@ describe('settings model helpers', () => {
   });
 
   it('providerTypeMeta returns OpenAI defaults for openai_compatible', () => {
-    const meta = providerTypeMeta('openai_compatible');
-    expect(meta.subtitle).toContain('OpenAI');
-    expect(meta.defaultBaseUrl).toBe('https://api.openai.com/v1');
+    expect(providerTypeMeta('openai_compatible')).toEqual({
+      defaultBaseUrl: 'https://api.openai.com/v1'
+    });
   });
 
   it('providerTypeMeta returns Anthropic defaults for anthropic_compatible', () => {
-    const meta = providerTypeMeta('anthropic_compatible');
-    expect(meta.subtitle).toContain('Anthropic');
-    expect(meta.defaultBaseUrl).toBe('https://api.anthropic.com');
+    expect(providerTypeMeta('anthropic_compatible')).toEqual({
+      defaultBaseUrl: 'https://api.anthropic.com'
+    });
   });
 });

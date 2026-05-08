@@ -96,6 +96,12 @@ export function SettingsView({
     [draft, state.providers]
   );
 
+  const refreshSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
+    const refreshed = unwrap<SettingsSnapshot>('settings get', await window.roc.settings.get());
+    updateLoadedState(applySettingsSnapshot(refreshed));
+    return refreshed;
+  }, [updateLoadedState]);
+
   const updateProviderDraft = useCallback((partial: Partial<ProviderDraft>): void => {
     setProviderDraft((current) => ({
       ...current,
@@ -122,23 +128,53 @@ export function SettingsView({
 
   const saveProviderDraft = useCallback(async (): Promise<void> => {
     let provider: ProviderConfig;
+    const apiKey = providerDraft.apiKey.trim();
     try {
       provider = buildProviderConfigFromDraft(providerDraft);
       if (providerDraft.mode === 'create') {
         assertProviderCreateIdAvailable(state.providers, provider.id);
+        if (apiKey.length === 0) {
+          throw new Error('新建 Provider 必须填写 API Key。');
+        }
       }
     } catch (error) {
       setProviderDraftError(error instanceof Error ? error.message : 'Provider 草稿无效。');
       return;
     }
-    const saved = unwrap<SettingsSnapshot>(
-      'settings save',
-      await window.roc.settings.save(upsertProviderInSettingsSaveRequest(buildBaseSaveRequest(), provider))
-    );
+    let saved: SettingsSnapshot;
+    try {
+      saved = unwrap<SettingsSnapshot>(
+        'settings save',
+        await window.roc.settings.save(upsertProviderInSettingsSaveRequest(buildBaseSaveRequest(), provider))
+      );
+    } catch (error) {
+      setProviderDraftError(error instanceof Error ? error.message : 'Provider 保存失败。');
+      return;
+    }
+    const savedProvider = saved.providers.find((entry) => entry.id === provider.id) ?? provider;
+    const nextDraft: ProviderDraft = {
+      ...createProviderDraft(providerDraft.type, savedProvider),
+      apiKey
+    };
     updateLoadedState(applySettingsSnapshot(saved));
-    setProviderDraft(createProviderDraft(providerDraft.type, provider));
-    setProviderDraftError(null);
-  }, [providerDraft, buildBaseSaveRequest, state.providers, updateLoadedState]);
+    setProviderDraft(nextDraft);
+    if (apiKey.length === 0) {
+      setProviderDraftError(null);
+      return;
+    }
+    try {
+      const refreshed = await saveProviderSecret(savedProvider.id, apiKey);
+      const refreshedProvider = refreshed.providers.find((entry) => entry.id === savedProvider.id) ?? savedProvider;
+      setProviderDraft({
+        ...createProviderDraft(providerDraft.type, refreshedProvider),
+        apiKey: ''
+      });
+      setProviderDraftError(null);
+    } catch (error) {
+      setProviderDraft(nextDraft);
+      setProviderDraftError(error instanceof Error ? error.message : 'API Key 保存失败。');
+    }
+  }, [providerDraft, buildBaseSaveRequest, saveProviderSecret, state.providers, updateLoadedState]);
 
   const deleteProvider = useCallback(
     async (providerId: string): Promise<void> => {
@@ -177,18 +213,21 @@ export function SettingsView({
     [updateLoadedState]
   );
 
+  async function saveProviderSecret(providerId: string, plaintext: string): Promise<SettingsSnapshot> {
+    setSecretBusyProviderId(providerId);
+    try {
+      unwrap('provider secret save', await window.roc.settings.setProviderSecret({ providerId, plaintext }));
+      return await refreshSettingsSnapshot();
+    } finally {
+      setSecretBusyProviderId(null);
+    }
+  }
+
   const setProviderSecret = useCallback(
     async (providerId: string, plaintext: string): Promise<void> => {
-      setSecretBusyProviderId(providerId);
-      try {
-        unwrap('provider secret save', await window.roc.settings.setProviderSecret({ providerId, plaintext }));
-        const refreshed = unwrap<SettingsSnapshot>('settings get', await window.roc.settings.get());
-        updateLoadedState(applySettingsSnapshot(refreshed));
-      } finally {
-        setSecretBusyProviderId(null);
-      }
+      await saveProviderSecret(providerId, plaintext);
     },
-    [updateLoadedState]
+    [saveProviderSecret]
   );
 
   const clearProviderSecret = useCallback(
@@ -196,13 +235,23 @@ export function SettingsView({
       setSecretBusyProviderId(providerId);
       try {
         unwrap('provider secret clear', await window.roc.settings.clearProviderSecret(providerId));
-        const refreshed = unwrap<SettingsSnapshot>('settings get', await window.roc.settings.get());
-        updateLoadedState(applySettingsSnapshot(refreshed));
+        await refreshSettingsSnapshot();
+        setProviderDraft((current) =>
+          current.id === providerId
+            ? {
+                ...current,
+                apiKey: ''
+              }
+            : current
+        );
+        setProviderDraftError(null);
+      } catch (error) {
+        setProviderDraftError(error instanceof Error ? error.message : 'API Key 清除失败。');
       } finally {
         setSecretBusyProviderId(null);
       }
     },
-    [updateLoadedState]
+    [refreshSettingsSnapshot]
   );
 
   const testExa = useCallback(async (): Promise<void> => {

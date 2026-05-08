@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import type {
   ProviderConfig,
@@ -10,19 +10,6 @@ import {
   type EditableProviderType,
   type ProviderDraft
 } from '../../settings-model';
-
-function providerTypeLabel(type: ProviderConfig['type']): string {
-  if (type === 'openai_compatible') {
-    return 'OpenAI-compatible Provider';
-  }
-  if (type === 'anthropic_compatible') {
-    return 'Anthropic-compatible Provider';
-  }
-  if (type === 'ollama') {
-    return 'Ollama';
-  }
-  return 'Custom Endpoint';
-}
 
 function providerHasReadyModel(provider: ProviderConfig): boolean {
   return provider.enabled && provider.models.some((model) => model.enabled);
@@ -39,89 +26,6 @@ function ProviderAvatar({ provider }: { provider: ProviderConfig | null }): Reac
   const fallback = '?';
   const seed = provider === null ? fallback : provider.name.trim().charAt(0).toUpperCase() || fallback;
   return <span className="provider-avatar">{seed}</span>;
-}
-
-function ProviderSecretEditor({
-  busy,
-  onClear,
-  onSave,
-  providerId,
-  stored
-}: {
-  busy: boolean;
-  onClear: () => Promise<void>;
-  onSave: (plaintext: string) => Promise<void>;
-  providerId: string;
-  stored: boolean;
-}): React.JSX.Element {
-  const [value, setValue] = useState('');
-  const [reveal, setReveal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="provider-secret-editor">
-      <div className="provider-secret-input">
-        <input
-          autoComplete="off"
-          data-testid={`provider-secret-input-${providerId}`}
-          onChange={(event) => {
-            setValue(event.currentTarget.value);
-            setError(null);
-          }}
-          placeholder={stored ? '已有凭据。输入新值以替换' : 'Enter your API key'}
-          type={reveal ? 'text' : 'password'}
-          value={value}
-        />
-        <button
-          className="provider-secret-toggle"
-          aria-label={reveal ? '隐藏 API Key' : '显示 API Key'}
-          onClick={() => setReveal((current) => !current)}
-          type="button"
-        >
-          {reveal ? '隐藏' : '显示'}
-        </button>
-      </div>
-      <div className="provider-secret-actions">
-        <button
-          data-testid={`provider-secret-save-${providerId}`}
-          disabled={busy || value.length === 0}
-          onClick={async () => {
-            try {
-              await onSave(value);
-              setValue('');
-              setError(null);
-            } catch (saveError) {
-              setError(saveError instanceof Error ? saveError.message : 'API Key 保存失败。');
-            }
-          }}
-          type="button"
-        >
-          保存 API Key
-        </button>
-        {stored ? (
-          <button
-            data-testid={`provider-secret-clear-${providerId}`}
-            disabled={busy}
-            onClick={async () => {
-              try {
-                await onClear();
-                setError(null);
-              } catch (clearError) {
-                setError(clearError instanceof Error ? clearError.message : 'API Key 清除失败。');
-              }
-            }}
-            type="button"
-          >
-            清除
-          </button>
-        ) : null}
-      </div>
-      {error === null ? null : (
-        <span className="provider-secret-error" data-testid={`provider-secret-error-${providerId}`}>
-          {error}
-        </span>
-      )}
-    </div>
-  );
 }
 
 export function ProvidersSection({
@@ -178,10 +82,15 @@ export function ProvidersSection({
 
   const meta = providerTypeMeta(draft.type);
   const isCreating = draft.mode === 'create';
+  const [revealApiKey, setRevealApiKey] = useState(false);
   const stored = selectedProvider === null
     ? false
     : findSecret(providerSecretStatus, selectedProvider.id)?.stored === true;
   const busy = secretBusyProviderId !== null && secretBusyProviderId === selectedProvider?.id;
+
+  useEffect(() => {
+    setRevealApiKey(false);
+  }, [draft.id, draft.mode]);
 
   const runtimeStatus = (() => {
     if (selectedProvider === null) {
@@ -279,7 +188,6 @@ export function ProvidersSection({
               </label>
             </div>
           </header>
-          <p className="provider-detail-subtitle">{providerTypeLabel(draft.type)} · {meta.subtitle}</p>
           {isCreating ? (
             <div className="provider-type-section">
               <span className="provider-detail-label">Provider 类型</span>
@@ -313,20 +221,39 @@ export function ProvidersSection({
               />
             </label>
           </div>
-          <div className="provider-detail-section">
-            <span className="provider-detail-label">API Key</span>
-            {selectedProvider === null ? (
-              <p className="card-hint">保存 Provider 后可录入 API Key。</p>
-            ) : (
-              <ProviderSecretEditor
-                busy={busy}
-                onClear={() => onClearProviderSecret(selectedProvider.id)}
-                onSave={(plaintext) => onSetProviderSecret(selectedProvider.id, plaintext)}
-                providerId={selectedProvider.id}
-                stored={stored}
+          <label className="field">
+            <span>API Key</span>
+            <div className="provider-secret-input">
+              <input
+                autoComplete="off"
+                data-testid="provider-draft-api-key"
+                onChange={(event) => onUpdateDraft({ apiKey: event.currentTarget.value })}
+                placeholder={stored ? '已有凭据。输入新值以替换' : 'Enter your API key'}
+                type={revealApiKey ? 'text' : 'password'}
+                value={draft.apiKey}
               />
+              <button
+                className="provider-secret-toggle"
+                aria-label={revealApiKey ? '隐藏 API Key' : '显示 API Key'}
+                onClick={() => setRevealApiKey((current) => !current)}
+                type="button"
+              >
+                {revealApiKey ? '隐藏' : '显示'}
+              </button>
+            </div>
+            {selectedProvider === null || !stored ? null : (
+              <div className="provider-secret-actions">
+                <button
+                  data-testid={`provider-secret-clear-${selectedProvider.id}`}
+                  disabled={busy}
+                  onClick={() => void onClearProviderSecret(selectedProvider.id)}
+                  type="button"
+                >
+                  清除
+                </button>
+              </div>
             )}
-          </div>
+          </label>
           <label className="field">
             <span>Base URL</span>
             <input

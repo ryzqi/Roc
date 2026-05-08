@@ -3555,21 +3555,6 @@ button.model-pill {
   display: flex;
   gap: 4px;
 }
-.provider-secret-editor {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-.provider-secret-editor input {
-  flex: 1;
-  font-family: ui-monospace, monospace;
-}
-.provider-secret-error {
-  color: #b91c1c;
-  font-size: 12px;
-}
-
 /* impact preview modal */
 .modal-backdrop {
   position: fixed;
@@ -4049,12 +4034,6 @@ button.model-pill {
   left: 18px;
 }
 
-.provider-detail-subtitle {
-  margin: -2px 0 2px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
 .provider-type-section {
   display: grid;
   gap: 8px;
@@ -4091,11 +4070,6 @@ button.model-pill {
   background: #fff;
   color: var(--accent);
   box-shadow: 0 1px 3px rgba(20, 40, 80, 0.08);
-}
-
-.provider-detail-section {
-  display: grid;
-  gap: 10px;
 }
 
 .provider-detail-label {
@@ -4171,11 +4145,6 @@ button.model-pill {
 .provider-secret-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.provider-secret-error {
-  font-size: 12px;
-  color: var(--trend-bad);
 }
 
 .provider-detail-actions {

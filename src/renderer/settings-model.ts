@@ -35,6 +35,7 @@ export type ProviderDraft = {
   name: string;
   type: EditableProviderType;
   endpoint: string;
+  apiKey: string;
   enabled: boolean;
   modelsText: string;
 };
@@ -87,6 +88,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       name: '',
       type,
       endpoint: '',
+      apiKey: '',
       enabled: true,
       modelsText: ''
     };
@@ -100,6 +102,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     name: provider.name,
     type: provider.type as EditableProviderType,
     endpoint: provider.endpoint,
+    apiKey: '',
     enabled: provider.enabled,
     modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n')
   };
@@ -211,19 +214,16 @@ export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledMo
 }
 
 export type ProviderTypeMeta = {
-  subtitle: string;
   defaultBaseUrl: string;
 };
 
 export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
   if (type === 'anthropic_compatible') {
     return {
-      subtitle: 'Anthropic compatible /messages endpoint',
       defaultBaseUrl: 'https://api.anthropic.com'
     };
   }
   return {
-    subtitle: 'OpenAI compatible chat completions endpoint',
     defaultBaseUrl: 'https://api.openai.com/v1'
   };
 }
