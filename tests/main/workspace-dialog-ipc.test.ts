@@ -54,7 +54,8 @@ function registerWorkspaceHandlers(): void {
   registerIpc(services, {} as BrowserWindow, {
     openMainPage: () => undefined,
     openQuickEntry: async () => undefined,
-    openTrayEntry: async () => undefined
+    openTrayEntry: async () => undefined,
+    broadcastTaskUpdated: () => undefined
   });
 }
 

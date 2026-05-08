@@ -29,7 +29,12 @@ const rocApi: RocPreloadApi = {
     createBackgroundTask: (preview) => ipcRenderer.invoke(ipcChannels.tasksCreateBackgroundTask, preview),
     pauseBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksPauseBackgroundTask, id),
     resumeBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksResumeBackgroundTask, id),
-    cancelBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksCancelBackgroundTask, id)
+    cancelBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksCancelBackgroundTask, id),
+    onUpdated: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('roc:tasks:updated', listener);
+      return () => ipcRenderer.off('roc:tasks:updated', listener);
+    }
   },
   lifecycle: {
     getTraySummary: () => ipcRenderer.invoke(ipcChannels.lifecycleGetTraySummary),

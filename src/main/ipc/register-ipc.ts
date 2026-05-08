@@ -9,6 +9,7 @@ export type AppWindowControls = {
   openMainPage: (page: string) => void;
   openQuickEntry: () => Promise<void>;
   openTrayEntry: () => Promise<void>;
+  broadcastTaskUpdated: () => void;
 };
 
 function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
@@ -89,16 +90,32 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
     wrapIpc(() => services.taskService.createBackgroundTaskPreview(request))
   );
   ipcMain.handle(ipcChannels.tasksCreateBackgroundTask, (_event, preview) =>
-    wrapIpc(() => services.taskService.createBackgroundTask(preview))
+    wrapIpc(() => {
+      const task = services.taskService.createBackgroundTask(preview);
+      controls.broadcastTaskUpdated();
+      return task;
+    })
   );
   ipcMain.handle(ipcChannels.tasksPauseBackgroundTask, (_event, id: string) =>
-    wrapIpc(() => services.taskService.pauseBackgroundTask(id))
+    wrapIpc(() => {
+      const task = services.taskService.pauseBackgroundTask(id);
+      controls.broadcastTaskUpdated();
+      return task;
+    })
   );
   ipcMain.handle(ipcChannels.tasksResumeBackgroundTask, (_event, id: string) =>
-    wrapIpc(() => services.taskService.resumeBackgroundTask(id))
+    wrapIpc(() => {
+      const task = services.taskService.resumeBackgroundTask(id);
+      controls.broadcastTaskUpdated();
+      return task;
+    })
   );
   ipcMain.handle(ipcChannels.tasksCancelBackgroundTask, (_event, id: string) =>
-    wrapIpc(() => services.taskService.cancelBackgroundTask(id))
+    wrapIpc(() => {
+      const task = services.taskService.cancelBackgroundTask(id);
+      controls.broadcastTaskUpdated();
+      return task;
+    })
   );
   ipcMain.handle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
   ipcMain.handle(ipcChannels.lifecyclePauseBackground, () =>
@@ -190,7 +207,13 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>
     wrapIpc(() => services.agentService.getCapabilityPreview(request))
   );
-  ipcMain.handle(ipcChannels.chatSubmit, (_event, request) => wrapIpc(() => services.chatService.submit(request)));
+  ipcMain.handle(ipcChannels.chatSubmit, (_event, request) =>
+    wrapIpc(async () => {
+      const result = await services.chatService.submit(request);
+      controls.broadcastTaskUpdated();
+      return result;
+    })
+  );
   ipcMain.handle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => services.workspaceService.getCurrentWorkspace()));
   ipcMain.handle(ipcChannels.workspaceSelect, (_event, request) =>
     wrapIpc(() => services.workspaceService.selectWorkspace(request.path))

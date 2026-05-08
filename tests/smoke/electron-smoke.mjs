@@ -194,6 +194,18 @@ async function clickComposerPopoverChoice(page, triggerSelector, choiceSelector)
   await clickSmokeControl(page, choiceSelector);
 }
 
+async function hoverComposerPopoverContent(page, triggerSelector, popoverSelector) {
+  await page.hover(triggerSelector);
+  await page.waitForSelector(popoverSelector, { timeout: 5000 });
+  const popover = page.locator(popoverSelector);
+  const box = await popover.boundingBox();
+  if (box === null) {
+    throw new Error(`Smoke could not measure popover: ${popoverSelector}`);
+  }
+  await page.mouse.move(box.x + Math.min(28, box.width / 2), box.y + Math.min(28, box.height / 2), { steps: 12 });
+  await popover.waitFor({ state: 'visible', timeout: 5000 });
+}
+
 async function waitForTerminalSessionReady(page) {
   await page.waitForFunction(
     () => {
@@ -1533,8 +1545,17 @@ try {
     };
   });
   const typedChatPrompt = `Smoke typed user prompt ${Date.now()}`;
+  const typedChatPromptSecondLine = 'Smoke Shift+Enter second line';
+  const submittedChatPrompt = `${typedChatPrompt}\n${typedChatPromptSecondLine}`;
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
-  await page.fill('[data-testid="chat-input"]', typedChatPrompt);
+  await page.locator('body').hover({ position: { x: 8, y: 8 } });
+  await page.fill('[data-testid="chat-input"]', '');
+  await page.focus('[data-testid="chat-input"]');
+  await page.keyboard.type(typedChatPrompt);
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Enter');
+  await page.keyboard.up('Shift');
+  await page.keyboard.type(typedChatPromptSecondLine);
   const chatInputEvidence = await page.evaluate(() => {
     const input = document.querySelector('[data-testid="chat-input"]');
     const sendButton = document.querySelector('[data-testid="chat-task-submit"]');
@@ -1595,6 +1616,7 @@ try {
     return {
       exists: true,
       editable: !input.disabled && !input.readOnly,
+      resultAbsentBeforeSubmit: document.querySelector('[data-testid="chat-result"]') === null,
       visuallyFramed,
       rect: {
         width: rect.width,
@@ -1619,7 +1641,7 @@ try {
       value: input.value
     };
   });
-  await page.click('[data-testid="chat-task-submit"]');
+  await page.keyboard.press('Enter');
   await page.waitForSelector('[data-testid="chat-result"]', { timeout: 5000 });
   const chatResultText = await page.textContent('[data-testid="chat-result"]');
   if (chatResultText === null) {
@@ -1692,7 +1714,7 @@ try {
       manifest: manifest.payload,
       skillLoaded: skillLoaded.payload
     };
-  }, typedChatPrompt);
+  }, submittedChatPrompt);
   const historySidebarEvidence = await page.evaluate((expectedTitle) => {
     const historyList = document.querySelector('.history-list');
     const text = historyList?.textContent ?? '';
@@ -1706,7 +1728,7 @@ try {
       hasMemoryRecordLabel: text.includes('记忆整理裁决'),
       hasTaskRecordLabel: text.includes('任务工作台记录')
     };
-  }, typedChatPrompt);
+  }, taskCapabilityEvidence.threadTitle);
   await page.click('[data-testid="nav-doctor"]');
   await page.waitForSelector('[data-testid="doctor-view"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="doctor-view"]', '健康检查结果');
@@ -1931,14 +1953,17 @@ try {
     attachmentPickerVisible: false,
     attachmentSelectionVisible: false,
     toolPopoverVisible: false,
+    toolPopoverHoverSticky: false,
     toolPopoverBatchActionsVisible: false,
     toolSelectAllWorks: false,
     toolClearAllWorks: false,
     skillPopoverVisible: false,
+    skillPopoverHoverSticky: false,
     skillPopoverBatchActionsVisible: false,
     skillSelectAllWorks: false,
     skillClearAllWorks: false,
     modelPopoverVisible: false,
+    modelPopoverHoverSticky: false,
     composerOnlyHasSendOnRight: false,
     workbenchGitClickable: false,
     workbenchTerminalClickable: false,
@@ -1959,6 +1984,9 @@ try {
   await page.waitForSelector('[data-testid="chat-tool-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.toolPopoverVisible =
     ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('当前可用工具');
+  await hoverComposerPopoverContent(page, '[data-testid="chat-tool-trigger"]', '[data-testid="chat-tool-popover"]');
+  buttonInteractionEvidence.toolPopoverHoverSticky =
+    (await page.locator('[data-testid="chat-tool-popover"]').count()) === 1;
   buttonInteractionEvidence.toolPopoverBatchActionsVisible =
     ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('全选') &&
     ((await page.textContent('[data-testid="chat-tool-popover"]')) ?? '').includes('取消全选');
@@ -1975,6 +2003,9 @@ try {
   await page.waitForSelector('[data-testid="chat-skill-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.skillPopoverVisible =
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('当前可用技能');
+  await hoverComposerPopoverContent(page, '[data-testid="chat-skill-trigger"]', '[data-testid="chat-skill-popover"]');
+  buttonInteractionEvidence.skillPopoverHoverSticky =
+    (await page.locator('[data-testid="chat-skill-popover"]').count()) === 1;
   buttonInteractionEvidence.skillPopoverBatchActionsVisible =
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('全选') &&
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('取消全选');
@@ -1991,6 +2022,9 @@ try {
   await page.waitForSelector('[data-testid="chat-model-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.modelPopoverVisible =
     ((await page.textContent('[data-testid="chat-model-popover"]')) ?? '').includes('smoke-model');
+  await hoverComposerPopoverContent(page, '[data-testid="chat-model-trigger"]', '[data-testid="chat-model-popover"]');
+  buttonInteractionEvidence.modelPopoverHoverSticky =
+    (await page.locator('[data-testid="chat-model-popover"]').count()) === 1;
   buttonInteractionEvidence.composerOnlyHasSendOnRight = await page.evaluate(() => {
     const composerRight = document.querySelector('.composer-right');
     if (!(composerRight instanceof HTMLElement)) {
@@ -2439,13 +2473,14 @@ try {
     chatInputEditable:
       chatInputEvidence.exists &&
       chatInputEvidence.editable &&
+      chatInputEvidence.resultAbsentBeforeSubmit &&
       chatInputEvidence.visuallyFramed &&
       chatInputEvidence.sendButtonVisibleInViewport &&
       chatInputEvidence.bottomExplanationsAbsent &&
       (chatInputEvidence.inputSettledAtBottom ||
         (typeof chatInputEvidence.composerBottomGapToViewport === 'number' &&
           chatInputEvidence.composerBottomGapToViewport <= 10)) &&
-      chatInputEvidence.value === typedChatPrompt,
+      chatInputEvidence.value === submittedChatPrompt,
     agentCapabilityPreviewVisible:
       agentPreviewText.includes('Agent 能力预览') &&
       agentPreviewText.includes('web_read') &&
@@ -2469,11 +2504,11 @@ try {
       chatResultText.includes('smoke-ui-openai / smoke-ui-openai-model') &&
       chatResultLayoutEvidence.resultAboveInput,
     taskRunCapabilityStored:
-      taskCapabilityEvidence.expectedInput === typedChatPrompt &&
-      taskCapabilityEvidence.threadGoal === typedChatPrompt &&
+      taskCapabilityEvidence.expectedInput === submittedChatPrompt &&
+      taskCapabilityEvidence.threadGoal === submittedChatPrompt &&
       typeof taskCapabilityEvidence.userMessage === 'object' &&
       taskCapabilityEvidence.userMessage !== null &&
-      taskCapabilityEvidence.userMessage.content === typedChatPrompt &&
+      taskCapabilityEvidence.userMessage.content === submittedChatPrompt &&
       Array.isArray(taskCapabilityEvidence.userMessage.enabledCapabilities?.mcpServers) &&
       Array.isArray(taskCapabilityEvidence.userMessage.enabledCapabilities?.skills) &&
       taskCapabilityEvidence.userMessage.enabledCapabilities.mcpServers.includes('smoke-mcp') &&
@@ -2547,6 +2582,9 @@ try {
     diagnosticsApiExpanded:
       boundary.diagnosticsKeys.includes('samplePerformance') &&
       boundary.diagnosticsKeys.includes('createDiagnosticPackage'),
+    toolPopoverHoverSticky: buttonInteractionEvidence.toolPopoverHoverSticky,
+    skillPopoverHoverSticky: buttonInteractionEvidence.skillPopoverHoverSticky,
+    modelPopoverHoverSticky: buttonInteractionEvidence.modelPopoverHoverSticky,
     appShellFlushToWindow:
       appShellFrameEvidence.exists &&
       appShellFrameEvidence.gapTop !== null &&
@@ -2640,6 +2678,9 @@ try {
     taskApiExpanded: rendererBoundary.taskApiExpanded,
     lifecycleApiExpanded: rendererBoundary.lifecycleApiExpanded,
     diagnosticsApiExpanded: rendererBoundary.diagnosticsApiExpanded,
+    toolPopoverHoverSticky: rendererBoundary.toolPopoverHoverSticky,
+    skillPopoverHoverSticky: rendererBoundary.skillPopoverHoverSticky,
+    modelPopoverHoverSticky: rendererBoundary.modelPopoverHoverSticky,
     terminalApiExpanded:
       rendererBoundary.terminalKeys.includes('createSession') &&
       rendererBoundary.terminalKeys.includes('writeInput') &&
@@ -2666,6 +2707,7 @@ try {
       workspaceSelectButtonEvidence,
       buttonInteractionEvidence,
       entryButtonEvidence,
+      historySidebarEvidence,
       memoryRecoveryText,
       memoryRecoveryApiEvidence,
       terminalText,

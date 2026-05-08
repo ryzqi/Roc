@@ -94,7 +94,10 @@ async function createWindow(): Promise<void> {
   registerIpc(services, mainWindow, {
     openMainPage: showMainPage,
     openQuickEntry: () => openFloatingEntry('quick'),
-    openTrayEntry: () => openFloatingEntry('tray')
+    openTrayEntry: () => openFloatingEntry('tray'),
+    broadcastTaskUpdated: () => {
+      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+    }
   });
 
   services.terminalSessionService.onOutput((event) => {

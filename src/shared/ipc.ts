@@ -186,6 +186,7 @@ export type RocPreloadApi = {
     pauseBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
     resumeBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
     cancelBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
+    onUpdated: (callback: () => void) => () => void;
   };
   lifecycle: {
     getTraySummary: () => Promise<IpcResult<TraySummary>>;

@@ -67,6 +67,7 @@ import type {
 } from '../shared/types';
 import { ComposerActionIcon } from './chat-composer-icons';
 import { getStartupLoadIntent } from './startup-load-policy';
+import { buildHistoryItems as buildHistorySidebarItems } from './history-sidebar';
 import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
 import {
   buildGitBranchSwitcherModel,
@@ -506,15 +507,7 @@ function buildHistoryNavItems(state: LoadedState): NavItem[] {
 }
 
 function buildHistoryItems(state: LoadedState): HistoryItem[] {
-  const backgroundThreadIds = new Set(state.backgroundTasks.map((task) => task.threadId));
-  return state.taskSnapshot.threads
-    .filter((thread) => !backgroundThreadIds.has(thread.id))
-    .map((thread) => ({
-      id: thread.id,
-      label: thread.title,
-      meta: thread.updatedAt.replace('T', ' ').slice(0, 16),
-      icon: 'history'
-    }));
+  return buildHistorySidebarItems(state.taskSnapshot.threads, state.backgroundTasks);
 }
 
 function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
@@ -620,6 +613,19 @@ export function App(): React.JSX.Element {
     height: number;
   } | null>(null);
 
+  const refreshTaskState = useCallback(async (): Promise<void> => {
+    const [taskSnapshot, taskSurfaceData] = await Promise.all([window.roc.tasks.getSnapshot(), loadTaskSurfaceData()]);
+    setState((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
+            ...taskSurfaceData
+          }
+    );
+  }, []);
+
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
       const view = parseViewId(page);
@@ -634,6 +640,14 @@ export function App(): React.JSX.Element {
       setWorkbenchVisible(view !== 'chat' && WORKBENCH_VIEWS.has(view));
     });
   }, []);
+
+  useEffect(() => {
+    return window.roc.tasks.onUpdated(() => {
+      void refreshTaskState().catch((refreshError: unknown) => {
+        setError(refreshError instanceof Error ? refreshError.message : 'Roc 任务状态刷新失败。');
+      });
+    });
+  }, [refreshTaskState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1725,9 +1739,20 @@ function ChatView({
         .filter((model) => model.enabled)
         .map((model) => ({
           id: model.id,
+          shortLabel: model.displayName,
           label: `${provider.name} / ${model.displayName}`
         }))
     );
+  let composerModelLabel = '未配置';
+  if (state.defaultModelId !== null) {
+    const selectedModel = enabledModels.find((model) => model.id === state.defaultModelId);
+    if (selectedModel !== undefined) {
+      composerModelLabel = selectedModel.shortLabel;
+    } else {
+      const idSegments = state.defaultModelId.split(/[/:]/).filter((segment) => segment.length > 0);
+      composerModelLabel = idSegments.length > 0 ? idSegments[idSegments.length - 1] : state.defaultModelId;
+    }
+  }
   const trimmedInput = chatInput.trim();
   const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
 
@@ -1799,10 +1824,11 @@ function ChatView({
             value={chatInput}
             onChange={(event) => setChatInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                void submitCurrentInput();
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+                return;
               }
+              event.preventDefault();
+              void submitCurrentInput();
             }}
           />
           <div className="composer-bottom">
@@ -1946,8 +1972,10 @@ function ChatView({
               >
                 <button className="model-pill model-pill--composer" data-testid="chat-model-trigger" type="button" aria-label="模型">
                   <ComposerActionIcon kind="model" />
-                  <span>{state.defaultModelId ?? '配置默认模型'}</span>
-                  <span>▾</span>
+                  <span className="model-pill-copy">{composerModelLabel}</span>
+                  <span aria-hidden="true" className="model-pill-chevron">
+                    ▾
+                  </span>
                 </button>
                 {activeComposerPopover !== 'models' ? null : (
                   <div className="composer-popover composer-popover--wide" data-testid="chat-model-popover">
