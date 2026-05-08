@@ -82,6 +82,7 @@ import {
   setDefaultModelInSettingsSaveRequest
 } from './settings-model';
 import { SettingsView } from './settings';
+import { SettingsModal } from './settings/settings-modal';
 import '@xterm/xterm/css/xterm.css';
 import 'react-diff-view/style/index.css';
 
@@ -561,12 +562,6 @@ function buildControlNavItems(state: LoadedState): NavItem[] {
       label: 'Skill',
       meta: `${state.skills.filter((skill) => skill.enabled && skill.status === 'ready').length} 可用`,
       icon: 'sparkles'
-    },
-    {
-      id: 'settings',
-      label: '设置',
-      meta: state.defaultModelId === null ? '默认模型未配置' : state.defaultModelId,
-      icon: 'wrench'
     }
   ];
 }
@@ -599,7 +594,8 @@ async function updateTurnSelection(
 export function App(): React.JSX.Element {
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'));
-  const [activeView, setActiveView] = useState<ViewId>(initialView);
+  const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [state, setState] = useState<LoadedState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -631,6 +627,10 @@ export function App(): React.JSX.Element {
     return window.roc.app.onNavigate((page) => {
       const view = parseViewId(page);
       if (isFloatingView(view)) {
+        return;
+      }
+      if (view === 'settings') {
+        setSettingsOpen(true);
         return;
       }
       setActiveView(view);
@@ -1194,6 +1194,18 @@ export function App(): React.JSX.Element {
           </div>
           <SidebarNavGroup className="sidebar-block sidebar-block--tasks" activeView={activeView} items={workspaceNavItems} title="任务工作台" onSelect={setActiveView} />
           <SidebarNavGroup className="sidebar-block sidebar-block--control" activeView={activeView} items={controlNavItems} title="控制区" onSelect={setActiveView} />
+          <div className="sidebar-footer">
+            <button
+              className="settings-gear"
+              data-testid="settings-gear"
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              title="打开设置"
+              aria-label="打开设置"
+            >
+              <PreviewIcon name="wrench" />
+            </button>
+          </div>
         </aside>
 
         <div
@@ -1277,6 +1289,21 @@ export function App(): React.JSX.Element {
           ) : null}
         </div>
       </div>
+      {settingsOpen ? (
+        <SettingsModal onClose={() => setSettingsOpen(false)}>
+          <SettingsView
+            onNavigate={(target) => {
+              setSettingsOpen(false);
+              setActiveView(target);
+              setWorkbenchVisible(false);
+            }}
+            state={state}
+            updateLoadedState={(partial) =>
+              setState((current) => (current === null ? current : { ...current, ...partial }))
+            }
+          />
+        </SettingsModal>
+      ) : null}
     </div>
   );
 }
@@ -1605,15 +1632,6 @@ function ViewContent({
   }
   if (activeView === 'memory') {
     return <MemoryView loadState={memoryLoadState} state={state} />;
-  }
-  if (activeView === 'settings') {
-    return (
-      <SettingsView
-        onNavigate={(target) => onOpenView(target)}
-        state={state}
-        updateLoadedState={updateLoadedState}
-      />
-    );
   }
   if (activeView === 'doctor') {
     return <DoctorView loadState={operationsLoadState} state={state} />;

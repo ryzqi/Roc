@@ -642,6 +642,8 @@ try {
     viewSelector: '[data-testid="git-view"]'
   });
   await waitForTextContent(page, '[data-testid="git-view"]', 'phase-three-notes.txt');
+  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
+  await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await page.click('.rail-button[data-tool-button="files"]');
@@ -1138,7 +1140,8 @@ try {
   if (mcpText === null) {
     throw new Error('Smoke could not read MCP view text.');
   }
-  await clickSmokeControl(page, '[data-testid="nav-settings"]');
+  await clickSmokeControl(page, '[data-testid="settings-gear"]');
+  await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
@@ -1192,6 +1195,8 @@ try {
   if (settingsText === null) {
     throw new Error('Smoke could not read settings view text.');
   }
+  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
+  await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await waitForCapabilitySelection(page, { mcpCount: 1, skillCount: 1 });
@@ -1648,6 +1653,8 @@ try {
     memoryEditorHasNoDisabledButtons: false,
     memoryRecordSelectable: false
   };
+  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
+  await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await page.hover('[data-testid="chat-attachment-trigger"]');
