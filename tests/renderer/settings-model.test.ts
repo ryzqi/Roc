@@ -323,6 +323,52 @@ describe('settings model helpers', () => {
     });
   });
 
+  it('clears the default model when saving a disabled provider that owns it', () => {
+    const settings = defaultSettings();
+    const permissions = defaultPermissions();
+    const provider: ProviderConfig = {
+      id: 'openai-a',
+      name: 'OpenAI A',
+      type: 'openai_compatible',
+      endpoint: 'https://openai-a.example.test/v1',
+      credentialRef: 'secret:openai-a',
+      enabled: true,
+      models: [
+        {
+          id: 'gpt-a',
+          displayName: 'GPT A',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const request = buildSettingsSaveRequest({
+      settings,
+      providers: [provider],
+      defaultModelId: 'gpt-a',
+      permissions
+    });
+
+    expect(
+      upsertProviderInSettingsSaveRequest(request, {
+        ...provider,
+        enabled: false
+      })
+    ).toEqual({
+      settings,
+      providers: [
+        {
+          ...provider,
+          enabled: false
+        }
+      ],
+      defaultModelId: null,
+      permissions
+    });
+  });
+
   it('applies unified settings snapshot into renderer state and clears transient checks', () => {
     const settings: AppSettings = {
       ...defaultSettings(),

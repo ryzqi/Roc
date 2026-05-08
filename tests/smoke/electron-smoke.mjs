@@ -1160,7 +1160,9 @@ try {
     anthropicSecretStored: false,
     anthropicSecretCleared: false,
     openaiReady: false,
-    defaultModelSelectable: false
+    defaultModelSelectable: false,
+    providerTestFeedbackVisible: false,
+    saveAllDirect: false
   };
   await clickSmokeControl(page, '[data-testid="settings-gear"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
@@ -1450,12 +1452,33 @@ try {
   await clickSmokeControl(page, `[data-testid="provider-list-item-${openaiProviderId}"]`);
   await clickSmokeControl(page, `[data-testid="provider-test-${openaiProviderId}"]`);
   await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
+  await waitForTextContent(page, '[data-testid="provider-test-feedback"]', '已测试 smoke-ui-openai-model 可用。');
   providerSettingsEvidence.openaiReady = true;
+  providerSettingsEvidence.providerTestFeedbackVisible =
+    ((await page.textContent('[data-testid="provider-test-feedback"]')) ?? '').includes(
+      '已测试 smoke-ui-openai-model 可用。'
+    );
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
   await page.waitForSelector('[data-testid="default-model-smoke-ui-openai-model"]', { timeout: 5000 });
   await clickSmokeControl(page, '[data-testid="default-model-smoke-ui-openai-model"]');
   await waitForTextContent(page, '[data-testid="default-model-settings"]', 'smoke-ui-openai-model');
   providerSettingsEvidence.defaultModelSelectable = true;
+  await clickSmokeControl(page, '[data-testid="settings-section-app-basics"]');
+  await page.waitForSelector('[data-testid="settings-panel-app-basics"]', { timeout: 5000 });
+  const openAtLoginBeforeSaveAll = await page.locator('[data-testid="settings-startup-open-at-login"]').isChecked();
+  await clickSmokeControl(page, '[data-testid="settings-startup-open-at-login"]');
+  await waitForTextContent(page, '[data-testid="settings-dirty-count"]', '未保存 1 项');
+  await clickSmokeControl(page, '[data-testid="settings-save-all"]');
+  await page.waitForSelector('[data-testid="impact-preview-modal"]', { state: 'detached', timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="settings-dirty-count"]', '无未保存变更');
+  const openAtLoginAfterSaveAll = await page.evaluate(async () => {
+    const result = await window.roc.settings.get();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    return result.data.settings.startup.openAtLogin;
+  });
+  providerSettingsEvidence.saveAllDirect = openAtLoginAfterSaveAll === !openAtLoginBeforeSaveAll;
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
   await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
   const settingsText = await page.textContent('[data-testid="settings-view"]');
@@ -2322,7 +2345,9 @@ try {
       providerSettingsEvidence.anthropicSecretStored &&
       providerSettingsEvidence.anthropicSecretCleared &&
       providerSettingsEvidence.openaiReady &&
-      providerSettingsEvidence.defaultModelSelectable,
+      providerSettingsEvidence.defaultModelSelectable &&
+      providerSettingsEvidence.providerTestFeedbackVisible &&
+      providerSettingsEvidence.saveAllDirect,
     mcpManagedVisible:
       mcpText.includes('Smoke MCP') &&
       mcpText.includes('smoke-mcp:ready') &&

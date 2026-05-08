@@ -8,7 +8,6 @@ import type {
   McpServersConfig,
   PermissionsConfig,
   ProviderConfig,
-  ProviderTestResult,
   ProvidersConfig,
   RocSettingsDocument,
   SettingsSaveRequest
@@ -232,13 +231,17 @@ export class ConfigService {
 
   saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
     const parsed = SettingsSaveRequestSchema.parse(request);
+    const nextDefaultModelId = this.sanitizeDefaultModelIdForDisabledProviders(
+      parsed.providers,
+      parsed.defaultModelId
+    );
     const document = this.getSettingsDocument();
     this.writeSettingsDocument({
       ...document,
       settings: parsed.settings,
       providers: {
         schemaVersion: 1,
-        defaultModelId: parsed.defaultModelId,
+        defaultModelId: nextDefaultModelId,
         providers: parsed.providers
       },
       permissions: parsed.permissions
@@ -246,7 +249,7 @@ export class ConfigService {
     return {
       settings: parsed.settings,
       providers: parsed.providers,
-      defaultModelId: parsed.defaultModelId,
+      defaultModelId: nextDefaultModelId,
       permissions: parsed.permissions
     };
   }
@@ -338,50 +341,6 @@ export class ConfigService {
       providers: config.providers
     });
     return this.getDefaultModelState();
-  }
-
-  testProvider(providerId: string): ProviderTestResult {
-    const id = this.requireText(providerId, 'provider_id_empty', 'Provider ID 不能为空。', '请选择要测试的 provider。');
-    const provider = this.getProviders().providers.find((item) => item.id === id);
-    if (provider === undefined) {
-      throw new RocDomainError({
-        code: 'provider_not_found',
-        message: `找不到 Provider ${id}。`,
-        category: 'not_found',
-        retryable: false,
-        userAction: '请刷新设置页后重试。'
-      });
-    }
-
-    const checked = ['id', 'name', 'type', 'endpoint', 'models'];
-    const enabledModels = provider.models.filter((model) => model.enabled);
-    if (!provider.enabled) {
-      return {
-        providerId: id,
-        status: 'invalid',
-        defaultModelReady: false,
-        checked,
-        error: 'Provider 未启用。'
-      };
-    }
-    if (enabledModels.length === 0) {
-      return {
-        providerId: id,
-        status: 'invalid',
-        defaultModelReady: false,
-        checked,
-        error: 'Provider 没有已启用模型。'
-      };
-    }
-
-    const defaultModelState = this.getDefaultModelState();
-    return {
-      providerId: id,
-      status: 'ready',
-      defaultModelReady: defaultModelState.status === 'ready' && defaultModelState.providerId === id,
-      checked,
-      error: null
-    };
   }
 
   getDefaultModelState(): DefaultModelState {
@@ -492,6 +451,23 @@ export class ConfigService {
       providerId: null,
       reason: '默认模型不存在。'
     };
+  }
+
+  private sanitizeDefaultModelIdForDisabledProviders(
+    providers: readonly ProviderConfig[],
+    defaultModelId: string | null
+  ): string | null {
+    if (defaultModelId === null) {
+      return null;
+    }
+    if (
+      providers.some(
+        (provider) => !provider.enabled && provider.models.some((model) => model.id === defaultModelId)
+      )
+    ) {
+      return null;
+    }
+    return defaultModelId;
   }
 
   private upgradeLegacySettings(raw: unknown): RocSettings {

@@ -3555,112 +3555,6 @@ button.model-pill {
   display: flex;
   gap: 4px;
 }
-/* impact preview modal */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.modal-card {
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-  width: min(640px, 90vw);
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-.modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
-}
-.modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.modal-subtitle {
-  margin: 4px 0 0 0;
-  font-size: 12px;
-  color: #6b7280;
-}
-.modal-body {
-  padding: 12px 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-.modal-footer {
-  padding: 12px 20px;
-  border-top: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.modal-footer button.primary {
-  background: #1f6feb;
-  color: white;
-  border: 1px solid #1f6feb;
-}
-.modal-footer button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.impact-group {
-  margin-bottom: 12px;
-}
-.impact-group h3 {
-  margin: 0 0 8px 0;
-  font-size: 13px;
-  color: #374151;
-}
-.impact-row {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  background: #f9fafb;
-}
-.impact-row.impact-high {
-  border-color: #fcd34d;
-  background: #fffbeb;
-}
-.impact-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  color: #6b7280;
-}
-.impact-section {
-  font-weight: 600;
-  color: #111827;
-}
-.impact-change {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 0;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-}
-.impact-arrow {
-  color: #9ca3af;
-}
-.impact-before {
-  color: #6b7280;
-  text-decoration: line-through;
-}
-.impact-after {
-  color: #111827;
-  font-weight: 600;
-}
-.impact-note {
-  margin: 4px 0 0 0;
-  font-size: 12px;
-  color: #4b5563;
-}
 
 /* settings entry: gear button in sidebar footer */
 .sidebar-footer {
@@ -3931,6 +3825,24 @@ button.model-pill {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.provider-test-feedback {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.provider-test-feedback--ready {
+  background: rgba(26, 138, 97, 0.12);
+  color: var(--trend-ok);
+}
+
+.provider-test-feedback--invalid {
+  background: rgba(255, 244, 244, 0.95);
+  border: 1px solid rgba(238, 194, 194, 0.92);
+  color: var(--trend-bad);
 }
 
 .provider-detail-title {

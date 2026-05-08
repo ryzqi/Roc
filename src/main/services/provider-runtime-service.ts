@@ -1,4 +1,9 @@
-import type { EnabledCapabilities, ProviderConfig, ProviderExecutionResult } from '../../shared/types';
+import type {
+  EnabledCapabilities,
+  ProviderConfig,
+  ProviderExecutionResult,
+  ProviderTestResult
+} from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import type { SecretService } from './secret-service';
@@ -45,6 +50,7 @@ type AnthropicCompatibleRequestBody = {
 };
 
 const providerRequestTimeoutMs = 30_000;
+const providerTestPrompt = 'Reply with OK only.';
 
 export class ProviderRuntimeService {
   private deterministicTransport: ProviderTransport | null = null;
@@ -64,6 +70,67 @@ export class ProviderRuntimeService {
     };
   }
 
+  async testProvider(providerId: string): Promise<ProviderTestResult> {
+    const provider = this.resolveProviderById(providerId);
+    const defaultModelState = this.configService.getDefaultModelState();
+    const defaultModelReady =
+      defaultModelState.status === 'ready' && defaultModelState.providerId === provider.id;
+    const checked = ['id', 'type', 'enabled', 'models', 'credentials', 'transport'];
+
+    if (!provider.enabled) {
+      return {
+        providerId: provider.id,
+        status: 'invalid',
+        defaultModelReady,
+        checked,
+        modelId: null,
+        error: 'Provider 未启用。'
+      };
+    }
+    const enabledModel = provider.models.find((model) => model.enabled);
+    if (enabledModel === undefined) {
+      return {
+        providerId: provider.id,
+        status: 'invalid',
+        defaultModelReady,
+        checked,
+        modelId: null,
+        error: 'Provider 没有已启用模型。'
+      };
+    }
+
+    try {
+      const response = await this.executeTransportRequest({
+        provider,
+        modelId: enabledModel.id,
+        input: providerTestPrompt,
+        capabilitySummary: this.createCapabilitySummary({
+          mcpServers: [],
+          skills: []
+        })
+      });
+      this.requireResponseContent(response);
+      return {
+        providerId: provider.id,
+        status: 'ready',
+        defaultModelReady,
+        checked,
+        modelId: enabledModel.id,
+        error: null
+      };
+    } catch (error) {
+      const safeError = this.toSafeProviderError(error);
+      return {
+        providerId: provider.id,
+        status: 'invalid',
+        defaultModelReady,
+        checked,
+        modelId: enabledModel.id,
+        error: safeError.message
+      };
+    }
+  }
+
   async executeChat(request: ProviderRuntimeRequest): Promise<ProviderExecutionResult> {
     const input = request.input.trim();
     if (input.length === 0) {
@@ -77,53 +144,21 @@ export class ProviderRuntimeService {
     }
 
     const resolved = this.resolveDefaultProvider();
-    if (resolved.provider.type !== 'openai_compatible' && resolved.provider.type !== 'anthropic_compatible') {
-      throw new RocDomainError({
-        code: 'provider_type_unsupported',
-        message: '当前 Provider 类型尚未支持聊天执行。',
-        category: 'external',
-        retryable: false,
-        userAction: '请先使用 OpenAI-compatible 或 Anthropic-compatible Provider。'
-      });
-    }
-
     const startedAt = Date.now();
     const capabilitySummary = this.createCapabilitySummary(request.enabledCapabilities);
     let response: ProviderTransportResponse;
     try {
-      if (this.deterministicTransport === null) {
-        const transportRequest = {
-          provider: resolved.provider,
-          modelId: resolved.modelId,
-          input,
-          capabilitySummary
-        };
-        response =
-          resolved.provider.type === 'openai_compatible'
-            ? await this.executeOpenAiCompatible(transportRequest)
-            : await this.executeAnthropicCompatible(transportRequest);
-      } else {
-        response = await this.deterministicTransport({
-          provider: resolved.provider,
-          modelId: resolved.modelId,
-          input,
-          capabilitySummary
-        });
-      }
+      response = await this.executeTransportRequest({
+        provider: resolved.provider,
+        modelId: resolved.modelId,
+        input,
+        capabilitySummary
+      });
     } catch (error) {
       throw this.toSafeProviderError(error);
     }
 
-    const content = response.content.trim();
-    if (content.length === 0) {
-      throw new RocDomainError({
-        code: 'provider_empty_response',
-        message: 'Provider 返回了空回复。',
-        category: 'external',
-        retryable: true,
-        userAction: '请稍后重试，或检查 Provider 模型配置。'
-      });
-    }
+    const content = this.requireResponseContent(response);
 
     const promptTokens = response.promptTokens === undefined ? null : response.promptTokens;
     const completionTokens = response.completionTokens === undefined ? null : response.completionTokens;
@@ -167,6 +202,65 @@ export class ProviderRuntimeService {
       provider,
       modelId: defaultModelState.modelId
     };
+  }
+
+  private resolveProviderById(providerId: string): ProviderConfig {
+    const id = providerId.trim();
+    if (id.length === 0) {
+      throw new RocDomainError({
+        code: 'provider_id_empty',
+        message: 'Provider ID 不能为空。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请选择要测试的 provider。'
+      });
+    }
+
+    const provider = this.configService.getProviders().providers.find((item) => item.id === id);
+    if (provider === undefined) {
+      throw new RocDomainError({
+        code: 'provider_not_found',
+        message: `找不到 Provider ${id}。`,
+        category: 'not_found',
+        retryable: false,
+        userAction: '请刷新设置页后重试。'
+      });
+    }
+    return provider;
+  }
+
+  private async executeTransportRequest(
+    request: ProviderTransportRequest
+  ): Promise<ProviderTransportResponse> {
+    if (request.provider.type !== 'openai_compatible' && request.provider.type !== 'anthropic_compatible') {
+      throw new RocDomainError({
+        code: 'provider_type_unsupported',
+        message: '当前 Provider 类型尚未支持测试或聊天执行。',
+        category: 'external',
+        retryable: false,
+        userAction: '请先使用 OpenAI-compatible 或 Anthropic-compatible Provider。'
+      });
+    }
+    if (this.deterministicTransport !== null) {
+      return await this.deterministicTransport(request);
+    }
+    return request.provider.type === 'openai_compatible'
+      ? await this.executeOpenAiCompatible(request)
+      : await this.executeAnthropicCompatible(request);
+  }
+
+  private requireResponseContent(response: ProviderTransportResponse): string {
+    const content = response.content.trim();
+    if (content.length === 0) {
+      throw new RocDomainError({
+        code: 'provider_empty_response',
+        message: 'Provider 返回了空回复。',
+        category: 'external',
+        retryable: true,
+        userAction: '请稍后重试，或检查 Provider 模型配置。'
+      });
+    }
+    return content;
   }
 
   private async executeOpenAiCompatible(request: ProviderTransportRequest): Promise<ProviderTransportResponse> {

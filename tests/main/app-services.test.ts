@@ -2133,7 +2133,7 @@ describe('Roc foundation services', () => {
     });
   });
 
-  it('manages providers, tests local provider readiness, and clears invalid default models', () => {
+  it('manages providers and clears invalid default models', () => {
     const provider = services.configService.upsertProvider({
       id: 'provider-local',
       name: 'Local OpenAI-compatible',
@@ -2151,15 +2151,9 @@ describe('Roc foundation services', () => {
         }
       ]
     });
-    const testResult = services.configService.testProvider(provider.id);
     services.configService.setDefaultModel('model-tools');
 
     expect(provider.credentialRef).toBe('secret:provider-local');
-    expect(testResult).toMatchObject({
-      providerId: 'provider-local',
-      status: 'ready',
-      defaultModelReady: false
-    });
     expect(services.configService.getDefaultModelState()).toEqual({
       status: 'ready',
       modelId: 'model-tools',
@@ -2174,6 +2168,368 @@ describe('Roc foundation services', () => {
       modelId: null,
       providerId: null,
       reason: '未配置默认模型。'
+    });
+  });
+
+  it('tests a saved provider through the live transport without relying on the default model', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'OK'
+            },
+            finish_reason: 'stop'
+          }
+        ],
+        usage: {
+          prompt_tokens: 11,
+          completion_tokens: 1,
+          total_tokens: 12
+        }
+      },
+      200
+    );
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'provider-live-openai',
+            name: 'Live OpenAI compatible',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-live-openai',
+            enabled: true,
+            models: [
+              {
+                id: 'live-model',
+                displayName: 'Live model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+
+      const result = await liveServices.providerRuntimeService.testProvider('provider-live-openai');
+
+      expect(result).toMatchObject({
+        providerId: 'provider-live-openai',
+        status: 'ready',
+        defaultModelReady: false,
+        modelId: 'live-model',
+        error: null
+      });
+      expect(fakeProvider.requests).toHaveLength(1);
+      expect(fakeProvider.requests[0]).toMatchObject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        authorization: 'Bearer sk-live-test-secret'
+      });
+      expect(fakeProvider.requests[0]?.body).toMatchObject({
+        model: 'live-model',
+        stream: false,
+        messages: [
+          expect.objectContaining({
+            role: 'system'
+          }),
+          expect.objectContaining({
+            role: 'user',
+            content: 'Reply with OK only.'
+          })
+        ]
+      });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns local validation failures for provider tests without issuing live requests', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'This response should not be requested.'
+            },
+            finish_reason: 'stop'
+          }
+        ]
+      },
+      200
+    );
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'provider-disabled',
+            name: 'Disabled provider',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-disabled',
+            enabled: false,
+            models: [
+              {
+                id: 'disabled-model',
+                displayName: 'Disabled model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          },
+          {
+            id: 'provider-no-models',
+            name: 'No ready models',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-no-models',
+            enabled: true,
+            models: [
+              {
+                id: 'disabled-model',
+                displayName: 'Disabled model',
+                enabled: false,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          },
+          {
+            id: 'provider-missing-secret',
+            name: 'Missing secret',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-missing-secret',
+            enabled: true,
+            models: [
+              {
+                id: 'missing-secret-model',
+                displayName: 'Missing secret model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+
+      const disabled = await liveServices.providerRuntimeService.testProvider('provider-disabled');
+      const noModels = await liveServices.providerRuntimeService.testProvider('provider-no-models');
+      const missingSecret = await liveServices.providerRuntimeService.testProvider('provider-missing-secret');
+
+      expect(disabled).toMatchObject({
+        providerId: 'provider-disabled',
+        status: 'invalid',
+        defaultModelReady: false,
+        modelId: null,
+        error: 'Provider 未启用。'
+      });
+      expect(noModels).toMatchObject({
+        providerId: 'provider-no-models',
+        status: 'invalid',
+        defaultModelReady: false,
+        modelId: null,
+        error: 'Provider 没有已启用模型。'
+      });
+      expect(missingSecret).toMatchObject({
+        providerId: 'provider-missing-secret',
+        status: 'invalid',
+        defaultModelReady: false,
+        modelId: 'missing-secret-model',
+        error: 'Provider 凭据未存储。'
+      });
+      expect(fakeProvider.requests).toHaveLength(0);
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns redacted HTTP failures in provider tests after issuing a live request', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        error: {
+          message: 'bad Authorization: Bearer sk-live-test-secret'
+        }
+      },
+      401
+    );
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'provider-live-openai',
+            name: 'Live OpenAI compatible',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-live-openai',
+            enabled: true,
+            models: [
+              {
+                id: 'live-model',
+                displayName: 'Live model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+
+      const result = await liveServices.providerRuntimeService.testProvider('provider-live-openai');
+
+      expect(result).toMatchObject({
+        providerId: 'provider-live-openai',
+        status: 'invalid',
+        defaultModelReady: false,
+        modelId: 'live-model'
+      });
+      expect(result.error).toContain('HTTP 401');
+      expect(result.error).toContain('[REDACTED]');
+      expect(result.error).not.toContain('sk-live-test-secret');
+      expect(fakeProvider.requests).toHaveLength(1);
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns retryable network failures as invalid provider test results', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'This response should not be requested.'
+            },
+            finish_reason: 'stop'
+          }
+        ]
+      },
+      200
+    );
+    await fakeProvider.close();
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('provider-live-openai', 'sk-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'provider-live-openai',
+            name: 'Live OpenAI compatible',
+            type: 'openai_compatible',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: 'secret:provider-live-openai',
+            enabled: true,
+            models: [
+              {
+                id: 'live-model',
+                displayName: 'Live model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+
+      const result = await liveServices.providerRuntimeService.testProvider('provider-live-openai');
+
+      expect(result).toMatchObject({
+        providerId: 'provider-live-openai',
+        status: 'invalid',
+        defaultModelReady: false,
+        modelId: 'live-model'
+      });
+      expect(result.error).toContain('Provider 网络请求失败');
+      expect(result.error).not.toContain('sk-live-test-secret');
+    } finally {
+      liveServices.databaseService.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns provider timeout failures as invalid test results', async () => {
+    services.secretService.setProviderSecret('provider-local', 'sk-local-test-secret');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        {
+          id: 'provider-local',
+          name: 'Local OpenAI-compatible',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:11434/v1',
+          credentialRef: 'secret:provider-local',
+          enabled: true,
+          models: [
+            {
+              id: 'model-tools',
+              displayName: 'Tool capable model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+    services.providerRuntimeService.setDeterministicFailure(
+      new RocDomainError({
+        code: 'provider_request_timeout',
+        message: 'Provider 请求超时。',
+        category: 'external',
+        retryable: true,
+        userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
+      })
+    );
+
+    const result = await services.providerRuntimeService.testProvider('provider-local');
+
+    expect(result).toMatchObject({
+      providerId: 'provider-local',
+      status: 'invalid',
+      defaultModelReady: false,
+      modelId: 'model-tools',
+      error: 'Provider 请求超时。'
     });
   });
 

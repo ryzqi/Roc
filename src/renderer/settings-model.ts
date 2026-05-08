@@ -273,8 +273,13 @@ export function upsertProviderInSettingsSaveRequest(
   provider: ProviderConfig
 ): SettingsSaveRequest {
   const existingIndex = request.providers.findIndex((item) => item.id === provider.id);
+  const clearsDefaultModel =
+    !provider.enabled &&
+    request.defaultModelId !== null &&
+    provider.models.some((model) => model.id === request.defaultModelId);
   return {
     ...request,
+    defaultModelId: clearsDefaultModel ? null : request.defaultModelId,
     providers:
       existingIndex === -1
         ? [...request.providers, provider]

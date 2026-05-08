@@ -545,6 +545,7 @@ export type ProviderTestResult = {
   status: 'ready' | 'invalid';
   defaultModelReady: boolean;
   checked: string[];
+  modelId?: string | null;
   error: string | null;
 };
 

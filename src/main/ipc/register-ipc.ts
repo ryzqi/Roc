@@ -145,7 +145,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
     })
   );
   ipcMain.handle(ipcChannels.settingsTestProvider, (_event, id: string) =>
-    wrapIpc(() => services.configService.testProvider(id))
+    wrapIpc(() => services.providerRuntimeService.testProvider(id))
   );
   ipcMain.handle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
     wrapIpc(() => {

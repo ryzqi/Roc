@@ -347,4 +347,47 @@ describe('ConfigService unified settings document', () => {
     expect(permissions.defaultConfirmations.workspaceOutsideWrite).toBe('never_confirm');
     expect(permissions.defaultConfirmations.memoryDelete).toBe('never_confirm');
   });
+
+  it('clears defaultModelId when saveSettingsSnapshot disables the provider that owns it', () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    const provider: ProviderConfig = {
+      id: 'provider-openai',
+      name: 'Provider OpenAI',
+      type: 'openai_compatible',
+      endpoint: 'https://openai.example.test/v1',
+      credentialRef: 'secret:provider-openai',
+      enabled: false,
+      models: [
+        {
+          id: 'provider-openai-model',
+          displayName: 'Provider OpenAI Model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    configService.saveSettingsSnapshot({
+      settings: configService.getSettings(),
+      providers: [provider],
+      defaultModelId: 'provider-openai-model',
+      permissions: configService.getPermissions()
+    });
+
+    expect(configService.getProviders()).toEqual({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [provider]
+    });
+    expect(readSettingsDocument()).toMatchObject({
+      providers: {
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [provider]
+      }
+    });
+  });
 });

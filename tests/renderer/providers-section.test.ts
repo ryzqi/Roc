@@ -110,4 +110,102 @@ describe('providers section', () => {
     expect(html).toContain('data-testid="provider-draft-status"');
     expect(html).toContain('API Key 是必填项。');
   });
+
+  it('shows the last successful provider test result with the tested model id', () => {
+    const provider: ProviderConfig = {
+      id: 'provider-openai',
+      name: 'Provider OpenAI',
+      type: 'openai_compatible',
+      endpoint: 'https://api.example.test/v1',
+      credentialRef: 'secret:provider-openai',
+      enabled: true,
+      models: [
+        {
+          id: 'gpt-test',
+          displayName: 'GPT Test',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('openai_compatible', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [{ providerId: provider.id, stored: true }],
+        providerTestStatus: {
+          providerId: provider.id,
+          status: 'ready',
+          defaultModelReady: false,
+          checked: ['id', 'enabled', 'models', 'credentials', 'transport'],
+          modelId: 'gpt-test',
+          error: null
+        },
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-test-feedback"');
+    expect(html).toContain('已测试 gpt-test 可用。');
+  });
+
+  it('shows the last provider test failure reason instead of only changing the status pill', () => {
+    const provider: ProviderConfig = {
+      id: 'provider-openai',
+      name: 'Provider OpenAI',
+      type: 'openai_compatible',
+      endpoint: 'https://api.example.test/v1',
+      credentialRef: 'secret:provider-openai',
+      enabled: true,
+      models: [
+        {
+          id: 'gpt-test',
+          displayName: 'GPT Test',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('openai_compatible', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [{ providerId: provider.id, stored: true }],
+        providerTestStatus: {
+          providerId: provider.id,
+          status: 'invalid',
+          defaultModelReady: false,
+          checked: ['id', 'enabled', 'models', 'credentials', 'transport'],
+          modelId: 'gpt-test',
+          error: 'Provider 请求失败：HTTP 401 [REDACTED]'
+        },
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-test-feedback"');
+    expect(html).toContain('gpt-test 测试失败：Provider 请求失败：HTTP 401 [REDACTED]');
+  });
 });

@@ -118,6 +118,40 @@ export function ProvidersSection({
     return providerHasReadyModel(selectedProvider) ? 'ready' : 'invalid';
   })();
 
+  const testFeedback = useMemo(() => {
+    if (selectedProvider === null) {
+      return null;
+    }
+    if (providerTestStatus === null || providerTestStatus.providerId !== selectedProvider.id) {
+      return null;
+    }
+    if (providerTestStatus.status === 'ready') {
+      return {
+        tone: 'ready' as const,
+        text:
+          providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+            ? '已测试可用。'
+            : `已测试 ${providerTestStatus.modelId} 可用。`
+      };
+    }
+    if (providerTestStatus.error === null) {
+      return {
+        tone: 'invalid' as const,
+        text:
+          providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+            ? '测试失败。'
+            : `${providerTestStatus.modelId} 测试失败。`
+      };
+    }
+    return {
+      tone: 'invalid' as const,
+      text:
+        providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+          ? `测试失败：${providerTestStatus.error}`
+          : `${providerTestStatus.modelId} 测试失败：${providerTestStatus.error}`
+    };
+  }, [providerTestStatus, selectedProvider]);
+
   return (
     <section className="card provider-settings-card" data-testid="provider-settings">
       <div className="provider-toolbar">
@@ -204,6 +238,18 @@ export function ProvidersSection({
               </label>
             </div>
           </header>
+          {testFeedback === null ? null : (
+            <div
+              className={
+                testFeedback.tone === 'ready'
+                  ? 'provider-test-feedback provider-test-feedback--ready'
+                  : 'provider-test-feedback provider-test-feedback--invalid'
+              }
+              data-testid="provider-test-feedback"
+            >
+              {testFeedback.text}
+            </div>
+          )}
           {isCreating ? (
             <div className="provider-type-section">
               <span className="provider-detail-label">Provider 类型</span>

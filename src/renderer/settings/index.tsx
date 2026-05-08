@@ -27,7 +27,6 @@ import {
   type SettingsSectionId
 } from '../settings-model';
 import { useSettingsDraft } from './use-settings-draft';
-import { ImpactPreviewModal } from './impact-preview-modal';
 import { ProvidersSection } from './sections/providers-section';
 import { DefaultModelSection } from './sections/default-model-section';
 import { AppBasicsSection } from './sections/app-basics-section';
@@ -72,7 +71,6 @@ export function SettingsView({
   const [providerDraftError, setProviderDraftError] = useState<string | null>(null);
   const [secretBusyProviderId, setSecretBusyProviderId] = useState<string | null>(null);
   const [exaTestLabel, setExaTestLabel] = useState<string>('未测试');
-  const [showImpactModal, setShowImpactModal] = useState<boolean>(false);
   const [savingAll, setSavingAll] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -267,19 +265,8 @@ export function SettingsView({
     }
   }, [exaServer]);
 
-  const startSaveAll = useCallback((): void => {
+  const saveAll = useCallback(async (): Promise<void> => {
     setSaveError(null);
-    setShowImpactModal(true);
-  }, []);
-
-  const cancelSaveAll = useCallback((): void => {
-    if (savingAll) {
-      return;
-    }
-    setShowImpactModal(false);
-  }, [savingAll]);
-
-  const confirmSaveAll = useCallback(async (): Promise<void> => {
     setSavingAll(true);
     try {
       const saved = unwrap<SettingsSnapshot>(
@@ -287,7 +274,6 @@ export function SettingsView({
         await window.roc.settings.save(buildBaseSaveRequest())
       );
       updateLoadedState(applySettingsSnapshot(saved));
-      setShowImpactModal(false);
       setSaveError(null);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '保存失败。');
@@ -322,7 +308,7 @@ export function SettingsView({
             className="primary"
             data-testid="settings-save-all"
             disabled={!draft.isDirty || savingAll}
-            onClick={startSaveAll}
+            onClick={() => void saveAll()}
             type="button"
           >
             保存设置
@@ -402,14 +388,6 @@ export function SettingsView({
           </div>
         </div>
       </section>
-      {showImpactModal ? (
-        <ImpactPreviewModal
-          busy={savingAll}
-          onCancel={cancelSaveAll}
-          onConfirm={confirmSaveAll}
-          rows={draft.impactRows}
-        />
-      ) : null}
     </>
   );
 }
