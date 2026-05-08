@@ -213,13 +213,6 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.chatCancelRun, (_event, runId: string) =>
     wrapIpc(() => services.deepAgentRuntimeService.cancelRun(runId))
   );
-  ipcMain.handle(ipcChannels.chatSubmit, (_event, request) =>
-    wrapIpc(async () => {
-      const result = await services.chatService.submit(request);
-      controls.broadcastTaskUpdated();
-      return result;
-    })
-  );
   ipcMain.handle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => services.workspaceService.getCurrentWorkspace()));
   ipcMain.handle(ipcChannels.workspaceSelect, (_event, request) =>
     wrapIpc(() => services.workspaceService.selectWorkspace(request.path))

@@ -6,8 +6,6 @@ import type {
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
-  ChatSubmitRequest,
-  ChatSubmitResult,
   ChatCancelRunResult,
   ChatRunEvent,
   ChatStartRunRequest,
@@ -139,7 +137,6 @@ export const ipcChannels = {
   chatRunEvent: 'roc:chat:run-event',
   chatStartRun: 'roc:chat:start-run',
   chatCancelRun: 'roc:chat:cancel-run',
-  chatSubmit: 'roc:chat:submit',
   workspaceGetCurrent: 'roc:workspace:get-current',
   workspaceSelect: 'roc:workspace:select',
   workspaceSelectFromDialog: 'roc:workspace:select-from-dialog',
@@ -248,13 +245,12 @@ export type RocPreloadApi = {
   agent: {
     getStatus: () => Promise<IpcResult<AgentRuntimeStatus>>;
     getConfigPreview: () => Promise<IpcResult<DeepAgentConfigPreview>>;
-    getCapabilityPreview: (request: ChatSubmitRequest['enabledCapabilities']) => Promise<IpcResult<AgentCapabilityPreview>>;
+    getCapabilityPreview: (request: ChatStartRunRequest['enabledCapabilities']) => Promise<IpcResult<AgentCapabilityPreview>>;
   };
   chat: {
     startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;
     cancelRun: (runId: string) => Promise<IpcResult<ChatCancelRunResult>>;
     onRunEvent: (callback: (event: ChatRunEvent) => void) => () => void;
-    submit: (request: ChatSubmitRequest) => Promise<IpcResult<ChatSubmitResult>>;
   };
   workspace: {
     getCurrent: () => Promise<IpcResult<Workspace | null>>;

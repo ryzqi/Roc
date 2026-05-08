@@ -96,8 +96,7 @@ const rocApi: RocPreloadApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on(ipcChannels.chatRunEvent, listener);
       return () => ipcRenderer.off(ipcChannels.chatRunEvent, listener);
-    },
-    submit: (request) => ipcRenderer.invoke(ipcChannels.chatSubmit, request)
+    }
   },
   workspace: {
     getCurrent: () => ipcRenderer.invoke(ipcChannels.workspaceGetCurrent),

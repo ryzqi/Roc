@@ -128,15 +128,23 @@ describe('ConfigService unified settings document', () => {
     });
     expect(document.providers).toMatchObject({
       schemaVersion: 1,
-      defaultModelId: 'provider-openai-model',
-      providers: [
-        {
+      defaultModelId: 'provider-openai-model'
+    });
+    expect((document.providers as { providers: unknown[] }).providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'nvidia',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia'
+        }),
+        expect.objectContaining({
           id: 'provider-openai',
           name: 'OpenAI Provider',
           credentialRef: null
-        }
-      ]
-    });
+        })
+      ])
+    );
     expect(document.permissions).toEqual({
       schemaVersion: 2,
       defaultConfirmations: {
@@ -147,7 +155,7 @@ describe('ConfigService unified settings document', () => {
       },
       grants: ['shell.execute']
     });
-    expect(configService.getProviders().providers[0]?.credentialRef).toBeNull();
+    expect(configService.getProviders().providers.find((provider) => provider.id === 'provider-openai')?.credentialRef).toBeNull();
   });
 
   it('keeps legacy v2 unified document credentials only when they reference safeStorage secrets', () => {
@@ -220,10 +228,17 @@ describe('ConfigService unified settings document', () => {
     configService.initialize();
     const providers = configService.getProviders().providers;
 
-    expect(providers).toEqual([
-      expect.objectContaining({ id: 'kept-provider', credentialRef: 'secret:kept-provider' }),
-      expect.objectContaining({ id: 'legacy-env', credentialRef: null })
-    ]);
+    expect(providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'nvidia',
+          credentialRef: 'secret:nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1'
+        }),
+        expect.objectContaining({ id: 'kept-provider', credentialRef: 'secret:kept-provider' }),
+        expect.objectContaining({ id: 'legacy-env', credentialRef: null })
+      ])
+    );
     expect(configService.getPermissions()).toEqual({
       ...defaultPermissions(),
       grants: ['shell.execute']
@@ -271,7 +286,14 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 3,
       providers: {
         defaultModelId: 'anthropic-model',
-        providers: [provider]
+        providers: [
+          expect.objectContaining({
+            id: 'nvidia',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1'
+          }),
+          provider
+        ]
       },
       mcp: {
         servers: [mcpServer]
@@ -380,13 +402,27 @@ describe('ConfigService unified settings document', () => {
     expect(configService.getProviders()).toEqual({
       schemaVersion: 1,
       defaultModelId: null,
-      providers: [provider]
+      providers: [
+        expect.objectContaining({
+          id: 'nvidia',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1'
+        }),
+        provider
+      ]
     });
     expect(readSettingsDocument()).toMatchObject({
       providers: {
         schemaVersion: 1,
         defaultModelId: null,
-        providers: [provider]
+        providers: [
+          expect.objectContaining({
+            id: 'nvidia',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1'
+          }),
+          provider
+        ]
       }
     });
   });

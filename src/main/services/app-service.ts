@@ -1,6 +1,5 @@
 import type { AppStatus, RocRunMode } from '../../shared/types';
 import { AgentService } from './agent-service';
-import { ChatService } from './chat-service';
 import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
 import { DeepAgentRuntimeService } from './deep-agent-runtime-service';
@@ -39,7 +38,6 @@ export type AppServices = {
   langChainModelFactory: LangChainModelFactory;
   deepAgentRuntimeService: DeepAgentRuntimeService;
   providerRuntimeService: ProviderRuntimeService;
-  chatService: ChatService;
   workspaceService: WorkspaceService;
   fileService: FileService;
   gitService: GitService;
@@ -77,7 +75,6 @@ export class AppService {
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly deepAgentRuntimeService: DeepAgentRuntimeService,
     private readonly providerRuntimeService: ProviderRuntimeService,
-    private readonly chatService: ChatService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
     private readonly gitService: GitService,
@@ -149,7 +146,6 @@ export class AppService {
       langChainModelFactory: this.langChainModelFactory,
       deepAgentRuntimeService: this.deepAgentRuntimeService,
       providerRuntimeService: this.providerRuntimeService,
-      chatService: this.chatService,
       workspaceService: this.workspaceService,
       fileService: this.fileService,
       gitService: this.gitService,
@@ -199,8 +195,7 @@ export function createAppServices(
     agentService,
     workspaceService
   );
-  const providerRuntimeService = new ProviderRuntimeService(configService, secretService, langChainModelFactory);
-  const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
+  const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);
@@ -233,7 +228,6 @@ export function createAppServices(
     langChainModelFactory,
     deepAgentRuntimeService,
     providerRuntimeService,
-    chatService,
     workspaceService,
     fileService,
     gitService,
@@ -260,7 +254,6 @@ export function createAppServices(
     langChainModelFactory,
     deepAgentRuntimeService,
     providerRuntimeService,
-    chatService,
     workspaceService,
     fileService,
     gitService,

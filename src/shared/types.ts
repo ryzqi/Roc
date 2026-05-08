@@ -696,34 +696,6 @@ export type ChatCancelRunResult = {
   cancelled: boolean;
 };
 
-export type ChatSubmitRequest = {
-  input: string;
-  mode: 'chat' | 'task';
-  enabledCapabilities: EnabledCapabilities;
-};
-
-export type ChatSubmitResult =
-  | {
-      status: 'answered';
-      assistantMessage: string;
-      providerId: string;
-      modelId: string;
-      createdAt: string;
-      durationMs: number;
-      summary: string;
-    }
-  | {
-      status: 'task_answered';
-      assistantMessage: string;
-      providerId: string;
-      modelId: string;
-      threadId: string;
-      runId: string;
-      createdAt: string;
-      durationMs: number;
-      summary: string;
-    };
-
 export type DeepAgentConfigPreview = {
   runnable: false;
   model: string;

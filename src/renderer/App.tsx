@@ -27,7 +27,6 @@ import type {
   AppSettings,
   AppStatus,
   BackgroundTask,
-  ChatSubmitResult,
   DiagnosticPackage,
   DoctorSnapshot,
   FilePreviewResult,
@@ -227,7 +226,6 @@ type LoadedState = {
   doctor: DoctorSnapshot;
   agent: AgentRuntimeStatus;
   agentCapabilityPreview: AgentCapabilityPreview | null;
-  chatResult: ChatSubmitResult | null;
   workspace: Workspace | null;
   fileTree: FileTreeResult | null;
   fileSearch: FileSearchResult | null;
@@ -707,7 +705,6 @@ export function App(): React.JSX.Element {
         ...emptyOperationsData(refreshedAppStatus.mode),
         agent: loadedAgent,
         agentCapabilityPreview: null,
-        chatResult: null,
         workspace: loadedWorkspace,
         rtkStatus: unwrap<RtkStatus>('rtk status', rtkStatus),
         ...emptyWorkspaceData(),
@@ -4514,26 +4511,6 @@ function ChatRunPanel({ state }: { state: ChatRunState }): React.JSX.Element {
         <span>{state.threadId ?? '无 thread'}</span>
         <span>{state.durationMs === null ? '运行中' : `${state.durationMs} ms`}</span>
         <span>{state.summary ?? 'deepagents streaming'}</span>
-      </div>
-    </div>
-  );
-}
-
-function ChatResultPanel({ result }: { result: ChatSubmitResult }): React.JSX.Element {
-  const taskMeta = result.status === 'task_answered' ? `${result.threadId} / ${result.runId}` : '普通聊天';
-  return (
-    <div className="chat-result-card" data-testid="chat-result">
-      <div className="chat-result-header">
-        <strong data-testid="chat-result-status">{result.status}</strong>
-        <span data-testid="chat-result-model">
-          {result.providerId} / {result.modelId}
-        </span>
-      </div>
-      <p data-testid="chat-result-message">{result.assistantMessage}</p>
-      <div className="chat-result-meta">
-        <span>{taskMeta}</span>
-        <span>{result.durationMs} ms</span>
-        <span>{result.summary}</span>
       </div>
     </div>
   );

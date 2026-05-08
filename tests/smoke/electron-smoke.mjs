@@ -96,12 +96,30 @@ async function startSmokeProvider() {
   const server = createServer((request, response) => {
     void (async () => {
       const rawBody = await readRequestBody(request);
+      const parsedBody = rawBody.length === 0 ? null : JSON.parse(rawBody);
       requests.push({
         method: request.method,
         url: request.url,
         authorization: request.headers.authorization,
-        body: rawBody.length === 0 ? null : JSON.parse(rawBody)
+        body: parsedBody
       });
+      if (parsedBody?.stream === true || request.headers.accept === 'text/event-stream') {
+        response.statusCode = 200;
+        response.setHeader('content-type', 'text/event-stream');
+        response.setHeader('cache-control', 'no-cache');
+        response.setHeader('connection', 'keep-alive');
+        response.write(
+          'data: {"choices":[{"index":0,"delta":{"content":"Smoke Provider "},"finish_reason":null}]}\n\n'
+        );
+        response.write(
+          'data: {"choices":[{"index":0,"delta":{"content":"已生成首轮回复。"},"finish_reason":null}]}\n\n'
+        );
+        response.write(
+          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":16,"completion_tokens":9,"total_tokens":25}}\n\n'
+        );
+        response.end('data: [DONE]\n\n');
+        return;
+      }
       response.statusCode = 200;
       response.setHeader('content-type', 'application/json');
       response.end(
@@ -1152,6 +1170,8 @@ try {
     throw new Error('Smoke could not read MCP view text.');
   }
   const providerSettingsEvidence = {
+    nvidiaListed: false,
+    nvidiaFixedDetail: false,
     smokeProviderListed: false,
     providerActionsVisible: false,
     addProviderEntryVisible: false,
@@ -1180,6 +1200,20 @@ try {
   await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="provider-list-item-nvidia"]', { timeout: 5000 });
+  providerSettingsEvidence.nvidiaListed = true;
+  providerSettingsEvidence.nvidiaFixedDetail = await page.evaluate(() => {
+    const modelId = document.querySelector('[data-testid="provider-draft-model-id"]');
+    const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
+    const deleteButton = document.querySelector('[data-testid="provider-delete-nvidia"]');
+    return (
+      modelId instanceof HTMLInputElement &&
+      endpoint instanceof HTMLInputElement &&
+      endpoint.readOnly === true &&
+      endpoint.value === 'https://integrate.api.nvidia.com/v1' &&
+      deleteButton === null
+    );
+  });
   providerSettingsEvidence.headerChromeRemoved = await page.evaluate(() => {
     const header = document.querySelector('[data-testid="settings-header"]');
     if (!(header instanceof HTMLElement)) {
@@ -1616,7 +1650,6 @@ try {
     return {
       exists: true,
       editable: !input.disabled && !input.readOnly,
-      resultAbsentBeforeSubmit: document.querySelector('[data-testid="chat-result"]') === null,
       visuallyFramed,
       rect: {
         width: rect.width,
@@ -1637,13 +1670,14 @@ try {
         composerRect.bottom <= chatViewRect.bottom &&
         chatViewRect.bottom - composerRect.bottom <= 4 &&
         viewport.height - composerRect.bottom <= 10,
+      resultAbsentBeforeSubmit: document.querySelector('[data-testid="chat-run"]') === null,
       resultAboveInput: true,
       value: input.value
     };
   });
   await page.keyboard.press('Enter');
-  await page.waitForSelector('[data-testid="chat-result"]', { timeout: 5000 });
-  const chatResultText = await page.textContent('[data-testid="chat-result"]');
+  await page.waitForSelector('[data-testid="chat-run"]', { timeout: 5000 });
+  const chatResultText = await page.textContent('[data-testid="chat-run"]');
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
   }
@@ -1652,7 +1686,7 @@ try {
   );
   const chatResultLayoutEvidence = await page.evaluate(() => {
     const input = document.querySelector('[data-testid="chat-input"]');
-    const result = document.querySelector('[data-testid="chat-result"]');
+    const result = document.querySelector('[data-testid="chat-run"]');
     if (!(input instanceof HTMLElement) || !(result instanceof HTMLElement)) {
       return {
         resultAboveInput: false
@@ -2360,6 +2394,8 @@ try {
       memoryRecoveryText.includes(memoryRecoveryApiEvidence.id) &&
       memoryRecoveryText.includes(memoryRecoveryApiEvidence.status),
     providerConfiguredVisible:
+      providerSettingsEvidence.nvidiaListed &&
+      providerSettingsEvidence.nvidiaFixedDetail &&
       providerSettingsEvidence.smokeProviderListed &&
       providerSettingsEvidence.addProviderEntryVisible &&
       providerSettingsEvidence.headerChromeRemoved &&
@@ -2500,7 +2536,7 @@ try {
       agentPreviewApiEvidence.policy === 'external_content_reference_only',
     providerChatResultVisible:
       chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
-      chatResultText.includes('task_answered') &&
+      chatResultText.includes('completed') &&
       chatResultText.includes('smoke-ui-openai / smoke-ui-openai-model') &&
       chatResultLayoutEvidence.resultAboveInput,
     taskRunCapabilityStored:
