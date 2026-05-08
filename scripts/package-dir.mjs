@@ -1,38 +1,26 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  createPackagingEnvironment,
+  restoreBetterSqlite3ForNode,
+  runCommand
+} from './lib/native-packaging.mjs';
 
-const electronVersion = '41.3.0';
 const projectRoot = resolve('.');
-const electronBuilderCache = resolve('.runtime/electron-builder-cache');
-mkdirSync(electronBuilderCache, { recursive: true });
+const packagingEnvironment = createPackagingEnvironment();
 let exitCode = 0;
 
 function run(command, args, options = { exitOnFailure: true }) {
-  const result = spawnSync(command, args, {
-    env: {
-      ...process.env,
-      ELECTRON_BUILDER_CACHE: electronBuilderCache,
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-    },
-    stdio: 'inherit',
-    shell: process.platform === 'win32'
+  const status = runCommand(command, args, {
+    cwd: projectRoot,
+    env: packagingEnvironment
   });
-
-  if (result.status === null) {
+  if (status !== 0) {
     if (options.exitOnFailure) {
-      process.exit(1);
+      process.exit(status);
     }
-    return 1;
-  }
-
-  if (result.status !== 0) {
-    if (options.exitOnFailure) {
-      process.exit(result.status);
-    }
-    return result.status;
+    return status;
   }
 
   return 0;
@@ -40,24 +28,25 @@ function run(command, args, options = { exitOnFailure: true }) {
 
 try {
   run('pnpm', ['build']);
-  run('pnpm', [
-    'exec',
-    'electron-rebuild',
-    '--force',
-    '--only',
-    'better-sqlite3',
-    '--version',
-    electronVersion,
-    '--module-dir',
-    projectRoot
-  ]);
   exitCode = run('pnpm', ['exec', 'electron-builder', '--dir', '--config', 'electron-builder.yml'], {
     exitOnFailure: false
   });
 } finally {
-  const restoreExitCode = run('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], {
-    exitOnFailure: false
-  });
+  let restoreExitCode = 0;
+  try {
+    restoreBetterSqlite3ForNode({
+      projectRoot,
+      run: (command, args, options) =>
+        runCommand(command, args, {
+          ...options,
+          cwd: projectRoot,
+          env: packagingEnvironment
+        })
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    restoreExitCode = 1;
+  }
   if (exitCode === 0 && restoreExitCode !== 0) {
     exitCode = restoreExitCode;
   }

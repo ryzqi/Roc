@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import { prepareAndVerifyWorkspaceBetterSqlite3, restoreBetterSqlite3ForNode } from './lib/native-packaging.mjs';
 
-const electronVersion = '41.3.0';
 let exitCode = 0;
 
 function run(command, args, options = { exitOnFailure: true }) {
@@ -21,10 +21,20 @@ function run(command, args, options = { exitOnFailure: true }) {
 }
 
 try {
-  run('pnpm', ['exec', 'electron-rebuild', '--force', '--only', 'better-sqlite3', '--version', electronVersion]);
+  prepareAndVerifyWorkspaceBetterSqlite3({
+    run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
+  });
   exitCode = run('node', ['tests/smoke/electron-smoke.mjs'], { exitOnFailure: false });
 } finally {
-  const restoreExitCode = run('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], { exitOnFailure: false });
+  let restoreExitCode = 0;
+  try {
+    restoreBetterSqlite3ForNode({
+      run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    restoreExitCode = 1;
+  }
   if (exitCode === 0 && restoreExitCode !== 0) {
     exitCode = restoreExitCode;
   }

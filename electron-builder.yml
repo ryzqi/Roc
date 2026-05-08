@@ -9,6 +9,9 @@ files:
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
+beforePack: ./scripts/builder-hooks/before-pack.mjs
+afterPack: ./scripts/builder-hooks/after-pack.mjs
+afterAllArtifactBuild: ./scripts/builder-hooks/after-all-artifact-build.mjs
 win:
   signAndEditExecutable: false
   target:
