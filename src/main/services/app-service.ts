@@ -3,6 +3,7 @@ import { AgentService } from './agent-service';
 import { ChatService } from './chat-service';
 import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
+import { DeepAgentRuntimeService } from './deep-agent-runtime-service';
 import { DiagnosticsService } from './diagnostics-service';
 import { DoctorService } from './doctor-service';
 import { FileService } from './file-service';
@@ -36,6 +37,7 @@ export type AppServices = {
   doctorService: DoctorService;
   agentService: AgentService;
   langChainModelFactory: LangChainModelFactory;
+  deepAgentRuntimeService: DeepAgentRuntimeService;
   providerRuntimeService: ProviderRuntimeService;
   chatService: ChatService;
   workspaceService: WorkspaceService;
@@ -73,6 +75,7 @@ export class AppService {
     private readonly doctorService: DoctorService,
     private readonly agentService: AgentService,
     private readonly langChainModelFactory: LangChainModelFactory,
+    private readonly deepAgentRuntimeService: DeepAgentRuntimeService,
     private readonly providerRuntimeService: ProviderRuntimeService,
     private readonly chatService: ChatService,
     private readonly workspaceService: WorkspaceService,
@@ -144,6 +147,7 @@ export class AppService {
       doctorService: this.doctorService,
       agentService: this.agentService,
       langChainModelFactory: this.langChainModelFactory,
+      deepAgentRuntimeService: this.deepAgentRuntimeService,
       providerRuntimeService: this.providerRuntimeService,
       chatService: this.chatService,
       workspaceService: this.workspaceService,
@@ -189,6 +193,12 @@ export function createAppServices(
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
+  const deepAgentRuntimeService = new DeepAgentRuntimeService(
+    langChainModelFactory,
+    taskService,
+    agentService,
+    workspaceService
+  );
   const providerRuntimeService = new ProviderRuntimeService(configService, secretService, langChainModelFactory);
   const chatService = new ChatService(configService, taskService, agentService, providerRuntimeService);
   const fileService = new FileService(paths, databaseService, workspaceService);
@@ -221,6 +231,7 @@ export function createAppServices(
     doctorService,
     agentService,
     langChainModelFactory,
+    deepAgentRuntimeService,
     providerRuntimeService,
     chatService,
     workspaceService,
@@ -247,6 +258,7 @@ export function createAppServices(
     doctorService,
     agentService,
     langChainModelFactory,
+    deepAgentRuntimeService,
     providerRuntimeService,
     chatService,
     workspaceService,

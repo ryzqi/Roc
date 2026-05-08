@@ -8,6 +8,10 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatSubmitRequest,
   ChatSubmitResult,
+  ChatCancelRunResult,
+  ChatRunEvent,
+  ChatStartRunRequest,
+  ChatStartRunResult,
   DeepAgentConfigPreview,
   DiagnosticPackage,
   DiagnosticPackageRequest,
@@ -132,6 +136,9 @@ export const ipcChannels = {
   agentGetStatus: 'roc:agent:get-status',
   agentGetConfigPreview: 'roc:agent:get-config-preview',
   agentGetCapabilityPreview: 'roc:agent:get-capability-preview',
+  chatRunEvent: 'roc:chat:run-event',
+  chatStartRun: 'roc:chat:start-run',
+  chatCancelRun: 'roc:chat:cancel-run',
   chatSubmit: 'roc:chat:submit',
   workspaceGetCurrent: 'roc:workspace:get-current',
   workspaceSelect: 'roc:workspace:select',
@@ -244,6 +251,9 @@ export type RocPreloadApi = {
     getCapabilityPreview: (request: ChatSubmitRequest['enabledCapabilities']) => Promise<IpcResult<AgentCapabilityPreview>>;
   };
   chat: {
+    startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;
+    cancelRun: (runId: string) => Promise<IpcResult<ChatCancelRunResult>>;
+    onRunEvent: (callback: (event: ChatRunEvent) => void) => () => void;
     submit: (request: ChatSubmitRequest) => Promise<IpcResult<ChatSubmitResult>>;
   };
   workspace: {

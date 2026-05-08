@@ -90,6 +90,13 @@ const rocApi: RocPreloadApi = {
     getCapabilityPreview: (request) => ipcRenderer.invoke(ipcChannels.agentGetCapabilityPreview, request)
   },
   chat: {
+    startRun: (request) => ipcRenderer.invoke(ipcChannels.chatStartRun, request),
+    cancelRun: (runId) => ipcRenderer.invoke(ipcChannels.chatCancelRun, runId),
+    onRunEvent: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.chatRunEvent, listener);
+      return () => ipcRenderer.off(ipcChannels.chatRunEvent, listener);
+    },
     submit: (request) => ipcRenderer.invoke(ipcChannels.chatSubmit, request)
   },
   workspace: {

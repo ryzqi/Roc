@@ -207,6 +207,12 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>
     wrapIpc(() => services.agentService.getCapabilityPreview(request))
   );
+  ipcMain.handle(ipcChannels.chatStartRun, (_event, request) =>
+    wrapIpc(() => services.deepAgentRuntimeService.startRun(request))
+  );
+  ipcMain.handle(ipcChannels.chatCancelRun, (_event, runId: string) =>
+    wrapIpc(() => services.deepAgentRuntimeService.cancelRun(runId))
+  );
   ipcMain.handle(ipcChannels.chatSubmit, (_event, request) =>
     wrapIpc(async () => {
       const result = await services.chatService.submit(request);

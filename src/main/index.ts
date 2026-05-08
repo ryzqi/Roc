@@ -106,6 +106,12 @@ async function createWindow(): Promise<void> {
   services.terminalSessionService.onExit((event) => {
     broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:exit', event);
   });
+  services.deepAgentRuntimeService.onRunEvent((event) => {
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:chat:run-event', event);
+    if (event.runId.startsWith('run_')) {
+      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+    }
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);

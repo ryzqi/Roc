@@ -77,6 +77,66 @@ describe('workspace dialog IPC', () => {
     expect(electronMock.handlers.has(ipcChannels.terminalCloseSession)).toBe(true);
   });
 
+  it('registers chat run IPC handlers and delegates to the Deep Agents runtime', async () => {
+    registerWorkspaceHandlers();
+    const startRunSpy = vi.spyOn(services.deepAgentRuntimeService, 'startRun').mockResolvedValue({
+      runId: 'chat_123',
+      mode: 'chat',
+      threadId: 'thread_123',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6',
+      createdAt: '2026-05-09T00:00:00.000Z'
+    });
+    const cancelRunSpy = vi.spyOn(services.deepAgentRuntimeService, 'cancelRun').mockReturnValue({
+      runId: 'chat_123',
+      cancelled: true
+    });
+
+    const startHandler = electronMock.handlers.get(ipcChannels.chatStartRun);
+    const cancelHandler = electronMock.handlers.get(ipcChannels.chatCancelRun);
+    if (startHandler === undefined || cancelHandler === undefined) {
+      throw new Error('chat run handlers were not registered.');
+    }
+
+    const startResult = await startHandler({}, {
+      input: 'hello',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const cancelResult = await cancelHandler({}, 'chat_123');
+
+    expect(startRunSpy).toHaveBeenCalledWith({
+      input: 'hello',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    expect(cancelRunSpy).toHaveBeenCalledWith('chat_123');
+    expect(startResult).toEqual({
+      ok: true,
+      data: {
+        runId: 'chat_123',
+        mode: 'chat',
+        threadId: 'thread_123',
+        providerId: 'nvidia',
+        modelId: 'moonshotai/kimi-k2.6',
+        createdAt: '2026-05-09T00:00:00.000Z'
+      }
+    });
+    expect(cancelResult).toEqual({
+      ok: true,
+      data: {
+        runId: 'chat_123',
+        cancelled: true
+      }
+    });
+  });
+
   it('returns null when directory selection is cancelled', async () => {
     registerWorkspaceHandlers();
     electronMock.showOpenDialog.mockResolvedValue({

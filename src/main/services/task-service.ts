@@ -349,6 +349,24 @@ export class TaskService {
     };
   }
 
+  markRunRunning(runId: string): void {
+    const run = this.getRun(runId);
+    const now = new Date().toISOString();
+    const transaction = this.database.db.transaction(() => {
+      this.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('running', now, run.threadId);
+      this.database.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('running', run.id);
+      this.recordEvent({
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'agent_update',
+        payload: {
+          status: 'running'
+        }
+      });
+    });
+    transaction();
+  }
+
   completeRunWithProviderResult(input: { runId: string; result: ProviderExecutionResult }): void {
     const run = this.getRun(input.runId);
     const now = new Date().toISOString();
