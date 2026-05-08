@@ -3047,33 +3047,53 @@ button.model-pill {
 }
 
 .settings-list {
-  background: rgba(255, 255, 255, 0.98);
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--surface-strong);
 }
 
 .settings-item {
+  position: relative;
   width: 100%;
-  min-height: 46px;
+  min-height: 40px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 14px;
   border: 0;
-  border-bottom: 1px solid rgba(238, 242, 247, 0.96);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .settings-item:hover {
   color: var(--ink);
-  background: rgba(248, 250, 253, 0.98);
+  background: var(--accent-soft);
 }
 
 .settings-item.active {
   color: var(--ink);
-  background: rgba(244, 247, 251, 0.96);
+  background: var(--accent-soft);
   font-weight: 700;
+}
+
+.settings-item.active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 .settings-item:last-child {
@@ -3091,6 +3111,16 @@ button.model-pill {
   gap: 12px;
 }
 
+.settings-panel-stack .card {
+  padding: 22px 24px;
+}
+
+.settings-panel-stack .card:hover {
+  transform: none;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3102,9 +3132,9 @@ button.model-pill {
 .settings-form input,
 .settings-form select,
 .settings-form textarea {
-  border: 1px solid rgba(214, 223, 235, 0.96);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
   color: var(--ink);
   font-size: 13px;
 }
@@ -3113,6 +3143,11 @@ button.model-pill {
   min-height: 34px;
   padding: 0 12px;
   font-weight: 700;
+}
+
+.settings-actions button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface-card-hover);
 }
 
 .settings-form input,
@@ -3374,9 +3409,13 @@ button.model-pill {
   gap: 8px;
 }
 .page-actions button.primary {
-  background: #1f6feb;
-  color: white;
-  border: 1px solid #1f6feb;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+}
+.page-actions button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .page-actions button.primary:disabled,
 .page-actions button:disabled {
@@ -3389,25 +3428,25 @@ button.model-pill {
   height: 6px;
   border-radius: 50%;
   margin-left: 6px;
-  background: #f59e0b;
+  background: var(--trend-warn);
 }
 .settings-save-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: rgba(255, 244, 244, 0.95);
+  border: 1px solid rgba(238, 194, 194, 0.92);
+  color: var(--trend-bad);
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   margin-bottom: 8px;
 }
 .field-hint {
   display: block;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--muted);
   margin-top: 4px;
 }
 .card-hint {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--muted);
   margin: 0 0 12px 0;
 }
 .card-title.secondary {
