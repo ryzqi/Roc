@@ -1143,8 +1143,14 @@ try {
     smokeProviderListed: false,
     providerActionsVisible: false,
     addProviderEntryVisible: false,
+    headerChromeRemoved: false,
+    apiKeyHelpRemoved: false,
+    detailScrollReachable: false,
+    searchMatchesNameAndId: false,
+    openaiSlugGenerated: false,
     openaiCreated: false,
     openaiSecretStored: false,
+    anthropicSlugGenerated: false,
     anthropicCreated: false,
     anthropicSecretStored: false,
     openaiReady: false,
@@ -1154,6 +1160,20 @@ try {
   await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
+  providerSettingsEvidence.headerChromeRemoved = await page.evaluate(() => {
+    const header = document.querySelector('[data-testid="settings-header"]');
+    if (!(header instanceof HTMLElement)) {
+      return false;
+    }
+    return (
+      header.querySelector('.page-copy') === null &&
+      header.querySelector('.page-kicker') === null &&
+      header.querySelector('.page-title') === null &&
+      header.querySelector('[data-testid="settings-dirty-count"]') instanceof HTMLElement &&
+      header.querySelector('[data-testid="settings-reset-all"]') instanceof HTMLElement &&
+      header.querySelector('[data-testid="settings-save-all"]') instanceof HTMLElement
+    );
+  });
   await clickSmokeControl(page, '[data-testid="provider-list-item-smoke-provider"]');
   await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-delete-smoke-provider"]', { timeout: 5000 });
@@ -1178,34 +1198,124 @@ try {
   await page.waitForSelector('[data-testid="provider-add-openai"]', { timeout: 5000 });
   providerSettingsEvidence.addProviderEntryVisible = true;
   await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
-  await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-openai');
-  await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI OpenAI Provider');
+  const openaiProviderName = 'Smoke UI OpenAI';
+  await page.fill('[data-testid="provider-draft-name"]', openaiProviderName);
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model | Smoke UI OpenAI Model');
+  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
-  await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI OpenAI Provider');
+  await waitForTextContent(page, '[data-testid="settings-view"]', openaiProviderName);
   providerSettingsEvidence.openaiCreated = true;
-  await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-openai"]', { timeout: 5000 });
-  await page.fill('[data-testid="provider-secret-input-smoke-ui-openai"]', 'sk-smoke-ui-openai');
-  await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-openai"]');
-  await page.waitForSelector('[data-testid="provider-secret-clear-smoke-ui-openai"]', { timeout: 5000 });
+  const openaiProviderState = await page.evaluate(async (providerName) => {
+    const result = await window.roc.settings.get();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    const provider = result.data.providers.find((entry) => entry.name === providerName);
+    return {
+      statusText: document.querySelector('[data-testid="provider-draft-status"]')?.textContent ?? null,
+      providerIds: result.data.providers.map((entry) => `${entry.id}:${entry.name}`),
+      providerId: provider?.id ?? null
+    };
+  }, openaiProviderName);
+  if (openaiProviderState.providerId === null) {
+    throw new Error(
+      `missing provider for ${openaiProviderName}; status=${openaiProviderState.statusText}; providers=${openaiProviderState.providerIds.join(',')}`
+    );
+  }
+  const openaiProviderId = openaiProviderState.providerId;
+  providerSettingsEvidence.openaiSlugGenerated = openaiProviderId === 'smoke-ui-openai';
+  const providerDetailText = await page.textContent('[data-testid="provider-detail"]');
+  providerSettingsEvidence.apiKeyHelpRemoved =
+    providerDetailText !== null && !providerDetailText.includes('Get your API key from');
+  await clickSmokeControl(page, `[data-testid="provider-list-item-${openaiProviderId}"]`);
+  await page.waitForSelector(`[data-testid="provider-secret-input-${openaiProviderId}"]`, { timeout: 5000 });
+  const providerDetailScrollEvidence = await page.evaluate(() => {
+    const detail = document.querySelector('[data-testid="provider-detail"]');
+    const providerSave = document.querySelector('[data-testid="provider-save"]');
+    const secretSave = document.querySelector('[data-testid="provider-secret-save-smoke-ui-openai"]');
+    if (
+      !(detail instanceof HTMLElement) ||
+      !(providerSave instanceof HTMLElement) ||
+      !(secretSave instanceof HTMLElement)
+    ) {
+      return {
+        exists: false,
+        overflowY: null,
+        hadOverflow: false,
+        scrollMoved: false,
+        providerSaveVisible: false,
+        secretSaveVisible: false
+      };
+    }
+    const before = detail.scrollTop;
+    detail.scrollTop = detail.scrollHeight;
+    const after = detail.scrollTop;
+    const detailRect = detail.getBoundingClientRect();
+    const providerSaveRect = providerSave.getBoundingClientRect();
+    const secretSaveRect = secretSave.getBoundingClientRect();
+    const isVisibleWithinDetail = (rect) =>
+      rect.top >= detailRect.top - 1 && rect.bottom <= detailRect.bottom + 1;
+    return {
+      exists: true,
+      overflowY: window.getComputedStyle(detail).overflowY,
+      hadOverflow: detail.scrollHeight > detail.clientHeight,
+      scrollMoved: after > before,
+      providerSaveVisible: isVisibleWithinDetail(providerSaveRect),
+      secretSaveVisible: isVisibleWithinDetail(secretSaveRect)
+    };
+  });
+  providerSettingsEvidence.detailScrollReachable =
+    providerDetailScrollEvidence.exists &&
+    providerDetailScrollEvidence.overflowY === 'auto' &&
+    (!providerDetailScrollEvidence.hadOverflow || providerDetailScrollEvidence.scrollMoved) &&
+    providerDetailScrollEvidence.providerSaveVisible &&
+    providerDetailScrollEvidence.secretSaveVisible;
+  await page.fill(`[data-testid="provider-secret-input-${openaiProviderId}"]`, 'sk-smoke-ui-openai');
+  await clickSmokeControl(page, `[data-testid="provider-secret-save-${openaiProviderId}"]`);
+  await page.waitForSelector(`[data-testid="provider-secret-clear-${openaiProviderId}"]`, { timeout: 5000 });
   providerSettingsEvidence.openaiSecretStored = true;
   await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
   await clickSmokeControl(page, '[data-testid="provider-draft-type-anthropic_compatible"]');
-  await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-anthropic');
-  await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI Anthropic Provider');
+  const anthropicProviderName = 'Smoke UI Anthropic';
+  await page.fill('[data-testid="provider-draft-name"]', anthropicProviderName);
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
-  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model | Smoke UI Anthropic Model');
+  await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
-  await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI Anthropic Provider');
+  await waitForTextContent(page, '[data-testid="settings-view"]', anthropicProviderName);
   providerSettingsEvidence.anthropicCreated = true;
-  await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-anthropic"]', { timeout: 5000 });
-  await page.fill('[data-testid="provider-secret-input-smoke-ui-anthropic"]', 'sk-smoke-ui-anthropic');
-  await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-anthropic"]');
-  await page.waitForSelector('[data-testid="provider-secret-clear-smoke-ui-anthropic"]', { timeout: 5000 });
+  const anthropicProviderState = await page.evaluate(async (providerName) => {
+    const result = await window.roc.settings.get();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    const provider = result.data.providers.find((entry) => entry.name === providerName);
+    return {
+      statusText: document.querySelector('[data-testid="provider-draft-status"]')?.textContent ?? null,
+      providerIds: result.data.providers.map((entry) => `${entry.id}:${entry.name}`),
+      providerId: provider?.id ?? null
+    };
+  }, anthropicProviderName);
+  if (anthropicProviderState.providerId === null) {
+    throw new Error(
+      `missing provider for ${anthropicProviderName}; status=${anthropicProviderState.statusText}; providers=${anthropicProviderState.providerIds.join(',')}`
+    );
+  }
+  const anthropicProviderId = anthropicProviderState.providerId;
+  providerSettingsEvidence.anthropicSlugGenerated = anthropicProviderId === 'smoke-ui-anthropic';
+  await clickSmokeControl(page, `[data-testid="provider-list-item-${anthropicProviderId}"]`);
+  await page.waitForSelector(`[data-testid="provider-secret-input-${anthropicProviderId}"]`, { timeout: 5000 });
+  await page.fill(`[data-testid="provider-secret-input-${anthropicProviderId}"]`, 'sk-smoke-ui-anthropic');
+  await clickSmokeControl(page, `[data-testid="provider-secret-save-${anthropicProviderId}"]`);
+  await page.waitForSelector(`[data-testid="provider-secret-clear-${anthropicProviderId}"]`, { timeout: 5000 });
   providerSettingsEvidence.anthropicSecretStored = true;
-  await clickSmokeControl(page, '[data-testid="provider-list-item-smoke-ui-openai"]');
-  await clickSmokeControl(page, '[data-testid="provider-test-smoke-ui-openai"]');
+  await page.fill('[data-testid="provider-search"]', openaiProviderName);
+  await page.waitForSelector(`[data-testid="provider-list-item-${openaiProviderId}"]`, { timeout: 5000 });
+  await page.fill('[data-testid="provider-search"]', openaiProviderId);
+  await page.waitForSelector(`[data-testid="provider-list-item-${openaiProviderId}"]`, { timeout: 5000 });
+  await page.fill('[data-testid="provider-search"]', '');
+  providerSettingsEvidence.searchMatchesNameAndId = true;
+  await clickSmokeControl(page, `[data-testid="provider-list-item-${openaiProviderId}"]`);
+  await clickSmokeControl(page, `[data-testid="provider-test-${openaiProviderId}"]`);
   await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
   providerSettingsEvidence.openaiReady = true;
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
@@ -2059,8 +2169,14 @@ try {
     providerConfiguredVisible:
       providerSettingsEvidence.smokeProviderListed &&
       providerSettingsEvidence.addProviderEntryVisible &&
+      providerSettingsEvidence.headerChromeRemoved &&
+      providerSettingsEvidence.apiKeyHelpRemoved &&
+      providerSettingsEvidence.detailScrollReachable &&
+      providerSettingsEvidence.searchMatchesNameAndId &&
+      providerSettingsEvidence.openaiSlugGenerated &&
       providerSettingsEvidence.openaiCreated &&
       providerSettingsEvidence.openaiSecretStored &&
+      providerSettingsEvidence.anthropicSlugGenerated &&
       providerSettingsEvidence.anthropicCreated &&
       providerSettingsEvidence.anthropicSecretStored &&
       providerSettingsEvidence.openaiReady &&

@@ -3055,30 +3055,25 @@ button.model-pill {
 }
 
 .settings-page-strip {
-  align-items: flex-end;
-  padding: 4px 2px 14px;
-  margin-bottom: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 2px 2px 10px;
+  margin-bottom: 4px;
   background: transparent;
   border-bottom: 0;
 }
 
-.settings-page-strip .page-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.settings-page-strip .page-title {
-  margin-top: 0;
-}
-
 .settings-view-stage {
   padding: 8px 0 8px;
+  min-height: 0;
 }
 
 .settings-layout {
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
 }
 
 .settings-sidebar-card {
@@ -3145,6 +3140,7 @@ button.model-pill {
 .settings-form {
   display: grid;
   gap: 12px;
+  min-height: 0;
 }
 
 .settings-panel-stack .card {
@@ -3154,6 +3150,7 @@ button.model-pill {
 .settings-panel-stack--compact {
   gap: 10px;
   align-content: start;
+  min-height: 0;
 }
 
 .settings-panel-stack--compact .card {
@@ -3448,22 +3445,55 @@ button.model-pill {
 }
 
 /* settings module additions */
-.page-actions {
+.settings-page-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
-.page-actions button.primary {
+
+.settings-page-actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-page-actions button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface-card-hover);
+}
+
+.settings-page-actions button.primary {
   background: var(--accent);
   color: #fff;
-  border: 1px solid var(--accent);
+  border-color: var(--accent);
 }
-.page-actions button.primary:hover:not(:disabled) {
+
+.settings-page-actions button.primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
-.page-actions button.primary:disabled,
-.page-actions button:disabled {
+
+.settings-page-actions button.secondary {
+  border-color: rgba(190, 206, 235, 0.98);
+  background: rgba(242, 247, 255, 0.98);
+  color: var(--accent);
+}
+
+.settings-page-actions button.secondary:hover:not(:disabled) {
+  border-color: rgba(166, 189, 227, 0.98);
+  background: rgba(234, 242, 255, 0.98);
+}
+
+.settings-page-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -3745,6 +3775,10 @@ button.model-pill {
 
 /* providers section dual-pane layout */
 .provider-settings-card {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 16px 16px 18px;
 }
 
@@ -3812,6 +3846,7 @@ button.model-pill {
   grid-template-columns: minmax(248px, 280px) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
+  min-height: 0;
 }
 
 .provider-list {
@@ -3898,7 +3933,9 @@ button.model-pill {
   display: grid;
   align-content: start;
   gap: 12px;
-  padding: 16px 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.98);
@@ -4188,6 +4225,7 @@ button.model-pill {
 
   .provider-split {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .provider-list {

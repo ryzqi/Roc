@@ -29,5 +29,7 @@ describe('providers section', () => {
     expect(html).not.toContain('data-testid="provider-add-anthropic"');
     expect(html).toContain('data-testid="provider-draft-type-openai_compatible"');
     expect(html).toContain('data-testid="provider-draft-type-anthropic_compatible"');
+    expect(html).not.toContain('data-testid="provider-draft-id"');
+    expect(html).not.toContain('Get your API key from');
   });
 });

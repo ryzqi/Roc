@@ -304,16 +304,6 @@ export function ProvidersSection({
           ) : null}
           <div className="form-grid">
             <label className="field">
-              <span>Provider ID</span>
-              <input
-                data-testid="provider-draft-id"
-                disabled={!isCreating}
-                onChange={(event) => onUpdateDraft({ id: event.currentTarget.value })}
-                placeholder="e.g. my-openai"
-                value={draft.id}
-              />
-            </label>
-            <label className="field">
               <span>名称</span>
               <input
                 data-testid="provider-draft-name"
@@ -326,7 +316,7 @@ export function ProvidersSection({
           <div className="provider-detail-section">
             <span className="provider-detail-label">API Key</span>
             {selectedProvider === null ? (
-              <p className="card-hint">先填写 ID/名称/Endpoint/模型并保存草稿,再为该 Provider 录入 API Key。</p>
+              <p className="card-hint">保存 Provider 后可录入 API Key。</p>
             ) : (
               <ProviderSecretEditor
                 busy={busy}
@@ -336,12 +326,6 @@ export function ProvidersSection({
                 stored={stored}
               />
             )}
-            <p className="card-hint">
-              Get your API key from{' '}
-              <a href={meta.apiKeyHelpUrl} target="_blank" rel="noreferrer noopener">
-                {meta.apiKeyHelpLabel}
-              </a>
-            </p>
           </div>
           <label className="field">
             <span>Base URL</span>

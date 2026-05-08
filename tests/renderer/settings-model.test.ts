@@ -10,8 +10,10 @@ import type {
 import {
   applySettingsSnapshot,
   buildImpactRows,
+  assertProviderCreateIdAvailable,
   buildSettingsSaveRequest,
   buildEnabledModelOptions,
+  buildProviderIdFromName,
   buildProviderConfigFromDraft,
   createProviderDraft,
   deleteProviderFromSettingsSaveRequest,
@@ -85,6 +87,11 @@ describe('settings model helpers', () => {
     });
   });
 
+  it('builds deterministic provider ids from provider names', () => {
+    expect(buildProviderIdFromName(' Smoke UI OpenAI ')).toBe('smoke-ui-openai');
+    expect(buildProviderIdFromName('Anthropic-Compatible / East')).toBe('anthropic-compatible-east');
+  });
+
   it('parses model lines into enabled provider model configs', () => {
     expect(parseProviderModelDraft('gpt-4.1 | GPT 4.1\nclaude-sonnet-4-5')).toEqual([
       {
@@ -104,10 +111,9 @@ describe('settings model helpers', () => {
     ]);
   });
 
-  it('builds provider config from a draft and derives a safeStorage credential reference', () => {
+  it('builds provider config from create drafts and derives a safeStorage credential reference', () => {
     const draft = {
       ...createProviderDraft('anthropic_compatible'),
-      id: 'anthropic-east',
       name: 'Anthropic East',
       endpoint: 'https://anthropic.example.test/v1',
       modelsText: 'claude-sonnet-4-5 | Claude Sonnet 4.5'
@@ -132,15 +138,63 @@ describe('settings model helpers', () => {
     });
   });
 
-  it('rejects provider drafts with invalid id characters', () => {
+  it('keeps the existing provider id when editing a saved provider', () => {
+    const provider: ProviderConfig = {
+      id: 'anthropic-east',
+      name: 'Anthropic East',
+      type: 'anthropic_compatible',
+      endpoint: 'https://anthropic.example.test/v1',
+      credentialRef: 'secret:anthropic-east',
+      enabled: true,
+      models: [
+        {
+          id: 'claude-sonnet-4-5',
+          displayName: 'Claude Sonnet 4.5',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    expect(buildProviderConfigFromDraft(createProviderDraft('anthropic_compatible', provider))).toEqual(provider);
+  });
+
+  it('rejects provider drafts whose names cannot produce a valid id', () => {
     const draft = {
       ...createProviderDraft('openai_compatible'),
-      id: 'openai/main',
-      name: 'OpenAI Main',
+      name: '!!!',
       endpoint: 'https://openai.example.test/v1',
       modelsText: 'gpt-x | GPT X'
     };
-    expect(() => buildProviderConfigFromDraft(draft)).toThrow('Provider ID');
+    expect(() => buildProviderConfigFromDraft(draft)).toThrow('Provider 名称');
+  });
+
+  it('rejects create-mode provider ids that would collide with an existing provider', () => {
+    expect(() =>
+      assertProviderCreateIdAvailable(
+        [
+          {
+            id: 'Smoke-UI-OpenAI',
+            name: 'Existing Provider',
+            type: 'openai_compatible',
+            endpoint: 'https://existing.example.test/v1',
+            credentialRef: 'secret:Smoke-UI-OpenAI',
+            enabled: true,
+            models: [
+              {
+                id: 'existing-model',
+                displayName: 'Existing Model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ],
+        'smoke-ui-openai'
+      )
+    ).toThrow('ID 已存在');
   });
 
   it('lists default-model choices from enabled providers and enabled models only', () => {
@@ -379,14 +433,12 @@ describe('settings model helpers', () => {
   it('providerTypeMeta returns OpenAI defaults for openai_compatible', () => {
     const meta = providerTypeMeta('openai_compatible');
     expect(meta.subtitle).toContain('OpenAI');
-    expect(meta.apiKeyHelpUrl).toBe('https://platform.openai.com/api-keys');
     expect(meta.defaultBaseUrl).toBe('https://api.openai.com/v1');
   });
 
   it('providerTypeMeta returns Anthropic defaults for anthropic_compatible', () => {
     const meta = providerTypeMeta('anthropic_compatible');
     expect(meta.subtitle).toContain('Anthropic');
-    expect(meta.apiKeyHelpUrl).toBe('https://console.anthropic.com/settings/keys');
     expect(meta.defaultBaseUrl).toBe('https://api.anthropic.com');
   });
 });

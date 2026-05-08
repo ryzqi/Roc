@@ -13,6 +13,7 @@ import type {
 } from '../../shared/types';
 import {
   applySettingsSnapshot,
+  assertProviderCreateIdAvailable,
   buildProviderConfigFromDraft,
   createProviderDraft,
   deleteProviderFromSettingsSaveRequest,
@@ -123,6 +124,9 @@ export function SettingsView({
     let provider: ProviderConfig;
     try {
       provider = buildProviderConfigFromDraft(providerDraft);
+      if (providerDraft.mode === 'create') {
+        assertProviderCreateIdAvailable(state.providers, provider.id);
+      }
     } catch (error) {
       setProviderDraftError(error instanceof Error ? error.message : 'Provider 草稿无效。');
       return;
@@ -134,7 +138,7 @@ export function SettingsView({
     updateLoadedState(applySettingsSnapshot(saved));
     setProviderDraft(createProviderDraft(providerDraft.type, provider));
     setProviderDraftError(null);
-  }, [providerDraft, buildBaseSaveRequest, updateLoadedState]);
+  }, [providerDraft, buildBaseSaveRequest, state.providers, updateLoadedState]);
 
   const deleteProvider = useCallback(
     async (providerId: string): Promise<void> => {
@@ -252,15 +256,12 @@ export function SettingsView({
   return (
     <>
       <div className="page-strip settings-page-strip" data-testid="settings-header">
-        <div className="page-copy">
-          <div className="page-kicker">控制面</div>
-          <h1 className="page-title">设置</h1>
-        </div>
-        <div className="page-actions">
-          <span className={dirtyCount === 0 ? 'pill ok' : 'pill warn'} data-testid="settings-dirty-count">
-            {dirtyCount === 0 ? '无未保存变更' : `未保存 ${dirtyCount} 项`}
-          </span>
+        <span className={dirtyCount === 0 ? 'pill ok' : 'pill warn'} data-testid="settings-dirty-count">
+          {dirtyCount === 0 ? '无未保存变更' : `未保存 ${dirtyCount} 项`}
+        </span>
+        <div className="settings-page-actions">
           <button
+            className="secondary"
             data-testid="settings-reset-all"
             disabled={!draft.isDirty || savingAll}
             onClick={() => draft.resetAll()}

@@ -67,6 +67,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 ];
 
 const editableProviderTypes: readonly EditableProviderType[] = ['openai_compatible', 'anthropic_compatible'];
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export function selectSettingsSection(current: SettingsSectionId, requested: string): SettingsSectionId {
   if (SETTINGS_SECTIONS.some((section) => section.id === requested)) {
@@ -129,18 +130,51 @@ export function parseProviderModelDraft(modelsText: string): ProviderModel[] {
     });
 }
 
-const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+export function buildProviderIdFromName(name: string): string {
+  const normalizedName = name.trim();
+  if (normalizedName.length === 0) {
+    throw new Error('Provider 名称不能为空。');
+  }
+  const id = normalizedName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (id.length === 0 || !PROVIDER_ID_PATTERN.test(id)) {
+    throw new Error('Provider 名称无法生成合法 ID，请使用字母或数字。');
+  }
+  return id;
+}
 
-export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
+function resolveProviderDraftId(draft: ProviderDraft): string {
+  if (draft.mode === 'create') {
+    return buildProviderIdFromName(draft.name);
+  }
   const id = draft.id.trim();
-  const name = draft.name.trim();
-  const endpoint = draft.endpoint.trim();
   if (id.length === 0) {
     throw new Error('Provider ID 不能为空。');
   }
   if (!PROVIDER_ID_PATTERN.test(id)) {
     throw new Error('Provider ID 只允许字母、数字、下划线和短横线。');
   }
+  return id;
+}
+
+export function assertProviderCreateIdAvailable(
+  providers: readonly ProviderConfig[],
+  providerId: string
+): void {
+  const normalizedProviderId = providerId.trim().toLowerCase();
+  if (providers.some((provider) => provider.id.trim().toLowerCase() === normalizedProviderId)) {
+    throw new Error('Provider 名称生成的 ID 已存在，请调整名称后重试。');
+  }
+}
+
+export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
+  const id = resolveProviderDraftId(draft);
+  const name = draft.name.trim();
+  const endpoint = draft.endpoint.trim();
   if (name.length === 0) {
     throw new Error('Provider 名称不能为空。');
   }
@@ -178,8 +212,6 @@ export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledMo
 
 export type ProviderTypeMeta = {
   subtitle: string;
-  apiKeyHelpUrl: string;
-  apiKeyHelpLabel: string;
   defaultBaseUrl: string;
 };
 
@@ -187,15 +219,11 @@ export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
   if (type === 'anthropic_compatible') {
     return {
       subtitle: 'Anthropic compatible /messages endpoint',
-      apiKeyHelpUrl: 'https://console.anthropic.com/settings/keys',
-      apiKeyHelpLabel: 'Anthropic Console API Keys',
       defaultBaseUrl: 'https://api.anthropic.com'
     };
   }
   return {
     subtitle: 'OpenAI compatible chat completions endpoint',
-    apiKeyHelpUrl: 'https://platform.openai.com/api-keys',
-    apiKeyHelpLabel: 'OpenAI API Keys',
     defaultBaseUrl: 'https://api.openai.com/v1'
   };
 }
