@@ -251,7 +251,7 @@ export function SettingsView({
 
   return (
     <>
-      <div className="page-strip" data-testid="settings-header">
+      <div className="page-strip settings-page-strip" data-testid="settings-header">
         <div className="page-copy">
           <div className="page-kicker">控制面</div>
           <h1 className="page-title">设置</h1>
@@ -279,9 +279,9 @@ export function SettingsView({
           </button>
         </div>
       </div>
-      <section className="canvas-stage stage-grid" data-testid="settings-view">
-        <div className="split">
-          <nav className="settings-list">
+      <section className="canvas-stage stage-grid settings-view-stage" data-testid="settings-view">
+        <div className="split settings-layout">
+          <nav className="settings-list settings-sidebar-card">
             {SETTINGS_SECTIONS.map((item) => {
               const dirty = draft.dirtyIds.includes(item.id);
               return (
@@ -298,7 +298,7 @@ export function SettingsView({
               );
             })}
           </nav>
-          <div className="settings-panel-stack">
+          <div className="settings-panel-stack settings-panel-stack--compact">
             {saveError === null ? null : (
               <div className="settings-save-error" data-testid="settings-save-error">
                 {saveError}

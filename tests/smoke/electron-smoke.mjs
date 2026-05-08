@@ -642,7 +642,6 @@ try {
     viewSelector: '[data-testid="git-view"]'
   });
   await waitForTextContent(page, '[data-testid="git-view"]', 'phase-three-notes.txt');
-  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
@@ -1140,12 +1139,26 @@ try {
   if (mcpText === null) {
     throw new Error('Smoke could not read MCP view text.');
   }
+  const providerSettingsEvidence = {
+    smokeProviderListed: false,
+    providerActionsVisible: false,
+    addProviderEntryVisible: false,
+    openaiCreated: false,
+    openaiSecretStored: false,
+    anthropicCreated: false,
+    anthropicSecretStored: false,
+    openaiReady: false,
+    defaultModelSelectable: false
+  };
   await clickSmokeControl(page, '[data-testid="settings-gear"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="settings-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-settings"]', { timeout: 5000 });
+  await clickSmokeControl(page, '[data-testid="provider-list-item-smoke-provider"]');
   await page.waitForSelector('[data-testid="provider-test-smoke-provider"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-delete-smoke-provider"]', { timeout: 5000 });
+  providerSettingsEvidence.smokeProviderListed = true;
+  providerSettingsEvidence.providerActionsVisible = true;
   for (const sectionId of [
     'providers',
     'default-model',
@@ -1161,6 +1174,9 @@ try {
     });
   }
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
+  await page.waitForSelector('[data-testid="provider-add-anthropic"]', { state: 'detached', timeout: 5000 });
+  await page.waitForSelector('[data-testid="provider-add-openai"]', { timeout: 5000 });
+  providerSettingsEvidence.addProviderEntryVisible = true;
   await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
   await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-openai');
   await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI OpenAI Provider');
@@ -1168,34 +1184,42 @@ try {
   await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model | Smoke UI OpenAI Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI OpenAI Provider');
+  providerSettingsEvidence.openaiCreated = true;
   await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-openai"]', { timeout: 5000 });
   await page.fill('[data-testid="provider-secret-input-smoke-ui-openai"]', 'sk-smoke-ui-openai');
   await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-openai"]');
-  await waitForTextContent(page, '[data-testid="provider-secret-status-smoke-ui-openai"]', '凭据已存储');
-  await clickSmokeControl(page, '[data-testid="provider-add-anthropic"]');
+  await page.waitForSelector('[data-testid="provider-secret-clear-smoke-ui-openai"]', { timeout: 5000 });
+  providerSettingsEvidence.openaiSecretStored = true;
+  await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
+  await clickSmokeControl(page, '[data-testid="provider-draft-type-anthropic_compatible"]');
   await page.fill('[data-testid="provider-draft-id"]', 'smoke-ui-anthropic');
   await page.fill('[data-testid="provider-draft-name"]', 'Smoke UI Anthropic Provider');
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
   await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-anthropic-model | Smoke UI Anthropic Model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await waitForTextContent(page, '[data-testid="settings-view"]', 'Smoke UI Anthropic Provider');
+  providerSettingsEvidence.anthropicCreated = true;
   await page.waitForSelector('[data-testid="provider-secret-input-smoke-ui-anthropic"]', { timeout: 5000 });
   await page.fill('[data-testid="provider-secret-input-smoke-ui-anthropic"]', 'sk-smoke-ui-anthropic');
   await clickSmokeControl(page, '[data-testid="provider-secret-save-smoke-ui-anthropic"]');
-  await waitForTextContent(page, '[data-testid="provider-secret-status-smoke-ui-anthropic"]', '凭据已存储');
+  await page.waitForSelector('[data-testid="provider-secret-clear-smoke-ui-anthropic"]', { timeout: 5000 });
+  providerSettingsEvidence.anthropicSecretStored = true;
+  await clickSmokeControl(page, '[data-testid="provider-list-item-smoke-ui-openai"]');
   await clickSmokeControl(page, '[data-testid="provider-test-smoke-ui-openai"]');
-  await waitForTextContent(page, '[data-testid="settings-view"]', 'smoke-ui-openai:ready');
+  await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
+  providerSettingsEvidence.openaiReady = true;
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
   await page.waitForSelector('[data-testid="default-model-smoke-ui-openai-model"]', { timeout: 5000 });
   await clickSmokeControl(page, '[data-testid="default-model-smoke-ui-openai-model"]');
   await waitForTextContent(page, '[data-testid="default-model-settings"]', 'smoke-ui-openai-model');
+  providerSettingsEvidence.defaultModelSelectable = true;
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
-  await waitForTextContent(page, '[data-testid="settings-view"]', 'smoke-ui-openai:ready');
+  await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
   const settingsText = await page.textContent('[data-testid="settings-view"]');
   if (settingsText === null) {
     throw new Error('Smoke could not read settings view text.');
   }
-  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
+  await page.click('[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
@@ -1565,7 +1589,7 @@ try {
   const sidebarScrollEvidenceBefore = await page.evaluate(() => {
     const sidebar = document.querySelector('.sidebar');
     const controlBlock = document.querySelector('.sidebar-block--control');
-    const settingsButton = Array.from(document.querySelectorAll('.nav-button')).find((node) => node.textContent?.includes('设置'));
+    const settingsButton = document.querySelector('[data-testid="settings-gear"]');
     if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
       return {
         sidebarExists: sidebar !== null,
@@ -1602,7 +1626,7 @@ try {
   const sidebarScrollEvidenceAfter = await page.evaluate(() => {
     const sidebar = document.querySelector('.sidebar');
     const controlBlock = document.querySelector('.sidebar-block--control');
-    const settingsButton = Array.from(document.querySelectorAll('.nav-button')).find((node) => node.textContent?.includes('设置'));
+    const settingsButton = document.querySelector('[data-testid="settings-gear"]');
     if (!(sidebar instanceof HTMLElement) || !(controlBlock instanceof HTMLElement) || !(settingsButton instanceof HTMLButtonElement)) {
       return {
         sidebarExists: sidebar !== null,
@@ -1653,7 +1677,6 @@ try {
     memoryEditorHasNoDisabledButtons: false,
     memoryRecordSelectable: false
   };
-  await clickSmokeControl(page, '[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await page.click('[data-testid="nav-chat"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
@@ -2034,21 +2057,20 @@ try {
       memoryRecoveryText.includes(memoryRecoveryApiEvidence.id) &&
       memoryRecoveryText.includes(memoryRecoveryApiEvidence.status),
     providerConfiguredVisible:
-      settingsText.includes('Smoke Provider') &&
-      settingsText.includes('smoke-model') &&
-      settingsText.includes('smoke-provider:ready') &&
-      settingsText.includes('Smoke UI OpenAI Provider') &&
-      settingsText.includes('Smoke UI Anthropic Provider') &&
-      settingsText.includes('smoke-ui-openai-model'),
+      providerSettingsEvidence.smokeProviderListed &&
+      providerSettingsEvidence.addProviderEntryVisible &&
+      providerSettingsEvidence.openaiCreated &&
+      providerSettingsEvidence.openaiSecretStored &&
+      providerSettingsEvidence.anthropicCreated &&
+      providerSettingsEvidence.anthropicSecretStored &&
+      providerSettingsEvidence.openaiReady &&
+      providerSettingsEvidence.defaultModelSelectable,
     mcpManagedVisible:
       mcpText.includes('Smoke MCP') &&
       mcpText.includes('smoke-mcp:ready') &&
       mcpText.includes('enabled'),
     skillManagedVisible: mcpText.includes('Smoke Skill') && mcpText.includes('ready'),
-    providerActionsVisible:
-      settingsText.includes('测试') &&
-      settingsText.includes('编辑') &&
-      settingsText.includes('删除'),
+    providerActionsVisible: providerSettingsEvidence.providerActionsVisible,
     capabilityActionsVisible:
       mcpText.includes('测试') &&
       mcpText.includes('禁用') &&

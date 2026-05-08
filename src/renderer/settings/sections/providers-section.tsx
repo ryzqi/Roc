@@ -13,10 +13,10 @@ import {
 
 function providerTypeLabel(type: ProviderConfig['type']): string {
   if (type === 'openai_compatible') {
-    return 'Custom Provider';
+    return 'OpenAI-compatible Provider';
   }
   if (type === 'anthropic_compatible') {
-    return 'Custom ACP Provider';
+    return 'Anthropic-compatible Provider';
   }
   if (type === 'ollama') {
     return 'Ollama';
@@ -156,6 +156,10 @@ export function ProvidersSection({
   secretBusyProviderId: string | null;
 }): React.JSX.Element {
   const [search, setSearch] = useState('');
+  const providerTypeOptions: Array<{ type: EditableProviderType; label: string }> = [
+    { type: 'openai_compatible', label: 'OpenAI-compatible' },
+    { type: 'anthropic_compatible', label: 'Anthropic-compatible' }
+  ];
 
   const filteredProviders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -190,7 +194,7 @@ export function ProvidersSection({
   })();
 
   return (
-    <section className="card" data-testid="provider-settings">
+    <section className="card provider-settings-card" data-testid="provider-settings">
       <div className="provider-toolbar">
         <input
           className="provider-search"
@@ -201,13 +205,6 @@ export function ProvidersSection({
           value={search}
         />
         <div className="provider-toolbar-actions">
-          <button
-            data-testid="provider-add-anthropic"
-            onClick={() => onStartNewProvider('anthropic_compatible')}
-            type="button"
-          >
-            Add Custom ACP Provider
-          </button>
           <button
             className="primary"
             data-testid="provider-add-openai"
@@ -282,7 +279,29 @@ export function ProvidersSection({
               </label>
             </div>
           </header>
-          <p className="provider-detail-subtitle">{providerTypeLabel(draft.type)} - {meta.subtitle}</p>
+          <p className="provider-detail-subtitle">{providerTypeLabel(draft.type)} · {meta.subtitle}</p>
+          {isCreating ? (
+            <div className="provider-type-section">
+              <span className="provider-detail-label">Provider 类型</span>
+              <div className="provider-type-segmented" role="group" aria-label="Provider 类型">
+                {providerTypeOptions.map((option) => {
+                  const active = option.type === draft.type;
+                  return (
+                    <button
+                      aria-pressed={active}
+                      className={active ? 'provider-type-option active' : 'provider-type-option'}
+                      data-testid={`provider-draft-type-${option.type}`}
+                      key={option.type}
+                      onClick={() => onUpdateDraft({ type: option.type })}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <div className="form-grid">
             <label className="field">
               <span>Provider ID</span>
