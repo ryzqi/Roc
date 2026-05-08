@@ -65,6 +65,7 @@ import type {
   WindowStateSnapshot,
   Workspace
 } from '../shared/types';
+import { ComposerActionIcon } from './chat-composer-icons';
 import { getStartupLoadIntent } from './startup-load-policy';
 import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
 import {
@@ -105,10 +106,6 @@ type ViewId =
 type PreviewIconName =
   | 'bot'
   | 'clipboard'
-  | 'checklist'
-  | 'panel-capture'
-  | 'tray-upload'
-  | 'stack'
   | 'eye'
   | 'folder'
   | 'git'
@@ -1817,7 +1814,7 @@ function ChatView({
                 aria-label="上传文件"
                 onClick={() => void selectAttachmentsFromDialog()}
               >
-                <PreviewIcon name="tray-upload" />
+                <ComposerActionIcon kind="attachment" />
                 {selectedAttachments.length === 0 ? null : <span className="tool-badge">{selectedAttachments.length}</span>}
               </button>
               <div
@@ -1831,7 +1828,7 @@ function ChatView({
                   type="button"
                   aria-label="工具"
                 >
-                  <PreviewIcon name="stack" />
+                  <ComposerActionIcon kind="tools" />
                   <span className="tool-badge">{state.selectedMcpServers.length}</span>
                 </button>
                 {activeComposerPopover !== 'tools' ? null : (
@@ -1892,7 +1889,7 @@ function ChatView({
                   type="button"
                   aria-label="技能"
                 >
-                  <PreviewIcon name="checklist" />
+                  <ComposerActionIcon kind="skills" />
                   <span className="tool-badge">{state.selectedSkills.length}</span>
                 </button>
                 {activeComposerPopover !== 'skills' ? null : (
@@ -1948,7 +1945,7 @@ function ChatView({
                 onMouseLeave={() => setActiveComposerPopover((current) => (current === 'models' ? null : current))}
               >
                 <button className="model-pill model-pill--composer" data-testid="chat-model-trigger" type="button" aria-label="模型">
-                  <PreviewIcon name="panel-capture" />
+                  <ComposerActionIcon kind="model" />
                   <span>{state.defaultModelId ?? '配置默认模型'}</span>
                   <span>▾</span>
                 </button>
@@ -4527,35 +4524,6 @@ function PreviewIcon({ name }: { name: PreviewIconName }): React.JSX.Element {
           <path d="M9 5.5h6"></path>
           <path d="M9 10h6"></path>
           <path d="M9 14h4"></path>
-        </svg>
-      );
-    case 'checklist':
-      return (
-        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 5h12"></path>
-          <path d="M6 12h12"></path>
-          <path d="M6 19h12"></path>
-          <path d="M9 5.5l1.2 1.2L12.5 4.4"></path>
-          <path d="M9 12.5l1.2 1.2L12.5 11.4"></path>
-          <path d="M9 19.5l1.2 1.2L12.5 18.4"></path>
-        </svg>
-      );
-    case 'panel-capture':
-      return (
-        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="4" y="5" width="16" height="14" rx="3"></rect>
-          <path d="M8 9h8"></path>
-          <path d="M8 13h5"></path>
-          <path d="M15.5 14.5l2 2"></path>
-        </svg>
-      );
-    case 'tray-upload':
-      return (
-        <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 15.5v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"></path>
-          <path d="M12 5v10"></path>
-          <path d="M8.5 8.5L12 5l3.5 3.5"></path>
-          <path d="M7 15h10"></path>
         </svg>
       );
     case 'git':
