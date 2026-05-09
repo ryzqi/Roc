@@ -1172,6 +1172,7 @@ try {
   const providerSettingsEvidence = {
     nvidiaListed: false,
     nvidiaFixedDetail: false,
+    nvidiaDefaultModelChoicesVisible: false,
     smokeProviderListed: false,
     providerActionsVisible: false,
     addProviderEntryVisible: false,
@@ -1203,17 +1204,50 @@ try {
   await page.waitForSelector('[data-testid="provider-list-item-nvidia"]', { timeout: 5000 });
   providerSettingsEvidence.nvidiaListed = true;
   providerSettingsEvidence.nvidiaFixedDetail = await page.evaluate(() => {
-    const modelId = document.querySelector('[data-testid="provider-draft-model-id"]');
+    const models = document.querySelector('[data-testid="provider-draft-models"]');
+    const legacyModelId = document.querySelector('[data-testid="provider-draft-model-id"]');
     const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
     const deleteButton = document.querySelector('[data-testid="provider-delete-nvidia"]');
+    const statusPills = Array.from(
+      document.querySelectorAll('.provider-detail-title .provider-status-pill'),
+      (element) => element.textContent?.trim() ?? ''
+    );
     return (
-      modelId instanceof HTMLInputElement &&
+      models instanceof HTMLTextAreaElement &&
+      legacyModelId === null &&
       endpoint instanceof HTMLInputElement &&
       endpoint.readOnly === true &&
       endpoint.value === 'https://integrate.api.nvidia.com/v1' &&
-      deleteButton === null
+      deleteButton === null &&
+      !statusPills.includes('Fixed')
     );
   });
+  await page.fill(
+    '[data-testid="provider-draft-models"]',
+    'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct | Llama 3.3 70B'
+  );
+  await clickSmokeControl(page, '[data-testid="provider-save"]');
+  await page.waitForFunction(
+    async () => {
+      const result = await window.roc.settings.get();
+      if (!result.ok) {
+        return false;
+      }
+      const provider = result.data.providers.find((entry) => entry.id === 'nvidia');
+      const models = document.querySelector('[data-testid="provider-draft-models"]');
+      return (
+        provider !== undefined &&
+        provider.models.length === 2 &&
+        provider.models[0]?.id === 'moonshotai/kimi-k2.6' &&
+        provider.models[1]?.id === 'meta/llama-3.3-70b-instruct' &&
+        models instanceof HTMLTextAreaElement &&
+        models.value.includes('moonshotai/kimi-k2.6 | Kimi K2.6') &&
+        models.value.includes('meta/llama-3.3-70b-instruct | Llama 3.3 70B')
+      );
+    },
+    undefined,
+    { timeout: 5000 }
+  );
   providerSettingsEvidence.headerChromeRemoved = await page.evaluate(() => {
     const header = document.querySelector('[data-testid="settings-header"]');
     if (!(header instanceof HTMLElement)) {
@@ -1247,6 +1281,17 @@ try {
       timeout: 5000
     });
   }
+  await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
+  await page.waitForFunction(
+    () => {
+      const kimi = document.querySelector('[data-testid="default-model-moonshotai/kimi-k2.6"]');
+      const llama = document.querySelector('[data-testid="default-model-meta/llama-3.3-70b-instruct"]');
+      return kimi instanceof HTMLButtonElement && llama instanceof HTMLButtonElement;
+    },
+    undefined,
+    { timeout: 5000 }
+  );
+  providerSettingsEvidence.nvidiaDefaultModelChoicesVisible = true;
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
   await page.waitForSelector('[data-testid="provider-add-anthropic"]', { state: 'detached', timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-add-openai"]', { timeout: 5000 });
@@ -2396,6 +2441,7 @@ try {
     providerConfiguredVisible:
       providerSettingsEvidence.nvidiaListed &&
       providerSettingsEvidence.nvidiaFixedDetail &&
+      providerSettingsEvidence.nvidiaDefaultModelChoicesVisible &&
       providerSettingsEvidence.smokeProviderListed &&
       providerSettingsEvidence.addProviderEntryVisible &&
       providerSettingsEvidence.headerChromeRemoved &&

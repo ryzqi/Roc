@@ -111,6 +111,52 @@ describe('providers section', () => {
     expect(html).toContain('API Key 是必填项。');
   });
 
+  it('renders fixed NVIDIA details without Fixed chrome and uses the shared model list editor', () => {
+    const provider: ProviderConfig = {
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      credentialRef: 'secret:nvidia',
+      enabled: true,
+      models: [
+        {
+          id: 'moonshotai/kimi-k2.6',
+          displayName: 'Kimi K2.6',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('nvidia', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [{ providerId: provider.id, stored: true }],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-models"');
+    expect(html).not.toContain('data-testid="provider-draft-model-id"');
+    expect(html).not.toContain('>Fixed<');
+    expect(html).toContain('value="https://integrate.api.nvidia.com/v1"');
+    expect(html).toContain('readOnly=""');
+    expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
+  });
+
   it('shows the last successful provider test result with the tested model id', () => {
     const provider: ProviderConfig = {
       id: 'provider-openai',

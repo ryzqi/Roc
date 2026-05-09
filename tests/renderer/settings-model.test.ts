@@ -80,7 +80,6 @@ describe('settings model helpers', () => {
       apiKey: '',
       enabled: true,
       modelsText: '',
-      modelId: '',
       temperature: '',
       maxTokens: '',
       thinking: false
@@ -100,10 +99,56 @@ describe('settings model helpers', () => {
       apiKey: '',
       enabled: true,
       modelsText: '',
-      modelId: '',
       temperature: '',
       maxTokens: '',
       thinking: false
+    });
+  });
+
+  it('builds NVIDIA drafts from existing enabled model lists', () => {
+    const provider: ProviderConfig = {
+      id: 'nvidia',
+      name: 'Ignored NVIDIA Name',
+      type: 'nvidia',
+      endpoint: 'https://example.invalid',
+      credentialRef: 'secret:custom',
+      enabled: false,
+      models: [
+        {
+          id: 'moonshotai/kimi-k2.6',
+          displayName: 'Kimi K2.6',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: 'meta/llama-3.3-70b-instruct',
+          displayName: 'Llama 3.3 70B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: {
+        temperature: 0.2,
+        maxTokens: 4096,
+        thinking: true
+      }
+    };
+
+    expect(createProviderDraft('nvidia', provider)).toEqual({
+      mode: 'edit',
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      apiKey: '',
+      enabled: false,
+      modelsText:
+        'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct | Llama 3.3 70B',
+      temperature: '0.2',
+      maxTokens: '4096',
+      thinking: true
     });
   });
 
@@ -159,10 +204,10 @@ describe('settings model helpers', () => {
     });
   });
 
-  it('builds the fixed NVIDIA provider config from model id and NVIDIA options', () => {
+  it('builds the fixed NVIDIA provider config from model list text and NVIDIA options', () => {
     const draft = {
       ...createProviderDraft('nvidia'),
-      modelId: 'moonshotai/kimi-k2.6',
+      modelsText: 'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct',
       apiKey: 'nvapi-test',
       temperature: '0.4',
       maxTokens: '16384',
@@ -179,7 +224,14 @@ describe('settings model helpers', () => {
       models: [
         {
           id: 'moonshotai/kimi-k2.6',
-          displayName: 'moonshotai/kimi-k2.6',
+          displayName: 'Kimi K2.6',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: 'meta/llama-3.3-70b-instruct',
+          displayName: 'meta/llama-3.3-70b-instruct',
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true

@@ -213,7 +213,6 @@ export function ProvidersSection({
               >
                 {runtimeStatus === 'ready' ? 'Active' : 'Inactive'}
               </span>
-              {fixedProviderSelected ? <span className="provider-status-pill active">Fixed</span> : null}
             </div>
             <div className="provider-detail-controls">
               {selectedProvider === null ? null : (
@@ -335,17 +334,18 @@ export function ProvidersSection({
               {draft.type === 'nvidia' ? 'NVIDIA Provider 固定使用官方 OpenAI-compatible 端点。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
             </span>
           </label>
+          <label className="field">
+            <span>模型列表</span>
+            <textarea
+              data-testid="provider-draft-models"
+              onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
+              placeholder="一行一个,格式:modelId | displayName"
+              rows={4}
+              value={draft.modelsText}
+            />
+          </label>
           {draft.type === 'nvidia' ? (
             <>
-              <label className="field">
-                <span>模型 ID</span>
-                <input
-                  data-testid="provider-draft-model-id"
-                  onChange={(event) => onUpdateDraft({ modelId: event.currentTarget.value })}
-                  placeholder="moonshotai/kimi-k2.6"
-                  value={draft.modelId}
-                />
-              </label>
               <div className="form-grid">
                 <label className="field">
                   <span>Temperature</span>
@@ -381,18 +381,7 @@ export function ProvidersSection({
                 <span>启用 thinking / reasoning</span>
               </label>
             </>
-          ) : (
-            <label className="field">
-              <span>模型列表</span>
-              <textarea
-                data-testid="provider-draft-models"
-                onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
-                placeholder="一行一个,格式:modelId | displayName"
-                rows={4}
-                value={draft.modelsText}
-              />
-            </label>
-          )}
+          ) : null}
           <div className="provider-detail-actions">
             <button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} type="button">
               {draft.type === 'nvidia' ? '保存 NVIDIA 配置' : '保存 Provider'}

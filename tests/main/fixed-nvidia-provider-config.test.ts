@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('fixed NVIDIA provider config', () => {
-  it('always exposes a normalized built-in NVIDIA provider', () => {
+  it('always exposes a normalized built-in NVIDIA provider while preserving multiple saved models', () => {
     services.configService.saveProviders({
       schemaVersion: 1,
       defaultModelId: null,
@@ -35,6 +35,13 @@ describe('fixed NVIDIA provider config', () => {
             {
               id: 'moonshotai/kimi-k2.6',
               displayName: 'Kimi',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            },
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3 70B',
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true
@@ -61,6 +68,13 @@ describe('fixed NVIDIA provider config', () => {
         {
           id: 'moonshotai/kimi-k2.6',
           displayName: 'Kimi',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: 'meta/llama-3.3-70b-instruct',
+          displayName: 'Llama 3.3 70B',
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true

@@ -45,7 +45,6 @@ export type ProviderDraft = {
   apiKey: string;
   enabled: boolean;
   modelsText: string;
-  modelId: string;
   temperature: string;
   maxTokens: string;
   thinking: boolean;
@@ -94,7 +93,6 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
   }
   if (type === 'nvidia') {
     const normalized = normalizeFixedNvidiaProvider(provider);
-    const currentModel = normalized.models.find((model) => model.enabled) ?? normalized.models[0] ?? null;
     return {
       mode: 'edit',
       id: fixedNvidiaProviderId,
@@ -103,8 +101,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       endpoint: fixedNvidiaBaseUrl,
       apiKey: '',
       enabled: normalized.enabled,
-      modelsText: '',
-      modelId: currentModel?.id ?? '',
+      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
       temperature:
         typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
       maxTokens:
@@ -122,7 +119,6 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       apiKey: '',
       enabled: true,
       modelsText: '',
-      modelId: '',
       temperature: '',
       maxTokens: '',
       thinking: false
@@ -140,7 +136,6 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     apiKey: '',
     enabled: provider.enabled,
     modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
-    modelId: '',
     temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
     maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
     thinking: provider.options?.thinking === true
@@ -216,9 +211,9 @@ export function assertProviderCreateIdAvailable(
 export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
   const options = buildProviderOptionsFromDraft(draft);
   if (draft.type === 'nvidia') {
-    const modelId = draft.modelId.trim();
-    if (modelId.length === 0) {
-      throw new Error('NVIDIA 模型 ID 不能为空。');
+    const models = parseProviderModelDraft(draft.modelsText);
+    if (models.length === 0) {
+      throw new Error('NVIDIA 至少需要一个模型。');
     }
     const provider = normalizeFixedNvidiaProvider({
       id: fixedNvidiaProviderId,
@@ -227,15 +222,7 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
       endpoint: fixedNvidiaBaseUrl,
       credentialRef: `secret:${fixedNvidiaProviderId}`,
       enabled: draft.enabled,
-      models: [
-        {
-          id: modelId,
-          displayName: modelId,
-          enabled: true,
-          supportsStreaming: true,
-          supportsToolCalls: true
-        }
-      ],
+      models,
       options
     });
     return options === undefined
