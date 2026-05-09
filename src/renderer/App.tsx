@@ -1260,9 +1260,47 @@ export function App(): React.JSX.Element {
         }}
       >
         <div className="workband-drag-region">
-          <div className="brand">
-            <div className="brand-mark">R</div>
-            <span>Roc / 本地工作台</span>
+          <div className="workband-primary">
+            <div className="brand">
+              <div className="brand-mark">R</div>
+              <span>Roc / 本地工作台</span>
+            </div>
+            {activeView === 'chat' ? (
+              <div className="workband-chat-actions">
+                <button
+                  aria-label={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
+                  aria-pressed={!chatSidebarCollapsed}
+                  className={chatSidebarCollapsed ? 'icon-button workband-chat-action is-active' : 'icon-button workband-chat-action'}
+                  data-testid="chat-sidebar-toggle"
+                  title={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
+                  type="button"
+                  onClick={toggleChatSidebar}
+                >
+                  {chatSidebarCollapsed ? <PanelLeft aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} /> : <PanelLeftClose aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />}
+                </button>
+                <button
+                  aria-label="搜索历史对话"
+                  aria-pressed={showHistorySearch}
+                  className={showHistorySearch ? 'icon-button workband-chat-action is-active' : 'icon-button workband-chat-action'}
+                  data-testid="chat-history-search-toggle"
+                  title="搜索历史对话"
+                  type="button"
+                  onClick={toggleHistorySearch}
+                >
+                  <Search aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+                </button>
+                <button
+                  aria-label="新建对话"
+                  className="icon-button workband-chat-action"
+                  data-testid="chat-new-conversation"
+                  title="新建对话"
+                  type="button"
+                  onClick={startNewConversation}
+                >
+                  <SquarePen aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="thread-meta">
@@ -2100,53 +2138,6 @@ function ChatView({
     <section className="canvas-stage chat-stage" data-testid="chat-view">
       <div className="chat-empty-plane" aria-label="聊天主画布" ref={transcriptScrollRef}>
         <div className="chat-page-shell">
-          <header className="chat-toolbar">
-            <div className="chat-toolbar-copy">
-              <span className="chat-toolbar-kicker">对话</span>
-              <div className="chat-toolbar-text">
-                <h1 className="chat-toolbar-title">对话</h1>
-                <p className="chat-toolbar-subtitle">
-                  {selectedThreadId === null
-                    ? '开始新的任务对话，或从左侧历史继续已有上下文。'
-                    : '继续当前线程，或用顶部动作快速切换历史与新建会话。'}
-                </p>
-              </div>
-            </div>
-            <div className="chat-toolbar-actions">
-              <button
-                aria-label={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
-                aria-pressed={!chatSidebarCollapsed}
-                className={chatSidebarCollapsed ? 'chat-toolbar-action is-active' : 'chat-toolbar-action'}
-                data-testid="chat-sidebar-toggle"
-                title={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
-                type="button"
-                onClick={onToggleChatSidebar}
-              >
-                {chatSidebarCollapsed ? <PanelLeft aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} /> : <PanelLeftClose aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />}
-              </button>
-              <button
-                aria-label="搜索历史对话"
-                aria-pressed={historySearchVisible}
-                className={historySearchVisible ? 'chat-toolbar-action is-active' : 'chat-toolbar-action'}
-                data-testid="chat-history-search-toggle"
-                title="搜索历史对话"
-                type="button"
-                onClick={onToggleHistorySearch}
-              >
-                <Search aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
-              </button>
-              <button
-                aria-label="新建对话"
-                className="chat-toolbar-action"
-                data-testid="chat-new-conversation"
-                title="新建对话"
-                type="button"
-                onClick={onStartNewConversation}
-              >
-                <SquarePen aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
-              </button>
-            </div>
-          </header>
           <div className="chat-feedback-shell">
             <div className="chat-feedback-stack">
               {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}

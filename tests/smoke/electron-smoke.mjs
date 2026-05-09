@@ -2053,6 +2053,7 @@ try {
     return result;
   });
   const buttonInteractionEvidence = {
+    chatTopbarActionsGrouped: false,
     chatSidebarToggleVisible: false,
     chatSidebarToggleWorks: false,
     chatHistorySearchToggleVisible: false,
@@ -2082,6 +2083,29 @@ try {
   };
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await openChatView(page);
+  buttonInteractionEvidence.chatTopbarActionsGrouped = await page.evaluate(() => {
+    const workband = document.querySelector('[data-testid="window-workband"]');
+    const brand = workband?.querySelector('.brand');
+    const sidebarToggle = document.querySelector('[data-testid="chat-sidebar-toggle"]');
+    const historySearchToggle = document.querySelector('[data-testid="chat-history-search-toggle"]');
+    const newConversation = document.querySelector('[data-testid="chat-new-conversation"]');
+    if (
+      !(workband instanceof HTMLElement) ||
+      !(brand instanceof HTMLElement) ||
+      !(sidebarToggle instanceof HTMLElement) ||
+      !(historySearchToggle instanceof HTMLElement) ||
+      !(newConversation instanceof HTMLElement)
+    ) {
+      return false;
+    }
+    return (
+      workband.contains(sidebarToggle) &&
+      workband.contains(historySearchToggle) &&
+      workband.contains(newConversation) &&
+      !document.querySelector('.chat-toolbar-actions')?.contains(sidebarToggle) &&
+      sidebarToggle.getBoundingClientRect().left > brand.getBoundingClientRect().right
+    );
+  });
   buttonInteractionEvidence.chatSidebarToggleVisible = (await page.locator('[data-testid="chat-sidebar-toggle"]').count()) === 1;
   buttonInteractionEvidence.chatHistorySearchToggleVisible =
     (await page.locator('[data-testid="chat-history-search-toggle"]').count()) === 1;
