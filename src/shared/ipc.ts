@@ -70,6 +70,8 @@ import type {
   TerminalSessionResizeRequest,
   TerminalSessionSnapshot,
   TaskSnapshot,
+  TaskDeleteThreadRequest,
+  TaskDeleteThreadResult,
   TraySummary,
   Workspace,
   FileDialogSelection,
@@ -92,6 +94,7 @@ export const ipcChannels = {
   windowClose: 'roc:window:close',
   tasksGetSnapshot: 'roc:tasks:get-snapshot',
   tasksListBackgroundTasks: 'roc:tasks:list-background-tasks',
+  tasksDeleteThread: 'roc:tasks:delete-thread',
   tasksCreateBackgroundPreview: 'roc:tasks:create-background-preview',
   tasksCreateBackgroundTask: 'roc:tasks:create-background-task',
   tasksPauseBackgroundTask: 'roc:tasks:pause-background-task',
@@ -185,6 +188,7 @@ export type RocPreloadApi = {
   tasks: {
     getSnapshot: () => Promise<IpcResult<TaskSnapshot>>;
     listBackgroundTasks: () => Promise<IpcResult<BackgroundTask[]>>;
+    deleteThread: (request: TaskDeleteThreadRequest) => Promise<IpcResult<TaskDeleteThreadResult>>;
     createBackgroundTaskPreview: (request: BackgroundTaskPreviewRequest) => Promise<IpcResult<BackgroundTaskPreview>>;
     createBackgroundTask: (preview: BackgroundTaskPreview) => Promise<IpcResult<BackgroundTask>>;
     pauseBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;

@@ -234,6 +234,50 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('continues a selected task thread instead of creating a new thread for the next turn', async () => {
+    streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['第二轮已完成'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const firstRun = services.taskService.createTaskRun({
+      userInput: '第一轮输入',
+      modelId: 'moonshotai/kimi-k2.6',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed' && event.threadId === firstRun.threadId);
+    const started = await runtime.startRun({
+      input: '第二轮输入',
+      mode: 'task',
+      threadId: firstRun.threadId,
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const snapshot = services.taskService.getSnapshot();
+    const userMessages = snapshot.recentEvents
+      .filter((event) => event.threadId === firstRun.threadId && event.type === 'message')
+      .map((event) => (event.payload as { role: string; content: string }).content);
+
+    expect(started.threadId).toBe(firstRun.threadId);
+    expect(snapshot.threads).toHaveLength(1);
+    expect(services.taskService.getRun(started.runId).runNumber).toBe(2);
+    expect(userMessages).toEqual(expect.arrayContaining(['第一轮输入', '第二轮输入']));
+  });
+
   it('redacts provider failures before emitting task run failure events', async () => {
     streamEventsMock.mockRejectedValue(
       new RocDomainError({

@@ -137,6 +137,37 @@ describe('workspace dialog IPC', () => {
     });
   });
 
+  it('registers delete thread IPC and delegates to TaskService', async () => {
+    registerWorkspaceHandlers();
+    const archiveThreadSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & {
+          archiveThread: (threadId: string) => { deleted: true; threadId: string };
+        },
+        'archiveThread'
+      )
+      .mockReturnValue({
+        deleted: true,
+        threadId: 'thread_123'
+      });
+
+    const deleteHandler = electronMock.handlers.get(ipcChannels.tasksDeleteThread);
+    if (deleteHandler === undefined) {
+      throw new Error('tasksDeleteThread handler was not registered.');
+    }
+
+    const result = await deleteHandler({}, { threadId: 'thread_123' });
+
+    expect(archiveThreadSpy).toHaveBeenCalledWith('thread_123');
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        deleted: true,
+        threadId: 'thread_123'
+      }
+    });
+  });
+
   it('returns null when directory selection is cancelled', async () => {
     registerWorkspaceHandlers();
     electronMock.showOpenDialog.mockResolvedValue({

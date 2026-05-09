@@ -127,6 +127,8 @@ type NavItem = {
   label: string;
   meta: string;
   icon: PreviewIconName;
+  action?: 'new_conversation';
+  active?: boolean;
 };
 
 type HistoryItem = {
@@ -140,6 +142,12 @@ type PageMeta = {
   title: string;
   topMeta: string;
   pageLabel: string;
+};
+
+type HistoryContextMenuState = {
+  threadId: string;
+  x: number;
+  y: number;
 };
 
 type WorkbenchTool = 'files' | 'git' | 'terminal';
@@ -495,13 +503,15 @@ function buildTopMeta(view: MainViewId, state: LoadedState): string {
   return `${state.taskSnapshot.counts.failed} 个失败任务`;
 }
 
-function buildHistoryNavItems(state: LoadedState): NavItem[] {
+function buildHistoryNavItems(state: LoadedState, selectedThreadId: string | null, activeView: ViewId): NavItem[] {
   return [
     {
       id: 'chat',
-      label: '当前对话',
-      meta: `${state.taskSnapshot.recentEvents.filter((event) => event.type === 'message').length} 条消息`,
-      icon: 'history'
+      label: '新建对话',
+      meta: '发送首条消息后创建新会话',
+      icon: 'history',
+      action: 'new_conversation',
+      active: activeView === 'chat' && selectedThreadId === null
     }
   ];
 }
@@ -587,9 +597,12 @@ export function App(): React.JSX.Element {
   const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [state, setState] = useState<LoadedState | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [chatRunState, setChatRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
+  const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
     parseWorkbenchTool(initialParams.get('tool'), initialView)
@@ -649,6 +662,24 @@ export function App(): React.JSX.Element {
       });
     });
   }, [refreshTaskState]);
+
+  useEffect(() => {
+    if (historyContextMenu === null) {
+      return;
+    }
+
+    function closeHistoryContextMenu(event: PointerEvent): void {
+      if (event.target instanceof Element && event.target.closest('.history-context-menu') !== null) {
+        return;
+      }
+      setHistoryContextMenu(null);
+    }
+
+    window.addEventListener('pointerdown', closeHistoryContextMenu);
+    return () => {
+      window.removeEventListener('pointerdown', closeHistoryContextMenu);
+    };
+  }, [historyContextMenu]);
 
   useEffect(() => {
     return window.roc.chat.onRunEvent((event) => {
@@ -735,12 +766,30 @@ export function App(): React.JSX.Element {
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
 
+  const startNewConversation = useCallback((): void => {
+    setActiveView('chat');
+    setSelectedThreadId(null);
+    setChatRunState(createEmptyChatRunState());
+    setHistoryContextMenu(null);
+    setChatError(null);
+    setChatSelectionVersion((current) => current + 1);
+  }, []);
+
+  const selectHistoryThread = useCallback((threadId: string): void => {
+    setActiveView('chat');
+    setSelectedThreadId(threadId);
+    setHistoryContextMenu(null);
+    setChatError(null);
+    setChatSelectionVersion((current) => current + 1);
+  }, []);
+
   const startTaskRun = useCallback(
     async (input: string): Promise<boolean> => {
       setChatError(null);
       const result = await window.roc.chat.startRun({
         input,
         mode: 'task',
+        threadId: selectedThreadId,
         enabledCapabilities: {
           mcpServers: currentSelectedMcpServers,
           skills: currentSelectedSkills
@@ -750,9 +799,27 @@ export function App(): React.JSX.Element {
         setChatError(result.error.message);
         return false;
       }
+      setSelectedThreadId(result.data.threadId);
+      setHistoryContextMenu(null);
       return true;
     },
-    [currentSelectedMcpServers, currentSelectedSkills]
+    [currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
+  );
+
+  const deleteHistoryThread = useCallback(
+    async (threadId: string): Promise<void> => {
+      setHistoryContextMenu(null);
+      const result = await window.roc.tasks.deleteThread({ threadId });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      if (selectedThreadId === threadId) {
+        startNewConversation();
+      }
+      await refreshTaskState();
+    },
+    [refreshTaskState, selectedThreadId, startNewConversation]
   );
 
   useEffect(() => {
@@ -1090,11 +1157,13 @@ export function App(): React.JSX.Element {
           activeView={activeView}
           chatError={chatError}
           chatRunState={chatRunState}
+          chatSelectionVersion={chatSelectionVersion}
           memoryLoadState={memoryLoadState}
           onOpenView={setActiveView}
           operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={startTaskRun}
+          selectedThreadId={selectedThreadId}
           state={state}
           updateLoadedState={(partial) =>
             setState((current) => (current === null ? current : { ...current, ...partial }))
@@ -1108,7 +1177,7 @@ export function App(): React.JSX.Element {
   const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const meta = viewMeta(activeView as MainViewId);
   const topMeta = buildTopMeta(activeView as MainViewId, state);
-  const historyNavItems = buildHistoryNavItems(state);
+  const historyNavItems = buildHistoryNavItems(state, selectedThreadId, activeView);
   const historyItems = buildHistoryItems(state);
   const workspaceNavItems = buildWorkspaceNavItems(state);
   const controlNavItems = buildControlNavItems(state);
@@ -1201,7 +1270,18 @@ export function App(): React.JSX.Element {
             </button>
             {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
           </div>
-          <SidebarNavGroup activeView={activeView} items={historyNavItems} title="对话" onSelect={setActiveView} />
+          <SidebarNavGroup
+            activeView={activeView}
+            items={historyNavItems}
+            title="对话"
+            onSelect={(item) => {
+              if (item.action === 'new_conversation') {
+                startNewConversation();
+                return;
+              }
+              setActiveView(item.id);
+            }}
+          />
           <div className="sidebar-block sidebar-block--history">
             <div className="side-title">历史会话</div>
             <div className="sidebar-block-scroll history-list">
@@ -1209,7 +1289,21 @@ export function App(): React.JSX.Element {
                 <div className="history-empty">暂无历史会话</div>
               ) : (
                 historyItems.map((item) => (
-                  <button className="nav-button" key={item.id} type="button" onClick={() => setActiveView('chat')}>
+                  <button
+                    className={item.id === selectedThreadId ? 'nav-button active' : 'nav-button'}
+                    data-testid={`history-thread-${sanitizeTestId(item.id)}`}
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectHistoryThread(item.id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setHistoryContextMenu({
+                        threadId: item.id,
+                        x: event.clientX,
+                        y: event.clientY
+                      });
+                    }}
+                  >
                     <PreviewIcon name={item.icon} />
                     <span className="nav-copy">
                       <span className="nav-label">{item.label}</span>
@@ -1219,9 +1313,35 @@ export function App(): React.JSX.Element {
                 ))
               )}
             </div>
+            {historyContextMenu === null ? null : (
+              <div
+                className="history-context-menu"
+                style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
+              >
+                <button
+                  data-testid="history-thread-delete"
+                  type="button"
+                  onClick={() => void deleteHistoryThread(historyContextMenu.threadId)}
+                >
+                  删除
+                </button>
+              </div>
+            )}
           </div>
-          <SidebarNavGroup className="sidebar-block sidebar-block--tasks" activeView={activeView} items={workspaceNavItems} title="任务工作台" onSelect={setActiveView} />
-          <SidebarNavGroup className="sidebar-block sidebar-block--control" activeView={activeView} items={controlNavItems} title="控制区" onSelect={setActiveView} />
+          <SidebarNavGroup
+            className="sidebar-block sidebar-block--tasks"
+            activeView={activeView}
+            items={workspaceNavItems}
+            title="任务工作台"
+            onSelect={(item) => setActiveView(item.id)}
+          />
+          <SidebarNavGroup
+            className="sidebar-block sidebar-block--control"
+            activeView={activeView}
+            items={controlNavItems}
+            title="控制区"
+            onSelect={(item) => setActiveView(item.id)}
+          />
           <div className="sidebar-footer">
             <button
               className="settings-gear"
@@ -1255,11 +1375,13 @@ export function App(): React.JSX.Element {
                   activeView={activeView}
                   chatError={chatError}
                   chatRunState={chatRunState}
+                  chatSelectionVersion={chatSelectionVersion}
                   memoryLoadState={memoryLoadState}
                   onOpenView={setActiveView}
                   operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={startTaskRun}
+                  selectedThreadId={selectedThreadId}
                   state={state}
                   updateLoadedState={(partial) =>
                     setState((current) => (current === null ? current : { ...current, ...partial }))
@@ -1602,11 +1724,13 @@ function ViewContent({
   activeView,
   chatError,
   chatRunState,
+  chatSelectionVersion,
   memoryLoadState,
   onOpenView,
   operationsLoadState,
   onSelectWorkspace,
   onSubmitChatTask,
+  selectedThreadId,
   state,
   updateLoadedState,
   workspaceLoadState
@@ -1614,11 +1738,13 @@ function ViewContent({
   activeView: ViewId;
   chatError: string | null;
   chatRunState: ChatRunState;
+  chatSelectionVersion: number;
   memoryLoadState: LazyLoadState;
   onOpenView: (view: ViewId) => void;
   operationsLoadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<boolean>;
+  selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   workspaceLoadState: LazyLoadState;
@@ -1663,8 +1789,10 @@ function ViewContent({
     <ChatView
       chatError={chatError}
       chatRunState={chatRunState}
+      chatSelectionVersion={chatSelectionVersion}
       onOpenView={onOpenView}
       onSubmitChatTask={onSubmitChatTask}
+      selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
     />
@@ -1681,7 +1809,7 @@ function SidebarNavGroup({
   activeView: ViewId;
   className?: string;
   items: NavItem[];
-  onSelect: (view: ViewId) => void;
+  onSelect: (item: NavItem) => void;
   title: string;
 }): React.JSX.Element {
   return (
@@ -1689,7 +1817,7 @@ function SidebarNavGroup({
       <div className="side-title">{title}</div>
       <nav className="sidebar-block-scroll nav-list" aria-label={title}>
         {items.map((item) => (
-          <NavButton active={item.id === activeView} item={item} key={item.id} onClick={() => onSelect(item.id)} />
+          <NavButton active={item.active ?? item.id === activeView} item={item} key={item.id} onClick={() => onSelect(item)} />
         ))}
       </nav>
     </div>
@@ -1716,15 +1844,19 @@ function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; 
 function ChatView({
   chatError,
   chatRunState,
+  chatSelectionVersion,
   onOpenView,
   onSubmitChatTask,
+  selectedThreadId,
   state,
   updateLoadedState
 }: {
   chatError: string | null;
   chatRunState: ChatRunState;
+  chatSelectionVersion: number;
   onOpenView: (view: ViewId) => void;
   onSubmitChatTask: (input: string) => Promise<boolean>;
+  selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
@@ -1769,17 +1901,18 @@ function ChatView({
         backgroundTasks: state.backgroundTasks,
         chatRunState,
         pendingUserInput,
+        selectedThreadId,
         taskSnapshot: state.taskSnapshot
       }),
-    [chatRunState, pendingUserInput, state.backgroundTasks, state.taskSnapshot]
+    [chatRunState, pendingUserInput, selectedThreadId, state.backgroundTasks, state.taskSnapshot]
   );
 
   useEffect(() => {
-    if (pendingUserInput === null || chatRunState.threadId === null) {
+    if (pendingUserInput === null || selectedThreadId === null) {
       return;
     }
     const hasPersistedUserMessage = state.taskSnapshot.recentEvents.some((event) => {
-      if (event.threadId !== chatRunState.threadId || event.type !== 'message') {
+      if (event.threadId !== selectedThreadId || event.type !== 'message') {
         return false;
       }
       if (typeof event.payload !== 'object' || event.payload === null) {
@@ -1790,7 +1923,15 @@ function ChatView({
     if (hasPersistedUserMessage) {
       setPendingUserInput(null);
     }
-  }, [chatRunState.threadId, pendingUserInput, state.taskSnapshot.recentEvents]);
+  }, [pendingUserInput, selectedThreadId, state.taskSnapshot.recentEvents]);
+
+  useEffect(() => {
+    setChatInput('');
+    setPendingUserInput(null);
+    setSelectedAttachments([]);
+    setSubmitting(false);
+    setActiveComposerPopover(null);
+  }, [chatSelectionVersion]);
 
   useEffect(() => {
     const container = transcriptScrollRef.current;

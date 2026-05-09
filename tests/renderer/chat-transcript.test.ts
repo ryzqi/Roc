@@ -55,6 +55,32 @@ function createIdleRunState(): ChatRunState {
 }
 
 describe('chat transcript helpers', () => {
+  it('shows an empty new conversation when no thread is selected and no run is active', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-older', '历史任务', '2026-05-09T08:10:00.000Z')],
+      recentEvents: [
+        {
+          id: 'assistant-older',
+          threadId: 'thread-older',
+          runId: 'run-older',
+          type: 'message',
+          payload: { role: 'assistant', content: '旧线程回复' },
+          createdAt: '2026-05-09T08:10:03.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      backgroundTasks: createBackgroundTasks(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: null,
+      taskSnapshot: snapshot
+    });
+
+    expect(messages).toEqual([]);
+  });
+
   it('renders only the active user conversation thread and appends live assistant reasoning', () => {
     const snapshot = createSnapshot({
       threads: [
@@ -92,6 +118,7 @@ describe('chat transcript helpers', () => {
         reasoning: '先读取当前工作区和最近提交。'
       },
       pendingUserInput: null,
+      selectedThreadId: null,
       taskSnapshot: snapshot
     });
 
@@ -145,6 +172,7 @@ describe('chat transcript helpers', () => {
         reasoning: '先归纳，再输出最终结论。'
       },
       pendingUserInput: null,
+      selectedThreadId: 'thread-current',
       taskSnapshot: snapshot
     });
 
@@ -188,6 +216,7 @@ describe('chat transcript helpers', () => {
         status: 'running'
       },
       pendingUserInput: '新的用户输入',
+      selectedThreadId: null,
       taskSnapshot: snapshot
     });
 
@@ -196,6 +225,121 @@ describe('chat transcript helpers', () => {
         key: 'pending-user-message',
         role: 'user',
         content: '新的用户输入',
+        reasoning: null
+      }
+    ]);
+  });
+
+  it('renders only the explicitly selected history thread', () => {
+    const snapshot = createSnapshot({
+      threads: [
+        createThread('thread-current', '当前任务', '2026-05-09T08:30:00.000Z'),
+        createThread('thread-older', '历史任务', '2026-05-09T08:20:00.000Z')
+      ],
+      recentEvents: [
+        {
+          id: 'assistant-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'assistant', content: '当前线程回复' },
+          createdAt: '2026-05-09T08:30:03.000Z'
+        },
+        {
+          id: 'assistant-older',
+          threadId: 'thread-older',
+          runId: 'run-older',
+          type: 'message',
+          payload: { role: 'assistant', content: '历史线程回复' },
+          createdAt: '2026-05-09T08:20:03.000Z'
+        },
+        {
+          id: 'user-older',
+          threadId: 'thread-older',
+          runId: 'run-older',
+          type: 'message',
+          payload: { role: 'user', content: '请继续历史会话' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      backgroundTasks: createBackgroundTasks(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: 'thread-older',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-older',
+        role: 'user',
+        content: '请继续历史会话',
+        reasoning: null
+      },
+      {
+        key: 'assistant-older',
+        role: 'assistant',
+        content: '历史线程回复',
+        reasoning: null
+      }
+    ]);
+  });
+
+  it('does not append live assistant output from a different thread than the selected history thread', () => {
+    const snapshot = createSnapshot({
+      threads: [
+        createThread('thread-current', '当前任务', '2026-05-09T08:30:00.000Z'),
+        createThread('thread-older', '历史任务', '2026-05-09T08:20:00.000Z')
+      ],
+      recentEvents: [
+        {
+          id: 'assistant-older',
+          threadId: 'thread-older',
+          runId: 'run-older',
+          type: 'message',
+          payload: { role: 'assistant', content: '历史线程回复' },
+          createdAt: '2026-05-09T08:20:03.000Z'
+        },
+        {
+          id: 'user-older',
+          threadId: 'thread-older',
+          runId: 'run-older',
+          type: 'message',
+          payload: { role: 'user', content: '请继续历史会话' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      backgroundTasks: createBackgroundTasks(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        assistantMessage: '这是别的线程的实时输出',
+        reasoning: '别的线程推理'
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-older',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-older',
+        role: 'user',
+        content: '请继续历史会话',
+        reasoning: null
+      },
+      {
+        key: 'assistant-older',
+        role: 'assistant',
+        content: '历史线程回复',
         reasoning: null
       }
     ]);

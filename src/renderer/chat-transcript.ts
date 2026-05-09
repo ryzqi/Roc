@@ -1,6 +1,5 @@
 import type { BackgroundTask, TaskEvent, TaskSnapshot } from '../shared/types';
 import type { ChatRunState } from './chat-run-state';
-import { buildHistoryItems } from './history-sidebar';
 
 export type ChatTranscriptMessage = {
   key: string;
@@ -32,15 +31,11 @@ function isMessageTaskEvent(event: TaskEvent, threadId: string): event is Messag
   return event.threadId === threadId && event.type === 'message' && isMessagePayload(event.payload);
 }
 
-function resolveActiveThreadId(
-  taskSnapshot: TaskSnapshot,
-  backgroundTasks: BackgroundTask[],
-  chatRunState: ChatRunState
-): string | null {
-  if (chatRunState.threadId !== null) {
-    return chatRunState.threadId;
+function resolveActiveThreadId(selectedThreadId: string | null, chatRunState: ChatRunState): string | null {
+  if (selectedThreadId !== null) {
+    return selectedThreadId;
   }
-  return buildHistoryItems(taskSnapshot.threads, backgroundTasks)[0]?.id ?? null;
+  return chatRunState.threadId;
 }
 
 function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
@@ -60,9 +55,10 @@ export function buildChatTranscript(input: {
   backgroundTasks: BackgroundTask[];
   chatRunState: ChatRunState;
   pendingUserInput: string | null;
+  selectedThreadId: string | null;
   taskSnapshot: TaskSnapshot;
 }): ChatTranscriptMessage[] {
-  const activeThreadId = resolveActiveThreadId(input.taskSnapshot, input.backgroundTasks, input.chatRunState);
+  const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
   if (activeThreadId === null) {
     return input.pendingUserInput === null
       ? []

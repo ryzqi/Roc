@@ -418,6 +418,15 @@ export type TaskRun = {
   enabledCapabilities: EnabledCapabilities;
 };
 
+export type TaskDeleteThreadRequest = {
+  threadId: string;
+};
+
+export type TaskDeleteThreadResult = {
+  deleted: true;
+  threadId: string;
+};
+
 export type BackgroundTaskTrigger = {
   type: 'manual' | 'schedule';
   description: string;

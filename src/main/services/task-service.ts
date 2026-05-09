@@ -236,57 +236,102 @@ export class TaskService {
     };
   }
 
-  createTaskRun(input: { userInput: string; modelId: string; enabledCapabilities: EnabledCapabilities }): TaskRun {
+  createTaskRun(input: {
+    userInput: string;
+    modelId: string;
+    enabledCapabilities: EnabledCapabilities;
+    threadId?: string;
+  }): TaskRun {
     const now = new Date().toISOString();
-    const threadId = `thread_${randomUUID()}`;
     const runId = `run_${randomUUID()}`;
     const eventId = `event_${randomUUID()}`;
-    const title = input.userInput.trim().slice(0, 60);
     const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
+    const existingThreadId =
+      input.threadId === undefined
+        ? null
+        : this.requireText(
+            input.threadId,
+            'task_thread_id_empty',
+            '任务会话 ID 不能为空。',
+            '请选择一个有效的会话后再继续发送。'
+          );
+    const threadId = existingThreadId ?? `thread_${randomUUID()}`;
+    const runNumber = existingThreadId === null ? 1 : this.nextRunNumber(threadId);
 
-    this.database.db
-      .prepare(
-        `INSERT INTO task_threads (id, title, goal, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(threadId, title, input.userInput, 'waiting_next_turn', now, now);
+    const transaction = this.database.db.transaction(() => {
+      if (existingThreadId === null) {
+        const title = input.userInput.trim().slice(0, 60);
+        this.database.db
+          .prepare(
+            `INSERT INTO task_threads (id, title, goal, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          )
+          .run(threadId, title, input.userInput, 'waiting_next_turn', now, now);
+      } else {
+        this.requireActiveThread(threadId);
+        this.database.db
+          .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+          .run('waiting_next_turn', now, threadId);
+      }
 
-    this.database.db
-      .prepare(
-        `INSERT INTO task_runs
-         (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(runId, threadId, 1, input.userInput, 'waiting_next_turn', now, null, input.modelId, enabledCapabilitiesJson);
+      this.database.db
+        .prepare(
+          `INSERT INTO task_runs
+           (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(runId, threadId, runNumber, input.userInput, 'waiting_next_turn', now, null, input.modelId, enabledCapabilitiesJson);
 
-    this.database.db
-      .prepare(
-        `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        eventId,
-        threadId,
-        runId,
-        'message',
-        JSON.stringify({
-          role: 'user',
-          content: input.userInput,
-          enabledCapabilities: input.enabledCapabilities
-        }),
-        now
-      );
+      this.database.db
+        .prepare(
+          `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          eventId,
+          threadId,
+          runId,
+          'message',
+          JSON.stringify({
+            role: 'user',
+            content: input.userInput,
+            enabledCapabilities: input.enabledCapabilities
+          }),
+          now
+        );
+    });
+    transaction();
 
     return {
       id: runId,
       threadId,
-      runNumber: 1,
+      runNumber,
       userInput: input.userInput,
       status: 'waiting_next_turn',
       startedAt: now,
       endedAt: null,
       modelId: input.modelId,
       enabledCapabilities: input.enabledCapabilities
+    };
+  }
+
+  archiveThread(threadId: string): { deleted: true; threadId: string } {
+    const normalizedThreadId = this.requireText(
+      threadId,
+      'task_thread_id_empty',
+      '任务会话 ID 不能为空。',
+      '请选择一个要删除的历史会话。'
+    );
+    this.requireActiveThread(normalizedThreadId);
+    const now = new Date().toISOString();
+
+    this.database.db
+      .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
+      .run('archived', now, now, normalizedThreadId);
+
+    return {
+      deleted: true,
+      threadId: normalizedThreadId
     };
   }
 
@@ -493,6 +538,7 @@ export class TaskService {
       .prepare(
         `SELECT id, thread_id, run_id, type, payload_json, created_at
          FROM task_events
+         WHERE thread_id IN (SELECT id FROM task_threads WHERE archived_at IS NULL)
          ORDER BY created_at DESC
          LIMIT 50`
       )
@@ -607,6 +653,56 @@ export class TaskService {
       notificationPolicy: row.notification_policy,
       riskLevel: row.risk_level,
       requiresConfirmation: row.requires_confirmation === 1,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private nextRunNumber(threadId: string): number {
+    const row = this.database.db
+      .prepare(
+        `SELECT COALESCE(MAX(run_number), 0) AS last_run_number
+         FROM task_runs
+         WHERE thread_id = ?`
+      )
+      .get(threadId) as { last_run_number: number };
+
+    return row.last_run_number + 1;
+  }
+
+  private requireActiveThread(threadId: string): TaskThread {
+    const row = this.database.db
+      .prepare(
+        `SELECT id, title, goal, status, created_at, updated_at
+         FROM task_threads
+         WHERE id = ? AND archived_at IS NULL`
+      )
+      .get(threadId) as
+      | {
+          id: string;
+          title: string;
+          goal: string;
+          status: TaskThread['status'];
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+
+    if (row === undefined) {
+      throw new RocDomainError({
+        code: 'task_thread_not_found',
+        message: '任务会话不存在。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请刷新历史会话列表后重试。'
+      });
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      goal: row.goal,
+      status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };

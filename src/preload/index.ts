@@ -25,6 +25,7 @@ const rocApi: RocPreloadApi = {
   tasks: {
     getSnapshot: () => ipcRenderer.invoke(ipcChannels.tasksGetSnapshot),
     listBackgroundTasks: () => ipcRenderer.invoke(ipcChannels.tasksListBackgroundTasks),
+    deleteThread: (request) => ipcRenderer.invoke(ipcChannels.tasksDeleteThread, request),
     createBackgroundTaskPreview: (request) => ipcRenderer.invoke(ipcChannels.tasksCreateBackgroundPreview, request),
     createBackgroundTask: (preview) => ipcRenderer.invoke(ipcChannels.tasksCreateBackgroundTask, preview),
     pauseBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksPauseBackgroundTask, id),

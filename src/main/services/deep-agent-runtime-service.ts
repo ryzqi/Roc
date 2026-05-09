@@ -143,6 +143,7 @@ export class DeepAgentRuntimeService {
 
     const capabilityPreview = this.agentService.getCapabilityPreview(request.enabledCapabilities);
     const run = this.taskService.createTaskRun({
+      threadId: request.threadId ?? undefined,
       userInput: input,
       modelId,
       enabledCapabilities: request.enabledCapabilities
