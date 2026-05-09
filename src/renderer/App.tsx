@@ -15,7 +15,11 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
-  RefreshCw
+  PanelLeft,
+  PanelLeftClose,
+  RefreshCw,
+  Search,
+  SquarePen
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
@@ -66,7 +70,11 @@ import type {
 } from '../shared/types';
 import { ComposerActionIcon } from './chat-composer-icons';
 import { getStartupLoadIntent } from './startup-load-policy';
-import { buildHistoryItems as buildHistorySidebarItems } from './history-sidebar';
+import {
+  buildHistoryItems as buildHistorySidebarItems,
+  filterHistoryItems,
+  type HistorySidebarItem
+} from './history-sidebar';
 import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from './git-diff-adapter';
 import {
   buildGitBranchSwitcherModel,
@@ -127,15 +135,7 @@ type NavItem = {
   label: string;
   meta: string;
   icon: PreviewIconName;
-  action?: 'new_conversation';
   active?: boolean;
-};
-
-type HistoryItem = {
-  id: string;
-  label: string;
-  meta: string;
-  icon: PreviewIconName;
 };
 
 type PageMeta = {
@@ -503,20 +503,22 @@ function buildTopMeta(view: MainViewId, state: LoadedState): string {
   return `${state.taskSnapshot.counts.failed} 个失败任务`;
 }
 
-function buildHistoryNavItems(state: LoadedState, selectedThreadId: string | null, activeView: ViewId): NavItem[] {
+function buildHistoryNavItems(selectedThreadId: string | null, activeView: ViewId): NavItem[] {
+  if (activeView === 'chat') {
+    return [];
+  }
   return [
     {
       id: 'chat',
       label: '新建对话',
       meta: '发送首条消息后创建新会话',
       icon: 'history',
-      action: 'new_conversation',
-      active: activeView === 'chat' && selectedThreadId === null
+      active: selectedThreadId === null
     }
   ];
 }
 
-function buildHistoryItems(state: LoadedState): HistoryItem[] {
+function buildHistoryItems(state: LoadedState): HistorySidebarItem[] {
   return buildHistorySidebarItems(state.taskSnapshot.threads, state.backgroundTasks);
 }
 
@@ -611,6 +613,9 @@ export function App(): React.JSX.Element {
     initialView === 'chat' ? initialParams.has('tool') : WORKBENCH_VIEWS.has(initialView)
   );
   const [workbenchWidth, setWorkbenchWidth] = useState(560);
+  const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
+  const [historySearchVisible, setHistorySearchVisible] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [windowState, setWindowState] = useState<WindowStateSnapshot>({
     maximized: false,
     minimized: false,
@@ -626,6 +631,7 @@ export function App(): React.JSX.Element {
     width: number;
     height: number;
   } | null>(null);
+  const historySearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
     const [taskSnapshot, taskSurfaceData] = await Promise.all([window.roc.tasks.getSnapshot(), loadTaskSurfaceData()]);
@@ -760,6 +766,19 @@ export function App(): React.JSX.Element {
     setActiveWorkbenchTool(defaultWorkbenchTool(activeView));
   }, [activeView]);
 
+  useEffect(() => {
+    if (activeView !== 'chat') {
+      setHistorySearchVisible(false);
+      setHistorySearchQuery('');
+      setHistoryContextMenu(null);
+      return;
+    }
+    if (historySearchVisible) {
+      historySearchInputRef.current?.focus();
+      historySearchInputRef.current?.select();
+    }
+  }, [activeView, historySearchVisible]);
+
   const currentWorkspace = state?.workspace ?? null;
   const currentAppMode = state?.appStatus.mode ?? null;
   const currentAgentExecution = state?.agent.execution ?? null;
@@ -782,6 +801,34 @@ export function App(): React.JSX.Element {
     setChatError(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
+
+  const toggleChatSidebar = useCallback((): void => {
+    setHistoryContextMenu(null);
+    setChatSidebarCollapsed((current) => {
+      const next = !current;
+      if (next) {
+        setHistorySearchVisible(false);
+        setHistorySearchQuery('');
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleHistorySearch = useCallback((): void => {
+    setHistoryContextMenu(null);
+    if (chatSidebarCollapsed) {
+      setChatSidebarCollapsed(false);
+      setHistorySearchVisible(true);
+      return;
+    }
+    setHistorySearchVisible((current) => {
+      const next = !current;
+      if (!next) {
+        setHistorySearchQuery('');
+      }
+      return next;
+    });
+  }, [chatSidebarCollapsed]);
 
   const startTaskRun = useCallback(
     async (input: string): Promise<boolean> => {
@@ -1155,14 +1202,19 @@ export function App(): React.JSX.Element {
       <main className="floating-stage" data-testid={`floating-${activeView}`}>
         <ViewContent
           activeView={activeView}
+          chatSidebarCollapsed={chatSidebarCollapsed}
           chatError={chatError}
           chatRunState={chatRunState}
           chatSelectionVersion={chatSelectionVersion}
+          historySearchVisible={activeView === 'chat' && historySearchVisible}
           memoryLoadState={memoryLoadState}
           onOpenView={setActiveView}
+          onStartNewConversation={startNewConversation}
           operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={startTaskRun}
+          onToggleChatSidebar={toggleChatSidebar}
+          onToggleHistorySearch={toggleHistorySearch}
           selectedThreadId={selectedThreadId}
           state={state}
           updateLoadedState={(partial) =>
@@ -1177,8 +1229,12 @@ export function App(): React.JSX.Element {
   const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const meta = viewMeta(activeView as MainViewId);
   const topMeta = buildTopMeta(activeView as MainViewId, state);
-  const historyNavItems = buildHistoryNavItems(state, selectedThreadId, activeView);
+  const historyNavItems = buildHistoryNavItems(selectedThreadId, activeView);
   const historyItems = buildHistoryItems(state);
+  const visibleHistoryItems = activeView === 'chat' ? filterHistoryItems(historyItems, historySearchQuery) : historyItems;
+  const showHistorySearch = activeView === 'chat' && historySearchVisible;
+  const showHistorySearchEmpty = showHistorySearch && historyItems.length > 0 && visibleHistoryItems.length === 0;
+  const showChatSidebar = activeView !== 'chat' || !chatSidebarCollapsed;
   const workspaceNavItems = buildWorkspaceNavItems(state);
   const controlNavItems = buildControlNavItems(state);
 
@@ -1254,107 +1310,138 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <div className={activeView === 'chat' ? 'workspace workspace--chat' : 'workspace'}>
-        <aside className="sidebar">
-          <div className="sidebar-head">
-            <button
-              className="workspace-pill"
-              data-testid="workspace-select-button"
-              title={visibleWorkspaceLabel(state)}
-              type="button"
-              onClick={() => void selectWorkspaceFromDialog()}
-            >
-              <PreviewIcon name="folder" />
-              <span>{visibleWorkspaceLabel(state)}</span>
-              <strong>选择</strong>
-            </button>
-            {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
-          </div>
-          <SidebarNavGroup
-            activeView={activeView}
-            items={historyNavItems}
-            title="对话"
-            onSelect={(item) => {
-              if (item.action === 'new_conversation') {
-                startNewConversation();
-                return;
-              }
-              setActiveView(item.id);
-            }}
-          />
-          <div className="sidebar-block sidebar-block--history">
-            <div className="side-title">历史会话</div>
-            <div className="sidebar-block-scroll history-list">
-              {historyItems.length === 0 ? (
-                <div className="history-empty">暂无历史会话</div>
-              ) : (
-                historyItems.map((item) => (
-                  <button
-                    className={item.id === selectedThreadId ? 'nav-button active' : 'nav-button'}
-                    data-testid={`history-thread-${sanitizeTestId(item.id)}`}
-                    key={item.id}
-                    type="button"
-                    onClick={() => selectHistoryThread(item.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setHistoryContextMenu({
-                        threadId: item.id,
-                        x: event.clientX,
-                        y: event.clientY
-                      });
+      <div
+        className={
+          activeView === 'chat'
+            ? showChatSidebar
+              ? 'workspace workspace--chat'
+              : 'workspace workspace--chat workspace--chat-sidebar-collapsed'
+            : 'workspace'
+        }
+      >
+        {showChatSidebar ? (
+          <aside className="sidebar">
+            <div className="sidebar-head">
+              <button
+                className="workspace-pill"
+                data-testid="workspace-select-button"
+                title={visibleWorkspaceLabel(state)}
+                type="button"
+                onClick={() => void selectWorkspaceFromDialog()}
+              >
+                <PreviewIcon name="folder" />
+                <span>{visibleWorkspaceLabel(state)}</span>
+                <strong>选择</strong>
+              </button>
+              {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
+            </div>
+            {historyNavItems.length === 0 ? null : (
+              <SidebarNavGroup
+                activeView={activeView}
+                items={historyNavItems}
+                title="对话"
+                onSelect={(item) => {
+                  if (item.id === 'chat') {
+                    startNewConversation();
+                    return;
+                  }
+                  setActiveView(item.id);
+                }}
+              />
+            )}
+            <div className="sidebar-block sidebar-block--history">
+              <div className="side-title">历史会话</div>
+              {showHistorySearch ? (
+                <label className="history-search-field">
+                  <Search aria-hidden="true" className="icon-svg" size={15} strokeWidth={1.8} />
+                  <input
+                    aria-label="搜索历史会话"
+                    data-testid="chat-history-search-input"
+                    placeholder="搜索历史会话"
+                    ref={historySearchInputRef}
+                    type="search"
+                    value={historySearchQuery}
+                    onChange={(event) => {
+                      setHistoryContextMenu(null);
+                      setHistorySearchQuery(event.target.value);
                     }}
+                  />
+                </label>
+              ) : null}
+              <div className="sidebar-block-scroll history-list">
+                {historyItems.length === 0 ? (
+                  <div className="history-empty">暂无历史会话</div>
+                ) : showHistorySearchEmpty ? (
+                  <div className="history-empty" data-testid="chat-history-search-empty">未找到匹配的历史会话</div>
+                ) : (
+                  visibleHistoryItems.map((item) => (
+                    <button
+                      className={item.id === selectedThreadId ? 'nav-button active' : 'nav-button'}
+                      data-testid={`history-thread-${sanitizeTestId(item.id)}`}
+                      key={item.id}
+                      type="button"
+                      onClick={() => selectHistoryThread(item.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setHistoryContextMenu({
+                          threadId: item.id,
+                          x: event.clientX,
+                          y: event.clientY
+                        });
+                      }}
+                    >
+                      <PreviewIcon name={item.icon} />
+                      <span className="nav-copy">
+                        <span className="nav-label">{item.label}</span>
+                        <span className="nav-meta">{item.meta}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              {historyContextMenu === null ? null : (
+                <div
+                  className="history-context-menu"
+                  style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
+                >
+                  <button
+                    data-testid="history-thread-delete"
+                    type="button"
+                    onClick={() => void deleteHistoryThread(historyContextMenu.threadId)}
                   >
-                    <PreviewIcon name={item.icon} />
-                    <span className="nav-copy">
-                      <span className="nav-label">{item.label}</span>
-                      <span className="nav-meta">{item.meta}</span>
-                    </span>
+                    删除
                   </button>
-                ))
+                </div>
               )}
             </div>
-            {historyContextMenu === null ? null : (
-              <div
-                className="history-context-menu"
-                style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
+            <SidebarNavGroup
+              className="sidebar-block sidebar-block--tasks"
+              activeView={activeView}
+              items={workspaceNavItems}
+              title="任务工作台"
+              onSelect={(item) => setActiveView(item.id)}
+            />
+            <SidebarNavGroup
+              className="sidebar-block sidebar-block--control"
+              activeView={activeView}
+              items={controlNavItems}
+              title="控制区"
+              onSelect={(item) => setActiveView(item.id)}
+            />
+            <div className="sidebar-footer">
+              <button
+                className="settings-gear"
+                data-testid="settings-gear"
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                title="打开设置"
+                aria-label="打开设置"
               >
-                <button
-                  data-testid="history-thread-delete"
-                  type="button"
-                  onClick={() => void deleteHistoryThread(historyContextMenu.threadId)}
-                >
-                  删除
-                </button>
-              </div>
-            )}
-          </div>
-          <SidebarNavGroup
-            className="sidebar-block sidebar-block--tasks"
-            activeView={activeView}
-            items={workspaceNavItems}
-            title="任务工作台"
-            onSelect={(item) => setActiveView(item.id)}
-          />
-          <SidebarNavGroup
-            className="sidebar-block sidebar-block--control"
-            activeView={activeView}
-            items={controlNavItems}
-            title="控制区"
-            onSelect={(item) => setActiveView(item.id)}
-          />
-          <div className="sidebar-footer">
-            <button
-              className="settings-gear"
-              data-testid="settings-gear"
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              title="打开设置"
-              aria-label="打开设置"
-            >
-              <PreviewIcon name="wrench" />
-            </button>
-          </div>
-        </aside>
+                <PreviewIcon name="wrench" />
+              </button>
+            </div>
+          </aside>
+        ) : null}
 
         <div
           style={hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined}
@@ -1373,14 +1460,19 @@ export function App(): React.JSX.Element {
               <div className="canvas-scroll">
                 <ViewContent
                   activeView={activeView}
+                  chatSidebarCollapsed={chatSidebarCollapsed}
                   chatError={chatError}
                   chatRunState={chatRunState}
                   chatSelectionVersion={chatSelectionVersion}
+                  historySearchVisible={showHistorySearch}
                   memoryLoadState={memoryLoadState}
                   onOpenView={setActiveView}
+                  onStartNewConversation={startNewConversation}
                   operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={startTaskRun}
+                  onToggleChatSidebar={toggleChatSidebar}
+                  onToggleHistorySearch={toggleHistorySearch}
                   selectedThreadId={selectedThreadId}
                   state={state}
                   updateLoadedState={(partial) =>
@@ -1722,28 +1814,38 @@ async function loadSettingsState(): Promise<{
 
 function ViewContent({
   activeView,
+  chatSidebarCollapsed,
   chatError,
   chatRunState,
   chatSelectionVersion,
+  historySearchVisible,
   memoryLoadState,
   onOpenView,
+  onStartNewConversation,
   operationsLoadState,
   onSelectWorkspace,
   onSubmitChatTask,
+  onToggleChatSidebar,
+  onToggleHistorySearch,
   selectedThreadId,
   state,
   updateLoadedState,
   workspaceLoadState
 }: {
   activeView: ViewId;
+  chatSidebarCollapsed: boolean;
   chatError: string | null;
   chatRunState: ChatRunState;
   chatSelectionVersion: number;
+  historySearchVisible: boolean;
   memoryLoadState: LazyLoadState;
   onOpenView: (view: ViewId) => void;
+  onStartNewConversation: () => void;
   operationsLoadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<boolean>;
+  onToggleChatSidebar: () => void;
+  onToggleHistorySearch: () => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -1787,11 +1889,16 @@ function ViewContent({
   }
   return (
     <ChatView
+      chatSidebarCollapsed={chatSidebarCollapsed}
       chatError={chatError}
       chatRunState={chatRunState}
       chatSelectionVersion={chatSelectionVersion}
+      historySearchVisible={historySearchVisible}
       onOpenView={onOpenView}
+      onStartNewConversation={onStartNewConversation}
       onSubmitChatTask={onSubmitChatTask}
+      onToggleChatSidebar={onToggleChatSidebar}
+      onToggleHistorySearch={onToggleHistorySearch}
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
@@ -1842,20 +1949,30 @@ function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; 
 }
 
 function ChatView({
+  chatSidebarCollapsed,
   chatError,
   chatRunState,
   chatSelectionVersion,
+  historySearchVisible,
   onOpenView,
+  onStartNewConversation,
   onSubmitChatTask,
+  onToggleChatSidebar,
+  onToggleHistorySearch,
   selectedThreadId,
   state,
   updateLoadedState
 }: {
+  chatSidebarCollapsed: boolean;
   chatError: string | null;
   chatRunState: ChatRunState;
   chatSelectionVersion: number;
+  historySearchVisible: boolean;
   onOpenView: (view: ViewId) => void;
+  onStartNewConversation: () => void;
   onSubmitChatTask: (input: string) => Promise<boolean>;
+  onToggleChatSidebar: () => void;
+  onToggleHistorySearch: () => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -1982,10 +2099,61 @@ function ChatView({
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
       <div className="chat-empty-plane" aria-label="聊天主画布" ref={transcriptScrollRef}>
-        <div className="chat-feedback-stack">
-          {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
-          {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
-          <ChatTranscriptPanel messages={chatTranscript} />
+        <div className="chat-page-shell">
+          <header className="chat-toolbar">
+            <div className="chat-toolbar-copy">
+              <span className="chat-toolbar-kicker">对话</span>
+              <div className="chat-toolbar-text">
+                <h1 className="chat-toolbar-title">对话</h1>
+                <p className="chat-toolbar-subtitle">
+                  {selectedThreadId === null
+                    ? '开始新的任务对话，或从左侧历史继续已有上下文。'
+                    : '继续当前线程，或用顶部动作快速切换历史与新建会话。'}
+                </p>
+              </div>
+            </div>
+            <div className="chat-toolbar-actions">
+              <button
+                aria-label={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
+                aria-pressed={!chatSidebarCollapsed}
+                className={chatSidebarCollapsed ? 'chat-toolbar-action is-active' : 'chat-toolbar-action'}
+                data-testid="chat-sidebar-toggle"
+                title={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
+                type="button"
+                onClick={onToggleChatSidebar}
+              >
+                {chatSidebarCollapsed ? <PanelLeft aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} /> : <PanelLeftClose aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />}
+              </button>
+              <button
+                aria-label="搜索历史对话"
+                aria-pressed={historySearchVisible}
+                className={historySearchVisible ? 'chat-toolbar-action is-active' : 'chat-toolbar-action'}
+                data-testid="chat-history-search-toggle"
+                title="搜索历史对话"
+                type="button"
+                onClick={onToggleHistorySearch}
+              >
+                <Search aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+              </button>
+              <button
+                aria-label="新建对话"
+                className="chat-toolbar-action"
+                data-testid="chat-new-conversation"
+                title="新建对话"
+                type="button"
+                onClick={onStartNewConversation}
+              >
+                <SquarePen aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
+              </button>
+            </div>
+          </header>
+          <div className="chat-feedback-shell">
+            <div className="chat-feedback-stack">
+              {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
+              {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
+              <ChatTranscriptPanel messages={chatTranscript} />
+            </div>
+          </div>
         </div>
       </div>
       <div className="chat-bottom-stack">

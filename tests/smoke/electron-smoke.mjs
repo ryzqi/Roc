@@ -206,6 +206,16 @@ async function clickSmokeControl(page, selector) {
   });
 }
 
+async function openChatView(page) {
+  const sidebarEntry = page.locator('[data-testid="nav-chat"]');
+  if ((await sidebarEntry.count()) > 0) {
+    await clickSmokeControl(page, '[data-testid="nav-chat"]');
+  } else {
+    await clickSmokeControl(page, '[data-testid="chat-new-conversation"]');
+  }
+  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+}
+
 async function clickComposerPopoverChoice(page, triggerSelector, choiceSelector) {
   await page.hover(triggerSelector);
   await page.waitForSelector(choiceSelector, { timeout: 5000 });
@@ -673,8 +683,7 @@ try {
   });
   await waitForTextContent(page, '[data-testid="git-view"]', 'phase-three-notes.txt');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
-  await page.click('[data-testid="nav-chat"]');
-  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  await openChatView(page);
   await page.click('.rail-button[data-tool-button="files"]');
   await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="workbench-panel"]', { timeout: 5000 });
@@ -1578,8 +1587,7 @@ try {
   }
   await page.click('[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
-  await page.click('[data-testid="nav-chat"]');
-  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  await openChatView(page);
   await waitForCapabilitySelection(page, { mcpCount: 1, skillCount: 1 });
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="turn-mcp-smoke-mcp"]', { timeout: 5000 });
@@ -2045,6 +2053,12 @@ try {
     return result;
   });
   const buttonInteractionEvidence = {
+    chatSidebarToggleVisible: false,
+    chatSidebarToggleWorks: false,
+    chatHistorySearchToggleVisible: false,
+    chatHistorySearchToggleWorks: false,
+    chatNewConversationVisible: false,
+    chatNewConversationWorks: false,
     attachmentPickerVisible: false,
     attachmentSelectionVisible: false,
     toolPopoverVisible: false,
@@ -2067,14 +2081,36 @@ try {
     memoryRecordSelectable: false
   };
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
-  await page.click('[data-testid="nav-chat"]');
-  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
+  await openChatView(page);
+  buttonInteractionEvidence.chatSidebarToggleVisible = (await page.locator('[data-testid="chat-sidebar-toggle"]').count()) === 1;
+  buttonInteractionEvidence.chatHistorySearchToggleVisible =
+    (await page.locator('[data-testid="chat-history-search-toggle"]').count()) === 1;
+  buttonInteractionEvidence.chatNewConversationVisible =
+    (await page.locator('[data-testid="chat-new-conversation"]').count()) === 1;
+  await page.click('[data-testid="chat-history-search-toggle"]');
+  await page.waitForSelector('[data-testid="chat-history-search-input"]', { timeout: 5000 });
+  buttonInteractionEvidence.chatHistorySearchToggleWorks =
+    (await page.locator('[data-testid="chat-history-search-input"]').count()) === 1;
+  await page.click('[data-testid="chat-sidebar-toggle"]');
+  await page.waitForFunction(() => document.querySelector('.sidebar') === null, undefined, { timeout: 5000 });
+  buttonInteractionEvidence.chatSidebarToggleWorks = (await page.locator('.sidebar').count()) === 0;
+  await page.click('[data-testid="chat-sidebar-toggle"]');
+  await page.waitForSelector('.sidebar', { timeout: 5000 });
   await page.hover('[data-testid="chat-attachment-trigger"]');
   buttonInteractionEvidence.attachmentPickerVisible = (await page.locator('[data-testid="chat-attachment-trigger"]').count()) === 1;
   await page.click('[data-testid="chat-attachment-trigger"]');
   await page.waitForSelector('[data-testid="chat-attachment-pill"]', { timeout: 5000 });
   buttonInteractionEvidence.attachmentSelectionVisible =
     ((await page.textContent('[data-testid="chat-attachment-pill"]')) ?? '').includes('phase-three-notes.txt');
+  await page.click('[data-testid="chat-new-conversation"]');
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="chat-view"]') !== null &&
+      document.querySelector('[data-testid="chat-attachment-pill"]') === null,
+    undefined,
+    { timeout: 5000 }
+  );
+  buttonInteractionEvidence.chatNewConversationWorks = (await page.locator('[data-testid="chat-attachment-pill"]').count()) === 0;
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="chat-tool-popover"]', { timeout: 5000 });
   buttonInteractionEvidence.toolPopoverVisible =

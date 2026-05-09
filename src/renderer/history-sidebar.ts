@@ -27,3 +27,14 @@ export function buildHistoryItems(threads: TaskThread[], backgroundTasks: Backgr
       icon: 'history'
     }));
 }
+
+export function filterHistoryItems(items: HistorySidebarItem[], query: string): HistorySidebarItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery.length === 0) {
+    return items;
+  }
+  return items.filter((item) => {
+    const haystacks = [item.label, item.meta].map((value) => value.toLocaleLowerCase());
+    return haystacks.some((value) => value.includes(normalizedQuery));
+  });
+}
