@@ -609,16 +609,92 @@ button {
   border-radius: 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.992), rgba(254, 254, 255, 1));
   overflow: auto;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 8px 0 6px;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  padding: 18px 0 10px;
 }
 
 .chat-feedback-stack {
   width: min(100%, 860px);
   display: grid;
+  gap: 14px;
+  min-height: 100%;
+}
+
+.chat-transcript {
+  display: grid;
+  gap: 18px;
+  align-content: end;
+}
+
+.chat-message-row {
+  display: flex;
+}
+
+.chat-message-row--assistant {
+  justify-content: flex-start;
+}
+
+.chat-message-row--user {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: min(100%, 680px);
+  display: grid;
   gap: 12px;
+  padding: 16px 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(218, 226, 238, 0.94);
+  box-shadow: 0 18px 40px rgba(20, 30, 48, 0.08);
+}
+
+.chat-bubble--assistant {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.98));
+  color: var(--ink);
+  border-top-left-radius: 8px;
+}
+
+.chat-bubble--user {
+  background: linear-gradient(180deg, rgba(59, 92, 145, 0.96), rgba(45, 74, 121, 0.98));
+  color: #f7faff;
+  border-color: rgba(56, 86, 136, 0.96);
+  border-top-right-radius: 8px;
+}
+
+.chat-bubble p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-bubble--user p {
+  color: inherit;
+}
+
+.chat-bubble-reasoning {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(240, 244, 249, 0.88);
+  border: 1px solid rgba(216, 224, 236, 0.94);
+}
+
+.chat-bubble-reasoning strong {
+  color: #476283;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.chat-bubble-reasoning p {
+  color: #5b6f88;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .chat-bottom-stack {
@@ -764,7 +840,6 @@ button {
 .grid-3,
 .split,
 .compact-grid,
-.capability-card-grid,
 .form-grid,
 .memory-library-layout {
   display: grid;
@@ -789,14 +864,8 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.capability-card-grid {
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
-}
-
 .empty-state,
-.memory-search-box,
-.chat-result-card,
-.agent-preview {
+.memory-search-box {
   border: 1px solid rgba(220, 228, 239, 0.9);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -3326,93 +3395,6 @@ button.model-pill {
   font-size: 12px;
 }
 
-.chat-result-card,
-.chat-run-card,
-.agent-preview {
-  display: grid;
-  gap: 10px;
-}
-
-.chat-result-card,
-.chat-run-card {
-  padding: 14px;
-  border-color: rgba(184, 224, 208, 0.92);
-  background: rgba(236, 249, 244, 0.95);
-}
-
-.chat-result-header,
-.chat-result-meta {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.chat-result-header strong {
-  color: var(--green);
-}
-
-.chat-result-card p,
-.chat-run-card p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.chat-run-reasoning {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(220, 228, 239, 0.94);
-}
-
-.chat-run-reasoning strong {
-  color: var(--accent);
-  font-size: 12px;
-}
-
-.chat-run-reasoning p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-.chat-run-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.capability-card {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-  border: 1px solid rgba(220, 228, 239, 0.9);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.72);
-  padding: 12px;
-  font-size: 12px;
-}
-
-.capability-card strong {
-  color: var(--ink);
-}
-
-.capability-card span,
-.capability-card small {
-  color: var(--muted);
-}
-
 .tool-row {
   display: flex;
   min-width: 0;
@@ -3478,8 +3460,7 @@ button.model-pill {
   .split,
   .form-grid,
   .memory-library-layout,
-  .compact-grid,
-  .capability-card-grid {
+  .compact-grid {
     grid-template-columns: 1fr;
   }
 

@@ -83,6 +83,7 @@ import {
   setDefaultModelInSettingsSaveRequest
 } from './settings-model';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
+import { buildChatTranscript, type ChatTranscriptMessage } from './chat-transcript';
 import { SettingsView } from './settings';
 import { SettingsModal } from './settings/settings-modal';
 import '@xterm/xterm/css/xterm.css';
@@ -1728,9 +1729,11 @@ function ChatView({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
   const [chatInput, setChatInput] = useState('');
+  const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<'tools' | 'skills' | 'models' | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
   const visibleCapabilitySkills = state.skills.filter(
     (skill) => skill.enabled && skill.status === 'ready'
@@ -1760,6 +1763,42 @@ function ChatView({
   }
   const trimmedInput = chatInput.trim();
   const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
+  const chatTranscript = useMemo(
+    () =>
+      buildChatTranscript({
+        backgroundTasks: state.backgroundTasks,
+        chatRunState,
+        pendingUserInput,
+        taskSnapshot: state.taskSnapshot
+      }),
+    [chatRunState, pendingUserInput, state.backgroundTasks, state.taskSnapshot]
+  );
+
+  useEffect(() => {
+    if (pendingUserInput === null || chatRunState.threadId === null) {
+      return;
+    }
+    const hasPersistedUserMessage = state.taskSnapshot.recentEvents.some((event) => {
+      if (event.threadId !== chatRunState.threadId || event.type !== 'message') {
+        return false;
+      }
+      if (typeof event.payload !== 'object' || event.payload === null) {
+        return false;
+      }
+      return Reflect.get(event.payload, 'role') === 'user' && Reflect.get(event.payload, 'content') === pendingUserInput;
+    });
+    if (hasPersistedUserMessage) {
+      setPendingUserInput(null);
+    }
+  }, [chatRunState.threadId, pendingUserInput, state.taskSnapshot.recentEvents]);
+
+  useEffect(() => {
+    const container = transcriptScrollRef.current;
+    if (container === null) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [chatRunState.assistantMessage, chatRunState.reasoning, chatTranscript]);
 
   async function submitCurrentInput(): Promise<void> {
     if (sendDisabled) {
@@ -1769,6 +1808,7 @@ function ChatView({
     try {
       const submitted = await onSubmitChatTask(trimmedInput);
       if (submitted) {
+        setPendingUserInput(trimmedInput);
         setChatInput('');
       }
     } finally {
@@ -1800,12 +1840,11 @@ function ChatView({
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
-      <div className="chat-empty-plane" aria-label="聊天主画布">
+      <div className="chat-empty-plane" aria-label="聊天主画布" ref={transcriptScrollRef}>
         <div className="chat-feedback-stack">
           {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
           {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
-          {state.agentCapabilityPreview === null ? null : <AgentCapabilityPreviewPanel preview={state.agentCapabilityPreview} />}
-          {chatRunState.status === 'idle' ? null : <ChatRunPanel state={chatRunState} />}
+          <ChatTranscriptPanel messages={chatTranscript} />
         </div>
       </div>
       <div className="chat-bottom-stack">
@@ -4422,96 +4461,27 @@ function TerminalWorkbench({
   );
 }
 
-function AgentCapabilityPreviewPanel({ preview }: { preview: AgentCapabilityPreview }): React.JSX.Element {
+function ChatTranscriptPanel({ messages }: { messages: ChatTranscriptMessage[] }): React.JSX.Element {
   return (
-    <section className="card agent-preview" data-testid="agent-capability-preview">
-      <div className="card-title">Agent 能力预览</div>
-      <div className="grid-2 compact-grid">
-        <ToolRow label="模型" value={preview.modelId} tone="ok" />
-        <ToolRow label="不可信上下文" value={preview.untrustedContextPolicy} tone="warn" />
-        <ToolRow label="MCP" value={preview.selectedCapabilities.mcpServers.join(', ')} />
-        <ToolRow label="Skills" value={preview.selectedCapabilities.skills.join(', ')} />
-      </div>
-      <div className="capability-card-grid" data-testid="agent-tool-cards">
-        {[...preview.toolCards, ...preview.skillCards].map((card) => (
-          <div className="capability-card" key={card.id}>
-            <strong>{card.name}</strong>
-            <span>{card.capabilityType}</span>
-            <small>{card.scope} · {card.riskLevel} · {card.auditCategory}</small>
-            <small>{card.untrustedContext ? '不可信上下文' : '受控上下文'}</small>
-          </div>
-        ))}
-      </div>
-      <div className="capability-card-grid" data-testid="agent-subagents">
-        {preview.subagents.map((subagent) => (
-          <div className="capability-card" key={subagent.id}>
-            <strong>{subagent.name}</strong>
-            <span>{subagent.purpose}</span>
-            <small>{subagent.inheritsSkills ? 'inherits skills' : 'does not inherit skills'}</small>
-          </div>
-        ))}
-      </div>
-      {preview.skippedCapabilities.length === 0 ? null : (
-        <div className="notice" data-testid="agent-skipped-capabilities">
-          {preview.skippedCapabilities.map((item) => `${item.type}:${item.id}:${item.reason}`).join(', ')}
+    <div className="chat-transcript" data-testid="chat-transcript">
+      {messages.map((message) => (
+        <div
+          className={message.role === 'user' ? 'chat-message-row chat-message-row--user' : 'chat-message-row chat-message-row--assistant'}
+          data-role={message.role}
+          data-testid={message.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'}
+          key={message.key}
+        >
+          <article className={message.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--assistant'}>
+            {message.content.length === 0 ? null : <p>{message.content}</p>}
+            {message.reasoning === null ? null : (
+              <div className="chat-bubble-reasoning" data-testid="chat-message-reasoning">
+                <strong>思考</strong>
+                <p>{message.reasoning}</p>
+              </div>
+            )}
+          </article>
         </div>
-      )}
-    </section>
-  );
-}
-
-function ChatRunPanel({ state }: { state: ChatRunState }): React.JSX.Element {
-  const statusLabel =
-    state.status === 'running'
-      ? 'streaming'
-      : state.status === 'completed'
-        ? 'completed'
-        : state.status === 'failed'
-          ? 'failed'
-          : 'idle';
-  return (
-    <div className="chat-run-card" data-testid="chat-run">
-      <div className="chat-result-header">
-        <strong data-testid="chat-run-status">{statusLabel}</strong>
-        <span data-testid="chat-run-model">
-          {state.providerId ?? '未配置'} / {state.modelId ?? '未配置'}
-        </span>
-      </div>
-      <p data-testid="chat-run-message">{state.assistantMessage || (state.status === 'running' ? '正在生成回复…' : '暂无回复内容。')}</p>
-      {state.reasoning.length === 0 ? null : (
-        <div className="chat-run-reasoning" data-testid="chat-run-reasoning">
-          <strong>Reasoning</strong>
-          <p>{state.reasoning}</p>
-        </div>
-      )}
-      {state.todos.length === 0 ? null : (
-        <div className="chat-run-list" data-testid="chat-run-todos">
-          {state.todos.map((todo) => (
-            <span className="pill" key={`${todo.content}:${todo.status}`}>
-              {todo.status} · {todo.content}
-            </span>
-          ))}
-        </div>
-      )}
-      {state.subagents.length === 0 ? null : (
-        <div className="chat-run-list" data-testid="chat-run-subagents">
-          {state.subagents.map((subagent) => (
-            <span className="pill" key={`${subagent.subagent}:${subagent.status}`}>
-              {subagent.subagent} · {subagent.status}
-            </span>
-          ))}
-        </div>
-      )}
-      {state.errorMessage === null ? null : (
-        <span className="inline-warning" data-testid="chat-run-error">
-          {state.errorMessage}
-        </span>
-      )}
-      <div className="chat-result-meta">
-        <span>{state.threadId ?? '无 thread'}</span>
-        <span>{state.durationMs === null ? '运行中' : `${state.durationMs} ms`}</span>
-        <span>{state.summary ?? 'deepagents streaming'}</span>
-      </div>
+      ))}
     </div>
   );
 }

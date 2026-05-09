@@ -1596,13 +1596,12 @@ try {
     mcpCount: 1,
     skillCount: 1
   });
-  await page.waitForSelector('[data-testid="agent-capability-preview"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="agent-tool-cards"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="agent-subagents"]', { timeout: 5000 });
-  const agentPreviewText = await page.textContent('[data-testid="agent-capability-preview"]');
-  if (agentPreviewText === null) {
-    throw new Error('Smoke could not read Agent capability preview text.');
-  }
+  const agentCapabilityPreviewHidden = await page.evaluate(
+    () =>
+      document.querySelector('[data-testid="agent-capability-preview"]') === null &&
+      document.querySelector('[data-testid="agent-tool-cards"]') === null &&
+      document.querySelector('[data-testid="agent-subagents"]') === null
+  );
   const agentPreviewApiEvidence = await page.evaluate(async () => {
     const preview = await window.roc.agent.getCapabilityPreview({
       mcpServers: ['smoke-mcp', 'missing-mcp'],
@@ -1715,14 +1714,21 @@ try {
         composerRect.bottom <= chatViewRect.bottom &&
         chatViewRect.bottom - composerRect.bottom <= 4 &&
         viewport.height - composerRect.bottom <= 10,
-      resultAbsentBeforeSubmit: document.querySelector('[data-testid="chat-run"]') === null,
+      transcriptMountedBeforeSubmit: document.querySelector('[data-testid="chat-transcript"]') !== null,
       resultAboveInput: true,
       value: input.value
     };
   });
   await page.keyboard.press('Enter');
-  await page.waitForSelector('[data-testid="chat-run"]', { timeout: 5000 });
-  const chatResultText = await page.textContent('[data-testid="chat-run"]');
+  await page.waitForFunction(
+    () => {
+      const assistantMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]'));
+      const latestAssistant = assistantMessages.at(-1);
+      return (latestAssistant?.textContent ?? '').includes('Smoke Provider 已生成首轮回复。');
+    },
+    { timeout: 5000 }
+  );
+  const chatResultText = await page.textContent('[data-testid="chat-transcript"]');
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
   }
@@ -1731,14 +1737,24 @@ try {
   );
   const chatResultLayoutEvidence = await page.evaluate(() => {
     const input = document.querySelector('[data-testid="chat-input"]');
-    const result = document.querySelector('[data-testid="chat-run"]');
-    if (!(input instanceof HTMLElement) || !(result instanceof HTMLElement)) {
+    const userMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-user"]'));
+    const assistantMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]'));
+    const latestUser = userMessages.at(-1);
+    const latestAssistant = assistantMessages.at(-1);
+    if (!(input instanceof HTMLElement) || !(latestUser instanceof HTMLElement) || !(latestAssistant instanceof HTMLElement)) {
       return {
-        resultAboveInput: false
+        resultAboveInput: false,
+        userAlignedRight: false,
+        assistantAlignedLeft: false
       };
     }
+    const inputRect = input.getBoundingClientRect();
+    const userRect = latestUser.getBoundingClientRect();
+    const assistantRect = latestAssistant.getBoundingClientRect();
     return {
-      resultAboveInput: result.getBoundingClientRect().bottom <= input.getBoundingClientRect().top
+      resultAboveInput: userRect.bottom <= inputRect.top && assistantRect.bottom <= inputRect.top,
+      userAlignedRight: window.getComputedStyle(latestUser).justifyContent === 'flex-end',
+      assistantAlignedLeft: window.getComputedStyle(latestAssistant).justifyContent === 'flex-start'
     };
   });
   const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
@@ -2555,7 +2571,7 @@ try {
     chatInputEditable:
       chatInputEvidence.exists &&
       chatInputEvidence.editable &&
-      chatInputEvidence.resultAbsentBeforeSubmit &&
+      chatInputEvidence.transcriptMountedBeforeSubmit &&
       chatInputEvidence.visuallyFramed &&
       chatInputEvidence.sendButtonVisibleInViewport &&
       chatInputEvidence.bottomExplanationsAbsent &&
@@ -2563,12 +2579,7 @@ try {
         (typeof chatInputEvidence.composerBottomGapToViewport === 'number' &&
           chatInputEvidence.composerBottomGapToViewport <= 10)) &&
       chatInputEvidence.value === submittedChatPrompt,
-    agentCapabilityPreviewVisible:
-      agentPreviewText.includes('Agent 能力预览') &&
-      agentPreviewText.includes('web_read') &&
-      agentPreviewText.includes('smoke_tool') &&
-      agentPreviewText.includes('Smoke Skill') &&
-      agentPreviewText.includes('does not inherit skills'),
+    agentCapabilityPreviewHidden: agentCapabilityPreviewHidden,
     agentCapabilityPreviewApi:
       agentPreviewApiEvidence.selected.mcpServers.includes('smoke-mcp') &&
       agentPreviewApiEvidence.selected.skills.includes('smoke-skill') &&
@@ -2582,9 +2593,10 @@ try {
       agentPreviewApiEvidence.policy === 'external_content_reference_only',
     providerChatResultVisible:
       chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
-      chatResultText.includes('completed') &&
-      chatResultText.includes('smoke-ui-openai / smoke-ui-openai-model') &&
-      chatResultLayoutEvidence.resultAboveInput,
+      chatResultText.includes(submittedChatPrompt) &&
+      chatResultLayoutEvidence.resultAboveInput &&
+      chatResultLayoutEvidence.userAlignedRight &&
+      chatResultLayoutEvidence.assistantAlignedLeft,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === submittedChatPrompt &&
       taskCapabilityEvidence.threadGoal === submittedChatPrompt &&
@@ -2744,7 +2756,7 @@ try {
     chatCapabilitySelectionVisible: rendererBoundary.chatCapabilitySelectionVisible,
     chatCollapsedRailLayoutVisible: rendererBoundary.chatCollapsedRailLayoutVisible,
     chatInputEditable: rendererBoundary.chatInputEditable,
-    agentCapabilityPreviewVisible: rendererBoundary.agentCapabilityPreviewVisible,
+    agentCapabilityPreviewHidden: rendererBoundary.agentCapabilityPreviewHidden,
     agentCapabilityPreviewApi: rendererBoundary.agentCapabilityPreviewApi,
     providerChatResultVisible: rendererBoundary.providerChatResultVisible,
     taskRunCapabilityStored: rendererBoundary.taskRunCapabilityStored,
