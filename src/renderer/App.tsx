@@ -33,6 +33,8 @@ import type {
   BackgroundTask,
   DiagnosticPackage,
   DoctorSnapshot,
+  FileEntryShape,
+  FilePreviewLike,
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
@@ -1510,19 +1512,19 @@ function fileExtension(relativePath: string): string {
 }
 
 type TreeNode = {
-  entry: FileTreeResult['entries'][number];
+  entry: FileEntryShape;
   depth: number;
 };
 
-function flattenTreeEntries(
-  entries: FileTreeResult['entries'],
+function flattenTreeEntries<E extends FileEntryShape>(
+  entries: E[],
   expandedDirectories: Set<string>,
-  childEntries: Record<string, FileTreeResult['entries']>
+  childEntries: Record<string, E[]>
 ): TreeNode[] {
   const rootEntries = [...entries].sort(compareFileEntries);
   const nodes: TreeNode[] = [];
 
-  function visit(list: FileTreeResult['entries'], depth: number): void {
+  function visit(list: E[], depth: number): void {
     for (const entry of list) {
       nodes.push({ entry, depth });
       if (entry.type !== 'directory' || !expandedDirectories.has(entry.relativePath)) {
@@ -1540,14 +1542,14 @@ function flattenTreeEntries(
   return nodes;
 }
 
-function compareFileEntries(left: FileTreeResult['entries'][number], right: FileTreeResult['entries'][number]): number {
+function compareFileEntries(left: FileEntryShape, right: FileEntryShape): number {
   if (left.type !== right.type) {
     return left.type === 'directory' ? -1 : 1;
   }
   return left.name.localeCompare(right.name, 'zh-Hans-CN');
 }
 
-function fileTypeLabel(preview: FilePreviewResult | null): string {
+function fileTypeLabel(preview: FilePreviewLike | null): string {
   if (preview === null) {
     return '未加载';
   }
@@ -1561,7 +1563,7 @@ function fileTypeLabel(preview: FilePreviewResult | null): string {
   return extension.length === 0 ? '文本文件' : `${extension.toUpperCase()} 文件`;
 }
 
-function fileTreeIcon(entry: FileTreeResult['entries'][number], active: boolean, expanded: boolean): React.JSX.Element {
+function fileTreeIcon(entry: FileEntryShape, active: boolean, expanded: boolean): React.JSX.Element {
   const className = active ? 'tree-item-file-icon tree-item-file-icon--active' : 'tree-item-file-icon';
   if (entry.type === 'directory') {
     const DirectoryIcon = expanded ? FolderOpen : Folder;
@@ -1605,11 +1607,11 @@ function fileTreeIcon(entry: FileTreeResult['entries'][number], active: boolean,
   return <File className={className} size={16} strokeWidth={1.8} />;
 }
 
-function isImagePreview(preview: FilePreviewResult | null): preview is FilePreviewResult & { kind: 'image'; mediaType: string } {
+function isImagePreview(preview: FilePreviewLike | null): preview is FilePreviewLike & { kind: 'image'; mediaType: string } {
   return preview !== null && preview.kind === 'image' && typeof preview.mediaType === 'string';
 }
 
-function previewTextBody(preview: FilePreviewResult | null): string {
+function previewTextBody(preview: FilePreviewLike | null): string {
   if (preview === null) {
     return '当前没有加载可预览内容。';
   }
@@ -4518,7 +4520,7 @@ function TreeItem({
   active?: boolean;
   depth?: number;
   expanded?: boolean;
-  entry: FileTreeResult['entries'][number];
+  entry: FileEntryShape;
   loading?: boolean;
   onClick?: () => void;
 }): React.JSX.Element {
