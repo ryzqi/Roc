@@ -72,7 +72,9 @@ const rocApi: RocPreloadApi = {
     list: () => ipcRenderer.invoke(ipcChannels.skillsList),
     importSkill: (request) => ipcRenderer.invoke(ipcChannels.skillsImport, request),
     setEnabled: (request) => ipcRenderer.invoke(ipcChannels.skillsSetEnabled, request),
-    deleteSkill: (id) => ipcRenderer.invoke(ipcChannels.skillsDelete, id)
+    deleteSkill: (id) => ipcRenderer.invoke(ipcChannels.skillsDelete, id),
+    listFiles: (request) => ipcRenderer.invoke(ipcChannels.skillsListFiles, request),
+    readFile: (request) => ipcRenderer.invoke(ipcChannels.skillsReadFile, request)
   },
   settings: {
     get: () => ipcRenderer.invoke(ipcChannels.settingsGet),

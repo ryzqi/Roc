@@ -60,6 +60,11 @@ import type {
   ShellExecutionResult,
   SettingsSaveRequest,
   SettingsSnapshot,
+  SkillFileEntry,
+  SkillFilePreviewRequest,
+  SkillFilePreviewResult,
+  SkillFileTreeRequest,
+  SkillFileTreeResult,
   SkillImportRequest,
   SkillSnapshot,
   TerminalSessionCloseRequest,
@@ -132,6 +137,8 @@ export const ipcChannels = {
   skillsImport: 'roc:skills:import',
   skillsSetEnabled: 'roc:skills:set-enabled',
   skillsDelete: 'roc:skills:delete',
+  skillsListFiles: 'roc:skills:list-files',
+  skillsReadFile: 'roc:skills:read-file',
   doctorGetLatest: 'roc:doctor:get-latest',
   doctorRun: 'roc:doctor:run',
   agentGetStatus: 'roc:agent:get-status',
@@ -234,6 +241,8 @@ export type RocPreloadApi = {
     importSkill: (request: SkillImportRequest) => Promise<IpcResult<SkillSnapshot>>;
     setEnabled: (request: { id: string; enabled: boolean }) => Promise<IpcResult<SkillSnapshot>>;
     deleteSkill: (id: string) => Promise<IpcResult<{ deleted: true }>>;
+    listFiles: (request: SkillFileTreeRequest) => Promise<IpcResult<SkillFileTreeResult>>;
+    readFile: (request: SkillFilePreviewRequest) => Promise<IpcResult<SkillFilePreviewResult>>;
   };
   settings: {
     get: () => Promise<IpcResult<SettingsSnapshot>>;
