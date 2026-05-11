@@ -98,3 +98,74 @@ describe('SkillService.listFiles', () => {
     expect(result.entries.find((entry) => entry.name === '.git')).toBeUndefined();
   });
 });
+
+describe('SkillService.readFile', () => {
+  it('returns text content for utf-8 files', () => {
+    writeSkill('text-skill', {
+      'SKILL.md': '---\nname: text-skill\ndescription: t\n---\n# Body'
+    });
+
+    const result = service.readFile({ id: 'text-skill', relativePath: 'SKILL.md' });
+
+    expect(result.kind).toBe('text');
+    expect(result.content).toContain('# Body');
+    expect(result.truncated).toBe(false);
+    expect(result.relativePath).toBe('SKILL.md');
+  });
+
+  it('truncates text content when over maxBytes', () => {
+    writeSkill('long-skill', {
+      'SKILL.md': '---\nname: long-skill\ndescription: l\n---\n',
+      'big.txt': 'a'.repeat(10_000)
+    });
+
+    const result = service.readFile({ id: 'long-skill', relativePath: 'big.txt', maxBytes: 1024 });
+
+    expect(result.kind).toBe('text');
+    expect(result.truncated).toBe(true);
+    expect(result.content.length).toBe(1024);
+    expect(result.sizeBytes).toBe(10_000);
+  });
+
+  it('returns a data URI for image files', () => {
+    writeSkill('image-skill', {
+      'SKILL.md': '---\nname: image-skill\ndescription: i\n---\n',
+      'pic.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    });
+
+    const result = service.readFile({ id: 'image-skill', relativePath: 'pic.png' });
+
+    expect(result.kind).toBe('image');
+    expect(result.mediaType).toBe('image/png');
+    expect(result.content.startsWith('data:image/png;base64,')).toBe(true);
+    expect(result.truncated).toBe(false);
+  });
+
+  it('treats files with null bytes as binary', () => {
+    writeSkill('binary-skill', {
+      'SKILL.md': '---\nname: binary-skill\ndescription: b\n---\n',
+      'blob.dat': Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04])
+    });
+
+    const result = service.readFile({ id: 'binary-skill', relativePath: 'blob.dat' });
+
+    expect(result.kind).toBe('binary');
+    expect(result.content).toBe('');
+    expect(result.sizeBytes).toBe(5);
+  });
+
+  it('throws when target is a directory', () => {
+    writeSkill('dir-skill', {
+      'SKILL.md': '---\nname: dir-skill\ndescription: d\n---\n',
+      'references/file.md': 'inner'
+    });
+
+    expect(() => service.readFile({ id: 'dir-skill', relativePath: 'references' })).toThrowError(RocDomainError);
+  });
+
+  it('throws when path escapes the skill root', () => {
+    writeSkill('escape-skill', { 'SKILL.md': '---\nname: escape-skill\ndescription: e\n---\n' });
+
+    expect(() => service.readFile({ id: 'escape-skill', relativePath: '../alpha/SKILL.md' })).toThrowError(RocDomainError);
+  });
+});

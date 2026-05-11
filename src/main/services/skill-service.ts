@@ -2,6 +2,8 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { basename, join, resolve, sep } from 'node:path';
 import type {
   SkillFileEntry,
+  SkillFilePreviewRequest,
+  SkillFilePreviewResult,
   SkillFileTreeRequest,
   SkillFileTreeResult,
   SkillImportRequest,
@@ -22,6 +24,16 @@ const defaultSkillState: SkillState = {
 
 const skillListLimit = 200;
 const skillIgnoredDirectories = new Set(['.git']);
+const skillPreviewBytes = 64 * 1024;
+const skillImageMediaTypes = new Map<string, string>([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.bmp', 'image/bmp'],
+  ['.svg', 'image/svg+xml']
+]);
 
 export class SkillService {
   constructor(private readonly paths: RocPaths) {}
@@ -145,6 +157,76 @@ export class SkillService {
       relativePath,
       entries,
       truncated: children.length > visibleChildren.length
+    };
+  }
+
+  readFile(request: SkillFilePreviewRequest): SkillFilePreviewResult {
+    const skillId = this.normalizeSkillId(request.id);
+    const skillRoot = join(this.paths.skillsDir, skillId);
+    if (!existsSync(skillRoot)) {
+      throw this.notFound(skillId);
+    }
+    const relativePath = this.normalizeSkillRelativePath(request.relativePath);
+    if (relativePath.length === 0) {
+      throw new RocDomainError({
+        code: 'skill_file_target_not_file',
+        message: 'Skill 文件预览目标必须是文件。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请选择一个文件。'
+      });
+    }
+    const target = this.resolveInsideSkill(skillRoot, relativePath);
+    const targetStat = statSync(target);
+    if (!targetStat.isFile()) {
+      throw new RocDomainError({
+        code: 'skill_file_target_not_file',
+        message: 'Skill 文件预览目标必须是文件。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请选择一个文件。'
+      });
+    }
+    const maxBytes = request.maxBytes === undefined ? skillPreviewBytes : request.maxBytes;
+    if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+      throw new RocDomainError({
+        code: 'skill_file_invalid_limit',
+        message: 'maxBytes 必须是正整数。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请提供正整数 maxBytes。'
+      });
+    }
+    const buffer = readFileSync(target);
+    const mediaType = this.skillImageMediaTypeForPath(relativePath);
+    if (mediaType !== null) {
+      return {
+        id: skillId,
+        relativePath,
+        kind: 'image',
+        mediaType,
+        content: `data:${mediaType};base64,${buffer.toString('base64')}`,
+        truncated: false,
+        sizeBytes: buffer.byteLength
+      };
+    }
+    if (this.isSkillBinaryBuffer(buffer)) {
+      return {
+        id: skillId,
+        relativePath,
+        kind: 'binary',
+        content: '',
+        truncated: false,
+        sizeBytes: buffer.byteLength
+      };
+    }
+    return {
+      id: skillId,
+      relativePath,
+      kind: 'text',
+      content: buffer.subarray(0, maxBytes).toString('utf8'),
+      truncated: buffer.byteLength > maxBytes,
+      sizeBytes: buffer.byteLength
     };
   }
 
@@ -283,5 +365,19 @@ export class SkillService {
       });
     }
     return target;
+  }
+
+  private skillImageMediaTypeForPath(relativePath: string): string | null {
+    const normalized = relativePath.toLowerCase();
+    for (const [extension, mediaType] of skillImageMediaTypes.entries()) {
+      if (normalized.endsWith(extension)) {
+        return mediaType;
+      }
+    }
+    return null;
+  }
+
+  private isSkillBinaryBuffer(buffer: Buffer): boolean {
+    return buffer.subarray(0, 4096).includes(0);
   }
 }
