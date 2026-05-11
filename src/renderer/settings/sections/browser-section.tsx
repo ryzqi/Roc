@@ -16,7 +16,7 @@ export function BrowserSection({
       <div className="card-title">网页与浏览器</div>
       <div className="card-pad settings-form">
         <p className="card-hint">
-          搜索走 Exa 官方 Hosted MCP；网页阅读链路（Jina Reader）尚未实现，本版本只展示状态占位。
+          搜索走 Exa 官方 Hosted MCP；网页阅读走主进程内置 Jina Reader，读取链路固定为 r.jina.ai/&lt;url&gt;。
         </p>
         <div className="row action-row" data-testid="settings-browser-exa-row">
           <div>
@@ -42,10 +42,10 @@ export function BrowserSection({
           </button>
         </div>
         <InfoRow
-          sub="Jina Reader 主进程封装尚未上线；后续上线后会在此处展示状态与测试入口。"
-          tag="未实现"
+          sub="Jina Reader 已内置；按需读取公开网页正文，支持 no-cache 和 readerlm-v2 响应模式。"
+          tag="已内置"
           title="网页阅读 (Jina Reader)"
-          tone="warn"
+          tone="ok"
         />
         <InfoRow
           sub="搜索结果与网页正文均标记为不可信上下文，未经显式整理不会进入长期记忆。"

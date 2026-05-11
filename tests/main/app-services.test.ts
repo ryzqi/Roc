@@ -1925,6 +1925,32 @@ describe('Roc foundation services', () => {
     expect(services.mcpService.listServers().some((item) => item.id === 'docs-http')).toBe(false);
   });
 
+  it('ensures the Exa preset exists on startup and reports real browser capability findings in Doctor', () => {
+    const exaServer = services.mcpService.listServers().find((server) => server.id === 'exa-hosted');
+    const doctor = services.doctorService.run();
+
+    expect(exaServer).toMatchObject({
+      id: 'exa-hosted',
+      name: 'Exa Hosted MCP',
+      transport: 'http',
+      preset: true,
+      enabled: false,
+      url: 'https://mcp.exa.ai/mcp'
+    });
+    expect(doctor.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: 'mcp.exa_preset',
+          status: 'pass'
+        }),
+        expect.objectContaining({
+          checkId: 'web.read',
+          status: 'pass'
+        })
+      ])
+    );
+  });
+
   it('imports, disables, enables, and deletes local skills without a marketplace', () => {
     const source = mkdtempSync(join(tmpdir(), 'roc-skill-source-'));
     try {
@@ -2064,6 +2090,52 @@ describe('Roc foundation services', () => {
       terminal_command: true,
       git_operation: true,
       search_docs: true,
+      web_read: true
+    });
+  });
+
+  it('normalizes the Exa preset into a single web_search capability card', () => {
+    services.configService.upsertProvider({
+      id: 'provider-local',
+      name: 'Local OpenAI-compatible',
+      type: 'openai_compatible',
+      endpoint: 'http://127.0.0.1:11434/v1',
+      credentialRef: null,
+      enabled: true,
+      models: [
+        {
+          id: 'model-ready',
+          displayName: 'Ready model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    });
+    services.configService.setDefaultModel('model-ready');
+    services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+
+    const preview = services.agentService.getCapabilityPreview({
+      mcpServers: ['exa-hosted'],
+      skills: []
+    });
+
+    expect(preview.selectedCapabilities.mcpServers).toEqual(['exa-hosted']);
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'mcp:exa-hosted:web_search',
+        name: 'web_search',
+        capabilityType: 'mcp_tool',
+        auditCategory: 'mcp_call'
+      })
+    );
+    expect(preview.toolCards).not.toContainEqual(
+      expect.objectContaining({
+        name: 'web_search_exa'
+      })
+    );
+    expect(preview.interruptOn).toMatchObject({
+      web_search: true,
       web_read: true
     });
   });

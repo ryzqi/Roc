@@ -133,6 +133,26 @@ export class AgentService {
   }
 
   private createMcpToolCards(server: McpServerSnapshot): AgentCapabilityCard[] {
+    if (server.id === 'exa-hosted') {
+      return [
+        {
+          id: 'mcp:exa-hosted:web_search',
+          name: 'web_search',
+          capabilityType: 'mcp_tool',
+          description: '通过 Exa Hosted MCP 搜索公开网络信息。',
+          requiredInput: 'query',
+          scope: 'external',
+          dependencies: [server.id],
+          sideEffects: ['external_tool_call'],
+          requiresApproval: server.riskLevel !== 'low',
+          supportsLongTermGrant: true,
+          revokeGrantHint: '在能力管理视图撤销该 MCP server 的长期授权。',
+          riskLevel: server.riskLevel ?? 'medium',
+          auditCategory: 'mcp_call',
+          untrustedContext: true
+        }
+      ];
+    }
     const allowedTools = server.allowedTools;
     if (allowedTools === undefined) {
       return [];

@@ -86,6 +86,7 @@ export class DoctorService {
     const latestPerformance = this.diagnosticsService.getLatestPerformanceSample();
     const mcpServers = this.mcpService.listServers();
     const skills = this.skillService.list();
+    const exaServer = mcpServers.find((server) => server.id === 'exa-hosted') ?? null;
     const findings: DoctorFinding[] = [
       this.finding('paths.root', existsSync(this.paths.root), 'Roc 数据根目录', this.paths.root, createdAt, 'error', {
         label: '打开数据根目录',
@@ -167,13 +168,38 @@ export class DoctorService {
         'mcp.servers',
         mcpServers.length > 0,
         'MCP 配置',
-        mcpServers.length === 0 ? '尚未配置 MCP server。' : `已配置 ${mcpServers.length} 个 MCP server。`,
+        mcpServers.length === 0
+          ? '尚未配置 MCP server。'
+          : `已配置 ${mcpServers.length} 个 MCP server，其中 ${mcpServers.filter((server) => server.enabled).length} 个已启用。`,
         createdAt,
         'warning',
         {
           label: '打开 MCP 管理',
           action: 'open_mcp_settings'
         }
+      ),
+      this.finding(
+        'mcp.exa_preset',
+        exaServer !== null,
+        'Exa Hosted MCP 预设',
+        exaServer === null
+          ? 'Exa Hosted MCP 预设缺失。'
+          : exaServer.enabled
+            ? 'Exa Hosted MCP 已注册并启用。'
+            : 'Exa Hosted MCP 已注册，默认未启用。',
+        createdAt,
+        'warning',
+        {
+          label: '打开 MCP 管理',
+          action: 'open_mcp_settings'
+        }
+      ),
+      this.finding(
+        'web.read',
+        true,
+        '网页阅读 (Jina Reader)',
+        'Jina Reader 已内置，读取链路固定为 r.jina.ai/<url>。',
+        createdAt
       ),
       this.finding(
         'skills.scan',

@@ -20,6 +20,7 @@ import { ShellExecutionService } from './shell-execution-service';
 import { SkillService } from './skill-service';
 import { TaskService } from './task-service';
 import { TerminalSessionService } from './terminal-session-service';
+import { WebReadService } from './web-read-service';
 import { WorkspaceService } from './workspace-service';
 
 export type AppServices = {
@@ -42,6 +43,7 @@ export type AppServices = {
   fileService: FileService;
   gitService: GitService;
   terminalSessionService: TerminalSessionService;
+  webReadService: WebReadService;
   rtkService: RtkService;
   shellExecutionService: ShellExecutionService;
   secretService: SecretService;
@@ -79,6 +81,7 @@ export class AppService {
     private readonly fileService: FileService,
     private readonly gitService: GitService,
     private readonly terminalSessionService: TerminalSessionService,
+    private readonly webReadService: WebReadService,
     private readonly rtkService: RtkService,
     private readonly shellExecutionService: ShellExecutionService,
     private readonly logService: LogService,
@@ -88,6 +91,7 @@ export class AppService {
   initialize(): void {
     this.paths.ensureTree();
     this.configService.initialize();
+    this.mcpService.ensureExaPreset();
     this.databaseService.initialize();
     this.logService.initialize();
     this.memoryService.initialize();
@@ -150,6 +154,7 @@ export class AppService {
       fileService: this.fileService,
       gitService: this.gitService,
       terminalSessionService: this.terminalSessionService,
+      webReadService: this.webReadService,
       rtkService: this.rtkService,
       shellExecutionService: this.shellExecutionService
     };
@@ -189,11 +194,14 @@ export function createAppServices(
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
+  const webReadService = new WebReadService();
   const deepAgentRuntimeService = new DeepAgentRuntimeService(
     langChainModelFactory,
     taskService,
     agentService,
-    workspaceService
+    workspaceService,
+    mcpService,
+    webReadService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const fileService = new FileService(paths, databaseService, workspaceService);
@@ -232,6 +240,7 @@ export function createAppServices(
     fileService,
     gitService,
     terminalSessionService,
+    webReadService,
     rtkService,
     shellExecutionService,
     logService,
@@ -258,6 +267,7 @@ export function createAppServices(
     fileService,
     gitService,
     terminalSessionService,
+    webReadService,
     rtkService,
     shellExecutionService,
     secretService

@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { FilesystemBackend, StateBackend, createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
+import type { ClientTool } from '@langchain/core/tools';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import type {
   ChatRunEvent,
   ChatStartRunRequest,
@@ -13,8 +16,11 @@ import type {
 import type { AgentService } from './agent-service';
 import { RocDomainError } from './errors';
 import type { LangChainChatModelHandle, LangChainModelFactory } from './langchain-model-factory';
+import type { McpService } from './mcp-service';
 import type { TaskService } from './task-service';
+import { WebReadService, type WebReadRequest } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
+import { z } from 'zod';
 
 type ActiveRun = {
   abortController: AbortController;
@@ -48,7 +54,9 @@ export class DeepAgentRuntimeService {
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly taskService: TaskService,
     private readonly agentService: AgentService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly mcpService: McpService,
+    private readonly webReadService: WebReadService
   ) {}
 
   onRunEvent(listener: (event: ChatRunEvent) => void): () => void {
@@ -168,12 +176,15 @@ export class DeepAgentRuntimeService {
   private async executeRun(context: RunExecutionContext): Promise<void> {
     const assistantChunks: string[] = [];
     const reasoningChunks: string[] = [];
+    const closers: Array<() => Promise<void>> = [];
 
     try {
+      const tools = await this.createRunTools(context, closers);
       const agent = createDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: this.buildSystemPrompt(context.enabledCapabilities),
-        backend: this.createBackend()
+        backend: this.createBackend(),
+        tools
       });
       const run = await agent.streamEvents(
         {
@@ -237,8 +248,92 @@ export class DeepAgentRuntimeService {
         retryable: failure.retryable
       });
     } finally {
+      await Promise.allSettled(closers.map(async (close) => close()));
       this.activeRuns.delete(context.runId);
     }
+  }
+
+  private async createRunTools(
+    context: RunExecutionContext,
+    closers: Array<() => Promise<void>>
+  ): Promise<ClientTool[]> {
+    const tools: ClientTool[] = [this.createWebReadTool()];
+    const webSearchTool = await this.createWebSearchTool(context, closers);
+    if (webSearchTool !== null) {
+      tools.unshift(webSearchTool);
+    }
+    return tools;
+  }
+
+  private async createWebSearchTool(
+    context: RunExecutionContext,
+    closers: Array<() => Promise<void>>
+  ): Promise<ClientTool | null> {
+    if (!context.enabledCapabilities.mcpServers.includes('exa-hosted')) {
+      return null;
+    }
+    const exaServer = this.mcpService.listServers().find((server) => server.id === 'exa-hosted' && server.enabled);
+    if (
+      exaServer === undefined ||
+      exaServer.url === undefined ||
+      (exaServer.transport !== 'http' && exaServer.transport !== 'sse')
+    ) {
+      return null;
+    }
+
+    const client = new MultiServerMCPClient({
+      throwOnLoadError: true,
+      prefixToolNameWithServerName: false,
+      useStandardContentBlocks: true,
+      onConnectionError: 'throw',
+      mcpServers: {
+        'exa-hosted': {
+          transport: exaServer.transport,
+          url: exaServer.url
+        }
+      }
+    });
+    closers.push(async () => {
+      await client.close();
+    });
+
+    try {
+      const tools = await client.getTools();
+      const searchTool =
+        tools.find((candidate) => candidate.name === 'web_search_exa') ??
+        tools.find((candidate) => candidate.name === 'web_search_advanced_exa');
+      if (searchTool === undefined) {
+        throw new RocDomainError({
+          code: 'web_search_tool_missing',
+          message: 'Exa Hosted MCP 未暴露 web_search 工具。',
+          category: 'external',
+          retryable: true,
+          userAction: '请测试 Exa Hosted MCP 后重试。'
+        });
+      }
+      searchTool.name = 'web_search';
+      searchTool.description = '通过 Exa Hosted MCP 搜索公开网络信息。';
+      return searchTool;
+    } catch (error) {
+      throw this.toWebSearchFailure(error);
+    }
+  }
+
+  private createWebReadTool(): ClientTool {
+    const schema = z.object({
+      url: z.string().url(),
+      responseMode: z.enum(['markdown', 'readerlm-v2']).default('markdown'),
+      timeoutSeconds: z.number().int().min(1).max(120).default(20),
+      noCache: z.boolean().default(false)
+    });
+    return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
+      name: 'web_read',
+      description: '通过内置 Jina Reader 读取公开网页正文。',
+      schema,
+      func: async (input: WebReadRequest) => {
+        return await this.webReadService.read(input);
+      }
+    });
   }
 
   private async consumeMessages(
@@ -602,6 +697,28 @@ export class DeepAgentRuntimeService {
       message: 'Provider 执行失败。',
       retryable: true
     };
+  }
+
+  private toWebSearchFailure(error: unknown): RocDomainError {
+    if (error instanceof RocDomainError) {
+      return error;
+    }
+    if (error instanceof Error) {
+      return new RocDomainError({
+        code: 'web_search_unavailable',
+        message: `web_search 不可用：${this.redact(error.message)}`,
+        category: 'external',
+        retryable: true,
+        userAction: '请测试 Exa Hosted MCP 连接或稍后重试。'
+      });
+    }
+    return new RocDomainError({
+      code: 'web_search_unavailable',
+      message: 'web_search 当前不可用。',
+      category: 'external',
+      retryable: true,
+      userAction: '请测试 Exa Hosted MCP 连接或稍后重试。'
+    });
   }
 
   private isAbortError(error: unknown): boolean {

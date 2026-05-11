@@ -6,16 +6,33 @@ import { createAppServices, type AppServices } from '../../src/main/services/app
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
 import { RocDomainError } from '../../src/main/services/errors';
 import type { ChatRunEvent } from '../../src/shared/types';
+import { z } from 'zod';
 
-const streamEventsMock = vi.fn();
+const mocked = vi.hoisted(() => ({
+  streamEventsMock: vi.fn(),
+  createDeepAgentMock: vi.fn(),
+  exaSearchInvokeMock: vi.fn(),
+  mcpGetToolsMock: vi.fn(),
+  mcpClientCloseMock: vi.fn()
+}));
 
 vi.mock('deepagents', async () => {
   const actual = await vi.importActual<typeof import('deepagents')>('deepagents');
   return {
     ...actual,
-    createDeepAgent: vi.fn(() => ({
-      streamEvents: streamEventsMock
+    createDeepAgent: mocked.createDeepAgentMock.mockImplementation(() => ({
+      streamEvents: mocked.streamEventsMock
     }))
+  };
+});
+
+vi.mock('@langchain/mcp-adapters', () => {
+  class MultiServerMCPClientMock {
+    getTools = mocked.mcpGetToolsMock;
+    close = mocked.mcpClientCloseMock;
+  }
+  return {
+    MultiServerMCPClient: MultiServerMCPClientMock
   };
 });
 
@@ -34,7 +51,9 @@ function createRuntime(): DeepAgentRuntimeService {
     services.langChainModelFactory,
     services.taskService,
     services.agentService,
-    services.workspaceService
+    services.workspaceService,
+    services.mcpService,
+    services.webReadService
   );
 }
 
@@ -103,7 +122,23 @@ beforeEach(() => {
       }
     }
   });
-  streamEventsMock.mockReset();
+  mocked.streamEventsMock.mockReset();
+  mocked.createDeepAgentMock.mockClear();
+  mocked.exaSearchInvokeMock.mockReset();
+  mocked.exaSearchInvokeMock.mockResolvedValue('Exa search results');
+  mocked.mcpGetToolsMock.mockReset();
+  mocked.mcpGetToolsMock.mockResolvedValue([
+    {
+      name: 'web_search_exa',
+      description: 'Search the public web via Exa.',
+      schema: z.object({
+        query: z.string()
+      }),
+      invoke: mocked.exaSearchInvokeMock
+    }
+  ]);
+  mocked.mcpClientCloseMock.mockReset();
+  mocked.mcpClientCloseMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -114,7 +149,7 @@ afterEach(() => {
 
 describe('DeepAgentRuntimeService', () => {
   it('emits message, reasoning, and completion events for a chat run', async () => {
-    streamEventsMock.mockResolvedValue({
+    mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
           text: createAsyncIterable(['Hello', ' world']),
@@ -166,7 +201,7 @@ describe('DeepAgentRuntimeService', () => {
   });
 
   it('stores selected MCP and Skill capabilities on task runs and records manifest events', async () => {
-    streamEventsMock.mockResolvedValue({
+    mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
           text: createAsyncIterable(['Task complete'])
@@ -234,8 +269,146 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('mounts real web_search and web_read tools for task runs when Exa is enabled', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Search complete'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('Fetched via Jina Reader', {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8'
+        }
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '搜索最新上下文并读取网页',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: []
+      }
+    });
+    await completed;
+
+    const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | { tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }
+      | undefined;
+    const toolNames = createAgentCall?.tools?.map((tool) => tool.name) ?? [];
+    const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
+    const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
+
+    expect(toolNames).toEqual(expect.arrayContaining(['web_search', 'web_read']));
+    await expect(webSearchTool?.invoke({ query: 'langchain mcp adapters' })).resolves.toBe('Exa search results');
+    await expect(
+      webReadTool?.invoke({
+        url: 'https://example.com',
+        noCache: true,
+        responseMode: 'markdown',
+        timeoutSeconds: 8
+      })
+    ).resolves.toBe('Fetched via Jina Reader');
+    expect(mocked.exaSearchInvokeMock).toHaveBeenCalledWith({ query: 'langchain mcp adapters' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://r.jina.ai/https://example.com/',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'cache-control': 'no-cache',
+          pragma: 'no-cache'
+        })
+      })
+    );
+    expect(mocked.mcpClientCloseMock).toHaveBeenCalled();
+  });
+
+  it('records web_search and web_read tool lifecycle events in the task trace', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['已整理搜索与网页正文'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'web_search',
+          input: { query: 'roc exa mcp' },
+          output: Promise.resolve('search output')
+        },
+        {
+          name: 'web_read',
+          input: { url: 'https://example.com' },
+          output: Promise.resolve('page body')
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const started = await runtime.startRun({
+      input: '读取搜索结果网页',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const snapshot = services.taskService.getSnapshot();
+    const toolEvents = snapshot.recentEvents.filter(
+      (event) => event.runId === started.runId && event.type === 'tool_call'
+    );
+
+    expect(toolEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'web_search',
+            status: 'start',
+            input: { query: 'roc exa mcp' }
+          })
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'web_search',
+            status: 'end',
+            output: 'search output'
+          })
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'web_read',
+            status: 'start',
+            input: { url: 'https://example.com' }
+          })
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'web_read',
+            status: 'end',
+            output: 'page body'
+          })
+        })
+      ])
+    );
+  });
+
   it('continues a selected task thread instead of creating a new thread for the next turn', async () => {
-    streamEventsMock.mockResolvedValue({
+    mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
           text: createAsyncIterable(['第二轮已完成'])
@@ -279,7 +452,7 @@ describe('DeepAgentRuntimeService', () => {
   });
 
   it('redacts provider failures before emitting task run failure events', async () => {
-    streamEventsMock.mockRejectedValue(
+    mocked.streamEventsMock.mockRejectedValue(
       new RocDomainError({
         code: 'provider_http_error',
         message: 'Provider 请求失败：Authorization: Bearer sk-secret-value',
