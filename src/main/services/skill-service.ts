@@ -1,6 +1,12 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
-import type { SkillImportRequest, SkillSnapshot } from '../../shared/types';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join, resolve, sep } from 'node:path';
+import type {
+  SkillFileEntry,
+  SkillFileTreeRequest,
+  SkillFileTreeResult,
+  SkillImportRequest,
+  SkillSnapshot
+} from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 
@@ -13,6 +19,9 @@ const defaultSkillState: SkillState = {
   schemaVersion: 1,
   enabled: true
 };
+
+const skillListLimit = 200;
+const skillIgnoredDirectories = new Set(['.git']);
 
 export class SkillService {
   constructor(private readonly paths: RocPaths) {}
@@ -88,6 +97,55 @@ export class SkillService {
       throw this.notFound(skillId);
     }
     rmSync(skillPath, { recursive: true, force: true });
+  }
+
+  listFiles(request: SkillFileTreeRequest): SkillFileTreeResult {
+    const skillId = this.normalizeSkillId(request.id);
+    const skillRoot = join(this.paths.skillsDir, skillId);
+    if (!existsSync(skillRoot)) {
+      throw this.notFound(skillId);
+    }
+    const relativePath = this.normalizeSkillRelativePath(request.relativePath);
+    const target = this.resolveInsideSkill(skillRoot, relativePath);
+    const targetStat = statSync(target);
+    if (!targetStat.isDirectory()) {
+      throw new RocDomainError({
+        code: 'skill_file_target_not_directory',
+        message: 'Skill 文件树目标必须是目录。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请选择一个目录。'
+      });
+    }
+    const children = readdirSync(target, { withFileTypes: true })
+      .filter((entry) => !skillIgnoredDirectories.has(entry.name))
+      .sort((left, right) => {
+        if (left.isDirectory() !== right.isDirectory()) {
+          return left.isDirectory() ? -1 : 1;
+        }
+        return left.name.localeCompare(right.name, 'zh-Hans-CN');
+      });
+    const visibleChildren = children.slice(0, skillListLimit);
+    const entries: SkillFileEntry[] = visibleChildren.map((entry) => {
+      const absolutePath = join(target, entry.name);
+      const entryStat = statSync(absolutePath);
+      const entryRelative = relativePath.length === 0 ? entry.name : `${relativePath}/${entry.name}`;
+      return {
+        name: entry.name,
+        relativePath: entryRelative,
+        type: entry.isDirectory() ? 'directory' : 'file',
+        size: entryStat.size,
+        updatedAt: entryStat.mtime.toISOString()
+      };
+    });
+
+    return {
+      id: skillId,
+      rootPath: skillRoot,
+      relativePath,
+      entries,
+      truncated: children.length > visibleChildren.length
+    };
   }
 
   private readSkill(id: string): SkillSnapshot | null {
@@ -193,5 +251,37 @@ export class SkillService {
       });
     }
     return trimmed;
+  }
+
+  private normalizeSkillRelativePath(value: string): string {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed === '.') {
+      return '';
+    }
+    return trimmed.replaceAll('\\', '/');
+  }
+
+  private resolveInsideSkill(skillRoot: string, relativePath: string): string {
+    const absoluteRoot = resolve(skillRoot);
+    const target = resolve(absoluteRoot, relativePath);
+    if (target !== absoluteRoot && !target.startsWith(absoluteRoot + sep)) {
+      throw new RocDomainError({
+        code: 'skill_file_outside_skill_root',
+        message: 'Skill 文件路径越界。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请只访问该 Skill 目录内部的文件。'
+      });
+    }
+    if (!existsSync(target)) {
+      throw new RocDomainError({
+        code: 'skill_file_target_missing',
+        message: 'Skill 文件不存在。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请刷新文件列表后重试。'
+      });
+    }
+    return target;
   }
 }
