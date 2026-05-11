@@ -4517,19 +4517,48 @@ button.model-pill {
 }
 
 .skill-drawer-close {
-  min-width: 32px;
-  min-height: 32px;
-  border-radius: 999px;
-  border: 1px solid rgba(207, 218, 232, 0.94);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text);
-  font-size: 14px;
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: 16px;
   line-height: 1;
 }
 
-.skill-drawer-close:hover {
+.skill-drawer-action {
+  display: inline-flex;
+  min-width: 58px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid rgba(207, 218, 232, 0.94);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.skill-drawer-action:hover {
   border-color: rgba(118, 144, 190, 0.6);
   color: var(--ink);
+}
+
+.skill-drawer-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.skill-drawer-action--danger {
+  color: var(--trend-bad);
+  border-color: rgba(192, 68, 68, 0.32);
+}
+
+.skill-drawer-action--danger:hover {
+  background: rgba(192, 68, 68, 0.08);
+  border-color: rgba(192, 68, 68, 0.5);
+  color: var(--trend-bad);
 }
 
 .skill-drawer-body {
@@ -4577,6 +4606,12 @@ button.model-pill {
   color: #2a3245;
 }
 
+.skill-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .skill-row-button {
   width: 100%;
   display: grid;
@@ -4590,7 +4625,6 @@ button.model-pill {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  margin-bottom: 6px;
 }
 
 .skill-row-button:hover {

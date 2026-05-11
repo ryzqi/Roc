@@ -41,15 +41,27 @@ export function SkillDrawer({
           <span className="skill-drawer-kicker">Skill · {statusLabel}</span>
           <span className="skill-drawer-name">{skill.name}</span>
         </div>
-        <button data-testid="skill-drawer-toggle" disabled={busy} type="button" onClick={onToggle}>
+        <button
+          className="skill-drawer-action"
+          data-testid="skill-drawer-toggle"
+          disabled={busy}
+          type="button"
+          onClick={onToggle}
+        >
           {skill.enabled ? '禁用' : '启用'}
         </button>
-        <button data-testid="skill-drawer-delete" disabled={busy} type="button" onClick={onDelete}>
+        <button
+          className="skill-drawer-action skill-drawer-action--danger"
+          data-testid="skill-drawer-delete"
+          disabled={busy}
+          type="button"
+          onClick={onDelete}
+        >
           删除
         </button>
         <button
           aria-label="关闭"
-          className="skill-drawer-close"
+          className="skill-drawer-action skill-drawer-close"
           data-testid="skill-drawer-close"
           type="button"
           onClick={onClose}

@@ -185,21 +185,20 @@ export function SkillsView({
   drawer
 }: SkillsViewProps): React.JSX.Element {
   return (
-    <section className="canvas-stage stage-grid" data-testid="skills-view">
-      <section className="card skill-drawer-host" data-testid="skill-management">
-        <div className="card-title">Skill 管理</div>
-        <div className="skills-filter-strip">
-          {model.filters.map((filter) => (
-            <SelectionChip
-              active={model.filter === filter.id}
-              count={filter.count}
-              id={filter.id}
-              key={filter.id}
-              label={filter.label}
-              onClick={onFilterChange}
-            />
-          ))}
-        </div>
+    <section className="canvas-stage stage-grid skill-drawer-host" data-testid="skills-view">
+      <div className="skills-filter-strip" data-testid="skill-management">
+        {model.filters.map((filter) => (
+          <SelectionChip
+            active={model.filter === filter.id}
+            count={filter.count}
+            id={filter.id}
+            key={filter.id}
+            label={filter.label}
+            onClick={onFilterChange}
+          />
+        ))}
+      </div>
+      <div className="skill-row-list">
         {model.emptyState === null
           ? model.visibleSkills.map((skill) => {
               const isSelected = selectedSkillId === skill.id;
@@ -224,8 +223,8 @@ export function SkillsView({
           : (
               <EmptyCard detail={model.emptyState.detail} testId="skills-empty-state" title={model.emptyState.title} />
             )}
-        {drawer}
-      </section>
+      </div>
+      {drawer}
     </section>
   );
 }
