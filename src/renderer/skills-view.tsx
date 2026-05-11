@@ -6,13 +6,11 @@ export type SkillFilterId = 'all' | 'enabled' | 'disabled' | 'invalid';
 type SkillViewRow = {
   id: string;
   name: string;
-  path: string;
   enabled: boolean;
   status: SkillSnapshot['status'];
   lastError: string | null;
   statusTone: 'ok' | 'warn';
   statusLabel: string;
-  actionLabel: '启用' | '禁用';
 };
 
 type SkillSummary = {
@@ -41,10 +39,10 @@ export type SkillManagementViewModel = {
 
 type SkillsViewProps = {
   model: SkillManagementViewModel;
-  busySkillId: string | null;
-  onDeleteSkill: (skillId: string) => void | Promise<void>;
+  selectedSkillId: string | null;
   onFilterChange: (filter: SkillFilterId) => void;
-  onToggleSkill: (skillId: string, enabled: boolean) => void | Promise<void>;
+  onSelectSkill: (skillId: string) => void;
+  drawer: React.ReactNode | null;
 };
 
 function mapSkillRow(skill: SkillSnapshot): SkillViewRow {
@@ -52,13 +50,11 @@ function mapSkillRow(skill: SkillSnapshot): SkillViewRow {
   return {
     id: skill.id,
     name: skill.name,
-    path: skill.path,
     enabled: skill.enabled,
     status: skill.status,
     lastError: skill.lastError ?? null,
     statusTone: skill.enabled && skill.status === 'ready' ? 'ok' : 'warn',
-    statusLabel,
-    actionLabel: skill.enabled ? '禁用' : '启用'
+    statusLabel
   };
 }
 
@@ -136,27 +132,6 @@ export function buildSkillManagementViewModel(
   };
 }
 
-function SummaryMetric({
-  label,
-  note,
-  tone = 'neutral',
-  value
-}: {
-  label: string;
-  note: string;
-  tone?: 'neutral' | 'ok' | 'warn' | 'bad';
-  value: number | string;
-}): React.JSX.Element {
-  const toneClass = tone === 'neutral' ? '' : ` metric--${tone}`;
-  return (
-    <div className={`metric${toneClass}`}>
-      <strong>{value}</strong>
-      <span>{label}</span>
-      <small>{note}</small>
-    </div>
-  );
-}
-
 function EmptyCard({ detail, title, testId }: { detail: string; title: string; testId: string }): React.JSX.Element {
   return (
     <div className="empty-state" data-testid={testId}>
@@ -204,19 +179,14 @@ function SelectionChip({
 
 export function SkillsView({
   model,
-  busySkillId,
-  onDeleteSkill,
+  selectedSkillId,
   onFilterChange,
-  onToggleSkill
+  onSelectSkill,
+  drawer
 }: SkillsViewProps): React.JSX.Element {
   return (
     <section className="canvas-stage stage-grid" data-testid="skills-view">
-      <div className="grid-3">
-        <SummaryMetric label="Skill 总数" note={`${model.summary.enabled} 个已启用`} value={model.summary.total} />
-        <SummaryMetric label="Ready" note="可被本轮选择" tone="ok" value={model.summary.ready} />
-        <SummaryMetric label="Invalid" note="需要修复依赖或描述" tone="warn" value={model.summary.invalid} />
-      </div>
-      <section className="card" data-testid="skill-management">
+      <section className="card skill-drawer-host" data-testid="skill-management">
         <div className="card-title">Skill 管理</div>
         <div className="skills-filter-strip">
           {model.filters.map((filter) => (
@@ -230,41 +200,31 @@ export function SkillsView({
             />
           ))}
         </div>
-        {model.emptyState === null ? (
-          model.visibleSkills.map((skill) => {
-            const busy = busySkillId === skill.id;
-            return (
-              <div className="row action-row" data-testid={`skill-row-${skill.id}`} key={skill.id}>
-                <div>
-                  <div className="row-title">{skill.name}</div>
-                  <div className="row-sub">{skill.path}</div>
-                  {skill.lastError === null ? null : (
-                    <div className="row-sub skills-row-error">{skill.lastError}</div>
-                  )}
-                </div>
-                <StatusPill tone={skill.statusTone} value={skill.statusLabel} />
+        {model.emptyState === null
+          ? model.visibleSkills.map((skill) => {
+              const isSelected = selectedSkillId === skill.id;
+              return (
                 <button
-                  data-testid={`skill-toggle-${skill.id}`}
-                  disabled={busy}
+                  className={isSelected ? 'skill-row-button selected' : 'skill-row-button'}
+                  data-testid={`skill-row-${skill.id}`}
+                  key={skill.id}
                   type="button"
-                  onClick={() => onToggleSkill(skill.id, !skill.enabled)}
+                  onClick={() => onSelectSkill(skill.id)}
                 >
-                  {skill.actionLabel}
+                  <span className="skill-row-info">
+                    <span className="skill-row-name">{skill.name}</span>
+                    {skill.lastError === null ? null : (
+                      <span className="skill-row-error">{skill.lastError}</span>
+                    )}
+                  </span>
+                  <StatusPill tone={skill.statusTone} value={skill.statusLabel} />
                 </button>
-                <button
-                  data-testid={`skill-delete-${skill.id}`}
-                  disabled={busy}
-                  type="button"
-                  onClick={() => onDeleteSkill(skill.id)}
-                >
-                  删除
-                </button>
-              </div>
-            );
-          })
-        ) : (
-          <EmptyCard detail={model.emptyState.detail} testId="skills-empty-state" title={model.emptyState.title} />
-        )}
+              );
+            })
+          : (
+              <EmptyCard detail={model.emptyState.detail} testId="skills-empty-state" title={model.emptyState.title} />
+            )}
+        {drawer}
       </section>
     </section>
   );
