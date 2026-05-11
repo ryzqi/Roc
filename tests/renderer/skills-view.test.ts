@@ -26,24 +26,33 @@ describe('skills view', () => {
         description: '需要修复依赖。',
         status: 'invalid',
         lastError: 'missing dependency'
+      }),
+      createSkill({
+        id: 'disabled-invalid',
+        name: 'Disabled Invalid',
+        enabled: false,
+        description: '已禁用但仍然失效。',
+        status: 'invalid',
+        lastError: 'still broken'
       })
     ];
 
     const enabledModel = buildSkillManagementViewModel(skills, 'enabled', null);
-    expect(enabledModel.summary.total).toBe(3);
+    expect(enabledModel.summary.total).toBe(4);
     expect(enabledModel.summary.enabled).toBe(2);
-    expect(enabledModel.summary.ready).toBe(2);
-    expect(enabledModel.summary.invalid).toBe(1);
+    expect(enabledModel.summary.ready).toBe(1);
+    expect(enabledModel.summary.invalid).toBe(2);
     expect(enabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['enabled-ready', 'broken-skill']);
     expect(enabledModel.selectedSkill?.id).toBe('enabled-ready');
 
     const invalidModel = buildSkillManagementViewModel(skills, 'invalid', 'enabled-ready');
-    expect(invalidModel.visibleSkills.map((skill) => skill.id)).toEqual(['broken-skill']);
+    expect(invalidModel.visibleSkills.map((skill) => skill.id)).toEqual(['broken-skill', 'disabled-invalid']);
     expect(invalidModel.selectedSkill?.id).toBe('broken-skill');
     expect(invalidModel.emptyState).toBeNull();
+    expect(invalidModel.visibleSkills[1]?.statusLabel).toBe('invalid');
 
     const disabledModel = buildSkillManagementViewModel(skills, 'disabled', null);
-    expect(disabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['disabled-ready']);
+    expect(disabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['disabled-ready', 'disabled-invalid']);
   });
 
   it('renders filter controls, condensed list items, and a separate detail panel', () => {

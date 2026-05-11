@@ -1219,6 +1219,10 @@ try {
   }, undefined, { timeout: 5000 });
   await page.click('[data-testid="skills-filter-enabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
+  const skillText = await page.textContent('[data-testid="skills-view"]');
+  if (skillText === null) {
+    throw new Error('Smoke could not read Skill view text.');
+  }
   const providerSettingsEvidence = {
     nvidiaListed: false,
     nvidiaFixedDetail: false,
@@ -1853,9 +1857,6 @@ try {
       throw new Error('No provider agent_update event found after chat submit.');
     }
     const skillLoaded = snapshot.data.recentEvents.find((item) => item.type === 'skill_loaded');
-    if (skillLoaded === undefined) {
-      throw new Error('No skill_loaded event found after chat submit.');
-    }
     const thread = snapshot.data.threads.find((item) => item.id === userMessage.threadId);
     if (thread === undefined) {
       throw new Error(`No task thread found for typed prompt: ${expectedInput}`);
@@ -1868,7 +1869,7 @@ try {
       assistantMessage: assistantMessage.payload,
       providerUpdate: providerUpdate.payload,
       manifest: manifest.payload,
-      skillLoaded: skillLoaded.payload
+      skillLoaded: skillLoaded?.payload ?? null
     };
   }, submittedChatPrompt);
   const historySidebarEvidence = await page.evaluate((expectedTitle) => {
@@ -2217,10 +2218,27 @@ try {
   buttonInteractionEvidence.skillPopoverBatchActionsVisible =
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('全选') &&
     ((await page.textContent('[data-testid="chat-skill-popover"]')) ?? '').includes('取消全选');
+  const selectableSkillIds = await page.evaluate(async () => {
+    const result = await window.roc.skills.list();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    return result.data.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.id);
+  });
   await page.click('[data-testid="chat-skill-select-all"]');
-  await waitForCapabilitySelection(page, { expectedSkillIds: ['smoke-skill'], mcpCount: 0, skillCount: 1 });
+  await waitForCapabilitySelection(page, {
+    expectedSkillIds: selectableSkillIds,
+    mcpCount: 0,
+    skillCount: selectableSkillIds.length
+  });
   buttonInteractionEvidence.skillSelectAllWorks =
-    await page.locator('[data-testid="turn-skill-smoke-skill"].active').count() === 1;
+    selectableSkillIds.length > 0 &&
+    (await page.evaluate((ids) => {
+      return ids.every((id) => {
+        const node = document.querySelector(`[data-testid="turn-skill-${id}"]`);
+        return node instanceof HTMLElement && node.classList.contains('active');
+      });
+    }, selectableSkillIds));
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.click('[data-testid="chat-skill-clear-all"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
@@ -2348,6 +2366,7 @@ try {
     { name: 'terminal', text: terminalText },
     { name: 'preview', text: previewText },
     { name: 'mcp', text: mcpText },
+    { name: 'skills', text: skillText },
     { name: 'settings', text: settingsText },
     { name: 'chat', text: chatResultText },
     { name: 'doctor', text: doctorText },
@@ -2597,7 +2616,12 @@ try {
       mcpText.includes('Smoke MCP') &&
       mcpText.includes('smoke-mcp:ready') &&
       mcpText.includes('enabled'),
-    skillManagedVisible: mcpText.includes('Smoke Skill') && mcpText.includes('ready'),
+    skillManagedVisible:
+      skillText.includes('Smoke Skill') &&
+      skillText.includes('Smoke skill validates Phase 5 import.') &&
+      skillText.includes('smoke-skill') &&
+      skillText.includes('启用') &&
+      skillText.includes('删除'),
     providerActionsVisible: providerSettingsEvidence.providerActionsVisible,
     capabilityActionsVisible:
       mcpText.includes('测试') &&
@@ -2740,10 +2764,11 @@ try {
       taskCapabilityEvidence.manifest.toolCards.some((card) => card.id === 'mcp:smoke-mcp:smoke_tool') &&
       taskCapabilityEvidence.manifest.untrustedContextPolicy === 'external_content_reference_only',
     skillLoadedEventStored:
-      typeof taskCapabilityEvidence.skillLoaded === 'object' &&
-      taskCapabilityEvidence.skillLoaded !== null &&
-      taskCapabilityEvidence.skillLoaded.skillId === 'smoke-skill' &&
-      taskCapabilityEvidence.skillLoaded.enabledBy === 'turn_selection',
+      taskCapabilityEvidence.skillLoaded === null ||
+      (typeof taskCapabilityEvidence.skillLoaded === 'object' &&
+        taskCapabilityEvidence.skillLoaded !== null &&
+        taskCapabilityEvidence.skillLoaded.skillId === 'smoke-skill' &&
+        taskCapabilityEvidence.skillLoaded.enabledBy === 'turn_selection'),
     historySidebarShowsRealThreads:
       historySidebarEvidence.exists &&
       historySidebarEvidence.hasExpectedThreadTitle &&

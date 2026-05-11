@@ -51,7 +51,7 @@ type SkillsViewProps = {
 };
 
 function mapSkillRow(skill: SkillSnapshot): SkillViewRow {
-  const statusLabel = skill.enabled ? skill.status : 'disabled';
+  const statusLabel = skill.status === 'invalid' ? 'invalid' : skill.enabled ? 'ready' : 'disabled';
   return {
     id: skill.id,
     name: skill.name,
@@ -132,7 +132,7 @@ export function buildSkillManagementViewModel(
   const summary: SkillSummary = {
     total: skills.length,
     enabled: skills.filter((skill) => skill.enabled).length,
-    ready: skills.filter((skill) => skill.status === 'ready').length,
+    ready: skills.filter((skill) => skill.enabled && skill.status === 'ready').length,
     invalid: skills.filter((skill) => skill.status === 'invalid').length
   };
 
