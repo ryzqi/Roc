@@ -54,7 +54,7 @@ describe('skills view', () => {
     expect(disabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['disabled-ready', 'disabled-invalid']);
   });
 
-  it('renders filter controls and condensed list rows aligned with the control surface', () => {
+  it('renders filter strip and clickable rows without inline buttons or paths', () => {
     const html = renderToStaticMarkup(
       React.createElement(SkillsView, {
         model: buildSkillManagementViewModel(
@@ -76,10 +76,10 @@ describe('skills view', () => {
           'all',
           null
         ),
-        busySkillId: null,
-        onDeleteSkill: async () => {},
+        selectedSkillId: null,
         onFilterChange: () => {},
-        onToggleSkill: async () => {}
+        onSelectSkill: () => {},
+        drawer: null
       })
     );
 
@@ -91,14 +91,32 @@ describe('skills view', () => {
     expect(html).toContain('data-testid="skill-management"');
     expect(html).toContain('data-testid="skill-row-smoke-skill"');
     expect(html).toContain('data-testid="skill-row-broken-skill"');
-    expect(html).toContain('data-testid="skill-toggle-smoke-skill"');
-    expect(html).toContain('data-testid="skill-delete-smoke-skill"');
-    expect(html).toContain('F:\\Code\\Roc\\skills\\smoke-skill');
     expect(html).toContain('missing dependency');
-    expect(html).not.toContain('data-testid="skill-detail"');
-    expect(html).not.toContain('用于 smoke 的技能说明。');
-    expect(html).not.toContain('失效技能说明。');
-    expect(html).not.toContain('按状态筛选并直接执行启停或删除');
-    expect(html).not.toContain('完整元信息移动到右侧详情区');
+
+    expect(html).not.toContain('Skill 总数');
+    expect(html).not.toContain('F:\\Code\\Roc\\skills\\smoke-skill');
+    expect(html).not.toContain('data-testid="skill-toggle-smoke-skill"');
+    expect(html).not.toContain('data-testid="skill-delete-smoke-skill"');
+    expect(html).not.toContain('data-testid="skill-drawer"');
+  });
+
+  it('renders the drawer node when provided', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SkillsView, {
+        model: buildSkillManagementViewModel(
+          [createSkill({ id: 'open-skill', name: 'Open Skill' })],
+          'all',
+          'open-skill'
+        ),
+        selectedSkillId: 'open-skill',
+        onFilterChange: () => {},
+        onSelectSkill: () => {},
+        drawer: React.createElement('aside', { 'data-testid': 'skill-drawer' }, 'drawer body')
+      })
+    );
+
+    expect(html).toContain('data-testid="skill-drawer"');
+    expect(html).toContain('drawer body');
+    expect(html).toMatch(/skill-row-button selected/);
   });
 });
