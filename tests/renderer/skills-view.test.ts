@@ -16,7 +16,7 @@ function createSkill(overrides: Partial<SkillSnapshot> & Pick<SkillSnapshot, 'id
 }
 
 describe('skills view', () => {
-  it('builds enabled and invalid filters while keeping the selected detail in sync', () => {
+  it('builds enabled and invalid filters with consistent summary counts', () => {
     const skills = [
       createSkill({ id: 'enabled-ready', name: 'Enabled Ready' }),
       createSkill({ id: 'disabled-ready', name: 'Disabled Ready', enabled: false }),
@@ -43,11 +43,10 @@ describe('skills view', () => {
     expect(enabledModel.summary.ready).toBe(1);
     expect(enabledModel.summary.invalid).toBe(2);
     expect(enabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['enabled-ready', 'broken-skill']);
-    expect(enabledModel.selectedSkill?.id).toBe('enabled-ready');
+    expect(enabledModel.emptyState).toBeNull();
 
-    const invalidModel = buildSkillManagementViewModel(skills, 'invalid', 'enabled-ready');
+    const invalidModel = buildSkillManagementViewModel(skills, 'invalid', null);
     expect(invalidModel.visibleSkills.map((skill) => skill.id)).toEqual(['broken-skill', 'disabled-invalid']);
-    expect(invalidModel.selectedSkill?.id).toBe('broken-skill');
     expect(invalidModel.emptyState).toBeNull();
     expect(invalidModel.visibleSkills[1]?.statusLabel).toBe('invalid');
 
@@ -55,7 +54,7 @@ describe('skills view', () => {
     expect(disabledModel.visibleSkills.map((skill) => skill.id)).toEqual(['disabled-ready', 'disabled-invalid']);
   });
 
-  it('renders filter controls, condensed list items, and a separate detail panel', () => {
+  it('renders filter controls and condensed list rows aligned with the control surface', () => {
     const html = renderToStaticMarkup(
       React.createElement(SkillsView, {
         model: buildSkillManagementViewModel(
@@ -75,12 +74,11 @@ describe('skills view', () => {
             })
           ],
           'all',
-          'broken-skill'
+          null
         ),
         busySkillId: null,
         onDeleteSkill: async () => {},
         onFilterChange: () => {},
-        onSelectSkill: () => {},
         onToggleSkill: async () => {}
       })
     );
@@ -91,14 +89,16 @@ describe('skills view', () => {
     expect(html).toContain('data-testid="skills-filter-disabled"');
     expect(html).toContain('data-testid="skills-filter-invalid"');
     expect(html).toContain('data-testid="skill-management"');
-    expect(html).toContain('data-testid="skill-detail"');
-    expect(html).toContain('data-testid="skill-detail-path"');
-    expect(html).toContain('data-testid="skill-detail-error"');
-    expect(html).toContain('用于 smoke 的技能说明。');
-    expect(html).toContain('失效技能说明。');
-    expect(html).toContain('missing dependency');
+    expect(html).toContain('data-testid="skill-row-smoke-skill"');
+    expect(html).toContain('data-testid="skill-row-broken-skill"');
     expect(html).toContain('data-testid="skill-toggle-smoke-skill"');
     expect(html).toContain('data-testid="skill-delete-smoke-skill"');
-    expect(html).not.toContain('触发与依赖');
+    expect(html).toContain('F:\\Code\\Roc\\skills\\smoke-skill');
+    expect(html).toContain('missing dependency');
+    expect(html).not.toContain('data-testid="skill-detail"');
+    expect(html).not.toContain('用于 smoke 的技能说明。');
+    expect(html).not.toContain('失效技能说明。');
+    expect(html).not.toContain('按状态筛选并直接执行启停或删除');
+    expect(html).not.toContain('完整元信息移动到右侧详情区');
   });
 });

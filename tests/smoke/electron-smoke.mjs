@@ -1189,13 +1189,11 @@ try {
   await page.click('[data-testid="nav-skills"]');
   await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-detail"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-toggle-smoke-skill"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-delete-smoke-skill"]', { timeout: 5000 });
   await page.click('[data-testid="skills-filter-enabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
-  await page.click('[data-testid="skill-select-smoke-skill"]');
-  await waitForTextContent(page, '[data-testid="skill-detail"]', 'smoke-skill');
+  await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'Smoke Skill');
   await page.click('[data-testid="skill-toggle-smoke-skill"]');
   await page.waitForFunction(async () => {
     const result = await window.roc.skills.list();
@@ -1207,7 +1205,7 @@ try {
   }, undefined, { timeout: 5000 });
   await page.click('[data-testid="skills-filter-disabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
-  await waitForTextContent(page, '[data-testid="skill-detail"]', 'disabled');
+  await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'disabled');
   await page.click('[data-testid="skill-toggle-smoke-skill"]');
   await page.waitForFunction(async () => {
     const result = await window.roc.skills.list();

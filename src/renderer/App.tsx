@@ -2429,9 +2429,8 @@ function SkillsView({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
   const [filter, setFilter] = useState<SkillFilterId>('all');
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [busySkillId, setBusySkillId] = useState<string | null>(null);
-  const model = buildSkillManagementViewModel(state.skills, filter, selectedSkillId);
+  const model = buildSkillManagementViewModel(state.skills, filter, null);
 
   async function refreshSkills(): Promise<void> {
     const skills = unwrap<SkillSnapshot[]>('skills', await window.roc.skills.list());
@@ -2446,7 +2445,6 @@ function SkillsView({
     try {
       unwrap<SkillSnapshot>('skill toggle', await window.roc.skills.setEnabled({ id, enabled }));
       await refreshSkills();
-      setSelectedSkillId(id);
     } finally {
       setBusySkillId((current) => (current === id ? null : current));
     }
@@ -2457,7 +2455,6 @@ function SkillsView({
     try {
       unwrap<{ deleted: true }>('skill delete', await window.roc.skills.deleteSkill(id));
       await refreshSkills();
-      setSelectedSkillId((current) => (current === id ? null : current));
     } finally {
       setBusySkillId((current) => (current === id ? null : current));
     }
@@ -2471,7 +2468,6 @@ function SkillsView({
         model={model}
         onDeleteSkill={(id) => void deleteSkill(id)}
         onFilterChange={(nextFilter) => setFilter(nextFilter)}
-        onSelectSkill={(id) => setSelectedSkillId(id)}
         onToggleSkill={(id, enabled) => void setSkillEnabled(id, enabled)}
       />
     </>
