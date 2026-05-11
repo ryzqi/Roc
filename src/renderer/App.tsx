@@ -94,6 +94,7 @@ import type { LoadedState } from './loaded-state';
 import { unwrap } from './loaded-state';
 import { SettingsView } from './settings';
 import { SettingsModal } from './settings/settings-modal';
+import { SkillsView as SkillControlView, buildSkillManagementViewModel, type SkillFilterId } from './skills-view';
 import '@xterm/xterm/css/xterm.css';
 import 'react-diff-view/style/index.css';
 
@@ -2415,7 +2416,6 @@ function McpView({
           <Metric label="长期授权" note="均可撤销" tone="warn" value={state.mcpServers.filter((server) => server.riskLevel !== 'low').length} />
         </div>
         <McpManagementPanel state={state} updateLoadedState={updateLoadedState} />
-        <SkillManagementPanel state={state} updateLoadedState={updateLoadedState} />
       </section>
     </>
   );
@@ -2428,22 +2428,52 @@ function SkillsView({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
+  const [filter, setFilter] = useState<SkillFilterId>('all');
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [busySkillId, setBusySkillId] = useState<string | null>(null);
+  const model = buildSkillManagementViewModel(state.skills, filter, selectedSkillId);
+
+  async function refreshSkills(): Promise<void> {
+    const skills = unwrap<SkillSnapshot[]>('skills', await window.roc.skills.list());
+    updateLoadedState({
+      skills,
+      selectedSkills: skills.filter((item) => item.enabled && item.status === 'ready').map((item) => item.id)
+    });
+  }
+
+  async function setSkillEnabled(id: string, enabled: boolean): Promise<void> {
+    setBusySkillId(id);
+    try {
+      unwrap<SkillSnapshot>('skill toggle', await window.roc.skills.setEnabled({ id, enabled }));
+      await refreshSkills();
+      setSelectedSkillId(id);
+    } finally {
+      setBusySkillId((current) => (current === id ? null : current));
+    }
+  }
+
+  async function deleteSkill(id: string): Promise<void> {
+    setBusySkillId(id);
+    try {
+      unwrap<{ deleted: true }>('skill delete', await window.roc.skills.deleteSkill(id));
+      await refreshSkills();
+      setSelectedSkillId((current) => (current === id ? null : current));
+    } finally {
+      setBusySkillId((current) => (current === id ? null : current));
+    }
+  }
+
   return (
     <>
       <PageHeading kicker="控制面" title="Skill" />
-      <section className="canvas-stage stage-grid" data-testid="skills-view">
-        <div className="grid-3">
-          <Metric label="Skill 总数" note={`${state.skills.filter((skill) => skill.enabled).length} 个已启用`} value={state.skills.length} />
-          <Metric label="Ready" note="可被本轮选择" tone="ok" value={state.skills.filter((skill) => skill.status === 'ready').length} />
-          <Metric label="Invalid" note="需要修复依赖或描述" tone="warn" value={state.skills.filter((skill) => skill.status === 'invalid').length} />
-        </div>
-        <SkillManagementPanel state={state} updateLoadedState={updateLoadedState} />
-        <section className="card">
-          <div className="card-title">触发与依赖</div>
-          <Row title="触发范围" sub="按仓库、任务类型和关键词命中" tag="受控" tone="ok" />
-          <Row title="权限继承" sub="子代理默认不继承本轮 Skill" tag="隔离" tone="warn" />
-        </section>
-      </section>
+      <SkillControlView
+        busySkillId={busySkillId}
+        model={model}
+        onDeleteSkill={(id) => void deleteSkill(id)}
+        onFilterChange={(nextFilter) => setFilter(nextFilter)}
+        onSelectSkill={(id) => setSelectedSkillId(id)}
+        onToggleSkill={(id, enabled) => void setSkillEnabled(id, enabled)}
+      />
     </>
   );
 }
@@ -2508,67 +2538,6 @@ function McpManagementPanel({
                   updateLoadedState({
                     mcpServers,
                     selectedMcpServers: mcpServers.filter((item) => item.enabled).map((item) => item.id)
-                  });
-                });
-              }}
-            >
-              删除
-            </button>
-          </div>
-        ))
-      )}
-    </section>
-  );
-}
-
-function SkillManagementPanel({
-  state,
-  updateLoadedState
-}: {
-  state: LoadedState;
-  updateLoadedState: (partial: Partial<LoadedState>) => void;
-}): React.JSX.Element {
-  return (
-    <section className="card" data-testid="skill-management">
-      <div className="card-title">Skill 清单</div>
-      {state.skills.length === 0 ? (
-        <p className="muted">尚未导入本地 Skill。</p>
-      ) : (
-        state.skills.map((skill) => (
-          <div className="row action-row" key={skill.id}>
-            <div>
-              <div className="row-title">{skill.name}</div>
-              <div className="row-sub">
-                {skill.id} · {skill.description}
-              </div>
-            </div>
-            <span className={skill.enabled && skill.status === 'ready' ? 'pill ok' : 'pill warn'}>
-              {skill.enabled ? skill.status : 'disabled'}
-            </span>
-            <button
-              data-testid={`skill-toggle-${skill.id}`}
-              type="button"
-              onClick={() => {
-                void window.roc.skills.setEnabled({ id: skill.id, enabled: !skill.enabled }).then(async () => {
-                  const skills = unwrap<SkillSnapshot[]>('skills', await window.roc.skills.list());
-                  updateLoadedState({
-                    skills,
-                    selectedSkills: skills.filter((item) => item.enabled && item.status === 'ready').map((item) => item.id)
-                  });
-                });
-              }}
-            >
-              {skill.enabled ? '禁用' : '启用'}
-            </button>
-            <button
-              data-testid={`skill-delete-${skill.id}`}
-              type="button"
-              onClick={() => {
-                void window.roc.skills.deleteSkill(skill.id).then(async () => {
-                  const skills = unwrap<SkillSnapshot[]>('skills', await window.roc.skills.list());
-                  updateLoadedState({
-                    skills,
-                    selectedSkills: skills.filter((item) => item.enabled && item.status === 'ready').map((item) => item.id)
                   });
                 });
               }}

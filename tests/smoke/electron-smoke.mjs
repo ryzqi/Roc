@@ -247,15 +247,26 @@ async function waitForTerminalSessionReady(page) {
 }
 
 async function waitForCapabilitySelection(page, { mcpCount, skillCount, expectedMcpIds = [], expectedSkillIds = [] }) {
-  await page.waitForFunction(
-    ({ mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
-      const toolText = document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '';
-      const skillText = document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '';
-      return toolText.includes(String(expectedMcpCount)) && skillText.includes(String(expectedSkillCount));
-    },
-    { mcpCount, skillCount },
-    { timeout: 5000 }
-  );
+  try {
+    await page.waitForFunction(
+      ({ mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
+        const toolText = document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '';
+        const skillText = document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '';
+        return toolText.includes(String(expectedMcpCount)) && skillText.includes(String(expectedSkillCount));
+      },
+      { mcpCount, skillCount },
+      { timeout: 5000 }
+    );
+  } catch (error) {
+    const triggerEvidence = await page.evaluate(() => ({
+      toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
+      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? ''
+    }));
+    throw new Error(
+      `Capability selection wait failed for mcp=${mcpCount}, skill=${skillCount}: ${JSON.stringify(triggerEvidence)}`,
+      { cause: error }
+    );
+  }
 
   if (expectedMcpIds.length > 0) {
     await page.hover('[data-testid="chat-tool-trigger"]');
@@ -1166,18 +1177,48 @@ try {
   await page.click('[data-testid="nav-mcp"]');
   await page.waitForSelector('[data-testid="mcp-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-management"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-test-smoke-mcp"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-toggle-smoke-mcp"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="mcp-delete-smoke-mcp"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-toggle-smoke-skill"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-delete-smoke-skill"]', { timeout: 5000 });
   await page.click('[data-testid="mcp-test-smoke-mcp"]');
   await waitForTextContent(page, '[data-testid="mcp-management"]', 'smoke-mcp:ready');
   const mcpText = await page.textContent('[data-testid="mcp-view"]');
   if (mcpText === null) {
     throw new Error('Smoke could not read MCP view text.');
   }
+  await page.click('[data-testid="nav-skills"]');
+  await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-detail"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-toggle-smoke-skill"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-delete-smoke-skill"]', { timeout: 5000 });
+  await page.click('[data-testid="skills-filter-enabled"]');
+  await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
+  await page.click('[data-testid="skill-select-smoke-skill"]');
+  await waitForTextContent(page, '[data-testid="skill-detail"]', 'smoke-skill');
+  await page.click('[data-testid="skill-toggle-smoke-skill"]');
+  await page.waitForFunction(async () => {
+    const result = await window.roc.skills.list();
+    if (!result.ok) {
+      return false;
+    }
+    const skill = result.data.find((entry) => entry.id === 'smoke-skill');
+    return skill?.enabled === false;
+  }, undefined, { timeout: 5000 });
+  await page.click('[data-testid="skills-filter-disabled"]');
+  await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="skill-detail"]', 'disabled');
+  await page.click('[data-testid="skill-toggle-smoke-skill"]');
+  await page.waitForFunction(async () => {
+    const result = await window.roc.skills.list();
+    if (!result.ok) {
+      return false;
+    }
+    const skill = result.data.find((entry) => entry.id === 'smoke-skill');
+    return skill?.enabled === true;
+  }, undefined, { timeout: 5000 });
+  await page.click('[data-testid="skills-filter-enabled"]');
+  await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
   const providerSettingsEvidence = {
     nvidiaListed: false,
     nvidiaFixedDetail: false,
@@ -1588,11 +1629,23 @@ try {
   await page.click('[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await openChatView(page);
-  await waitForCapabilitySelection(page, { mcpCount: 1, skillCount: 1 });
   await page.hover('[data-testid="chat-tool-trigger"]');
   await page.waitForSelector('[data-testid="turn-mcp-smoke-mcp"]', { timeout: 5000 });
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="turn-skill-smoke-skill"]', { timeout: 5000 });
+  await page.hover('[data-testid="chat-tool-trigger"]');
+  await page.click('[data-testid="chat-tool-clear-all"]');
+  await page.hover('[data-testid="chat-skill-trigger"]');
+  await page.click('[data-testid="chat-skill-clear-all"]');
+  await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
+  await clickComposerPopoverChoice(page, '[data-testid="chat-tool-trigger"]', '[data-testid="turn-mcp-smoke-mcp"]');
+  await clickComposerPopoverChoice(page, '[data-testid="chat-skill-trigger"]', '[data-testid="turn-skill-smoke-skill"]');
+  await waitForCapabilitySelection(page, {
+    expectedMcpIds: ['smoke-mcp'],
+    expectedSkillIds: ['smoke-skill'],
+    mcpCount: 1,
+    skillCount: 1
+  });
   await clickComposerPopoverChoice(page, '[data-testid="chat-tool-trigger"]', '[data-testid="turn-mcp-smoke-mcp"]');
   await clickComposerPopoverChoice(page, '[data-testid="chat-skill-trigger"]', '[data-testid="turn-skill-smoke-skill"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
