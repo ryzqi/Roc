@@ -1,4 +1,5 @@
 import type { BackgroundTask, TaskThread } from '../shared/types';
+import { formatBeijingDateTime } from './format-time';
 
 export type HistorySidebarItem = {
   id: string;
@@ -23,7 +24,7 @@ export function buildHistoryItems(threads: TaskThread[], backgroundTasks: Backgr
     .map((thread) => ({
       id: thread.id,
       label: thread.title,
-      meta: thread.updatedAt.replace('T', ' ').slice(0, 16),
+      meta: formatBeijingDateTime(thread.updatedAt),
       icon: 'history'
     }));
 }

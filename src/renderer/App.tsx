@@ -68,7 +68,6 @@ import type {
   WindowStateSnapshot,
   Workspace
 } from '../shared/types';
-import { ComposerActionIcon } from './chat-composer-icons';
 import { getStartupLoadIntent } from './startup-load-policy';
 import {
   buildHistoryItems as buildHistorySidebarItems,
@@ -86,12 +85,13 @@ import {
   selectAllGitChanges
 } from './git-workbench';
 import {
-  applySettingsSnapshot,
-  buildSettingsSaveRequest,
-  setDefaultModelInSettingsSaveRequest
+  applySettingsSnapshot
 } from './settings-model';
-import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
-import { buildChatTranscript, type ChatTranscriptMessage } from './chat-transcript';
+import { formatBeijingDateTime } from './format-time';
+import { ChatView } from './chat/chat-view';
+import { useChatRun } from './chat/use-chat-run';
+import type { LoadedState } from './loaded-state';
+import { unwrap } from './loaded-state';
 import { SettingsView } from './settings';
 import { SettingsModal } from './settings/settings-modal';
 import '@xterm/xterm/css/xterm.css';
@@ -206,52 +206,6 @@ type MemoryRecordViewModel = {
   accessCount?: string;
   note?: string;
 };
-
-type LoadedState = {
-  appStatus: AppStatus;
-  taskSnapshot: TaskSnapshot;
-  memoryStatus: MemoryStatus;
-  memoryCandidates: MemoryCandidate[];
-  memoryConflicts: MemoryConflict[];
-  memorySearch: MemorySearchResult | null;
-  sessionSearch: SessionSearchResult | null;
-  memoryRecovery: MemoryDeleteResult | null;
-  settings: AppSettings;
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  providerSecretStatus: ProviderSecretStatus[];
-  permissions: PermissionsConfig;
-  providerTestStatus: ProviderTestResult | null;
-  mcpServers: McpServerSnapshot[];
-  mcpTestStatus: McpServerTestResult | null;
-  skills: SkillSnapshot[];
-  selectedMcpServers: string[];
-  selectedSkills: string[];
-  backgroundTask: BackgroundTask | null;
-  backgroundTasks: BackgroundTask[];
-  traySummary: TraySummary;
-  diagnosticPackage: DiagnosticPackage | null;
-  performanceSample: PerformanceSample;
-  doctor: DoctorSnapshot;
-  agent: AgentRuntimeStatus;
-  agentCapabilityPreview: AgentCapabilityPreview | null;
-  workspace: Workspace | null;
-  fileTree: FileTreeResult | null;
-  fileSearch: FileSearchResult | null;
-  filePreview: FilePreviewResult | null;
-  gitStatus: GitStatusResult | null;
-  gitBranches: GitBranchListResult | null;
-  gitError: string | null;
-  gitSelectedPath: string | null;
-  gitSelectedPreview: GitFileDiffResult | null;
-  gitLastCommit: GitCommitResult | null;
-  gitLastPush: GitPushResult | null;
-  rtkStatus: RtkStatus;
-  terminalError: string | null;
-  terminalSession: TerminalSessionSnapshot | null;
-};
-
-type IpcLikeResult<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
 
 function emptyWorkspaceData(): WorkspaceData {
   return {
@@ -568,31 +522,6 @@ function buildControlNavItems(state: LoadedState): NavItem[] {
   ];
 }
 
-function unwrap<T>(label: string, result: IpcLikeResult<T>): T {
-  if (result.ok) {
-    return result.data;
-  }
-  throw new Error(`${label} failed: ${result.error.message}`);
-}
-
-function toggleSelection(current: string[], id: string): string[] {
-  if (current.includes(id)) {
-    return current.filter((item) => item !== id);
-  }
-  return [...current, id];
-}
-
-async function updateTurnSelection(
-  updateLoadedState: (partial: Partial<LoadedState>) => void,
-  enabledCapabilities: { mcpServers: string[]; skills: string[] }
-): Promise<void> {
-  updateLoadedState({
-    selectedMcpServers: enabledCapabilities.mcpServers,
-    selectedSkills: enabledCapabilities.skills,
-    agentCapabilityPreview: null
-  });
-}
-
 export function App(): React.JSX.Element {
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'));
@@ -600,10 +529,8 @@ export function App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [state, setState] = useState<LoadedState | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [chatRunState, setChatRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [chatError, setChatError] = useState<string | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
@@ -686,19 +613,6 @@ export function App(): React.JSX.Element {
       window.removeEventListener('pointerdown', closeHistoryContextMenu);
     };
   }, [historyContextMenu]);
-
-  useEffect(() => {
-    return window.roc.chat.onRunEvent((event) => {
-      setChatRunState((current) => applyChatRunEvent(current, event));
-      if (event.type === 'run_failed') {
-        setChatError(event.message);
-        return;
-      }
-      if (event.type === 'run_started') {
-        setChatError(null);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -788,9 +702,7 @@ export function App(): React.JSX.Element {
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
     setSelectedThreadId(null);
-    setChatRunState(createEmptyChatRunState());
     setHistoryContextMenu(null);
-    setChatError(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
@@ -798,7 +710,6 @@ export function App(): React.JSX.Element {
     setActiveView('chat');
     setSelectedThreadId(threadId);
     setHistoryContextMenu(null);
-    setChatError(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
@@ -831,8 +742,7 @@ export function App(): React.JSX.Element {
   }, [chatSidebarCollapsed]);
 
   const startTaskRun = useCallback(
-    async (input: string): Promise<boolean> => {
-      setChatError(null);
+    async (input: string): Promise<{ ok: true } | { ok: false; error: string }> => {
       const result = await window.roc.chat.startRun({
         input,
         mode: 'task',
@@ -843,12 +753,11 @@ export function App(): React.JSX.Element {
         }
       });
       if (!result.ok) {
-        setChatError(result.error.message);
-        return false;
+        return { ok: false, error: result.error.message };
       }
       setSelectedThreadId(result.data.threadId);
       setHistoryContextMenu(null);
-      return true;
+      return { ok: true };
     },
     [currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
   );
@@ -1202,19 +1111,11 @@ export function App(): React.JSX.Element {
       <main className="floating-stage" data-testid={`floating-${activeView}`}>
         <ViewContent
           activeView={activeView}
-          chatSidebarCollapsed={chatSidebarCollapsed}
-          chatError={chatError}
-          chatRunState={chatRunState}
           chatSelectionVersion={chatSelectionVersion}
-          historySearchVisible={activeView === 'chat' && historySearchVisible}
           memoryLoadState={memoryLoadState}
-          onOpenView={setActiveView}
-          onStartNewConversation={startNewConversation}
           operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={startTaskRun}
-          onToggleChatSidebar={toggleChatSidebar}
-          onToggleHistorySearch={toggleHistorySearch}
           selectedThreadId={selectedThreadId}
           state={state}
           updateLoadedState={(partial) =>
@@ -1498,19 +1399,11 @@ export function App(): React.JSX.Element {
               <div className="canvas-scroll">
                 <ViewContent
                   activeView={activeView}
-                  chatSidebarCollapsed={chatSidebarCollapsed}
-                  chatError={chatError}
-                  chatRunState={chatRunState}
                   chatSelectionVersion={chatSelectionVersion}
-                  historySearchVisible={showHistorySearch}
                   memoryLoadState={memoryLoadState}
-                  onOpenView={setActiveView}
-                  onStartNewConversation={startNewConversation}
                   operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={startTaskRun}
-                  onToggleChatSidebar={toggleChatSidebar}
-                  onToggleHistorySearch={toggleHistorySearch}
                   selectedThreadId={selectedThreadId}
                   state={state}
                   updateLoadedState={(partial) =>
@@ -1852,38 +1745,22 @@ async function loadSettingsState(): Promise<{
 
 function ViewContent({
   activeView,
-  chatSidebarCollapsed,
-  chatError,
-  chatRunState,
   chatSelectionVersion,
-  historySearchVisible,
   memoryLoadState,
-  onOpenView,
-  onStartNewConversation,
   operationsLoadState,
   onSelectWorkspace,
   onSubmitChatTask,
-  onToggleChatSidebar,
-  onToggleHistorySearch,
   selectedThreadId,
   state,
   updateLoadedState,
   workspaceLoadState
 }: {
   activeView: ViewId;
-  chatSidebarCollapsed: boolean;
-  chatError: string | null;
-  chatRunState: ChatRunState;
   chatSelectionVersion: number;
-  historySearchVisible: boolean;
   memoryLoadState: LazyLoadState;
-  onOpenView: (view: ViewId) => void;
-  onStartNewConversation: () => void;
   operationsLoadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
-  onSubmitChatTask: (input: string) => Promise<boolean>;
-  onToggleChatSidebar: () => void;
-  onToggleHistorySearch: () => void;
+  onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -1920,23 +1797,15 @@ function ViewContent({
     return <DiagnosticsView loadState={operationsLoadState} state={state} />;
   }
   if (activeView === 'quick') {
-    return <QuickEntryView chatError={chatError} onSubmitChatTask={onSubmitChatTask} state={state} />;
+    return <QuickEntryView onSubmitChatTask={onSubmitChatTask} state={state} />;
   }
   if (activeView === 'tray') {
     return <TrayEntryView state={state} updateLoadedState={updateLoadedState} />;
   }
   return (
     <ChatView
-      chatSidebarCollapsed={chatSidebarCollapsed}
-      chatError={chatError}
-      chatRunState={chatRunState}
       chatSelectionVersion={chatSelectionVersion}
-      historySearchVisible={historySearchVisible}
-      onOpenView={onOpenView}
-      onStartNewConversation={onStartNewConversation}
       onSubmitChatTask={onSubmitChatTask}
-      onToggleChatSidebar={onToggleChatSidebar}
-      onToggleHistorySearch={onToggleHistorySearch}
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
@@ -1986,411 +1855,25 @@ function NavButton({ active, item, onClick }: { active: boolean; item: NavItem; 
   );
 }
 
-function ChatView({
-  chatSidebarCollapsed,
-  chatError,
-  chatRunState,
-  chatSelectionVersion,
-  historySearchVisible,
-  onOpenView,
-  onStartNewConversation,
-  onSubmitChatTask,
-  onToggleChatSidebar,
-  onToggleHistorySearch,
-  selectedThreadId,
-  state,
-  updateLoadedState
-}: {
-  chatSidebarCollapsed: boolean;
-  chatError: string | null;
-  chatRunState: ChatRunState;
-  chatSelectionVersion: number;
-  historySearchVisible: boolean;
-  onOpenView: (view: ViewId) => void;
-  onStartNewConversation: () => void;
-  onSubmitChatTask: (input: string) => Promise<boolean>;
-  onToggleChatSidebar: () => void;
-  onToggleHistorySearch: () => void;
-  selectedThreadId: string | null;
-  state: LoadedState;
-  updateLoadedState: (partial: Partial<LoadedState>) => void;
-}): React.JSX.Element {
-  const [chatInput, setChatInput] = useState('');
-  const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
-  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [activeComposerPopover, setActiveComposerPopover] = useState<'tools' | 'skills' | 'models' | null>(null);
-  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
-  const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
-  const visibleCapabilitySkills = state.skills.filter(
-    (skill) => skill.enabled && skill.status === 'ready'
-  );
-  const allVisibleMcpSelected = visibleCapabilityServers.length > 0 && visibleCapabilityServers.every((server) => state.selectedMcpServers.includes(server.id));
-  const allVisibleSkillsSelected = visibleCapabilitySkills.length > 0 && visibleCapabilitySkills.every((skill) => state.selectedSkills.includes(skill.id));
-  const enabledModels = state.providers
-    .filter((provider) => provider.enabled)
-    .flatMap((provider) =>
-      provider.models
-        .filter((model) => model.enabled)
-        .map((model) => ({
-          id: model.id,
-          shortLabel: model.displayName,
-          label: `${provider.name} / ${model.displayName}`
-        }))
-    );
-  let composerModelLabel = '未配置';
-  if (state.defaultModelId !== null) {
-    const selectedModel = enabledModels.find((model) => model.id === state.defaultModelId);
-    if (selectedModel !== undefined) {
-      composerModelLabel = selectedModel.shortLabel;
-    } else {
-      const idSegments = state.defaultModelId.split(/[/:]/).filter((segment) => segment.length > 0);
-      composerModelLabel = idSegments.length > 0 ? idSegments[idSegments.length - 1] : state.defaultModelId;
-    }
-  }
-  const trimmedInput = chatInput.trim();
-  const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
-  const chatTranscript = useMemo(
-    () =>
-      buildChatTranscript({
-        backgroundTasks: state.backgroundTasks,
-        chatRunState,
-        pendingUserInput,
-        selectedThreadId,
-        taskSnapshot: state.taskSnapshot
-      }),
-    [chatRunState, pendingUserInput, selectedThreadId, state.backgroundTasks, state.taskSnapshot]
-  );
-
-  useEffect(() => {
-    if (pendingUserInput === null || selectedThreadId === null) {
-      return;
-    }
-    const hasPersistedUserMessage = state.taskSnapshot.recentEvents.some((event) => {
-      if (event.threadId !== selectedThreadId || event.type !== 'message') {
-        return false;
-      }
-      if (typeof event.payload !== 'object' || event.payload === null) {
-        return false;
-      }
-      return Reflect.get(event.payload, 'role') === 'user' && Reflect.get(event.payload, 'content') === pendingUserInput;
-    });
-    if (hasPersistedUserMessage) {
-      setPendingUserInput(null);
-    }
-  }, [pendingUserInput, selectedThreadId, state.taskSnapshot.recentEvents]);
-
-  useEffect(() => {
-    setChatInput('');
-    setPendingUserInput(null);
-    setSelectedAttachments([]);
-    setSubmitting(false);
-    setActiveComposerPopover(null);
-  }, [chatSelectionVersion]);
-
-  useEffect(() => {
-    const container = transcriptScrollRef.current;
-    if (container === null) {
-      return;
-    }
-    container.scrollTop = container.scrollHeight;
-  }, [chatRunState.assistantMessage, chatRunState.reasoning, chatTranscript]);
-
-  async function submitCurrentInput(): Promise<void> {
-    if (sendDisabled) {
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const submitted = await onSubmitChatTask(trimmedInput);
-      if (submitted) {
-        setPendingUserInput(trimmedInput);
-        setChatInput('');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function selectAttachmentsFromDialog(): Promise<void> {
-    const selection = await window.roc.files.selectFromDialog();
-    if (!selection.ok || selection.data === null) {
-      return;
-    }
-    setSelectedAttachments(selection.data.filePaths);
-  }
-
-  async function setVisibleMcpSelection(nextSelected: string[]): Promise<void> {
-    await updateTurnSelection(updateLoadedState, {
-      mcpServers: nextSelected,
-      skills: state.selectedSkills
-    });
-  }
-
-  async function setVisibleSkillSelection(nextSelected: string[]): Promise<void> {
-    await updateTurnSelection(updateLoadedState, {
-      mcpServers: state.selectedMcpServers,
-      skills: nextSelected
-    });
-  }
-
-  return (
-    <section className="canvas-stage chat-stage" data-testid="chat-view">
-      <div className="chat-empty-plane" aria-label="聊天主画布" ref={transcriptScrollRef}>
-        <div className="chat-page-shell">
-          <div className="chat-feedback-shell">
-            <div className="chat-feedback-stack">
-              {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
-              {chatError === null ? null : <span className="inline-warning" data-testid="chat-error">{chatError}</span>}
-              <ChatTranscriptPanel messages={chatTranscript} />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="chat-bottom-stack">
-        <div className="composer composer--chat">
-          {selectedAttachments.length === 0 ? null : (
-            <div className="chat-attachment-strip">
-              {selectedAttachments.map((path) => (
-                <span className="chat-attachment-pill" data-testid="chat-attachment-pill" key={path}>
-                  <PreviewIcon name="paperclip" />
-                  <span>{path.split(/[/\\]/).at(-1) ?? path}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          <textarea
-            aria-label="输入消息"
-            className="composer-input"
-            data-testid="chat-input"
-            placeholder="输入消息..."
-            rows={3}
-            value={chatInput}
-            onChange={(event) => setChatInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
-                return;
-              }
-              event.preventDefault();
-              void submitCurrentInput();
-            }}
-          />
-          <div className="composer-bottom">
-            <div className="composer-left">
-              <button
-                className={selectedAttachments.length > 0 ? 'composer-tool active' : 'composer-tool'}
-                data-testid="chat-attachment-trigger"
-                type="button"
-                aria-label="上传文件"
-                onClick={() => void selectAttachmentsFromDialog()}
-              >
-                <ComposerActionIcon kind="attachment" />
-                {selectedAttachments.length === 0 ? null : <span className="tool-badge">{selectedAttachments.length}</span>}
-              </button>
-              <div
-                className="composer-popover-anchor"
-                onMouseEnter={() => setActiveComposerPopover('tools')}
-                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'tools' ? null : current))}
-              >
-                <button
-                  className={state.selectedMcpServers.length > 0 ? 'composer-tool composer-tool--tools active' : 'composer-tool composer-tool--tools'}
-                  data-testid="chat-tool-trigger"
-                  type="button"
-                  aria-label="工具"
-                >
-                  <ComposerActionIcon kind="tools" />
-                  <span className="tool-badge">{state.selectedMcpServers.length}</span>
-                </button>
-                {activeComposerPopover !== 'tools' ? null : (
-                  <div className="composer-popover" data-testid="chat-tool-popover">
-                    <div className="composer-popover-head">
-                      <span>工具</span>
-                      <strong>{visibleCapabilityServers.length} 个可用</strong>
-                    </div>
-                    <div className="composer-popover-copy">展示当前可用工具，并选择本轮要启用的项。</div>
-                    <div className="composer-popover-actions">
-                      <button
-                        className="composer-choice composer-choice--action"
-                        data-testid="chat-tool-select-all"
-                        type="button"
-                        onClick={() => void setVisibleMcpSelection(visibleCapabilityServers.map((server) => server.id))}
-                      >
-                        全选
-                      </button>
-                      <button
-                        className="composer-choice composer-choice--action"
-                        data-testid="chat-tool-clear-all"
-                        type="button"
-                        onClick={() => void setVisibleMcpSelection([])}
-                      >
-                        取消全选
-                      </button>
-                    </div>
-                    <div className="composer-popover-list">
-                      {visibleCapabilityServers.map((server) => (
-                        <button
-                          className={state.selectedMcpServers.includes(server.id) ? 'composer-choice active' : 'composer-choice'}
-                          data-testid={`turn-mcp-${server.id}`}
-                          key={server.id}
-                          type="button"
-                          onClick={() =>
-                            void updateTurnSelection(updateLoadedState, {
-                              mcpServers: toggleSelection(state.selectedMcpServers, server.id),
-                              skills: state.selectedSkills
-                            })
-                          }
-                        >
-                          <span>{server.name}</span>
-                          <small>{server.allowedTools?.join(', ') || 'ripgrep 搜索'}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div
-                className="composer-popover-anchor"
-                onMouseEnter={() => setActiveComposerPopover('skills')}
-                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'skills' ? null : current))}
-              >
-                <button
-                  className={state.selectedSkills.length > 0 ? 'composer-tool composer-tool--skills active' : 'composer-tool composer-tool--skills'}
-                  data-testid="chat-skill-trigger"
-                  type="button"
-                  aria-label="技能"
-                >
-                  <ComposerActionIcon kind="skills" />
-                  <span className="tool-badge">{state.selectedSkills.length}</span>
-                </button>
-                {activeComposerPopover !== 'skills' ? null : (
-                  <div className="composer-popover" data-testid="chat-skill-popover">
-                    <div className="composer-popover-head">
-                      <span>技能</span>
-                      <strong>{visibleCapabilitySkills.length} 个可用</strong>
-                    </div>
-                    <div className="composer-popover-copy">展示当前可用技能，并选择本轮要启用的项。</div>
-                    <div className="composer-popover-actions">
-                      <button
-                        className="composer-choice composer-choice--action"
-                        data-testid="chat-skill-select-all"
-                        type="button"
-                        onClick={() => void setVisibleSkillSelection(visibleCapabilitySkills.map((skill) => skill.id))}
-                      >
-                        全选
-                      </button>
-                      <button
-                        className="composer-choice composer-choice--action"
-                        data-testid="chat-skill-clear-all"
-                        type="button"
-                        onClick={() => void setVisibleSkillSelection([])}
-                      >
-                        取消全选
-                      </button>
-                    </div>
-                    <div className="composer-popover-list">
-                      {visibleCapabilitySkills.map((skill) => (
-                        <button
-                          className={state.selectedSkills.includes(skill.id) ? 'composer-choice active' : 'composer-choice'}
-                          data-testid={`turn-skill-${skill.id}`}
-                          key={skill.id}
-                          type="button"
-                          onClick={() =>
-                            void updateTurnSelection(updateLoadedState, {
-                              mcpServers: state.selectedMcpServers,
-                              skills: toggleSelection(state.selectedSkills, skill.id)
-                            })
-                          }
-                        >
-                          <span>{skill.name}</span>
-                          <small>{skill.description}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div
-                className="composer-popover-anchor"
-                onMouseEnter={() => setActiveComposerPopover('models')}
-                onMouseLeave={() => setActiveComposerPopover((current) => (current === 'models' ? null : current))}
-              >
-                <button className="model-pill model-pill--composer" data-testid="chat-model-trigger" type="button" aria-label="模型">
-                  <ComposerActionIcon kind="model" />
-                  <span className="model-pill-copy">{composerModelLabel}</span>
-                  <span aria-hidden="true" className="model-pill-chevron">
-                    ▾
-                  </span>
-                </button>
-                {activeComposerPopover !== 'models' ? null : (
-                  <div className="composer-popover composer-popover--wide" data-testid="chat-model-popover">
-                    <div className="composer-popover-head">
-                      <span>模型</span>
-                      <strong>默认模型</strong>
-                    </div>
-                    <div className="composer-popover-list">
-                      {enabledModels.map((model) => (
-                        <button
-                          className={state.defaultModelId === model.id ? 'composer-choice active' : 'composer-choice'}
-                          key={model.id}
-                          type="button"
-                          onClick={() => {
-                            void window.roc.settings
-                              .save(
-                                setDefaultModelInSettingsSaveRequest(
-                                  buildSettingsSaveRequest({
-                                    settings: state.settings,
-                                    providers: state.providers,
-                                    defaultModelId: state.defaultModelId,
-                                    permissions: state.permissions
-                                  }),
-                                  model.id
-                                )
-                              )
-                              .then((result) => {
-                                updateLoadedState(applySettingsSnapshot(unwrap<SettingsSnapshot>('settings save', result)));
-                              });
-                          }}
-                        >
-                          <span>{model.label}</span>
-                          <small>{model.id}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="composer-right">
-              <button
-                className="send-button"
-                data-testid="chat-task-submit"
-                type="button"
-                aria-label="发送"
-                disabled={sendDisabled}
-                onClick={() => void submitCurrentInput()}
-              >
-                <PreviewIcon name="send" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function QuickEntryView({
-  chatError,
   onSubmitChatTask,
   state
 }: {
-  chatError: string | null;
-  onSubmitChatTask: (input: string) => Promise<boolean>;
+  onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   state: LoadedState;
 }): React.JSX.Element {
+  const chatRun = useChatRun();
   const failedTasks = state.taskSnapshot.counts.failed;
   const pendingConfirmations = state.traySummary.backgroundTasks.pendingConfirmation;
   const quickTaskInput = '快捷入口创建任务';
+
+  async function submitQuickTask(): Promise<void> {
+    const result = await onSubmitChatTask(quickTaskInput);
+    if (!result.ok) {
+      chatRun.setError(result.error);
+    }
+  }
+
   return (
     <section className="floating-shell floating-shell--quick" data-testid="quick-entry-view">
       <div className="mini-window" data-testid="quick-entry-visual">
@@ -2401,7 +1884,7 @@ function QuickEntryView({
         <div className="card-pad">
           <div className="field-box">补充当前任务或创建新的本地任务</div>
           <div className="tab-row tab-row--quick">
-            <button className="tab active" data-testid="quick-submit-task" type="button" onClick={() => void onSubmitChatTask(quickTaskInput)}>
+            <button className="tab active" data-testid="quick-submit-task" type="button" onClick={() => void submitQuickTask()}>
               追加到当前任务
             </button>
             <button className="tab" data-testid="quick-open-tasks" type="button" onClick={() => void window.roc.app.openMainPage('tasks')}>
@@ -2430,7 +1913,7 @@ function QuickEntryView({
           tag={failedTasks > 0 ? '可修复' : '无'}
           tone={failedTasks > 0 ? 'bad' : 'ok'}
         />
-        {chatError === null ? null : <span className="inline-warning" data-testid="quick-entry-error">{chatError}</span>}
+        {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="quick-entry-error">{chatRun.errorMessage}</span>}
       </div>
     </section>
   );
@@ -2536,7 +2019,7 @@ function TasksView({
               <Row title="任务事件" sub="当前没有任务事件。" tag="空" tone="warn" />
             ) : (
               recentEvents.map((event) => (
-                <Row key={event.id} title={event.type} sub={event.createdAt} tag="已记录" tone="info" />
+                <Row key={event.id} title={event.type} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="info" />
               ))
             )}
           </section>
@@ -3463,7 +2946,7 @@ function DiagnosticsView({
             <Row title="失败事件" sub="当前没有失败任务事件。" tag="空" tone="ok" />
           ) : (
             failedEvents.map((event) => (
-              <Row key={event.id} title={event.type} sub={event.createdAt} tag="已记录" tone="bad" />
+              <Row key={event.id} title={event.type} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="bad" />
             ))
           )}
         </section>
@@ -4758,31 +4241,6 @@ function TerminalWorkbench({
         </footer>
       </div>
     </section>
-  );
-}
-
-function ChatTranscriptPanel({ messages }: { messages: ChatTranscriptMessage[] }): React.JSX.Element {
-  return (
-    <div className="chat-transcript" data-testid="chat-transcript">
-      {messages.map((message) => (
-        <div
-          className={message.role === 'user' ? 'chat-message-row chat-message-row--user' : 'chat-message-row chat-message-row--assistant'}
-          data-role={message.role}
-          data-testid={message.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'}
-          key={message.key}
-        >
-          <article className={message.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--assistant'}>
-            {message.content.length === 0 ? null : <p>{message.content}</p>}
-            {message.reasoning === null ? null : (
-              <div className="chat-bubble-reasoning" data-testid="chat-message-reasoning">
-                <strong>思考</strong>
-                <p>{message.reasoning}</p>
-              </div>
-            )}
-          </article>
-        </div>
-      ))}
-    </div>
   );
 }
 

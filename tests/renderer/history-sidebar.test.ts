@@ -52,7 +52,7 @@ describe('history sidebar helpers', () => {
       {
         id: 'user-thread',
         label: '用户真实任务',
-        meta: '2026-05-08 15:30',
+        meta: '2026-05-08 23:30',
         icon: 'history'
       }
     ]);
