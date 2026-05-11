@@ -46,16 +46,18 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
   };
 }
 
-function createRuntime(): DeepAgentRuntimeService {
-  return new DeepAgentRuntimeService(
-    services.langChainModelFactory,
-    services.taskService,
-    services.agentService,
-    services.workspaceService,
-    services.mcpService,
-    services.webReadService
-  );
-}
+  function createRuntime(): DeepAgentRuntimeService {
+    return new DeepAgentRuntimeService(
+      services.langChainModelFactory,
+      services.taskService,
+      services.memoryService,
+      services.agentService,
+      services.workspaceService,
+      services.mcpService,
+      services.webReadService,
+      services.paths
+    );
+  }
 
 function waitForEvent(
   runtime: DeepAgentRuntimeService,
@@ -74,10 +76,15 @@ function waitForEvent(
 }
 
 let root: string;
+let userHome: string;
+let previousUserProfile: string | undefined;
 let services: AppServices;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-deep-agent-runtime-'));
+  userHome = mkdtempSync(join(tmpdir(), 'roc-user-home-'));
+  previousUserProfile = process.env.USERPROFILE;
+  process.env.USERPROFILE = userHome;
   services = createAppServices(root);
   services.appService.initialize();
   services.secretService.setProviderSecret('nvidia', 'nvapi-test');
@@ -144,6 +151,12 @@ beforeEach(() => {
 afterEach(() => {
   services.databaseService.close();
   rmSync(root, { recursive: true, force: true });
+  rmSync(userHome, { recursive: true, force: true });
+  if (previousUserProfile === undefined) {
+    delete process.env.USERPROFILE;
+  } else {
+    process.env.USERPROFILE = previousUserProfile;
+  }
   vi.restoreAllMocks();
 });
 
@@ -200,7 +213,37 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
-  it('stores selected MCP and Skill capabilities on task runs and records manifest events', async () => {
+  it('passes skills to deepagents and keeps skill storage under the user .roc directory', async () => {
+    expect(services.paths.skillsDir).toBe(join(userHome, '.roc', 'skills'));
+
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: 'Use the selected skill.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['project-review']
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | { skills?: string[]; backend?: { routePrefixes?: string[] } }
+      | undefined;
+    expect(call?.skills).toEqual(['/skills/project-review/']);
+    expect(call?.backend?.routePrefixes).toEqual(['/skills/']);
+  });
+
+  it('stores selected MCP and Skill capabilities on task runs without claiming unloaded skills were executed', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
@@ -221,9 +264,9 @@ describe('DeepAgentRuntimeService', () => {
       riskLevel: 'medium',
       allowedTools: ['search_docs']
     });
-    mkdirSync(join(root, 'skills', 'project-review'));
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
-      join(root, 'skills', 'project-review', 'SKILL.md'),
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
       ['---', 'name: project-review', 'description: Review a local project', '---', ''].join('\n'),
       'utf8'
     );
@@ -243,7 +286,6 @@ describe('DeepAgentRuntimeService', () => {
     const run = services.taskService.getRun(started.runId);
     const snapshot = services.taskService.getSnapshot();
     const manifestEvent = snapshot.recentEvents.find((event) => event.type === 'context_manifest');
-    const skillEvent = snapshot.recentEvents.find((event) => event.type === 'skill_loaded');
 
     expect(run.enabledCapabilities).toEqual({
       mcpServers: ['docs-http', 'missing-mcp'],
@@ -262,14 +304,10 @@ describe('DeepAgentRuntimeService', () => {
       skippedCapabilities: [expect.objectContaining({ id: 'missing-mcp', type: 'mcp_server', reason: 'not_found' })],
       untrustedContextPolicy: 'external_content_reference_only'
     });
-    expect(skillEvent?.payload).toMatchObject({
-      skillId: 'project-review',
-      enabledBy: 'turn_selection',
-      source: 'agent_capability_preview'
-    });
+    expect(snapshot.recentEvents.find((event) => event.type === 'skill_loaded')).toBeUndefined();
   });
 
-  it('mounts real web_search and web_read tools for task runs when Exa is enabled', async () => {
+  it('mounts real memory, web, and named subagent runtime capabilities for task runs when Exa is enabled', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
@@ -281,6 +319,16 @@ describe('DeepAgentRuntimeService', () => {
       output: Promise.resolve({})
     });
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+    const candidate = services.memoryService.writeCandidate({
+      type: 'knowledge_note',
+      scope: 'project:roc',
+      content: 'Deep Agents runtime should expose memory_search and memory_get.',
+      confidence: 0.9,
+      priority: 'high',
+      source: 'test',
+      sourceRef: 'tests/deep-agent-runtime-service'
+    });
+    const acceptedMemory = services.memoryService.acceptCandidate(candidate.id);
     const fetchMock = vi.fn().mockResolvedValue(
       new Response('Fetched via Jina Reader', {
         status: 200,
@@ -304,13 +352,36 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }
+      | {
+          tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }>;
+          subagents?: Array<{ name: string; tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }>;
+        }
       | undefined;
     const toolNames = createAgentCall?.tools?.map((tool) => tool.name) ?? [];
+    const subagentNames = createAgentCall?.subagents?.map((subagent) => subagent.name) ?? [];
+    const codeReviewSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'code-review');
+    const researchSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'research');
+    const memorySearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_search');
+    const memoryGetTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_get');
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
-    expect(toolNames).toEqual(expect.arrayContaining(['web_search', 'web_read']));
+    expect(toolNames).toEqual(expect.arrayContaining(['memory_search', 'memory_get', 'web_search', 'web_read']));
+    expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
+    expect(codeReviewSubagent?.tools?.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['memory_search', 'memory_get'])
+    );
+    expect(researchSubagent?.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['web_read']));
+    await expect(
+      memorySearchTool?.invoke({
+        query: 'Deep Agents runtime',
+        source: 'curated',
+        scope: 'project:roc'
+      })
+    ).resolves.toContain(acceptedMemory.id);
+    await expect(memoryGetTool?.invoke({ id: acceptedMemory.id })).resolves.toContain(
+      'Deep Agents runtime should expose memory_search and memory_get.'
+    );
     await expect(webSearchTool?.invoke({ query: 'langchain mcp adapters' })).resolves.toBe('Exa search results');
     await expect(
       webReadTool?.invoke({

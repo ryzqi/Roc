@@ -500,19 +500,6 @@ export class TaskService {
       type: 'context_manifest',
       payload: manifest
     });
-    for (const skillCard of input.preview.skillCards) {
-      this.recordEvent({
-        threadId: input.threadId,
-        runId: input.runId,
-        type: 'skill_loaded',
-        payload: {
-          skillId: skillCard.id.replace('skill:', ''),
-          path: skillCard.sourcePath,
-          enabledBy: 'turn_selection',
-          source: 'agent_capability_preview'
-        }
-      });
-    }
     return manifest;
   }
 

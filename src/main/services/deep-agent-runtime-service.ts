@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { FilesystemBackend, StateBackend, createDeepAgent } from 'deepagents';
+import { CompositeBackend, FilesystemBackend, StateBackend, createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
@@ -10,13 +10,16 @@ import type {
   ChatStartRunRequest,
   ChatStartRunResult,
   ChatTodoItem,
+  MemorySearchRequest,
   ProviderExecutionResult,
   TaskRun
 } from '../../shared/types';
 import type { AgentService } from './agent-service';
 import { RocDomainError } from './errors';
 import type { LangChainChatModelHandle, LangChainModelFactory } from './langchain-model-factory';
+import type { MemoryService } from './memory-service';
 import type { McpService } from './mcp-service';
+import type { RocPaths } from './paths';
 import type { TaskService } from './task-service';
 import { WebReadService, type WebReadRequest } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
@@ -44,6 +47,17 @@ type RunFailure = {
   retryable: boolean;
 };
 
+type MemoryGetRequest = {
+  id: string;
+};
+
+type RuntimeSubagent = {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  tools: Array<DynamicStructuredTool<any, any, any, string>>;
+};
+
 const runEventName = 'run-event';
 
 export class DeepAgentRuntimeService {
@@ -53,10 +67,12 @@ export class DeepAgentRuntimeService {
   constructor(
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly taskService: TaskService,
+    private readonly memoryService: MemoryService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
     private readonly mcpService: McpService,
-    private readonly webReadService: WebReadService
+    private readonly webReadService: WebReadService,
+    private readonly paths: RocPaths
   ) {}
 
   onRunEvent(listener: (event: ChatRunEvent) => void): () => void {
@@ -179,11 +195,13 @@ export class DeepAgentRuntimeService {
     const closers: Array<() => Promise<void>> = [];
 
     try {
-      const tools = await this.createRunTools(context, closers);
+      const { subagents, tools } = await this.createRunTools(context, closers);
       const agent = createDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: this.buildSystemPrompt(context.enabledCapabilities),
         backend: this.createBackend(),
+        skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
+        subagents,
         tools
       });
       const run = await agent.streamEvents(
@@ -256,13 +274,23 @@ export class DeepAgentRuntimeService {
   private async createRunTools(
     context: RunExecutionContext,
     closers: Array<() => Promise<void>>
-  ): Promise<ClientTool[]> {
-    const tools: ClientTool[] = [this.createWebReadTool()];
+  ): Promise<{ subagents: RuntimeSubagent[]; tools: ClientTool[] }> {
+    const memorySearchTool = this.createMemorySearchTool();
+    const memoryGetTool = this.createMemoryGetTool();
+    const webReadTool = this.createWebReadTool();
+    const tools: ClientTool[] = [memorySearchTool, memoryGetTool, webReadTool];
     const webSearchTool = await this.createWebSearchTool(context, closers);
     if (webSearchTool !== null) {
       tools.unshift(webSearchTool);
     }
-    return tools;
+    return {
+      subagents: this.createRunSubagents({
+        memoryGetTool,
+        memorySearchTool,
+        webReadTool
+      }),
+      tools
+    };
   }
 
   private async createWebSearchTool(
@@ -319,7 +347,7 @@ export class DeepAgentRuntimeService {
     }
   }
 
-  private createWebReadTool(): ClientTool {
+  private createWebReadTool(): DynamicStructuredTool<any, any, any, string> {
     const schema = z.object({
       url: z.string().url(),
       responseMode: z.enum(['markdown', 'readerlm-v2']).default('markdown'),
@@ -334,6 +362,60 @@ export class DeepAgentRuntimeService {
         return await this.webReadService.read(input);
       }
     });
+  }
+
+  private createMemorySearchTool(): DynamicStructuredTool<any, any, any, string> {
+    const schema = z.object({
+      query: z.string().trim().min(1),
+      includeCold: z.boolean().default(false),
+      source: z.enum(['curated', 'session', 'all']).default('curated'),
+      scope: z.string().trim().min(1).optional()
+    });
+    return new DynamicStructuredTool<typeof schema, MemorySearchRequest, MemorySearchRequest, string>({
+      name: 'memory_search',
+      description: '检索 Roc 长期记忆与会话回忆索引，返回相关条目摘要。',
+      schema,
+      func: async (input: MemorySearchRequest) => {
+        return JSON.stringify(this.memoryService.search(input), null, 2);
+      }
+    });
+  }
+
+  private createMemoryGetTool(): DynamicStructuredTool<any, any, any, string> {
+    const schema = z.object({
+      id: z.string().trim().min(1)
+    });
+    return new DynamicStructuredTool<typeof schema, MemoryGetRequest, MemoryGetRequest, string>({
+      name: 'memory_get',
+      description: '读取指定 Roc 记忆条目的 Markdown 真相源。',
+      schema,
+      func: async (input: MemoryGetRequest) => {
+        return this.memoryService.get(input.id);
+      }
+    });
+  }
+
+  private createRunSubagents(input: {
+    memoryGetTool: DynamicStructuredTool<any, any, any, string>;
+    memorySearchTool: DynamicStructuredTool<any, any, any, string>;
+    webReadTool: DynamicStructuredTool<any, any, any, string>;
+  }): RuntimeSubagent[] {
+    const subagents: RuntimeSubagent[] = [];
+    subagents.push({
+      name: 'code-review',
+      description: '审查代码改动并优先产出 bug、风险、回归与缺失验证。',
+      systemPrompt:
+        '你是 Roc 的代码审查子代理。先聚焦 bug、行为回归、风险和缺失验证，再给出简短结论。必要时先用 memory_search 和 memory_get 获取项目记忆。',
+      tools: [input.memorySearchTool, input.memoryGetTool]
+    });
+    subagents.push({
+      name: 'research',
+      description: '围绕公开资料检索与网页阅读整理结论。',
+      systemPrompt:
+        '你是 Roc 的资料检索子代理。优先用 web_read 收集外部证据，输出简洁结论，并标注哪些内容来自外部不可信资料。',
+      tools: [input.webReadTool]
+    });
+    return subagents;
   }
 
   private async consumeMessages(
@@ -571,15 +653,28 @@ export class DeepAgentRuntimeService {
     ].join(';');
   }
 
-  private createBackend(): FilesystemBackend | StateBackend {
+  private createBackend(): CompositeBackend {
     const workspace = this.workspaceService.getCurrentWorkspace();
-    if (workspace === null) {
-      return new StateBackend();
-    }
-    return new FilesystemBackend({
-      rootDir: workspace.path,
-      virtualMode: true
-    });
+    return new CompositeBackend(
+      new StateBackend(),
+      workspace === null
+        ? {
+            '/skills/': new FilesystemBackend({
+              rootDir: this.paths.skillsDir,
+              virtualMode: true
+            })
+          }
+        : {
+            '/workspace/': new FilesystemBackend({
+              rootDir: workspace.path,
+              virtualMode: true
+            }),
+            '/skills/': new FilesystemBackend({
+              rootDir: this.paths.skillsDir,
+              virtualMode: true
+            })
+          }
+    );
   }
 
   private resolveAssistantMessage(chunks: string[]): string {

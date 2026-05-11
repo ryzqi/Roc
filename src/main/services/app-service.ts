@@ -198,10 +198,12 @@ export function createAppServices(
   const deepAgentRuntimeService = new DeepAgentRuntimeService(
     langChainModelFactory,
     taskService,
+    memoryService,
     agentService,
     workspaceService,
     mcpService,
-    webReadService
+    webReadService,
+    paths
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const fileService = new FileService(paths, databaseService, workspaceService);
