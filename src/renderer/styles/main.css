@@ -1699,10 +1699,32 @@ button.model-pill {
   font-weight: 700;
 }
 
+.composer-choice-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.composer-choice-copy > span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .composer-choice small {
   color: #7a8ca0;
   font-size: 11px;
   line-height: 1.45;
+}
+
+.composer-choice-description {
+  display: block;
+}
+
+.composer-choice-description--clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .composer-choice.active,

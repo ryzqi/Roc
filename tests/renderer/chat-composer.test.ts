@@ -235,6 +235,7 @@ describe('chat composer skills popover', () => {
     expect(html).toContain('data-testid="chat-skill-popover"');
     expect(html).toContain('data-testid="turn-skill-deep-review"');
     expect(html).toContain('>Deep Review<');
-    expect(html).toContain('只保留这一段说明文本。');
+    expect(html).toContain('class="composer-choice-copy">');
+    expect(html).toContain('class="composer-choice-description composer-choice-description--clamp-2">只保留这一段说明文本。</small>');
   });
 });

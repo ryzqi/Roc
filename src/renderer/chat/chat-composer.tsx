@@ -270,8 +270,10 @@ export function ChatComposer({
                         })
                       }
                     >
-                      <span>{skill.name}</span>
-                      <small>{skill.description}</small>
+                      <span className="composer-choice-copy">
+                        <span>{skill.name}</span>
+                        <small className="composer-choice-description composer-choice-description--clamp-2">{skill.description}</small>
+                      </span>
                     </button>
                   ))}
                 </div>

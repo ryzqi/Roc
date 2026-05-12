@@ -1189,12 +1189,15 @@ try {
   await page.click('[data-testid="nav-skills"]');
   await page.waitForSelector('[data-testid="skills-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-toggle-smoke-skill"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="skill-delete-smoke-skill"]', { timeout: 5000 });
   await page.click('[data-testid="skills-filter-enabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'Smoke Skill');
-  await page.click('[data-testid="skill-toggle-smoke-skill"]');
+  await page.click('[data-testid="skill-row-smoke-skill"]');
+  await page.waitForSelector('[data-testid="skill-drawer"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-drawer-toggle"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="skill-drawer-delete"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="skill-drawer"]', 'Skill · ready');
+  await page.click('[data-testid="skill-drawer-toggle"]');
   await page.waitForFunction(async () => {
     const result = await window.roc.skills.list();
     if (!result.ok) {
@@ -1206,7 +1209,10 @@ try {
   await page.click('[data-testid="skills-filter-disabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'disabled');
-  await page.click('[data-testid="skill-toggle-smoke-skill"]');
+  const disabledSkillText = await page.textContent('[data-testid="skill-row-smoke-skill"]');
+  await page.waitForSelector('[data-testid="skill-drawer"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="skill-drawer"]', 'Skill · disabled');
+  await page.click('[data-testid="skill-drawer-toggle"]');
   await page.waitForFunction(async () => {
     const result = await window.roc.skills.list();
     if (!result.ok) {
@@ -2616,10 +2622,8 @@ try {
       mcpText.includes('enabled'),
     skillManagedVisible:
       skillText.includes('Smoke Skill') &&
-      skillText.includes('Smoke skill validates Phase 5 import.') &&
-      skillText.includes('smoke-skill') &&
-      skillText.includes('启用') &&
-      skillText.includes('删除'),
+      skillText.includes('ready') &&
+      (disabledSkillText ?? '').includes('disabled'),
     providerActionsVisible: providerSettingsEvidence.providerActionsVisible,
     capabilityActionsVisible:
       mcpText.includes('测试') &&
