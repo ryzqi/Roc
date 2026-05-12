@@ -43,7 +43,7 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
   return recentEvents
     .filter((event): event is MessageTaskEvent => isMessageTaskEvent(event, threadId))
     .slice()
-    .reverse()
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     .map((event) => ({
       key: event.id,
       role: event.payload.role,
@@ -57,6 +57,7 @@ export function buildChatTranscript(input: {
   backgroundTasks: BackgroundTask[];
   chatRunState: ChatRunState;
   pendingUserInput: string | null;
+  persistedMessages?: TaskEvent[];
   selectedThreadId: string | null;
   taskSnapshot: TaskSnapshot;
 }): ChatTranscriptMessage[] {
@@ -75,7 +76,8 @@ export function buildChatTranscript(input: {
         ];
   }
 
-  const messages = buildPersistedTranscriptMessages(input.taskSnapshot.recentEvents, activeThreadId);
+  const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;
+  const messages = buildPersistedTranscriptMessages(persistedMessageEvents, activeThreadId);
   if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
     messages.push({
       key: 'pending-user-message',

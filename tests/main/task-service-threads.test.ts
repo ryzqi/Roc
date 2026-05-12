@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { RocDomainError } from '../../src/main/services/errors';
-import type { EnabledCapabilities, TaskRun } from '../../src/shared/types';
+import type { EnabledCapabilities, TaskEvent, TaskRun } from '../../src/shared/types';
 
 type TaskServiceThreadLifecycleApi = AppServices['taskService'] & {
   createTaskRun(input: {
@@ -14,6 +14,8 @@ type TaskServiceThreadLifecycleApi = AppServices['taskService'] & {
     threadId?: string;
   }): TaskRun;
   archiveThread(threadId: string): { deleted: true; threadId: string };
+  listThreadMessages(threadId: string): TaskEvent[];
+  recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent;
 };
 
 const emptyCapabilities: EnabledCapabilities = {
@@ -60,6 +62,46 @@ describe('TaskService thread lifecycle', () => {
     expect(secondRun.runNumber).toBe(2);
     expect(snapshot.threads).toHaveLength(1);
     expect(messageEvents).toEqual(expect.arrayContaining(['第一轮输入', '第二轮输入']));
+  });
+
+  it('lists complete thread messages even after recentEvents is saturated by streaming trace events', () => {
+    const taskService = services.taskService as TaskServiceThreadLifecycleApi;
+    const firstRun = taskService.createTaskRun({
+      userInput: '第一轮输入',
+      modelId: 'model-alpha',
+      enabledCapabilities: emptyCapabilities
+    });
+
+    for (let index = 0; index < 60; index += 1) {
+      taskService.recordEvent({
+        threadId: firstRun.threadId,
+        runId: firstRun.id,
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: `chunk-${index}`
+        }
+      });
+    }
+
+    const secondRun = taskService.createTaskRun({
+      threadId: firstRun.threadId,
+      userInput: '第二轮输入',
+      modelId: 'model-alpha',
+      enabledCapabilities: emptyCapabilities
+    });
+
+    const snapshot = services.taskService.getSnapshot();
+    const snapshotMessageContents = snapshot.recentEvents
+      .filter((event) => event.threadId === firstRun.threadId && event.type === 'message')
+      .map((event) => (event.payload as { content: string }).content);
+    const threadMessageContents = taskService
+      .listThreadMessages(firstRun.threadId)
+      .map((event) => (event.payload as { content: string }).content);
+
+    expect(secondRun.threadId).toBe(firstRun.threadId);
+    expect(snapshotMessageContents).toEqual(['第二轮输入']);
+    expect(threadMessageContents).toEqual(['第一轮输入', '第二轮输入']);
   });
 
   it('archives a thread without deleting its runs or events', () => {

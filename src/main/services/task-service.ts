@@ -363,6 +363,41 @@ export class TaskService {
     };
   }
 
+  listThreadMessages(threadId: string): TaskEvent[] {
+    const normalizedThreadId = requireText(
+      threadId,
+      'task_thread_id_empty',
+      '任务会话 ID 不能为空。',
+      '请选择一个有效的会话后再继续查看消息。'
+    );
+    requireActiveThread(this.database, normalizedThreadId);
+
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ? AND type = 'message'
+         ORDER BY created_at ASC`
+      )
+      .all(normalizedThreadId) as Array<{
+      id: string;
+      thread_id: string;
+      run_id: string;
+      type: TaskEvent['type'];
+      payload_json: string;
+      created_at: string;
+    }>;
+
+    return rows.map((event) => ({
+      id: event.id,
+      threadId: event.thread_id,
+      runId: event.run_id,
+      type: event.type,
+      payload: JSON.parse(event.payload_json) as unknown,
+      createdAt: event.created_at
+    }));
+  }
+
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent {
     const now = new Date().toISOString();
     const eventId = `event_${randomUUID()}`;

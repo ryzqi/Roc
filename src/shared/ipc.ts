@@ -74,7 +74,9 @@ import type {
   TerminalSessionOutputEvent,
   TerminalSessionResizeRequest,
   TerminalSessionSnapshot,
+  TaskEvent,
   TaskSnapshot,
+  TaskMessageHistoryRequest,
   TaskDeleteThreadRequest,
   TaskDeleteThreadResult,
   TraySummary,
@@ -98,6 +100,7 @@ export const ipcChannels = {
   windowToggleMaximize: 'roc:window:toggle-maximize',
   windowClose: 'roc:window:close',
   tasksGetSnapshot: 'roc:tasks:get-snapshot',
+  tasksGetThreadMessages: 'roc:tasks:get-thread-messages',
   tasksListBackgroundTasks: 'roc:tasks:list-background-tasks',
   tasksDeleteThread: 'roc:tasks:delete-thread',
   tasksCreateBackgroundPreview: 'roc:tasks:create-background-preview',
@@ -194,6 +197,7 @@ export type RocPreloadApi = {
   };
   tasks: {
     getSnapshot: () => Promise<IpcResult<TaskSnapshot>>;
+    getThreadMessages: (request: TaskMessageHistoryRequest) => Promise<IpcResult<TaskEvent[]>>;
     listBackgroundTasks: () => Promise<IpcResult<BackgroundTask[]>>;
     deleteThread: (request: TaskDeleteThreadRequest) => Promise<IpcResult<TaskDeleteThreadResult>>;
     createBackgroundTaskPreview: (request: BackgroundTaskPreviewRequest) => Promise<IpcResult<BackgroundTaskPreview>>;

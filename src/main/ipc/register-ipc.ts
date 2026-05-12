@@ -85,6 +85,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
     })
   );
   ipcMain.handle(ipcChannels.tasksGetSnapshot, () => wrapIpc(() => services.taskService.getSnapshot()));
+  ipcMain.handle(ipcChannels.tasksGetThreadMessages, (_event, request) =>
+    wrapIpc(() => services.taskService.listThreadMessages(request.threadId))
+  );
   ipcMain.handle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => services.taskService.listBackgroundTasks()));
   ipcMain.handle(ipcChannels.tasksDeleteThread, (_event, request) =>
     wrapIpc(() => {

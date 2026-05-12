@@ -4,6 +4,7 @@ import { buildChatTranscript } from '../chat-transcript';
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
+import type { TaskEvent } from '../../shared/types';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -28,10 +29,16 @@ export function ChatView({
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
+  const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
 
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
   const deferredReasoning = useDeferredValue(chatRun.state.reasoning);
+  const activeThreadId = selectedThreadId ?? chatRun.state.threadId;
+  const latestPersistedMessageEventId =
+    activeThreadId === null
+      ? null
+      : state.taskSnapshot.recentEvents.find((event) => event.threadId === activeThreadId && event.type === 'message')?.id ?? null;
 
   const chatTranscript = useMemo(
     () =>
@@ -43,6 +50,7 @@ export function ChatView({
           reasoning: deferredReasoning
         },
         pendingUserInput,
+        persistedMessages,
         selectedThreadId,
         taskSnapshot: state.taskSnapshot
       }),
@@ -51,6 +59,7 @@ export function ChatView({
       deferredAssistantMessage,
       deferredReasoning,
       pendingUserInput,
+      persistedMessages,
       selectedThreadId,
       state.backgroundTasks,
       state.taskSnapshot
@@ -76,8 +85,39 @@ export function ChatView({
   }, [pendingUserInput, selectedThreadId, state.taskSnapshot.recentEvents]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadPersistedMessages(threadId: string): Promise<void> {
+      const result = await window.roc.tasks.getThreadMessages({ threadId });
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      if (cancelled) {
+        return;
+      }
+      setPersistedMessages(result.data);
+    }
+
+    if (activeThreadId === null || latestPersistedMessageEventId === null) {
+      setPersistedMessages([]);
+      return;
+    }
+
+    void loadPersistedMessages(activeThreadId).catch(() => {
+      if (!cancelled) {
+        setPersistedMessages([]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, latestPersistedMessageEventId]);
+
+  useEffect(() => {
     setChatInput('');
     setPendingUserInput(null);
+    setPersistedMessages([]);
     setSelectedAttachments([]);
     setSubmitting(false);
     setActiveComposerPopover(null);

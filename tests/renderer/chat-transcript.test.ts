@@ -353,4 +353,78 @@ describe('chat transcript helpers', () => {
       }
     ]);
   });
+
+  it('prefers thread persisted messages over the truncated recentEvents window', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:30:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-current-2',
+          threadId: 'thread-current',
+          runId: 'run-current-2',
+          type: 'message',
+          payload: { role: 'user', content: '第二轮输入' },
+          createdAt: '2026-05-09T08:30:10.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      backgroundTasks: createBackgroundTasks(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot,
+      persistedMessages: [
+        {
+          id: 'user-current-1',
+          threadId: 'thread-current',
+          runId: 'run-current-1',
+          type: 'message',
+          payload: { role: 'user', content: '第一轮输入' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        },
+        {
+          id: 'assistant-current-1',
+          threadId: 'thread-current',
+          runId: 'run-current-1',
+          type: 'message',
+          payload: { role: 'assistant', content: '第一轮回复' },
+          createdAt: '2026-05-09T08:20:03.000Z'
+        },
+        {
+          id: 'user-current-2',
+          threadId: 'thread-current',
+          runId: 'run-current-2',
+          type: 'message',
+          payload: { role: 'user', content: '第二轮输入' },
+          createdAt: '2026-05-09T08:30:10.000Z'
+        }
+      ]
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-current-1',
+        role: 'user',
+        content: '第一轮输入',
+        reasoning: null,
+        isStreaming: false
+      },
+      {
+        key: 'assistant-current-1',
+        role: 'assistant',
+        content: '第一轮回复',
+        reasoning: null,
+        isStreaming: false
+      },
+      {
+        key: 'user-current-2',
+        role: 'user',
+        content: '第二轮输入',
+        reasoning: null,
+        isStreaming: false
+      }
+    ]);
+  });
 });

@@ -68,6 +68,10 @@ export type TaskSnapshot = {
   recentEvents: TaskEvent[];
 };
 
+export type TaskMessageHistoryRequest = {
+  threadId: string;
+};
+
 export type TaskRun = {
   id: string;
   threadId: string;
