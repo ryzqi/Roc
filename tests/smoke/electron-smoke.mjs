@@ -1192,6 +1192,73 @@ try {
   await page.click('[data-testid="skills-filter-enabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'Smoke Skill');
+  const skillLayoutEvidence = await page.evaluate(() => {
+    const view = document.querySelector('[data-testid="skills-view"]');
+    const filterStrip = document.querySelector('[data-testid="skill-management"]');
+    const firstRow = document.querySelector('[data-testid="skill-row-smoke-skill"]');
+    const filterButtons = Array.from(document.querySelectorAll('[data-testid^="skills-filter-"]')).filter(
+      (element) => element instanceof HTMLElement
+    );
+    if (
+      !(view instanceof HTMLElement) ||
+      !(filterStrip instanceof HTMLElement) ||
+      !(firstRow instanceof HTMLElement) ||
+      filterButtons.length === 0
+    ) {
+      return {
+        exists: false,
+        viewHeight: null,
+        filterStripHeight: null,
+        chipHeights: [],
+        chipMaxHeight: null,
+        gapToFirstRow: null,
+        stripAlignItems: null,
+        stripAlignContent: null
+      };
+    }
+    const viewRect = view.getBoundingClientRect();
+    const stripRect = filterStrip.getBoundingClientRect();
+    const rowRect = firstRow.getBoundingClientRect();
+    const chipHeights = filterButtons.map((element) => Number(element.getBoundingClientRect().height.toFixed(2)));
+    return {
+      exists: true,
+      viewHeight: Number(viewRect.height.toFixed(2)),
+      viewDisplay: getComputedStyle(view).display,
+      viewJustifyContent: getComputedStyle(view).justifyContent,
+      viewAlignItems: getComputedStyle(view).alignItems,
+      filterStripHeight: Number(stripRect.height.toFixed(2)),
+      filterStripTop: Number(stripRect.top.toFixed(2)),
+      chipHeights,
+      chipMaxHeight: chipHeights.length === 0 ? null : Math.max(...chipHeights),
+      gapToRowList:
+        firstRow.parentElement instanceof HTMLElement
+          ? Number((firstRow.parentElement.getBoundingClientRect().top - stripRect.bottom).toFixed(2))
+          : null,
+      gapToFirstRow: Number((rowRect.top - stripRect.bottom).toFixed(2)),
+      rowListTop: Number(
+        (
+          (firstRow.parentElement instanceof HTMLElement
+            ? firstRow.parentElement.getBoundingClientRect().top
+            : Number.NaN)
+        ).toFixed(2)
+      ),
+      rowListHeight:
+        firstRow.parentElement instanceof HTMLElement
+          ? Number(firstRow.parentElement.getBoundingClientRect().height.toFixed(2))
+          : null,
+      rowListDisplay:
+        firstRow.parentElement instanceof HTMLElement ? getComputedStyle(firstRow.parentElement).display : null,
+      rowListJustifyContent:
+        firstRow.parentElement instanceof HTMLElement ? getComputedStyle(firstRow.parentElement).justifyContent : null,
+      rowListPaddingTop:
+        firstRow.parentElement instanceof HTMLElement ? getComputedStyle(firstRow.parentElement).paddingTop : null,
+      rowListMarginTop:
+        firstRow.parentElement instanceof HTMLElement ? getComputedStyle(firstRow.parentElement).marginTop : null,
+      firstRowTop: Number(rowRect.top.toFixed(2)),
+      stripAlignItems: getComputedStyle(filterStrip).alignItems,
+      stripAlignContent: getComputedStyle(filterStrip).alignContent
+    };
+  });
   await page.click('[data-testid="skill-row-smoke-skill"]');
   await page.waitForSelector('[data-testid="skill-drawer"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="skill-drawer-toggle"]', { timeout: 5000 });
@@ -2624,6 +2691,14 @@ try {
       skillText.includes('Smoke Skill') &&
       skillText.includes('ready') &&
       (disabledSkillText ?? '').includes('disabled'),
+    skillLayoutCompact:
+      skillLayoutEvidence.exists &&
+      skillLayoutEvidence.filterStripHeight !== null &&
+      skillLayoutEvidence.filterStripHeight <= 72 &&
+      skillLayoutEvidence.chipMaxHeight !== null &&
+      skillLayoutEvidence.chipMaxHeight <= 56 &&
+      skillLayoutEvidence.gapToRowList !== null &&
+      skillLayoutEvidence.gapToRowList <= 64,
     providerActionsVisible: providerSettingsEvidence.providerActionsVisible,
     capabilityActionsVisible:
       mcpText.includes('测试') &&
@@ -2883,6 +2958,7 @@ try {
     providerConfiguredVisible: rendererBoundary.providerConfiguredVisible,
     mcpManagedVisible: rendererBoundary.mcpManagedVisible,
     skillManagedVisible: rendererBoundary.skillManagedVisible,
+    skillLayoutCompact: rendererBoundary.skillLayoutCompact,
     providerActionsVisible: rendererBoundary.providerActionsVisible,
     capabilityActionsVisible: rendererBoundary.capabilityActionsVisible,
     quickEntryVisible: rendererBoundary.quickEntryVisible,
@@ -2958,6 +3034,7 @@ try {
       workbenchWidthAfter,
       collapsedChatLayoutBeforeOpen,
       collapsedChatLayoutAfterClose,
+      skillLayoutEvidence,
       providerSettingsEvidence,
       previewText
     },

@@ -47,7 +47,7 @@ export class AgentService {
       runnable: false,
       model: defaultModelState.modelId,
       memoryAccess: 'memory_service_only',
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'],
+      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
       rocTools: ['memory_search', 'memory_get'],
       todoMapping: {
         sourceTool: 'write_todos',
@@ -56,7 +56,7 @@ export class AgentService {
       interruptOn: {
         write_file: true,
         edit_file: true,
-        terminal_command: true,
+        execute: true,
         git_operation: true
       },
       reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
@@ -110,13 +110,14 @@ export class AgentService {
     }
 
     const webReadCard = this.createWebReadCard();
+    const executeCard = this.createExecuteCard();
     const memoryCards = this.createMemoryCards();
-    const toolCards = [...memoryCards, webReadCard, ...selectedMcpCards];
+    const toolCards = [...memoryCards, executeCard, webReadCard, ...selectedMcpCards];
 
     return {
       runnable: false,
       modelId: defaultModelState.modelId,
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'],
+      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
       selectedCapabilities: {
         mcpServers: selectedMcpServers,
         skills: selectedSkills
@@ -214,6 +215,25 @@ export class AgentService {
     };
   }
 
+  private createExecuteCard(): AgentCapabilityCard {
+    return {
+      id: 'builtin:execute',
+      name: 'execute',
+      capabilityType: 'terminal_tool',
+      description: '通过 Deep Agents 内建 execute 在当前工作区执行命令，由 Roc 的 RTK 与审计层统一包裹。',
+      requiredInput: 'shell command',
+      scope: 'workspace',
+      dependencies: ['LocalShellBackend', 'RtkService'],
+      sideEffects: ['workspace_command_execution', 'task_trace_audit'],
+      requiresApproval: true,
+      supportsLongTermGrant: false,
+      revokeGrantHint: 'execute 由 Roc 内置 backend 提供，不创建长期授权。',
+      riskLevel: 'medium',
+      auditCategory: 'agent_execute',
+      untrustedContext: false
+    };
+  }
+
   private createMemoryCards(): AgentCapabilityCard[] {
     return [
       {
@@ -274,7 +294,7 @@ export class AgentService {
     const policy: Record<string, boolean> = {
       write_file: true,
       edit_file: true,
-      terminal_command: true,
+      execute: true,
       git_operation: true,
       web_read: true
     };

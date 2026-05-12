@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { RocDomainError, wrapIpc } from '../../src/main/services/errors';
 
@@ -454,7 +454,7 @@ describe('Roc foundation services', () => {
       runnable: false,
       model: 'model-ready',
       memoryAccess: 'memory_service_only',
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'],
+      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
       rocTools: ['memory_search', 'memory_get'],
       todoMapping: {
         sourceTool: 'write_todos',
@@ -463,7 +463,7 @@ describe('Roc foundation services', () => {
       interruptOn: {
         write_file: true,
         edit_file: true,
-        terminal_command: true,
+        execute: true,
         git_operation: true
       },
       reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
@@ -1193,10 +1193,9 @@ describe('Roc foundation services', () => {
       });
       services.taskService.markRunRunning(task.id);
 
-      const commandResult = services.shellExecutionService.execute({
+      const commandResult = services.shellExecutionService.executeAgentCommand({
         command: 'dir',
         cwd: workspaceRoot,
-        source: 'agent',
         threadId: task.threadId,
         runId: task.id
       });
@@ -1211,18 +1210,76 @@ describe('Roc foundation services', () => {
         command: 'dir',
         cwd: workspaceRoot,
         exitCode: 0,
+        truncated: false,
         usedRtk: false,
         bypassReason: 'rtk_binary_missing'
       });
-      expect(commandResult.stdout).toContain('notes.txt');
+      expect(commandResult.output).toContain('notes.txt');
       expect(blockedResult).toEqual({
         status: 'requires_confirmation',
         reason: 'high_risk_command',
         riskLevel: 'high',
         normalizedCommand: 'remove-item notes.txt'
       });
-      expect(snapshot.recentEvents.some((event) => event.type === 'terminal_command')).toBe(true);
+      expect(snapshot.recentEvents.some((event) => event.type === 'agent_execute')).toBe(true);
       expect(snapshot.recentEvents.some((event) => event.type === 'agent_update')).toBe(true);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uses rtk for allowed agent commands when roc-rtk.exe is available', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
+    try {
+      writeFileSync(join(services.paths.toolsDir, 'roc-rtk.exe'), '', 'utf8');
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      writeFileSync(join(workspaceRoot, '.git'), '', 'utf8');
+      const task = services.taskService.createTaskRun({
+        userInput: '检查 git 状态',
+        modelId: 'model-ready',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      services.taskService.markRunRunning(task.id);
+      const shellExecutionServiceForTest = services.shellExecutionService as unknown as {
+        execFile: unknown;
+      };
+      const originalExecFile = shellExecutionServiceForTest.execFile;
+      (services.shellExecutionService as unknown as {
+        execFile: (
+          file: string,
+          args: string[],
+          cwd: string,
+          extraEnv?: Record<string, string>
+        ) => { stdout: string; stderr: string; exitCode: number };
+      }).execFile = (file, args, execCwd, extraEnv = {}) => {
+        if (String(file).endsWith('roc-rtk.exe')) {
+          expect(args).toEqual(['git', 'status']);
+          expect(execCwd).toBe(workspaceRoot);
+          expect(extraEnv.RTK_DB_PATH).toBe(join(root, 'rtk', 'history.db'));
+          expect(extraEnv.RTK_TEE_DIR).toBe(join(root, 'rtk', 'tee'));
+          return {
+            stdout: 'On branch main',
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`unexpected command: ${String(file)}`);
+      };
+
+      const result = services.shellExecutionService.executeAgentCommand({
+        command: 'git status',
+        cwd: workspaceRoot,
+        threadId: task.threadId,
+        runId: task.id
+      });
+
+      expect(result.usedRtk).toBe(true);
+      expect(result.bypassReason).toBeUndefined();
+      expect(result.output).toBe('On branch main');
+      shellExecutionServiceForTest.execFile = originalExecFile;
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
@@ -1343,7 +1400,7 @@ describe('Roc foundation services', () => {
     expect(status).toEqual({
       enabledForAgentCommands: true,
       binaryPath: join(root, 'tools', 'roc-rtk.exe'),
-      configPath: join(root, 'config', 'rtk.toml'),
+      configPath: join(root, 'rtk', 'config.toml'),
       teeDir: join(root, 'rtk', 'tee'),
       resourceState: 'missing',
       bypassReason: 'rtk_binary_missing'
@@ -2056,6 +2113,16 @@ describe('Roc foundation services', () => {
     );
     expect(preview.toolCards).toContainEqual(
       expect.objectContaining({
+        id: 'builtin:execute',
+        name: 'execute',
+        capabilityType: 'terminal_tool',
+        scope: 'workspace',
+        auditCategory: 'agent_execute',
+        requiresApproval: true
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
         id: 'web:web_read',
         name: 'web_read',
         capabilityType: 'web_read',
@@ -2087,7 +2154,7 @@ describe('Roc foundation services', () => {
     expect(preview.interruptOn).toMatchObject({
       write_file: true,
       edit_file: true,
-      terminal_command: true,
+      execute: true,
       git_operation: true,
       search_docs: true,
       web_read: true

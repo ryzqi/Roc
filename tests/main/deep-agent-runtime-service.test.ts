@@ -55,6 +55,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.workspaceService,
       services.mcpService,
       services.webReadService,
+      services.shellExecutionService,
       services.paths
     );
   }
@@ -329,6 +330,9 @@ describe('DeepAgentRuntimeService', () => {
       sourceRef: 'tests/deep-agent-runtime-service'
     });
     const acceptedMemory = services.memoryService.acceptCandidate(candidate.id);
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-runtime-workspace-'));
+    services.workspaceService.selectWorkspace(workspaceRoot);
+    writeFileSync(join(workspaceRoot, 'runtime-note.txt'), 'runtime note\n', 'utf8');
     const fetchMock = vi.fn().mockResolvedValue(
       new Response('Fetched via Jina Reader', {
         status: 200,
@@ -353,6 +357,9 @@ describe('DeepAgentRuntimeService', () => {
 
     const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
       | {
+          backend?: {
+            execute?: (command: string) => Promise<{ output: string; exitCode: number | null; truncated: boolean }>;
+          };
           tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }>;
           subagents?: Array<{ name: string; tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }>;
         }
@@ -361,12 +368,18 @@ describe('DeepAgentRuntimeService', () => {
     const subagentNames = createAgentCall?.subagents?.map((subagent) => subagent.name) ?? [];
     const codeReviewSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'code-review');
     const researchSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'research');
+    const backend = createAgentCall?.backend as
+      | {
+          execute?: (command: string) => Promise<{ output: string; exitCode: number | null; truncated: boolean }>;
+        }
+      | undefined;
     const memorySearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_search');
     const memoryGetTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_get');
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
     expect(toolNames).toEqual(expect.arrayContaining(['memory_search', 'memory_get', 'web_search', 'web_read']));
+    expect(toolNames).not.toContain('terminal_command');
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
     expect(codeReviewSubagent?.tools?.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(['memory_search', 'memory_get'])
@@ -383,6 +396,11 @@ describe('DeepAgentRuntimeService', () => {
       'Deep Agents runtime should expose memory_search and memory_get.'
     );
     await expect(webSearchTool?.invoke({ query: 'langchain mcp adapters' })).resolves.toBe('Exa search results');
+    await expect(backend?.execute?.('dir')).resolves.toMatchObject({
+      exitCode: 0,
+      truncated: false,
+      output: expect.stringContaining('runtime-note.txt')
+    });
     await expect(
       webReadTool?.invoke({
         url: 'https://example.com',
@@ -402,6 +420,42 @@ describe('DeepAgentRuntimeService', () => {
       })
     );
     expect(mocked.mcpClientCloseMock).toHaveBeenCalled();
+  });
+
+  it('uses backend execute instead of mounting terminal_command for task runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['列出完成'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '列出工作区文件',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          backend?: { execute?: (command: string) => Promise<unknown> };
+          tools?: Array<{ name: string }>;
+        }
+      | undefined;
+    const toolNames = createAgentCall?.tools?.map((tool) => tool.name) ?? [];
+
+    expect(toolNames).not.toContain('terminal_command');
+    expect(typeof createAgentCall?.backend?.execute).toBe('function');
   });
 
   it('records web_search and web_read tool lifecycle events in the task trace', async () => {

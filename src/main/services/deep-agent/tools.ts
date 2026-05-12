@@ -2,10 +2,7 @@ import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { z } from 'zod';
-import type {
-  ChatStartRunRequest,
-  MemorySearchRequest
-} from '../../../shared/types';
+import type { ChatStartRunRequest, MemorySearchRequest } from '../../../shared/types';
 import { RocDomainError } from '../errors';
 import type { McpService } from '../mcp-service';
 import type { MemoryService } from '../memory-service';

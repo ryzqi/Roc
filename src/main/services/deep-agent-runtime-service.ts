@@ -15,6 +15,7 @@ import type { LangChainModelFactory } from './langchain-model-factory';
 import type { MemoryService } from './memory-service';
 import type { McpService } from './mcp-service';
 import type { RocPaths } from './paths';
+import type { ShellExecutionService } from './shell-execution-service';
 import type { TaskService } from './task-service';
 import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
@@ -43,6 +44,7 @@ export class DeepAgentRuntimeService {
     private readonly workspaceService: WorkspaceService,
     private readonly mcpService: McpService,
     private readonly webReadService: WebReadService,
+    private readonly shellExecutionService: ShellExecutionService,
     private readonly paths: RocPaths
   ) {}
 
@@ -162,7 +164,7 @@ export class DeepAgentRuntimeService {
       const agent = createDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-        backend: createBackend(this.workspaceService, this.paths),
+        backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
         skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
         subagents,
         tools: runTools
@@ -263,6 +265,21 @@ export class DeepAgentRuntimeService {
         webReadTool
       }),
       tools: runTools
+    };
+  }
+
+  private taskBoundShellExecutionService(context: RunExecutionContext): {
+    executeAgentCommand: (input: { command: string; cwd?: string }) => ReturnType<
+      import('./shell-execution-service').ShellExecutionService['executeAgentCommand']
+    >;
+  } {
+    return {
+      executeAgentCommand: (input) =>
+        this.shellExecutionService.executeAgentCommand({
+          ...input,
+          threadId: context.taskRun?.threadId ?? context.threadId,
+          runId: context.taskRun?.id ?? context.runId
+        })
     };
   }
 

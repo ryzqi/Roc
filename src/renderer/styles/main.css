@@ -1332,6 +1332,9 @@
 .skills-filter-strip {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  align-self: start;
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -4398,6 +4401,8 @@ button.model-pill {
 }
 
 .skill-drawer-host {
+  display: flex;
+  flex-direction: column;
   position: relative;
 }
 
@@ -4542,6 +4547,7 @@ button.model-pill {
 .skill-row-list {
   display: flex;
   flex-direction: column;
+  width: 100%;
   gap: 6px;
 }
 

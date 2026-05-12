@@ -195,6 +195,7 @@ export function createAppServices(
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
   const webReadService = new WebReadService();
+  const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
   const deepAgentRuntimeService = new DeepAgentRuntimeService(
     langChainModelFactory,
     taskService,
@@ -203,13 +204,13 @@ export function createAppServices(
     workspaceService,
     mcpService,
     webReadService,
+    shellExecutionService,
     paths
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);
-  const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
   const doctorService = new DoctorService(
     paths,
     configService,

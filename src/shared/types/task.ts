@@ -36,7 +36,7 @@ export type TaskEvent = {
     | 'skill_loaded'
     | 'subagent_started'
     | 'subagent_completed'
-    | 'terminal_command'
+    | 'agent_execute'
     | 'file_change'
     | 'git_operation'
     | 'memory_operation'

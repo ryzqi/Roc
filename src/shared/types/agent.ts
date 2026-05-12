@@ -19,7 +19,7 @@ export type DeepAgentConfigPreview = {
   reason: string;
 };
 
-export type AgentCapabilityType = 'memory_tool' | 'mcp_tool' | 'web_read' | 'skill' | 'subagent';
+export type AgentCapabilityType = 'memory_tool' | 'mcp_tool' | 'terminal_tool' | 'web_read' | 'skill' | 'subagent';
 export type AgentCapabilityScope = 'app' | 'workspace' | 'memory' | 'network' | 'external';
 export type AgentCapabilityRisk = 'none' | 'low' | 'medium' | 'high' | 'critical';
 

@@ -187,7 +187,7 @@ export class ConfigService {
 
   initialize(): void {
     this.ensureSettingsDocument();
-    this.ensureText('rtk.toml', "root = \"%USERPROFILE%\\\\.roc\\\\rtk\"\n");
+    this.ensureTextAtPath(join(this.paths.rtkDir, 'config.toml'), this.defaultRtkConfig());
     this.getSettingsDocument();
   }
 
@@ -610,6 +610,25 @@ export class ConfigService {
     if (!existsSync(target)) {
       writeFileSync(target, value, 'utf8');
     }
+  }
+
+  private ensureTextAtPath(target: string, value: string): void {
+    if (!existsSync(target)) {
+      writeFileSync(target, value, 'utf8');
+    }
+  }
+
+  private defaultRtkConfig(): string {
+    return [
+      '[tracking]',
+      `database_path = "${join(this.paths.rtkDir, 'history.db').replaceAll('\\', '\\\\')}"`,
+      '',
+      '[tee]',
+      'enabled = true',
+      'mode = "always"',
+      `directory = "${join(this.paths.rtkDir, 'tee').replaceAll('\\', '\\\\')}"`,
+      ''
+    ].join('\n');
   }
 
   private looksLikeCurrentDocument(value: unknown): value is RocSettingsDocument {
