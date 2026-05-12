@@ -51,8 +51,36 @@
   --duration-slow: 320ms;
   --easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --easing-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-base: var(--duration-base) var(--easing-standard);
   --transition-fast: var(--duration-fast) var(--easing-standard);
+
+  /* 聊天气泡 */
+  --chat-bubble-radius: 20px;
+  --chat-bubble-radius-tight: 8px;
+  --chat-gap: 18px;
+  --chat-avatar-size: 30px;
+
+  /* 玻璃质感 */
+  --surface-glass: rgba(255, 255, 255, 0.72);
+  --surface-glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-blur: 14px;
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-ring: rgba(120, 144, 184, 0.18);
+
+  /* 气泡专属 */
+  --chat-bubble-assistant-bg: rgba(248, 250, 254, 0.78);
+  --chat-bubble-assistant-border: rgba(214, 224, 240, 0.7);
+  --chat-bubble-assistant-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 6px 18px rgba(20, 40, 80, 0.05);
+  --chat-bubble-user-bg: linear-gradient(140deg, var(--accent) 0%, #4f74b8 100%);
+  --chat-bubble-user-shadow: 0 14px 32px rgba(45, 74, 121, 0.18);
+
+  /* 代码块 */
+  --code-surface: #0f1726;
+  --code-surface-soft: rgba(15, 23, 38, 0.04);
+  --code-text: #d8e1f0;
+  --code-header-bg: rgba(255, 255, 255, 0.04);
+  --code-header-text: #8a9bb8;
   color: var(--text);
   background: var(--bg);
   font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
