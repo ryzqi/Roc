@@ -1971,7 +1971,7 @@ describe('Roc foundation services', () => {
         enabled: true,
         status: 'ready'
       });
-      expect(resolve(imported.path).startsWith(resolve(root, 'skills'))).toBe(true);
+      expect(resolve(imported.path).startsWith(resolve(services.paths.skillsDir))).toBe(true);
       expect(disabled.enabled).toBe(false);
       expect(enabled.enabled).toBe(true);
       expect(skills).toContainEqual(expect.objectContaining({ id: 'project-review', enabled: true }));
@@ -2022,9 +2022,9 @@ describe('Roc foundation services', () => {
       riskLevel: 'low',
       allowedTools: ['disabled_tool']
     });
-    mkdirSync(join(root, 'skills', 'project-review'));
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
-      join(root, 'skills', 'project-review', 'SKILL.md'),
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
       ['---', 'name: project-review', 'description: Review a local project', '---', ''].join('\n'),
       'utf8'
     );
@@ -2068,7 +2068,7 @@ describe('Roc foundation services', () => {
         id: 'skill:project-review',
         name: 'project-review',
         capabilityType: 'skill',
-        sourcePath: join(root, 'skills', 'project-review')
+        sourcePath: join(services.paths.skillsDir, 'project-review')
       })
     );
     expect(preview.subagents).toContainEqual(

@@ -22,7 +22,7 @@ export function createWebReadTool(webReadService: WebReadService): DynamicStruct
   });
   return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
     name: 'web_read',
-    description: '通过内置 Jina Reader 读取公开网页正文。',
+    description: '读取公开网页正文，返回适合继续分析的文本内容。',
     schema,
     func: async (input: WebReadRequest) => {
       return await webReadService.read(input);
@@ -39,7 +39,7 @@ export function createMemorySearchTool(memoryService: MemoryService): DynamicStr
   });
   return new DynamicStructuredTool<typeof schema, MemorySearchRequest, MemorySearchRequest, string>({
     name: 'memory_search',
-    description: '检索 Roc 长期记忆与会话回忆索引，返回相关条目摘要。',
+    description: '检索 Roc 长期记忆与会话回忆，返回相关条目摘要列表。',
     schema,
     func: async (input: MemorySearchRequest) => {
       return JSON.stringify(memoryService.search(input), null, 2);
@@ -53,7 +53,7 @@ export function createMemoryGetTool(memoryService: MemoryService): DynamicStruct
   });
   return new DynamicStructuredTool<typeof schema, MemoryGetRequest, MemoryGetRequest, string>({
     name: 'memory_get',
-    description: '读取指定 Roc 记忆条目的 Markdown 真相源。',
+    description: '读取指定 Roc 记忆条目的 Markdown 原文。',
     schema,
     func: async (input: MemoryGetRequest) => {
       return memoryService.get(input.id);
@@ -110,7 +110,7 @@ export async function createWebSearchTool(input: {
       });
     }
     searchTool.name = 'web_search';
-    searchTool.description = '通过 Exa Hosted MCP 搜索公开网络信息。';
+    searchTool.description = '搜索公开网络信息，返回适合继续检索的结果列表。';
     return searchTool;
   } catch (error) {
     throw toWebSearchFailure(error);
@@ -125,16 +125,16 @@ export function createRunSubagents(input: {
   const subagents: RuntimeSubagent[] = [];
   subagents.push({
     name: 'code-review',
-    description: '审查代码改动并优先产出 bug、风险、回归与缺失验证。',
+    description: '审查代码改动，优先输出 bug、回归风险、边界条件与缺失验证。',
     systemPrompt:
-      '你是 Roc 的代码审查子代理。先聚焦 bug、行为回归、风险和缺失验证，再给出简短结论。必要时先用 memory_search 和 memory_get 获取项目记忆。',
+      '你是 Roc 的代码审查子代理。先找 bug、行为回归、风险和缺失验证，再给出简短结论。不要改写需求，不要淡化风险。需要项目上下文时，先使用 memory_search 和 memory_get。',
     tools: [input.memorySearchTool, input.memoryGetTool]
   });
   subagents.push({
     name: 'research',
-    description: '围绕公开资料检索与网页阅读整理结论。',
+    description: '检索公开资料并读取网页，整理带来源边界的结论。',
     systemPrompt:
-      '你是 Roc 的资料检索子代理。优先用 web_read 收集外部证据，输出简洁结论，并标注哪些内容来自外部不可信资料。',
+      '你是 Roc 的资料检索子代理。优先使用 web_read 收集外部证据，只输出与问题直接相关的结论，并明确哪些信息来自外部资料且仍需核实。',
     tools: [input.webReadTool]
   });
   return subagents;

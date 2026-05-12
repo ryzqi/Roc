@@ -128,7 +128,7 @@ export class AgentService {
       subagents: this.createSubagents(),
       interruptOn: this.createInterruptPolicy(selectedMcpCards),
       untrustedContextPolicy: 'external_content_reference_only',
-      reason: 'Phase 5R 只装配 Agent 能力预览，不执行 Deep Agents run。'
+      reason: '当前仅生成本轮能力清单预览，实际运行时才会装配 Deep Agents。'
     };
   }
 
@@ -139,7 +139,7 @@ export class AgentService {
           id: 'mcp:exa-hosted:web_search',
           name: 'web_search',
           capabilityType: 'mcp_tool',
-          description: '通过 Exa Hosted MCP 搜索公开网络信息。',
+          description: '搜索公开网络信息，返回可继续阅读和核实的结果列表。',
           requiredInput: 'query',
           scope: 'external',
           dependencies: [server.id],
@@ -161,8 +161,8 @@ export class AgentService {
       id: `mcp:${server.id}:${toolName}`,
       name: toolName,
       capabilityType: 'mcp_tool',
-      description: `${server.name} 暴露的 MCP tool wrapper。`,
-      requiredInput: 'tool-specific JSON input',
+      description: `${server.name} 提供的 ${toolName} 调用入口。`,
+      requiredInput: 'tool-specific structured input',
       scope: 'external',
       dependencies: [server.id],
       sideEffects: ['external_tool_call'],
@@ -200,7 +200,7 @@ export class AgentService {
       id: 'web:web_read',
       name: 'web_read',
       capabilityType: 'web_read',
-      description: '读取用户给定 URL 或搜索结果 URL 的网页内容。',
+      description: '读取指定 URL 的网页正文，返回可继续分析的文本内容。',
       requiredInput: 'url',
       scope: 'network',
       dependencies: ['explicit_url'],
@@ -220,7 +220,7 @@ export class AgentService {
         id: 'memory:memory_search',
         name: 'memory_search',
         capabilityType: 'memory_tool',
-        description: '检索 Roc 长期记忆和会话回忆索引。',
+        description: '检索 Roc 长期记忆与会话回忆，返回相关条目摘要列表。',
         requiredInput: 'query and optional scope',
         scope: 'memory',
         dependencies: ['MemoryService'],
@@ -236,7 +236,7 @@ export class AgentService {
         id: 'memory:memory_get',
         name: 'memory_get',
         capabilityType: 'memory_tool',
-        description: '读取指定记忆条目的 Markdown 真相源。',
+        description: '读取指定 Roc 记忆条目的 Markdown 原文。',
         requiredInput: 'memory id',
         scope: 'memory',
         dependencies: ['MemoryService'],
@@ -256,14 +256,14 @@ export class AgentService {
       {
         id: 'code-review',
         name: '代码审查子任务',
-        purpose: '隔离审查上下文并把 findings 回流主任务轨迹。',
+        purpose: '隔离审查上下文，并把 bug、风险与缺失验证回流主任务轨迹。',
         inheritsSkills: false,
         tools: ['memory_search', 'memory_get']
       },
       {
         id: 'research',
         name: '资料检索子任务',
-        purpose: '围绕搜索和网页阅读整理不可信资料摘要。',
+        purpose: '围绕网页阅读整理外部资料结论，并明确来源边界。',
         inheritsSkills: false,
         tools: ['web_read']
       }
