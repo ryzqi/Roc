@@ -8,6 +8,7 @@ import type { LangChainChatModelHandle } from '../langchain-model-factory';
 export type ActiveRun = {
   abortController: AbortController;
   createdAt: string;
+  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   modelHandle: LangChainChatModelHandle;
   mode: ChatStartRunRequest['mode'];
   runId: string;
@@ -18,7 +19,6 @@ export type ActiveRun = {
 export type RunExecutionContext = ActiveRun & {
   input: string;
   startedAtMs: number;
-  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
 };
 
 export type RunFailure = {

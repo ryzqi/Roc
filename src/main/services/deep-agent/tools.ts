@@ -94,9 +94,10 @@ export async function createWebSearchTool(input: {
 
   try {
     const tools = await client.getTools();
-    const searchTool =
-      tools.find((candidate) => candidate.name === 'web_search_exa') ??
-      tools.find((candidate) => candidate.name === 'web_search_advanced_exa');
+    const allowedTools = exaServer.allowedTools ?? [];
+    const searchTool = tools.find((candidate) =>
+      allowedTools.some((allowedName) => candidate.name === allowedName || candidate.name.endsWith(`__${allowedName}`))
+    );
     if (searchTool === undefined) {
       throw new RocDomainError({
         code: 'web_search_tool_missing',

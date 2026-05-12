@@ -8,6 +8,8 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatCancelRunResult,
   ChatRunEvent,
+  ChatResumeRunRequest,
+  ChatResumeRunResult,
   ChatStartRunRequest,
   ChatStartRunResult,
   DeepAgentConfigPreview,
@@ -150,6 +152,7 @@ export const ipcChannels = {
   chatRunEvent: 'roc:chat:run-event',
   chatStartRun: 'roc:chat:start-run',
   chatCancelRun: 'roc:chat:cancel-run',
+  chatResumeRun: 'roc:chat:resume-run',
   workspaceGetCurrent: 'roc:workspace:get-current',
   workspaceSelect: 'roc:workspace:select',
   workspaceSelectFromDialog: 'roc:workspace:select-from-dialog',
@@ -267,6 +270,7 @@ export type RocPreloadApi = {
   chat: {
     startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;
     cancelRun: (runId: string) => Promise<IpcResult<ChatCancelRunResult>>;
+    resumeRun: (request: ChatResumeRunRequest) => Promise<IpcResult<ChatResumeRunResult>>;
     onRunEvent: (callback: (event: ChatRunEvent) => void) => () => void;
   };
   workspace: {

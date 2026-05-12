@@ -1,4 +1,4 @@
-import type { ChatRunEvent, ChatRunMode, ChatTodoItem } from '../shared/types';
+import type { ChatPendingApproval, ChatRunEvent, ChatRunMode, ChatTodoItem } from '../shared/types';
 
 export type ChatRunToolState = {
   name: string;
@@ -19,7 +19,7 @@ export type ChatRunState = {
   providerId: string | null;
   modelId: string | null;
   createdAt: string | null;
-  status: 'idle' | 'running' | 'completed' | 'failed';
+  status: 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed';
   assistantMessage: string;
   reasoning: string;
   durationMs: number | null;
@@ -27,6 +27,8 @@ export type ChatRunState = {
   errorCode: string | null;
   errorMessage: string | null;
   retryable: boolean;
+  pendingApprovals: ChatPendingApproval[];
+  resumeBusy: boolean;
   toolEvents: ChatRunToolState[];
   todos: ChatTodoItem[];
   subagents: ChatRunSubagentState[];
@@ -48,6 +50,8 @@ export function createEmptyChatRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
+    pendingApprovals: [],
+    resumeBusy: false,
     toolEvents: [],
     todos: [],
     subagents: []
@@ -71,6 +75,8 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       errorCode: null,
       errorMessage: null,
       retryable: false,
+      pendingApprovals: [],
+      resumeBusy: false,
       toolEvents: [],
       todos: [],
       subagents: []
@@ -133,16 +139,45 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       status: 'completed',
       assistantMessage: event.assistantMessage,
       durationMs: event.durationMs,
-      summary: event.summary
+      summary: event.summary,
+      pendingApprovals: [],
+      resumeBusy: false
     };
   }
 
-  return {
-    ...state,
-    threadId: event.threadId,
-    status: 'failed',
-    errorCode: event.code,
-    errorMessage: event.message,
-    retryable: event.retryable
-  };
+  if (event.type === 'run_interrupted') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'waiting_user',
+      pendingApprovals: [
+        Object.assign({ interruptId: event.interruptId }, event.payload)
+      ],
+      resumeBusy: false
+    };
+  }
+
+  if (event.type === 'run_resumed') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'running',
+      pendingApprovals: state.pendingApprovals.filter((approval) => approval.interruptId !== event.interruptId),
+      resumeBusy: false
+    };
+  }
+
+  if (event.type === 'run_failed') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'failed',
+      errorCode: event.code,
+      errorMessage: event.message,
+      retryable: event.retryable,
+      resumeBusy: false
+    };
+  }
+
+  return state;
 }

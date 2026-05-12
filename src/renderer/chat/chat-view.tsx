@@ -4,7 +4,7 @@ import { buildChatTranscript } from '../chat-transcript';
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
-import type { TaskEvent } from '../../shared/types';
+import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -146,6 +146,22 @@ export function ChatView({
     }
   }
 
+  async function handleApprovalDecision(approvalId: string, decision: ChatResumeDecision): Promise<void> {
+    if (chatRun.state.runId === null || chatRun.state.threadId === null) {
+      chatRun.setError('当前没有可恢复的审批运行。');
+      return;
+    }
+    const result = await window.roc.chat.resumeRun({
+      runId: chatRun.state.runId,
+      threadId: chatRun.state.threadId,
+      interruptId: approvalId,
+      decision
+    });
+    if (!result.ok) {
+      chatRun.setError(result.error.message);
+    }
+  }
+
   const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredReasoning.length}`;
 
   return (
@@ -156,7 +172,14 @@ export function ChatView({
             <div className="chat-feedback-stack">
               {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
               {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="chat-error">{chatRun.errorMessage}</span>}
-              <ChatTranscriptPanel messages={chatTranscript} liveSignal={liveSignal} scrollContainerRef={transcriptScrollRef} />
+              <ChatTranscriptPanel
+                messages={chatTranscript}
+                liveSignal={liveSignal}
+                scrollContainerRef={transcriptScrollRef}
+                onApprovalDecision={(approvalId, decision) => {
+                  void handleApprovalDecision(approvalId, decision);
+                }}
+              />
             </div>
           </div>
         </div>

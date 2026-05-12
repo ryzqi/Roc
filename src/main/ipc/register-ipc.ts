@@ -229,6 +229,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.chatCancelRun, (_event, runId: string) =>
     wrapIpc(() => services.deepAgentRuntimeService.cancelRun(runId))
   );
+  ipcMain.handle(ipcChannels.chatResumeRun, (_event, request) =>
+    wrapIpc(() => services.deepAgentRuntimeService.resumeRun(request))
+  );
   ipcMain.handle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => services.workspaceService.getCurrentWorkspace()));
   ipcMain.handle(ipcChannels.workspaceSelect, (_event, request) =>
     wrapIpc(() => services.workspaceService.selectWorkspace(request.path))

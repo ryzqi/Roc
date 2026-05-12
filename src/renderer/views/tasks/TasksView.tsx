@@ -10,6 +10,27 @@ import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
 import { TraySummaryPanel } from '../floating/TraySummaryPanel';
 
+function describeTaskEvent(event: TaskSnapshot['recentEvents'][number]): string {
+  if (event.type === 'approval_requested' && typeof event.payload === 'object' && event.payload !== null) {
+    const actionRequests = Reflect.get(event.payload, 'actionRequests');
+    if (Array.isArray(actionRequests) && actionRequests.length > 0) {
+      const first = actionRequests[0];
+      if (typeof first === 'object' && first !== null && typeof Reflect.get(first, 'name') === 'string') {
+        return `等待审批 · ${Reflect.get(first, 'name') as string}`;
+      }
+    }
+    return '等待审批';
+  }
+  if (event.type === 'approval_decision' && typeof event.payload === 'object' && event.payload !== null) {
+    const decision = Reflect.get(event.payload, 'decision');
+    if (typeof decision === 'object' && decision !== null && typeof Reflect.get(decision, 'type') === 'string') {
+      return `审批决策 · ${Reflect.get(decision, 'type') as string}`;
+    }
+    return '审批决策';
+  }
+  return event.type;
+}
+
 export function TasksView({
   state,
   updateLoadedState
@@ -58,7 +79,7 @@ export function TasksView({
               <Row title="任务事件" sub="当前没有任务事件。" tag="空" tone="warn" />
             ) : (
               recentEvents.map((event) => (
-                <Row key={event.id} title={event.type} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="info" />
+                <Row key={event.id} title={describeTaskEvent(event)} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="info" />
               ))
             )}
           </section>

@@ -1,4 +1,4 @@
-import type { BackgroundTask, TaskEvent, TaskSnapshot } from '../shared/types';
+import type { BackgroundTask, ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
 import type { ChatRunState } from './chat-run-state';
 
 export type ChatTranscriptMessage = {
@@ -6,6 +6,7 @@ export type ChatTranscriptMessage = {
   role: 'user' | 'assistant';
   content: string;
   reasoning: string | null;
+  approval: ChatPendingApproval | null;
   isStreaming: boolean;
 };
 
@@ -49,6 +50,7 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
       role: event.payload.role,
       content: event.payload.content,
       reasoning: null,
+      approval: null,
       isStreaming: false
     }));
 }
@@ -71,6 +73,7 @@ export function buildChatTranscript(input: {
             role: 'user',
             content: input.pendingUserInput,
             reasoning: null,
+            approval: null,
             isStreaming: false
           }
         ];
@@ -84,6 +87,7 @@ export function buildChatTranscript(input: {
       role: 'user',
       content: input.pendingUserInput,
       reasoning: null,
+      approval: null,
       isStreaming: false
     });
   }
@@ -105,12 +109,13 @@ export function buildChatTranscript(input: {
     messages[assistantIndex] = {
       ...messages[assistantIndex],
       reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+      approval: input.chatRunState.pendingApprovals[0] ?? null,
       isStreaming: false
     };
     return messages;
   }
 
-  if (liveContent.length === 0 && liveReasoning.length === 0) {
+  if (liveContent.length === 0 && liveReasoning.length === 0 && input.chatRunState.pendingApprovals.length === 0) {
     return messages;
   }
 
@@ -119,6 +124,7 @@ export function buildChatTranscript(input: {
     role: 'assistant',
     content: liveContent,
     reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+    approval: input.chatRunState.pendingApprovals[0] ?? null,
     isStreaming: input.chatRunState.status === 'running'
   });
   return messages;

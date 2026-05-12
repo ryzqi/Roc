@@ -1,4 +1,5 @@
 import type { EnabledCapabilities } from './agent';
+import type { HITLRequest, HITLResponse } from 'langchain';
 
 export type ChatRunMode = 'chat' | 'task';
 
@@ -8,6 +9,27 @@ export type ChatTodoItem = {
 };
 
 export type ChatToolEventStatus = 'start' | 'progress' | 'end' | 'error';
+
+export type ChatApprovalRequest = HITLRequest;
+
+export type ChatPendingApproval = HITLRequest & {
+  interruptId: string;
+};
+
+export type ChatResumeDecision = HITLResponse['decisions'][number];
+
+export type ChatResumeRunRequest = {
+  runId: string;
+  threadId: string;
+  interruptId?: string;
+  decision: ChatResumeDecision;
+};
+
+export type ChatResumeRunResult = {
+  runId: string;
+  threadId: string;
+  resumedAt: string;
+};
 
 export type ChatRunEvent =
   | {
@@ -28,6 +50,19 @@ export type ChatRunEvent =
       type: 'reasoning_delta';
       runId: string;
       delta: string;
+    }
+  | {
+      type: 'run_interrupted';
+      runId: string;
+      threadId: string | null;
+      interruptId: string;
+      payload: ChatApprovalRequest;
+    }
+  | {
+      type: 'run_resumed';
+      runId: string;
+      threadId: string | null;
+      interruptId: string;
     }
   | {
       type: 'tool_event';

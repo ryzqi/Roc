@@ -81,4 +81,80 @@ describe('chat run state', () => {
     expect(state.errorMessage).toBe('Provider 网络请求失败。');
     expect(state.errorCode).toBe('provider_network_error');
   });
+
+  it('enters waiting_user on interrupt and keeps reasoning updates through resume completion', () => {
+    let state = createEmptyChatRunState();
+
+    state = applyChatRunEvent(state, {
+      type: 'run_started',
+      runId: 'chat_approval',
+      mode: 'task',
+      threadId: 'thread_approval',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6',
+      createdAt: '2026-05-12T00:00:00.000Z'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'reasoning_delta',
+      runId: 'chat_approval',
+      delta: '先分析命令风险。\n'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'run_interrupted',
+      runId: 'chat_approval',
+      threadId: 'thread_approval',
+      interruptId: 'interrupt-1',
+      payload: {
+        actionRequests: [
+          {
+            name: 'execute',
+            args: {
+              command: 'git status'
+            }
+          }
+        ],
+        reviewConfigs: [
+          {
+            actionName: 'execute',
+            allowedDecisions: ['approve', 'reject']
+          }
+        ]
+      }
+    });
+
+    expect(state.status).toBe('waiting_user');
+    expect(state.pendingApprovals).toEqual([
+      expect.objectContaining({
+        interruptId: 'interrupt-1'
+      })
+    ]);
+    expect(state.reasoning).toBe('先分析命令风险。\n');
+
+    state = applyChatRunEvent(state, {
+      type: 'run_resumed',
+      runId: 'chat_approval',
+      threadId: 'thread_approval',
+      interruptId: 'interrupt-1'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'reasoning_delta',
+      runId: 'chat_approval',
+      delta: '审批通过，继续执行。'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'run_completed',
+      runId: 'chat_approval',
+      threadId: 'thread_approval',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6',
+      createdAt: '2026-05-12T00:00:00.000Z',
+      durationMs: 640,
+      summary: 'nvidia:moonshotai/kimi-k2.6:deepagents',
+      assistantMessage: '命令已执行。'
+    });
+
+    expect(state.status).toBe('completed');
+    expect(state.pendingApprovals).toEqual([]);
+    expect(state.reasoning).toBe('先分析命令风险。\n审批通过，继续执行。');
+  });
 });

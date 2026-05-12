@@ -3,7 +3,12 @@ import { EventEmitter } from 'node:events';
 import { createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
+import { Command, MemorySaver, type InterruptPayload } from '@langchain/langgraph';
+import type { HITLRequest, HITLResponse } from 'langchain';
 import type {
+  ChatPendingApproval,
+  ChatResumeRunRequest,
+  ChatResumeRunResult,
   ChatRunEvent,
   ChatStartRunRequest,
   ChatStartRunResult,
@@ -35,6 +40,14 @@ import {
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly checkpointer = new MemorySaver();
+  private readonly pendingInterrupts = new Map<
+    string,
+    {
+      threadId: string;
+      approval: ChatPendingApproval;
+    }
+  >();
 
   constructor(
     private readonly langChainModelFactory: LangChainModelFactory,
@@ -78,6 +91,7 @@ export class DeepAgentRuntimeService {
     const activeRun: ActiveRun = {
       abortController,
       createdAt,
+      enabledCapabilities: request.enabledCapabilities,
       modelHandle,
       mode: request.mode,
       runId,
@@ -99,8 +113,7 @@ export class DeepAgentRuntimeService {
     const context: RunExecutionContext = {
       ...activeRun,
       input,
-      startedAtMs: Date.now(),
-      enabledCapabilities: request.enabledCapabilities
+      startedAtMs: Date.now()
     };
     void this.executeRun(context);
 
@@ -126,6 +139,71 @@ export class DeepAgentRuntimeService {
     return {
       runId,
       cancelled: true
+    };
+  }
+
+  async resumeRun(request: ChatResumeRunRequest): Promise<ChatResumeRunResult> {
+    const pending = this.pendingInterrupts.get(request.runId);
+    if (pending === undefined) {
+      throw new RocDomainError({
+        code: 'chat_resume_no_pending_interrupt',
+        message: '当前运行没有待处理的审批中断。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请先等待需要审批的运行中断。'
+      });
+    }
+    if (pending.threadId !== request.threadId) {
+      throw new RocDomainError({
+        code: 'chat_resume_thread_mismatch',
+        message: '恢复运行时的线程 ID 与待审批运行不匹配。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请回到原任务会话后重试。'
+      });
+    }
+
+    const activeRun = this.activeRuns.get(request.runId);
+    if (activeRun === undefined || activeRun.taskRun === null) {
+      throw new RocDomainError({
+        code: 'chat_resume_run_missing',
+        message: '待恢复的运行上下文不存在。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请重新发起本轮任务。'
+      });
+    }
+
+    const resumedAt = new Date().toISOString();
+    const resumePayload: HITLResponse = {
+      decisions: [request.decision]
+    };
+    this.taskService.recordApprovalDecision({
+      runId: activeRun.taskRun.id,
+      payload: {
+        interruptId: pending.approval.interruptId,
+        decision: request.decision
+      }
+    });
+    this.taskService.markRunResumed(activeRun.taskRun.id);
+    this.emit({
+      type: 'run_resumed',
+      runId: request.runId,
+      threadId: request.threadId,
+      interruptId: pending.approval.interruptId
+    });
+
+    const context: RunExecutionContext = {
+      ...activeRun,
+      input: activeRun.taskRun.userInput,
+      startedAtMs: Date.now()
+    };
+    await this.executeResume(context, resumePayload);
+
+    return {
+      runId: request.runId,
+      threadId: request.threadId,
+      resumedAt
     };
   }
 
@@ -160,6 +238,8 @@ export class DeepAgentRuntimeService {
     const closers: Array<() => Promise<void>> = [];
 
     try {
+      const interruptOn =
+        context.taskRun === null ? undefined : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
       const { subagents, tools: runTools } = await this.createRunTools(context, closers);
       const agent = createDeepAgent({
         model: context.modelHandle.model,
@@ -167,7 +247,9 @@ export class DeepAgentRuntimeService {
         backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
         skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
         subagents,
-        tools: runTools
+        tools: runTools,
+        interruptOn,
+        checkpointer: context.taskRun === null ? undefined : this.checkpointer
       });
       const run = await agent.streamEvents(
         {
@@ -188,6 +270,29 @@ export class DeepAgentRuntimeService {
         this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
         this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
       ]);
+
+      if (run.interrupted) {
+        const approval = this.readPendingApproval(run.interrupts, context.runId);
+        if (context.taskRun !== null) {
+          this.pendingInterrupts.set(context.runId, {
+            threadId: context.threadId,
+            approval
+          });
+          this.taskService.recordApprovalRequested({
+            runId: context.taskRun.id,
+            payload: approval
+          });
+          this.taskService.markRunWaitingUser(context.taskRun.id);
+        }
+        this.emit({
+          type: 'run_interrupted',
+          runId: context.runId,
+          threadId: context.threadId,
+          interruptId: approval.interruptId,
+          payload: approval
+        });
+        return;
+      }
 
       await Promise.resolve(run.output);
       const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
@@ -266,6 +371,115 @@ export class DeepAgentRuntimeService {
       }),
       tools: runTools
     };
+  }
+
+  private async executeResume(context: RunExecutionContext, resumePayload: HITLResponse): Promise<void> {
+    const assistantChunks: string[] = [];
+    const reasoningChunks: string[] = [];
+    const closers: Array<() => Promise<void>> = [];
+
+    try {
+      const interruptOn =
+        context.taskRun === null ? undefined : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
+      const { subagents, tools: runTools } = await this.createRunTools(context, closers);
+      const agent = createDeepAgent({
+        model: context.modelHandle.model,
+        systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
+        backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
+        skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
+        subagents,
+        tools: runTools,
+        interruptOn,
+        checkpointer: context.taskRun === null ? undefined : this.checkpointer
+      });
+      const run = await agent.streamEvents(new Command({ resume: resumePayload }), {
+        version: 'v3',
+        configurable: {
+          thread_id: context.threadId,
+          run_id: context.runId
+        },
+        signal: context.abortController.signal
+      });
+
+      await Promise.all([
+        this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks),
+        this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
+        this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
+      ]);
+
+      if (run.interrupted) {
+        const approval = this.readPendingApproval(run.interrupts, context.runId);
+        if (context.taskRun !== null) {
+          this.pendingInterrupts.set(context.runId, {
+            threadId: context.threadId,
+            approval
+          });
+          this.taskService.recordApprovalRequested({
+            runId: context.taskRun.id,
+            payload: approval
+          });
+          this.taskService.markRunWaitingUser(context.taskRun.id);
+        }
+        this.emit({
+          type: 'run_interrupted',
+          runId: context.runId,
+          threadId: context.threadId,
+          interruptId: approval.interruptId,
+          payload: approval
+        });
+        return;
+      }
+
+      await Promise.resolve(run.output);
+      const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
+      const result = prompt.buildProviderExecutionResult({
+        modelHandle: context.modelHandle,
+        createdAt: context.createdAt,
+        startedAtMs: context.startedAtMs,
+        inputLength: context.input.length,
+        assistantMessage
+      });
+      if (context.taskRun !== null) {
+        this.taskService.completeRunWithProviderResult({
+          runId: context.taskRun.id,
+          result
+        });
+      }
+      this.pendingInterrupts.delete(context.runId);
+      this.emit({
+        type: 'run_completed',
+        runId: context.runId,
+        threadId: context.threadId,
+        providerId: result.providerId,
+        modelId: result.modelId,
+        createdAt: context.createdAt,
+        durationMs: result.durationMs,
+        summary: result.summary,
+        assistantMessage: result.assistantMessage
+      });
+    } catch (error) {
+      const failure = errorMapping.toRunFailure(error);
+      if (context.taskRun !== null) {
+        this.taskService.failRunWithProviderError({
+          runId: context.taskRun.id,
+          providerId: context.modelHandle.provider.id,
+          modelId: context.modelHandle.modelId,
+          code: failure.code,
+          message: failure.message,
+          retryable: failure.retryable
+        });
+      }
+      this.emit({
+        type: 'run_failed',
+        runId: context.runId,
+        threadId: context.threadId,
+        code: failure.code,
+        message: failure.message,
+        retryable: failure.retryable
+      });
+    } finally {
+      await Promise.allSettled(closers.map(async (close) => close()));
+    }
   }
 
   private taskBoundShellExecutionService(context: RunExecutionContext): {
@@ -487,5 +701,41 @@ export class DeepAgentRuntimeService {
 
   private emit(event: ChatRunEvent): void {
     this.eventEmitter.emit(RUN_EVENT_NAME, event);
+  }
+
+  private readPendingApproval(interrupts: readonly InterruptPayload[], runId: string): ChatPendingApproval {
+    const interrupt = interrupts[0];
+    if (interrupt === undefined) {
+      throw new RocDomainError({
+        code: 'chat_interrupt_payload_invalid',
+        message: '运行进入审批中断，但没有收到可恢复的中断负载。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请重新发起本轮任务。'
+      });
+    }
+    const payload = interrupt.payload;
+    if (!this.isHitlRequest(payload)) {
+      throw new RocDomainError({
+        code: 'chat_interrupt_payload_invalid',
+        message: '审批中断负载结构无效，无法展示审批请求。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请重新发起本轮任务。'
+      });
+    }
+    return {
+      interruptId: interrupt.interruptId,
+      ...payload
+    };
+  }
+
+  private isHitlRequest(value: unknown): value is HITLRequest {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+    const actionRequests = Reflect.get(value, 'actionRequests');
+    const reviewConfigs = Reflect.get(value, 'reviewConfigs');
+    return Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
   }
 }

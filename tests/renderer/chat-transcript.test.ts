@@ -48,6 +48,8 @@ function createIdleRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
+    pendingApprovals: [],
+    resumeBusy: false,
     toolEvents: [],
     todos: [],
     subagents: []
@@ -128,6 +130,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请整理一下当前变更',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -135,6 +138,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '我先检查当前变更。',
         reasoning: '先读取当前工作区和最近提交。',
+        approval: null,
         isStreaming: true
       }
     ]);
@@ -184,6 +188,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '整理一下结果',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -191,6 +196,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '已经整理完成。',
         reasoning: '先归纳，再输出最终结论。',
+        approval: null,
         isStreaming: false
       }
     ]);
@@ -230,6 +236,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '新的用户输入',
         reasoning: null,
+        approval: null,
         isStreaming: false
       }
     ]);
@@ -283,6 +290,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -290,6 +298,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,
+        approval: null,
         isStreaming: false
       }
     ]);
@@ -342,6 +351,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -349,6 +359,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,
+        approval: null,
         isStreaming: false
       }
     ]);
@@ -409,6 +420,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '第一轮输入',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -416,6 +428,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '第一轮回复',
         reasoning: null,
+        approval: null,
         isStreaming: false
       },
       {
@@ -423,6 +436,79 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '第二轮输入',
         reasoning: null,
+        approval: null,
+        isStreaming: false
+      }
+    ]);
+  });
+
+  it('includes a waiting approval assistant bubble when the live run is interrupted before final output', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-12T08:30:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '请执行 git status' },
+          createdAt: '2026-05-12T08:30:00.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      backgroundTasks: createBackgroundTasks(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'waiting_user',
+        assistantMessage: '',
+        reasoning: '先分析命令风险。',
+        pendingApprovals: [
+          {
+            interruptId: 'interrupt-1',
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        ],
+        resumeBusy: false
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-current',
+        role: 'user',
+        content: '请执行 git status',
+        reasoning: null,
+        approval: null,
+        isStreaming: false
+      },
+      {
+        key: 'live-run-current',
+        role: 'assistant',
+        content: '',
+        reasoning: '先分析命令风险。',
+        approval: expect.objectContaining({
+          interruptId: 'interrupt-1'
+        }),
         isStreaming: false
       }
     ]);

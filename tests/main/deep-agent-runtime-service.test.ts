@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Command } from '@langchain/langgraph';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
 import { RocDomainError } from '../../src/main/services/errors';
@@ -13,7 +14,8 @@ const mocked = vi.hoisted(() => ({
   createDeepAgentMock: vi.fn(),
   exaSearchInvokeMock: vi.fn(),
   mcpGetToolsMock: vi.fn(),
-  mcpClientCloseMock: vi.fn()
+  mcpClientCloseMock: vi.fn(),
+  invokeMock: vi.fn()
 }));
 
 vi.mock('deepagents', async () => {
@@ -21,7 +23,8 @@ vi.mock('deepagents', async () => {
   return {
     ...actual,
     createDeepAgent: mocked.createDeepAgentMock.mockImplementation(() => ({
-      streamEvents: mocked.streamEventsMock
+      streamEvents: mocked.streamEventsMock,
+      invoke: mocked.invokeMock
     }))
   };
 });
@@ -147,6 +150,7 @@ beforeEach(() => {
   ]);
   mocked.mcpClientCloseMock.mockReset();
   mocked.mcpClientCloseMock.mockResolvedValue(undefined);
+  mocked.invokeMock.mockReset();
 });
 
 afterEach(() => {
@@ -530,6 +534,204 @@ describe('DeepAgentRuntimeService', () => {
         })
       ])
     );
+  });
+
+  it('passes the agent interrupt policy into deepagents for task runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '执行需要审批的任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: []
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          interruptOn?: Record<string, unknown>;
+          checkpointer?: unknown;
+        }
+      | undefined;
+
+    expect(call?.interruptOn).toMatchObject({
+      write_file: true,
+      edit_file: true,
+      execute: true,
+      git_operation: true,
+      web_read: true,
+      web_search: true
+    });
+    expect(call?.checkpointer).toBeTruthy();
+  });
+
+  it('records approval requests and moves the task thread into waiting_user when the agent interrupts', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-1',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                },
+                description: '请确认执行命令'
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行 git status',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const event = await interrupted;
+    const snapshot = services.taskService.getSnapshot();
+    const approvalEvent = snapshot.recentEvents.find(
+      (candidate) => candidate.runId === started.runId && candidate.type === 'approval_requested'
+    );
+
+    expect(event).toMatchObject({
+      type: 'run_interrupted',
+      runId: started.runId,
+      threadId: started.threadId
+    });
+    expect(snapshot.threads[0]?.status).toBe('waiting_user');
+    expect(approvalEvent?.payload).toMatchObject({
+      interruptId: 'interrupt-1',
+      actionRequests: [
+        expect.objectContaining({
+          name: 'execute',
+          args: {
+            command: 'git status'
+          }
+        })
+      ],
+      reviewConfigs: [
+        expect.objectContaining({
+          actionName: 'execute',
+          allowedDecisions: ['approve', 'reject']
+        })
+      ]
+    });
+  });
+
+  it('resumes the interrupted task run on the same thread via Command({ resume })', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-2',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+    mocked.invokeMock.mockResolvedValue({
+      messages: [{ role: 'assistant', content: '已继续执行' }]
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行 git status',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+    expect(started.threadId).toBeTruthy();
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        decision: {
+          type: 'approve'
+        }
+      })
+    ).resolves.toMatchObject({
+      runId: started.runId,
+      threadId: started.threadId
+    });
+
+    const resumeInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0];
+    const resumeConfig = mocked.streamEventsMock.mock.calls.at(-1)?.[1] as
+      | {
+          configurable?: {
+            thread_id?: string;
+            run_id?: string;
+          };
+        }
+      | undefined;
+    const snapshot = services.taskService.getSnapshot();
+    const decisionEvent = snapshot.recentEvents.find(
+      (candidate) => candidate.runId === started.runId && candidate.type === 'approval_decision'
+    );
+
+    expect(resumeInput).toBeInstanceOf(Command);
+    expect(resumeConfig?.configurable?.thread_id).toBe(started.threadId);
+    expect(decisionEvent?.payload).toMatchObject({
+      interruptId: 'interrupt-2',
+      decision: {
+        type: 'approve'
+      }
+    });
   });
 
   it('continues a selected task thread instead of creating a new thread for the next turn', async () => {
