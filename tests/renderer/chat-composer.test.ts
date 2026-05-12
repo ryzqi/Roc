@@ -204,7 +204,7 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
 }
 
 describe('chat composer skills popover', () => {
-  it('renders only skill descriptions inside the skill popover choices', () => {
+  it('renders skill names and descriptions inside the skill popover choices', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatComposer, {
         chatInput: '规划一下',
@@ -234,7 +234,7 @@ describe('chat composer skills popover', () => {
 
     expect(html).toContain('data-testid="chat-skill-popover"');
     expect(html).toContain('data-testid="turn-skill-deep-review"');
+    expect(html).toContain('>Deep Review<');
     expect(html).toContain('只保留这一段说明文本。');
-    expect(html).not.toContain('>Deep Review<');
   });
 });

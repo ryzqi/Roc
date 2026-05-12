@@ -270,6 +270,7 @@ export function ChatComposer({
                         })
                       }
                     >
+                      <span>{skill.name}</span>
                       <small>{skill.description}</small>
                     </button>
                   ))}
