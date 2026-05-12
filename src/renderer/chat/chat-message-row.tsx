@@ -1,4 +1,6 @@
 import { memo } from 'react';
+import { motion } from 'motion/react';
+import { bubbleEnter, bubbleEnterTransition } from '../animations';
 import type { ChatTranscriptMessage } from '../chat-transcript';
 import { MarkdownView } from './markdown-view';
 
@@ -7,13 +9,23 @@ type ChatMessageRowProps = {
 };
 
 function ChatMessageRowImpl({ message }: ChatMessageRowProps): React.JSX.Element {
+  const bubbleClassName = [
+    message.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--assistant',
+    message.isStreaming ? 'is-streaming' : ''
+  ]
+    .filter((part) => part.length > 0)
+    .join(' ');
   return (
-    <div
+    <motion.div
+      animate="animate"
       className={message.role === 'user' ? 'chat-message-row chat-message-row--user' : 'chat-message-row chat-message-row--assistant'}
       data-role={message.role}
       data-testid={message.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'}
+      initial="initial"
+      transition={bubbleEnterTransition}
+      variants={bubbleEnter}
     >
-      <article className={message.role === 'user' ? 'chat-bubble chat-bubble--user' : 'chat-bubble chat-bubble--assistant'}>
+      <article className={bubbleClassName}>
         {message.content.length === 0
           ? null
           : message.role === 'assistant'
@@ -25,8 +37,11 @@ function ChatMessageRowImpl({ message }: ChatMessageRowProps): React.JSX.Element
             <p>{message.reasoning}</p>
           </div>
         )}
+        {message.isStreaming && message.role === 'assistant' ? (
+          <span className="chat-typing-cursor" aria-hidden="true" />
+        ) : null}
       </article>
-    </div>
+    </motion.div>
   );
 }
 
@@ -36,5 +51,6 @@ export const ChatMessageRow = memo(
     prev.message.key === next.message.key &&
     prev.message.role === next.message.role &&
     prev.message.content === next.message.content &&
-    prev.message.reasoning === next.message.reasoning
+    prev.message.reasoning === next.message.reasoning &&
+    prev.message.isStreaming === next.message.isStreaming
 );

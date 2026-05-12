@@ -1,0 +1,36 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--text);
+  background: var(--bg-gradient);
+  letter-spacing: 0;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.boot,
+.fatal {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--ink);
+}

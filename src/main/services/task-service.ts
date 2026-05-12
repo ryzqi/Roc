@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   AgentCapabilityManifest,
   AgentCapabilityPreview,
@@ -12,42 +13,31 @@ import type {
   TaskSnapshot,
   TaskThread
 } from '../../shared/types';
-import { randomUUID } from 'node:crypto';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
-
-type BackgroundTaskRow = {
-  id: string;
-  thread_id: string;
-  run_id: string;
-  goal: string;
-  status: BackgroundTask['status'];
-  scheduled: number;
-  trigger_description: string;
-  next_run_at: string | null;
-  workspace_path: string;
-  allowed_actions_json: string;
-  forbidden_actions_json: string;
-  failure_policy: BackgroundTask['failurePolicy'];
-  notification_policy: BackgroundTask['notificationPolicy'];
-  risk_level: BackgroundTask['riskLevel'];
-  requires_confirmation: number;
-  created_at: string;
-  updated_at: string;
-};
+import {
+  backgroundTaskFromRow,
+  inferBackgroundRisk,
+  invalidTransition,
+  nextRunNumber,
+  requireActiveThread,
+  requireBackgroundTask,
+  requireText,
+  type BackgroundTaskRow
+} from './task';
 
 export class TaskService {
   constructor(private readonly database: DatabaseService) {}
 
   createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview {
-    const goal = this.requireText(request.goal, 'background_task_goal_empty', '后台任务目标不能为空。', '请输入后台任务目标。');
-    const triggerDescription = this.requireText(
+    const goal = requireText(request.goal, 'background_task_goal_empty', '后台任务目标不能为空。', '请输入后台任务目标。');
+    const triggerDescription = requireText(
       request.trigger.description,
       'background_task_trigger_empty',
       '后台任务触发条件不能为空。',
       '请填写后台任务触发方式。'
     );
-    const workspacePath = this.requireText(
+    const workspacePath = requireText(
       request.workspacePath,
       'background_task_workspace_empty',
       '后台任务作用目录不能为空。',
@@ -75,7 +65,7 @@ export class TaskService {
       workspacePath,
       scheduled,
       nextRunAt: request.trigger.nextRunAt,
-      riskLevel: this.inferBackgroundRisk(request.allowedActions, request.forbiddenActions),
+      riskLevel: inferBackgroundRisk(request.allowedActions, request.forbiddenActions),
       requiresConfirmation: request.forbiddenActions.length > 0 && request.allowedActions.length === 0
     };
   }
@@ -173,28 +163,28 @@ export class TaskService {
   }
 
   pauseBackgroundTask(id: string): BackgroundTask {
-    const task = this.requireBackgroundTask(id);
+    const task = requireBackgroundTask(this.database, id);
     if (task.status !== 'running' && task.status !== 'pending_confirmation') {
-      throw this.invalidTransition('后台任务当前状态不能暂停。');
+      throw invalidTransition('后台任务当前状态不能暂停。');
     }
     return this.transitionBackgroundTask(task, 'paused', 'background_task_paused');
   }
 
   resumeBackgroundTask(id: string): BackgroundTask {
-    const task = this.requireBackgroundTask(id);
+    const task = requireBackgroundTask(this.database, id);
     if (task.status !== 'paused') {
-      throw this.invalidTransition('后台任务当前状态不能继续。');
+      throw invalidTransition('后台任务当前状态不能继续。');
     }
     return this.transitionBackgroundTask(task, 'running', 'background_task_resumed');
   }
 
   cancelBackgroundTask(id: string): BackgroundTask {
-    const task = this.requireBackgroundTask(id);
+    const task = requireBackgroundTask(this.database, id);
     if (task.status === 'cancelled') {
       return task;
     }
     if (task.status === 'completed' || task.status === 'archived') {
-      throw this.invalidTransition('后台任务当前状态不能取消。');
+      throw invalidTransition('后台任务当前状态不能取消。');
     }
     return this.transitionBackgroundTask(task, 'cancelled', 'background_task_cancelled');
   }
@@ -211,7 +201,7 @@ export class TaskService {
       )
       .all() as BackgroundTaskRow[];
 
-    return rows.map((row) => this.backgroundTaskFromRow(row));
+    return rows.map((row) => backgroundTaskFromRow(row));
   }
 
   getBackgroundTaskSummary(): BackgroundTaskSummary {
@@ -249,14 +239,14 @@ export class TaskService {
     const existingThreadId =
       input.threadId === undefined
         ? null
-        : this.requireText(
+        : requireText(
             input.threadId,
             'task_thread_id_empty',
             '任务会话 ID 不能为空。',
             '请选择一个有效的会话后再继续发送。'
           );
     const threadId = existingThreadId ?? `thread_${randomUUID()}`;
-    const runNumber = existingThreadId === null ? 1 : this.nextRunNumber(threadId);
+    const runNumber = existingThreadId === null ? 1 : nextRunNumber(this.database, threadId);
 
     const transaction = this.database.db.transaction(() => {
       if (existingThreadId === null) {
@@ -268,7 +258,7 @@ export class TaskService {
           )
           .run(threadId, title, input.userInput, 'waiting_next_turn', now, now);
       } else {
-        this.requireActiveThread(threadId);
+        requireActiveThread(this.database, threadId);
         this.database.db
           .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
           .run('waiting_next_turn', now, threadId);
@@ -316,13 +306,13 @@ export class TaskService {
   }
 
   archiveThread(threadId: string): { deleted: true; threadId: string } {
-    const normalizedThreadId = this.requireText(
+    const normalizedThreadId = requireText(
       threadId,
       'task_thread_id_empty',
       '任务会话 ID 不能为空。',
       '请选择一个要删除的历史会话。'
     );
-    this.requireActiveThread(normalizedThreadId);
+    requireActiveThread(this.database, normalizedThreadId);
     const now = new Date().toISOString();
 
     this.database.db
@@ -596,137 +586,5 @@ export class TaskService {
       status,
       updatedAt: now
     };
-  }
-
-  private requireBackgroundTask(id: string): BackgroundTask {
-    const taskId = this.requireText(id, 'background_task_id_empty', '后台任务 ID 不能为空。', '请选择一个后台任务。');
-    const row = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
-                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-                requires_confirmation, created_at, updated_at
-         FROM background_tasks
-         WHERE id = ?`
-      )
-      .get(taskId) as BackgroundTaskRow | undefined;
-
-    if (row === undefined) {
-      throw new RocDomainError({
-        code: 'background_task_not_found',
-        message: '后台任务不存在。',
-        category: 'not_found',
-        retryable: false,
-        userAction: '请刷新任务工作台后重试。'
-      });
-    }
-
-    return this.backgroundTaskFromRow(row);
-  }
-
-  private backgroundTaskFromRow(row: BackgroundTaskRow): BackgroundTask {
-    return {
-      id: row.id,
-      threadId: row.thread_id,
-      runId: row.run_id,
-      goal: row.goal,
-      status: row.status,
-      scheduled: row.scheduled === 1,
-      triggerDescription: row.trigger_description,
-      nextRunAt: row.next_run_at,
-      workspacePath: row.workspace_path,
-      allowedActions: JSON.parse(row.allowed_actions_json) as string[],
-      forbiddenActions: JSON.parse(row.forbidden_actions_json) as string[],
-      failurePolicy: row.failure_policy,
-      notificationPolicy: row.notification_policy,
-      riskLevel: row.risk_level,
-      requiresConfirmation: row.requires_confirmation === 1,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-
-  private nextRunNumber(threadId: string): number {
-    const row = this.database.db
-      .prepare(
-        `SELECT COALESCE(MAX(run_number), 0) AS last_run_number
-         FROM task_runs
-         WHERE thread_id = ?`
-      )
-      .get(threadId) as { last_run_number: number };
-
-    return row.last_run_number + 1;
-  }
-
-  private requireActiveThread(threadId: string): TaskThread {
-    const row = this.database.db
-      .prepare(
-        `SELECT id, title, goal, status, created_at, updated_at
-         FROM task_threads
-         WHERE id = ? AND archived_at IS NULL`
-      )
-      .get(threadId) as
-      | {
-          id: string;
-          title: string;
-          goal: string;
-          status: TaskThread['status'];
-          created_at: string;
-          updated_at: string;
-        }
-      | undefined;
-
-    if (row === undefined) {
-      throw new RocDomainError({
-        code: 'task_thread_not_found',
-        message: '任务会话不存在。',
-        category: 'not_found',
-        retryable: false,
-        userAction: '请刷新历史会话列表后重试。'
-      });
-    }
-
-    return {
-      id: row.id,
-      title: row.title,
-      goal: row.goal,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-
-  private inferBackgroundRisk(allowedActions: string[], forbiddenActions: string[]): BackgroundTaskPreview['riskLevel'] {
-    const commands = [...allowedActions, ...forbiddenActions].map((item) => item.toLowerCase());
-    if (commands.some((command) => command.includes('git push') || command.includes('rm ') || command.includes('remove-item'))) {
-      return 'medium';
-    }
-    if (commands.length === 0) {
-      return 'low';
-    }
-    return 'medium';
-  }
-
-  private invalidTransition(message: string): RocDomainError {
-    return new RocDomainError({
-      code: 'background_task_invalid_transition',
-      message,
-      category: 'conflict',
-      retryable: false,
-      userAction: '请查看任务状态，必要时创建新的后台任务。'
-    });
-  }
-
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
   }
 }

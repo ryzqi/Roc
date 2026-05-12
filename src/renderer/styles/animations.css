@@ -1,0 +1,84 @@
+/* 全局动画与可访问性。在 main.css 之后加载，可覆盖具体选择器的局部动画。 */
+
+@keyframes chat-cursor-blink {
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes chat-token-fade {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drawer-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 流式打字光标 */
+.chat-typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  border-radius: 1px;
+  animation: chat-cursor-blink 1s ease-in-out infinite;
+}
+
+/* 流式期间末段平滑淡入 */
+.chat-bubble--assistant.is-streaming > *:last-child {
+  animation: chat-token-fade 220ms ease-out both;
+}
+
+/* 系统级减弱动效兼容 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,5 +1,7 @@
+import { motion } from 'motion/react';
 import type React from 'react';
 import type { SkillFileEntry, SkillFilePreviewResult, SkillSnapshot } from '../shared/types';
+import { drawerSlideIn, drawerTransition } from './animations';
 
 export type SkillBrowserViewState = {
   rootEntries: SkillFileEntry[] | null;
@@ -35,7 +37,16 @@ export function SkillDrawer({
 }: SkillDrawerProps): React.JSX.Element {
   const statusLabel = skill.status === 'invalid' ? 'invalid' : skill.enabled ? 'ready' : 'disabled';
   return (
-    <aside className="skill-drawer" data-testid="skill-drawer" aria-label={`Skill ${skill.name}`}>
+    <motion.aside
+      animate="animate"
+      aria-label={`Skill ${skill.name}`}
+      className="skill-drawer"
+      data-testid="skill-drawer"
+      exit="exit"
+      initial="initial"
+      transition={drawerTransition}
+      variants={drawerSlideIn}
+    >
       <header className="skill-drawer-header">
         <div className="skill-drawer-headline">
           <span className="skill-drawer-kicker">Skill · {statusLabel}</span>
@@ -90,6 +101,6 @@ export function SkillDrawer({
           <div className="skill-drawer-preview-body">{previewView}</div>
         </section>
       </div>
-    </aside>
+    </motion.aside>
   );
 }

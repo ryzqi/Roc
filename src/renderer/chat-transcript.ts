@@ -6,6 +6,7 @@ export type ChatTranscriptMessage = {
   role: 'user' | 'assistant';
   content: string;
   reasoning: string | null;
+  isStreaming: boolean;
 };
 
 type MessagePayload = {
@@ -47,7 +48,8 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
       key: event.id,
       role: event.payload.role,
       content: event.payload.content,
-      reasoning: null
+      reasoning: null,
+      isStreaming: false
     }));
 }
 
@@ -67,7 +69,8 @@ export function buildChatTranscript(input: {
             key: 'pending-user-message',
             role: 'user',
             content: input.pendingUserInput,
-            reasoning: null
+            reasoning: null,
+            isStreaming: false
           }
         ];
   }
@@ -78,7 +81,8 @@ export function buildChatTranscript(input: {
       key: 'pending-user-message',
       role: 'user',
       content: input.pendingUserInput,
-      reasoning: null
+      reasoning: null,
+      isStreaming: false
     });
   }
 
@@ -98,7 +102,8 @@ export function buildChatTranscript(input: {
   if (matchesPersistedAssistant) {
     messages[assistantIndex] = {
       ...messages[assistantIndex],
-      reasoning: liveReasoning.length === 0 ? null : liveReasoning
+      reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+      isStreaming: false
     };
     return messages;
   }
@@ -111,7 +116,8 @@ export function buildChatTranscript(input: {
     key: `live-${input.chatRunState.runId ?? 'assistant'}`,
     role: 'assistant',
     content: liveContent,
-    reasoning: liveReasoning.length === 0 ? null : liveReasoning
+    reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+    isStreaming: input.chatRunState.status === 'running'
   });
   return messages;
 }

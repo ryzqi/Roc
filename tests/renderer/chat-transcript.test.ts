@@ -127,13 +127,15 @@ describe('chat transcript helpers', () => {
         key: 'user-current',
         role: 'user',
         content: '请整理一下当前变更',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       },
       {
         key: 'live-run-current',
         role: 'assistant',
         content: '我先检查当前变更。',
-        reasoning: '先读取当前工作区和最近提交。'
+        reasoning: '先读取当前工作区和最近提交。',
+        isStreaming: true
       }
     ]);
   });
@@ -181,13 +183,15 @@ describe('chat transcript helpers', () => {
         key: 'user-current',
         role: 'user',
         content: '整理一下结果',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       },
       {
         key: 'assistant-current',
         role: 'assistant',
         content: '已经整理完成。',
-        reasoning: '先归纳，再输出最终结论。'
+        reasoning: '先归纳，再输出最终结论。',
+        isStreaming: false
       }
     ]);
   });
@@ -225,7 +229,8 @@ describe('chat transcript helpers', () => {
         key: 'pending-user-message',
         role: 'user',
         content: '新的用户输入',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       }
     ]);
   });
@@ -277,13 +282,15 @@ describe('chat transcript helpers', () => {
         key: 'user-older',
         role: 'user',
         content: '请继续历史会话',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       },
       {
         key: 'assistant-older',
         role: 'assistant',
         content: '历史线程回复',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       }
     ]);
   });
@@ -334,13 +341,15 @@ describe('chat transcript helpers', () => {
         key: 'user-older',
         role: 'user',
         content: '请继续历史会话',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       },
       {
         key: 'assistant-older',
         role: 'assistant',
         content: '历史线程回复',
-        reasoning: null
+        reasoning: null,
+        isStreaming: false
       }
     ]);
   });

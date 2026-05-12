@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
@@ -8,7 +8,6 @@ import type {
   MemoryDeleteResult,
   MemoryEntry,
   MemoryLayer,
-  MemoryPriority,
   MemorySearchRequest,
   MemorySearchResult,
   MemoryStatus,
@@ -19,38 +18,7 @@ import type {
   SessionSearchResult
 } from '../../shared/types';
 import type { RocPaths } from './paths';
-
-const warmFiles = ['preferences.md', 'feedback.md', 'project_context.md', 'process_skills.md', 'knowledge_notes.md'];
-
-type MemoryIndexRow = {
-  id: string;
-  layer: MemoryLayer;
-  type: MemoryType;
-  scope: string;
-  status: MemoryEntry['status'];
-  confidence: number;
-  priority: MemoryPriority;
-  source: string;
-  source_ref: string;
-  markdown_path: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type CandidateRow = MemoryIndexRow & {
-  candidate_state: MemoryCandidate['state'];
-  suggested_action: MemoryCandidate['suggestedAction'];
-};
-
-type SessionRecallRow = {
-  id: string;
-  scope: string;
-  title: string;
-  summary: string;
-  source_ref: string;
-  markdown_path: string;
-  created_at: string;
-};
+import { conflict, db, fts, layerStats, markdown, operationsLog, routing, search, validation, WARM_FILES } from './memory';
 
 export class MemoryService {
   constructor(
@@ -59,28 +27,28 @@ export class MemoryService {
   ) {}
 
   initialize(): void {
-    this.ensureFile(join(this.paths.memoryDir, 'hot', 'hot_memory.md'), '# Hot Memory\n\n');
-    for (const file of warmFiles) {
-      this.ensureFile(join(this.paths.memoryDir, 'warm', file), `# ${basename(file, '.md')}\n\n`);
+    markdown.ensureFile(join(this.paths.memoryDir, 'hot', 'hot_memory.md'), '# Hot Memory\n\n');
+    for (const file of WARM_FILES) {
+      markdown.ensureFile(join(this.paths.memoryDir, 'warm', file), `# ${basename(file, '.md')}\n\n`);
     }
-    this.ensureFile(join(this.paths.memoryDir, 'cold', 'cold_index.md'), '# Cold Memory Index\n\n');
-    this.ensureFile(join(this.paths.memoryDir, 'sessions', 'session_index.md'), '# Session Recall Index\n\n');
-    this.ensureFile(join(this.paths.logsDir, 'memory_operations.log'), '');
+    markdown.ensureFile(join(this.paths.memoryDir, 'cold', 'cold_index.md'), '# Cold Memory Index\n\n');
+    markdown.ensureFile(join(this.paths.memoryDir, 'sessions', 'session_index.md'), '# Session Recall Index\n\n');
+    markdown.ensureFile(join(this.paths.logsDir, 'memory_operations.log'), '');
   }
 
   status(): MemoryStatus {
-    const fullTextReady = this.hasTable('memory_entries_fts') && this.hasTable('session_recall_fts');
+    const fullTextReady = db.hasTable(this.database, 'memory_entries_fts') && db.hasTable(this.database, 'session_recall_fts');
     const degradedReasons = ['sqlite-vec embedding provider has not been configured; search falls back to FTS5 or Markdown.'];
     if (!fullTextReady) {
       degradedReasons.push('SQLite FTS5 is not available; search falls back to SQLite metadata and Markdown keyword matching.');
     }
 
     const layers: MemoryStatus['layers'] = {
-      hot: this.layerStats('hot', join(this.paths.memoryDir, 'hot')),
-      warm: this.layerStats('warm', join(this.paths.memoryDir, 'warm')),
-      cold: this.layerStats('cold', join(this.paths.memoryDir, 'cold')),
-      session: this.layerStats('session', join(this.paths.memoryDir, 'sessions')),
-      candidate: this.layerStats('candidate', join(this.paths.memoryDir, 'staging'))
+      hot: layerStats.layerStats(this.database, 'hot', join(this.paths.memoryDir, 'hot')),
+      warm: layerStats.layerStats(this.database, 'warm', join(this.paths.memoryDir, 'warm')),
+      cold: layerStats.layerStats(this.database, 'cold', join(this.paths.memoryDir, 'cold')),
+      session: layerStats.layerStats(this.database, 'session', join(this.paths.memoryDir, 'sessions')),
+      candidate: layerStats.layerStats(this.database, 'candidate', join(this.paths.memoryDir, 'staging'))
     };
 
     return {
@@ -103,7 +71,7 @@ export class MemoryService {
   }
 
   search(request: MemorySearchRequest): MemorySearchResult {
-    const query = this.requireText(
+    const query = validation.requireText(
       request.query,
       'memory_query_empty',
       '记忆检索 query 不能为空。',
@@ -114,18 +82,18 @@ export class MemoryService {
       return {
         query,
         degraded: true,
-        degradedReason: this.searchDegradedReason(),
-        items: this.searchSessionItems({ query, scope: request.scope })
+        degradedReason: search.searchDegradedReason(this.database),
+        items: search.searchSessionItems(this.database, { query, scope: request.scope })
       };
     }
 
     if (request.source === 'all') {
-      const curatedItems = this.searchCuratedItems(request, query);
-      const sessionItems = this.searchSessionItems({ query, scope: request.scope });
+      const curatedItems = search.searchCuratedItems(this.database, request, query);
+      const sessionItems = search.searchSessionItems(this.database, { query, scope: request.scope });
       return {
         query,
         degraded: true,
-        degradedReason: this.searchDegradedReason(),
+        degradedReason: search.searchDegradedReason(this.database),
         items: [...curatedItems, ...sessionItems]
       };
     }
@@ -133,13 +101,13 @@ export class MemoryService {
     return {
       query,
       degraded: true,
-      degradedReason: this.searchDegradedReason(),
-      items: this.searchCuratedItems(request, query)
+      degradedReason: search.searchDegradedReason(this.database),
+      items: search.searchCuratedItems(this.database, request, query)
     };
   }
 
   get(id: string): string {
-    const memoryId = this.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要读取的记忆 ID。');
+    const memoryId = validation.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要读取的记忆 ID。');
     const row = this.database.db
       .prepare('SELECT markdown_path FROM memory_entries_index WHERE id = ?')
       .get(memoryId) as { markdown_path: string } | undefined;
@@ -154,11 +122,12 @@ export class MemoryService {
       });
     }
 
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
     return readFileSync(row.markdown_path, 'utf8');
   }
 
   writeCandidate(entry: Omit<MemoryEntry, 'id' | 'layer' | 'status' | 'createdAt' | 'updatedAt'>): MemoryEntry {
-    this.validateCandidateInput(entry);
+    validation.validateCandidateInput(entry);
     const now = new Date().toISOString();
     const id = `mem_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
     const markdownPath = join(this.paths.memoryDir, 'staging', `${id}.md`);
@@ -170,11 +139,11 @@ export class MemoryService {
       createdAt: now,
       updatedAt: now
     };
-    const conflicts = this.detectConflicts(fullEntry);
+    const conflicts = conflict.detectConflicts(this.database, fullEntry);
     const candidateState: MemoryCandidate['state'] = conflicts.length > 0 ? 'conflict_detected' : 'new';
     const suggestedAction: MemoryCandidate['suggestedAction'] = conflicts.length > 0 ? 'review_conflict' : 'accept';
 
-    writeFileSync(markdownPath, this.renderMemoryMarkdown(fullEntry), 'utf8');
+    writeFileSync(markdownPath, markdown.renderMemoryMarkdown(fullEntry), 'utf8');
     this.database.db
       .prepare(
         `INSERT INTO memory_entries_index
@@ -203,7 +172,7 @@ export class MemoryService {
       )
       .run(id, id, candidateState, suggestedAction, now, now);
 
-    for (const conflict of conflicts) {
+    for (const conflictEntry of conflicts) {
       this.database.db
         .prepare(
           `INSERT INTO memory_conflicts (id, candidate_id, active_memory_id, type, scope, reason, status, created_at)
@@ -212,21 +181,21 @@ export class MemoryService {
         .run(
           `memconf_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`,
           id,
-          conflict.activeMemoryId,
+          conflictEntry.activeMemoryId,
           fullEntry.type,
           fullEntry.scope,
-          conflict.reason,
+          conflictEntry.reason,
           now
         );
     }
 
-    this.appendOperation(fullEntry.id, 'candidate_write', {
+    operationsLog.appendOperation(this.database, this.paths, fullEntry.id, 'candidate_write', {
       source: fullEntry.source,
       sourceRef: fullEntry.sourceRef,
       candidateState
     });
     if (conflicts.length > 0) {
-      this.appendOperation(fullEntry.id, 'memory_conflict_detected', { conflicts });
+      operationsLog.appendOperation(this.database, this.paths, fullEntry.id, 'memory_conflict_detected', { conflicts });
     }
 
     return fullEntry;
@@ -241,20 +210,20 @@ export class MemoryService {
          JOIN memory_entries_index i ON i.id = c.memory_id
          ORDER BY c.updated_at DESC`
       )
-      .all() as CandidateRow[];
+      .all() as Array<import('./memory/types').CandidateRow>;
 
     return rows.map((row) => ({
       id: row.id,
       state: row.candidate_state,
       type: row.type,
       scope: row.scope,
-      content: this.readMemoryBody(row.markdown_path),
+      content: markdown.readMemoryBody(row.markdown_path),
       confidence: row.confidence,
       priority: row.priority,
       source: row.source,
       sourceRef: row.source_ref,
       suggestedAction: row.suggested_action,
-      conflictCount: this.countCandidateConflicts(row.id),
+      conflictCount: db.countCandidateConflicts(this.database, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
@@ -269,7 +238,7 @@ export class MemoryService {
       )
       .all()
       .map((row) => {
-        const conflict = row as {
+        const conflictRow = row as {
           id: string;
           candidate_id: string;
           active_memory_id: string;
@@ -280,21 +249,21 @@ export class MemoryService {
           created_at: string;
         };
         return {
-          id: conflict.id,
-          candidateId: conflict.candidate_id,
-          activeMemoryId: conflict.active_memory_id,
-          type: conflict.type,
-          scope: conflict.scope,
-          reason: conflict.reason,
-          status: conflict.status,
-          createdAt: conflict.created_at
+          id: conflictRow.id,
+          candidateId: conflictRow.candidate_id,
+          activeMemoryId: conflictRow.active_memory_id,
+          type: conflictRow.type,
+          scope: conflictRow.scope,
+          reason: conflictRow.reason,
+          status: conflictRow.status,
+          createdAt: conflictRow.created_at
         };
       });
   }
 
   acceptCandidate(id: string): MemoryEntry {
-    const candidateId = this.requireText(id, 'memory_candidate_id_empty', '候选记忆 ID 不能为空。', '请提供要接受的候选 ID。');
-    const candidate = this.getCandidateRow(candidateId);
+    const candidateId = validation.requireText(id, 'memory_candidate_id_empty', '候选记忆 ID 不能为空。', '请提供要接受的候选 ID。');
+    const candidate = db.getCandidateRow(this.database, candidateId);
     if (candidate.candidate_state === 'rejected') {
       throw new RocDomainError({
         code: 'memory_candidate_rejected',
@@ -306,13 +275,13 @@ export class MemoryService {
     }
 
     const now = new Date().toISOString();
-    const layer = this.targetLayer(candidate);
+    const layer = routing.targetLayer(candidate);
     const activeEntry: MemoryEntry = {
       id: candidate.id,
       layer,
       type: candidate.type,
       scope: candidate.scope,
-      content: this.readMemoryBody(candidate.markdown_path),
+      content: markdown.readMemoryBody(candidate.markdown_path),
       confidence: candidate.confidence,
       priority: candidate.priority,
       status: 'active',
@@ -321,9 +290,9 @@ export class MemoryService {
       createdAt: candidate.created_at,
       updatedAt: now
     };
-    const markdownPath = this.activeMarkdownPath(activeEntry);
+    const markdownPath = routing.activeMarkdownPath(this.paths, activeEntry);
 
-    writeFileSync(markdownPath, this.renderMemoryMarkdown(activeEntry), 'utf8');
+    writeFileSync(markdownPath, markdown.renderMemoryMarkdown(activeEntry), 'utf8');
     this.database.db
       .prepare(
         `UPDATE memory_entries_index
@@ -338,15 +307,18 @@ export class MemoryService {
          WHERE memory_id = ?`
       )
       .run(now, now, candidate.id);
-    this.upsertMemoryFts(activeEntry, markdownPath);
-    this.appendOperation(activeEntry.id, 'candidate_accept', { layer, sourceRef: activeEntry.sourceRef });
+    fts.upsertMemoryFts(this.database, activeEntry, markdownPath);
+    operationsLog.appendOperation(this.database, this.paths, activeEntry.id, 'candidate_accept', {
+      layer,
+      sourceRef: activeEntry.sourceRef
+    });
 
     return activeEntry;
   }
 
   rejectCandidate(id: string): MemoryCandidate {
-    const candidateId = this.requireText(id, 'memory_candidate_id_empty', '候选记忆 ID 不能为空。', '请提供要拒绝的候选 ID。');
-    const candidate = this.getCandidateRow(candidateId);
+    const candidateId = validation.requireText(id, 'memory_candidate_id_empty', '候选记忆 ID 不能为空。', '请提供要拒绝的候选 ID。');
+    const candidate = db.getCandidateRow(this.database, candidateId);
     const now = new Date().toISOString();
     this.database.db
       .prepare(
@@ -356,27 +328,27 @@ export class MemoryService {
       )
       .run(now, now, candidate.id);
     this.database.db.prepare("UPDATE memory_entries_index SET status = 'archived', updated_at = ? WHERE id = ?").run(now, candidate.id);
-    this.deleteMemoryFts(candidate.id);
-    this.appendOperation(candidate.id, 'candidate_reject', { sourceRef: candidate.source_ref });
+    fts.deleteMemoryFts(this.database, candidate.id);
+    operationsLog.appendOperation(this.database, this.paths, candidate.id, 'candidate_reject', { sourceRef: candidate.source_ref });
     return this.listCandidates().filter((item) => item.id === candidate.id)[0];
   }
 
   writeSessionRecall(request: SessionRecallWriteRequest): SessionRecallEntry {
-    const sessionId = this.requireText(
+    const sessionId = validation.requireText(
       request.sessionId,
       'session_id_empty',
       '会话回忆 sessionId 不能为空。',
       '请提供要归档的 session ID。'
     );
-    const title = this.requireText(request.title, 'session_title_empty', '会话标题不能为空。', '请提供会话标题。');
-    const summary = this.requireText(request.summary, 'session_summary_empty', '会话摘要不能为空。', '请提供会话摘要。');
-    const scope = this.requireText(request.scope, 'session_scope_empty', '会话 scope 不能为空。', '请提供会话 scope。');
-    const content = this.requireText(request.content, 'session_content_empty', '会话全文不能为空。', '请提供会话全文。');
-    const sourceRef = this.requireText(request.sourceRef, 'session_source_ref_empty', '会话来源引用不能为空。', '请提供会话来源引用。');
+    const title = validation.requireText(request.title, 'session_title_empty', '会话标题不能为空。', '请提供会话标题。');
+    const summary = validation.requireText(request.summary, 'session_summary_empty', '会话摘要不能为空。', '请提供会话摘要。');
+    const scope = validation.requireText(request.scope, 'session_scope_empty', '会话 scope 不能为空。', '请提供会话 scope。');
+    const content = validation.requireText(request.content, 'session_content_empty', '会话全文不能为空。', '请提供会话全文。');
+    const sourceRef = validation.requireText(request.sourceRef, 'session_source_ref_empty', '会话来源引用不能为空。', '请提供会话来源引用。');
     const now = new Date().toISOString();
     const datePart = now.slice(0, 10);
     const markdownPath = join(this.paths.memoryDir, 'sessions', datePart, `${sessionId}.md`);
-    const markdown = [
+    const markdownContent = [
       '---',
       `id: ${sessionId}`,
       `title: ${title}`,
@@ -394,15 +366,15 @@ export class MemoryService {
     ].join('\n');
 
     mkdirSync(dirname(markdownPath), { recursive: true });
-    writeFileSync(markdownPath, markdown, 'utf8');
+    writeFileSync(markdownPath, markdownContent, 'utf8');
     this.database.db
       .prepare(
         `INSERT OR REPLACE INTO session_recall_index (id, scope, title, summary, source_ref, markdown_path, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(sessionId, scope, title, summary, sourceRef, markdownPath, now);
-    this.upsertSessionFts({ id: sessionId, title, summary, scope, sourceRef, markdownPath, createdAt: now }, content);
-    this.appendOperation(sessionId, 'session_recall_write', { scope, sourceRef });
+    fts.upsertSessionFts(this.database, { id: sessionId, title, summary, scope, sourceRef, markdownPath, createdAt: now }, content);
+    operationsLog.appendOperation(this.database, this.paths, sessionId, 'session_recall_write', { scope, sourceRef });
 
     return {
       id: sessionId,
@@ -416,7 +388,7 @@ export class MemoryService {
   }
 
   sessionSearch(request: SessionSearchRequest): SessionSearchResult {
-    const query = this.requireText(
+    const query = validation.requireText(
       request.query,
       'session_query_empty',
       '会话回忆检索 query 不能为空。',
@@ -424,20 +396,20 @@ export class MemoryService {
     );
     return {
       query,
-      items: this.searchSessionRows({ query, scope: request.scope }).map((row) => ({
+      items: search.searchSessionRows(this.database, { query, scope: request.scope }).map((row) => ({
         id: row.id,
         title: row.title,
         summary: row.summary,
         scope: row.scope,
         sourceRef: row.source_ref,
-        reason: this.hasTable('session_recall_fts') ? 'SQLite FTS5 session match' : 'Markdown session keyword match'
+        reason: db.hasTable(this.database, 'session_recall_fts') ? 'SQLite FTS5 session match' : 'Markdown session keyword match'
       }))
     };
   }
 
   deleteMemory(id: string): MemoryDeleteResult {
-    const memoryId = this.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要删除的记忆 ID。');
-    const row = this.getMemoryRow(memoryId);
+    const memoryId = validation.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要删除的记忆 ID。');
+    const row = db.getMemoryRow(this.database, memoryId);
     if (row.status !== 'active') {
       throw new RocDomainError({
         code: 'memory_delete_invalid_state',
@@ -449,8 +421,8 @@ export class MemoryService {
     }
     const now = new Date().toISOString();
     this.database.db.prepare("UPDATE memory_entries_index SET status = 'archived', updated_at = ? WHERE id = ?").run(now, memoryId);
-    this.deleteMemoryFts(memoryId);
-    this.appendOperation(memoryId, 'memory_delete', { previousStatus: row.status, recoverable: true });
+    fts.deleteMemoryFts(this.database, memoryId);
+    operationsLog.appendOperation(this.database, this.paths, memoryId, 'memory_delete', { previousStatus: row.status, recoverable: true });
     return {
       id: memoryId,
       status: 'archived',
@@ -459,8 +431,8 @@ export class MemoryService {
   }
 
   restoreMemory(id: string): MemoryDeleteResult {
-    const memoryId = this.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要恢复的记忆 ID。');
-    const row = this.getMemoryRow(memoryId);
+    const memoryId = validation.requireText(id, 'memory_id_empty', '记忆 ID 不能为空。', '请提供要恢复的记忆 ID。');
+    const row = db.getMemoryRow(this.database, memoryId);
     if (row.status !== 'archived') {
       throw new RocDomainError({
         code: 'memory_restore_invalid_state',
@@ -477,7 +449,7 @@ export class MemoryService {
       layer: row.layer,
       type: row.type,
       scope: row.scope,
-      content: this.readMemoryBody(row.markdown_path),
+      content: markdown.readMemoryBody(row.markdown_path),
       confidence: row.confidence,
       priority: row.priority,
       status: 'active',
@@ -486,540 +458,15 @@ export class MemoryService {
       createdAt: row.created_at,
       updatedAt: now
     };
-    this.upsertMemoryFts(restoredEntry, row.markdown_path);
-    this.appendOperation(memoryId, 'memory_restore', { previousStatus: row.status });
+    fts.upsertMemoryFts(this.database, restoredEntry, row.markdown_path);
+    operationsLog.appendOperation(this.database, this.paths, memoryId, 'memory_restore', { previousStatus: row.status });
     return {
       id: memoryId,
       status: 'active',
       recoverable: false
     };
   }
-
-  private searchCuratedItems(request: MemorySearchRequest, query: string): MemorySearchResult['items'] {
-    const byId = new Map<string, MemorySearchResult['items'][number]>();
-    for (const item of this.searchMemoryFts(request, query)) {
-      byId.set(item.id, item);
-    }
-    for (const item of this.searchMemoryFallback(request, query)) {
-      if (!byId.has(item.id)) {
-        byId.set(item.id, item);
-      }
-    }
-    return [...byId.values()];
-  }
-
-  private searchMemoryFts(request: MemorySearchRequest, query: string): MemorySearchResult['items'] {
-    if (!this.hasTable('memory_entries_fts')) {
-      return [];
-    }
-
-    const includeCold = request.includeCold === true;
-    const rows =
-      request.scope === undefined
-        ? (this.database.db
-            .prepare(
-              `SELECT i.id, i.layer, i.scope, i.confidence, i.source_ref, i.markdown_path
-               FROM memory_entries_fts f
-               JOIN memory_entries_index i ON i.id = f.memory_id
-               WHERE memory_entries_fts MATCH ?
-                 AND i.status = 'active'
-                 AND (i.layer IN ('hot', 'warm') OR (? = 1 AND i.layer = 'cold'))
-               ORDER BY rank
-               LIMIT 20`
-            )
-            .all(query, includeCold ? 1 : 0) as Array<{
-            id: string;
-            layer: MemoryLayer;
-            scope: string;
-            confidence: number;
-            source_ref: string;
-            markdown_path: string;
-          }>)
-        : (this.database.db
-            .prepare(
-              `SELECT i.id, i.layer, i.scope, i.confidence, i.source_ref, i.markdown_path
-               FROM memory_entries_fts f
-               JOIN memory_entries_index i ON i.id = f.memory_id
-               WHERE memory_entries_fts MATCH ?
-                 AND i.status = 'active'
-                 AND i.scope = ?
-                 AND (i.layer IN ('hot', 'warm') OR (? = 1 AND i.layer = 'cold'))
-               ORDER BY rank
-               LIMIT 20`
-            )
-            .all(query, request.scope, includeCold ? 1 : 0) as Array<{
-            id: string;
-            layer: MemoryLayer;
-            scope: string;
-            confidence: number;
-            source_ref: string;
-            markdown_path: string;
-          }>);
-
-    return rows.map((row) => ({
-      id: row.id,
-      layer: row.layer,
-      scope: row.scope,
-      confidence: row.confidence,
-      sourceRef: row.source_ref,
-      reason: 'SQLite FTS5 keyword match',
-      summary: this.summarize(this.readMemoryBody(row.markdown_path))
-    }));
-  }
-
-  private searchMemoryFallback(request: MemorySearchRequest, query: string): MemorySearchResult['items'] {
-    const includeCold = request.includeCold === true;
-    const rows =
-      request.scope === undefined
-        ? (this.database.db
-            .prepare(
-              `SELECT id, layer, scope, confidence, source_ref, markdown_path
-               FROM memory_entries_index
-               WHERE status = 'active'
-                 AND (layer IN ('hot', 'warm') OR (? = 1 AND layer = 'cold'))
-               ORDER BY updated_at DESC
-               LIMIT 50`
-            )
-            .all(includeCold ? 1 : 0) as Array<{
-            id: string;
-            layer: MemoryLayer;
-            scope: string;
-            confidence: number;
-            source_ref: string;
-            markdown_path: string;
-          }>)
-        : (this.database.db
-            .prepare(
-              `SELECT id, layer, scope, confidence, source_ref, markdown_path
-               FROM memory_entries_index
-               WHERE status = 'active'
-                 AND scope = ?
-                 AND (layer IN ('hot', 'warm') OR (? = 1 AND layer = 'cold'))
-               ORDER BY updated_at DESC
-               LIMIT 50`
-            )
-            .all(request.scope, includeCold ? 1 : 0) as Array<{
-            id: string;
-            layer: MemoryLayer;
-            scope: string;
-            confidence: number;
-            source_ref: string;
-            markdown_path: string;
-          }>);
-
-    const loweredQuery = query.toLocaleLowerCase();
-    return rows
-      .map((row) => ({ row, content: this.readMemoryBody(row.markdown_path) }))
-      .filter(({ row, content }) => `${row.scope}\n${content}`.toLocaleLowerCase().includes(loweredQuery))
-      .map(({ row, content }) => ({
-        id: row.id,
-        layer: row.layer,
-        scope: row.scope,
-        confidence: row.confidence,
-        sourceRef: row.source_ref,
-        reason: 'Markdown fallback keyword match',
-        summary: this.summarize(content)
-      }));
-  }
-
-  private searchSessionItems(request: SessionSearchRequest): MemorySearchResult['items'] {
-    return this.searchSessionRows(request).map((row) => ({
-      id: row.id,
-      layer: 'session',
-      scope: row.scope,
-      confidence: 1,
-      sourceRef: row.source_ref,
-      reason: this.hasTable('session_recall_fts') ? 'SQLite FTS5 session match' : 'Markdown session keyword match',
-      summary: this.summarize(row.summary)
-    }));
-  }
-
-  private searchSessionRows(request: SessionSearchRequest): SessionRecallRow[] {
-    const query = this.requireText(
-      request.query,
-      'session_query_empty',
-      '会话回忆检索 query 不能为空。',
-      '请输入要检索的会话关键词。'
-    );
-    const rowsById = new Map<string, SessionRecallRow>();
-
-    if (this.hasTable('session_recall_fts')) {
-      const ftsRows =
-        request.scope === undefined
-          ? (this.database.db
-              .prepare(
-                `SELECT s.id, s.scope, s.title, s.summary, s.source_ref, s.markdown_path, s.created_at
-                 FROM session_recall_fts f
-                 JOIN session_recall_index s ON s.id = f.session_id
-                 WHERE session_recall_fts MATCH ?
-                 ORDER BY rank
-                 LIMIT 20`
-              )
-              .all(query) as SessionRecallRow[])
-          : (this.database.db
-              .prepare(
-                `SELECT s.id, s.scope, s.title, s.summary, s.source_ref, s.markdown_path, s.created_at
-                 FROM session_recall_fts f
-                 JOIN session_recall_index s ON s.id = f.session_id
-                 WHERE session_recall_fts MATCH ?
-                   AND s.scope = ?
-                 ORDER BY rank
-                 LIMIT 20`
-              )
-              .all(query, request.scope) as SessionRecallRow[]);
-      for (const row of ftsRows) {
-        rowsById.set(row.id, row);
-      }
-    }
-
-    const fallbackRows =
-      request.scope === undefined
-        ? (this.database.db
-            .prepare(
-              `SELECT id, scope, title, summary, source_ref, markdown_path, created_at
-               FROM session_recall_index
-               ORDER BY created_at DESC
-               LIMIT 50`
-            )
-            .all() as SessionRecallRow[])
-        : (this.database.db
-            .prepare(
-              `SELECT id, scope, title, summary, source_ref, markdown_path, created_at
-               FROM session_recall_index
-               WHERE scope = ?
-               ORDER BY created_at DESC
-               LIMIT 50`
-            )
-            .all(request.scope) as SessionRecallRow[]);
-    const loweredQuery = query.toLocaleLowerCase();
-    for (const row of fallbackRows) {
-      const content = this.readMemoryBody(row.markdown_path);
-      const searchable = `${row.scope}\n${row.title}\n${row.summary}\n${content}`.toLocaleLowerCase();
-      if (searchable.includes(loweredQuery) && !rowsById.has(row.id)) {
-        rowsById.set(row.id, row);
-      }
-    }
-
-    return [...rowsById.values()];
-  }
-
-  private layerStats(layer: MemoryLayer, directory: string): { entries: number; characters: number; path: string } {
-    const rows = this.database.db
-      .prepare('SELECT markdown_path FROM memory_entries_index WHERE layer = ? AND status != ?')
-      .all(layer, 'archived') as Array<{ markdown_path: string }>;
-
-    let characters = 0;
-    for (const row of rows) {
-      if (existsSync(row.markdown_path)) {
-        characters += readFileSync(row.markdown_path, 'utf8').length;
-      }
-    }
-
-    if (rows.length === 0 && existsSync(directory)) {
-      if (layer === 'hot') {
-        const hotPath = join(directory, 'hot_memory.md');
-        characters = existsSync(hotPath) ? readFileSync(hotPath, 'utf8').length : 0;
-      }
-    }
-
-    return { entries: rows.length, characters, path: directory };
-  }
-
-  private appendOperation(memoryId: string | null, operationType: string, payload: unknown): void {
-    const now = new Date().toISOString();
-    const operationId = `memop_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
-    this.database.db
-      .prepare(
-        `INSERT INTO memory_operations (id, memory_id, operation_type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(operationId, memoryId, operationType, JSON.stringify(payload), now);
-    appendFileSync(
-      join(this.paths.logsDir, 'memory_operations.log'),
-      `${JSON.stringify({ id: operationId, memoryId, operationType, payload, createdAt: now })}\n`,
-      'utf8'
-    );
-  }
-
-  private validateCandidateInput(entry: Omit<MemoryEntry, 'id' | 'layer' | 'status' | 'createdAt' | 'updatedAt'>): void {
-    this.requireText(entry.type, 'memory_type_empty', '记忆 type 不能为空。', '请选择记忆类型。');
-    this.requireText(entry.scope, 'memory_scope_empty', '记忆 scope 不能为空。', '请选择记忆作用范围。');
-    this.requireText(entry.content, 'memory_content_empty', '记忆内容不能为空。', '请输入要保存的记忆内容。');
-    this.requireText(entry.priority, 'memory_priority_empty', '记忆 priority 不能为空。', '请选择记忆优先级。');
-    this.requireText(entry.source, 'memory_source_empty', '记忆 source 不能为空。', '请提供记忆来源。');
-    this.requireText(entry.sourceRef, 'memory_source_ref_empty', '记忆 sourceRef 不能为空。', '请提供可追溯来源。');
-    if (entry.confidence < 0 || entry.confidence > 1) {
-      throw new RocDomainError({
-        code: 'memory_confidence_invalid',
-        message: '记忆 confidence 必须在 0 到 1 之间。',
-        category: 'validation',
-        retryable: false,
-        userAction: '请使用 0 到 1 之间的置信度。'
-      });
-    }
-  }
-
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
-  }
-
-  private detectConflicts(entry: MemoryEntry): Array<{ activeMemoryId: string; reason: string }> {
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, markdown_path
-         FROM memory_entries_index
-         WHERE status = 'active' AND type = ? AND scope = ?`
-      )
-      .all(entry.type, entry.scope) as Array<{ id: string; markdown_path: string }>;
-    const conflicts: Array<{ activeMemoryId: string; reason: string }> = [];
-    for (const row of rows) {
-      const activeContent = this.readMemoryBody(row.markdown_path);
-      if (this.isConflicting(activeContent, entry.content)) {
-        conflicts.push({
-          activeMemoryId: row.id,
-          reason: 'same_type_scope_contradiction_or_duplicate'
-        });
-      }
-    }
-    return conflicts;
-  }
-
-  private isConflicting(activeContent: string, candidateContent: string): boolean {
-    const activeNormalized = this.normalizeForConflict(activeContent);
-    const candidateNormalized = this.normalizeForConflict(candidateContent);
-    if (activeNormalized.length === 0 || candidateNormalized.length === 0) {
-      return false;
-    }
-    if (activeNormalized === candidateNormalized) {
-      return true;
-    }
-    const activeNegation = this.hasNegation(activeContent);
-    const candidateNegation = this.hasNegation(candidateContent);
-    return activeNegation !== candidateNegation && this.tokenOverlap(activeContent, candidateContent) >= 0.6;
-  }
-
-  private normalizeForConflict(content: string): string {
-    return content
-      .replace(/^---[\s\S]*?---/m, '')
-      .replaceAll('不', '')
-      .replaceAll('不要', '')
-      .replaceAll('不能', '')
-      .replace(/\bnot\b/g, '')
-      .replace(/\bdoes\s+not\b/g, '')
-      .replace(/[，。！？、；：,.!?:;\s]/g, '')
-      .toLocaleLowerCase();
-  }
-
-  private hasNegation(content: string): boolean {
-    return content.includes('不') || content.toLocaleLowerCase().includes('not ');
-  }
-
-  private tokenOverlap(left: string, right: string): number {
-    const leftTokens = this.significantTokens(left);
-    const rightTokens = this.significantTokens(right);
-    if (leftTokens.length === 0 || rightTokens.length === 0) {
-      return 0;
-    }
-    const rightSet = new Set(rightTokens);
-    const overlapCount = leftTokens.filter((token) => rightSet.has(token)).length;
-    return overlapCount / Math.max(leftTokens.length, rightTokens.length);
-  }
-
-  private significantTokens(content: string): string[] {
-    return content
-      .toLocaleLowerCase()
-      .replace(/[，。！？、；：,.!?:;()\[\]{}]/g, ' ')
-      .split(/\s+/)
-      .filter((token) => token.length > 2 && token !== 'not' && token !== 'does');
-  }
-
-  private getMemoryRow(id: string): MemoryIndexRow {
-    const row = this.database.db
-      .prepare(
-        `SELECT id, layer, type, scope, status, confidence, priority, source, source_ref, markdown_path, created_at, updated_at
-         FROM memory_entries_index
-         WHERE id = ?`
-      )
-      .get(id) as MemoryIndexRow | undefined;
-
-    if (row === undefined) {
-      throw new RocDomainError({
-        code: 'memory_not_found',
-        message: `找不到记忆条目 ${id}。`,
-        category: 'not_found',
-        retryable: false,
-        userAction: '请刷新记忆中心或检查记忆 ID。'
-      });
-    }
-    return row;
-  }
-
-  private getCandidateRow(id: string): CandidateRow {
-    const row = this.database.db
-      .prepare(
-        `SELECT i.id, i.layer, i.type, i.scope, i.status, i.confidence, i.priority, i.source, i.source_ref, i.markdown_path,
-                i.created_at, i.updated_at, c.state AS candidate_state, c.suggested_action
-         FROM memory_candidates c
-         JOIN memory_entries_index i ON i.id = c.memory_id
-         WHERE c.memory_id = ?`
-      )
-      .get(id) as CandidateRow | undefined;
-
-    if (row === undefined) {
-      throw new RocDomainError({
-        code: 'memory_candidate_not_found',
-        message: `找不到候选记忆 ${id}。`,
-        category: 'not_found',
-        retryable: false,
-        userAction: '请刷新候选记忆列表。'
-      });
-    }
-    return row;
-  }
-
-  private countCandidateConflicts(candidateId: string): number {
-    const row = this.database.db
-      .prepare("SELECT COUNT(*) AS count FROM memory_conflicts WHERE candidate_id = ? AND status = 'open'")
-      .get(candidateId) as { count: number };
-    return row.count;
-  }
-
-  private targetLayer(row: CandidateRow): MemoryLayer {
-    const canEnterHot =
-      row.scope === 'global' &&
-      (row.priority === 'critical' || row.priority === 'high') &&
-      (row.source === 'user_explicit' || row.source === 'consolidation');
-    return canEnterHot ? 'hot' : 'warm';
-  }
-
-  private activeMarkdownPath(entry: MemoryEntry): string {
-    if (entry.layer === 'hot') {
-      return join(this.paths.memoryDir, 'hot', `${entry.id}.md`);
-    }
-    if (entry.layer === 'warm') {
-      return join(this.paths.memoryDir, 'warm', this.warmFileForType(entry.type));
-    }
-    if (entry.layer === 'cold') {
-      return join(this.paths.memoryDir, 'cold', 'archive', `${entry.id}.md`);
-    }
-    return join(this.paths.memoryDir, entry.layer, `${entry.id}.md`);
-  }
-
-  private warmFileForType(type: MemoryType): string {
-    if (type === 'preference') {
-      return 'preferences.md';
-    }
-    if (type === 'feedback') {
-      return 'feedback.md';
-    }
-    if (type === 'project_context') {
-      return 'project_context.md';
-    }
-    if (type === 'process_skill') {
-      return 'process_skills.md';
-    }
-    return 'knowledge_notes.md';
-  }
-
-  private upsertMemoryFts(entry: MemoryEntry, markdownPath: string): void {
-    if (!this.hasTable('memory_entries_fts')) {
-      return;
-    }
-    const content = this.readMemoryBody(markdownPath);
-    this.deleteMemoryFts(entry.id);
-    this.database.db
-      .prepare(
-        `INSERT INTO memory_entries_fts (memory_id, content, summary, scope, layer)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(entry.id, content, this.summarize(content), entry.scope, entry.layer);
-  }
-
-  private deleteMemoryFts(id: string): void {
-    if (!this.hasTable('memory_entries_fts')) {
-      return;
-    }
-    this.database.db.prepare('DELETE FROM memory_entries_fts WHERE memory_id = ?').run(id);
-  }
-
-  private upsertSessionFts(entry: SessionRecallEntry, content: string): void {
-    if (!this.hasTable('session_recall_fts')) {
-      return;
-    }
-    this.database.db.prepare('DELETE FROM session_recall_fts WHERE session_id = ?').run(entry.id);
-    this.database.db
-      .prepare(
-        `INSERT INTO session_recall_fts (session_id, title, summary, content, scope)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(entry.id, entry.title, entry.summary, content, entry.scope);
-  }
-
-  private searchDegradedReason(): string {
-    const fullTextStatus = this.hasTable('memory_entries_fts') ? 'FTS5 is available.' : 'FTS5 is unavailable.';
-    return `Vector index is not configured. ${fullTextStatus} Search falls back to deterministic local indexes.`;
-  }
-
-  private summarize(content: string): string {
-    return content.replace(/\s+/g, ' ').trim().slice(0, 180);
-  }
-
-  private renderMemoryMarkdown(entry: MemoryEntry): string {
-    return [
-      '---',
-      `id: ${entry.id}`,
-      `type: ${entry.type}`,
-      `scope: ${entry.scope}`,
-      `layer: ${entry.layer}`,
-      `confidence: ${entry.confidence}`,
-      `priority: ${entry.priority}`,
-      `status: ${entry.status}`,
-      `source: ${entry.source}`,
-      `source_ref: ${entry.sourceRef}`,
-      `created_at: ${entry.createdAt}`,
-      `updated_at: ${entry.updatedAt}`,
-      '---',
-      '',
-      entry.content,
-      ''
-    ].join('\n');
-  }
-
-  private readMemoryBody(markdownPath: string): string {
-    if (!existsSync(markdownPath)) {
-      return '';
-    }
-    const content = readFileSync(markdownPath, 'utf8');
-    if (!content.startsWith('---')) {
-      return content;
-    }
-    const closingIndex = content.indexOf('\n---', 3);
-    if (closingIndex === -1) {
-      return content;
-    }
-    return content.slice(closingIndex + 4).trim();
-  }
-
-  private hasTable(table: string): boolean {
-    const row = this.database.db
-      .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table') AND name = ?")
-      .get(table) as { name: string } | undefined;
-    return row !== undefined;
-  }
-
-  private ensureFile(path: string, content: string): void {
-    if (!existsSync(path)) {
-      writeFileSync(path, content, 'utf8');
-    }
-  }
 }
+
+// Unused import suppressor to keep MemoryLayer / RocPaths / DatabaseService surface available for downstream typing.
+export type { MemoryLayer, RocPaths };

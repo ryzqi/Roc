@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type React from 'react';
+import { modalBackdropFade, modalPop, modalPopTransition } from '../animations';
 
 export function SettingsModal({
   children,
@@ -20,34 +22,46 @@ export function SettingsModal({
   }, [onClose]);
 
   return (
-    <div
-      className="settings-modal-backdrop"
-      data-testid="settings-modal-backdrop"
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className="settings-modal"
-        data-testid="settings-modal"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="设置"
+    <AnimatePresence>
+      <motion.div
+        animate="animate"
+        className="settings-modal-backdrop"
+        data-testid="settings-modal-backdrop"
+        exit="exit"
+        initial="initial"
+        onClick={onClose}
+        role="presentation"
+        transition={{ duration: 0.16 }}
+        variants={modalBackdropFade}
       >
-        <header className="settings-modal-titlebar">
-          <span className="settings-modal-title">设置</span>
-          <button
-            className="settings-modal-close"
-            data-testid="settings-modal-close"
-            onClick={onClose}
-            type="button"
-            aria-label="关闭设置"
-          >
-            ×
-          </button>
-        </header>
-        <div className="settings-modal-body">{children}</div>
-      </div>
-    </div>
+        <motion.div
+          animate="animate"
+          aria-label="设置"
+          aria-modal="true"
+          className="settings-modal"
+          data-testid="settings-modal"
+          exit="exit"
+          initial="initial"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+          transition={modalPopTransition}
+          variants={modalPop}
+        >
+          <header className="settings-modal-titlebar">
+            <span className="settings-modal-title">设置</span>
+            <button
+              className="settings-modal-close"
+              data-testid="settings-modal-close"
+              onClick={onClose}
+              type="button"
+              aria-label="关闭设置"
+            >
+              ×
+            </button>
+          </header>
+          <div className="settings-modal-body">{children}</div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
