@@ -37,91 +37,93 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       variants={variants}
     >
       <article className={bubbleClassName}>
-        {message.content.length === 0
-          ? null
-          : isAssistant
-            ? <MarkdownView text={message.content} />
-            : <p>{message.content}</p>}
-        {message.reasoning === null ? null : (
-          <details
-            className="chat-bubble-reasoning"
-            data-testid="chat-message-reasoning"
-            open={message.isStreaming ? true : undefined}
-          >
-            <summary>
-              <span className={message.isStreaming ? 'reasoning-shimmer' : undefined}>思考过程</span>
-            </summary>
-            <div className="reasoning-body">
-              <MarkdownView text={message.reasoning} />
-            </div>
-          </details>
-        )}
-        {approval === null ? null : (
-          <motion.div
-            className="chat-approval-card"
-            data-testid="chat-approval-card"
-            initial="initial"
-            animate="animate"
-            variants={approvalCardEnter}
-            transition={approvalCardTransition}
-          >
-            <header className="chat-approval-head">
-              <span className="chat-approval-dot" aria-hidden="true" />
-              等待审批
-              <span className="chat-approval-count">{approval.actionRequests.length}</span>
-            </header>
-            <ul className="chat-approval-actions">
-              {approval.actionRequests.map((request, index) => {
-                const reviewConfig = approval.reviewConfigs.find((config) => config.actionName === request.name);
-                return (
-                  <li key={`${request.name}-${index}`} className="chat-approval-item">
-                    <span className="chat-approval-tool" data-testid="chat-approval-tool-name">{request.name}</span>
-                    <pre className="chat-approval-args" data-testid="chat-approval-tool-args">{JSON.stringify(request.args, null, 2)}</pre>
-                    <span className="chat-approval-decisions" data-testid="chat-approval-decisions">
-                      {(reviewConfig?.allowedDecisions ?? []).join(' / ')}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="chat-approval-buttons">
-              <button
-                type="button"
-                className="approval-btn approval-btn--approve"
-                onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'approve' })}
+        {isAssistant ? (
+          <div className="chat-assistant-content" data-testid="chat-assistant-content">
+            {message.content.length === 0 ? null : <MarkdownView text={message.content} />}
+            {message.reasoning === null ? null : (
+              <details
+                className="chat-bubble-reasoning"
+                data-testid="chat-message-reasoning"
+                open={message.isStreaming ? true : undefined}
               >
-                approve
-              </button>
-              <button
-                type="button"
-                className="approval-btn approval-btn--reject"
-                onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'reject' })}
+                <summary>
+                  <span className={message.isStreaming ? 'reasoning-shimmer' : undefined}>思考过程</span>
+                </summary>
+                <div className="reasoning-body">
+                  <MarkdownView text={message.reasoning} />
+                </div>
+              </details>
+            )}
+            {approval === null ? null : (
+              <motion.div
+                className="chat-approval-card"
+                data-testid="chat-approval-card"
+                initial="initial"
+                animate="animate"
+                variants={approvalCardEnter}
+                transition={approvalCardTransition}
               >
-                reject
-              </button>
-              {approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
-                <button
-                  type="button"
-                  className="approval-btn approval-btn--edit"
-                  onClick={() =>
-                    onApprovalDecision?.(approval.interruptId, {
-                      type: 'edit',
-                      editedAction: approval.actionRequests[0] ?? {
-                        name: 'unknown',
-                        args: {}
+                <header className="chat-approval-head">
+                  <span className="chat-approval-dot" aria-hidden="true" />
+                  等待审批
+                  <span className="chat-approval-count">{approval.actionRequests.length}</span>
+                </header>
+                <ul className="chat-approval-actions">
+                  {approval.actionRequests.map((request, index) => {
+                    const reviewConfig = approval.reviewConfigs.find((config) => config.actionName === request.name);
+                    return (
+                      <li key={`${request.name}-${index}`} className="chat-approval-item">
+                        <span className="chat-approval-tool" data-testid="chat-approval-tool-name">{request.name}</span>
+                        <pre className="chat-approval-args" data-testid="chat-approval-tool-args">{JSON.stringify(request.args, null, 2)}</pre>
+                        <span className="chat-approval-decisions" data-testid="chat-approval-decisions">
+                          {(reviewConfig?.allowedDecisions ?? []).join(' / ')}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="chat-approval-buttons">
+                  <button
+                    type="button"
+                    className="approval-btn approval-btn--approve"
+                    onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'approve' })}
+                  >
+                    approve
+                  </button>
+                  <button
+                    type="button"
+                    className="approval-btn approval-btn--reject"
+                    onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'reject' })}
+                  >
+                    reject
+                  </button>
+                  {approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
+                    <button
+                      type="button"
+                      className="approval-btn approval-btn--edit"
+                      onClick={() =>
+                        onApprovalDecision?.(approval.interruptId, {
+                          type: 'edit',
+                          editedAction: approval.actionRequests[0] ?? {
+                            name: 'unknown',
+                            args: {}
+                          }
+                        })
                       }
-                    })
-                  }
-                >
-                  edit
-                </button>
-              ) : null}
-            </div>
-          </motion.div>
+                    >
+                      edit
+                    </button>
+                  ) : null}
+                </div>
+              </motion.div>
+            )}
+            {message.isStreaming ? (
+              <span className="chat-typing-cursor" aria-hidden="true" />
+            ) : null}
+          </div>
+        ) : (
+          <p>{message.content}</p>
         )}
-        {message.isStreaming && isAssistant ? (
-          <span className="chat-typing-cursor" aria-hidden="true" />
-        ) : null}
       </article>
     </motion.div>
   );

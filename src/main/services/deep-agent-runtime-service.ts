@@ -37,6 +37,16 @@ import {
   type RuntimeSubagent
 } from './deep-agent';
 
+type ReasoningSource =
+  | {
+      kind: 'stream';
+      stream: AsyncIterable<unknown>;
+    }
+  | {
+      kind: 'values';
+      values: string[];
+    };
+
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
@@ -505,7 +515,7 @@ export class DeepAgentRuntimeService {
   ): Promise<void> {
     for await (const message of messages) {
       const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
-      const reasoningStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'reasoning'));
+      const reasoningSource = this.readReasoningSource(message);
       const tasks: Array<Promise<void>> = [];
 
       if (textStream !== null) {
@@ -532,20 +542,111 @@ export class DeepAgentRuntimeService {
         );
       }
 
-      if (reasoningStream !== null) {
+      if (reasoningSource !== null) {
         tasks.push(
-          this.consumeStringStream(reasoningStream, (delta) => {
-            reasoningChunks.push(delta);
-            this.emit({
-              type: 'reasoning_delta',
-              runId: context.runId,
-              delta
-            });
-          })
+          this.consumeReasoningSource(reasoningSource, context, reasoningChunks)
         );
       }
 
       await Promise.all(tasks);
+    }
+  }
+
+  private readReasoningSource(message: unknown): ReasoningSource | null {
+    const standardReasoning = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoning'));
+    if (standardReasoning !== null) {
+      return standardReasoning;
+    }
+
+    const directFallback = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoning_content'));
+    if (directFallback !== null) {
+      return directFallback;
+    }
+    const camelCaseFallback = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoningContent'));
+    if (camelCaseFallback !== null) {
+      return camelCaseFallback;
+    }
+
+    const blockValues = this.readReasoningBlockValues(recordUtils.readRecordValue(message, 'content'));
+    if (blockValues.length === 0) {
+      return null;
+    }
+    return {
+      kind: 'values',
+      values: blockValues
+    };
+  }
+
+  private readReasoningFallbackValue(value: unknown): ReasoningSource | null {
+    const stream = recordUtils.readAsyncIterable(value);
+    if (stream !== null) {
+      return {
+        kind: 'stream',
+        stream
+      };
+    }
+    const text = recordUtils.readNonEmptyString(value);
+    if (text === null) {
+      return null;
+    }
+    return {
+      kind: 'values',
+      values: [text]
+    };
+  }
+
+  private readReasoningBlockValues(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.flatMap((block) => this.readReasoningBlockText(block));
+  }
+
+  private readReasoningBlockText(block: unknown): string[] {
+    if (!recordUtils.isRecord(block)) {
+      return [];
+    }
+    const type = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'type'));
+    if (type !== 'reasoning' && type !== 'reasoning_content') {
+      return [];
+    }
+
+    const values: string[] = [];
+    const text = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'text'));
+    if (text !== null) {
+      values.push(text);
+    }
+    const reasoningText = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'reasoning_content'));
+    if (reasoningText !== null) {
+      values.push(reasoningText);
+    }
+    return values;
+  }
+
+  private async consumeReasoningSource(
+    source: ReasoningSource,
+    context: RunExecutionContext,
+    reasoningChunks: string[]
+  ): Promise<void> {
+    if (source.kind === 'stream') {
+      await this.consumeStringStream(source.stream, (delta) => {
+        reasoningChunks.push(delta);
+        this.emit({
+          type: 'reasoning_delta',
+          runId: context.runId,
+          delta
+        });
+      });
+      return;
+    }
+
+    for (const delta of source.values) {
+      reasoningChunks.push(delta);
+      this.emit({
+        type: 'reasoning_delta',
+        runId: context.runId,
+        delta
+      });
     }
   }
 

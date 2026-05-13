@@ -1882,15 +1882,21 @@ try {
         resultAboveInput: false,
         userAlignedRight: false,
         assistantAlignedLeft: false,
-        assistantBubbleUnframed: false
+        assistantBubbleUnframed: false,
+        assistantContentAnchoredLeft: false,
+        assistantBubbleFitsContent: false,
+        assistantBubbleNarrowerThanRow: false
       };
     }
     const inputRect = input.getBoundingClientRect();
     const userRect = latestUser.getBoundingClientRect();
     const assistantRect = latestAssistant.getBoundingClientRect();
     const assistantBubble = latestAssistant.querySelector('.chat-bubble--assistant');
+    const assistantContent = latestAssistant.querySelector('[data-testid="chat-assistant-content"]');
     const assistantBubbleStyle =
       assistantBubble instanceof HTMLElement ? window.getComputedStyle(assistantBubble) : null;
+    const assistantBubbleRect = assistantBubble instanceof HTMLElement ? assistantBubble.getBoundingClientRect() : null;
+    const assistantContentRect = assistantContent instanceof HTMLElement ? assistantContent.getBoundingClientRect() : null;
     return {
       resultAboveInput: userRect.bottom <= inputRect.top && assistantRect.bottom <= inputRect.top,
       userAlignedRight: window.getComputedStyle(latestUser).justifyContent === 'flex-end',
@@ -1899,7 +1905,15 @@ try {
         assistantBubbleStyle !== null &&
         assistantBubbleStyle.backgroundColor === 'rgba(0, 0, 0, 0)' &&
         assistantBubbleStyle.borderTopWidth === '0px' &&
-        assistantBubbleStyle.boxShadow === 'none'
+        assistantBubbleStyle.boxShadow === 'none',
+      assistantContentAnchoredLeft:
+        assistantContentRect !== null && Math.abs(assistantContentRect.left - assistantRect.left) <= 4,
+      assistantBubbleFitsContent:
+        assistantBubbleRect !== null &&
+        assistantContentRect !== null &&
+        Math.abs(assistantBubbleRect.width - assistantContentRect.width) <= 4,
+      assistantBubbleNarrowerThanRow:
+        assistantBubbleRect !== null && assistantBubbleRect.width <= assistantRect.width - 24
     };
   });
   const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
@@ -2820,7 +2834,10 @@ try {
       chatResultLayoutEvidence.resultAboveInput &&
       chatResultLayoutEvidence.userAlignedRight &&
       chatResultLayoutEvidence.assistantAlignedLeft &&
-      chatResultLayoutEvidence.assistantBubbleUnframed,
+      chatResultLayoutEvidence.assistantBubbleUnframed &&
+      chatResultLayoutEvidence.assistantContentAnchoredLeft &&
+      chatResultLayoutEvidence.assistantBubbleFitsContent &&
+      chatResultLayoutEvidence.assistantBubbleNarrowerThanRow,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === submittedChatPrompt &&
       taskCapabilityEvidence.threadGoal === submittedChatPrompt &&

@@ -218,6 +218,137 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('emits reasoning deltas from reasoning_content when the standard reasoning stream is missing', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          reasoning_content: 'fallback thinking'
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the fallback reasoning only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['fallback thinking']);
+  });
+
+  it('prefers the standard reasoning stream over reasoning_content fallback when both exist', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          reasoning: createAsyncIterable(['standard thinking']),
+          reasoning_content: createAsyncIterable(['fallback thinking'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the standard reasoning only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['standard thinking']);
+  });
+
+  it('extracts only explicit reasoning blocks from fallback content blocks', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          content: [
+            {
+              type: 'text',
+              text: 'should stay out of reasoning'
+            },
+            {
+              type: 'reasoning',
+              text: 'block thinking'
+            }
+          ]
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    const started = await runtime.startRun({
+      input: 'Reply with the explicit reasoning block only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    expect(started.runId).toBeTruthy();
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['block thinking']);
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+        .map((event) => event.delta)
+    ).toEqual(['Final answer']);
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: 'Final answer'
+    });
+  });
+
   it('passes skills to deepagents and keeps skill storage under the user .roc directory', async () => {
     expect(services.paths.skillsDir).toBe(join(userHome, '.roc', 'skills'));
 
