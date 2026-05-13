@@ -1,18 +1,18 @@
 :root {
-  --bg: #f6f8fb;
-  --bg-soft: #fafbfd;
-  --surface: rgba(255, 255, 255, 0.88);
+  --bg: #fcfcfd;
+  --bg-soft: #ffffff;
+  --surface: #ffffff;
   --surface-strong: #ffffff;
   --surface-card: #ffffff;
-  --surface-card-hover: #fbfcfe;
+  --surface-card-hover: #fafbfc;
   --surface-translucent: rgba(255, 255, 255, 0.92);
-  --line: #dbe4f0;
-  --line-strong: #ccd6e4;
-  --line-soft: rgba(216, 224, 236, 0.94);
-  --text: #26364d;
-  --muted: #7485a1;
-  --subtle: #93a1b7;
-  --ink: #1a2740;
+  --line: #e5e7eb;
+  --line-strong: #d1d5db;
+  --line-soft: #f1f3f5;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --subtle: #9ca3af;
+  --ink: #111827;
   --blue: #3d66b0;
   --green: #1a8a61;
   --amber: #b37a19;
@@ -29,7 +29,7 @@
   --trend-warn-strong: #d09a3e;
   --trend-bad: #c04444;
   --trend-bad-strong: #e26565;
-  --bg-gradient: linear-gradient(180deg, #fcfdff 0%, #f5f7fb 100%);
+  --bg-gradient: linear-gradient(180deg, #fcfcfd 0%, #f7f8fa 100%);
   --shadow-soft: 0 24px 60px rgba(20, 40, 80, 0.08);
   --shadow-panel: 0 22px 54px rgba(25, 46, 88, 0.16);
   --shadow-card: 0 6px 18px rgba(20, 40, 80, 0.06);
@@ -56,9 +56,9 @@
   --transition-fast: var(--duration-fast) var(--easing-standard);
 
   /* 聊天气泡 */
-  --chat-bubble-radius: 20px;
-  --chat-bubble-radius-tight: 8px;
-  --chat-gap: 18px;
+  --chat-bubble-radius: 14px;
+  --chat-bubble-radius-tight: 14px;
+  --chat-gap: 28px;
   --chat-avatar-size: 30px;
 
   /* 玻璃质感 */
@@ -69,18 +69,19 @@
   --glass-ring: rgba(120, 144, 184, 0.18);
 
   /* 气泡专属 */
-  --chat-bubble-assistant-bg: rgba(248, 250, 254, 0.78);
-  --chat-bubble-assistant-border: rgba(214, 224, 240, 0.7);
-  --chat-bubble-assistant-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 6px 18px rgba(20, 40, 80, 0.05);
-  --chat-bubble-user-bg: linear-gradient(140deg, var(--accent) 0%, #4f74b8 100%);
-  --chat-bubble-user-shadow: 0 14px 32px rgba(45, 74, 121, 0.18);
+  --chat-bubble-assistant-bg: transparent;
+  --chat-bubble-assistant-border: var(--line);
+  --chat-bubble-assistant-shadow: none;
+  --chat-bubble-user-bg: #f1f3f5;
+  --chat-bubble-user-color: var(--text);
+  --chat-bubble-user-shadow: none;
 
   /* 代码块 */
-  --code-surface: #0f1726;
-  --code-surface-soft: rgba(15, 23, 38, 0.04);
-  --code-text: #d8e1f0;
-  --code-header-bg: rgba(255, 255, 255, 0.04);
-  --code-header-text: #8a9bb8;
+  --code-surface: #f7f8fa;
+  --code-surface-soft: rgba(31, 41, 55, 0.04);
+  --code-text: #1f2937;
+  --code-header-bg: #fafbfc;
+  --code-header-text: #6b7280;
   color: var(--text);
   background: var(--bg);
   font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;

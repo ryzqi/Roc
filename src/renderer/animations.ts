@@ -38,13 +38,13 @@ export const bubbleEnter: Variants = {
 };
 
 export const userBubbleEnter: Variants = {
-  initial: { opacity: 0, y: 6, x: 8 },
-  animate: { opacity: 1, y: 0, x: 0 }
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0 }
 };
 
 export const assistantBubbleEnter: Variants = {
-  initial: { opacity: 0, y: 6, x: -6 },
-  animate: { opacity: 1, y: 0, x: 0 }
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0 }
 };
 
 export const bubbleEnterTransition: Transition = {

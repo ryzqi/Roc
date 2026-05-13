@@ -36,7 +36,6 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       transition={bubbleEnterTransition}
       variants={variants}
     >
-      {isAssistant ? <span className="chat-avatar chat-avatar--assistant" aria-hidden="true" /> : null}
       <article className={bubbleClassName}>
         {message.content.length === 0
           ? null

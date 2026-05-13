@@ -13,7 +13,7 @@
 @keyframes chat-token-fade {
   from {
     opacity: 0;
-    transform: translateY(2px);
+    transform: translateY(1px);
   }
   to {
     opacity: 1;
@@ -57,11 +57,11 @@
 /* 流式打字光标 */
 .chat-typing-cursor {
   display: inline-block;
-  width: 2px;
+  width: 1.5px;
   height: 1em;
   margin-left: 3px;
   vertical-align: -0.15em;
-  background: var(--accent);
+  background: var(--ink);
   border-radius: 1px;
   animation: chat-cursor-blink 1.2s ease-in-out infinite;
 }
