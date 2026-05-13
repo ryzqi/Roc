@@ -25,6 +25,53 @@ describe('record-utils reasoning helpers', () => {
     ).resolves.toBe('block thinking');
   });
 
+  it('reads reasoning text from snake_case content blocks', async () => {
+    await expect(
+      readReasoningFromMessageOutput({
+        content_blocks: [
+          {
+            type: 'reasoning',
+            reasoning: 'snake block thinking'
+          }
+        ]
+      })
+    ).resolves.toBe('snake block thinking');
+  });
+
+  it('reads OpenAI Responses reasoning summaries from additional kwargs', async () => {
+    await expect(
+      readReasoningFromMessageOutput({
+        additional_kwargs: {
+          reasoning: {
+            summary: [
+              {
+                type: 'summary_text',
+                text: 'summary one'
+              },
+              {
+                type: 'summary_text',
+                text: 'summary two'
+              }
+            ]
+          }
+        }
+      })
+    ).resolves.toBe('summary onesummary two');
+  });
+
+  it('does not read plain text content blocks as reasoning', async () => {
+    await expect(
+      readReasoningFromMessageOutput({
+        contentBlocks: [
+          {
+            type: 'text',
+            text: 'plain answer'
+          }
+        ]
+      })
+    ).resolves.toBeNull();
+  });
+
   it('reads reasoning block text from thinking blocks', () => {
     expect(
       readReasoningBlockText({

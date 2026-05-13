@@ -256,6 +256,142 @@ describe('DeepAgentRuntimeService', () => {
     ).toEqual(['fallback thinking']);
   });
 
+  it('emits reasoning deltas from LangChain contentBlocks when the standard reasoning stream is missing', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          contentBlocks: [
+            {
+              type: 'text',
+              text: 'should stay out of reasoning'
+            },
+            {
+              type: 'reasoning',
+              reasoning: 'content block thinking'
+            }
+          ]
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the content block reasoning only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['content block thinking']);
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+        .map((event) => event.delta)
+    ).toEqual(['Final answer']);
+  });
+
+  it('emits reasoning deltas from OpenAI Responses reasoning summaries in additional kwargs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          additional_kwargs: {
+            reasoning: {
+              summary: [
+                {
+                  type: 'summary_text',
+                  text: 'summary thinking'
+                }
+              ]
+            }
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the OpenAI reasoning summary only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['summary thinking']);
+  });
+
+  it('emits reasoning deltas from additional_kwargs reasoning_content on streamed messages', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          additional_kwargs: {
+            reasoning_content: 'additional kwargs thinking'
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the provider reasoning content only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['additional kwargs thinking']);
+  });
+
   it('emits reasoning deltas from the final message output additional_kwargs when the live reasoning stream is missing', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
@@ -295,6 +431,102 @@ describe('DeepAgentRuntimeService', () => {
         .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
         .map((event) => event.delta)
     ).toEqual(['trailing thinking']);
+  });
+
+  it('emits reasoning deltas from final message output OpenAI reasoning summaries', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          output: Promise.resolve({
+            additional_kwargs: {
+              reasoning: {
+                summary: [
+                  {
+                    type: 'summary_text',
+                    text: 'trailing summary thinking'
+                  }
+                ]
+              }
+            }
+          })
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with trailing reasoning summary only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['trailing summary thinking']);
+  });
+
+  it('emits reasoning deltas from final message output contentBlocks', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          output: Promise.resolve({
+            contentBlocks: [
+              {
+                type: 'text',
+                text: 'plain answer block'
+              },
+              {
+                type: 'reasoning',
+                reasoning: 'trailing block thinking'
+              }
+            ]
+          })
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with trailing content block reasoning only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['trailing block thinking']);
   });
 
   it('prefers the standard reasoning stream over reasoning_content fallback when both exist', async () => {

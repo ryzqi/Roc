@@ -658,22 +658,13 @@ export class DeepAgentRuntimeService {
       return standardReasoning;
     }
 
-    const directFallback = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoning_content'));
-    if (directFallback !== null) {
-      return directFallback;
-    }
-    const camelCaseFallback = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoningContent'));
-    if (camelCaseFallback !== null) {
-      return camelCaseFallback;
-    }
-
-    const blockValues = this.readReasoningBlockValues(recordUtils.readRecordValue(message, 'content'));
-    if (blockValues.length === 0) {
+    const values = recordUtils.readReasoningTextValues(message);
+    if (values.length === 0) {
       return null;
     }
     return {
       kind: 'values',
-      values: blockValues
+      values
     };
   }
 
@@ -693,17 +684,6 @@ export class DeepAgentRuntimeService {
       kind: 'values',
       values: [text]
     };
-  }
-
-  private readReasoningBlockValues(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.flatMap((block) => this.readReasoningBlockText(block));
-  }
-
-  private readReasoningBlockText(block: unknown): string[] {
-    return recordUtils.readReasoningBlockText(block);
   }
 
   private async consumeReasoningSource(
