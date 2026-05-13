@@ -1810,6 +1810,7 @@ describe('Roc foundation services', () => {
   });
 
   it('returns provider timeout failures as invalid test results', async () => {
+    vi.useFakeTimers();
     services.secretService.setProviderSecret('provider-local', 'sk-local-test-secret');
     services.configService.saveProviders({
       schemaVersion: 1,
@@ -1837,21 +1838,23 @@ describe('Roc foundation services', () => {
     services.providerRuntimeService.setDeterministicFailure(
       new RocDomainError({
         code: 'provider_request_timeout',
-        message: 'Provider 请求超时。',
+        message: 'Provider 请求超时，请稍后重试或检查 Provider endpoint。',
         category: 'external',
         retryable: true,
         userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
       })
     );
 
-    const result = await services.providerRuntimeService.testProvider('provider-local');
+    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
 
     expect(result).toMatchObject({
       providerId: 'provider-local',
       status: 'invalid',
       defaultModelReady: false,
       modelId: 'model-tools',
-      error: 'Provider 请求超时。'
+      error: 'Provider 请求超时，请稍后重试或检查 Provider endpoint。'
     });
   });
 

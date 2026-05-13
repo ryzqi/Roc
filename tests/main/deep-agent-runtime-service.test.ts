@@ -154,6 +154,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   services.databaseService.close();
   rmSync(root, { recursive: true, force: true });
   rmSync(userHome, { recursive: true, force: true });
@@ -253,6 +254,47 @@ describe('DeepAgentRuntimeService', () => {
         .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
         .map((event) => event.delta)
     ).toEqual(['fallback thinking']);
+  });
+
+  it('emits reasoning deltas from the final message output additional_kwargs when the live reasoning stream is missing', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          output: Promise.resolve({
+            additional_kwargs: {
+              reasoning_content: 'trailing thinking'
+            }
+          })
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with trailing reasoning only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['trailing thinking']);
   });
 
   it('prefers the standard reasoning stream over reasoning_content fallback when both exist', async () => {
@@ -1145,5 +1187,105 @@ describe('DeepAgentRuntimeService', () => {
       modelId: 'moonshotai/kimi-k2.6'
     });
     expect(JSON.stringify(errorEvent?.payload)).not.toContain('sk-secret-value');
+  });
+
+  it('retries retryable provider request failures before completing a chat run', async () => {
+    vi.useFakeTimers();
+    mocked.streamEventsMock
+      .mockRejectedValueOnce(new Error('request timed out'))
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(['Retry success'])
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: '请在重试后完成',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await vi.runAllTimersAsync();
+    const result = await completed;
+
+    expect(mocked.streamEventsMock).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: 'Retry success'
+    });
+  });
+
+  it('emits the final retryable failure after exhausting provider request retries', async () => {
+    vi.useFakeTimers();
+    mocked.streamEventsMock.mockRejectedValue({
+      status: 500,
+      message: 'upstream failed'
+    });
+
+    const runtime = createRuntime();
+    const failed = waitForEvent(runtime, (event) => event.type === 'run_failed');
+
+    await runtime.startRun({
+      input: '持续失败',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await vi.runAllTimersAsync();
+    const result = await failed;
+
+    expect(mocked.streamEventsMock).toHaveBeenCalledTimes(4);
+    expect(result).toMatchObject({
+      type: 'run_failed',
+      code: 'provider_http_error',
+      message: 'Provider 返回 HTTP 500。',
+      retryable: true
+    });
+  });
+
+  it('cancels immediately while waiting to retry a provider request', async () => {
+    vi.useFakeTimers();
+    mocked.streamEventsMock.mockRejectedValue(new Error('fetch failed'));
+
+    const runtime = createRuntime();
+    const failed = waitForEvent(runtime, (event) => event.type === 'run_failed');
+
+    const started = await runtime.startRun({
+      input: '取消重试等待',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await Promise.resolve();
+
+    expect(runtime.cancelRun(started.runId)).toEqual({
+      runId: started.runId,
+      cancelled: true
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await failed;
+
+    expect(mocked.streamEventsMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      type: 'run_failed',
+      code: 'chat_run_cancelled',
+      message: '当前运行已取消。',
+      retryable: true
+    });
   });
 });

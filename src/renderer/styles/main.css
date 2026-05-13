@@ -628,7 +628,7 @@
 }
 
 .chat-page-shell {
-  width: min(100%, 760px);
+  width: min(100%, 1080px);
   min-height: 100%;
   display: grid;
   align-content: end;
@@ -637,12 +637,12 @@
 .chat-feedback-shell {
   min-height: 0;
   display: grid;
-  justify-items: center;
+  justify-items: stretch;
   align-content: end;
 }
 
 .chat-feedback-stack {
-  width: min(100%, 740px);
+  width: 100%;
   display: grid;
   gap: 24px;
   min-height: 100%;
@@ -706,7 +706,7 @@
   box-shadow: none;
   border-radius: var(--chat-bubble-radius);
   padding: 10px 14px;
-  max-width: min(100%, 78%);
+  max-width: min(100%, 560px);
 }
 
 .chat-bubble p {

@@ -6,6 +6,11 @@ import type {
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import { LangChainModelFactory } from './langchain-model-factory';
+import {
+  executeWithProviderRequestRetry,
+  isRetryableProviderHttpStatus,
+  providerRequestTimeoutMessage
+} from './provider-request-retry';
 
 type ProviderTransportRequest = {
   provider: ProviderConfig;
@@ -72,16 +77,19 @@ export class ProviderRuntimeService {
     }
 
     try {
-      const response = await this.executeTransportRequest({
-        provider,
-        modelId: enabledModel.id,
-        input: providerTestPrompt,
-        capabilitySummary: this.createCapabilitySummary({
-          mcpServers: [],
-          skills: []
-        })
+      const response = await executeWithProviderRequestRetry(async () => {
+        const result = await this.executeTransportRequest({
+          provider,
+          modelId: enabledModel.id,
+          input: providerTestPrompt,
+          capabilitySummary: this.createCapabilitySummary({
+            mcpServers: [],
+            skills: []
+          })
+        });
+        this.requireResponseContent(result);
+        return result;
       });
-      this.requireResponseContent(response);
       return {
         providerId: provider.id,
         status: 'ready',
@@ -273,7 +281,7 @@ export class ProviderRuntimeService {
           code: 'provider_http_error',
           message: this.createHttpErrorMessage(status, this.extractLangChainErrorDetail(error)),
           category: 'external',
-          retryable: this.isRetryableHttpStatus(status),
+          retryable: isRetryableProviderHttpStatus(status),
           userAction: '请检查 Provider endpoint、凭据、模型名称和服务状态后重试。'
         });
       }
@@ -282,7 +290,7 @@ export class ProviderRuntimeService {
       if (this.isLangChainTimeoutError(error)) {
         return new RocDomainError({
           code: 'provider_request_timeout',
-          message: 'Provider 请求超时。',
+          message: providerRequestTimeoutMessage,
           category: 'external',
           retryable: true,
           userAction: '请稍后重试，或检查 Provider endpoint 是否可访问。'
@@ -329,22 +337,6 @@ export class ProviderRuntimeService {
       return `Provider 请求失败：HTTP ${status}`;
     }
     return `Provider 请求失败：HTTP ${status} ${this.redact(trimmed).slice(0, 300)}`;
-  }
-
-  private isRetryableHttpStatus(status: number): boolean {
-    if (status === 408) {
-      return true;
-    }
-    if (status === 425) {
-      return true;
-    }
-    if (status === 429) {
-      return true;
-    }
-    if (status >= 500) {
-      return true;
-    }
-    return false;
   }
 
   private readOptionalToken(value: unknown): number | undefined {

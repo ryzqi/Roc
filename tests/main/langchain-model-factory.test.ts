@@ -64,5 +64,44 @@ describe('LangChainModelFactory', () => {
         thinking: true
       }
     });
+    expect((result.model as { timeout?: number }).timeout).toBe(60_000);
+    expect((result.model as { clientConfig?: { maxRetries?: number } }).clientConfig?.maxRetries).toBe(0);
+  });
+
+  it('builds anthropic-compatible models with a 60 second request timeout', async () => {
+    services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-5',
+      providers: [
+        {
+          id: 'anthropic-local',
+          name: 'Anthropic Local',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test/v1/messages',
+          credentialRef: 'secret:anthropic-local',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet 4.5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel();
+
+    expect(result.provider.id).toBe('anthropic-local');
+    expect(result.modelId).toBe('claude-sonnet-4-5');
+    expect((result.model as { clientOptions?: { timeout?: number; maxRetries?: number } }).clientOptions).toMatchObject({
+      timeout: 60_000,
+      maxRetries: 0
+    });
   });
 });

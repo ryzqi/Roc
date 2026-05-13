@@ -1,4 +1,5 @@
 import { RocDomainError } from '../errors';
+import { isRetryableProviderHttpStatus, providerRequestTimeoutMessage } from '../provider-request-retry';
 import { isRecord } from './record-utils';
 import { redact } from './redact';
 import type { RunFailure } from './types';
@@ -49,7 +50,7 @@ export function toRunFailure(error: unknown): RunFailure {
       return {
         code: 'provider_http_error',
         message: `Provider 返回 HTTP ${status}。`,
-        retryable: status >= 500 || status === 429
+        retryable: isRetryableProviderHttpStatus(status)
       };
     }
   }
@@ -57,7 +58,7 @@ export function toRunFailure(error: unknown): RunFailure {
     if (isTimeoutError(error)) {
       return {
         code: 'provider_request_timeout',
-        message: 'Provider 请求超时。',
+        message: providerRequestTimeoutMessage,
         retryable: true
       };
     }

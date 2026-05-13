@@ -6,9 +6,8 @@ import { fixedNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ProviderConfig, ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
+import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
-
-const langChainRequestTimeoutMs = 30_000;
 
 export type LangChainModelRuntime = {
   providerType: ProviderType;
@@ -138,7 +137,7 @@ export class LangChainModelFactory {
           maxTokens,
           clientOptions: {
             maxRetries: 0,
-            timeout: langChainRequestTimeoutMs
+            timeout: providerRequestTimeoutMs
           }
         })
       };
@@ -178,7 +177,7 @@ export class LangChainModelFactory {
         maxRetries: 0,
         temperature,
         maxTokens,
-        timeout: langChainRequestTimeoutMs,
+        timeout: providerRequestTimeoutMs,
         configuration: {
           baseURL: baseUrl,
           maxRetries: 0

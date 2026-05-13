@@ -24,6 +24,7 @@ import type { ShellExecutionService } from './shell-execution-service';
 import type { TaskService } from './task-service';
 import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
+import { executeWithProviderRequestRetry, isRetryableProviderRequestFailure } from './provider-request-retry';
 import {
   createBackend,
   errorMapping,
@@ -305,93 +306,112 @@ export class DeepAgentRuntimeService {
   }
 
   private async executeRun(context: RunExecutionContext): Promise<void> {
-    const assistantChunks: string[] = [];
-    const reasoningChunks: string[] = [];
-    const closers: Array<() => Promise<void>> = [];
-
     try {
-      const interruptOn =
-        context.taskRun === null ? undefined : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
-      const { subagents, tools: runTools } = await this.createRunTools(context, closers);
-      const agent = createDeepAgent({
-        model: context.modelHandle.model,
-        systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-        backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
-        skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
-        subagents,
-        tools: runTools,
-        interruptOn,
-        checkpointer: context.taskRun === null ? undefined : this.checkpointer
-      });
-      const run = await agent.streamEvents(
-        {
-          messages: [new HumanMessage(context.input)]
-        },
-        {
-          version: 'v3',
-          configurable: {
-            thread_id: context.threadId,
-            run_id: context.runId
-          },
-          signal: context.abortController.signal
-        }
-      );
+      let attemptProducedVisibleOutput = false;
+      await executeWithProviderRequestRetry(async () => {
+        attemptProducedVisibleOutput = false;
+        const assistantChunks: string[] = [];
+        const reasoningChunks: string[] = [];
+        const closers: Array<() => Promise<void>> = [];
 
-      await Promise.all([
-        this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks),
-        this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
-        this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
-      ]);
+        try {
+          const interruptOn =
+            context.taskRun === null
+              ? undefined
+              : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
+          const { subagents, tools: runTools } = await this.createRunTools(context, closers);
+          const agent = createDeepAgent({
+            model: context.modelHandle.model,
+            systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
+            backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
+            skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
+            subagents,
+            tools: runTools,
+            interruptOn,
+            checkpointer: context.taskRun === null ? undefined : this.checkpointer
+          });
+          const run = await agent.streamEvents(
+            {
+              messages: [new HumanMessage(context.input)]
+            },
+            {
+              version: 'v3',
+              configurable: {
+                thread_id: context.threadId,
+                run_id: context.runId
+              },
+              signal: context.abortController.signal
+            }
+          );
 
-      if (run.interrupted) {
-        const approval = this.readPendingApproval(run.interrupts, context.runId);
-        if (context.taskRun !== null) {
-          this.pendingInterrupts.set(context.runId, {
+          await Promise.all([
+            this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks, () => {
+              attemptProducedVisibleOutput = true;
+            }),
+            this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, () => {
+              attemptProducedVisibleOutput = true;
+            }),
+            this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context, () => {
+              attemptProducedVisibleOutput = true;
+            })
+          ]);
+
+          if (run.interrupted) {
+            const approval = this.readPendingApproval(run.interrupts, context.runId);
+            if (context.taskRun !== null) {
+              this.pendingInterrupts.set(context.runId, {
+                threadId: context.threadId,
+                approval
+              });
+              this.taskService.recordApprovalRequested({
+                runId: context.taskRun.id,
+                payload: approval
+              });
+              this.taskService.markRunWaitingUser(context.taskRun.id);
+            }
+            this.emit({
+              type: 'run_interrupted',
+              runId: context.runId,
+              threadId: context.threadId,
+              interruptId: approval.interruptId,
+              payload: approval
+            });
+            return;
+          }
+
+          await Promise.resolve(run.output);
+          const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
+          const result = prompt.buildProviderExecutionResult({
+            modelHandle: context.modelHandle,
+            createdAt: context.createdAt,
+            startedAtMs: context.startedAtMs,
+            inputLength: context.input.length,
+            assistantMessage
+          });
+          if (context.taskRun !== null) {
+            this.taskService.completeRunWithProviderResult({
+              runId: context.taskRun.id,
+              result
+            });
+          }
+
+          this.emit({
+            type: 'run_completed',
+            runId: context.runId,
             threadId: context.threadId,
-            approval
+            providerId: result.providerId,
+            modelId: result.modelId,
+            createdAt: context.createdAt,
+            durationMs: result.durationMs,
+            summary: result.summary,
+            assistantMessage: result.assistantMessage
           });
-          this.taskService.recordApprovalRequested({
-            runId: context.taskRun.id,
-            payload: approval
-          });
-          this.taskService.markRunWaitingUser(context.taskRun.id);
+        } finally {
+          await Promise.allSettled(closers.map(async (close) => close()));
         }
-        this.emit({
-          type: 'run_interrupted',
-          runId: context.runId,
-          threadId: context.threadId,
-          interruptId: approval.interruptId,
-          payload: approval
-        });
-        return;
-      }
-
-      await Promise.resolve(run.output);
-      const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
-      const result = prompt.buildProviderExecutionResult({
-        modelHandle: context.modelHandle,
-        createdAt: context.createdAt,
-        startedAtMs: context.startedAtMs,
-        inputLength: context.input.length,
-        assistantMessage
-      });
-      if (context.taskRun !== null) {
-        this.taskService.completeRunWithProviderResult({
-          runId: context.taskRun.id,
-          result
-        });
-      }
-
-      this.emit({
-        type: 'run_completed',
-        runId: context.runId,
-        threadId: context.threadId,
-        providerId: result.providerId,
-        modelId: result.modelId,
-        createdAt: context.createdAt,
-        durationMs: result.durationMs,
-        summary: result.summary,
-        assistantMessage: result.assistantMessage
+      }, {
+        signal: context.abortController.signal,
+        shouldRetry: (error) => !attemptProducedVisibleOutput && isRetryableProviderRequestFailure(error)
       });
     } catch (error) {
       const failure = errorMapping.toRunFailure(error);
@@ -414,7 +434,6 @@ export class DeepAgentRuntimeService {
         retryable: failure.retryable
       });
     } finally {
-      await Promise.allSettled(closers.map(async (close) => close()));
       this.activeRuns.delete(context.runId);
     }
   }
@@ -573,7 +592,8 @@ export class DeepAgentRuntimeService {
     messages: AsyncIterable<unknown>,
     context: RunExecutionContext,
     assistantChunks: string[],
-    reasoningChunks: string[]
+    reasoningChunks: string[],
+    onVisibleOutput?: () => void
   ): Promise<void> {
     for await (const message of messages) {
       const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
@@ -583,6 +603,7 @@ export class DeepAgentRuntimeService {
       if (textStream !== null) {
         tasks.push(
           this.consumeStringStream(textStream, (delta) => {
+            onVisibleOutput?.();
             assistantChunks.push(delta);
             if (context.taskRun !== null) {
               this.taskService.recordEvent({
@@ -606,12 +627,29 @@ export class DeepAgentRuntimeService {
 
       if (reasoningSource !== null) {
         tasks.push(
-          this.consumeReasoningSource(reasoningSource, context, reasoningChunks)
+          this.consumeReasoningSource(reasoningSource, context, reasoningChunks, onVisibleOutput)
         );
       }
 
       await Promise.all(tasks);
+
+      if (reasoningSource === null && reasoningChunks.length === 0) {
+        const trailingReasoning = await this.readReasoningFromOutput(message);
+        if (trailingReasoning !== null) {
+          onVisibleOutput?.();
+          reasoningChunks.push(trailingReasoning);
+          this.emit({
+            type: 'reasoning_delta',
+            runId: context.runId,
+            delta: trailingReasoning
+          });
+        }
+      }
     }
+  }
+
+  private async readReasoningFromOutput(message: unknown): Promise<string | null> {
+    return await recordUtils.readReasoningFromMessageOutput(recordUtils.readRecordValue(message, 'output'));
   }
 
   private readReasoningSource(message: unknown): ReasoningSource | null {
@@ -665,33 +703,18 @@ export class DeepAgentRuntimeService {
   }
 
   private readReasoningBlockText(block: unknown): string[] {
-    if (!recordUtils.isRecord(block)) {
-      return [];
-    }
-    const type = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'type'));
-    if (type !== 'reasoning' && type !== 'reasoning_content') {
-      return [];
-    }
-
-    const values: string[] = [];
-    const text = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'text'));
-    if (text !== null) {
-      values.push(text);
-    }
-    const reasoningText = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'reasoning_content'));
-    if (reasoningText !== null) {
-      values.push(reasoningText);
-    }
-    return values;
+    return recordUtils.readReasoningBlockText(block);
   }
 
   private async consumeReasoningSource(
     source: ReasoningSource,
     context: RunExecutionContext,
-    reasoningChunks: string[]
+    reasoningChunks: string[],
+    onVisibleOutput?: () => void
   ): Promise<void> {
     if (source.kind === 'stream') {
       await this.consumeStringStream(source.stream, (delta) => {
+        onVisibleOutput?.();
         reasoningChunks.push(delta);
         this.emit({
           type: 'reasoning_delta',
@@ -703,6 +726,7 @@ export class DeepAgentRuntimeService {
     }
 
     for (const delta of source.values) {
+      onVisibleOutput?.();
       reasoningChunks.push(delta);
       this.emit({
         type: 'reasoning_delta',
@@ -712,10 +736,15 @@ export class DeepAgentRuntimeService {
     }
   }
 
-  private async consumeToolCalls(calls: AsyncIterable<unknown>, context: RunExecutionContext): Promise<void> {
+  private async consumeToolCalls(
+    calls: AsyncIterable<unknown>,
+    context: RunExecutionContext,
+    onVisibleOutput?: () => void
+  ): Promise<void> {
     for await (const call of calls) {
       const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
       const input = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
+      onVisibleOutput?.();
       this.emit({
         type: 'tool_event',
         runId: context.runId,
@@ -739,6 +768,7 @@ export class DeepAgentRuntimeService {
 
       try {
         const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
+        onVisibleOutput?.();
         this.emit({
           type: 'tool_event',
           runId: context.runId,
@@ -761,6 +791,7 @@ export class DeepAgentRuntimeService {
         this.emitTodoEvent(context.runId, output);
       } catch (error) {
         const message = error instanceof Error ? redact(error.message) : 'Tool 执行失败。';
+        onVisibleOutput?.();
         this.emit({
           type: 'tool_event',
           runId: context.runId,
@@ -784,11 +815,16 @@ export class DeepAgentRuntimeService {
     }
   }
 
-  private async consumeSubagents(subagents: AsyncIterable<unknown>, context: RunExecutionContext): Promise<void> {
+  private async consumeSubagents(
+    subagents: AsyncIterable<unknown>,
+    context: RunExecutionContext,
+    onVisibleOutput?: () => void
+  ): Promise<void> {
     for await (const subagent of subagents) {
       const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(subagent, 'name')) ?? 'subagent';
       const taskInput = await Promise.resolve(recordUtils.readRecordValue(subagent, 'taskInput'));
       const summary = recordUtils.readNonEmptyString(taskInput) ?? null;
+      onVisibleOutput?.();
       this.emit({
         type: 'subagent_event',
         runId: context.runId,
@@ -810,6 +846,7 @@ export class DeepAgentRuntimeService {
 
       try {
         await Promise.resolve(recordUtils.readRecordValue(subagent, 'output'));
+        onVisibleOutput?.();
         this.emit({
           type: 'subagent_event',
           runId: context.runId,
@@ -830,6 +867,7 @@ export class DeepAgentRuntimeService {
         }
       } catch (error) {
         const failureSummary = error instanceof Error ? redact(error.message) : summary;
+        onVisibleOutput?.();
         this.emit({
           type: 'subagent_event',
           runId: context.runId,
