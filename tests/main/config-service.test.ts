@@ -88,7 +88,8 @@ describe('ConfigService unified settings document', () => {
           preset: false,
           riskLevel: 'medium' as const,
           url: 'https://docs.example.test/mcp',
-          allowedTools: ['search_docs']
+          allowedTools: ['search_docs'],
+          approvalMode: 'always_confirm' as const
         }
       ]
     };
@@ -275,7 +276,8 @@ describe('ConfigService unified settings document', () => {
       preset: true,
       riskLevel: 'medium',
       url: 'https://mcp.exa.ai/mcp',
-      allowedTools: ['web_search_exa']
+      allowedTools: ['web_search_exa'],
+      approvalMode: 'always_confirm'
     };
 
     configService.upsertProvider(provider);
@@ -368,6 +370,68 @@ describe('ConfigService unified settings document', () => {
     expect(stored).toEqual(settings);
     expect(permissions.defaultConfirmations.workspaceOutsideWrite).toBe('never_confirm');
     expect(permissions.defaultConfirmations.memoryDelete).toBe('never_confirm');
+  });
+
+  it('backfills legacy MCP approval mode to always_confirm when the stored config omits it', () => {
+    writeFileSync(
+      join(root, 'config', 'settings.json'),
+      `${JSON.stringify({
+        schemaVersion: 3,
+        settings: {
+          schemaVersion: 2,
+          defaultWorkspace: null,
+          startup: { openAtLogin: false, minimizeToTray: true },
+          notifications: { lowDistraction: true },
+          globalHotkey: null,
+          memory: {
+            candidateReviewMode: 'manual',
+            warmRecallEnabled: true,
+            sessionRetentionDays: 90,
+            crossScopeRecall: 'explicit_only',
+            coldAutoForgetDays: 90
+          }
+        },
+        providers: {
+          schemaVersion: 1,
+          defaultModelId: null,
+          providers: []
+        },
+        mcp: {
+          schemaVersion: 1,
+          servers: [
+            {
+              id: 'legacy-mcp',
+              name: 'Legacy MCP',
+              enabled: true,
+              transport: 'http',
+              preset: false,
+              riskLevel: 'medium',
+              url: 'https://legacy.example.test/mcp',
+              allowedTools: ['search_docs']
+            }
+          ]
+        },
+        permissions: defaultPermissions(),
+        shortcuts: {
+          schemaVersion: 1,
+          shortcuts: []
+        }
+      }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    expect(configService.getMcpConfig()).toEqual({
+      schemaVersion: 1,
+      servers: [
+        expect.objectContaining({
+          id: 'legacy-mcp',
+          approvalMode: 'always_confirm'
+        })
+      ]
+    });
   });
 
   it('clears defaultModelId when saveSettingsSnapshot disables the provider that owns it', () => {

@@ -88,7 +88,8 @@ const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   riskLevel: z.enum(['low', 'medium', 'high']),
   url: z.string().min(1).optional(),
   command: z.string().min(1).optional(),
-  allowedTools: z.array(z.string().min(1))
+  allowedTools: z.array(z.string().min(1)),
+  approvalMode: z.enum(['always_confirm', 'auto_approve']).default('always_confirm')
 });
 
 const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
@@ -409,7 +410,7 @@ export class ConfigService {
       schemaVersion: 3,
       settings: this.upgradeLegacySettings(raw.settings),
       providers: this.upgradeLegacyProviders(raw.providers ?? defaultProviders),
-      mcp: McpServersConfigSchema.parse(raw.mcp ?? defaultMcpConfig),
+      mcp: this.upgradeLegacyMcpConfig(raw.mcp),
       permissions: this.upgradeLegacyPermissions(raw.permissions),
       shortcuts: ShortcutsConfigSchema.parse(raw.shortcuts ?? defaultShortcuts)
     };
@@ -417,7 +418,17 @@ export class ConfigService {
 
   private getSettingsDocument(): RocSettingsDocument {
     const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
-    return SettingsDocumentSchema.parse(parsed);
+    const document = SettingsDocumentSchema.parse(parsed);
+    const normalizedMcp = this.upgradeLegacyMcpConfig(document.mcp);
+    if (JSON.stringify(normalizedMcp) !== JSON.stringify(document.mcp)) {
+      const normalizedDocument: RocSettingsDocument = {
+        ...document,
+        mcp: normalizedMcp
+      };
+      this.writeSettingsDocument(normalizedDocument);
+      return normalizedDocument;
+    }
+    return document;
   }
 
   private writeSettingsDocument(document: RocSettingsDocument): void {
@@ -559,6 +570,25 @@ export class ConfigService {
       defaultModelId: typeof value.defaultModelId === 'string' ? value.defaultModelId : null,
       providers: upgradedProviders
     }));
+  }
+
+  private upgradeLegacyMcpConfig(raw: unknown): RocMcpConfig {
+    if (raw === null || raw === undefined || typeof raw !== 'object') {
+      return defaultMcpConfig;
+    }
+
+    const value = raw as Record<string, unknown>;
+    const servers = Array.isArray(value.servers) ? value.servers : [];
+    return McpServersConfigSchema.parse({
+      schemaVersion: 1,
+      servers: servers.map((entry) => {
+        const server = entry as Record<string, unknown>;
+        return {
+          ...server,
+          approvalMode: server.approvalMode === 'auto_approve' ? 'auto_approve' : 'always_confirm'
+        };
+      })
+    });
   }
 
   private upgradeLegacyPermissions(raw: unknown): RocPermissions {

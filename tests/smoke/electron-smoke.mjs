@@ -392,7 +392,8 @@ async function seedSmokeRuntimeData(page, { providerEndpoint }) {
           preset: false,
           riskLevel: 'low',
           url: 'http://127.0.0.1:65534/mcp',
-          allowedTools: ['smoke_tool']
+          allowedTools: ['smoke_tool'],
+          approvalMode: 'always_confirm'
         }),
         'mcp upsert'
       );

@@ -398,7 +398,8 @@ describe('DeepAgentRuntimeService', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs']
+      allowedTools: ['search_docs'],
+      approvalMode: 'always_confirm'
     });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
@@ -706,6 +707,53 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.checkpointer).toBeTruthy();
   });
 
+  it('maps MCP server approval mode into interruptOn without affecting execute or web_read', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    services.mcpService.upsertServer({
+      id: 'docs-http',
+      name: 'Docs HTTP MCP',
+      transport: 'http',
+      enabled: true,
+      url: 'https://docs.example.test/mcp',
+      preset: false,
+      riskLevel: 'medium',
+      allowedTools: ['search_docs'],
+      approvalMode: 'auto_approve'
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '执行不需要 MCP 审批的任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['docs-http'],
+        skills: []
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          interruptOn?: Record<string, unknown>;
+        }
+      | undefined;
+
+    expect(call?.interruptOn).toMatchObject({
+      write_file: true,
+      edit_file: true,
+      execute: true,
+      git_operation: true,
+      web_read: true,
+      search_docs: false
+    });
+  });
+
   it('records approval requests and moves the task thread into waiting_user when the agent interrupts', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([]),
@@ -862,6 +910,154 @@ describe('DeepAgentRuntimeService', () => {
       decision: {
         type: 'approve'
       }
+    });
+  });
+
+  it('resumes an interrupted task run even after the in-memory active run context is gone', async () => {
+    mocked.streamEventsMock
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        interrupted: true,
+        interrupts: [
+          {
+            interruptId: 'interrupt-resume-after-eviction',
+            payload: {
+              actionRequests: [
+                {
+                  name: 'execute',
+                  args: {
+                    command: 'git status'
+                  }
+                }
+              ],
+              reviewConfigs: [
+                {
+                  actionName: 'execute',
+                  allowedDecisions: ['approve', 'reject']
+                }
+              ]
+            }
+          }
+        ],
+        output: Promise.resolve({
+          interrupted: true
+        })
+      })
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(['已恢复并继续执行'])
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行 git status',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+
+    const activeRuns = Reflect.get(runtime as object, 'activeRuns') as Map<string, unknown>;
+    activeRuns.delete(started.runId);
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-resume-after-eviction',
+        decision: {
+          type: 'approve'
+        }
+      })
+    ).resolves.toMatchObject({
+      runId: started.runId,
+      threadId: started.threadId
+    });
+
+    const resumeInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0];
+    const resumeConfig = mocked.streamEventsMock.mock.calls.at(-1)?.[1] as
+      | {
+          configurable?: {
+            thread_id?: string;
+            run_id?: string;
+          };
+        }
+      | undefined;
+
+    expect(resumeInput).toBeInstanceOf(Command);
+    expect(resumeConfig?.configurable).toMatchObject({
+      thread_id: started.threadId,
+      run_id: started.runId
+    });
+  });
+
+  it('rejects resume when the provided interrupt id does not match the pending approval', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-expected',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行 git status',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-unexpected',
+        decision: {
+          type: 'approve'
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'chat_resume_interrupt_mismatch',
+      message: '恢复运行时的审批中断 ID 与待处理审批不匹配。'
     });
   });
 

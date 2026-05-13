@@ -134,20 +134,25 @@ export class AgentService {
   }
 
   private createMcpToolCards(server: McpServerSnapshot): AgentCapabilityCard[] {
+    const approvalLabel = server.approvalMode === 'auto_approve' ? '自动执行' : '每次审批';
+    const approvalHint =
+      server.approvalMode === 'auto_approve'
+        ? '当前 MCP server 已设为自动执行，可在 MCP 管理视图改回每次审批。'
+        : '当前 MCP server 设为每次审批，可在 MCP 管理视图改为自动执行。';
     if (server.id === 'exa-hosted') {
       return [
         {
           id: 'mcp:exa-hosted:web_search',
           name: 'web_search',
           capabilityType: 'mcp_tool',
-          description: '搜索公开网络信息，返回可继续阅读和核实的结果列表。',
+          description: `搜索公开网络信息，返回可继续阅读和核实的结果列表。当前策略：${approvalLabel}。`,
           requiredInput: 'query',
           scope: 'external',
           dependencies: [server.id],
           sideEffects: ['external_tool_call'],
-          requiresApproval: server.riskLevel !== 'low',
+          requiresApproval: server.approvalMode === 'always_confirm',
           supportsLongTermGrant: true,
-          revokeGrantHint: '在能力管理视图撤销该 MCP server 的长期授权。',
+          revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
           riskLevel: server.riskLevel ?? 'medium',
           auditCategory: 'mcp_call',
           untrustedContext: true
@@ -162,14 +167,14 @@ export class AgentService {
       id: `mcp:${server.id}:${toolName}`,
       name: toolName,
       capabilityType: 'mcp_tool',
-      description: `${server.name} 提供的 ${toolName} 调用入口。`,
+      description: `${server.name} 提供的 ${toolName} 调用入口。当前策略：${approvalLabel}。`,
       requiredInput: 'tool-specific structured input',
       scope: 'external',
       dependencies: [server.id],
       sideEffects: ['external_tool_call'],
-      requiresApproval: server.riskLevel !== 'low',
+      requiresApproval: server.approvalMode === 'always_confirm',
       supportsLongTermGrant: true,
-      revokeGrantHint: '在能力管理视图撤销该 MCP server 的长期授权。',
+      revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
       riskLevel: server.riskLevel ?? 'medium',
       auditCategory: 'mcp_call',
       untrustedContext: true

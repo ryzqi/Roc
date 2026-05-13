@@ -192,6 +192,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.mcpSetServerEnabled, (_event, request) =>
     wrapIpc(() => services.mcpService.setServerEnabled(request.id, request.enabled))
   );
+  ipcMain.handle(ipcChannels.mcpSetServerApprovalMode, (_event, request) =>
+    wrapIpc(() => services.mcpService.setServerApprovalMode(request.id, request.approvalMode))
+  );
   ipcMain.handle(ipcChannels.mcpDeleteServer, (_event, id: string) =>
     wrapIpc(() => {
       services.mcpService.deleteServer(id);

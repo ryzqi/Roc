@@ -1952,9 +1952,11 @@ describe('Roc foundation services', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs']
+      allowedTools: ['search_docs'],
+      approvalMode: 'always_confirm'
     });
     const disabled = services.mcpService.setServerEnabled('docs-http', false);
+    const autoApproved = services.mcpService.setServerApprovalMode('docs-http', 'auto_approve');
     const testResult = services.mcpService.testServer('docs-http');
     const servers = services.mcpService.listServers();
 
@@ -1965,6 +1967,7 @@ describe('Roc foundation services', () => {
     });
     expect(server.enabled).toBe(true);
     expect(disabled.enabled).toBe(false);
+    expect(autoApproved.approvalMode).toBe('auto_approve');
     expect(testResult).toMatchObject({
       serverId: 'docs-http',
       status: 'ready',
@@ -1974,7 +1977,8 @@ describe('Roc foundation services', () => {
       expect.objectContaining({
         id: 'docs-http',
         enabled: false,
-        status: 'not_connected'
+        status: 'not_connected',
+        approvalMode: 'auto_approve'
       })
     );
 
@@ -2067,7 +2071,8 @@ describe('Roc foundation services', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs']
+      allowedTools: ['search_docs'],
+      approvalMode: 'always_confirm'
     });
     services.mcpService.upsertServer({
       id: 'disabled-mcp',
@@ -2077,7 +2082,8 @@ describe('Roc foundation services', () => {
       url: 'https://disabled.example.test/mcp',
       preset: false,
       riskLevel: 'low',
-      allowedTools: ['disabled_tool']
+      allowedTools: ['disabled_tool'],
+      approvalMode: 'auto_approve'
     });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
@@ -2108,7 +2114,8 @@ describe('Roc foundation services', () => {
         scope: 'external',
         riskLevel: 'medium',
         auditCategory: 'mcp_call',
-        requiresApproval: true
+        requiresApproval: true,
+        description: expect.stringContaining('当前策略：每次审批')
       })
     );
     expect(preview.toolCards).toContainEqual(
@@ -2181,6 +2188,7 @@ describe('Roc foundation services', () => {
     });
     services.configService.setDefaultModel('model-ready');
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+    services.mcpService.setServerApprovalMode('exa-hosted', 'auto_approve');
 
     const preview = services.agentService.getCapabilityPreview({
       mcpServers: ['exa-hosted'],
@@ -2193,7 +2201,9 @@ describe('Roc foundation services', () => {
         id: 'mcp:exa-hosted:web_search',
         name: 'web_search',
         capabilityType: 'mcp_tool',
-        auditCategory: 'mcp_call'
+        auditCategory: 'mcp_call',
+        requiresApproval: false,
+        description: expect.stringContaining('当前策略：自动执行')
       })
     );
     expect(preview.toolCards).not.toContainEqual(
@@ -2202,7 +2212,7 @@ describe('Roc foundation services', () => {
       })
     );
     expect(preview.interruptOn).toMatchObject({
-      web_search: true,
+      web_search: false,
       web_read: true
     });
   });

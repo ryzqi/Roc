@@ -47,6 +47,14 @@ type ReasoningSource =
       values: string[];
     };
 
+type ResumeContext = {
+  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
+  modelHandle: Awaited<ReturnType<LangChainModelFactory['createChatModelByModelId']>>;
+  runId: string;
+  taskRun: TaskRun;
+  threadId: string;
+};
+
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
@@ -172,30 +180,42 @@ export class DeepAgentRuntimeService {
         userAction: '请回到原任务会话后重试。'
       });
     }
-
-    const activeRun = this.activeRuns.get(request.runId);
-    if (activeRun === undefined || activeRun.taskRun === null) {
+    if (request.interruptId !== undefined && request.interruptId !== pending.approval.interruptId) {
       throw new RocDomainError({
-        code: 'chat_resume_run_missing',
-        message: '待恢复的运行上下文不存在。',
+        code: 'chat_resume_interrupt_mismatch',
+        message: '恢复运行时的审批中断 ID 与待处理审批不匹配。',
         category: 'validation',
-        retryable: true,
-        userAction: '请重新发起本轮任务。'
+        retryable: false,
+        userAction: '请使用当前审批卡对应的操作按钮重试。'
       });
     }
+
+    const resumeContext = await this.readResumeContext(request.runId, request.threadId);
+    const abortController = new AbortController();
+    const activeRun: ActiveRun = {
+      abortController,
+      createdAt: resumeContext.taskRun.startedAt,
+      enabledCapabilities: resumeContext.enabledCapabilities,
+      modelHandle: resumeContext.modelHandle,
+      mode: 'task',
+      runId: resumeContext.runId,
+      taskRun: resumeContext.taskRun,
+      threadId: resumeContext.threadId
+    };
+    this.activeRuns.set(request.runId, activeRun);
 
     const resumedAt = new Date().toISOString();
     const resumePayload: HITLResponse = {
       decisions: [request.decision]
     };
     this.taskService.recordApprovalDecision({
-      runId: activeRun.taskRun.id,
+      runId: resumeContext.taskRun.id,
       payload: {
         interruptId: pending.approval.interruptId,
         decision: request.decision
       }
     });
-    this.taskService.markRunResumed(activeRun.taskRun.id);
+    this.taskService.markRunResumed(resumeContext.taskRun.id);
     this.emit({
       type: 'run_resumed',
       runId: request.runId,
@@ -205,7 +225,7 @@ export class DeepAgentRuntimeService {
 
     const context: RunExecutionContext = {
       ...activeRun,
-      input: activeRun.taskRun.userInput,
+      input: resumeContext.taskRun.userInput,
       startedAtMs: Date.now()
     };
     await this.executeResume(context, resumePayload);
@@ -214,6 +234,48 @@ export class DeepAgentRuntimeService {
       runId: request.runId,
       threadId: request.threadId,
       resumedAt
+    };
+  }
+
+  private async readResumeContext(runId: string, threadId: string): Promise<ResumeContext> {
+    let taskRun: TaskRun;
+    try {
+      taskRun = this.taskService.getRun(runId);
+    } catch {
+      throw new RocDomainError({
+        code: 'chat_resume_run_missing',
+        message: '待恢复的运行上下文不存在。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请重新发起本轮任务。'
+      });
+    }
+
+    if (taskRun.threadId !== threadId) {
+      throw new RocDomainError({
+        code: 'chat_resume_thread_mismatch',
+        message: '恢复运行时的线程 ID 与待审批运行不匹配。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请回到原任务会话后重试。'
+      });
+    }
+    if (taskRun.modelId === null) {
+      throw new RocDomainError({
+        code: 'chat_resume_run_missing',
+        message: '待恢复的运行上下文不存在。',
+        category: 'validation',
+        retryable: true,
+        userAction: '请重新发起本轮任务。'
+      });
+    }
+
+    return {
+      enabledCapabilities: taskRun.enabledCapabilities,
+      modelHandle: await this.langChainModelFactory.createChatModelByModelId(taskRun.modelId, { streaming: true }),
+      runId: taskRun.id,
+      taskRun,
+      threadId: taskRun.threadId
     };
   }
 

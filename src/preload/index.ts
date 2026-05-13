@@ -66,6 +66,7 @@ const rocApi: RocPreloadApi = {
     ensureExaPreset: () => ipcRenderer.invoke(ipcChannels.mcpEnsureExaPreset),
     upsertServer: (server) => ipcRenderer.invoke(ipcChannels.mcpUpsertServer, server),
     setServerEnabled: (request) => ipcRenderer.invoke(ipcChannels.mcpSetServerEnabled, request),
+    setServerApprovalMode: (request) => ipcRenderer.invoke(ipcChannels.mcpSetServerApprovalMode, request),
     deleteServer: (id) => ipcRenderer.invoke(ipcChannels.mcpDeleteServer, id),
     testServer: (id) => ipcRenderer.invoke(ipcChannels.mcpTestServer, id)
   },

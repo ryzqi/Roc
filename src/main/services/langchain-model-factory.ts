@@ -59,6 +59,33 @@ export class LangChainModelFactory {
     return await this.createModelForProvider(provider, model.id, options);
   }
 
+  async createChatModelByModelId(modelId: string, options: CreateModelOptions = {}): Promise<LangChainChatModelHandle> {
+    const matches = this.configService
+      .getProviders()
+      .providers.filter((provider) => provider.models.some((candidate) => candidate.id === modelId));
+
+    if (matches.length === 0) {
+      throw new RocDomainError({
+        code: 'provider_model_missing',
+        message: '恢复运行需要的模型不存在或未启用。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请检查默认模型与 Provider 配置后重新发起本轮任务。'
+      });
+    }
+    if (matches.length > 1) {
+      throw new RocDomainError({
+        code: 'provider_model_ambiguous',
+        message: '恢复运行需要的模型映射到多个 Provider，无法确定恢复上下文。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请确保该模型 ID 只存在于一个已配置 Provider 中后重试。'
+      });
+    }
+
+    return await this.createModelForProvider(matches[0]!, modelId, options);
+  }
+
   async createModelForProvider(
     provider: ProviderConfig,
     modelId: string,

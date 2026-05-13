@@ -510,6 +510,7 @@ describe('settings model helpers', () => {
         url: 'https://docs.example.test/mcp',
         command: undefined,
         allowedTools: ['search_docs'],
+        approvalMode: 'always_confirm',
         lastError: null
       }
     ];
