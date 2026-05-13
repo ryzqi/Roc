@@ -137,6 +137,7 @@ describe('Roc foundation services', () => {
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"providers"');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"mcp"');
     expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
+    expect(existsSync(join(root, 'skills'))).toBe(true);
     expect(existsSync(join(root, 'tasks', 'recovery'))).toBe(true);
     expect(existsSync(join(root, 'rtk', 'tee'))).toBe(true);
   });

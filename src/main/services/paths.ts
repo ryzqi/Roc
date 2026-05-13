@@ -5,7 +5,6 @@ import type { RocPathsSnapshot } from '../../shared/types';
 
 export class RocPaths {
   readonly root: string;
-  readonly userRoot: string;
   readonly configDir: string;
   readonly databasePath: string;
   readonly memoryDir: string;
@@ -22,13 +21,12 @@ export class RocPaths {
 
   constructor(root = join(homedir(), '.roc')) {
     this.root = root;
-    this.userRoot = join(homedir(), '.roc');
     this.configDir = join(root, 'config');
     this.databasePath = join(root, 'roc.sqlite');
     this.memoryDir = join(root, 'memory');
     this.logsDir = join(root, 'logs');
     this.diagnosticsDir = join(root, 'diagnostics');
-    this.skillsDir = join(this.userRoot, 'skills');
+    this.skillsDir = join(root, 'skills');
     this.artifactsDir = join(root, 'tasks', 'artifacts');
     this.indexesDir = join(root, 'indexes');
     this.tasksDir = join(root, 'tasks');

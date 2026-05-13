@@ -349,8 +349,8 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
-  it('passes skills to deepagents and keeps skill storage under the user .roc directory', async () => {
-    expect(services.paths.skillsDir).toBe(join(userHome, '.roc', 'skills'));
+  it('passes skills to deepagents and keeps skill storage under the configured Roc data root', async () => {
+    expect(services.paths.skillsDir).toBe(join(root, 'skills'));
 
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
