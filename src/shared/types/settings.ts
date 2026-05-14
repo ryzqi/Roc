@@ -27,16 +27,11 @@ export type AppSettings = {
   };
 };
 
-export type PermissionConfirmationPolicy = 'always_confirm' | 'never_confirm';
+export type ApprovalMode = 'fully_automatic' | 'default';
 
 export type PermissionsConfig = {
-  schemaVersion: 2;
-  defaultConfirmations: {
-    workspaceOutsideWrite: PermissionConfirmationPolicy;
-    gitPush: PermissionConfirmationPolicy;
-    memoryDelete: PermissionConfirmationPolicy;
-    workspaceOutsideShell: PermissionConfirmationPolicy;
-  };
+  schemaVersion: 3;
+  mode: ApprovalMode;
   grants: unknown[];
 };
 
@@ -114,7 +109,7 @@ export type McpServersConfig = {
 };
 
 export type RocSettingsDocument = {
-  schemaVersion: 3;
+  schemaVersion: 4;
   settings: AppSettings;
   providers: ProvidersConfig;
   mcp: McpServersConfig;

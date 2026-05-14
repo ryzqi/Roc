@@ -103,3 +103,8 @@ export type FileWriteResult = {
   recoveryPoint: RecoveryPoint;
   bytesWritten: number;
 };
+
+export type FileDeleteResult = {
+  relativePath: string;
+  recoveryPoint: RecoveryPoint;
+};

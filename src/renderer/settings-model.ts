@@ -1,7 +1,7 @@
 import type {
+  ApprovalMode,
   AppSettings,
   McpServerSnapshot,
-  PermissionConfirmationPolicy,
   PermissionsConfig,
   ProviderConfig,
   ProviderModel,
@@ -413,16 +413,9 @@ const memoryFieldImpactCopy: Record<keyof AppSettings['memory'], string> = {
   coldAutoForgetDays: '会影响冷记忆的自动遗忘策略。'
 };
 
-const permissionConfirmationCopy: Record<keyof PermissionsConfig['defaultConfirmations'], string> = {
-  workspaceOutsideWrite: '会影响 agent 写入工作区外文件时是否始终要求确认。',
-  gitPush: '会影响 git push 是否始终要求确认。',
-  memoryDelete: '会影响删除记忆条目是否始终要求确认。',
-  workspaceOutsideShell: '会影响在工作区外执行命令时是否始终要求确认。'
-};
-
-const confirmationCopy: Record<PermissionConfirmationPolicy, string> = {
-  always_confirm: '始终确认',
-  never_confirm: '不确认'
+const approvalModeCopy: Record<ApprovalMode, string> = {
+  fully_automatic: '全自动',
+  default: '默认(MCP 与删除文件需审批)'
 };
 
 const candidateModeCopy: Record<AppSettings['memory']['candidateReviewMode'], string> = {
@@ -572,23 +565,16 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
     });
   }
 
-  for (const field of Object.keys(base.permissions.defaultConfirmations) as Array<
-    keyof PermissionsConfig['defaultConfirmations']
-  >) {
-    const before = base.permissions.defaultConfirmations[field];
-    const after = draft.permissions.defaultConfirmations[field];
-    if (before === after) {
-      continue;
-    }
-    rows.push({
-      sectionId: 'auth-security',
-      field: `defaultConfirmations.${field}`,
-      before: confirmationCopy[before],
-      after: confirmationCopy[after],
-      impact: permissionConfirmationCopy[field],
-      severity: 'high'
-    });
-  }
+  pushIfChanged(
+    rows,
+    'auth-security',
+    'permissions.mode',
+    base.permissions.mode,
+    draft.permissions.mode,
+    '会影响 agent 何时弹出审批卡。',
+    'high',
+    (value) => approvalModeCopy[value]
+  );
 
   return rows;
 }

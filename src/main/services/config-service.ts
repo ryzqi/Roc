@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { createFixedNvidiaProviderConfig, isFixedProvider, normalizeFixedNvidiaProvider } from '../../shared/provider-defaults';
 import type {
+  ApprovalMode,
   AppSettings,
   DefaultModelState,
   McpServerConfig,
@@ -88,8 +89,7 @@ const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   riskLevel: z.enum(['low', 'medium', 'high']),
   url: z.string().min(1).optional(),
   command: z.string().min(1).optional(),
-  allowedTools: z.array(z.string().min(1)),
-  approvalMode: z.enum(['always_confirm', 'auto_approve']).default('always_confirm')
+  allowedTools: z.array(z.string().min(1))
 });
 
 const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
@@ -97,16 +97,11 @@ const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
   servers: z.array(McpServerSchema)
 });
 
-const PermissionConfirmationSchema = z.enum(['always_confirm', 'never_confirm']);
+const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
 
 const PermissionsConfigSchema: z.ZodType<PermissionsConfig> = z.object({
-  schemaVersion: z.literal(2),
-  defaultConfirmations: z.object({
-    workspaceOutsideWrite: PermissionConfirmationSchema,
-    gitPush: PermissionConfirmationSchema,
-    memoryDelete: PermissionConfirmationSchema,
-    workspaceOutsideShell: PermissionConfirmationSchema
-  }),
+  schemaVersion: z.literal(3),
+  mode: ApprovalModeSchema,
   grants: z.array(z.unknown())
 });
 
@@ -123,7 +118,7 @@ const SettingsSaveRequestSchema: z.ZodType<SettingsSaveRequest> = z.object({
 });
 
 const SettingsDocumentSchema: z.ZodType<RocSettingsDocument> = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   settings: SettingsSchema,
   providers: ProvidersSchema,
   mcp: McpServersConfigSchema,
@@ -168,13 +163,8 @@ const defaultMcpConfig: RocMcpConfig = {
 };
 
 const defaultPermissions: PermissionsConfig = {
-  schemaVersion: 2,
-  defaultConfirmations: {
-    workspaceOutsideWrite: 'always_confirm',
-    gitPush: 'always_confirm',
-    memoryDelete: 'always_confirm',
-    workspaceOutsideShell: 'always_confirm'
-  },
+  schemaVersion: 3,
+  mode: 'fully_automatic',
   grants: []
 };
 
@@ -396,10 +386,10 @@ export class ConfigService {
 
   private migrateLegacySplitFiles(rawSettings: unknown | undefined): RocSettingsDocument {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       settings: rawSettings === undefined ? defaultSettings : this.upgradeLegacySettings(rawSettings),
       providers: this.upgradeLegacyProviders(this.readLegacyConfig('providers.json', defaultProviders)),
-      mcp: this.readLegacyConfigStrict('mcp.servers.json', McpServersConfigSchema, defaultMcpConfig),
+      mcp: this.upgradeLegacyMcpConfig(this.readJsonIfExists('mcp.servers.json')),
       permissions: this.upgradeLegacyPermissions(this.readJsonIfExists('permissions.json')),
       shortcuts: this.readLegacyConfigStrict('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
     };
@@ -407,7 +397,7 @@ export class ConfigService {
 
   private migrateLegacyV2Document(raw: Record<string, unknown>): RocSettingsDocument {
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       settings: this.upgradeLegacySettings(raw.settings),
       providers: this.upgradeLegacyProviders(raw.providers ?? defaultProviders),
       mcp: this.upgradeLegacyMcpConfig(raw.mcp),
@@ -583,32 +573,14 @@ export class ConfigService {
       schemaVersion: 1,
       servers: servers.map((entry) => {
         const server = entry as Record<string, unknown>;
-        return {
-          ...server,
-          approvalMode: server.approvalMode === 'auto_approve' ? 'auto_approve' : 'always_confirm'
-        };
+        const { approvalMode: _approvalMode, ...rest } = server;
+        return rest;
       })
     });
   }
 
   private upgradeLegacyPermissions(raw: unknown): RocPermissions {
-    if (raw === null || raw === undefined || typeof raw !== 'object') {
-      return defaultPermissions;
-    }
-    const value = raw as Record<string, unknown>;
-    const incoming = (value.defaultConfirmations ?? {}) as Record<string, unknown>;
-    return PermissionsConfigSchema.parse({
-      schemaVersion: 2,
-      defaultConfirmations: {
-        workspaceOutsideWrite:
-          incoming.workspaceOutsideWrite === 'never_confirm' ? 'never_confirm' : 'always_confirm',
-        gitPush: incoming.gitPush === 'never_confirm' ? 'never_confirm' : 'always_confirm',
-        memoryDelete: incoming.memoryDelete === 'never_confirm' ? 'never_confirm' : 'always_confirm',
-        workspaceOutsideShell:
-          incoming.workspaceOutsideShell === 'never_confirm' ? 'never_confirm' : 'always_confirm'
-      },
-      grants: Array.isArray(value.grants) ? value.grants : []
-    });
+    return defaultPermissions;
   }
 
   private readLegacyConfig(name: string, fallback: RocProviders): unknown {
@@ -666,7 +638,7 @@ export class ConfigService {
       return false;
     }
     const record = value as { schemaVersion?: unknown };
-    return record.schemaVersion === 3;
+    return record.schemaVersion === 4;
   }
 
   private looksLikeLegacyDocumentV2(value: unknown): boolean {
@@ -674,7 +646,7 @@ export class ConfigService {
       return false;
     }
     const record = value as { schemaVersion?: unknown; settings?: unknown; providers?: unknown };
-    return record.schemaVersion === 2 && 'settings' in record && 'providers' in record;
+    return (record.schemaVersion === 2 || record.schemaVersion === 3) && 'settings' in record && 'providers' in record;
   }
 
   private filePath(name: string): string {

@@ -196,12 +196,14 @@ export function createAppServices(
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
   const webReadService = new WebReadService();
   const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
+  const fileService = new FileService(paths, databaseService, workspaceService);
   const deepAgentRuntimeService = new DeepAgentRuntimeService(
     langChainModelFactory,
     taskService,
     memoryService,
     agentService,
     workspaceService,
+    fileService,
     mcpService,
     webReadService,
     shellExecutionService,
@@ -209,7 +211,6 @@ export function createAppServices(
     logService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
-  const fileService = new FileService(paths, databaseService, workspaceService);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);
   const doctorService = new DoctorService(

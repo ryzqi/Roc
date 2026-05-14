@@ -377,7 +377,7 @@ export class TaskService {
         `SELECT id, thread_id, run_id, type, payload_json, created_at
          FROM task_events
          WHERE thread_id = ? AND type = 'message'
-         ORDER BY created_at ASC`
+         ORDER BY created_at ASC, rowid ASC`
       )
       .all(normalizedThreadId) as Array<{
       id: string;
@@ -612,7 +612,7 @@ export class TaskService {
         `SELECT id, thread_id, run_id, type, payload_json, created_at
          FROM task_events
          WHERE thread_id IN (SELECT id FROM task_threads WHERE archived_at IS NULL)
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, rowid DESC
          LIMIT 50`
       )
       .all() as Array<{

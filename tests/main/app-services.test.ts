@@ -461,12 +461,7 @@ describe('Roc foundation services', () => {
         sourceTool: 'write_todos',
         target: 'task_steps'
       },
-      interruptOn: {
-        write_file: true,
-        edit_file: true,
-        execute: true,
-        git_operation: true
-      },
+      interruptOn: {},
       reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
     });
   });
@@ -1956,11 +1951,9 @@ describe('Roc foundation services', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs'],
-      approvalMode: 'always_confirm'
+      allowedTools: ['search_docs']
     });
     const disabled = services.mcpService.setServerEnabled('docs-http', false);
-    const autoApproved = services.mcpService.setServerApprovalMode('docs-http', 'auto_approve');
     const testResult = services.mcpService.testServer('docs-http');
     const servers = services.mcpService.listServers();
 
@@ -1971,7 +1964,6 @@ describe('Roc foundation services', () => {
     });
     expect(server.enabled).toBe(true);
     expect(disabled.enabled).toBe(false);
-    expect(autoApproved.approvalMode).toBe('auto_approve');
     expect(testResult).toMatchObject({
       serverId: 'docs-http',
       status: 'ready',
@@ -1981,8 +1973,7 @@ describe('Roc foundation services', () => {
       expect.objectContaining({
         id: 'docs-http',
         enabled: false,
-        status: 'not_connected',
-        approvalMode: 'auto_approve'
+        status: 'not_connected'
       })
     );
 
@@ -2075,8 +2066,7 @@ describe('Roc foundation services', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs'],
-      approvalMode: 'always_confirm'
+      allowedTools: ['search_docs']
     });
     services.mcpService.upsertServer({
       id: 'disabled-mcp',
@@ -2086,8 +2076,7 @@ describe('Roc foundation services', () => {
       url: 'https://disabled.example.test/mcp',
       preset: false,
       riskLevel: 'low',
-      allowedTools: ['disabled_tool'],
-      approvalMode: 'auto_approve'
+      allowedTools: ['disabled_tool']
     });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
@@ -2118,8 +2107,7 @@ describe('Roc foundation services', () => {
         scope: 'external',
         riskLevel: 'medium',
         auditCategory: 'mcp_call',
-        requiresApproval: true,
-        description: expect.stringContaining('当前策略：每次审批')
+        requiresApproval: false
       })
     );
     expect(preview.toolCards).toContainEqual(
@@ -2129,7 +2117,16 @@ describe('Roc foundation services', () => {
         capabilityType: 'terminal_tool',
         scope: 'workspace',
         auditCategory: 'agent_execute',
-        requiresApproval: true
+        requiresApproval: false
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:delete_file',
+        name: 'delete_file',
+        capabilityType: 'terminal_tool',
+        auditCategory: 'workspace_delete',
+        requiresApproval: false
       })
     );
     expect(preview.toolCards).toContainEqual(
@@ -2163,13 +2160,9 @@ describe('Roc foundation services', () => {
       ])
     );
     expect(preview.interruptOn).toMatchObject({
-      write_file: true,
-      edit_file: true,
-      execute: true,
-      git_operation: true,
-      search_docs: true,
-      web_read: true
+      // fully_automatic 默认不挂 interrupt
     });
+    expect(preview.interruptOn).toEqual({});
   });
 
   it('normalizes the Exa preset into a single web_search capability card', () => {
@@ -2192,7 +2185,6 @@ describe('Roc foundation services', () => {
     });
     services.configService.setDefaultModel('model-ready');
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
-    services.mcpService.setServerApprovalMode('exa-hosted', 'auto_approve');
 
     const preview = services.agentService.getCapabilityPreview({
       mcpServers: ['exa-hosted'],
@@ -2206,8 +2198,7 @@ describe('Roc foundation services', () => {
         name: 'web_search',
         capabilityType: 'mcp_tool',
         auditCategory: 'mcp_call',
-        requiresApproval: false,
-        description: expect.stringContaining('当前策略：自动执行')
+        requiresApproval: false
       })
     );
     expect(preview.toolCards).not.toContainEqual(
@@ -2215,9 +2206,64 @@ describe('Roc foundation services', () => {
         name: 'web_search_exa'
       })
     );
-    expect(preview.interruptOn).toMatchObject({
-      web_search: false,
-      web_read: true
+    expect(preview.interruptOn).toEqual({});
+  });
+
+  it('switches capability preview to default approval mode for MCP and delete_file only', () => {
+    services.configService.upsertProvider({
+      id: 'provider-local',
+      name: 'Local OpenAI-compatible',
+      type: 'openai_compatible',
+      endpoint: 'http://127.0.0.1:11434/v1',
+      credentialRef: null,
+      enabled: true,
+      models: [
+        {
+          id: 'model-ready',
+          displayName: 'Ready model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    });
+    services.configService.setDefaultModel('model-ready');
+    services.configService.savePermissions({
+      schemaVersion: 3,
+      mode: 'default',
+      grants: []
+    });
+    services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+
+    const preview = services.agentService.getCapabilityPreview({
+      mcpServers: ['exa-hosted'],
+      skills: []
+    });
+
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:delete_file',
+        name: 'delete_file',
+        requiresApproval: true
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'mcp:exa-hosted:web_search',
+        name: 'web_search',
+        requiresApproval: true
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:execute',
+        name: 'execute',
+        requiresApproval: false
+      })
+    );
+    expect(preview.interruptOn).toEqual({
+      delete_file: true,
+      web_search: true
     });
   });
 

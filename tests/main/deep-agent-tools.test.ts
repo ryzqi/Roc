@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  createDeleteFileTool,
   createWebSearchTool,
   createMemoryGetTool,
   createMemorySearchTool,
@@ -59,10 +60,47 @@ describe('deep agent tools', () => {
     const webReadTool = createWebReadTool(webReadService);
     const memorySearchTool = createMemorySearchTool(memoryService);
     const memoryGetTool = createMemoryGetTool(memoryService);
+    const deleteFileTool = createDeleteFileTool({
+      deleteFile: vi.fn().mockReturnValue({
+        relativePath: 'notes.md',
+        recoveryPoint: {
+          id: 'recovery-1',
+          relativePath: 'notes.md',
+          snapshotPath: 'snapshot',
+          contentSha256: 'sha',
+          source: 'agent.delete_file',
+          createdAt: '2026-05-14T00:00:00.000Z',
+          restored: false
+        }
+      })
+    } as never);
 
     expect(webReadTool.description).toBe('读取公开网页正文，返回适合继续分析的文本内容。');
     expect(memorySearchTool.description).toBe('检索 Roc 长期记忆与会话回忆，返回相关条目摘要列表。');
     expect(memoryGetTool.description).toBe('读取指定 Roc 记忆条目的 Markdown 原文。');
+    expect(deleteFileTool.description).toContain('仅删除工作区内文件');
+  });
+
+  it('creates a delete_file tool that delegates to FileService.deleteFile', async () => {
+    const deleteFile = vi.fn().mockReturnValue({
+      relativePath: 'notes.md',
+      recoveryPoint: {
+        id: 'recovery-1',
+        relativePath: 'notes.md',
+        snapshotPath: 'snapshot',
+        contentSha256: 'sha',
+        source: 'agent.delete_file',
+        createdAt: '2026-05-14T00:00:00.000Z',
+        restored: false
+      }
+    });
+
+    const tool = createDeleteFileTool({ deleteFile } as never);
+    const result = await tool.invoke({ relativePath: 'notes.md' });
+
+    expect(deleteFile).toHaveBeenCalledWith('notes.md');
+    expect(result).toContain('"relativePath": "notes.md"');
+    expect(result).toContain('"source": "agent.delete_file"');
   });
 
   it('builds subagents with explicit operating prompts', () => {

@@ -93,13 +93,8 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     defaultModelId: null,
     providerSecretStatus: [],
     permissions: {
-      schemaVersion: 2,
-      defaultConfirmations: {
-        workspaceOutsideWrite: 'always_confirm',
-        gitPush: 'always_confirm',
-        memoryDelete: 'always_confirm',
-        workspaceOutsideShell: 'always_confirm'
-      },
+      schemaVersion: 3,
+      mode: 'fully_automatic',
       grants: []
     },
     providerTestStatus: null,
@@ -186,7 +181,7 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
 }
 
 describe('McpManagementPanel', () => {
-  it('renders approval mode controls and current status for each MCP server', () => {
+  it('renders the global approval hint and current status for each MCP server', () => {
     const html = renderToStaticMarkup(
       React.createElement(McpManagementPanel, {
         state: createLoadedState({
@@ -200,7 +195,6 @@ describe('McpManagementPanel', () => {
               tools: 1,
               preset: false,
               riskLevel: 'medium',
-              approvalMode: 'always_confirm',
               url: 'https://docs.example.test/mcp',
               allowedTools: ['search_docs'],
               lastError: null
@@ -214,7 +208,6 @@ describe('McpManagementPanel', () => {
               tools: 2,
               preset: true,
               riskLevel: 'medium',
-              approvalMode: 'auto_approve',
               url: 'https://mcp.exa.ai/mcp',
               allowedTools: ['web_search_exa', 'web_search_advanced_exa'],
               lastError: null
@@ -226,14 +219,14 @@ describe('McpManagementPanel', () => {
     );
 
     expect(html).toContain('data-testid="mcp-management"');
-    expect(html).toContain('仅控制该 MCP server 的工具调用是否进入审批');
+    expect(html).toContain('data-testid="mcp-global-approval-hint"');
+    expect(html).toContain('MCP 调用是否需要审批由全局策略统一控制');
+    expect(html).toContain('设置 → 授权与安全');
     expect(html).toContain('不影响 execute / web_read');
-    expect(html).toContain('审批策略： 每次审批');
-    expect(html).toContain('审批策略： 全自动执行');
-    expect(html).toContain('data-testid="mcp-approval-mode-docs-http"');
-    expect(html).toContain('data-testid="mcp-approval-always-docs-http"');
-    expect(html).toContain('data-testid="mcp-approval-auto-docs-http"');
-    expect(html).toContain('data-testid="mcp-approval-mode-exa-hosted"');
-    expect(html).toContain('checked=""');
+    expect(html).toContain('docs-http:not_connected · http · medium');
+    expect(html).toContain('exa-hosted:ready · http · medium');
+    expect(html).not.toContain('mcp-approval-mode-');
+    expect(html).not.toContain('mcp-approval-always-');
+    expect(html).not.toContain('mcp-approval-auto-');
   });
 });

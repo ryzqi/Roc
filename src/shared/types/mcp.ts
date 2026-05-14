@@ -1,5 +1,3 @@
-export type McpApprovalMode = 'always_confirm' | 'auto_approve';
-
 export type McpServerSnapshot = {
   id: string;
   name: string;
@@ -12,7 +10,6 @@ export type McpServerSnapshot = {
   url?: string;
   command?: string;
   allowedTools?: string[];
-  approvalMode: McpApprovalMode;
   lastError?: string | null;
 };
 
@@ -26,7 +23,6 @@ export type McpServerConfig = {
   url?: string;
   command?: string;
   allowedTools: string[];
-  approvalMode: McpApprovalMode;
 };
 
 export type McpServerTestResult = {

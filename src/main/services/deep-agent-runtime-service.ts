@@ -16,6 +16,7 @@ import type {
 } from '../../shared/types';
 import type { AgentService } from './agent-service';
 import { RocDomainError } from './errors';
+import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
 import type { MemoryService } from './memory-service';
@@ -75,6 +76,7 @@ export class DeepAgentRuntimeService {
     private readonly memoryService: MemoryService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
+    private readonly fileService: FileService,
     private readonly mcpService: McpService,
     private readonly webReadService: WebReadService,
     private readonly shellExecutionService: ShellExecutionService,
@@ -454,7 +456,8 @@ export class DeepAgentRuntimeService {
     const memorySearchTool = tools.createMemorySearchTool(this.memoryService);
     const memoryGetTool = tools.createMemoryGetTool(this.memoryService);
     const webReadTool = tools.createWebReadTool(this.webReadService);
-    const runTools: ClientTool[] = [memoryGetTool, memorySearchTool, webReadTool];
+    const deleteFileTool = tools.createDeleteFileTool(this.fileService);
+    const runTools: ClientTool[] = [memoryGetTool, memorySearchTool, webReadTool, deleteFileTool];
     const webSearchTool = await tools.createWebSearchTool({
       mcpService: this.mcpService,
       enabledCapabilities: context.enabledCapabilities,

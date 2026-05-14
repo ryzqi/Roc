@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import type {
   FilePreviewRequest,
   FilePreviewResult,
+  FileDeleteResult,
   FileSearchRequest,
   FileSearchResult,
   FileTreeRequest,
@@ -198,6 +199,43 @@ export class FileService {
       relativePath,
       recoveryPoint,
       bytesWritten: Buffer.byteLength(request.content, 'utf8')
+    };
+  }
+
+  deleteFile(relativePathInput: string): FileDeleteResult {
+    const relativePath = this.normalizeRelativePath(relativePathInput);
+    const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
+    if (!existsSync(absolutePath)) {
+      throw new RocDomainError({
+        code: 'delete_file_target_missing',
+        message: '要删除的目标不存在。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请确认目标路径后重试。'
+      });
+    }
+    const stat = statSync(absolutePath);
+    if (stat.isDirectory()) {
+      const children = readdirSync(absolutePath);
+      if (children.length > 0) {
+        throw new RocDomainError({
+          code: 'delete_file_target_not_empty',
+          message: '只能删除空目录。',
+          category: 'validation',
+          retryable: false,
+          userAction: '请先清空目录内容，或改为删除具体文件。'
+        });
+      }
+    }
+    const recoveryPoint = this.createRecoveryPoint(relativePath, absolutePath, 'agent.delete_file');
+    if (stat.isDirectory()) {
+      rmdirSync(absolutePath);
+    } else {
+      unlinkSync(absolutePath);
+    }
+    return {
+      relativePath,
+      recoveryPoint
     };
   }
 

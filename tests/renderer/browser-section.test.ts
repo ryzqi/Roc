@@ -18,7 +18,6 @@ describe('browser section', () => {
           riskLevel: 'medium',
           url: 'https://mcp.exa.ai/mcp',
           allowedTools: ['web_search_exa', 'web_search_advanced_exa'],
-          approvalMode: 'always_confirm',
           lastError: null
         },
         onTestExa: async () => {},

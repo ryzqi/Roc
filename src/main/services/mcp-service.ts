@@ -12,8 +12,7 @@ const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   riskLevel: z.enum(['low', 'medium', 'high']),
   url: z.string().min(1).optional(),
   command: z.string().min(1).optional(),
-  allowedTools: z.array(z.string().min(1)),
-  approvalMode: z.enum(['always_confirm', 'auto_approve']).default('always_confirm')
+  allowedTools: z.array(z.string().min(1))
 });
 
 export class McpService {
@@ -34,7 +33,6 @@ export class McpService {
       url: server.url,
       command: server.command,
       allowedTools: server.allowedTools,
-      approvalMode: server.approvalMode,
       lastError: null
     }));
   }
@@ -53,8 +51,7 @@ export class McpService {
       url: 'https://mcp.exa.ai/mcp',
       preset: true,
       riskLevel: 'medium',
-      allowedTools: ['web_search_exa', 'web_search_advanced_exa'],
-      approvalMode: 'always_confirm'
+      allowedTools: ['web_search_exa', 'web_search_advanced_exa']
     });
   }
 
@@ -82,24 +79,6 @@ export class McpService {
     const nextServer: McpServerConfig = {
       ...found,
       enabled
-    };
-    this.writeConfig({
-      schemaVersion: 1,
-      servers: config.servers.map((server) => (server.id === serverId ? nextServer : server))
-    });
-    return nextServer;
-  }
-
-  setServerApprovalMode(id: string, approvalMode: McpServerConfig['approvalMode']): McpServerConfig {
-    const serverId = this.requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要修改的 MCP server。');
-    const config = this.readConfig();
-    const found = config.servers.find((server) => server.id === serverId);
-    if (found === undefined) {
-      throw this.notFound(serverId);
-    }
-    const nextServer: McpServerConfig = {
-      ...found,
-      approvalMode
     };
     this.writeConfig({
       schemaVersion: 1,

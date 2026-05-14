@@ -136,7 +136,6 @@ export const ipcChannels = {
   mcpEnsureExaPreset: 'roc:mcp:ensure-exa-preset',
   mcpUpsertServer: 'roc:mcp:upsert-server',
   mcpSetServerEnabled: 'roc:mcp:set-server-enabled',
-  mcpSetServerApprovalMode: 'roc:mcp:set-server-approval-mode',
   mcpDeleteServer: 'roc:mcp:delete-server',
   mcpTestServer: 'roc:mcp:test-server',
   skillsList: 'roc:skills:list',
@@ -241,7 +240,6 @@ export type RocPreloadApi = {
     ensureExaPreset: () => Promise<IpcResult<McpServerConfig>>;
     upsertServer: (server: McpServerConfig) => Promise<IpcResult<McpServerConfig>>;
     setServerEnabled: (request: { id: string; enabled: boolean }) => Promise<IpcResult<McpServerConfig>>;
-    setServerApprovalMode: (request: { id: string; approvalMode: McpServerConfig['approvalMode'] }) => Promise<IpcResult<McpServerConfig>>;
     deleteServer: (id: string) => Promise<IpcResult<{ deleted: true }>>;
     testServer: (id: string) => Promise<IpcResult<McpServerTestResult>>;
   };

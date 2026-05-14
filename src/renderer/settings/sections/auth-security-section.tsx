@@ -1,31 +1,24 @@
 import type React from 'react';
-import type { PermissionConfirmationPolicy, PermissionsConfig } from '../../../shared/types';
-import { FieldRow, InfoRow } from '../atoms';
+import type { ApprovalMode, PermissionsConfig } from '../../../shared/types';
+import { InfoRow } from '../atoms';
 
-const fields: Array<{
-  key: keyof PermissionsConfig['defaultConfirmations'];
-  label: string;
-  hint: string;
+const approvalModes: Array<{
+  value: ApprovalMode;
+  title: string;
+  description: string;
+  testId: string;
 }> = [
   {
-    key: 'workspaceOutsideWrite',
-    label: '工作区外写入',
-    hint: '影响 agent 修改、删除、移动工作区外文件时是否始终弹出确认。'
+    value: 'fully_automatic',
+    title: '全自动',
+    description: '直接执行内置工具与 MCP 工具；删除文件与外部调用不再默认弹出审批卡。',
+    testId: 'settings-approval-mode-fully-automatic'
   },
   {
-    key: 'workspaceOutsideShell',
-    label: '工作区外执行命令',
-    hint: '影响 agent 在工作区外发起命令时是否始终弹出确认。'
-  },
-  {
-    key: 'gitPush',
-    label: 'Git push',
-    hint: '影响远端推送是否始终弹出确认；本地 commit 不受此项影响。'
-  },
-  {
-    key: 'memoryDelete',
-    label: '删除记忆',
-    hint: '影响删除有效记忆条目时是否始终弹出确认；候选记忆删除不受影响。'
+    value: 'default',
+    title: '默认',
+    description: '仅在 delete_file 与 MCP 工具调用前弹出审批卡；execute、web_read 与记忆工具保持直通。',
+    testId: 'settings-approval-mode-default'
   }
 ];
 
@@ -36,16 +29,10 @@ export function AuthSecuritySection({
   draft: PermissionsConfig;
   onChange: (next: PermissionsConfig) => void;
 }): React.JSX.Element {
-  function setConfirmation(
-    key: keyof PermissionsConfig['defaultConfirmations'],
-    value: PermissionConfirmationPolicy
-  ): void {
+  function setApprovalMode(mode: ApprovalMode): void {
     onChange({
       ...draft,
-      defaultConfirmations: {
-        ...draft.defaultConfirmations,
-        [key]: value
-      }
+      mode
     });
   }
 
@@ -54,25 +41,22 @@ export function AuthSecuritySection({
       <div className="card-title">授权与安全</div>
       <div className="card-pad settings-form">
         <p className="card-hint">
-          这些开关只决定默认确认规则的策略偏好；任务运行时的实际决策仍由权限服务在工具调用前裁决。
+          这里控制 Roc 的全局审批策略。运行时是否中断并展示审批卡，会按当前模式统一决定。
         </p>
         <div className="form-grid">
-          {fields.map((field) => (
-            <FieldRow hint={field.hint} key={field.key} label={field.label}>
-              <select
-                data-testid={`settings-confirmation-${field.key}`}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  if (value === 'always_confirm' || value === 'never_confirm') {
-                    setConfirmation(field.key, value);
-                  }
-                }}
-                value={draft.defaultConfirmations[field.key]}
-              >
-                <option value="always_confirm">始终确认</option>
-                <option value="never_confirm">不确认</option>
-              </select>
-            </FieldRow>
+          {approvalModes.map((option) => (
+            <label className="field" key={option.value}>
+              <span>{option.title}</span>
+              <input
+                checked={draft.mode === option.value}
+                data-testid={option.testId}
+                name="settings-approval-mode"
+                onChange={() => setApprovalMode(option.value)}
+                type="radio"
+                value={option.value}
+              />
+              <small className="field-hint">{option.description}</small>
+            </label>
           ))}
         </div>
       </div>

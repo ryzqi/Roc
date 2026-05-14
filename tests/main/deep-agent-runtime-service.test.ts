@@ -56,6 +56,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.memoryService,
       services.agentService,
       services.workspaceService,
+      services.fileService,
       services.mcpService,
       services.webReadService,
       services.shellExecutionService,
@@ -702,8 +703,7 @@ describe('DeepAgentRuntimeService', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs'],
-      approvalMode: 'always_confirm'
+      allowedTools: ['search_docs']
     });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
@@ -818,7 +818,7 @@ describe('DeepAgentRuntimeService', () => {
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
-    expect(toolNames).toEqual(['memory_get', 'memory_search', 'web_read', 'web_search']);
+    expect(toolNames).toEqual(['memory_get', 'memory_search', 'web_read', 'delete_file', 'web_search']);
     expect(toolNames).not.toContain('terminal_command');
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
     expect(codeReviewSubagent?.tools?.map((tool) => tool.name)).toEqual(
@@ -979,6 +979,11 @@ describe('DeepAgentRuntimeService', () => {
       subagents: createAsyncIterable([]),
       output: Promise.resolve({})
     });
+    services.configService.savePermissions({
+      schemaVersion: 3,
+      mode: 'default',
+      grants: []
+    });
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
 
     const runtime = createRuntime();
@@ -1001,11 +1006,9 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toMatchObject({
-      write_file: true,
-      edit_file: true,
-      execute: true,
-      git_operation: true,
-      web_read: true,
+      delete_file: true
+    });
+    expect(call?.interruptOn).toMatchObject({
       web_search: true
     });
     expect(call?.checkpointer).toBeTruthy();
@@ -1133,12 +1136,17 @@ describe('DeepAgentRuntimeService', () => {
     expect(createChatModelByModelIdSpy.mock.calls.at(-1)?.[1]).toEqual({ streaming: true, cacheTtl: '1h' });
   });
 
-  it('maps MCP server approval mode into interruptOn without affecting execute or web_read', async () => {
+  it('maps global default approval mode into interruptOn without affecting execute or web_read', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
       toolCalls: createAsyncIterable([]),
       subagents: createAsyncIterable([]),
       output: Promise.resolve({})
+    });
+    services.configService.savePermissions({
+      schemaVersion: 3,
+      mode: 'default',
+      grants: []
     });
     services.mcpService.upsertServer({
       id: 'docs-http',
@@ -1148,8 +1156,7 @@ describe('DeepAgentRuntimeService', () => {
       url: 'https://docs.example.test/mcp',
       preset: false,
       riskLevel: 'medium',
-      allowedTools: ['search_docs'],
-      approvalMode: 'auto_approve'
+      allowedTools: ['search_docs']
     });
 
     const runtime = createRuntime();
@@ -1170,13 +1177,9 @@ describe('DeepAgentRuntimeService', () => {
         }
       | undefined;
 
-    expect(call?.interruptOn).toMatchObject({
-      write_file: true,
-      edit_file: true,
-      execute: true,
-      git_operation: true,
-      web_read: true,
-      search_docs: false
+    expect(call?.interruptOn).toEqual({
+      delete_file: true,
+      search_docs: true
     });
   });
 

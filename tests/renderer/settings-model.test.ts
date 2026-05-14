@@ -44,13 +44,8 @@ function defaultSettings(): AppSettings {
 
 function defaultPermissions(): PermissionsConfig {
   return {
-    schemaVersion: 2,
-    defaultConfirmations: {
-      workspaceOutsideWrite: 'always_confirm',
-      gitPush: 'always_confirm',
-      memoryDelete: 'always_confirm',
-      workspaceOutsideShell: 'always_confirm'
-    },
+    schemaVersion: 3,
+    mode: 'fully_automatic',
     grants: []
   };
 }
@@ -510,7 +505,6 @@ describe('settings model helpers', () => {
         url: 'https://docs.example.test/mcp',
         command: undefined,
         allowedTools: ['search_docs'],
-        approvalMode: 'always_confirm',
         lastError: null
       }
     ];
@@ -565,10 +559,7 @@ describe('settings model helpers', () => {
     const basePermissions = defaultPermissions();
     const draftPermissions: PermissionsConfig = {
       ...basePermissions,
-      defaultConfirmations: {
-        ...basePermissions.defaultConfirmations,
-        gitPush: 'never_confirm'
-      }
+      mode: 'default'
     };
 
     const rows = buildImpactRows(
@@ -581,12 +572,13 @@ describe('settings model helpers', () => {
       'defaultWorkspace',
       'memory.warmRecallEnabled',
       'memory.sessionRetentionDays',
-      'defaultConfirmations.gitPush'
+      'permissions.mode'
     ]);
     expect(rows.find((row) => row.field === 'defaultModelId')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'defaultWorkspace')?.severity).toBe('info');
     expect(rows.find((row) => row.field === 'memory.warmRecallEnabled')?.after).toBe('已关闭');
-    expect(rows.find((row) => row.field === 'defaultConfirmations.gitPush')?.severity).toBe('high');
+    expect(rows.find((row) => row.field === 'permissions.mode')?.severity).toBe('high');
+    expect(rows.find((row) => row.field === 'permissions.mode')?.after).toBe('默认(MCP 与删除文件需审批)');
   });
 
   it('providerTypeMeta returns OpenAI defaults for openai_compatible', () => {

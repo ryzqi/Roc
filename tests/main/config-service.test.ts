@@ -16,13 +16,8 @@ function readSettingsDocument(): unknown {
 
 function defaultPermissions(): PermissionsConfig {
   return {
-    schemaVersion: 2,
-    defaultConfirmations: {
-      workspaceOutsideWrite: 'always_confirm',
-      gitPush: 'always_confirm',
-      memoryDelete: 'always_confirm',
-      workspaceOutsideShell: 'always_confirm'
-    },
+    schemaVersion: 3,
+    mode: 'fully_automatic',
     grants: []
   };
 }
@@ -38,7 +33,7 @@ afterEach(() => {
 });
 
 describe('ConfigService unified settings document', () => {
-  it('migrates legacy v1 split config files into schemaVersion 3 settings.json with safeStorage credentials', () => {
+  it('migrates legacy v1 split config files into schemaVersion 4 settings.json with safeStorage credentials', () => {
     const legacyV1Settings = {
       schemaVersion: 1 as const,
       defaultWorkspace: 'F:\\Code\\Roc',
@@ -112,7 +107,7 @@ describe('ConfigService unified settings document', () => {
     configService.initialize();
 
     const document = readSettingsDocument() as Record<string, unknown>;
-    expect(document.schemaVersion).toBe(3);
+    expect(document.schemaVersion).toBe(4);
     expect(document.settings).toMatchObject({
       schemaVersion: 2,
       defaultWorkspace: 'F:\\Code\\Roc',
@@ -147,14 +142,9 @@ describe('ConfigService unified settings document', () => {
       ])
     );
     expect(document.permissions).toEqual({
-      schemaVersion: 2,
-      defaultConfirmations: {
-        workspaceOutsideWrite: 'always_confirm',
-        gitPush: 'always_confirm',
-        memoryDelete: 'always_confirm',
-        workspaceOutsideShell: 'always_confirm'
-      },
-      grants: ['shell.execute']
+      schemaVersion: 3,
+      mode: 'fully_automatic',
+      grants: []
     });
     expect(configService.getProviders().providers.find((provider) => provider.id === 'provider-openai')?.credentialRef).toBeNull();
   });
@@ -240,10 +230,7 @@ describe('ConfigService unified settings document', () => {
         expect.objectContaining({ id: 'legacy-env', credentialRef: null })
       ])
     );
-    expect(configService.getPermissions()).toEqual({
-      ...defaultPermissions(),
-      grants: ['shell.execute']
-    });
+    expect(configService.getPermissions()).toEqual(defaultPermissions());
     expect(configService.getSettings().memory.sessionRetentionDays).toBe(90);
   });
 
@@ -276,8 +263,7 @@ describe('ConfigService unified settings document', () => {
       preset: true,
       riskLevel: 'medium',
       url: 'https://mcp.exa.ai/mcp',
-      allowedTools: ['web_search_exa'],
-      approvalMode: 'always_confirm'
+      allowedTools: ['web_search_exa']
     };
 
     configService.upsertProvider(provider);
@@ -285,7 +271,7 @@ describe('ConfigService unified settings document', () => {
     mcpService.upsertServer(mcpServer);
 
     expect(readSettingsDocument()).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       providers: {
         defaultModelId: 'anthropic-model',
         providers: [
@@ -330,7 +316,7 @@ describe('ConfigService unified settings document', () => {
     ).toThrow();
   });
 
-  it('persists permission default confirmations and language preferences via saveSettingsSnapshot', () => {
+  it('persists approval mode and language preferences via saveSettingsSnapshot', () => {
     const configService = new ConfigService(paths);
     configService.initialize();
 
@@ -354,25 +340,23 @@ describe('ConfigService unified settings document', () => {
       providers: [],
       defaultModelId: null,
       permissions: {
-        schemaVersion: 2,
-        defaultConfirmations: {
-          workspaceOutsideWrite: 'never_confirm',
-          gitPush: 'always_confirm',
-          memoryDelete: 'never_confirm',
-          workspaceOutsideShell: 'always_confirm'
-        },
+        schemaVersion: 3,
+        mode: 'default',
         grants: []
-      }
+      } as PermissionsConfig
     });
 
     const stored = configService.getSettings();
     const permissions = configService.getPermissions();
     expect(stored).toEqual(settings);
-    expect(permissions.defaultConfirmations.workspaceOutsideWrite).toBe('never_confirm');
-    expect(permissions.defaultConfirmations.memoryDelete).toBe('never_confirm');
+    expect(permissions).toEqual({
+      schemaVersion: 3,
+      mode: 'default',
+      grants: []
+    });
   });
 
-  it('backfills legacy MCP approval mode to always_confirm when the stored config omits it', () => {
+  it('drops legacy MCP approval mode fields and resets permissions to fully_automatic during migration', () => {
     writeFileSync(
       join(root, 'config', 'settings.json'),
       `${JSON.stringify({
@@ -407,11 +391,21 @@ describe('ConfigService unified settings document', () => {
               preset: false,
               riskLevel: 'medium',
               url: 'https://legacy.example.test/mcp',
-              allowedTools: ['search_docs']
+              allowedTools: ['search_docs'],
+              approvalMode: 'always_confirm'
             }
           ]
         },
-        permissions: defaultPermissions(),
+        permissions: {
+          schemaVersion: 2,
+          defaultConfirmations: {
+            workspaceOutsideWrite: 'never_confirm',
+            gitPush: 'always_confirm',
+            memoryDelete: 'never_confirm',
+            workspaceOutsideShell: 'always_confirm'
+          },
+          grants: ['legacy-grant']
+        },
         shortcuts: {
           schemaVersion: 1,
           shortcuts: []
@@ -427,10 +421,15 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 1,
       servers: [
         expect.objectContaining({
-          id: 'legacy-mcp',
-          approvalMode: 'always_confirm'
+          id: 'legacy-mcp'
         })
       ]
+    });
+    expect(configService.getMcpConfig().servers[0]).not.toHaveProperty('approvalMode');
+    expect(configService.getPermissions()).toEqual({
+      schemaVersion: 3,
+      mode: 'fully_automatic',
+      grants: []
     });
   });
 

@@ -4,6 +4,7 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { z } from 'zod';
 import type { ChatStartRunRequest, MemorySearchRequest } from '../../../shared/types';
 import { RocDomainError } from '../errors';
+import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
 import type { MemoryService } from '../memory-service';
 import { WebReadService, type WebReadRequest } from '../web-read-service';
@@ -54,6 +55,20 @@ export function createMemoryGetTool(memoryService: MemoryService): DynamicStruct
     schema,
     func: async (input: MemoryGetRequest) => {
       return memoryService.get(input.id);
+    }
+  });
+}
+
+export function createDeleteFileTool(fileService: FileService): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.object({
+    relativePath: z.string().trim().min(1)
+  });
+  return new DynamicStructuredTool<typeof schema, { relativePath: string }, { relativePath: string }, string>({
+    name: 'delete_file',
+    description: '仅删除工作区内文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
+    schema,
+    func: async (input: { relativePath: string }) => {
+      return JSON.stringify(fileService.deleteFile(input.relativePath), null, 2);
     }
   });
 }

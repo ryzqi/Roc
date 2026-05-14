@@ -111,13 +111,8 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     defaultModelId: 'gpt-test',
     providerSecretStatus: [],
     permissions: {
-      schemaVersion: 2,
-      defaultConfirmations: {
-        workspaceOutsideWrite: 'always_confirm',
-        gitPush: 'always_confirm',
-        memoryDelete: 'always_confirm',
-        workspaceOutsideShell: 'always_confirm'
-      },
+      schemaVersion: 3,
+      mode: 'fully_automatic',
       grants: []
     },
     providerTestStatus: null,

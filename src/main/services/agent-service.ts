@@ -1,5 +1,6 @@
 import { createDeepAgent } from 'deepagents';
 import type {
+  ApprovalMode,
   AgentCapabilityCard,
   AgentCapabilityPreview,
   AgentRuntimeStatus,
@@ -43,6 +44,7 @@ export class AgentService {
       throw this.configService.createDefaultModelError(defaultModelState);
     }
 
+    const approvalMode = this.getApprovalMode();
     return {
       runnable: false,
       model: defaultModelState.modelId,
@@ -53,12 +55,7 @@ export class AgentService {
         sourceTool: 'write_todos',
         target: 'task_steps'
       },
-      interruptOn: {
-        write_file: true,
-        edit_file: true,
-        execute: true,
-        git_operation: true
-      },
+      interruptOn: this.createInterruptPolicy(approvalMode, []),
       reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
     };
   }
@@ -71,6 +68,7 @@ export class AgentService {
 
     const mcpServers = this.mcpService.listServers();
     const skills = this.skillService.list();
+    const approvalMode = this.getApprovalMode();
     const skippedCapabilities: SkippedCapability[] = [];
     const selectedMcpServers: string[] = [];
     const selectedSkills: string[] = [];
@@ -88,7 +86,7 @@ export class AgentService {
         continue;
       }
       selectedMcpServers.push(server.id);
-      selectedMcpCards.push(...this.createMcpToolCards(server));
+      selectedMcpCards.push(...this.createMcpToolCards(server, approvalMode));
     }
 
     for (const skillId of requestedCapabilities.skills) {
@@ -111,8 +109,9 @@ export class AgentService {
 
     const webReadCard = this.createWebReadCard();
     const executeCard = this.createExecuteCard();
+    const deleteFileCard = this.createDeleteFileCard(approvalMode);
     const memoryCards = this.createMemoryCards();
-    const toolCards = [...memoryCards, executeCard, webReadCard, ...selectedMcpCards];
+    const toolCards = [...memoryCards, executeCard, webReadCard, deleteFileCard, ...selectedMcpCards];
 
     return {
       runnable: false,
@@ -127,30 +126,33 @@ export class AgentService {
       toolCards,
       skillCards: selectedSkillCards,
       subagents: this.createSubagents(),
-      interruptOn: this.createInterruptPolicy(selectedMcpCards),
+      interruptOn: this.createInterruptPolicy(
+        approvalMode,
+        selectedMcpCards.map((card) => card.name)
+      ),
       untrustedContextPolicy: 'external_content_reference_only',
       reason: '当前仅生成本轮能力清单预览，实际运行时才会装配 Deep Agents。'
     };
   }
 
-  private createMcpToolCards(server: McpServerSnapshot): AgentCapabilityCard[] {
-    const approvalLabel = server.approvalMode === 'auto_approve' ? '自动执行' : '每次审批';
+  private createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMode): AgentCapabilityCard[] {
+    const requiresApproval = approvalMode === 'default';
     const approvalHint =
-      server.approvalMode === 'auto_approve'
-        ? '当前 MCP server 已设为自动执行，可在 MCP 管理视图改回每次审批。'
-        : '当前 MCP server 设为每次审批，可在 MCP 管理视图改为自动执行。';
+      approvalMode === 'default'
+        ? '当前全局策略会在 MCP 调用时弹出审批卡。'
+        : '当前全局策略会直接执行 MCP 调用。';
     if (server.id === 'exa-hosted') {
       return [
         {
           id: 'mcp:exa-hosted:web_search',
           name: 'web_search',
           capabilityType: 'mcp_tool',
-          description: `搜索公开网络信息，返回可继续阅读和核实的结果列表。当前策略：${approvalLabel}。`,
+          description: '搜索公开网络信息，返回可继续阅读和核实的结果列表。',
           requiredInput: 'query',
           scope: 'external',
           dependencies: [server.id],
           sideEffects: ['external_tool_call'],
-          requiresApproval: server.approvalMode === 'always_confirm',
+          requiresApproval,
           supportsLongTermGrant: true,
           revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
           riskLevel: server.riskLevel ?? 'medium',
@@ -167,12 +169,12 @@ export class AgentService {
       id: `mcp:${server.id}:${toolName}`,
       name: toolName,
       capabilityType: 'mcp_tool',
-      description: `${server.name} 提供的 ${toolName} 调用入口。当前策略：${approvalLabel}。`,
+      description: `${server.name} 提供的 ${toolName} 调用入口。`,
       requiredInput: 'tool-specific structured input',
       scope: 'external',
       dependencies: [server.id],
       sideEffects: ['external_tool_call'],
-      requiresApproval: server.approvalMode === 'always_confirm',
+      requiresApproval,
       supportsLongTermGrant: true,
       revokeGrantHint: `${approvalHint} supportsLongTermGrant 仅表示可长期保留该能力授权。`,
       riskLevel: server.riskLevel ?? 'medium',
@@ -211,7 +213,7 @@ export class AgentService {
       scope: 'network',
       dependencies: ['explicit_url'],
       sideEffects: ['network_read'],
-      requiresApproval: true,
+      requiresApproval: false,
       supportsLongTermGrant: true,
       revokeGrantHint: '在设置页网页与搜索授权中撤销。',
       riskLevel: 'medium',
@@ -230,7 +232,7 @@ export class AgentService {
       scope: 'workspace',
       dependencies: ['LocalShellBackend', 'RtkService'],
       sideEffects: ['workspace_command_execution', 'task_trace_audit'],
-      requiresApproval: true,
+      requiresApproval: false,
       supportsLongTermGrant: false,
       revokeGrantHint: 'execute 由 Roc 内置 backend 提供，不创建长期授权。',
       riskLevel: 'medium',
@@ -276,6 +278,25 @@ export class AgentService {
     ];
   }
 
+  private createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
+    return {
+      id: 'builtin:delete_file',
+      name: 'delete_file',
+      capabilityType: 'terminal_tool',
+      description: '删除当前工作区内的文件或空目录，并在删除前写入恢复点。',
+      requiredInput: 'workspace relative path',
+      scope: 'workspace',
+      dependencies: ['FileService'],
+      sideEffects: ['workspace_delete', 'recovery_point_write'],
+      requiresApproval: approvalMode === 'default',
+      supportsLongTermGrant: false,
+      revokeGrantHint: 'delete_file 由 Roc 内置文件服务提供，不创建长期授权。',
+      riskLevel: 'high',
+      auditCategory: 'workspace_delete',
+      untrustedContext: false
+    };
+  }
+
   private createSubagents(): AgentSubagentPreview[] {
     return [
       {
@@ -295,16 +316,19 @@ export class AgentService {
     ];
   }
 
-  private createInterruptPolicy(mcpCards: AgentCapabilityCard[]): Record<string, boolean> {
+  private getApprovalMode(): ApprovalMode {
+    return this.configService.getPermissions().mode;
+  }
+
+  private createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): Record<string, boolean> {
+    if (approvalMode === 'fully_automatic') {
+      return {};
+    }
     const policy: Record<string, boolean> = {
-      write_file: true,
-      edit_file: true,
-      execute: true,
-      git_operation: true,
-      web_read: true
+      delete_file: true
     };
-    for (const card of mcpCards) {
-      policy[card.name] = card.requiresApproval;
+    for (const toolName of mcpToolNames) {
+      policy[toolName] = true;
     }
     return policy;
   }
