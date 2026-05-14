@@ -24,7 +24,7 @@ describe('chat message row', () => {
     expect(html).not.toContain('<p>第一段\n\n- 列表项');
   });
 
-  it('keeps assistant content, reasoning, approval, and the streaming cursor in one assistant content block', () => {
+  it('keeps assistant reasoning, content, approval, and the streaming cursor in one assistant content block', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -56,7 +56,7 @@ describe('chat message row', () => {
 
     expect(html).toContain('data-testid="chat-assistant-content"');
     expect(html).toMatch(
-      /data-testid="chat-assistant-content"[\s\S]*<p>最终答案<\/p>[\s\S]*data-testid="chat-message-reasoning"[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
+      /data-testid="chat-assistant-content"[\s\S]*data-testid="chat-message-reasoning"[\s\S]*<p>最终答案<\/p>[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
     );
   });
 

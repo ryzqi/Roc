@@ -39,7 +39,6 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       <article className={bubbleClassName}>
         {isAssistant ? (
           <div className="chat-assistant-content" data-testid="chat-assistant-content">
-            {message.content.length === 0 ? null : <MarkdownView text={message.content} />}
             {message.reasoning === null ? null : (
               <details
                 className="chat-bubble-reasoning"
@@ -54,6 +53,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                 </div>
               </details>
             )}
+            {message.content.length === 0 ? null : <MarkdownView text={message.content} />}
             {approval === null ? null : (
               <motion.div
                 className="chat-approval-card"
