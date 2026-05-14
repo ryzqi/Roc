@@ -617,7 +617,7 @@ export class DeepAgentRuntimeService {
       const reasoningSource = this.readReasoningSource(message);
       const tasks: Array<Promise<void>> = [];
 
-      if (textStream !== null) {
+      if (textStream !== null && !recordUtils.isNonAssistantTextMessage(message)) {
         tasks.push(
           this.consumeStringStream(textStream, (delta) => {
             onVisibleOutput?.();

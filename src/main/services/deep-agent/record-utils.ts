@@ -18,6 +18,175 @@ export function readNonEmptyString(value: unknown): string | null {
   return value.length === 0 ? null : value;
 }
 
+const NON_ASSISTANT_MESSAGE_TYPES = new Set([
+  'tool',
+  'tool_result',
+  'tool_use',
+  'mcp_call',
+  'mcp_result',
+  'mcp_tool_call',
+  'mcp_tool_result',
+  'skill_loaded',
+  'skill_load',
+  'skill_content'
+]);
+
+const NON_ASSISTANT_CONTENT_BLOCK_TYPES = new Set([
+  'tool_call',
+  'tool_call_chunk',
+  'invalid_tool_call',
+  'tool_result',
+  'tool_use',
+  'server_tool_call',
+  'server_tool_call_chunk',
+  'server_tool_call_result',
+  'mcp_call',
+  'mcp_result',
+  'mcp_tool_call',
+  'mcp_tool_result',
+  'skill_loaded',
+  'skill_load',
+  'skill_content'
+]);
+
+export function isNonAssistantTextMessage(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (hasNonAssistantMessageType(value)) {
+    return true;
+  }
+
+  const additionalKwargs = readRecordValue(value, 'additional_kwargs');
+  if (hasToolCalls(value) || hasToolCalls(additionalKwargs)) {
+    return true;
+  }
+
+  return readContentBlocks(value).some((block) => isNonAssistantContentBlock(block));
+}
+
+function hasNonAssistantMessageType(value: Record<string, unknown>): boolean {
+  const role = readLowercaseString(readRecordValue(value, 'role'));
+  if (role !== null && NON_ASSISTANT_MESSAGE_TYPES.has(role)) {
+    return true;
+  }
+
+  const type = readLowercaseString(readRecordValue(value, 'type'));
+  return type !== null && NON_ASSISTANT_MESSAGE_TYPES.has(type);
+}
+
+function hasToolCalls(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const toolCalls = readRecordValue(value, 'tool_calls');
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+    return true;
+  }
+
+  const toolCallChunks = readRecordValue(value, 'tool_call_chunks');
+  if (Array.isArray(toolCallChunks) && toolCallChunks.length > 0) {
+    return true;
+  }
+
+  return readNonEmptyString(readRecordValue(value, 'tool_call_id')) !== null;
+}
+
+function readContentBlocks(value: unknown): unknown[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const blocks: unknown[] = [];
+  appendArrayValues(blocks, readRecordValue(value, 'contentBlocks'));
+  appendArrayValues(blocks, readRecordValue(value, 'content_blocks'));
+  appendArrayValues(blocks, readRecordValue(value, 'content'));
+
+  const additionalKwargs = readRecordValue(value, 'additional_kwargs');
+  if (isRecord(additionalKwargs)) {
+    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'contentBlocks'));
+    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'content_blocks'));
+    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'content'));
+  }
+
+  return blocks;
+}
+
+function appendArrayValues(target: unknown[], value: unknown): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  target.push(...value);
+}
+
+function isNonAssistantContentBlock(block: unknown): boolean {
+  if (!isRecord(block)) {
+    return false;
+  }
+
+  const type = readLowercaseString(readRecordValue(block, 'type'));
+  if (type !== null && NON_ASSISTANT_CONTENT_BLOCK_TYPES.has(type)) {
+    return true;
+  }
+
+  if (hasToolCalls(block)) {
+    return true;
+  }
+
+  if (hasSkillInstructionPath(block)) {
+    return true;
+  }
+
+  const nestedContent = readRecordValue(block, 'content');
+  return Array.isArray(nestedContent) && nestedContent.some((item) => isNonAssistantContentBlock(item));
+}
+
+function hasSkillInstructionPath(value: Record<string, unknown>): boolean {
+  const path = readNonEmptyString(readRecordValue(value, 'path'));
+  if (path !== null && isSkillInstructionPath(path)) {
+    return true;
+  }
+
+  const filePath = readNonEmptyString(readRecordValue(value, 'filePath'));
+  if (filePath !== null && isSkillInstructionPath(filePath)) {
+    return true;
+  }
+
+  const snakeCaseFilePath = readNonEmptyString(readRecordValue(value, 'file_path'));
+  if (snakeCaseFilePath !== null && isSkillInstructionPath(snakeCaseFilePath)) {
+    return true;
+  }
+
+  const metadata = readRecordValue(value, 'metadata');
+  if (!isRecord(metadata)) {
+    return false;
+  }
+
+  const metadataPath = readNonEmptyString(readRecordValue(metadata, 'path'));
+  if (metadataPath !== null && isSkillInstructionPath(metadataPath)) {
+    return true;
+  }
+
+  const metadataFilePath = readNonEmptyString(readRecordValue(metadata, 'filePath'));
+  if (metadataFilePath !== null && isSkillInstructionPath(metadataFilePath)) {
+    return true;
+  }
+
+  const metadataSnakeCaseFilePath = readNonEmptyString(readRecordValue(metadata, 'file_path'));
+  return metadataSnakeCaseFilePath !== null && isSkillInstructionPath(metadataSnakeCaseFilePath);
+}
+
+function isSkillInstructionPath(path: string): boolean {
+  return path.replaceAll('\\', '/').toLowerCase().endsWith('/skill.md');
+}
+
+function readLowercaseString(value: unknown): string | null {
+  const text = readNonEmptyString(value);
+  return text === null ? null : text.toLowerCase();
+}
+
 export function readReasoningBlockText(block: unknown): string[] {
   if (!isRecord(block)) {
     return [];

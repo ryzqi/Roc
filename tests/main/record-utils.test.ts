@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readReasoningBlockText, readReasoningFromMessageOutput } from '../../src/main/services/deep-agent/record-utils';
+import {
+  isNonAssistantTextMessage,
+  readReasoningBlockText,
+  readReasoningFromMessageOutput
+} from '../../src/main/services/deep-agent/record-utils';
 
 describe('record-utils reasoning helpers', () => {
   it('reads reasoning_content from message output additional_kwargs', async () => {
@@ -79,5 +83,51 @@ describe('record-utils reasoning helpers', () => {
         thinking: 'native thinking'
       })
     ).toEqual(['native thinking']);
+  });
+});
+
+describe('record-utils assistant text boundaries', () => {
+  it('identifies tool result content blocks as non-assistant text', () => {
+    expect(
+      isNonAssistantTextMessage({
+        contentBlocks: [
+          {
+            type: 'tool_result',
+            name: 'web_search',
+            content: '{"results":[{"title":"Exa raw result"}]}'
+          }
+        ]
+      })
+    ).toBe(true);
+  });
+
+  it('identifies skill load content blocks as non-assistant text', () => {
+    expect(
+      isNonAssistantTextMessage({
+        additional_kwargs: {
+          content_blocks: [
+            {
+              type: 'skill_loaded',
+              name: 'project-review',
+              path: '/skills/project-review/SKILL.md',
+              content: '---\nname: project-review\ndescription: Review a project\n---\n# Project Review'
+            }
+          ]
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('keeps ordinary assistant text messages visible', () => {
+    expect(
+      isNonAssistantTextMessage({
+        contentBlocks: [
+          {
+            type: 'text',
+            text: '这是模型最终回答。'
+          }
+        ]
+      })
+    ).toBe(false);
   });
 });
