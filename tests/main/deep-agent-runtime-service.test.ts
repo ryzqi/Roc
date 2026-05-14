@@ -59,7 +59,10 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.mcpService,
       services.webReadService,
       services.shellExecutionService,
-      services.paths
+      services.paths,
+      {
+        append: vi.fn()
+      } as never
     );
   }
 
@@ -653,6 +656,33 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.backend?.routePrefixes).toEqual(['/skills/']);
   });
 
+  it('sorts selected skills before passing them to deepagents', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: 'Use the selected skills.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['zeta-review', 'alpha-review']
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | { skills?: string[] }
+      | undefined;
+    expect(call?.skills).toEqual(['/skills/alpha-review/', '/skills/zeta-review/']);
+  });
+
   it('stores selected MCP and Skill capabilities on task runs without claiming unloaded skills were executed', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
@@ -788,7 +818,7 @@ describe('DeepAgentRuntimeService', () => {
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
-    expect(toolNames).toEqual(expect.arrayContaining(['memory_search', 'memory_get', 'web_search', 'web_read']));
+    expect(toolNames).toEqual(['memory_get', 'memory_search', 'web_read', 'web_search']);
     expect(toolNames).not.toContain('terminal_command');
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
     expect(codeReviewSubagent?.tools?.map((tool) => tool.name)).toEqual(
@@ -979,6 +1009,128 @@ describe('DeepAgentRuntimeService', () => {
       web_search: true
     });
     expect(call?.checkpointer).toBeTruthy();
+  });
+
+  it('passes Anthropic prompt cache TTL only for task-mode runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-5',
+      providers: [
+        {
+          id: 'anthropic-local',
+          name: 'Anthropic Local',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test/v1/messages',
+          credentialRef: 'secret:anthropic-local',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet 4.5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+    vi.spyOn(services.langChainModelFactory, 'createDefaultChatModel').mockRestore();
+
+    const createDefaultChatModelSpy = vi.spyOn(services.langChainModelFactory, 'createDefaultChatModel');
+    const createChatModelByModelIdSpy = vi.spyOn(services.langChainModelFactory, 'createChatModelByModelId');
+    const runtime = createRuntime();
+
+    const chatCompleted = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: 'chat mode',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await chatCompleted;
+
+    const taskCompleted = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: 'task mode',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await taskCompleted;
+
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-task-cache-ttl',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['resumed']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    await runtime.startRun({
+      input: 'interrupt me',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const interruption = await interrupted as Extract<ChatRunEvent, { type: 'run_interrupted' }>;
+    const resumed = waitForEvent(runtime, (event) => event.type === 'run_completed' && event.runId === interruption.runId);
+    await runtime.resumeRun({
+      runId: interruption.runId,
+      threadId: interruption.threadId as string,
+      interruptId: interruption.interruptId,
+      decision: {
+        type: 'approve'
+      }
+    });
+    await resumed;
+
+    expect(createDefaultChatModelSpy.mock.calls[0]?.[0]).toEqual({ streaming: true });
+    expect(createDefaultChatModelSpy.mock.calls[1]?.[0]).toEqual({ streaming: true, cacheTtl: '1h' });
+    expect(createChatModelByModelIdSpy.mock.calls.at(-1)?.[1]).toEqual({ streaming: true, cacheTtl: '1h' });
   });
 
   it('maps MCP server approval mode into interruptOn without affecting execute or web_read', async () => {
@@ -1454,6 +1606,55 @@ describe('DeepAgentRuntimeService', () => {
     expect(result).toMatchObject({
       type: 'run_completed',
       assistantMessage: 'Retry success'
+    });
+  });
+
+  it('records provider usage including prompt cache fields on completed task runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Cached answer']),
+          usage_metadata: {
+            input_tokens: 1200,
+            output_tokens: 40,
+            total_tokens: 1240,
+            input_token_details: {
+              cache_read: 900,
+              cache_creation: 120
+            }
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const started = await runtime.startRun({
+      input: '统计缓存命中',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const snapshot = services.taskService.getSnapshot();
+    const usageEvent = snapshot.recentEvents.find(
+      (event) => event.runId === started.runId && event.type === 'agent_update'
+    );
+
+    expect(usageEvent?.payload).toMatchObject({
+      usage: {
+        promptTokens: 1200,
+        completionTokens: 40,
+        totalTokens: 1240,
+        cacheReadTokens: 900,
+        cacheCreationTokens: 120
+      }
     });
   });
 

@@ -205,7 +205,8 @@ export function createAppServices(
     mcpService,
     webReadService,
     shellExecutionService,
-    paths
+    paths,
+    logService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const fileService = new FileService(paths, databaseService, workspaceService);

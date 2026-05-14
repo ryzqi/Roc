@@ -85,6 +85,8 @@ export type ProviderExecutionUsage = {
   promptTokens: number | null;
   completionTokens: number | null;
   totalTokens: number | null;
+  cacheReadTokens?: number | null;
+  cacheCreationTokens?: number | null;
   promptCharacters: number;
   completionCharacters: number;
 };

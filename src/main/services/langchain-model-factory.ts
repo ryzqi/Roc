@@ -1,7 +1,13 @@
+import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
+import { convertChunksToEvents } from '@langchain/core/language_models/compat';
+import type { ChatModelStreamEvent } from '@langchain/core/language_models/event';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import type { BaseLanguageModelInput } from '@langchain/core/language_models/base';
+import { AIMessageChunk, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages';
+import { ChatGenerationChunk } from '@langchain/core/outputs';
+import type { Runnable } from '@langchain/core/runnables';
 import { ChatAnthropic } from '@langchain/anthropic';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, type ChatOpenAICallOptions } from '@langchain/openai';
 import { fixedNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ProviderConfig, ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
@@ -24,8 +30,33 @@ export type LangChainChatModelHandle = {
 };
 
 type CreateModelOptions = {
+  cacheTtl?: '5m' | '1h';
   streaming?: boolean;
 };
+
+class ReasoningAwareChatOpenAI extends ChatOpenAI {
+  async *_streamChatModelEvents(
+    messages: BaseMessage[],
+    options: this['ParsedCallOptions'],
+    runManager?: CallbackManagerForLLMRun
+  ): AsyncGenerator<ChatModelStreamEvent> {
+    yield* convertChunksToEvents(
+      normalizeOpenAiReasoningChunks(super._streamResponseChunks(messages, options, runManager)),
+      {
+        signal: options.signal
+      }
+    );
+  }
+
+  override withConfig(config: Partial<ChatOpenAICallOptions>): Runnable<BaseLanguageModelInput, AIMessageChunk, ChatOpenAICallOptions> {
+    const newModel = new ReasoningAwareChatOpenAI(this.fields);
+    newModel.defaultOptions = {
+      ...this.defaultOptions,
+      ...config
+    };
+    return newModel;
+  }
+}
 
 export class LangChainModelFactory {
   constructor(
@@ -118,6 +149,40 @@ export class LangChainModelFactory {
 
     if (provider.type === 'anthropic_compatible') {
       const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
+      const cacheControl =
+        options.cacheTtl === undefined
+          ? undefined
+          : {
+              type: 'ephemeral' as const,
+              ttl: options.cacheTtl
+            };
+      const model = new ChatAnthropic({
+        model: modelId,
+        apiKey,
+        anthropicApiUrl: baseUrl,
+        streaming,
+        maxRetries: 0,
+        temperature,
+        maxTokens,
+        clientOptions: {
+          maxRetries: 0,
+          timeout: providerRequestTimeoutMs
+        }
+      });
+      if (cacheControl !== undefined) {
+        const anthropicModelWithDefaults = model as ChatAnthropic & {
+          defaultOptions?: {
+            cache_control?: {
+              type: 'ephemeral';
+              ttl?: '5m' | '1h';
+            };
+          };
+        };
+        anthropicModelWithDefaults.defaultOptions = {
+          ...anthropicModelWithDefaults.defaultOptions,
+          cache_control: cacheControl
+        };
+      }
       return {
         provider,
         modelId,
@@ -127,19 +192,7 @@ export class LangChainModelFactory {
           streaming,
           modelKwargs: {}
         },
-        model: new ChatAnthropic({
-          model: modelId,
-          apiKey,
-          anthropicApiUrl: baseUrl,
-          streaming,
-          maxRetries: 0,
-          temperature,
-          maxTokens,
-          clientOptions: {
-            maxRetries: 0,
-            timeout: providerRequestTimeoutMs
-          }
-        })
+        model
       };
     }
 
@@ -161,6 +214,34 @@ export class LangChainModelFactory {
     }
 
     const baseUrl = provider.type === 'nvidia' ? fixedNvidiaBaseUrl : provider.endpoint.trim();
+    const chatModel = streaming ? new ReasoningAwareChatOpenAI({
+      model: modelId,
+      apiKey,
+      streaming,
+      maxRetries: 0,
+      temperature,
+      maxTokens,
+      timeout: providerRequestTimeoutMs,
+      configuration: {
+        baseURL: baseUrl,
+        maxRetries: 0
+      },
+      modelKwargs
+    }) : new ChatOpenAI({
+      model: modelId,
+      apiKey,
+      streaming,
+      maxRetries: 0,
+      temperature,
+      maxTokens,
+      timeout: providerRequestTimeoutMs,
+      configuration: {
+        baseURL: baseUrl,
+        maxRetries: 0
+      },
+      modelKwargs
+    });
+
     return {
       provider,
       modelId,
@@ -170,20 +251,7 @@ export class LangChainModelFactory {
         streaming,
         modelKwargs
       },
-      model: new ChatOpenAI({
-        model: modelId,
-        apiKey,
-        streaming,
-        maxRetries: 0,
-        temperature,
-        maxTokens,
-        timeout: providerRequestTimeoutMs,
-        configuration: {
-          baseURL: baseUrl,
-          maxRetries: 0
-        },
-        modelKwargs
-      })
+      model: chatModel
     };
   }
 
@@ -296,4 +364,86 @@ export class LangChainModelFactory {
     }
     return value;
   }
+}
+
+async function* normalizeOpenAiReasoningChunks(
+  chunks: AsyncIterable<ChatGenerationChunk>
+): AsyncGenerator<ChatGenerationChunk> {
+  for await (const chunk of chunks) {
+    const reasoningText = readProviderReasoningDelta(chunk.message);
+    if (reasoningText === null || typeof chunk.message.content !== 'string' || hasExplicitReasoningBlocks(chunk.message.content)) {
+      yield chunk;
+      continue;
+    }
+
+    yield new ChatGenerationChunk({
+      message: new AIMessageChunk({
+        id: chunk.message.id,
+        content: [
+          {
+            type: 'reasoning',
+            index: 1,
+            reasoning: reasoningText
+          }
+        ]
+      }),
+      text: '',
+      generationInfo: {}
+    });
+
+    yield new ChatGenerationChunk({
+      message: new AIMessageChunk({
+        id: chunk.message.id,
+        content: chunk.message.content,
+        name: chunk.message.name,
+        additional_kwargs: stripProviderReasoningDelta(chunk.message.additional_kwargs),
+        response_metadata: chunk.message.response_metadata
+      }),
+      text: chunk.text,
+      generationInfo: chunk.generationInfo
+    });
+  }
+}
+
+function readProviderReasoningDelta(message: ChatGenerationChunk['message']): string | null {
+  const additionalKwargs = message.additional_kwargs;
+  if (additionalKwargs === null || additionalKwargs === undefined || typeof additionalKwargs !== 'object') {
+    return null;
+  }
+
+  const reasoningContent = additionalKwargs.reasoning_content;
+  if (typeof reasoningContent === 'string' && reasoningContent.length > 0) {
+    return reasoningContent;
+  }
+
+  const camelCaseReasoningContent = additionalKwargs.reasoningContent;
+  if (typeof camelCaseReasoningContent === 'string' && camelCaseReasoningContent.length > 0) {
+    return camelCaseReasoningContent;
+  }
+
+  return null;
+}
+
+function stripProviderReasoningDelta(additionalKwargs: unknown): Record<string, unknown> {
+  if (additionalKwargs === null || additionalKwargs === undefined || typeof additionalKwargs !== 'object') {
+    return {};
+  }
+
+  const { reasoning_content: _reasoningContent, reasoningContent: _camelCaseReasoningContent, ...rest } =
+    additionalKwargs as Record<string, unknown>;
+  return rest;
+}
+
+function hasExplicitReasoningBlocks(content: unknown): boolean {
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  return content.some((item) => {
+    if (item === null || typeof item !== 'object') {
+      return false;
+    }
+    const type = item.type;
+    return type === 'reasoning' || type === 'reasoning_content' || type === 'thinking';
+  });
 }

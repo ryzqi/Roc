@@ -17,6 +17,7 @@ import type {
 import type { AgentService } from './agent-service';
 import { RocDomainError } from './errors';
 import type { LangChainModelFactory } from './langchain-model-factory';
+import type { LogService } from './log-service';
 import type { MemoryService } from './memory-service';
 import type { McpService } from './mcp-service';
 import type { RocPaths } from './paths';
@@ -77,7 +78,8 @@ export class DeepAgentRuntimeService {
     private readonly mcpService: McpService,
     private readonly webReadService: WebReadService,
     private readonly shellExecutionService: ShellExecutionService,
-    private readonly paths: RocPaths
+    private readonly paths: RocPaths,
+    private readonly logService: LogService
   ) {}
 
   onRunEvent(listener: (event: ChatRunEvent) => void): () => void {
@@ -100,7 +102,8 @@ export class DeepAgentRuntimeService {
     }
 
     const modelHandle = await this.langChainModelFactory.createDefaultChatModel({
-      streaming: true
+      streaming: true,
+      cacheTtl: request.mode === 'task' ? '1h' : undefined
     });
     const createdAt = new Date().toISOString();
     const taskRun = this.createTaskRunIfNeeded(request, input, modelHandle.modelId);
@@ -273,7 +276,10 @@ export class DeepAgentRuntimeService {
 
     return {
       enabledCapabilities: taskRun.enabledCapabilities,
-      modelHandle: await this.langChainModelFactory.createChatModelByModelId(taskRun.modelId, { streaming: true }),
+      modelHandle: await this.langChainModelFactory.createChatModelByModelId(taskRun.modelId, {
+        streaming: true,
+        cacheTtl: '1h'
+      }),
       runId: taskRun.id,
       taskRun,
       threadId: taskRun.threadId
@@ -312,6 +318,7 @@ export class DeepAgentRuntimeService {
         attemptProducedVisibleOutput = false;
         const assistantChunks: string[] = [];
         const reasoningChunks: string[] = [];
+        const usageAccumulator = createUsageAccumulator();
         const closers: Array<() => Promise<void>> = [];
 
         try {
@@ -324,7 +331,7 @@ export class DeepAgentRuntimeService {
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
             backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
-            skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
+            skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
             subagents,
             tools: runTools,
             interruptOn,
@@ -345,7 +352,7 @@ export class DeepAgentRuntimeService {
           );
 
           await Promise.all([
-            this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks, () => {
+            this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks, usageAccumulator, () => {
               attemptProducedVisibleOutput = true;
             }),
             this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, () => {
@@ -386,8 +393,10 @@ export class DeepAgentRuntimeService {
             createdAt: context.createdAt,
             startedAtMs: context.startedAtMs,
             inputLength: context.input.length,
-            assistantMessage
+            assistantMessage,
+            usage: usageAccumulator
           });
+          this.logProviderUsage(context, usageAccumulator);
           if (context.taskRun !== null) {
             this.taskService.completeRunWithProviderResult({
               runId: context.taskRun.id,
@@ -445,14 +454,14 @@ export class DeepAgentRuntimeService {
     const memorySearchTool = tools.createMemorySearchTool(this.memoryService);
     const memoryGetTool = tools.createMemoryGetTool(this.memoryService);
     const webReadTool = tools.createWebReadTool(this.webReadService);
-    const runTools: ClientTool[] = [memorySearchTool, memoryGetTool, webReadTool];
+    const runTools: ClientTool[] = [memoryGetTool, memorySearchTool, webReadTool];
     const webSearchTool = await tools.createWebSearchTool({
       mcpService: this.mcpService,
       enabledCapabilities: context.enabledCapabilities,
       closers
     });
     if (webSearchTool !== null) {
-      runTools.unshift(webSearchTool);
+      runTools.push(webSearchTool);
     }
     return {
       subagents: tools.createRunSubagents({
@@ -467,6 +476,7 @@ export class DeepAgentRuntimeService {
   private async executeResume(context: RunExecutionContext, resumePayload: HITLResponse): Promise<void> {
     const assistantChunks: string[] = [];
     const reasoningChunks: string[] = [];
+    const usageAccumulator = createUsageAccumulator();
     const closers: Array<() => Promise<void>> = [];
 
     try {
@@ -477,7 +487,7 @@ export class DeepAgentRuntimeService {
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
         backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
-        skills: context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`),
+        skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
         subagents,
         tools: runTools,
         interruptOn,
@@ -493,7 +503,7 @@ export class DeepAgentRuntimeService {
       });
 
       await Promise.all([
-        this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks),
+        this.consumeMessages(run.messages as AsyncIterable<unknown>, context, assistantChunks, reasoningChunks, usageAccumulator),
         this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
         this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
       ]);
@@ -528,8 +538,10 @@ export class DeepAgentRuntimeService {
         createdAt: context.createdAt,
         startedAtMs: context.startedAtMs,
         inputLength: context.input.length,
-        assistantMessage
+        assistantMessage,
+        usage: usageAccumulator
       });
+      this.logProviderUsage(context, usageAccumulator);
       if (context.taskRun !== null) {
         this.taskService.completeRunWithProviderResult({
           runId: context.taskRun.id,
@@ -593,9 +605,11 @@ export class DeepAgentRuntimeService {
     context: RunExecutionContext,
     assistantChunks: string[],
     reasoningChunks: string[],
+    usageAccumulator: ProviderUsageAccumulator,
     onVisibleOutput?: () => void
   ): Promise<void> {
     for await (const message of messages) {
+      updateUsageAccumulator(usageAccumulator, message);
       const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
       const reasoningSource = this.readReasoningSource(message);
       const tasks: Array<Promise<void>> = [];
@@ -884,6 +898,26 @@ export class DeepAgentRuntimeService {
     this.eventEmitter.emit(RUN_EVENT_NAME, event);
   }
 
+  private logProviderUsage(context: RunExecutionContext, usage: ProviderUsageAccumulator): void {
+    const promptTokens = usage.promptTokens ?? 0;
+    const cacheReadTokens = usage.cacheReadTokens ?? 0;
+    this.logService.append({
+      level: 'info',
+      message: 'Deep Agent provider usage recorded.',
+      data: {
+        provider: context.modelHandle.provider.type,
+        providerId: context.modelHandle.provider.id,
+        model: context.modelHandle.modelId,
+        input_tokens: usage.promptTokens,
+        output_tokens: usage.completionTokens,
+        total_tokens: usage.totalTokens,
+        cache_read: usage.cacheReadTokens,
+        cache_creation: usage.cacheCreationTokens,
+        cache_hit_ratio: promptTokens > 0 ? cacheReadTokens / promptTokens : 0
+      }
+    });
+  }
+
   private readPendingApproval(interrupts: readonly InterruptPayload[], runId: string): ChatPendingApproval {
     const interrupt = interrupts[0];
     if (interrupt === undefined) {
@@ -919,4 +953,52 @@ export class DeepAgentRuntimeService {
     const reviewConfigs = Reflect.get(value, 'reviewConfigs');
     return Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
   }
+}
+
+type ProviderUsageAccumulator = {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+};
+
+function createUsageAccumulator(): ProviderUsageAccumulator {
+  return {
+    promptTokens: null,
+    completionTokens: null,
+    totalTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null
+  };
+}
+
+function updateUsageAccumulator(target: ProviderUsageAccumulator, message: unknown): void {
+  const usageMetadata = recordUtils.readRecordValue(message, 'usage_metadata');
+  const inputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'input_tokens'));
+  const outputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'output_tokens'));
+  const totalTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'total_tokens'));
+  const inputTokenDetails = recordUtils.readRecordValue(usageMetadata, 'input_token_details');
+  const cacheReadTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_read'));
+  const cacheCreationTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_creation'));
+
+  if (inputTokens !== null) {
+    target.promptTokens = inputTokens;
+  }
+  if (outputTokens !== null) {
+    target.completionTokens = outputTokens;
+  }
+  if (totalTokens !== null) {
+    target.totalTokens = totalTokens;
+  }
+  if (cacheReadTokens !== null) {
+    target.cacheReadTokens = cacheReadTokens;
+  }
+  if (cacheCreationTokens !== null) {
+    target.cacheCreationTokens = cacheCreationTokens;
+  }
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
