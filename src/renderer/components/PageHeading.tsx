@@ -1,28 +1,20 @@
-import { CompactStatusPill } from './CompactStatusPill';
-
 export function PageHeading({
   flags,
-  kicker,
+  meta,
   title
 }: {
   flags?: React.ReactNode;
   kicker: string;
+  meta?: string;
   title: string;
 }): React.JSX.Element {
   return (
     <div className="page-strip">
       <div className="page-copy">
-        <div className="page-kicker">{kicker}</div>
         <h1 className="page-title">{title}</h1>
+        {meta === undefined ? null : <div className="page-meta">{meta}</div>}
       </div>
-      <div className="page-flags">
-        {flags ?? (
-          <>
-            <CompactStatusPill tone="ok" value="工作区内" />
-            <CompactStatusPill tone="info" value="右侧图标栏展开" />
-          </>
-        )}
-      </div>
+      {flags === undefined ? null : <div className="page-flags">{flags}</div>}
     </div>
   );
 }

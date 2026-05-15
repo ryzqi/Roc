@@ -9,7 +9,6 @@ export function StatusPill({
 }): React.JSX.Element {
   return (
     <span className={`status-pill ${tone}`}>
-      <span className="status-dot"></span>
       <span>{label}</span>
       <strong>{value}</strong>
     </span>
