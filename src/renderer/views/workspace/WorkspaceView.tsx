@@ -19,7 +19,7 @@ export function WorkspaceView({
   if (state.workspace === null) {
     return (
       <>
-        <PageHeading kicker="工作区" title="工作区文件" />
+        <PageHeading title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
           <EmptyState
             action={
@@ -39,7 +39,7 @@ export function WorkspaceView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" title="工作区文件" />
+        <PageHeading title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
           <EmptyState testId="workspace-loading" title="工作区数据加载中" tone="loading" />
           <WorkspaceStatusPanels state={state} />
@@ -51,7 +51,7 @@ export function WorkspaceView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" title="工作区文件" />
+        <PageHeading title="工作区文件" />
         <section className="canvas-stage stage-grid" data-testid="workspace-view">
           <EmptyState testId="workspace-load-error" title="工作区数据加载失败" tone="error" />
           <WorkspaceStatusPanels state={state} />
@@ -62,27 +62,30 @@ export function WorkspaceView({
 
   return (
     <>
-      <PageHeading kicker="工作区" title="工作区文件" />
+      <PageHeading title="工作区文件" meta={state.workspace.displayName} />
       <section className="canvas-stage stage-grid" data-testid="workspace-view">
-        <div className="split">
-          <section className="file-tree file-tree-surface card" data-testid="file-tree">
+        <div className="split workspace-surface-grid">
+          <section className="file-tree file-tree-surface workspace-surface" data-testid="file-tree">
             {state.fileTree === null ? (
               <p className="muted">文件树未加载。</p>
             ) : (
               state.fileTree.entries.map((entry) => <TreeItem entry={entry} key={entry.relativePath} />)
             )}
           </section>
-          <section className="card">
-            <div className="card-title">
-              文件操作预览 <CompactStatusPill tone="ok" value="工作区内" />
+          <section className="section workspace-surface">
+            <div className="section-head">
+              <h2 className="section-title">文件操作预览</h2>
+              <CompactStatusPill tone="ok" value="工作区内" />
             </div>
-            <Row title="搜索" sub="按标题、正文、任务 ID、记忆 ID 搜索" tag="可执行" tone="info" />
-            <Row title="编辑" sub="写入前创建恢复点，高风险动作确认" tag="受控" tone="ok" />
-            <Row title="预览" sub="Markdown、代码、图片、PDF、Office 按需加载" tag="可用" tone="ok" />
-            <Row title="自动化" sub="默认限定当前工作区，外部写入需确认" tag="受控" tone="warn" />
+            <div className="list-rows">
+              <Row title="搜索" sub="按标题、正文、任务 ID、记忆 ID 搜索" tag="可执行" tone="info" />
+              <Row title="编辑" sub="写入前创建恢复点，高风险动作确认" tag="受控" tone="ok" />
+              <Row title="预览" sub="Markdown、代码、图片、PDF、Office 按需加载" tag="可用" tone="ok" />
+              <Row title="自动化" sub="默认限定当前工作区，外部写入需确认" tag="受控" tone="warn" />
+            </div>
           </section>
         </div>
-        <section className="code-preview" data-testid="file-preview">
+        <section className="code-preview workspace-surface" data-testid="file-preview">
           {state.filePreview === null
             ? '# 当前工作区无可预览文本文件'
             : state.filePreview.content}
@@ -101,28 +104,40 @@ export function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.
         : '打开终端后建立会话'
       : `${state.terminalSession.shell} · ${state.terminalSession.cols}×${state.terminalSession.rows}`;
   return (
-    <div className="grid-3">
-      <section className="card" data-testid="git-panel">
-        <div className="card-title">Git</div>
-        {state.gitStatus === null ? (
-          <p className="muted">{gitErrorLabel(state.gitError)}</p>
-        ) : (
-          <Row sub={state.gitStatus.workspacePath} tag={`${state.gitStatus.changedFiles} 变更`} title={state.gitStatus.branch} tone="info" />
-        )}
+    <div className="stat-row workspace-status-row">
+      <section className="section" data-testid="git-panel">
+        <div className="section-head">
+          <h2 className="section-title">工作区状态</h2>
+        </div>
+        <div className="list-rows">
+          {state.gitStatus === null ? (
+            <p className="muted">{gitErrorLabel(state.gitError)}</p>
+          ) : (
+            <Row sub={state.gitStatus.workspacePath} tag={`${state.gitStatus.changedFiles} 变更`} title={state.gitStatus.branch} tone="info" />
+          )}
+        </div>
       </section>
-      <section className="card" data-testid="terminal-panel">
-        <div className="card-title">终端</div>
-        <Row
-          title={state.terminalSession === null ? '未连接' : state.terminalSession.status}
-          sub={state.terminalError ?? terminalLabel}
-          tag={state.terminalSession === null ? '空态' : '会话'}
-          tone={state.terminalSession === null ? 'warn' : 'ok'}
-        />
+      <section className="section" data-testid="terminal-panel">
+        <div className="section-head">
+          <h2 className="section-title">终端</h2>
+        </div>
+        <div className="list-rows">
+          <Row
+            title={state.terminalSession === null ? '未连接' : state.terminalSession.status}
+            sub={state.terminalError ?? terminalLabel}
+            tag={state.terminalSession === null ? '空态' : '会话'}
+            tone={state.terminalSession === null ? 'warn' : 'ok'}
+          />
+        </div>
       </section>
-      <section className="card" data-testid="rtk-panel">
-        <div className="card-title">RTK</div>
-        <Row title="资源状态" sub={state.rtkStatus.resourceState === 'ready' ? 'ready' : '缺失降级'} tag={state.rtkStatus.resourceState} tone="warn" />
-        <Row title="tee" sub={state.rtkStatus.teeDir} tag={state.rtkStatus.enabledForAgentCommands ? 'agent' : 'terminal'} tone="info" />
+      <section className="section" data-testid="rtk-panel">
+        <div className="section-head">
+          <h2 className="section-title">RTK</h2>
+        </div>
+        <div className="list-rows">
+          <Row title="资源状态" sub={state.rtkStatus.resourceState === 'ready' ? 'ready' : '缺失降级'} tag={state.rtkStatus.resourceState} tone="warn" />
+          <Row title="tee" sub={state.rtkStatus.teeDir} tag={state.rtkStatus.enabledForAgentCommands ? 'agent' : 'terminal'} tone="info" />
+        </div>
       </section>
     </div>
   );

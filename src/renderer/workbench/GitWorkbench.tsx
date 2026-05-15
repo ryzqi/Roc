@@ -492,22 +492,22 @@ export function GitWorkbench({
           </header>
           <section className="git-changes-pane" data-testid="workbench-git-changes">
             <div className="git-section-header git-section-header--staged">
-              <span>STAGED CHANGES</span>
+              <span>待提交变更</span>
               <span className="git-section-count">{stagedCount}</span>
             </div>
             <GitChangeList
               actionBusy={actionBusy}
               changes={changes.filter((change) => canUnstageGitChange(change))}
-              emptyText="No staged changes."
+              emptyText="当前没有待提交变更。"
               selectable={false}
               selectedPath={selectedPath}
               selectedPathSet={selectedPathSet}
-              title="Staged Changes"
+              title="待提交变更"
               onSelectGitFile={selectGitFile}
               onToggleSelectedPath={toggleSelectedPath}
             />
             <div className="git-section-header">
-              <span>CHANGES</span>
+              <span>工作区变更</span>
               <span className="git-section-count">{state.gitStatus.changedFiles - stagedCount}</span>
               <button
                 className="git-stage-all-button"
@@ -543,11 +543,11 @@ export function GitWorkbench({
             <GitChangeList
               actionBusy={actionBusy}
               changes={changes.filter((change) => !canUnstageGitChange(change))}
-              emptyText="Workspace is clean."
+              emptyText="工作区干净。"
               selectable
               selectedPath={selectedPath}
               selectedPathSet={selectedPathSet}
-              title="Changes"
+              title="工作区变更"
               onSelectGitFile={selectGitFile}
               onToggleSelectedPath={toggleSelectedPath}
             />

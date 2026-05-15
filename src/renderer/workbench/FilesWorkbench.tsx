@@ -149,7 +149,7 @@ export function FilesWorkbench({
         <section className="workbench-sidebar-pane workbench-sidebar-pane--files">
           <header className="pane-header">
             <div>
-              <div className="pane-title">EXPLORER</div>
+              <div className="pane-title">文件树</div>
               {directoryLoadingPath === null ? null : <div className="pane-subtitle">正在展开目录</div>}
             </div>
             <CompactStatusPill tone="info" value={state.fileTree?.truncated ? '已截断' : '工作区内'} />

@@ -2384,7 +2384,9 @@ button.model-pill {
 .workbench-surface {
   height: 100%;
   min-height: 0;
-  background: rgba(248, 250, 253, 0.95);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
 }
 
 .workbench-files,
@@ -2397,6 +2399,7 @@ button.model-pill {
 .workbench-files {
   display: grid;
   grid-template-columns: minmax(228px, var(--file-pane-width, 304px)) 12px minmax(0, 1fr);
+  border-radius: inherit;
 }
 
 .workbench-sidebar-pane {
@@ -2404,8 +2407,8 @@ button.model-pill {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border-right: 1px solid rgba(220, 227, 237, 0.94);
-  background: rgba(250, 252, 255, 0.98);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .workbench-sidebar-pane--files {
@@ -2418,7 +2421,7 @@ button.model-pill {
   display: grid;
   grid-template-rows: auto minmax(0, max-content);
   align-content: start;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--surface);
 }
 
 .pane-header {
@@ -2428,7 +2431,7 @@ button.model-pill {
   justify-content: space-between;
   gap: 12px;
   padding: 0 14px;
-  border-bottom: 1px solid rgba(226, 232, 241, 0.96);
+  border-bottom: 1px solid var(--line);
 }
 
 .pane-header--content {
@@ -2442,22 +2445,23 @@ button.model-pill {
   justify-content: space-between;
   gap: 8px;
   padding: 0 14px;
-  border-bottom: 1px solid rgba(234, 239, 246, 0.96);
-  color: #7a8ba4;
-  font-size: 11px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .pane-title {
-  color: #5f728f;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--font-h3-size);
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .pane-subtitle {
   margin-top: 4px;
-  color: #8a99af;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .pane-subtitle--content {
@@ -2468,9 +2472,9 @@ button.model-pill {
 .pane-path {
   min-width: 0;
   overflow: hidden;
-  color: #5f728f;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2492,7 +2496,7 @@ button.model-pill {
   min-height: 0;
   overflow: auto;
   padding: 10px 0 12px;
-  background: rgba(250, 252, 255, 0.98);
+  background: transparent;
   scrollbar-width: none;
 }
 
@@ -2500,7 +2504,7 @@ button.model-pill {
   position: relative;
   min-height: 0;
   cursor: col-resize;
-  background: linear-gradient(180deg, rgba(244, 247, 251, 0.96), rgba(250, 252, 255, 0.98));
+  background: transparent;
 }
 
 .workbench-file-splitter::after {
@@ -2511,11 +2515,11 @@ button.model-pill {
   left: 5px;
   width: 2px;
   border-radius: 999px;
-  background: rgba(190, 204, 224, 0.86);
+  background: var(--line-strong);
 }
 
 .workbench-file-splitter:hover::after {
-  background: rgba(98, 132, 188, 0.56);
+  background: var(--accent);
 }
 
 .workbench-file-meta-strip {
@@ -2524,9 +2528,9 @@ button.model-pill {
   align-items: center;
   gap: 14px;
   padding: 0 18px;
-  border-bottom: 1px solid rgba(234, 239, 246, 0.96);
-  color: #7b8da7;
-  font-size: 11px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: var(--font-meta-size);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -2538,22 +2542,22 @@ button.model-pill {
   display: grid;
   grid-auto-rows: max-content;
   overflow: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  background: var(--surface);
 }
 
 .workbench-file-body--code {
-  background: linear-gradient(180deg, rgba(249, 251, 255, 0.96), rgba(255, 255, 255, 1));
+  background: var(--surface);
 }
 
 .workbench-file-preview {
   margin: 0;
   padding: 24px 24px 12px;
-  color: #202a38;
+  color: var(--text);
   background: transparent;
-  font-size: 13px;
+  font-size: var(--font-body-size);
   line-height: 1.7;
   white-space: pre-wrap;
-  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-body);
 }
 
 .workbench-file-empty {
@@ -2561,13 +2565,14 @@ button.model-pill {
   align-content: start;
   gap: 8px;
   padding: 28px 24px 16px;
-  color: #536882;
-  font-size: 13px;
+  color: var(--muted);
+  font-size: var(--font-body-size);
   line-height: 1.65;
 }
 
 .workbench-file-empty strong {
-  color: #203149;
+  color: var(--ink);
+  font-weight: 500;
 }
 
 .workbench-file-empty p {
@@ -2575,9 +2580,9 @@ button.model-pill {
 }
 
 .workbench-file-body--code .workbench-file-preview {
-  color: #33455f;
-  font-size: 12px;
-  font-family: "Cascadia Mono", Consolas, monospace;
+  color: var(--code-text);
+  font-size: var(--font-code-size);
+  font-family: var(--font-mono);
   white-space: pre;
 }
 
@@ -2586,9 +2591,8 @@ button.model-pill {
   align-items: center;
   justify-content: center;
   padding: 28px;
-  background:
-    linear-gradient(180deg, rgba(249, 251, 255, 0.92), rgba(255, 255, 255, 0.98)),
-    radial-gradient(circle at top, rgba(131, 160, 198, 0.1), transparent 48%);
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-soft);
 }
 
 .workbench-file-image-preview {
@@ -2606,9 +2610,9 @@ button.model-pill {
   align-items: center;
   gap: 16px;
   padding: 0 18px;
-  border-top: 1px solid rgba(226, 232, 241, 0.96);
-  color: #7285a2;
-  font-size: 11px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--font-meta-size);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -2622,18 +2626,18 @@ button.model-pill {
   padding: 0 14px;
   border: 0;
   background: transparent;
-  color: #31445f;
-  font-size: 13px;
+  color: var(--text);
+  font-size: var(--font-ui-size);
   text-align: left;
 }
 
 .tree-item:hover {
-  background: rgba(234, 240, 248, 0.72);
+  background: var(--bg-soft);
 }
 
 .tree-item.selected {
-  background: rgba(220, 231, 245, 0.9);
-  color: #183253;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .tree-item-icon {
@@ -2677,7 +2681,8 @@ button.model-pill {
   grid-template-columns: var(--git-pane-width, 410px) 12px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
-  background: #f4f6fa;
+  border-radius: inherit;
+  background: var(--surface);
 }
 
 .git-sidebar,
@@ -2690,46 +2695,46 @@ button.model-pill {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  border-right: 1px solid rgba(221, 228, 238, 1);
-  background: #f5f7fb;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .git-header {
   display: grid;
   gap: 10px;
   padding: 20px 18px 12px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .git-commit-message {
   min-height: 124px;
   padding: 14px 16px;
-  border: 1px solid rgba(221, 229, 239, 1);
-  border-radius: 10px;
-  background: #ffffff;
-  color: #415268;
-  font-size: 18px;
-  line-height: 1.4;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--font-body-size);
+  line-height: 1.65;
   resize: none;
   outline: none;
 }
 
 .git-commit-message::placeholder {
-  color: #8998aa;
+  color: var(--subtle);
 }
 
 .git-commit-button {
   min-height: 36px;
   padding: 0 14px;
-  border: 0;
-  border-radius: 8px;
-  background: #d7e2da;
-  color: #708175;
-  font-size: 15px;
-  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
   cursor: not-allowed;
   transition:
     background-color 140ms ease,
-    box-shadow 140ms ease,
     color 140ms ease;
 }
 
@@ -2738,10 +2743,10 @@ button.model-pill {
 }
 
 .git-commit-button--ready {
-  background: #9fd3a9;
+  background: var(--ink);
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(83, 145, 97, 0.24);
+  border-color: var(--ink);
 }
 
 .git-sidebar-toolbar,
@@ -2749,7 +2754,7 @@ button.model-pill {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #55667d;
+  color: var(--muted);
 }
 
 .git-sidebar-toolbar {
@@ -2759,8 +2764,8 @@ button.model-pill {
 .git-sidebar-statusbar {
   justify-content: space-between;
   padding: 12px 16px;
-  border-top: 1px solid rgba(221, 228, 238, 1);
-  background: #eef1f6;
+  border-top: 1px solid var(--line);
+  background: var(--bg-soft);
 }
 
 .git-branch-status,
@@ -2770,7 +2775,7 @@ button.model-pill {
 .git-stage-all-button {
   border: 0;
   background: transparent;
-  color: #2950d6;
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -2778,12 +2783,12 @@ button.model-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .git-sync-stat {
-  color: #607087;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-changes-pane {
@@ -2797,9 +2802,9 @@ button.model-pill {
   align-items: center;
   gap: 10px;
   margin: 14px 0 10px;
-  color: #516174;
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  font-weight: 500;
 }
 
 .git-section-header--staged {
@@ -2810,8 +2815,9 @@ button.model-pill {
   min-width: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #e5e9f1;
-  color: #53657d;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
   text-align: center;
 }
 
@@ -2820,9 +2826,10 @@ button.model-pill {
   min-height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  background: #e7efff;
-  font-size: 12px;
-  font-weight: 700;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  font-size: var(--font-meta-size);
+  font-weight: 500;
 }
 
 .git-change-list {
@@ -2832,8 +2839,8 @@ button.model-pill {
 
 .git-change-empty {
   padding: 12px 0 16px;
-  color: #7e8da0;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-change-card {
@@ -2847,7 +2854,7 @@ button.model-pill {
 }
 
 .git-change-card.selected {
-  background: #eaf1fe;
+  background: var(--accent-soft);
 }
 
 .git-change-meta {
@@ -2858,7 +2865,7 @@ button.model-pill {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #2f3d54;
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
@@ -2874,7 +2881,7 @@ button.model-pill {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--font-ui-size);
 }
 
 .git-change-side {
@@ -2884,8 +2891,8 @@ button.model-pill {
 }
 
 .git-change-state {
-  color: #8494a8;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-branch-popover {
@@ -2897,17 +2904,17 @@ button.model-pill {
   display: grid;
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(214, 221, 231, 1);
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 18px 32px rgba(28, 44, 66, 0.18);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
 }
 
 .workbench-git-splitter {
   position: relative;
   z-index: 2;
   cursor: col-resize;
-  background: linear-gradient(180deg, rgba(220, 227, 238, 0.1), rgba(220, 227, 238, 0.65), rgba(220, 227, 238, 0.1));
+  background: transparent;
 }
 
 .workbench-git-splitter::before {
@@ -2915,26 +2922,26 @@ button.model-pill {
   position: absolute;
   inset: 0 4px;
   border-radius: 999px;
-  background: rgba(160, 172, 190, 0.55);
+  background: var(--line-strong);
 }
 
 .git-branch-popover-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #4c5d75;
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
 }
 
 .git-branch-search {
   min-height: 42px;
   padding: 0 12px;
-  border: 1px solid rgba(205, 215, 229, 1);
-  border-radius: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
   outline: none;
-  color: #31415a;
-  font-size: 14px;
+  color: var(--text);
+  font-size: var(--font-ui-size);
 }
 
 .git-branch-list {
@@ -2950,13 +2957,13 @@ button.model-pill {
   gap: 8px;
   min-height: 34px;
   padding: 0 10px;
-  border-radius: 6px;
-  color: #2c66e4;
+  border-radius: var(--r-sm);
+  color: var(--text);
   text-align: left;
 }
 
 .git-branch-option.active {
-  background: #edf4ff;
+  background: var(--accent-soft);
 }
 
 .git-branch-create-row {
@@ -2969,18 +2976,18 @@ button.model-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #607087;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-branch-create-button,
 .git-stage-all-button {
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 6px;
-  background: #eaf2ff;
-  color: #2c66e4;
-  font-weight: 700;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .git-detail-pane {
@@ -2988,7 +2995,7 @@ button.model-pill {
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: 12px;
   padding: 20px 18px 16px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .git-selection-slot {
@@ -3003,9 +3010,9 @@ button.model-pill {
 .git-selection-empty {
   display: grid;
   gap: 10px;
-  border: 1px solid rgba(223, 229, 237, 1);
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
 }
 
 .git-diff-panel {
@@ -3028,8 +3035,8 @@ button.model-pill {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px 12px;
-  color: #79879a;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-diff-body {
@@ -3064,22 +3071,22 @@ button.model-pill {
 }
 
 .git-selection-title {
-  color: #1f2f44;
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
 }
 
 .git-selection-subtitle {
-  color: #79879a;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 .git-last-result {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  color: #718198;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
 }
 
 @media (max-width: 1180px) {
@@ -3106,10 +3113,7 @@ button.model-pill {
 .workbench-terminal {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background:
-    radial-gradient(circle at top left, rgba(104, 136, 189, 0.18), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(27, 52, 94, 0.1), transparent 24%),
-    linear-gradient(180deg, rgba(240, 245, 252, 0.98), rgba(247, 250, 254, 0.95));
+  background: var(--surface);
 }
 
 .terminal-header {
@@ -3119,8 +3123,8 @@ button.model-pill {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px 12px;
-  border-bottom: 1px solid rgba(226, 232, 241, 0.96);
-  background: rgba(248, 251, 255, 0.92);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
 }
 
 .terminal-heading {
@@ -3130,9 +3134,9 @@ button.model-pill {
 }
 
 .terminal-subtitle {
-  color: #304865;
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--text);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -3152,11 +3156,11 @@ button.model-pill {
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border: 1px solid rgba(208, 220, 238, 0.96);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #5e7392;
-  font-weight: 600;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .terminal-shell-frame {
@@ -3164,11 +3168,11 @@ button.model-pill {
   margin: 14px 18px 12px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid rgba(22, 30, 45, 0.76);
-  border-radius: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   overflow: hidden;
-  box-shadow: 0 28px 64px rgba(16, 23, 38, 0.26);
-  background: linear-gradient(180deg, rgba(17, 25, 41, 0.98), rgba(10, 17, 31, 0.98));
+  box-shadow: none;
+  background: var(--surface);
 }
 
 .terminal-shell-topline {
@@ -3177,8 +3181,8 @@ button.model-pill {
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(33, 45, 68, 0.96), rgba(19, 27, 43, 0.96));
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
 }
 
 .terminal-dot {
@@ -3202,10 +3206,10 @@ button.model-pill {
 
 .terminal-shell-title {
   margin-left: 6px;
-  color: #dce4ef;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 500;
+  letter-spacing: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3215,9 +3219,7 @@ button.model-pill {
 .terminal-xterm-shell {
   min-height: 0;
   padding: 0;
-  background:
-    linear-gradient(180deg, rgba(11, 18, 31, 0.96), rgba(8, 13, 24, 1)),
-    #101726;
+  background: var(--surface);
 }
 
 .terminal-xterm-host {
@@ -3236,7 +3238,7 @@ button.model-pill {
   gap: 12px;
   padding-bottom: 2px;
   border-top: 0;
-  color: #647894;
+  color: var(--muted);
 }
 
 .terminal-status-bar span {
@@ -3246,9 +3248,7 @@ button.model-pill {
 }
 
 .terminal-header {
-  background:
-    linear-gradient(180deg, rgba(252, 254, 255, 0.96), rgba(243, 247, 253, 0.92)),
-    rgba(248, 251, 255, 0.92);
+  background: var(--bg-soft);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -3262,9 +3262,9 @@ button.model-pill {
 }
 
 .terminal-badge[data-role='shell'] {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(243, 247, 253, 0.94));
-  color: #44597a;
-  border-color: rgba(208, 220, 238, 0.96);
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line);
 }
 
 .terminal-badge[data-role='bind'] {
@@ -3323,18 +3323,11 @@ button.model-pill {
 .terminal-shell-frame {
   position: relative;
   animation: terminal-frame-enter 280ms ease-out both;
-  box-shadow:
-    0 28px 64px rgba(16, 23, 38, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 
 .terminal-shell-frame::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 24%);
+  content: none;
 }
 
 @keyframes terminal-frame-enter {
@@ -3343,8 +3336,8 @@ button.model-pill {
 }
 
 .terminal-dot {
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border: 0;
+  box-shadow: none;
   transition: filter 140ms ease, transform 140ms ease;
 }
 
@@ -3353,8 +3346,8 @@ button.model-pill {
 }
 
 .terminal-shell-title {
-  letter-spacing: 0.04em;
-  opacity: 0.9;
+  letter-spacing: 0;
+  opacity: 1;
 }
 
 .terminal-xterm-shell {
@@ -3362,14 +3355,7 @@ button.model-pill {
 }
 
 .terminal-xterm-shell::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 1px;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  content: none;
 }
 
 .terminal-xterm-host .xterm-viewport::-webkit-scrollbar {

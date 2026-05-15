@@ -15,7 +15,7 @@ export function PreviewView({
   if (state.workspace !== null && loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="工作区" title="文件预览" />
+        <PageHeading title="文件预览" />
         <section className="canvas-stage stage-grid" data-testid="preview-view">
           <EmptyState testId="preview-loading" title="文件预览加载中" tone="loading" />
         </section>
@@ -26,7 +26,7 @@ export function PreviewView({
   if (state.workspace !== null && loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="工作区" title="文件预览" />
+        <PageHeading title="文件预览" />
         <section className="canvas-stage stage-grid" data-testid="preview-view">
           <EmptyState testId="preview-load-error" title="文件预览加载失败" tone="error" />
         </section>
@@ -51,45 +51,51 @@ export function PreviewView({
 
   return (
     <>
-      <PageHeading kicker="工作区" title="文件预览" />
+      <PageHeading title="文件预览" meta={state.filePreview === null ? '无可预览文件' : state.filePreview.relativePath} />
       <section className="canvas-stage stage-grid" data-testid="preview-view">
-        <div className="grid-2">
-          <section className="card">
-            <div className="card-title">Markdown / 文本预览</div>
+        <div className="preview-surface-grid">
+          <section className="section preview-surface">
+            <div className="section-head">
+              <h2 className="section-title">Markdown / 文本预览</h2>
+            </div>
             <div className="card-pad">
-              <>
-                <div className="page-title mini">{state.filePreview === null ? '无可预览文件' : state.filePreview.relativePath}</div>
-                <div className="page-subtitle">
-                  {state.filePreview === null ? '当前根目录没有可预览文本文件。' : `${state.filePreview.sizeBytes} bytes`}
-                </div>
-                {state.filePreview === null ? null : state.filePreview.kind === 'image' ? (
-                  <p className="muted">图片预览已加载。</p>
-                ) : (
-                  <p className="muted">{previewBody}</p>
-                )}
-              </>
+              <div className="page-title mini">{state.filePreview === null ? '无可预览文件' : state.filePreview.relativePath}</div>
+              <div className="page-subtitle">
+                {state.filePreview === null ? '当前根目录没有可预览文本文件。' : `${state.filePreview.sizeBytes} bytes`}
+              </div>
+              {state.filePreview === null ? null : state.filePreview.kind === 'image' ? (
+                <p className="muted">图片预览已加载。</p>
+              ) : (
+                <p className="muted">{previewBody}</p>
+              )}
             </div>
           </section>
-          <section className="card">
-            <div className="card-title">代码 / Diff 预览</div>
+          <section className="section preview-surface">
+            <div className="section-head">
+              <h2 className="section-title">代码 / Diff 预览</h2>
+            </div>
             {previewStage}
           </section>
         </div>
-        <section className="card">
-          <div className="card-title">搜索命中</div>
-          {state.fileSearch === null || state.fileSearch.matches.length === 0 ? (
-            <p className="muted">没有匹配项。</p>
-          ) : (
-            state.fileSearch.matches.map((match) => (
-              <Row
-                key={`${match.relativePath}:${match.line}:${match.column}`}
-                sub={match.preview}
-                tag={`${match.line}:${match.column}`}
-                title={match.relativePath}
-                tone="info"
-              />
-            ))
-          )}
+        <section className="section preview-surface">
+          <div className="section-head">
+            <h2 className="section-title">搜索命中</h2>
+          </div>
+          <div className="list-rows">
+            {state.fileSearch === null || state.fileSearch.matches.length === 0 ? (
+              <p className="muted">没有匹配项。</p>
+            ) : (
+              state.fileSearch.matches.map((match) => (
+                <Row
+                  key={`${match.relativePath}:${match.line}:${match.column}`}
+                  sub={match.preview}
+                  tag={`${match.line}:${match.column}`}
+                  title={match.relativePath}
+                  tone="info"
+                />
+              ))
+            )}
+          </div>
         </section>
       </section>
     </>

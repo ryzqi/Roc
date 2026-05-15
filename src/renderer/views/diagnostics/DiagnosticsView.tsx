@@ -18,7 +18,7 @@ export function DiagnosticsView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="控制面" title="任务诊断包" />
+        <PageHeading title="任务诊断包" />
         <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
           <EmptyState testId="diagnostics-loading" title="诊断数据加载中" tone="loading" />
         </section>
@@ -29,7 +29,7 @@ export function DiagnosticsView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="控制面" title="任务诊断包" />
+        <PageHeading title="任务诊断包" />
         <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
           <EmptyState testId="diagnostics-load-error" title="诊断数据加载失败" tone="error" />
         </section>
@@ -40,31 +40,27 @@ export function DiagnosticsView({
   const failedEvents = state.taskSnapshot.recentEvents.filter((event) => event.type === 'error').slice(0, 3);
   return (
     <>
-      <PageHeading kicker="控制面" title="任务诊断包" />
+      <PageHeading title="任务诊断包" meta={`最近失败 ${failedEvents.length} 条 · task ${state.taskSnapshot.counts.total}`} />
       <section className="canvas-stage stage-grid" data-testid="diagnostics-view">
-        <section className="card">
-          <div className="card-title">失败任务 <StatusPill label="状态" tone="bad" value={failedEvents.length === 0 ? '无失败任务' : '验证失败'} /></div>
-          {failedEvents.length === 0 ? (
-            <Row title="失败事件" sub="当前没有失败任务事件。" tag="空" tone="ok" />
-          ) : (
-            failedEvents.map((event) => (
-              <Row key={event.id} title={event.type} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="bad" />
-            ))
-          )}
+        <section className="single-panel">
+          <div className="section-head">
+            <h2 className="section-title">失败任务</h2>
+            <StatusPill label="状态" tone="bad" value={failedEvents.length === 0 ? '无失败任务' : '验证失败'} />
+          </div>
+          <div className="list-rows">
+            {failedEvents.length === 0 ? (
+              <Row title="失败事件" sub="当前没有失败任务事件。" tag="空" tone="ok" />
+            ) : (
+              failedEvents.map((event) => (
+                <Row key={event.id} title={event.type} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="bad" />
+              ))
+            )}
+            <Row title="关键日志" sub={state.diagnosticPackage === null ? '尚未生成诊断包。' : state.diagnosticPackage.path} tag={state.diagnosticPackage === null ? '空态' : '已生成'} tone={state.diagnosticPackage === null ? 'warn' : 'ok'} />
+            <Row title="恢复与脱敏" sub={state.diagnosticPackage === null ? '无诊断包' : state.diagnosticPackage.redacted ? '已脱敏' : '未通过'} tag={state.diagnosticPackage === null ? '空态' : '已检查'} tone={state.diagnosticPackage === null ? 'warn' : state.diagnosticPackage.redacted ? 'ok' : 'bad'} />
+            <Row title="包含项" sub={state.diagnosticPackage === null ? '无' : state.diagnosticPackage.includes.join(', ')} tag="task_snapshot" tone="info" />
+          </div>
         </section>
-        <div className="grid-2">
-          <section className="card">
-            <div className="card-title">关键日志</div>
-            <Row title="诊断包" sub={state.diagnosticPackage === null ? '尚未生成诊断包。' : state.diagnosticPackage.path} tag={state.diagnosticPackage === null ? '空态' : '已生成'} tone={state.diagnosticPackage === null ? 'warn' : 'ok'} />
-            <Row title="性能采样" sub={`${state.performanceSample.rssMb} MB RSS`} tag={state.performanceSample.exceedsBudget ? '超预算' : '正常'} tone={state.performanceSample.exceedsBudget ? 'warn' : 'ok'} />
-          </section>
-          <section className="card">
-            <div className="card-title">恢复与脱敏</div>
-            <Row title="脱敏状态" sub={state.diagnosticPackage === null ? '无诊断包' : state.diagnosticPackage.redacted ? '已脱敏' : '未通过'} tag={state.diagnosticPackage === null ? '空态' : '已检查'} tone={state.diagnosticPackage === null ? 'warn' : state.diagnosticPackage.redacted ? 'ok' : 'bad'} />
-            <Row title="包含项" sub={state.diagnosticPackage === null ? '无' : state.diagnosticPackage.includes.join(', ')} tag="真实数据" tone="info" />
-          </section>
-        </div>
-        <div className="grid-2">
+        <div className="diagnostics-surface-grid">
           <DiagnosticPackagePanel diagnosticPackage={state.diagnosticPackage} />
           <PerformancePanel performanceSample={state.performanceSample} />
         </div>

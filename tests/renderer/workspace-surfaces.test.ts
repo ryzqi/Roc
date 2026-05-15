@@ -1,0 +1,304 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { DiagnosticPackagePanel } from '../../src/renderer/views/diagnostics/DiagnosticPackagePanel';
+import { DiagnosticsView } from '../../src/renderer/views/diagnostics/DiagnosticsView';
+import { DoctorView } from '../../src/renderer/views/doctor/DoctorView';
+import { GitView } from '../../src/renderer/views/git/GitView';
+import { PerformancePanel } from '../../src/renderer/views/diagnostics/PerformancePanel';
+import { PreviewView } from '../../src/renderer/views/preview/PreviewView';
+import { TerminalView } from '../../src/renderer/views/terminal/TerminalView';
+import { WorkspaceView } from '../../src/renderer/views/workspace/WorkspaceView';
+import { createLoadedState } from './view-test-helpers';
+
+describe('workspace and diagnostics surfaces', () => {
+  it('renders workspace view with section surfaces instead of legacy cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WorkspaceView, {
+        loadState: { status: 'ready', error: null, key: 'workspace' },
+        onSelectWorkspace: async () => {},
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          fileTree: {
+            workspacePath: 'F:\\Code\\Roc',
+            relativePath: '',
+            truncated: false,
+            entries: [
+              {
+                name: 'README.md',
+                relativePath: 'README.md',
+                type: 'file',
+                size: 123,
+                updatedAt: '2026-05-16T08:00:00.000Z'
+              }
+            ]
+          },
+          filePreview: {
+            relativePath: 'README.md',
+            kind: 'text',
+            content: '# Preview',
+            truncated: false,
+            sizeBytes: 123
+          },
+          gitStatus: {
+            workspacePath: 'F:\\Code\\Roc',
+            isRepository: true,
+            branch: 'main',
+            porcelain: [' M README.md'],
+            changes: [],
+            changedFiles: 1
+          },
+          terminalSession: {
+            id: 'terminal-1',
+            cwd: 'F:\\Code\\Roc',
+            shell: 'pwsh',
+            cols: 120,
+            rows: 32,
+            status: 'ready',
+            exitCode: null
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('data-testid="workspace-view"');
+    expect(html).toContain('workspace-surface-grid');
+    expect(html).toContain('section-title">文件操作预览');
+    expect(html).toContain('section-title">工作区状态');
+    expect(html).not.toContain('card-title');
+    expect(html).not.toContain('class="card"');
+  });
+
+  it('renders preview view with unified preview surfaces', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(PreviewView, {
+        loadState: { status: 'ready', error: null, key: 'preview' },
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          filePreview: {
+            relativePath: 'README.md',
+            kind: 'text',
+            content: '# Preview',
+            truncated: false,
+            sizeBytes: 123
+          },
+          fileSearch: {
+            query: 'Preview',
+            truncated: false,
+            matches: [
+              {
+                relativePath: 'README.md',
+                line: 1,
+                column: 1,
+                preview: '# Preview'
+              }
+            ]
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('data-testid="preview-view"');
+    expect(html).toContain('preview-surface-grid');
+    expect(html).toContain('preview-surface');
+    expect(html).toContain('搜索命中');
+    expect(html).not.toContain('card-title');
+  });
+
+  it('renders terminal view with section copy and shell surface', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(TerminalView, {
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          terminalSession: {
+            id: 'terminal-1',
+            cwd: 'F:\\Code\\Roc',
+            shell: 'pwsh',
+            cols: 120,
+            rows: 32,
+            status: 'ready',
+            exitCode: null
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('data-testid="terminal-view"');
+    expect(html).toContain('terminal-surface');
+    expect(html).toContain('section-title">命令执行边界');
+    expect(html).not.toContain('card-title');
+  });
+
+  it('renders git view with stat row and section surfaces', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GitView, {
+        loadState: { status: 'ready', error: null, key: 'git' },
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          gitStatus: {
+            workspacePath: 'F:\\Code\\Roc',
+            isRepository: true,
+            branch: 'main',
+            porcelain: [' M README.md'],
+            changes: [],
+            changedFiles: 1
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('data-testid="git-view"');
+    expect(html).toContain('class="stat-row"');
+    expect(html).toContain('class="section"');
+    expect(html).not.toContain('card-title');
+  });
+
+  it('renders doctor and diagnostics in single-panel form', () => {
+    const state = createLoadedState({
+      diagnosticPackage: {
+        id: 'pkg-1',
+        taskId: 'task-1',
+        path: 'F:\\Code\\Roc\\.artifacts\\pkg.zip',
+        createdAt: '2026-05-16T08:00:00.000Z',
+        includes: ['task_snapshot', 'doctor_findings'],
+        redacted: true
+      },
+      performanceSample: {
+        id: 'perf-1',
+        sampledAt: '2026-05-16T08:00:00.000Z',
+        mode: 'test',
+        uptimeSeconds: 42,
+        rssMb: 128,
+        heapUsedMb: 48,
+        heapTotalMb: 96,
+        memoryBudgetMb: 256,
+        exceedsBudget: false
+      },
+      doctor: {
+        generatedAt: '2026-05-16T08:00:00.000Z',
+        summary: {
+          pass: 3,
+          fail: 0,
+          degraded: 1,
+          skipped: 0
+        },
+        findings: [
+          {
+            id: 'finding-1',
+            checkId: 'memory',
+            severity: 'warning',
+            status: 'degraded',
+            title: '向量索引降级',
+            detail: '健康检查结果可继续使用。',
+            createdAt: '2026-05-16T08:00:00.000Z'
+          }
+        ]
+      },
+      taskSnapshot: {
+        generatedAt: '2026-05-16T08:00:00.000Z',
+        counts: {
+          total: 1,
+          running: 0,
+          failed: 1,
+          pendingConfirmation: 0
+        },
+        threads: [],
+        recentEvents: [
+          {
+            id: 'event-1',
+            threadId: 'thread-1',
+            runId: 'run-1',
+            type: 'error',
+            payload: {},
+            createdAt: '2026-05-16T08:00:00.000Z'
+          }
+        ]
+      }
+    });
+
+    const doctorHtml = renderToStaticMarkup(
+      React.createElement(DoctorView, {
+        loadState: { status: 'ready', error: null, key: 'doctor' },
+        state
+      })
+    );
+    const diagnosticsHtml = renderToStaticMarkup(
+      React.createElement(DiagnosticsView, {
+        loadState: { status: 'ready', error: null, key: 'diagnostics' },
+        state
+      })
+    );
+
+    expect(doctorHtml).toContain('data-testid="doctor-view"');
+    expect(doctorHtml).toContain('class="single-panel"');
+    expect(doctorHtml).toContain('健康检查结果');
+    expect(doctorHtml).not.toContain('card-title');
+
+    expect(diagnosticsHtml).toContain('data-testid="diagnostics-view"');
+    expect(diagnosticsHtml).toContain('class="single-panel"');
+    expect(diagnosticsHtml).toContain('task_snapshot');
+    expect(diagnosticsHtml).not.toContain('card-title');
+  });
+
+  it('renders diagnostic package and performance panels as section blocks', () => {
+    const diagnosticHtml = renderToStaticMarkup(
+      React.createElement(DiagnosticPackagePanel, {
+        diagnosticPackage: {
+          id: 'pkg-1',
+          taskId: 'task-1',
+          path: 'F:\\Code\\Roc\\.artifacts\\pkg.zip',
+          createdAt: '2026-05-16T08:00:00.000Z',
+          includes: ['task_snapshot'],
+          redacted: true
+        }
+      })
+    );
+    const performanceHtml = renderToStaticMarkup(
+      React.createElement(PerformancePanel, {
+        performanceSample: {
+          id: 'perf-1',
+          sampledAt: '2026-05-16T08:00:00.000Z',
+          mode: 'test',
+          uptimeSeconds: 42,
+          rssMb: 128,
+          heapUsedMb: 48,
+          heapTotalMb: 96,
+          memoryBudgetMb: 256,
+          exceedsBudget: false
+        }
+      })
+    );
+
+    expect(diagnosticHtml).toContain('class="section"');
+    expect(diagnosticHtml).toContain('task_snapshot');
+    expect(diagnosticHtml).not.toContain('card-title');
+
+    expect(performanceHtml).toContain('class="section"');
+    expect(performanceHtml).toContain('class="stat-row"');
+    expect(performanceHtml).not.toContain('card-title');
+  });
+});
