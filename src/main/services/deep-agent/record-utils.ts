@@ -142,8 +142,35 @@ function isNonAssistantContentBlock(block: unknown): boolean {
     return true;
   }
 
+  if (hasHostedSearchResultText(block)) {
+    return true;
+  }
+
   const nestedContent = readRecordValue(block, 'content');
   return Array.isArray(nestedContent) && nestedContent.some((item) => isNonAssistantContentBlock(item));
+}
+
+function hasHostedSearchResultText(value: Record<string, unknown>): boolean {
+  const type = readLowercaseString(readRecordValue(value, 'type'));
+  if (type !== 'text') {
+    return false;
+  }
+
+  const text = readNonEmptyString(readRecordValue(value, 'text'));
+  if (text === null) {
+    return false;
+  }
+
+  return isHostedSearchResultText(text);
+}
+
+function isHostedSearchResultText(text: string): boolean {
+  return (
+    text.startsWith('Title: ') &&
+    text.includes('\nURL: ') &&
+    text.includes('\nPublished: ') &&
+    text.includes('\nHighlights:')
+  );
 }
 
 function hasSkillInstructionPath(value: Record<string, unknown>): boolean {

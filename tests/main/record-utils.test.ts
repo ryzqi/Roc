@@ -110,6 +110,27 @@ describe('record-utils assistant text boundaries', () => {
     ).toBe(true);
   });
 
+  it('identifies hosted search result text blocks as non-assistant text', () => {
+    expect(
+      isNonAssistantTextMessage({
+        content: [
+          {
+            type: 'text',
+            text: [
+              'Title: NVIDIA Corp (NVDA) | Currently at $235.74 (+4.39%) | May 14, 2026',
+              'URL: https://finance.yahoo.com/quote/NVDA/',
+              'Published: 2026-05-15T09:50:39.199Z',
+              'Author: N/A',
+              'Highlights:',
+              '',
+              'NVDA — NVIDIA Corp'
+            ].join('\n')
+          }
+        ]
+      })
+    ).toBe(true);
+  });
+
   it('identifies skill load content blocks as non-assistant text', () => {
     expect(
       isNonAssistantTextMessage({

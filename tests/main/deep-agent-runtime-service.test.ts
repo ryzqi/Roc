@@ -1099,6 +1099,72 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('keeps hosted Exa text result blocks out of assistant chat text while preserving the final answer', async () => {
+    const rawSearchPayload = [
+      'Title: NVIDIA Corp (NVDA) | Currently at $235.74 (+4.39%) | May 14, 2026',
+      'URL: https://finance.yahoo.com/quote/NVDA/',
+      'Published: 2026-05-15T09:50:39.199Z',
+      'Author: N/A',
+      'Highlights:',
+      '',
+      'RAW_EXA_RESULT_BODY'
+    ].join('\n');
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable([rawSearchPayload]),
+          content: [
+            {
+              type: 'text',
+              text: rawSearchPayload
+            }
+          ]
+        },
+        {
+          text: createAsyncIterable(['最终回答：已基于搜索结果整理。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'web_search',
+          input: { query: 'NVDA stock price' },
+          output: Promise.resolve(rawSearchPayload)
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '搜索并总结 NVDA 当前股价',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+
+    expect(messageText).toBe('最终回答：已基于搜索结果整理。');
+    expect(messageText).not.toContain('RAW_EXA_RESULT_BODY');
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：已基于搜索结果整理。'
+    });
+  });
+
   it('keeps Skill raw instruction blocks out of assistant chat text', async () => {
     const rawSkillContent = '---\nname: project-review\ndescription: RAW_SKILL_DESCRIPTION\n---\n# Project Review';
     mocked.streamEventsMock.mockResolvedValue({
