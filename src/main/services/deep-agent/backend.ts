@@ -28,6 +28,31 @@ type AgentExecuteAdapter = {
   };
 };
 
+const WORKSPACE_ROUTE = '/workspace';
+const WORKSPACE_ROUTE_PREFIX = '/workspace/';
+const SKILLS_ROUTE = '/skills';
+const SKILLS_ROUTE_PREFIX = '/skills/';
+
+function isWorkspaceRoute(path: string): boolean {
+  return path === WORKSPACE_ROUTE || path.startsWith(WORKSPACE_ROUTE_PREFIX);
+}
+
+function isSkillsRoute(path: string): boolean {
+  return path === SKILLS_ROUTE || path.startsWith(SKILLS_ROUTE_PREFIX);
+}
+
+function isCanonicalRoute(path: string): boolean {
+  return isWorkspaceRoute(path) || isSkillsRoute(path);
+}
+
+function invalidRouteError(path: string): string {
+  return `Roc filesystem paths must stay under /workspace/ or /skills/. Received: ${path}`;
+}
+
+function skillsWriteDeniedError(path: string): string {
+  return `Roc skill files are read-only at runtime. Write operations are not allowed for: ${path}`;
+}
+
 class RocAgentBackend implements SandboxBackendProtocolV2 {
   private readonly fileBackend: CompositeBackend;
   private readonly shellBackend: LocalShellBackend;
@@ -74,30 +99,75 @@ class RocAgentBackend implements SandboxBackendProtocolV2 {
   }
 
   ls(path: string): Promise<LsResult> {
+    if (!isCanonicalRoute(path)) {
+      return Promise.resolve({
+        error: invalidRouteError(path)
+      });
+    }
     return this.fileBackend.ls(path);
   }
 
   read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
+    if (!isCanonicalRoute(filePath)) {
+      return Promise.resolve({
+        error: invalidRouteError(filePath)
+      });
+    }
     return this.fileBackend.read(filePath, offset, limit);
   }
 
   readRaw(filePath: string): Promise<ReadRawResult> {
+    if (!isCanonicalRoute(filePath)) {
+      return Promise.resolve({
+        error: invalidRouteError(filePath)
+      });
+    }
     return this.fileBackend.readRaw(filePath);
   }
 
   grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+    if (path !== null && path !== undefined && !isCanonicalRoute(path)) {
+      return Promise.resolve({
+        error: invalidRouteError(path)
+      });
+    }
     return this.fileBackend.grep(pattern, path ?? undefined, glob ?? undefined);
   }
 
   glob(pattern: string, path?: string): Promise<GlobResult> {
+    if (path !== undefined && !isCanonicalRoute(path)) {
+      return Promise.resolve({
+        error: invalidRouteError(path)
+      });
+    }
     return this.fileBackend.glob(pattern, path);
   }
 
   write(filePath: string, content: string): Promise<WriteResult> {
+    if (!isCanonicalRoute(filePath)) {
+      return Promise.resolve({
+        error: invalidRouteError(filePath)
+      });
+    }
+    if (!isWorkspaceRoute(filePath)) {
+      return Promise.resolve({
+        error: skillsWriteDeniedError(filePath)
+      });
+    }
     return this.fileBackend.write(filePath, content);
   }
 
   edit(filePath: string, oldString: string, newString: string, replaceAll?: boolean): Promise<EditResult> {
+    if (!isCanonicalRoute(filePath)) {
+      return Promise.resolve({
+        error: invalidRouteError(filePath)
+      });
+    }
+    if (!isWorkspaceRoute(filePath)) {
+      return Promise.resolve({
+        error: skillsWriteDeniedError(filePath)
+      });
+    }
     return this.fileBackend.edit(filePath, oldString, newString, replaceAll);
   }
 

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -89,6 +89,44 @@ describe('deep agent backend', () => {
         usedRtk: false,
         bypassReason: 'rtk_binary_missing'
       });
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('writes and edits /workspace files on disk', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-write-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      const backend = createBackend(services.workspaceService, services.paths, services.shellExecutionService);
+
+      const writeResult = await backend.write('/workspace/notes.md', 'alpha\n');
+      const editResult = await backend.edit('/workspace/notes.md', 'alpha', 'beta');
+
+      expect(writeResult.error).toBeUndefined();
+      expect(writeResult.path).toBe('/notes.md');
+      expect(editResult.error).toBeUndefined();
+      expect(editResult.path).toBe('/notes.md');
+      expect(readFileSync(join(workspaceRoot, 'notes.md'), 'utf8')).toBe('beta\n');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects writes outside the canonical workspace routes', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      const backend = createBackend(services.workspaceService, services.paths, services.shellExecutionService);
+
+      const appWrite = await backend.write('/app/hello.txt', 'bad\n');
+      const rootWrite = await backend.write('/hello.txt', 'bad\n');
+
+      expect(appWrite.error).toContain('/workspace/');
+      expect(appWrite.path).toBeUndefined();
+      expect(rootWrite.error).toContain('/workspace/');
+      expect(rootWrite.path).toBeUndefined();
+      expect(existsSync(join(workspaceRoot, 'hello.txt'))).toBe(false);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

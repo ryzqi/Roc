@@ -39,6 +39,7 @@ import {
   type RunExecutionContext,
   type RuntimeSubagent
 } from './deep-agent';
+import type { FilesystemPermission } from 'deepagents';
 
 type ReasoningSource =
   | {
@@ -57,6 +58,29 @@ type ResumeContext = {
   taskRun: TaskRun;
   threadId: string;
 };
+
+const WORKSPACE_FILESYSTEM_PERMISSIONS: FilesystemPermission[] = [
+  {
+    operations: ['read', 'write'],
+    paths: ['/workspace/**'],
+    mode: 'allow'
+  },
+  {
+    operations: ['read'],
+    paths: ['/skills/**'],
+    mode: 'allow'
+  },
+  {
+    operations: ['write'],
+    paths: ['/skills/**'],
+    mode: 'deny'
+  },
+  {
+    operations: ['read', 'write'],
+    paths: ['/**'],
+    mode: 'deny'
+  }
+];
 
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
@@ -333,6 +357,7 @@ export class DeepAgentRuntimeService {
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
             backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
+            permissions: WORKSPACE_FILESYSTEM_PERMISSIONS,
             skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
             subagents,
             tools: runTools,
@@ -490,6 +515,7 @@ export class DeepAgentRuntimeService {
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
         backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
+        permissions: WORKSPACE_FILESYSTEM_PERMISSIONS,
         skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
         subagents,
         tools: runTools,

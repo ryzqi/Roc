@@ -684,6 +684,56 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.skills).toEqual(['/skills/alpha-review/', '/skills/zeta-review/']);
   });
 
+  it('creates the deep agent with workspace-scoped filesystem permissions', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['Done']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: 'Create a note in the workspace.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['project-review']
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | { permissions?: Array<{ operations: string[]; paths: string[]; mode?: string }> }
+      | undefined;
+    expect(call?.permissions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operations: ['read', 'write'],
+          paths: ['/workspace/**'],
+          mode: 'allow'
+        }),
+        expect.objectContaining({
+          operations: ['read'],
+          paths: ['/skills/**'],
+          mode: 'allow'
+        }),
+        expect.objectContaining({
+          operations: ['write'],
+          paths: ['/skills/**'],
+          mode: 'deny'
+        }),
+        expect.objectContaining({
+          operations: ['read', 'write'],
+          paths: ['/**'],
+          mode: 'deny'
+        })
+      ])
+    );
+  });
+
   it('stores selected MCP and Skill capabilities on task runs without claiming unloaded skills were executed', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
