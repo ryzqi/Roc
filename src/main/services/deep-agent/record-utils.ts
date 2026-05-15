@@ -52,6 +52,8 @@ const NON_ASSISTANT_CONTENT_BLOCK_TYPES = new Set([
   'skill_content'
 ]);
 
+export type StreamedAssistantTextClassification = 'assistant' | 'non_assistant' | 'pending';
+
 export function isNonAssistantTextMessage(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
@@ -67,6 +69,30 @@ export function isNonAssistantTextMessage(value: unknown): boolean {
   }
 
   return readContentBlocks(value).some((block) => isNonAssistantContentBlock(block));
+}
+
+export function classifyStreamedAssistantText(text: string): StreamedAssistantTextClassification {
+  if (text.length === 0) {
+    return 'assistant';
+  }
+
+  if (isHostedSearchResultText(text)) {
+    return 'non_assistant';
+  }
+
+  if (isPotentialHostedSearchResultTextPrefix(text)) {
+    return 'pending';
+  }
+
+  if (isSkillFrontMatterText(text)) {
+    return 'non_assistant';
+  }
+
+  if (isPotentialSkillFrontMatterPrefix(text)) {
+    return 'pending';
+  }
+
+  return 'assistant';
 }
 
 function hasNonAssistantMessageType(value: Record<string, unknown>): boolean {
@@ -169,8 +195,56 @@ function isHostedSearchResultText(text: string): boolean {
     text.startsWith('Title: ') &&
     text.includes('\nURL: ') &&
     text.includes('\nPublished: ') &&
+    text.includes('\nAuthor: ') &&
     text.includes('\nHighlights:')
   );
+}
+
+function isPotentialHostedSearchResultTextPrefix(text: string): boolean {
+  const normalized = text.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('Title: ')) {
+    return false;
+  }
+
+  const expectedLinePrefixes = ['URL: ', 'Published: ', 'Author: ', 'Highlights:'];
+  if (!normalized.includes('\n')) {
+    return true;
+  }
+
+  const hasTrailingNewline = normalized.endsWith('\n');
+  const lines = normalized.split('\n');
+  const remainingLines = hasTrailingNewline ? lines.slice(1, -1) : lines.slice(1);
+
+  let expectedIndex = 0;
+  for (let index = 0; index < remainingLines.length; index += 1) {
+    const line = remainingLines[index] ?? '';
+    const expectedPrefix = expectedLinePrefixes[expectedIndex];
+    if (expectedPrefix === undefined) {
+      return false;
+    }
+
+    const isLastVisibleLine = index === remainingLines.length - 1;
+    const isPartialLine = isLastVisibleLine && !hasTrailingNewline;
+    if (isPartialLine) {
+      return expectedPrefix.startsWith(line) || line.startsWith(expectedPrefix);
+    }
+
+    if (!line.startsWith(expectedPrefix)) {
+      return false;
+    }
+    expectedIndex += 1;
+  }
+
+  return expectedIndex < expectedLinePrefixes.length;
+}
+
+function isSkillFrontMatterText(text: string): boolean {
+  return text.startsWith('---\n') && text.includes('\nname: ') && text.includes('\ndescription: ') && text.includes('\n---');
+}
+
+function isPotentialSkillFrontMatterPrefix(text: string): boolean {
+  const normalized = text.replace(/\r\n/g, '\n');
+  return normalized === '---' || normalized.startsWith('---\n') && !normalized.includes('\n---');
 }
 
 function hasSkillInstructionPath(value: Record<string, unknown>): boolean {

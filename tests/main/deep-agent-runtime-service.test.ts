@@ -1165,6 +1165,67 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('keeps streamed hosted Exa text deltas out of assistant chat text before structural metadata appears', async () => {
+    const rawSearchPayloadChunks = [
+      'Title: 成都 - 中国气象局-天气预报-城市预报\n',
+      'URL: https://weather.cma.cn/web/weather/57303.html\n',
+      'Published: N/A\n',
+      'Author: N/A\n',
+      'Highlights:\n',
+      '\n',
+      'RAW_EXA_RESULT_BODY'
+    ];
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(rawSearchPayloadChunks)
+        },
+        {
+          text: createAsyncIterable(['最终回答：已整理成都天气信息。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'web_search',
+          input: { query: '成都天气' },
+          output: Promise.resolve(rawSearchPayloadChunks.join(''))
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '搜索成都天气并总结',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+
+    expect(messageText).toBe('最终回答：已整理成都天气信息。');
+    expect(messageText).not.toContain('RAW_EXA_RESULT_BODY');
+    expect(messageText).not.toContain('中国气象局-天气预报-城市预报');
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：已整理成都天气信息。'
+    });
+  });
+
   it('keeps Skill raw instruction blocks out of assistant chat text', async () => {
     const rawSkillContent = '---\nname: project-review\ndescription: RAW_SKILL_DESCRIPTION\n---\n# Project Review';
     mocked.streamEventsMock.mockResolvedValue({

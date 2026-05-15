@@ -619,7 +619,7 @@ export class DeepAgentRuntimeService {
 
       if (textStream !== null && !recordUtils.isNonAssistantTextMessage(message)) {
         tasks.push(
-          this.consumeStringStream(textStream, (delta) => {
+          this.consumeAssistantTextStream(textStream, (delta) => {
             onVisibleOutput?.();
             assistantChunks.push(delta);
             if (context.taskRun !== null) {
@@ -894,6 +894,44 @@ export class DeepAgentRuntimeService {
       if (text !== null) {
         onDelta(text);
       }
+    }
+  }
+
+  private async consumeAssistantTextStream(stream: AsyncIterable<unknown>, onDelta: (delta: string) => void): Promise<void> {
+    let pending = '';
+    let released = false;
+    let suppressMessage = false;
+
+    await this.consumeStringStream(stream, (delta) => {
+      if (suppressMessage) {
+        return;
+      }
+
+      if (released) {
+        onDelta(delta);
+        return;
+      }
+
+      pending += delta;
+      const classification = recordUtils.classifyStreamedAssistantText(pending);
+      if (classification === 'non_assistant') {
+        pending = '';
+        suppressMessage = true;
+        return;
+      }
+      if (classification === 'pending') {
+        return;
+      }
+
+      released = true;
+      if (pending.length > 0) {
+        onDelta(pending);
+      }
+      pending = '';
+    });
+
+    if (!released && !suppressMessage && pending.length > 0) {
+      onDelta(pending);
     }
   }
 

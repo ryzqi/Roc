@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyStreamedAssistantText,
   isNonAssistantTextMessage,
   readReasoningBlockText,
   readReasoningFromMessageOutput
@@ -87,6 +88,32 @@ describe('record-utils reasoning helpers', () => {
 });
 
 describe('record-utils assistant text boundaries', () => {
+  it('keeps hosted search text prefixes pending until the raw result shape is confirmed', () => {
+    expect(
+      classifyStreamedAssistantText('Title: 成都 - 中国气象局-天气预报-城市预报\nURL: https://weather.cma.cn/web/weather/57303.html\nPub')
+    ).toBe('pending');
+  });
+
+  it('classifies the hosted search raw result template as non-assistant streamed text', () => {
+    expect(
+      classifyStreamedAssistantText(
+        [
+          'Title: 成都 - 中国气象局-天气预报-城市预报',
+          'URL: https://weather.cma.cn/web/weather/57303.html',
+          'Published: N/A',
+          'Author: N/A',
+          'Highlights:'
+        ].join('\n')
+      )
+    ).toBe('non_assistant');
+  });
+
+  it('returns assistant once a Title-prefixed message diverges from the hosted search result template', () => {
+    expect(
+      classifyStreamedAssistantText('Title: 成都天气总结\n今天多云，气温 22 度。')
+    ).toBe('assistant');
+  });
+
   it('identifies top-level server tool result messages as non-assistant text', () => {
     expect(
       isNonAssistantTextMessage({
