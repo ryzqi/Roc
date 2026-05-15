@@ -19,6 +19,14 @@ type ChatMessageRowProps = {
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
   const approval = message.approval;
   const isAssistant = message.role === 'assistant';
+  const reasoningStepCount =
+    message.reasoning === null
+      ? 0
+      : message.reasoning
+          .split(/\n+/)
+          .map((part) => part.trim())
+          .filter((part) => part.length > 0).length;
+  const reasoningLabel = reasoningStepCount > 0 ? `推理 · ${reasoningStepCount} 步` : '推理';
   const bubbleClassName = [
     isAssistant ? 'chat-bubble chat-bubble--assistant' : 'chat-bubble chat-bubble--user',
     message.isStreaming ? 'is-streaming' : ''
@@ -46,7 +54,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                 open={message.isStreaming ? true : undefined}
               >
                 <summary>
-                  <span className={message.isStreaming ? 'reasoning-shimmer' : undefined}>思考过程</span>
+                  <span className={message.isStreaming ? 'reasoning-shimmer' : undefined}>{reasoningLabel}</span>
                 </summary>
                 <div className="reasoning-body">
                   <MarkdownView text={message.reasoning} />
@@ -64,7 +72,6 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                 transition={approvalCardTransition}
               >
                 <header className="chat-approval-head">
-                  <span className="chat-approval-dot" aria-hidden="true" />
                   等待审批
                   <span className="chat-approval-count">{approval.actionRequests.length}</span>
                 </header>

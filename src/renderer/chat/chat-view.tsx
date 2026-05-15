@@ -163,13 +163,20 @@ export function ChatView({
   }
 
   const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredReasoning.length}`;
+  const showEmptyState = chatTranscript.length === 0;
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
       <div className="chat-empty-plane" aria-label="聊天主画布" ref={transcriptScrollRef}>
         <div className="chat-page-shell">
-          <div className="chat-feedback-shell">
+          <div className={showEmptyState ? 'chat-feedback-shell chat-feedback-shell--empty' : 'chat-feedback-shell'}>
             <div className="chat-feedback-stack">
+              {showEmptyState ? (
+                <header className="chat-empty-copy" data-testid="chat-empty-state">
+                  <h1>Roc 本地工作台</h1>
+                  <p>问问 Roc 或交给它一个任务</p>
+                </header>
+              ) : null}
               {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
               {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="chat-error">{chatRun.errorMessage}</span>}
               <ChatTranscriptPanel
@@ -184,7 +191,7 @@ export function ChatView({
           </div>
         </div>
       </div>
-      <div className="chat-bottom-stack">
+      <div className={showEmptyState ? 'chat-bottom-stack chat-bottom-stack--empty' : 'chat-bottom-stack'}>
         <ChatComposer
           chatInput={chatInput}
           onChatInputChange={setChatInput}

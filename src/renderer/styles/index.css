@@ -1,3 +1,8 @@
+@import './tokens.css';
+@import './base.css';
+@import './main.css';
+@import './animations.css';
+
 @font-face {
   font-family: 'Inter';
   src: url('./fonts/inter-latin-ext-400-normal.woff2') format('woff2');
@@ -53,8 +58,3 @@
   font-weight: 600;
   font-display: swap;
 }
-
-@import './tokens.css';
-@import './base.css';
-@import './main.css';
-@import './animations.css';

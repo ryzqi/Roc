@@ -19,6 +19,8 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid="chat-message-reasoning"');
+    expect(html).toContain('推理');
+    expect(html).not.toContain('思考过程');
     expect(html).toContain('<ul>');
     expect(html).toContain('<code class="hljs language-ts">');
     expect(html).not.toContain('<p>第一段\n\n- 列表项');
@@ -94,5 +96,6 @@ describe('chat message row', () => {
     expect(html).toContain('data-testid="chat-approval-tool-name">execute<');
     expect(html).toContain('git status');
     expect(html).toContain('approve / edit / reject');
+    expect(html).not.toContain('chat-approval-dot');
   });
 });
