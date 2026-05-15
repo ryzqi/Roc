@@ -109,10 +109,7 @@ async function startSmokeProvider() {
         response.setHeader('cache-control', 'no-cache');
         response.setHeader('connection', 'keep-alive');
         response.write(
-          'data: {"choices":[{"index":0,"delta":{"content":"Smoke Provider "},"finish_reason":null}]}\n\n'
-        );
-        response.write(
-          'data: {"choices":[{"index":0,"delta":{"content":"已生成首轮回复。"},"finish_reason":null}]}\n\n'
+          'data: {"choices":[{"index":0,"delta":{"content":"Smoke Provider 已生成首轮回复。\\n\\n短行一。\\n短行二。\\n短行三。\\n短行四。\\n短行五。\\n短行六。\\n短行七。\\n短行八。"},"finish_reason":null}]}\n\n'
         );
         response.write(
           'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":16,"completion_tokens":9,"total_tokens":25}}\n\n'
@@ -127,7 +124,7 @@ async function startSmokeProvider() {
           choices: [
             {
               message: {
-                content: 'Smoke Provider 已生成首轮回复。'
+                content: 'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。'
               },
               finish_reason: 'stop'
             }
@@ -1897,6 +1894,8 @@ try {
       assistantBubble instanceof HTMLElement ? window.getComputedStyle(assistantBubble) : null;
     const assistantBubbleRect = assistantBubble instanceof HTMLElement ? assistantBubble.getBoundingClientRect() : null;
     const assistantContentRect = assistantContent instanceof HTMLElement ? assistantContent.getBoundingClientRect() : null;
+    const composer = input.closest('.composer');
+    const composerRect = composer instanceof HTMLElement ? composer.getBoundingClientRect() : null;
     return {
       resultAboveInput: userRect.bottom <= inputRect.top && assistantRect.bottom <= inputRect.top,
       userAlignedRight: window.getComputedStyle(latestUser).justifyContent === 'flex-end',
@@ -1913,7 +1912,9 @@ try {
         assistantContentRect !== null &&
         Math.abs(assistantBubbleRect.width - assistantContentRect.width) <= 4,
       assistantBubbleNarrowerThanRow:
-        assistantBubbleRect !== null && assistantBubbleRect.width <= assistantRect.width - 24
+        assistantBubbleRect !== null && assistantBubbleRect.width <= assistantRect.width - 24,
+      assistantGapToComposer:
+        composerRect !== null ? Math.round(composerRect.top - assistantRect.bottom) : null
     };
   });
   const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
@@ -2837,7 +2838,9 @@ try {
       chatResultLayoutEvidence.assistantBubbleUnframed &&
       chatResultLayoutEvidence.assistantContentAnchoredLeft &&
       chatResultLayoutEvidence.assistantBubbleFitsContent &&
-      chatResultLayoutEvidence.assistantBubbleNarrowerThanRow,
+      chatResultLayoutEvidence.assistantBubbleNarrowerThanRow &&
+      typeof chatResultLayoutEvidence.assistantGapToComposer === 'number' &&
+      chatResultLayoutEvidence.assistantGapToComposer >= 24,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === submittedChatPrompt &&
       taskCapabilityEvidence.threadGoal === submittedChatPrompt &&
@@ -2851,7 +2854,8 @@ try {
     taskAssistantEventStored:
       typeof taskCapabilityEvidence.assistantMessage === 'object' &&
       taskCapabilityEvidence.assistantMessage !== null &&
-      taskCapabilityEvidence.assistantMessage.content === 'Smoke Provider 已生成首轮回复。' &&
+      typeof taskCapabilityEvidence.assistantMessage.content === 'string' &&
+      taskCapabilityEvidence.assistantMessage.content.includes('Smoke Provider 已生成首轮回复。') &&
       taskCapabilityEvidence.assistantMessage.providerId === 'smoke-ui-openai' &&
       taskCapabilityEvidence.assistantMessage.modelId === 'smoke-ui-openai-model',
     taskProviderUpdateStored:
@@ -3061,6 +3065,7 @@ try {
       workbenchWidthAfter,
       collapsedChatLayoutBeforeOpen,
       collapsedChatLayoutAfterClose,
+      chatResultLayoutEvidence,
       skillLayoutEvidence,
       providerSettingsEvidence,
       previewText

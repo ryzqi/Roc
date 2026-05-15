@@ -622,7 +622,7 @@
   overflow: auto;
   display: flex;
   justify-content: center;
-  padding: 32px 0 16px;
+  padding: 32px 0 28px;
   -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 14px), transparent 100%);
   mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 14px), transparent 100%);
 }
