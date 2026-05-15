@@ -87,6 +87,15 @@ describe('record-utils reasoning helpers', () => {
 });
 
 describe('record-utils assistant text boundaries', () => {
+  it('identifies top-level server tool result messages as non-assistant text', () => {
+    expect(
+      isNonAssistantTextMessage({
+        type: 'server_tool_call_result',
+        text: 'RAW_EXA_RESULT_BODY'
+      })
+    ).toBe(true);
+  });
+
   it('identifies tool result content blocks as non-assistant text', () => {
     expect(
       isNonAssistantTextMessage({

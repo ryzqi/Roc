@@ -1046,6 +1046,59 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('keeps top-level server tool result messages out of assistant chat text while preserving the final answer', async () => {
+    const rawSearchPayload = '{"results":[{"title":"Exa raw result","text":"RAW_EXA_RESULT_BODY"}]}';
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          type: 'server_tool_call_result',
+          text: createAsyncIterable([rawSearchPayload])
+        },
+        {
+          text: createAsyncIterable(['最终回答：已基于搜索结果整理。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'web_search',
+          input: { query: 'roc exa mcp' },
+          output: Promise.resolve(rawSearchPayload)
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '搜索并总结',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+
+    expect(messageText).toBe('最终回答：已基于搜索结果整理。');
+    expect(messageText).not.toContain('RAW_EXA_RESULT_BODY');
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：已基于搜索结果整理。'
+    });
+  });
+
   it('keeps Skill raw instruction blocks out of assistant chat text', async () => {
     const rawSkillContent = '---\nname: project-review\ndescription: RAW_SKILL_DESCRIPTION\n---\n# Project Review';
     mocked.streamEventsMock.mockResolvedValue({
