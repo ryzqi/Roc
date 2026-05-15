@@ -91,6 +91,8 @@ describe('skills view', () => {
     expect(html).toContain('data-testid="skill-management"');
     expect(html).toContain('data-testid="skill-row-smoke-skill"');
     expect(html).toContain('data-testid="skill-row-broken-skill"');
+    expect(html).toContain('class="section skill-management-surface"');
+    expect(html).toContain('class="list-rows skill-row-list"');
     expect(html).toContain('missing dependency');
 
     expect(html).not.toContain('Skill 总数');
@@ -98,6 +100,7 @@ describe('skills view', () => {
     expect(html).not.toContain('data-testid="skill-toggle-smoke-skill"');
     expect(html).not.toContain('data-testid="skill-delete-smoke-skill"');
     expect(html).not.toContain('data-testid="skill-drawer"');
+    expect(html).not.toContain('empty-state');
   });
 
   it('renders the drawer node when provided', () => {

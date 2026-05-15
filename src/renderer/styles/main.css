@@ -1238,6 +1238,61 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.stat-row {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stat-row > .metric + .metric {
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+}
+
+.section-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--font-h3-size);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.list-rows {
+  display: grid;
+  min-width: 0;
+}
+
+.single-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
 .split {
   grid-template-columns: 280px minmax(0, 1fr);
 }
@@ -1551,6 +1606,9 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
   color: var(--muted);
   font-size: 13px;
 }
@@ -1640,6 +1698,25 @@
   margin-top: 4px;
 }
 
+.section-empty-state {
+  display: grid;
+  gap: 8px;
+  padding: 20px 0;
+}
+
+.section-empty-state strong {
+  color: var(--ink);
+  font-size: var(--font-body-size);
+  font-weight: 500;
+}
+
+.section-empty-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  line-height: 1.55;
+}
+
 .empty-state p,
 .muted {
   margin: 0;
@@ -1659,24 +1736,25 @@
 
 .selection-chip {
   display: inline-flex;
-  min-width: 58px;
-  min-height: 30px;
+  min-width: 72px;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
-  border: 1px solid rgba(207, 218, 232, 0.94);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-ui-size);
+  font-weight: 500;
 }
 
 .selection-chip.active {
-  color: var(--green);
-  border-color: rgba(184, 224, 208, 0.92);
-  background: rgba(236, 249, 244, 0.95);
-  font-weight: 700;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 500;
 }
 
 .skills-filter-strip {
@@ -1686,7 +1764,6 @@
   align-content: flex-start;
   align-self: start;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 .skills-filter-strip .selection-chip {
@@ -1694,7 +1771,7 @@
 }
 
 .skills-filter-strip .selection-chip strong {
-  font-size: 11px;
+  font-size: var(--font-meta-size);
 }
 
 .skills-row-error {
@@ -3399,29 +3476,20 @@ button.model-pill {
 
 
 .memory-list-shell {
-  border-left: 2px solid rgba(214, 223, 235, 0.96);
-  border-radius: 0 18px 18px 0;
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(249, 251, 254, 0.9), rgba(255, 255, 255, 0.98));
+  display: grid;
+  gap: 12px;
 }
 
 .memory-list-head {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(231, 236, 243, 0.96);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 0 0 10px;
 }
 
 .memory-list-body {
-  padding: 10px 14px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.memory-record-list {
   display: grid;
   gap: 10px;
 }
@@ -3433,18 +3501,18 @@ button.model-pill {
   display: grid;
   gap: 8px;
   padding: 12px 12px 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(224, 231, 241, 0.96);
-  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .memory-record:hover {
-  border-color: rgba(200, 212, 231, 0.96);
+  border-color: var(--accent);
 }
 
 .memory-record.active {
-  border-color: rgba(190, 206, 235, 0.98);
-  background: rgba(245, 249, 255, 0.98);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .memory-record-meta {
@@ -3457,7 +3525,7 @@ button.model-pill {
 .memory-record-title {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .memory-record-copy {
@@ -3467,9 +3535,9 @@ button.model-pill {
 }
 
 .memory-editor-stage {
-  border-left: 2px solid rgba(214, 223, 235, 0.96);
-  border-radius: 0 22px 22px 0;
-  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(255, 255, 255, 0.98));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
   padding: 22px 24px 24px;
   display: grid;
   gap: 18px;
@@ -3485,8 +3553,8 @@ button.model-pill {
 
 .memory-editor-title {
   color: var(--ink);
-  font-size: 26px;
-  font-weight: 760;
+  font-size: var(--font-h1-size);
+  font-weight: 500;
   line-height: 1.1;
 }
 
@@ -3518,10 +3586,8 @@ button.model-pill {
 
 .memory-preview-surface {
   min-height: 120px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(225, 232, 242, 0.98);
-  background: rgba(255, 255, 255, 0.96);
+  padding: 14px 0 14px 14px;
+  border-left: 2px solid var(--line-strong);
   color: var(--muted);
   font-size: 12.5px;
   line-height: 1.6;
@@ -3581,6 +3647,13 @@ button.model-pill {
   color: var(--red);
   border-color: rgba(238, 194, 194, 0.92);
   background: rgba(255, 244, 244, 0.98);
+}
+
+.memory-summary-grid,
+.task-surface-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .settings-list {
@@ -3779,6 +3852,25 @@ button.model-pill {
 .field-box span:last-child {
   color: var(--muted);
   font-size: var(--font-meta-size);
+}
+
+.field-preview {
+  display: grid;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+}
+
+.field-preview-label {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  font-weight: 500;
+}
+
+.field-preview-value {
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  line-height: 1.5;
 }
 
 .mini-window .field-box {
@@ -4736,9 +4828,8 @@ button.model-pill {
   width: 62%;
   min-width: 420px;
   background: rgba(255, 255, 255, 0.99);
-  border: 1px solid rgba(205, 216, 232, 0.98);
-  border-radius: 18px;
-  box-shadow: -16px 0 32px rgba(20, 30, 50, 0.08);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -4761,15 +4852,13 @@ button.model-pill {
 }
 
 .skill-drawer-kicker {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .skill-drawer-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4786,22 +4875,22 @@ button.model-pill {
 .skill-drawer-action {
   display: inline-flex;
   min-width: 58px;
-  min-height: 30px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 0 14px;
-  border: 1px solid rgba(207, 218, 232, 0.94);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-ui-size);
   white-space: nowrap;
 }
 
 .skill-drawer-action:hover {
-  border-color: rgba(118, 144, 190, 0.6);
-  color: var(--ink);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .skill-drawer-action:disabled {
@@ -4811,14 +4900,14 @@ button.model-pill {
 }
 
 .skill-drawer-action--danger {
-  color: var(--trend-bad);
-  border-color: rgba(192, 68, 68, 0.32);
+  color: var(--st-bad);
+  border-color: var(--st-bad-line);
 }
 
 .skill-drawer-action--danger:hover {
-  background: rgba(192, 68, 68, 0.08);
-  border-color: rgba(192, 68, 68, 0.5);
-  color: var(--trend-bad);
+  background: rgba(156, 58, 58, 0.08);
+  border-color: var(--st-bad);
+  color: var(--st-bad);
 }
 
 .skill-drawer-body {
@@ -4880,21 +4969,21 @@ button.model-pill {
   gap: 12px;
   align-items: center;
   padding: 10px 14px;
-  border: 1px solid rgba(214, 223, 235, 0.96);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .skill-row-button:hover {
-  border-color: rgba(118, 144, 190, 0.55);
+  border-color: var(--accent);
 }
 
 .skill-row-button.selected {
-  border-color: rgba(91, 121, 184, 0.85);
-  background: rgba(238, 243, 251, 0.96);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .skill-row-info {

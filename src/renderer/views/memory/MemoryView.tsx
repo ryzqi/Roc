@@ -22,7 +22,7 @@ export function MemoryView({
   if (loadState.status === 'loading') {
     return (
       <>
-        <PageHeading kicker="控制面" title="记忆中心" />
+        <PageHeading title="记忆中心" />
         <section className="canvas-stage stage-grid" data-testid="memory-view">
           <EmptyState testId="memory-loading" title="记忆中心加载中" tone="loading" />
         </section>
@@ -33,7 +33,7 @@ export function MemoryView({
   if (loadState.status === 'error') {
     return (
       <>
-        <PageHeading kicker="控制面" title="记忆中心" />
+        <PageHeading title="记忆中心" />
         <section className="canvas-stage stage-grid" data-testid="memory-view">
           <EmptyState testId="memory-load-error" title="记忆中心加载失败" tone="error" />
         </section>
@@ -87,8 +87,8 @@ export function MemoryView({
     <>
       <PageHeading
         flags={<StatusPill label="真相源" tone="ok" value={state.memoryStatus.truthSource} />}
-        kicker="控制面"
         title="记忆中心"
+        meta={`本机 1 个工作区 · ${memoryItems.length + recallItems.length + state.memoryCandidates.length} 条记忆`}
       />
       <section className="canvas-stage stage-grid" data-testid="memory-view">
         <div className="memory-search-box">
@@ -97,7 +97,7 @@ export function MemoryView({
         </div>
         <div className="memory-library-layout">
           <aside className="memory-library-sidebar">
-            <div className="grid-2">
+            <div className="stat-row">
               <Metric
                 label="全部记忆"
                 note="含热 / 暖 / 会话回忆"
@@ -109,18 +109,22 @@ export function MemoryView({
                 value={selectedRecord === null ? 0 : 1}
               />
             </div>
-            <section className="card">
-              <div className="card-title">筛选与视图</div>
-              <Row title="记忆域" sub="偏好 / 反馈 / 项目上下文 / 过程技能 / 知识笔记 / 会话回忆" tag="全部" tone="info" />
-              <Row title="作用范围" sub="global / project:Roc / task threads" tag="自动约束" tone="ok" />
-              <Row title="来源" sub="user_explicit / feedback / agent_extract / session_recall" tag="可筛选" tone="ok" />
+            <section className="section">
+              <div className="section-head">
+                <h2 className="section-title">筛选与视图</h2>
+              </div>
+              <div className="list-rows">
+                <Row title="记忆域" sub="偏好 / 反馈 / 项目上下文 / 过程技能 / 知识笔记 / 会话回忆" tag="全部" tone="info" />
+                <Row title="作用范围" sub="global / project:Roc / task threads" tag="自动约束" tone="ok" />
+                <Row title="来源" sub="user_explicit / feedback / agent_extract / session_recall" tag="可筛选" tone="ok" />
+              </div>
             </section>
             <div className="memory-list-shell">
-              <div className="memory-list-head">
-                <span>记忆列表</span>
+              <div className="section-head memory-list-head">
+                <h2 className="section-title">记忆列表</h2>
                 <CompactStatusPill tone="ok" value={`${visibleRecords.length} 条记录`} />
               </div>
-              <div className="memory-list-body">
+              <div className="memory-list-body memory-record-list">
                 {visibleRecords.length === 0 ? (
                   <p className="muted">当前没有可显示记忆。</p>
                 ) : (
@@ -147,9 +151,13 @@ export function MemoryView({
                 )}
               </div>
             </div>
-            <section className="card">
-              <div className="card-title">后台静默整理</div>
-              <Row title="默认行为" tag="自动" tone="ok" />
+            <section className="section">
+              <div className="section-head">
+                <h2 className="section-title">后台静默整理</h2>
+              </div>
+              <div className="list-rows">
+                <Row title="默认行为" sub="候选与召回按当前设置自动整理。" tag="自动" tone="ok" />
+              </div>
             </section>
           </aside>
           <section className="memory-library-workspace">
@@ -210,53 +218,77 @@ export function MemoryView({
                       删除受控
                     </span>
                   </div>
-                  <section className="card">
-                    <div className="card-title">删除与恢复</div>
-                    <Row title="删除当前条目" sub="先展示影响范围；删除会话回忆不会自动级联删除策展记忆。" tag="受控" tone="warn" />
-                    <Row title="恢复历史版本" sub="可从 cold history 恢复旧版本，并保留 superseded 轨迹。" tag="可恢复" tone="info" />
+                  <section className="section">
+                    <div className="section-head">
+                      <h2 className="section-title">删除与恢复</h2>
+                    </div>
+                    <div className="list-rows">
+                      <Row title="删除当前条目" sub="先展示影响范围；删除会话回忆不会自动级联删除策展记忆。" tag="受控" tone="warn" />
+                      <Row title="恢复历史版本" sub="可从 cold history 恢复旧版本，并保留 superseded 轨迹。" tag="可恢复" tone="info" />
+                    </div>
                   </section>
                 </div>
               </div>
             </div>
           </section>
         </div>
-        <div className="grid-2">
+        <div className="memory-summary-grid">
           <div className="notice" data-testid="memory-degraded">
             {state.memoryStatus.degradedReason === undefined ? '索引状态正常；向量索引可按需重建。' : state.memoryStatus.degradedReason}
           </div>
-          <section className="card" data-testid="memory-candidates">
-            <div className="card-title">候选记忆</div>
-            {state.memoryCandidates.length === 0 ? <p className="muted">候选区为空。</p> : state.memoryCandidates.map((candidate) => (
-              <Row key={candidate.id} sub={candidate.content} tag={candidate.state} title={candidate.type} tone={candidate.state === 'conflict_detected' ? 'warn' : 'info'} />
-            ))}
+          <section className="section" data-testid="memory-candidates">
+            <div className="section-head">
+              <h2 className="section-title">候选记忆</h2>
+            </div>
+            <div className="list-rows">
+              {state.memoryCandidates.length === 0 ? <p className="muted">候选区为空。</p> : state.memoryCandidates.map((candidate) => (
+                <Row key={candidate.id} sub={candidate.content} tag={candidate.state} title={candidate.type} tone={candidate.state === 'conflict_detected' ? 'warn' : 'info'} />
+              ))}
+            </div>
           </section>
-          <section className="card" data-testid="memory-conflicts">
-            <div className="card-title">冲突裁决</div>
-            {state.memoryConflicts.length === 0 ? <p className="muted">没有开放冲突。</p> : state.memoryConflicts.map((conflict) => (
-              <Row key={conflict.id} sub={conflict.reason} tag={conflict.status} title={`${conflict.type} · ${conflict.scope}`} tone="warn" />
-            ))}
+          <section className="section" data-testid="memory-conflicts">
+            <div className="section-head">
+              <h2 className="section-title">冲突裁决</h2>
+            </div>
+            <div className="list-rows">
+              {state.memoryConflicts.length === 0 ? <p className="muted">没有开放冲突。</p> : state.memoryConflicts.map((conflict) => (
+                <Row key={conflict.id} sub={conflict.reason} tag={conflict.status} title={`${conflict.type} · ${conflict.scope}`} tone="warn" />
+              ))}
+            </div>
           </section>
-          <section className="card" data-testid="memory-search-results">
-            <div className="card-title">记忆召回</div>
-            {memoryItems.length === 0 ? <p className="muted">没有召回结果。</p> : memoryItems.map((item) => (
-              <Row key={`${item.layer}:${item.id}`} sub={item.summary} tag={item.layer} title={item.reason} tone="ok" />
-            ))}
+          <section className="section" data-testid="memory-search-results">
+            <div className="section-head">
+              <h2 className="section-title">记忆召回</h2>
+            </div>
+            <div className="list-rows">
+              {memoryItems.length === 0 ? <p className="muted">没有召回结果。</p> : memoryItems.map((item) => (
+                <Row key={`${item.layer}:${item.id}`} sub={item.summary} tag={item.layer} title={item.reason} tone="ok" />
+              ))}
+            </div>
           </section>
-          <section className="card" data-testid="session-recall-results">
-            <div className="card-title">会话回忆</div>
-            {recallItems.length === 0 ? <p className="muted">没有会话回忆结果。</p> : recallItems.map((item) => (
-              <Row key={item.id} sub={item.summary} tag={item.scope} title={item.title} tone="info" />
-            ))}
+          <section className="section" data-testid="session-recall-results">
+            <div className="section-head">
+              <h2 className="section-title">会话回忆</h2>
+            </div>
+            <div className="list-rows">
+              {recallItems.length === 0 ? <p className="muted">没有会话回忆结果。</p> : recallItems.map((item) => (
+                <Row key={item.id} sub={item.summary} tag={item.scope} title={item.title} tone="info" />
+              ))}
+            </div>
           </section>
-          <section className="card" data-testid="memory-recovery">
-            <div className="card-title">删除恢复</div>
-            {state.memoryRecovery !== null ? (
-              <Row title="最近操作" sub={state.memoryRecovery.id} tag={state.memoryRecovery.status} tone="ok" />
-            ) : latestActiveMemory !== null ? (
-              <Row title="最近操作" sub={latestActiveMemory.id} tag="active" tone="ok" />
-            ) : (
-              <Row title="最近操作" sub="暂无删除恢复记录。" tag="空" tone="warn" />
-            )}
+          <section className="section" data-testid="memory-recovery">
+            <div className="section-head">
+              <h2 className="section-title">删除恢复</h2>
+            </div>
+            <div className="list-rows">
+              {state.memoryRecovery !== null ? (
+                <Row title="最近操作" sub={state.memoryRecovery.id} tag={state.memoryRecovery.status} tone="ok" />
+              ) : latestActiveMemory !== null ? (
+                <Row title="最近操作" sub={latestActiveMemory.id} tag="active" tone="ok" />
+              ) : (
+                <Row title="最近操作" sub="暂无删除恢复记录。" tag="空" tone="warn" />
+              )}
+            </div>
           </section>
         </div>
       </section>

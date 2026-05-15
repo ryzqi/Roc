@@ -4,7 +4,7 @@ export function PageHeading({
   title
 }: {
   flags?: React.ReactNode;
-  kicker: string;
+  kicker?: string;
   meta?: string;
   title: string;
 }): React.JSX.Element {

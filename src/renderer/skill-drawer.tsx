@@ -81,7 +81,7 @@ export function SkillDrawer({
         </button>
       </header>
       <div className="skill-drawer-body">
-        <section className="skill-drawer-tree" data-testid="skill-drawer-tree">
+        <section className="skill-drawer-tree section" data-testid="skill-drawer-tree">
           {state.error !== null ? (
             <div className="muted" data-testid="skill-drawer-error" style={{ padding: '12px 14px' }}>
               {state.error}
@@ -94,7 +94,7 @@ export function SkillDrawer({
             treeView
           )}
         </section>
-        <section className="skill-drawer-preview-pane" data-testid="skill-drawer-preview-pane">
+        <section className="skill-drawer-preview-pane section" data-testid="skill-drawer-preview-pane">
           <header className="skill-drawer-preview-header">
             {state.selectedFilePath ?? '尚未选中文件'}
           </header>

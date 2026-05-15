@@ -134,7 +134,7 @@ export function buildSkillManagementViewModel(
 
 function EmptyCard({ detail, title, testId }: { detail: string; title: string; testId: string }): React.JSX.Element {
   return (
-    <div className="empty-state" data-testid={testId}>
+    <div className="section-empty-state" data-testid={testId}>
       <strong>{title}</strong>
       <p>{detail}</p>
     </div>
@@ -186,19 +186,24 @@ export function SkillsView({
 }: SkillsViewProps): React.JSX.Element {
   return (
     <section className="canvas-stage stage-grid skill-drawer-host" data-testid="skills-view">
-      <div className="skills-filter-strip" data-testid="skill-management">
-        {model.filters.map((filter) => (
-          <SelectionChip
-            active={model.filter === filter.id}
-            count={filter.count}
-            id={filter.id}
-            key={filter.id}
-            label={filter.label}
-            onClick={onFilterChange}
-          />
-        ))}
-      </div>
-      <div className="skill-row-list">
+      <section className="section skill-management-surface" data-testid="skill-management">
+        <div className="section-head">
+          <h2 className="section-title">Skill 管理</h2>
+        </div>
+        <div className="skills-filter-strip">
+          {model.filters.map((filter) => (
+            <SelectionChip
+              active={model.filter === filter.id}
+              count={filter.count}
+              id={filter.id}
+              key={filter.id}
+              label={filter.label}
+              onClick={onFilterChange}
+            />
+          ))}
+        </div>
+      </section>
+      <div className="list-rows skill-row-list">
         {model.emptyState === null
           ? model.visibleSkills.map((skill) => {
               const isSelected = selectedSkillId === skill.id;

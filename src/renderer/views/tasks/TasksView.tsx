@@ -43,11 +43,13 @@ export function TasksView({
   const scheduledTasks = state.backgroundTasks.filter((task) => task.scheduled).length;
   const pendingConfirmations = state.traySummary.backgroundTasks.pendingConfirmation;
   const recentEvents = state.taskSnapshot.recentEvents.slice(0, 4);
+  const workspaceCount = state.appStatus.workspace.selectedPath === '' ? 0 : 1;
+  const historyCount = state.taskSnapshot.counts.total;
   return (
     <>
-      <PageHeading kicker="任务控制" title="任务工作台" />
+      <PageHeading title="任务" meta={`本机 ${workspaceCount} 个工作区 · ${historyCount} 条历史`} />
       <section className="canvas-stage stage-grid" data-testid="tasks-view">
-        <div className="grid-3" data-testid="background-task-summary">
+        <div className="stat-row" data-testid="background-task-summary">
           <Metric
             label="后台任务"
             note={`${runningTasks} 个运行中`}
@@ -60,39 +62,51 @@ export function TasksView({
           />
           <Metric label="待确认" note="高风险动作" tone="warn" value={pendingConfirmations} />
         </div>
-        <div className="grid-2">
-          <section className="card">
-            <div className="card-title">任务队列 <CompactStatusPill tone="warn" value="需处理" /></div>
-            {backgroundTask === null ? (
-              <Row title="后台任务" sub="当前没有后台任务或定时执行。" tag="空" tone="warn" />
-            ) : (
-              <>
-                <Row title={backgroundTask.goal} sub={backgroundTask.triggerDescription} tag={backgroundTask.status} tone="info" />
-                <Row title="触发" sub={backgroundTask.triggerDescription} tag={backgroundTask.scheduled ? '定时' : '手动'} tone="ok" />
-                <Row title="下次运行" sub={backgroundTask.nextRunAt === null ? '无' : backgroundTask.nextRunAt} tag={backgroundTask.failurePolicy} tone="warn" />
-              </>
-            )}
+        <div className="task-surface-grid">
+          <section className="section">
+            <div className="section-head">
+              <h2 className="section-title">任务队列</h2>
+              <CompactStatusPill tone="warn" value="需处理" />
+            </div>
+            <div className="list-rows">
+              {backgroundTask === null ? (
+                <Row title="后台任务" sub="当前没有后台任务或定时执行。" tag="空" tone="warn" />
+              ) : (
+                <>
+                  <Row title={backgroundTask.goal} sub={backgroundTask.triggerDescription} tag={backgroundTask.status} tone="info" />
+                  <Row title="触发" sub={backgroundTask.triggerDescription} tag={backgroundTask.scheduled ? '定时' : '手动'} tone="ok" />
+                  <Row title="下次运行" sub={backgroundTask.nextRunAt === null ? '无' : backgroundTask.nextRunAt} tag={backgroundTask.failurePolicy} tone="warn" />
+                </>
+              )}
+            </div>
           </section>
-          <section className="card">
-            <div className="card-title">最近任务事件</div>
-            {recentEvents.length === 0 ? (
-              <Row title="任务事件" sub="当前没有任务事件。" tag="空" tone="warn" />
-            ) : (
-              recentEvents.map((event) => (
-                <Row key={event.id} title={describeTaskEvent(event)} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="info" />
-              ))
-            )}
+          <section className="section">
+            <div className="section-head">
+              <h2 className="section-title">最近任务事件</h2>
+            </div>
+            <div className="list-rows">
+              {recentEvents.length === 0 ? (
+                <Row title="任务事件" sub="当前没有任务事件。" tag="空" tone="warn" />
+              ) : (
+                recentEvents.map((event) => (
+                  <Row key={event.id} title={describeTaskEvent(event)} sub={formatBeijingDateTime(event.createdAt)} tag="已记录" tone="info" />
+                ))
+              )}
+            </div>
           </section>
         </div>
-        <div className="grid-2">
+        <div className="task-surface-grid">
           {backgroundTask === null ? (
             <EmptyState testId="background-task-controls" title="暂无后台任务" />
           ) : (
-            <section className="card" data-testid="background-task-controls">
-              <div className="card-title">
-                后台任务 <StatusPill label="状态" tone={backgroundTask.status === 'running' ? 'ok' : 'warn'} value={backgroundTask.status} />
+            <section className="section" data-testid="background-task-controls">
+              <div className="section-head">
+                <h2 className="section-title">后台任务</h2>
+                <StatusPill label="状态" tone={backgroundTask.status === 'running' ? 'ok' : 'warn'} value={backgroundTask.status} />
               </div>
-              <Row title="目标" sub={backgroundTask.goal} tag={backgroundTask.riskLevel} tone={backgroundTask.riskLevel === 'low' ? 'ok' : 'warn'} />
+              <div className="list-rows">
+                <Row title="目标" sub={backgroundTask.goal} tag={backgroundTask.riskLevel} tone={backgroundTask.riskLevel === 'low' ? 'ok' : 'warn'} />
+              </div>
               <div className="action-strip">
                 <button
                   data-testid="background-pause"
