@@ -39,19 +39,6 @@
   --st-warn-line: #d6c193;
   --st-bad-line: #d4adad;
 
-  /* 过渡别名，供分阶段迁移 */
-  --blue: var(--st-info);
-  --green: var(--st-ok);
-  --amber: var(--st-warn);
-  --red: var(--st-bad);
-  --trend-info: var(--st-info);
-  --trend-ok: var(--st-ok);
-  --trend-ok-strong: #2f8d67;
-  --trend-warn: var(--st-warn);
-  --trend-warn-strong: #a8742a;
-  --trend-bad: var(--st-bad);
-  --trend-bad-strong: #b55757;
-
   /* 圆角 */
   --r-xs: 6px;
   --r-sm: 8px;
@@ -114,7 +101,6 @@
   --chat-avatar-size: 30px;
   --surface-glass: rgba(255, 255, 255, 0.72);
   --surface-glass-strong: rgba(255, 255, 255, 0.86);
-  --glass-blur: 14px;
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-ring: rgba(120, 144, 184, 0.18);
   --chat-bubble-assistant-bg: transparent;

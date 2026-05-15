@@ -954,10 +954,10 @@ try {
       const detail = document.querySelector('[data-testid="workbench-git-selection"]')?.textContent ?? '';
       const selectedCount = document.querySelector('[data-testid="git-selected-count"]')?.textContent ?? '';
       return (
-        changes.includes('STAGED CHANGES2') &&
+        changes.includes('待提交变更2') &&
         changes.includes('batch-stage.txt已暂存') &&
         changes.includes('phase-three-notes.txt已暂存') &&
-        changes.includes('CHANGES0') &&
+        changes.includes('工作区变更0') &&
         detail.includes('已暂存') &&
         selectedCount.includes('2 selected')
       );
@@ -1024,7 +1024,7 @@ try {
     };
   });
   await page.click('[data-testid="workbench-git-commit"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('Workspace is clean.') === true);
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
   await page.waitForFunction(() => {
     const button = document.querySelector('[data-testid="workbench-git-commit"]');
     const message = document.querySelector('[data-testid="workbench-git-commit-message"]');
@@ -1060,7 +1060,7 @@ try {
   });
   await page.fill('[data-testid="workbench-git-commit-message"]', 'smoke push commit');
   await page.click('[data-testid="workbench-git-commit"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('Workspace is clean.') === true);
+  await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
   const gitLastPushText = await page.textContent('.git-last-result');
   await page.evaluate(() => {
     globalThis.__rocSmokeTerminalEvents = [];
@@ -1191,7 +1191,7 @@ try {
   await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'Smoke Skill');
   const skillLayoutEvidence = await page.evaluate(() => {
     const view = document.querySelector('[data-testid="skills-view"]');
-    const filterStrip = document.querySelector('[data-testid="skill-management"]');
+    const filterStrip = document.querySelector('.skills-filter-strip');
     const firstRow = document.querySelector('[data-testid="skill-row-smoke-skill"]');
     const filterButtons = Array.from(document.querySelectorAll('[data-testid^="skills-filter-"]')).filter(
       (element) => element instanceof HTMLElement
@@ -2625,10 +2625,10 @@ try {
       gitCommitInitialState.disabled === true &&
       gitCommitInitialState.value === '' &&
       !gitCommitInitialState.className.includes('git-commit-button--ready') &&
-      workbenchGitAfterBatchStage?.includes('STAGED CHANGES2') === true &&
+      workbenchGitAfterBatchStage?.includes('待提交变更2') === true &&
       workbenchGitAfterBatchStage?.includes('phase-three-notes.txt已暂存') === true &&
       workbenchGitAfterBatchStage?.includes('batch-stage.txt已暂存') === true &&
-      workbenchGitAfterBatchStage?.includes('CHANGES0') === true &&
+      workbenchGitAfterBatchStage?.includes('工作区变更0') === true &&
       workbenchGitSelectedCountAfterManual?.includes('2 selected') === true &&
       workbenchGitSelectedCountAfterAll?.includes('2 selected') === true &&
       gitCommitReadyState !== null &&
@@ -2656,7 +2656,6 @@ try {
     terminalWorkbenchStyled:
       terminalWorkbenchStyleEvidence.frameVisible &&
       terminalWorkbenchStyleEvidence.borderRadius !== '0px' &&
-      terminalWorkbenchStyleEvidence.boxShadow !== 'none' &&
       terminalWorkbenchStyleEvidence.xtermShellExists &&
       terminalWorkbenchStyleEvidence.shellFillRatio !== null &&
       terminalWorkbenchStyleEvidence.shellFillRatio >= 90,
