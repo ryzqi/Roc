@@ -10,10 +10,16 @@ body,
 }
 
 body {
+  font-family: var(--font-sans);
+  font-size: var(--font-body-size);
+  line-height: 1.65;
   color: var(--text);
   background: var(--bg-gradient);
   letter-spacing: 0;
   overflow: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -21,6 +27,14 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-feature-settings: var(--font-feature-mono);
 }
 
 button {
