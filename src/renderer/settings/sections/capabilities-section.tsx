@@ -16,9 +16,11 @@ export function CapabilitiesSection({
   const readySkills = skills.filter((skill) => skill.enabled && skill.status === 'ready').length;
   const invalidSkills = skills.filter((skill) => skill.status === 'invalid').length;
   return (
-    <section className="card" data-testid="settings-panel-capabilities">
-      <div className="card-title">能力入口</div>
-      <div className="card-pad settings-form">
+    <section className="single-panel settings-section-panel" data-testid="settings-panel-capabilities">
+      <div className="section-head">
+        <h2 className="section-title">能力入口</h2>
+      </div>
+      <div className="settings-form">
         <p className="card-hint">
           设置页只提供入口与健康摘要；具体新增、启停、授权、测试和删除请到能力管理视图。
         </p>

@@ -12,9 +12,11 @@ export function BrowserSection({
   testStatusLabel: string;
 }): React.JSX.Element {
   return (
-    <section className="card" data-testid="settings-panel-browser">
-      <div className="card-title">网页与浏览器</div>
-      <div className="card-pad settings-form">
+    <section className="single-panel settings-section-panel" data-testid="settings-panel-browser">
+      <div className="section-head">
+        <h2 className="section-title">网页与浏览器</h2>
+      </div>
+      <div className="settings-form">
         <p className="card-hint">
           搜索走 Exa 官方 Hosted MCP；网页阅读走主进程内置 Jina Reader，读取链路固定为 r.jina.ai/&lt;url&gt;。
         </p>

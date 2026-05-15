@@ -24,12 +24,12 @@ export function QuickEntryView({
 
   return (
     <section className="floating-shell floating-shell--quick" data-testid="quick-entry-view">
-      <div className="mini-window" data-testid="quick-entry-visual">
-        <div className="card-title">
-          Roc 快捷入口
+      <div className="mini-window single-panel" data-testid="quick-entry-visual">
+        <div className="section-head">
+          <h2 className="section-title">Roc 快捷入口</h2>
           <CompactStatusPill tone="ok" value="同步主窗口状态" />
         </div>
-        <div className="card-pad">
+        <div className="settings-subsection">
           <div className="field-box">补充当前任务或创建新的本地任务</div>
           <div className="tab-row tab-row--quick">
             <button className="tab active" data-testid="quick-submit-task" type="button" onClick={() => void submitQuickTask()}>
@@ -43,24 +43,26 @@ export function QuickEntryView({
             </button>
           </div>
         </div>
-        <Row
-          title="后台任务"
-          sub={`${state.traySummary.backgroundTasks.running} 个运行中`}
-          tag="运行中"
-          tone="info"
-        />
-        <Row
-          title="待确认"
-          sub={`${pendingConfirmations} 个高影响动作`}
-          tag="需确认"
-          tone="warn"
-        />
-        <Row
-          title="失败"
-          sub={`${failedTasks} 个失败任务`}
-          tag={failedTasks > 0 ? '可修复' : '无'}
-          tone={failedTasks > 0 ? 'bad' : 'ok'}
-        />
+        <div className="list-rows">
+          <Row
+            title="后台任务"
+            sub={`${state.traySummary.backgroundTasks.running} 个运行中`}
+            tag="运行中"
+            tone="info"
+          />
+          <Row
+            title="待确认"
+            sub={`${pendingConfirmations} 个高影响动作`}
+            tag="需确认"
+            tone="warn"
+          />
+          <Row
+            title="失败"
+            sub={`${failedTasks} 个失败任务`}
+            tag={failedTasks > 0 ? '可修复' : '无'}
+            tone={failedTasks > 0 ? 'bad' : 'ok'}
+          />
+        </div>
         {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="quick-entry-error">{chatRun.errorMessage}</span>}
       </div>
     </section>

@@ -15,25 +15,27 @@ export function TrayEntryView({
   const trayStatusValue = state.traySummary.backgroundPaused ? '已暂停' : '运行中';
   return (
     <section className="floating-shell floating-shell--tray" data-testid="tray-entry-view">
-      <div className="tray-pop" data-testid="tray-entry-visual">
-        <div className="card-title">
-          Roc 常驻状态
+      <div className="tray-pop single-panel" data-testid="tray-entry-visual">
+        <div className="section-head">
+          <h2 className="section-title">Roc 常驻状态</h2>
           <CompactStatusPill tone={trayStatusTone} value={trayStatusValue} />
         </div>
-        <Row title="后台任务" sub={`${state.traySummary.backgroundTasks.running} 个运行中，${state.traySummary.backgroundTasks.pendingConfirmation} 个等待用户`} tag="查看" tone="info" />
-        <Row
-          title="失败任务"
-          sub={`${state.taskSnapshot.counts.failed} 个失败任务`}
-          tag="修复"
-          tone={state.taskSnapshot.counts.failed > 0 ? 'bad' : 'ok'}
-        />
-        <Row title="待确认" sub={`${state.traySummary.backgroundTasks.pendingConfirmation} 个高风险动作`} tag="处理" tone="warn" />
-        <Row
-          title="后台执行"
-          sub={state.traySummary.backgroundPaused ? '后台执行已暂停' : '当前允许工作区内低风险任务'}
-          tag={state.traySummary.backgroundPaused ? '恢复' : '暂停'}
-          tone="info"
-        />
+        <div className="list-rows">
+          <Row title="后台任务" sub={`${state.traySummary.backgroundTasks.running} 个运行中，${state.traySummary.backgroundTasks.pendingConfirmation} 个等待用户`} tag="查看" tone="info" />
+          <Row
+            title="失败任务"
+            sub={`${state.taskSnapshot.counts.failed} 个失败任务`}
+            tag="修复"
+            tone={state.taskSnapshot.counts.failed > 0 ? 'bad' : 'ok'}
+          />
+          <Row title="待确认" sub={`${state.traySummary.backgroundTasks.pendingConfirmation} 个高风险动作`} tag="处理" tone="warn" />
+          <Row
+            title="后台执行"
+            sub={state.traySummary.backgroundPaused ? '后台执行已暂停' : '当前允许工作区内低风险任务'}
+            tag={state.traySummary.backgroundPaused ? '恢复' : '暂停'}
+            tone="info"
+          />
+        </div>
       </div>
       <div className="floating-entry-actions">
         <button

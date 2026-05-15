@@ -10,9 +10,11 @@ export function AppBasicsSection({
   onChange: (next: AppSettings) => void;
 }): React.JSX.Element {
   return (
-    <section className="card" data-testid="settings-panel-app-basics">
-      <div className="card-title">应用基础</div>
-      <div className="card-pad settings-form">
+    <section className="single-panel settings-section-panel" data-testid="settings-panel-app-basics">
+      <div className="section-head">
+        <h2 className="section-title">应用基础</h2>
+      </div>
+      <div className="settings-form">
         <FieldRow hint="工作区切换不会自动转移已运行任务，新任务才会绑定新的工作区。" label="默认工作区">
           <input
             data-testid="settings-default-workspace"

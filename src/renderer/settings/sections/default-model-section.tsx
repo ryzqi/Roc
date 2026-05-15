@@ -19,9 +19,9 @@ export function DefaultModelSection({
 }): React.JSX.Element {
   const options: EnabledModelOption[] = buildEnabledModelOptions(providers);
   return (
-    <section className="card" data-testid="default-model-settings">
-      <div className="card-title">
-        默认模型{' '}
+    <section className="single-panel settings-section-panel" data-testid="default-model-settings">
+      <div className="section-head">
+        <h2 className="section-title">默认模型</h2>
         <StatusPill
           label="当前"
           tone={defaultModelId === null ? 'warn' : 'ok'}

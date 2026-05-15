@@ -20,9 +20,11 @@ export function MemorySection({
   }
 
   return (
-    <section className="card" data-testid="settings-panel-memory">
-      <div className="card-title">记忆策略</div>
-      <div className="card-pad settings-form">
+    <section className="single-panel settings-section-panel" data-testid="settings-panel-memory">
+      <div className="section-head">
+        <h2 className="section-title">记忆策略</h2>
+      </div>
+      <div className="settings-form">
         <p className="card-hint">
           这里只管理记忆策略；具体记忆条目仍在记忆中心审阅、编辑或删除。
         </p>

@@ -155,7 +155,7 @@ export function ProvidersSection({
   }, [providerTestStatus, selectedProvider]);
 
   return (
-    <section className="card provider-settings-card" data-testid="provider-settings">
+    <section className="single-panel provider-settings-card" data-testid="provider-settings">
       <div className="provider-toolbar">
         <input
           className="provider-search"
@@ -194,10 +194,7 @@ export function ProvidersSection({
                 >
                   <ProviderAvatar provider={provider} />
                   <span className="provider-list-name">{provider.name}</span>
-                  <span
-                    className={ready ? 'provider-status-dot ready' : 'provider-status-dot idle'}
-                    aria-label={ready ? '已就绪' : '未启用'}
-                  />
+                  <span className={`status-pill ${ready ? 'ok' : 'info'}`}>{ready ? '已就绪' : '未启用'}</span>
                 </button>
               );
             })
