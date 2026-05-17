@@ -5,7 +5,6 @@ import type {
   AppStatus,
   BackgroundTask,
   DiagnosticPackage,
-  DoctorSnapshot,
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
@@ -60,7 +59,6 @@ export type LoadedState = {
   traySummary: TraySummary;
   diagnosticPackage: DiagnosticPackage | null;
   performanceSample: PerformanceSample;
-  doctor: DoctorSnapshot;
   agent: AgentRuntimeStatus;
   agentCapabilityPreview: AgentCapabilityPreview | null;
   workspace: Workspace | null;

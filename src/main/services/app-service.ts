@@ -4,7 +4,6 @@ import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
 import { DeepAgentRuntimeService } from './deep-agent-runtime-service';
 import { DiagnosticsService } from './diagnostics-service';
-import { DoctorService } from './doctor-service';
 import { FileService } from './file-service';
 import { GitService } from './git-service';
 import { LifecycleService } from './lifecycle-service';
@@ -34,7 +33,6 @@ export type AppServices = {
   diagnosticsService: DiagnosticsService;
   mcpService: McpService;
   skillService: SkillService;
-  doctorService: DoctorService;
   agentService: AgentService;
   langChainModelFactory: LangChainModelFactory;
   deepAgentRuntimeService: DeepAgentRuntimeService;
@@ -72,7 +70,6 @@ export class AppService {
     private readonly diagnosticsService: DiagnosticsService,
     private readonly mcpService: McpService,
     private readonly skillService: SkillService,
-    private readonly doctorService: DoctorService,
     private readonly agentService: AgentService,
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly deepAgentRuntimeService: DeepAgentRuntimeService,
@@ -121,7 +118,6 @@ export class AppService {
         diagnostics: 'ready',
         mcp: 'ready',
         skills: 'ready',
-        doctor: 'ready',
         agent: this.agentService.getStatus().defaultModelConfigured ? 'ready' : 'blocked',
         workspace: this.workspaceService.getCurrentWorkspace() === null ? 'blocked' : 'ready',
         files: this.workspaceService.getCurrentWorkspace() === null ? 'blocked' : 'ready',
@@ -145,7 +141,6 @@ export class AppService {
       diagnosticsService: this.diagnosticsService,
       mcpService: this.mcpService,
       skillService: this.skillService,
-      doctorService: this.doctorService,
       agentService: this.agentService,
       langChainModelFactory: this.langChainModelFactory,
       deepAgentRuntimeService: this.deepAgentRuntimeService,
@@ -213,19 +208,6 @@ export function createAppServices(
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);
-  const doctorService = new DoctorService(
-    paths,
-    configService,
-    databaseService,
-    memoryService,
-    workspaceService,
-    taskService,
-    lifecycleService,
-    diagnosticsService,
-    mcpService,
-    skillService,
-    rtkService
-  );
   const appService = new AppService(
     paths,
     configService,
@@ -236,7 +218,6 @@ export function createAppServices(
     diagnosticsService,
     mcpService,
     skillService,
-    doctorService,
     agentService,
     langChainModelFactory,
     deepAgentRuntimeService,
@@ -263,7 +244,6 @@ export function createAppServices(
     diagnosticsService,
     mcpService,
     skillService,
-    doctorService,
     agentService,
     langChainModelFactory,
     deepAgentRuntimeService,

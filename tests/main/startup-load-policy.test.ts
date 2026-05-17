@@ -74,8 +74,8 @@ describe('startup load policy', () => {
     expectTargets(settingsIntent, []);
   });
 
-  it('loads operations data only for doctor and diagnostics views', () => {
-    for (const activeView of ['doctor', 'diagnostics'] as const) {
+  it('loads operations data only for diagnostics view', () => {
+    for (const activeView of ['diagnostics'] as const) {
       const intent = getStartupLoadIntent({
         activeView,
         activeWorkbenchTool: 'files',

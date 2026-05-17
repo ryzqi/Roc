@@ -12,7 +12,6 @@ export const MAIN_VIEW_IDS = new Set<ViewId>([
   'skills',
   'memory',
   'settings',
-  'doctor',
   'diagnostics'
 ]);
 
@@ -75,11 +74,6 @@ export const PAGE_META: Record<MainViewId, PageMeta> = {
   settings: {
     title: '设置',
     topMeta: '设置',
-    pageLabel: '控制面'
-  },
-  doctor: {
-    title: 'Doctor',
-    topMeta: '诊断摘要',
     pageLabel: '控制面'
   },
   diagnostics: {
@@ -161,9 +155,6 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
   }
   if (view === 'settings') {
     return state.defaultModelId === null ? '默认模型未配置' : `默认模型 ${state.defaultModelId}`;
-  }
-  if (view === 'doctor') {
-    return `${state.doctor.summary.pass} 通过 · ${state.doctor.summary.fail} 失败`;
   }
   return `${state.taskSnapshot.counts.failed} 个失败任务`;
 }

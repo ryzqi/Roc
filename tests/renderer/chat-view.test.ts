@@ -108,11 +108,6 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       memoryBudgetMb: 0,
       exceedsBudget: false
     },
-    doctor: {
-      generatedAt: '2026-05-11T00:00:00.000Z',
-      summary: { pass: 0, fail: 0, degraded: 0, skipped: 0 },
-      findings: []
-    },
     agent: {
       deepAgentsPackage: 'available',
       deepAgentsApi: { createDeepAgent: true },

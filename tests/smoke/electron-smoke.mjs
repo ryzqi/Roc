@@ -235,8 +235,7 @@ async function waitForTerminalSessionReady(page) {
   await page.waitForFunction(
     () => {
       const host = document.querySelector('[data-testid="terminal-xterm"]');
-      const surface = document.querySelector('[data-testid="terminal-session-surface"]');
-      return host !== null && surface !== null;
+      return host !== null;
     },
     undefined,
     { timeout: 10000 }
@@ -1074,13 +1073,13 @@ try {
   await page.click('.workbench-tab[data-tool-button="terminal"]');
   await page.waitForSelector('[data-testid="terminal-xterm"]', { timeout: 10000 });
   const terminalWorkbenchStyleEvidence = await page.evaluate(() => {
-    const frame = document.querySelector('.terminal-shell-frame');
+    const frame = document.querySelector('.workbench-surface--terminal');
     const badges = Array.from(document.querySelectorAll('.terminal-badge')).map((element) => element.textContent ?? '');
     const scope = document.querySelector('[data-testid="terminal-session-scope"]')?.textContent ?? '';
     const terminalSubtitle = document.querySelector('.terminal-subtitle')?.textContent ?? '';
     const footerSegments = Array.from(document.querySelectorAll('.terminal-status-bar span')).map((element) => element.textContent?.trim() ?? '');
     const header = document.querySelector('.terminal-header');
-    const xtermShell = document.querySelector('.terminal-xterm-shell');
+    const xtermShell = document.querySelector('.terminal-xterm-host');
     const workbenchTerminal = document.querySelector('.workbench-terminal');
     if (!(frame instanceof HTMLElement)) {
       return {
@@ -1136,14 +1135,14 @@ try {
   }, terminalSessionId);
   await page.waitForFunction(
     (workspacePath) => {
-      const text = document.querySelector('[data-testid="terminal-session-surface"]')?.textContent?.toLowerCase() ?? '';
+      const text = document.querySelector('[data-testid="terminal-xterm"]')?.textContent?.toLowerCase() ?? '';
       return text.includes('phase-three-notes.txt') && text.includes(workspacePath.toLowerCase());
     },
     workspaceRoot,
     { timeout: 10000 }
   );
-  const terminalLiveOutput = await page.textContent('[data-testid="terminal-session-surface"]');
-  const terminalSecondOutput = await page.textContent('[data-testid="terminal-session-surface"]');
+  const terminalLiveOutput = await page.textContent('[data-testid="terminal-xterm"]');
+  const terminalSecondOutput = await page.textContent('[data-testid="terminal-xterm"]');
   await page.evaluate(() => {
     if (typeof globalThis.__rocSmokeTerminalOutputDispose === 'function') {
       globalThis.__rocSmokeTerminalOutputDispose();
@@ -1981,13 +1980,6 @@ try {
       hasTaskRecordLabel: text.includes('任务工作台记录')
     };
   }, taskCapabilityEvidence.threadTitle);
-  await page.click('[data-testid="nav-doctor"]');
-  await page.waitForSelector('[data-testid="doctor-view"]', { timeout: 5000 });
-  await waitForTextContent(page, '[data-testid="doctor-view"]', '健康检查结果');
-  const doctorText = await page.textContent('[data-testid="doctor-view"]');
-  if (doctorText === null) {
-    throw new Error('Smoke could not read doctor view text.');
-  }
   await page.click('[data-testid="nav-diagnostics"]');
   await page.waitForSelector('[data-testid="diagnostics-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="diagnostic-package-status"]', { timeout: 5000 });
@@ -2002,20 +1994,15 @@ try {
       mode: 'smoke',
       memoryBudgetMb: 300
     });
-    const doctor = await window.roc.doctor.run();
     const tray = await window.roc.lifecycle.getTraySummary();
     if (!sample.ok) {
       throw new Error(sample.error.message);
-    }
-    if (!doctor.ok) {
-      throw new Error(doctor.error.message);
     }
     if (!tray.ok) {
       throw new Error(tray.error.message);
     }
     return {
       sample: sample.data,
-      doctorCheckIds: doctor.data.findings.map((finding) => finding.checkId),
       tray: tray.data
     };
   });
@@ -2464,7 +2451,6 @@ try {
     { name: 'skills', text: skillText },
     { name: 'settings', text: settingsText },
     { name: 'chat', text: chatResultText },
-    { name: 'doctor', text: doctorText },
     { name: 'diagnostics', text: diagnosticsText },
     { name: 'quick-entry', text: quickEntryText },
     { name: 'tray-entry', text: trayEntryText }
@@ -2506,22 +2492,12 @@ try {
       taskText.includes('后台执行') &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
       backgroundTaskApiEvidence.hasCreatedEvent,
-    phase6DoctorVisible:
-      doctorText.includes('健康检查结果') &&
-      doctorText.includes('默认模型配置') &&
-      doctorText.includes('诊断包') &&
-      doctorText.includes('性能采样'),
     diagnosticPackageVisible: diagnosticsText.includes('脱敏') && diagnosticsText.includes('task_snapshot'),
     performanceSampleVisible:
       diagnosticsText.includes('RSS') &&
       phase6ApiEvidence.sample.rssMb > 0 &&
       phase6ApiEvidence.sample.heapUsedMb > 0 &&
       typeof phase6ApiEvidence.sample.exceedsBudget === 'boolean',
-    phase6DoctorApi:
-      phase6ApiEvidence.doctorCheckIds.includes('background.tasks') &&
-      phase6ApiEvidence.doctorCheckIds.includes('diagnostics.directory') &&
-      phase6ApiEvidence.doctorCheckIds.includes('performance.sample') &&
-      phase6ApiEvidence.tray.backgroundTasks.total > 0,
     workspaceFileVisible: workspaceText.includes('phase-three-notes.txt'),
     workspaceSearchVisible:
       workspaceApiEvidence.search.matches.some(
@@ -2950,10 +2926,8 @@ try {
     historySidebarShowsRealThreads: rendererBoundary.historySidebarShowsRealThreads,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
     traySummaryVisible: rendererBoundary.traySummaryVisible,
-    phase6DoctorVisible: rendererBoundary.phase6DoctorVisible,
     diagnosticPackageVisible: rendererBoundary.diagnosticPackageVisible,
     performanceSampleVisible: rendererBoundary.performanceSampleVisible,
-    phase6DoctorApi: rendererBoundary.phase6DoctorApi,
     workspaceFileVisible: rendererBoundary.workspaceFileVisible,
     workspaceSearchVisible: rendererBoundary.workspaceSearchVisible,
     gitChangesVisible: rendererBoundary.gitChangesVisible,

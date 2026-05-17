@@ -64,16 +64,6 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
       heapTotalMb: 0,
       memoryBudgetMb: 300,
       exceedsBudget: false
-    },
-    doctor: {
-      generatedAt: '',
-      summary: {
-        pass: 0,
-        fail: 0,
-        degraded: 0,
-        skipped: 0
-      },
-      findings: []
     }
   };
 }

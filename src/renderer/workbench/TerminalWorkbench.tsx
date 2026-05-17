@@ -191,27 +191,11 @@ export function TerminalWorkbench({
 
   const terminalStatusLabel = state.terminalSession === null ? 'starting' : state.terminalSession.status;
   const terminalFooterStatus = state.terminalError;
-  const terminalShellLabel =
-    state.terminalSession?.shell === 'pwsh'
-      ? 'PowerShell'
-      : state.terminalSession?.shell === 'powershell'
-        ? 'PowerShell'
-        : state.terminalSession?.shell ?? 'PowerShell';
 
   return (
     <section className="tool-panel workbench-surface workbench-surface--terminal">
       <div className="workbench-terminal">
-        <div className="terminal-shell-frame">
-          <div className="terminal-shell-topline">
-            <span className="terminal-dot terminal-dot--danger" />
-            <span className="terminal-dot terminal-dot--warn" />
-            <span className="terminal-dot terminal-dot--ok" />
-            <span className="terminal-shell-title">{terminalShellLabel}</span>
-          </div>
-          <div className="terminal-xterm-shell" data-testid="terminal-session-surface">
-            <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
-          </div>
-        </div>
+        <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
         <footer className="workbench-footer-bar terminal-status-bar">
           <span data-role="path">{state.terminalSession?.cwd ?? state.workspace.path}</span>
           {terminalFooterStatus === null ? null : <span data-role="status" data-state={terminalStatusLabel}>{terminalFooterStatus}</span>}

@@ -116,8 +116,8 @@ describe('workbench surfaces', () => {
       })
     );
 
-    expect(html).toContain('data-testid="terminal-session-surface"');
-    expect(html).toContain('terminal-shell-frame');
-    expect(html).toContain('PowerShell');
+    expect(html).toContain('data-testid="terminal-xterm"');
+    expect(html).toContain('workbench-surface--terminal');
+    expect(html).not.toContain('PowerShell');
   });
 });

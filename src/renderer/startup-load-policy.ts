@@ -9,7 +9,6 @@ export type StartupLoadViewId =
   | 'skills'
   | 'memory'
   | 'settings'
-  | 'doctor'
   | 'diagnostics'
   | 'quick'
   | 'tray';
@@ -30,7 +29,7 @@ export type StartupLoadPolicyInput = {
 };
 
 const WORKSPACE_VIEWS = new Set<StartupLoadViewId>(['workspace', 'git', 'preview']);
-const OPERATIONS_VIEWS = new Set<StartupLoadViewId>(['doctor', 'diagnostics']);
+const OPERATIONS_VIEWS = new Set<StartupLoadViewId>(['diagnostics']);
 const WORKSPACE_WORKBENCH_TOOLS = new Set<StartupWorkbenchTool>(['files', 'git']);
 
 export function getStartupLoadIntent(input: StartupLoadPolicyInput): StartupLoadIntent {

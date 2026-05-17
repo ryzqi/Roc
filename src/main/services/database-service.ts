@@ -177,23 +177,6 @@ export class DatabaseService {
         updated_at TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS doctor_runs (
-        id TEXT PRIMARY KEY,
-        generated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS doctor_findings (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        check_id TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        status TEXT NOT NULL,
-        title TEXT NOT NULL,
-        detail TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY(run_id) REFERENCES doctor_runs(id)
-      );
-
       CREATE TABLE IF NOT EXISTS performance_samples (
         id TEXT PRIMARY KEY,
         sampled_at TEXT NOT NULL,
@@ -231,7 +214,6 @@ export class DatabaseService {
        VALUES (1, 1, ?)`
     ).run(new Date().toISOString());
     this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
-    this.ensureColumn(db, 'doctor_findings', 'repair_action_json', 'TEXT');
     this.tryCreateFtsTables(db);
   }
 

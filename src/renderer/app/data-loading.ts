@@ -3,7 +3,6 @@ import type {
   AppStatus,
   BackgroundTask,
   DiagnosticPackage,
-  DoctorSnapshot,
   FilePreviewResult,
   FileTreeResult,
   McpServerSnapshot,
@@ -90,12 +89,10 @@ export async function loadOperationsData(mode: AppStatus['mode']): Promise<Opera
             errorSummary: '后台任务诊断请求'
           })
         );
-  const doctor = unwrap<DoctorSnapshot>('doctor', await window.roc.doctor.run());
 
   return {
     diagnosticPackage,
-    performanceSample,
-    doctor
+    performanceSample
   };
 }
 

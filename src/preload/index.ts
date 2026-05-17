@@ -84,10 +84,6 @@ const rocApi: RocPreloadApi = {
     setProviderSecret: (request) => ipcRenderer.invoke(ipcChannels.settingsSetProviderSecret, request),
     clearProviderSecret: (providerId) => ipcRenderer.invoke(ipcChannels.settingsClearProviderSecret, providerId)
   },
-  doctor: {
-    getLatest: () => ipcRenderer.invoke(ipcChannels.doctorGetLatest),
-    run: () => ipcRenderer.invoke(ipcChannels.doctorRun)
-  },
   agent: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.agentGetStatus),
     getConfigPreview: () => ipcRenderer.invoke(ipcChannels.agentGetConfigPreview),

@@ -47,12 +47,6 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
       icon: 'globe'
     },
     {
-      id: 'doctor',
-      label: 'Doctor',
-      meta: `${state.doctor.summary.pass} 通过 · ${state.doctor.summary.fail} 失败`,
-      icon: 'stethoscope'
-    },
-    {
       id: 'mcp',
       label: 'MCP',
       meta: `${state.mcpServers.filter((server) => server.enabled).length} 已启用`,

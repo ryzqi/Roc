@@ -15,7 +15,6 @@ import type {
   DeepAgentConfigPreview,
   DiagnosticPackage,
   DiagnosticPackageRequest,
-  DoctorSnapshot,
   FilePreviewRequest,
   FilePreviewResult,
   FileSearchRequest,
@@ -144,8 +143,6 @@ export const ipcChannels = {
   skillsDelete: 'roc:skills:delete',
   skillsListFiles: 'roc:skills:list-files',
   skillsReadFile: 'roc:skills:read-file',
-  doctorGetLatest: 'roc:doctor:get-latest',
-  doctorRun: 'roc:doctor:run',
   agentGetStatus: 'roc:agent:get-status',
   agentGetConfigPreview: 'roc:agent:get-config-preview',
   agentGetCapabilityPreview: 'roc:agent:get-capability-preview',
@@ -257,10 +254,6 @@ export type RocPreloadApi = {
     testProvider: (id: string) => Promise<IpcResult<ProviderTestResult>>;
     setProviderSecret: (request: ProviderSecretSetRequest) => Promise<IpcResult<ProviderSecretSetResult>>;
     clearProviderSecret: (providerId: string) => Promise<IpcResult<ProviderSecretClearResult>>;
-  };
-  doctor: {
-    getLatest: () => Promise<IpcResult<DoctorSnapshot>>;
-    run: () => Promise<IpcResult<DoctorSnapshot>>;
   };
   agent: {
     getStatus: () => Promise<IpcResult<AgentRuntimeStatus>>;

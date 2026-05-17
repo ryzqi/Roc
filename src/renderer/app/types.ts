@@ -2,7 +2,6 @@ import type { HistorySidebarItem } from '../history-sidebar';
 import type {
   BackgroundTask,
   DiagnosticPackage,
-  DoctorSnapshot,
   FileEntryShape,
   FilePreviewLike,
   FilePreviewResult,
@@ -36,7 +35,6 @@ export type ViewId =
   | 'skills'
   | 'memory'
   | 'settings'
-  | 'doctor'
   | 'diagnostics'
   | 'quick'
   | 'tray';
@@ -114,7 +112,6 @@ export type TaskSurfaceData = {
 export type OperationsData = {
   diagnosticPackage: DiagnosticPackage | null;
   performanceSample: PerformanceSample;
-  doctor: DoctorSnapshot;
 };
 
 export type LazyLoadState = {

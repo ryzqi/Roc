@@ -2,7 +2,6 @@ import { ChatView } from '../chat/chat-view';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import { DiagnosticsView } from './diagnostics/DiagnosticsView';
-import { DoctorView } from './doctor/DoctorView';
 import { QuickEntryView } from './floating/QuickEntryView';
 import { TrayEntryView } from './floating/TrayEntryView';
 import { GitView } from './git/GitView';
@@ -60,9 +59,6 @@ export function ViewContent({
   }
   if (activeView === 'memory') {
     return <MemoryView loadState={memoryLoadState} state={state} />;
-  }
-  if (activeView === 'doctor') {
-    return <DoctorView loadState={operationsLoadState} state={state} />;
   }
   if (activeView === 'diagnostics') {
     return <DiagnosticsView loadState={operationsLoadState} state={state} />;

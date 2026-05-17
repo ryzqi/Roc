@@ -216,8 +216,6 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.skillsReadFile, (_event, request) =>
     wrapIpc(() => services.skillService.readFile(request))
   );
-  ipcMain.handle(ipcChannels.doctorGetLatest, () => wrapIpc(() => services.doctorService.getLatest()));
-  ipcMain.handle(ipcChannels.doctorRun, () => wrapIpc(() => services.doctorService.run()));
   ipcMain.handle(ipcChannels.agentGetStatus, () => wrapIpc(() => services.agentService.getStatus()));
   ipcMain.handle(ipcChannels.agentGetConfigPreview, () => wrapIpc(() => services.agentService.getDeepAgentConfigPreview()));
   ipcMain.handle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>

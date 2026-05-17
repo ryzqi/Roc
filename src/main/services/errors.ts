@@ -39,7 +39,7 @@ export function toRocError(error: unknown): RocError {
       message: 'Roc 内部错误，已记录到本地日志。',
       category: 'internal',
       retryable: false,
-      userAction: '请查看 Roc 日志或重新运行 Doctor。'
+      userAction: '请查看 Roc 日志后重试。'
     };
   }
 
@@ -48,7 +48,7 @@ export function toRocError(error: unknown): RocError {
     message: 'Roc 遇到未知错误。',
     category: 'internal',
     retryable: false,
-    userAction: '请查看 Roc 日志或重新运行 Doctor。'
+    userAction: '请查看 Roc 日志后重试。'
   };
 }
 

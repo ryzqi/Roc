@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { DiagnosticPackagePanel } from '../../src/renderer/views/diagnostics/DiagnosticPackagePanel';
 import { DiagnosticsView } from '../../src/renderer/views/diagnostics/DiagnosticsView';
-import { DoctorView } from '../../src/renderer/views/doctor/DoctorView';
 import { GitView } from '../../src/renderer/views/git/GitView';
 import { PerformancePanel } from '../../src/renderer/views/diagnostics/PerformancePanel';
 import { PreviewView } from '../../src/renderer/views/preview/PreviewView';
@@ -177,14 +176,14 @@ describe('workspace and diagnostics surfaces', () => {
     expect(html).not.toContain('card-title');
   });
 
-  it('renders doctor and diagnostics in single-panel form', () => {
+  it('renders diagnostics in single-panel form', () => {
     const state = createLoadedState({
       diagnosticPackage: {
         id: 'pkg-1',
         taskId: 'task-1',
         path: 'F:\\Code\\Roc\\.artifacts\\pkg.zip',
         createdAt: '2026-05-16T08:00:00.000Z',
-        includes: ['task_snapshot', 'doctor_findings'],
+        includes: ['task_snapshot', 'performance_sample'],
         redacted: true
       },
       performanceSample: {
@@ -197,26 +196,6 @@ describe('workspace and diagnostics surfaces', () => {
         heapTotalMb: 96,
         memoryBudgetMb: 256,
         exceedsBudget: false
-      },
-      doctor: {
-        generatedAt: '2026-05-16T08:00:00.000Z',
-        summary: {
-          pass: 3,
-          fail: 0,
-          degraded: 1,
-          skipped: 0
-        },
-        findings: [
-          {
-            id: 'finding-1',
-            checkId: 'memory',
-            severity: 'warning',
-            status: 'degraded',
-            title: '向量索引降级',
-            detail: '健康检查结果可继续使用。',
-            createdAt: '2026-05-16T08:00:00.000Z'
-          }
-        ]
       },
       taskSnapshot: {
         generatedAt: '2026-05-16T08:00:00.000Z',
@@ -240,25 +219,12 @@ describe('workspace and diagnostics surfaces', () => {
       }
     });
 
-    const doctorHtml = renderToStaticMarkup(
-      React.createElement(DoctorView, {
-        loadState: { status: 'ready', error: null, key: 'doctor' },
-        state
-      })
-    );
     const diagnosticsHtml = renderToStaticMarkup(
       React.createElement(DiagnosticsView, {
         loadState: { status: 'ready', error: null, key: 'diagnostics' },
         state
       })
     );
-
-    expect(doctorHtml).toContain('data-testid="doctor-view"');
-    expect(doctorHtml).toContain('class="single-panel"');
-    expect(doctorHtml).toContain('健康检查结果');
-    expect(doctorHtml).toContain('通过 3 · 降级 1 · 失败 0');
-    expect(doctorHtml).not.toContain('pass 3 · degraded 1 · fail 0');
-    expect(doctorHtml).not.toContain('card-title');
 
     expect(diagnosticsHtml).toContain('data-testid="diagnostics-view"');
     expect(diagnosticsHtml).toContain('class="single-panel"');

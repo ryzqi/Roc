@@ -159,7 +159,6 @@ describe('Roc foundation services', () => {
     expect(tableNames).toContain('memory_operations');
     expect(tableNames).toContain('mcp_servers');
     expect(tableNames).toContain('skills');
-    expect(tableNames).toContain('doctor_findings');
   });
 
   it('returns a real empty task snapshot from SQLite', () => {
@@ -1425,16 +1424,6 @@ describe('Roc foundation services', () => {
     });
   });
 
-  it('returns Doctor findings from real service state', () => {
-    const doctor = services.doctorService.run();
-
-    expect(doctor.summary.pass).toBeGreaterThanOrEqual(3);
-    expect(doctor.summary.degraded).toBeGreaterThanOrEqual(1);
-    expect(doctor.findings.some((finding) => finding.checkId === 'provider.default_model')).toBe(true);
-    expect(doctor.findings.some((finding) => finding.checkId === 'rtk.binary')).toBe(true);
-    expect(doctor.findings.some((finding) => finding.checkId === 'workspace.default')).toBe(true);
-  });
-
   it('keeps unexpected IPC errors sanitized while preserving domain errors', async () => {
     const domainResult = await wrapIpc(() => {
       throw new RocDomainError({
@@ -1467,7 +1456,7 @@ describe('Roc foundation services', () => {
         message: 'Roc 内部错误，已记录到本地日志。',
         category: 'internal',
         retryable: false,
-        userAction: '请查看 Roc 日志或重新运行 Doctor。'
+        userAction: '请查看 Roc 日志后重试。'
       }
     });
   });
@@ -2003,9 +1992,8 @@ describe('Roc foundation services', () => {
     expect(services.mcpService.listServers().some((item) => item.id === 'docs-http')).toBe(false);
   });
 
-  it('ensures the Exa preset exists on startup and reports real browser capability findings in Doctor', () => {
+  it('ensures the Exa preset exists on startup', () => {
     const exaServer = services.mcpService.listServers().find((server) => server.id === 'exa-hosted');
-    const doctor = services.doctorService.run();
 
     expect(exaServer).toMatchObject({
       id: 'exa-hosted',
@@ -2015,18 +2003,6 @@ describe('Roc foundation services', () => {
       enabled: false,
       url: 'https://mcp.exa.ai/mcp'
     });
-    expect(doctor.findings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          checkId: 'mcp.exa_preset',
-          status: 'pass'
-        }),
-        expect.objectContaining({
-          checkId: 'web.read',
-          status: 'pass'
-        })
-      ])
-    );
   });
 
   it('imports, disables, enables, and deletes local skills without a marketplace', () => {
@@ -2395,40 +2371,7 @@ describe('Roc foundation services', () => {
     });
   });
 
-  it('keeps Doctor latest separate from a new run and includes Phase 6 repair actions', () => {
-    const first = services.doctorService.run();
-    const latest = services.doctorService.getLatest();
-    const second = services.doctorService.run();
-    const doctorRuns = services.databaseService.db.prepare('SELECT id FROM doctor_runs').all() as Array<{ id: string }>;
-
-    expect(latest.generatedAt).toBe(first.generatedAt);
-    expect(second.generatedAt >= first.generatedAt).toBe(true);
-    expect(doctorRuns.length).toBe(2);
-    expect(second.findings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          checkId: 'background.tasks',
-          repairAction: expect.objectContaining({
-            label: '打开任务工作台'
-          })
-        }),
-        expect.objectContaining({
-          checkId: 'diagnostics.directory',
-          repairAction: expect.objectContaining({
-            label: '打开诊断目录'
-          })
-        }),
-        expect.objectContaining({
-          checkId: 'performance.sample',
-          repairAction: expect.objectContaining({
-            label: '重新采样'
-          })
-        })
-      ])
-    );
-  });
-
-  it('generates redacted diagnostic packages with task, Doctor, RTK and performance evidence', () => {
+  it('generates redacted diagnostic packages with task, RTK and performance evidence', () => {
     const preview = services.taskService.createBackgroundTaskPreview({
       goal: '生成诊断包',
       trigger: {
@@ -2452,19 +2395,18 @@ describe('Roc foundation services', () => {
     expect(pack).toMatchObject({
       taskId: task.id,
       redacted: true,
-      includes: expect.arrayContaining(['task_snapshot', 'doctor_findings', 'performance_sample', 'rtk_status'])
+      includes: expect.arrayContaining(['task_snapshot', 'performance_sample', 'rtk_status'])
     });
     expect(content).toContain('[REDACTED]');
     expect(content).not.toContain('sk-secret-value');
     expect(content).not.toContain('Bearer sk-secret-value');
   });
 
-  it('records performance samples for Doctor and exposes the package directory script target', () => {
+  it('records performance samples and exposes the package directory script target', () => {
     const sample = services.diagnosticsService.samplePerformance({
       mode: 'test',
       memoryBudgetMb: 300
     });
-    const doctor = services.doctorService.run();
 
     expect(sample).toMatchObject({
       mode: 'test',
@@ -2473,12 +2415,6 @@ describe('Roc foundation services', () => {
     expect(sample.rssMb).toBeGreaterThan(0);
     expect(sample.heapUsedMb).toBeGreaterThan(0);
     expect(typeof sample.exceedsBudget).toBe('boolean');
-    expect(doctor.findings).toContainEqual(
-      expect.objectContaining({
-        checkId: 'performance.sample',
-        status: sample.exceedsBudget ? 'degraded' : 'pass'
-      })
-    );
     expect(existsSync(resolve('scripts/package-dir.mjs'))).toBe(true);
   });
 });

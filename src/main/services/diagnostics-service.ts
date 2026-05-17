@@ -117,14 +117,12 @@ export class DiagnosticsService {
             memoryBudgetMb: 300
           })
         : latestPerformance;
-    const doctorFindings = this.readLatestDoctorFindings();
-    const includes = ['task_snapshot', 'doctor_findings', 'performance_sample', 'logs', 'recovery_points', 'rtk_status'];
+    const includes = ['task_snapshot', 'performance_sample', 'logs', 'recovery_points', 'rtk_status'];
     const rawPayload = {
       id: packageId,
       taskId,
       createdAt,
       taskSnapshot: this.taskService.getSnapshot(),
-      doctorFindings,
       performanceSample,
       logs: {
         directory: this.paths.logsDir
@@ -155,24 +153,6 @@ export class DiagnosticsService {
       .run(packageId, taskId, filePath, createdAt, JSON.stringify(includes), 1);
 
     return diagnosticPackage;
-  }
-
-  private readLatestDoctorFindings(): unknown[] {
-    const run = this.database.db
-      .prepare('SELECT id FROM doctor_runs ORDER BY generated_at DESC LIMIT 1')
-      .get() as { id: string } | undefined;
-    if (run === undefined) {
-      return [];
-    }
-
-    return this.database.db
-      .prepare(
-        `SELECT check_id, severity, status, title, detail, repair_action_json, created_at
-         FROM doctor_findings
-         WHERE run_id = ?
-         ORDER BY created_at ASC`
-      )
-      .all(run.id);
   }
 
   private redactText(value: string): string {
