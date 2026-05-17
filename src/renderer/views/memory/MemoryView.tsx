@@ -6,6 +6,7 @@ import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import { StatusPill } from '../../components/StatusPill';
+import { buildTopMeta } from '../../app/view-routing';
 import type { LazyLoadState, MemoryRecordViewModel } from '../../app/types';
 import type { LoadedState } from '../../loaded-state';
 import { memoryRecordTitle } from './memory-record-title';
@@ -82,18 +83,19 @@ export function MemoryView({
   const visibleRecords = liveVisibleRecords;
   const selectedRecord = visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0] ?? null;
   const selectedRecordTitle = selectedRecord === null ? 'memory-center' : memoryRecordTitle(selectedRecord);
+  const currentScope = selectedRecord?.scope ?? state.memorySearch?.query ?? '全部记忆';
   const draftText = selectedRecord?.summary ?? '';
   return (
     <>
       <PageHeading
         flags={<StatusPill label="真相源" tone="ok" value={state.memoryStatus.truthSource} />}
         title="记忆中心"
-        meta={`本机 1 个工作区 · ${memoryItems.length + recallItems.length + state.memoryCandidates.length} 条记忆`}
+        meta={buildTopMeta('memory', state)}
       />
       <section className="canvas-stage stage-grid" data-testid="memory-view">
         <div className="memory-search-box">
           <span>搜索记忆 ID、正文、来源引用、scope 或会话摘要</span>
-          <StatusPill label="当前范围" tone="info" value="project:Roc" />
+          <StatusPill label="当前范围" tone="info" value={currentScope} />
         </div>
         <div className="memory-library-layout">
           <aside className="memory-library-sidebar">
@@ -115,7 +117,7 @@ export function MemoryView({
               </div>
               <div className="list-rows">
                 <Row title="记忆域" sub="偏好 / 反馈 / 项目上下文 / 过程技能 / 知识笔记 / 会话回忆" tag="全部" tone="info" />
-                <Row title="作用范围" sub="global / project:Roc / task threads" tag="自动约束" tone="ok" />
+                <Row title="作用范围" sub="global / project / task" tag="自动约束" tone="ok" />
                 <Row title="来源" sub="user_explicit / feedback / agent_extract / session_recall" tag="可筛选" tone="ok" />
               </div>
             </section>

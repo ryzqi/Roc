@@ -33,7 +33,7 @@ export class AgentService {
       },
       defaultModelConfigured,
       defaultModelState,
-      memoryAccess: 'memory_service_only',
+      memoryAccess: 'store_backend',
       execution: defaultModelConfigured ? 'ready' : 'blocked_until_provider_configured'
     };
   }
@@ -48,9 +48,9 @@ export class AgentService {
     return {
       runnable: false,
       model: defaultModelState.modelId,
-      memoryAccess: 'memory_service_only',
+      memoryAccess: 'store_backend',
       builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
-      rocTools: ['memory_search', 'memory_get'],
+      rocTools: [],
       todoMapping: {
         sourceTool: 'write_todos',
         target: 'task_steps'
@@ -110,8 +110,7 @@ export class AgentService {
     const webReadCard = this.createWebReadCard();
     const executeCard = this.createExecuteCard();
     const deleteFileCard = this.createDeleteFileCard(approvalMode);
-    const memoryCards = this.createMemoryCards();
-    const toolCards = [...memoryCards, executeCard, webReadCard, deleteFileCard, ...selectedMcpCards];
+    const toolCards = [executeCard, webReadCard, deleteFileCard, ...selectedMcpCards];
 
     return {
       runnable: false,
@@ -241,43 +240,6 @@ export class AgentService {
     };
   }
 
-  private createMemoryCards(): AgentCapabilityCard[] {
-    return [
-      {
-        id: 'memory:memory_search',
-        name: 'memory_search',
-        capabilityType: 'memory_tool',
-        description: '检索 Roc 长期记忆与会话回忆，返回相关条目摘要列表。',
-        requiredInput: 'query and optional scope',
-        scope: 'memory',
-        dependencies: ['MemoryService'],
-        sideEffects: [],
-        requiresApproval: false,
-        supportsLongTermGrant: false,
-        revokeGrantHint: '记忆工具由 Roc 内置边界提供，不创建长期授权。',
-        riskLevel: 'low',
-        auditCategory: 'memory_operation',
-        untrustedContext: false
-      },
-      {
-        id: 'memory:memory_get',
-        name: 'memory_get',
-        capabilityType: 'memory_tool',
-        description: '读取指定 Roc 记忆条目的 Markdown 原文。',
-        requiredInput: 'memory id',
-        scope: 'memory',
-        dependencies: ['MemoryService'],
-        sideEffects: [],
-        requiresApproval: false,
-        supportsLongTermGrant: false,
-        revokeGrantHint: '记忆工具由 Roc 内置边界提供，不创建长期授权。',
-        riskLevel: 'low',
-        auditCategory: 'memory_operation',
-        untrustedContext: false
-      }
-    ];
-  }
-
   private createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
     return {
       id: 'builtin:delete_file',
@@ -304,7 +266,7 @@ export class AgentService {
         name: '代码审查子任务',
         purpose: '隔离审查上下文，并把 bug、风险与缺失验证回流主任务轨迹。',
         inheritsSkills: false,
-        tools: ['memory_search', 'memory_get']
+        tools: []
       },
       {
         id: 'research',

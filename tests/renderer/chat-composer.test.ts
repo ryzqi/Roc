@@ -170,7 +170,7 @@ function createLoadedState(partial: Partial<LoadedState>): LoadedState {
         providerId: 'provider-openai',
         reason: ''
       },
-      memoryAccess: 'memory_service_only',
+      memoryAccess: 'store_backend',
       execution: 'ready'
     },
     agentCapabilityPreview: null,

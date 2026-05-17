@@ -5,6 +5,7 @@ import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
 import { StatusPill } from '../../components/StatusPill';
+import { buildTopMeta } from '../../app/view-routing';
 import { formatBeijingDateTime } from '../../format-time';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
@@ -43,11 +44,9 @@ export function TasksView({
   const scheduledTasks = state.backgroundTasks.filter((task) => task.scheduled).length;
   const pendingConfirmations = state.traySummary.backgroundTasks.pendingConfirmation;
   const recentEvents = state.taskSnapshot.recentEvents.slice(0, 4);
-  const workspaceCount = state.appStatus.workspace.selectedPath === '' ? 0 : 1;
-  const historyCount = state.taskSnapshot.counts.total;
   return (
     <>
-      <PageHeading title="任务" meta={`本机 ${workspaceCount} 个工作区 · ${historyCount} 条历史`} />
+      <PageHeading title="任务" meta={buildTopMeta('tasks', state)} />
       <section className="canvas-stage stage-grid" data-testid="tasks-view">
         <div className="stat-row" data-testid="background-task-summary">
           <Metric

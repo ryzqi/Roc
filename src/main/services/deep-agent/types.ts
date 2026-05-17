@@ -27,10 +27,6 @@ export type RunFailure = {
   retryable: boolean;
 };
 
-export type MemoryGetRequest = {
-  id: string;
-};
-
 export type RuntimeSubagent = {
   name: string;
   description: string;

@@ -346,7 +346,7 @@ describe('Roc foundation services', () => {
 
     expect(status.deepAgentsPackage).toBe('available');
     expect(status.defaultModelConfigured).toBe(false);
-    expect(status.memoryAccess).toBe('memory_service_only');
+    expect(status.memoryAccess).toBe('store_backend');
     expect(status.execution).toBe('blocked_until_provider_configured');
   });
 
@@ -454,9 +454,9 @@ describe('Roc foundation services', () => {
     expect(preview).toEqual({
       runnable: false,
       model: 'model-ready',
-      memoryAccess: 'memory_service_only',
+      memoryAccess: 'store_backend',
       builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
-      rocTools: ['memory_search', 'memory_get'],
+      rocTools: [],
       todoMapping: {
         sourceTool: 'write_todos',
         target: 'task_steps'
@@ -464,6 +464,28 @@ describe('Roc foundation services', () => {
       interruptOn: {},
       reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
     });
+  });
+
+  it('removes archived memories from the Deep Agents store projection on initialize', async () => {
+    const candidate = services.memoryService.writeCandidate({
+      type: 'project_context',
+      scope: 'project:roc',
+      content: '初始化时不应保留已归档记忆投影。',
+      confidence: 0.9,
+      priority: 'medium',
+      source: 'test',
+      sourceRef: 'test-store-projection'
+    });
+    const accepted = services.memoryService.acceptCandidate(candidate.id);
+    services.memoryService.deleteMemory(accepted.id);
+
+    services.memoryService.initialize();
+    const runtimeStore = Reflect.get(services.deepAgentRuntimeService as object, 'store') as {
+      get: (namespace: string[], key: string) => Promise<unknown>;
+    };
+    const projected = await runtimeStore.get(['roc', 'memory', 'filesystem'], `/${accepted.id}.md`);
+
+    expect(projected).toBeNull();
   });
 
   it('rejects providers saved with non-secret credential refs at the schema boundary', () => {

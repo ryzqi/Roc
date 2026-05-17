@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from '@langchain/langgraph';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
 import { RocDomainError } from '../../src/main/services/errors';
 import type { ChatRunEvent } from '../../src/shared/types';
@@ -53,7 +54,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
     return new DeepAgentRuntimeService(
       services.langChainModelFactory,
       services.taskService,
-      services.memoryService,
+      services.databaseService,
       services.agentService,
       services.workspaceService,
       services.fileService,
@@ -654,7 +655,7 @@ describe('DeepAgentRuntimeService', () => {
       | { skills?: string[]; backend?: { routePrefixes?: string[] } }
       | undefined;
     expect(call?.skills).toEqual(['/skills/project-review/']);
-    expect(call?.backend?.routePrefixes).toEqual(['/skills/']);
+    expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
   it('sorts selected skills before passing them to deepagents', async () => {
@@ -684,7 +685,7 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.skills).toEqual(['/skills/alpha-review/', '/skills/zeta-review/']);
   });
 
-  it('creates the deep agent with workspace-scoped filesystem permissions', async () => {
+  it('creates the deep agent with official filesystem and memory backends instead of custom permissions', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['Done']) }]),
       toolCalls: createAsyncIterable([]),
@@ -706,32 +707,11 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { permissions?: Array<{ operations: string[]; paths: string[]; mode?: string }> }
+      | { permissions?: unknown; store?: unknown; backend?: { routePrefixes?: string[] } }
       | undefined;
-    expect(call?.permissions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          operations: ['read', 'write'],
-          paths: ['/workspace/**'],
-          mode: 'allow'
-        }),
-        expect.objectContaining({
-          operations: ['read'],
-          paths: ['/skills/**'],
-          mode: 'allow'
-        }),
-        expect.objectContaining({
-          operations: ['write'],
-          paths: ['/skills/**'],
-          mode: 'deny'
-        }),
-        expect.objectContaining({
-          operations: ['read', 'write'],
-          paths: ['/**'],
-          mode: 'deny'
-        })
-      ])
-    );
+    expect(call?.permissions).toBeUndefined();
+    expect(call?.store).toBeTruthy();
+    expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
   it('stores selected MCP and Skill capabilities on task runs without claiming unloaded skills were executed', async () => {
@@ -813,7 +793,7 @@ describe('DeepAgentRuntimeService', () => {
     const candidate = services.memoryService.writeCandidate({
       type: 'knowledge_note',
       scope: 'project:roc',
-      content: 'Deep Agents runtime should expose memory_search and memory_get.',
+      content: 'Deep Agents runtime should expose official memory store routes.',
       confidence: 0.9,
       priority: 'high',
       source: 'test',
@@ -849,7 +829,10 @@ describe('DeepAgentRuntimeService', () => {
       | {
           backend?: {
             execute?: (command: string) => Promise<{ output: string; exitCode: number | null; truncated: boolean }>;
+            routePrefixes?: string[];
+            read?: (filePath: string, offset?: number, limit?: number) => Promise<{ content?: string; error?: string }>;
           };
+          store?: unknown;
           tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }>;
           subagents?: Array<{ name: string; tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }>;
         }
@@ -858,38 +841,27 @@ describe('DeepAgentRuntimeService', () => {
     const subagentNames = createAgentCall?.subagents?.map((subagent) => subagent.name) ?? [];
     const codeReviewSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'code-review');
     const researchSubagent = createAgentCall?.subagents?.find((subagent) => subagent.name === 'research');
-    const backend = createAgentCall?.backend as
-      | {
-          execute?: (command: string) => Promise<{ output: string; exitCode: number | null; truncated: boolean }>;
-        }
-      | undefined;
-    const memorySearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_search');
-    const memoryGetTool = createAgentCall?.tools?.find((tool) => tool.name === 'memory_get');
+    const backend = createAgentCall?.backend as RocCompositeBackend | undefined;
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
-    expect(toolNames).toEqual(['memory_get', 'memory_search', 'web_read', 'delete_file', 'web_search']);
+    expect(toolNames).toEqual(['web_read', 'delete_file', 'web_search']);
     expect(toolNames).not.toContain('terminal_command');
+    expect(toolNames).not.toContain('memory_search');
+    expect(toolNames).not.toContain('memory_get');
+    expect(createAgentCall?.store).toBeTruthy();
+    expect(createAgentCall?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
-    expect(codeReviewSubagent?.tools?.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['memory_search', 'memory_get'])
-    );
+    expect(codeReviewSubagent?.tools ?? []).toEqual([]);
     expect(researchSubagent?.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['web_read']));
-    await expect(
-      memorySearchTool?.invoke({
-        query: 'Deep Agents runtime',
-        source: 'curated',
-        scope: 'project:roc'
-      })
-    ).resolves.toContain(acceptedMemory.id);
-    await expect(memoryGetTool?.invoke({ id: acceptedMemory.id })).resolves.toContain(
-      'Deep Agents runtime should expose memory_search and memory_get.'
-    );
     await expect(webSearchTool?.invoke({ query: 'langchain mcp adapters' })).resolves.toBe('Exa search results');
     await expect(backend?.execute?.('dir')).resolves.toMatchObject({
       exitCode: 0,
       truncated: false,
       output: expect.stringContaining('runtime-note.txt')
+    });
+    await expect(backend?.read?.(`/memory/${acceptedMemory.id}.md`)).resolves.toMatchObject({
+      content: expect.stringContaining('Deep Agents runtime should expose official memory store routes.')
     });
     await expect(
       webReadTool?.invoke({
@@ -938,7 +910,7 @@ describe('DeepAgentRuntimeService', () => {
 
     const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
       | {
-          backend?: { execute?: (command: string) => Promise<unknown> };
+          backend?: RocCompositeBackend;
           tools?: Array<{ name: string }>;
         }
       | undefined;
@@ -946,6 +918,7 @@ describe('DeepAgentRuntimeService', () => {
 
     expect(toolNames).not.toContain('terminal_command');
     expect(typeof createAgentCall?.backend?.execute).toBe('function');
+    expect(createAgentCall?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/memory/']));
   });
 
   it('records web_search and web_read tool lifecycle events in the task trace', async () => {

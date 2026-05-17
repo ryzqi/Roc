@@ -38,10 +38,10 @@ export function DoctorView({
 
   return (
     <>
-      <PageHeading title="Doctor" meta={`pass ${state.doctor.summary.pass} · degraded ${state.doctor.summary.degraded} · fail ${state.doctor.summary.fail}`} />
+      <PageHeading title="Doctor" meta={`通过 ${state.doctor.summary.pass} · 降级 ${state.doctor.summary.degraded} · 失败 ${state.doctor.summary.fail}`} />
       <section className="canvas-stage stage-grid" data-testid="doctor-view">
         <div className="stat-row">
-          <Metric label="通过" note="检查项 pass" tone="ok" value={state.doctor.summary.pass} />
+          <Metric label="通过" note="检查项通过" tone="ok" value={state.doctor.summary.pass} />
           <Metric label="警告 / 降级" note="可执行修复" tone="warn" value={state.doctor.summary.degraded} />
           <Metric label="失败" note="需要用户处理" tone={state.doctor.summary.fail > 0 ? 'bad' : 'ok'} value={state.doctor.summary.fail} />
         </div>

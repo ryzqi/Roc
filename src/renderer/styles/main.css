@@ -1370,7 +1370,8 @@
   box-shadow: none;
 }
 
-.metric strong {
+.metric strong,
+.metric-value {
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: var(--font-num-size);
@@ -1381,7 +1382,9 @@
 }
 
 .metric span,
-.metric small {
+.metric small,
+.metric-label,
+.metric-note {
   display: block;
   align-self: start;
   padding: 0;
@@ -1392,11 +1395,13 @@
   font-weight: 400;
 }
 
-.metric span {
+.metric span,
+.metric-label {
   font-size: var(--font-meta-size);
 }
 
-.metric small {
+.metric small,
+.metric-note {
   font-size: var(--font-meta-size);
   line-height: 1.5;
 }
@@ -1428,6 +1433,10 @@
 
 .row:last-child {
   border-bottom: 0;
+}
+
+.row-copy {
+  min-width: 0;
 }
 
 .row-title {
@@ -3905,6 +3914,13 @@ button.model-pill {
 .tool-row strong {
   overflow: hidden;
   color: currentColor;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-row-label,
+.tool-row-value {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

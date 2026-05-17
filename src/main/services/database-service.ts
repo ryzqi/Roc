@@ -214,7 +214,17 @@ export class DatabaseService {
         includes_json TEXT NOT NULL,
         redacted INTEGER NOT NULL
       );
-    `);
+
+      CREATE TABLE IF NOT EXISTS langgraph_store_items (
+        namespace_key TEXT NOT NULL,
+        namespace_json TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(namespace_key, item_key)
+      );
+     `);
 
     db.prepare(
       `INSERT OR REPLACE INTO app_config_versions (id, schema_version, updated_at)

@@ -1,5 +1,5 @@
 import type { PerformanceSample } from '../../../shared/types';
-import { Row } from '../../components/Row';
+import { Metric } from '../../components/Metric';
 
 export function PerformancePanel({ performanceSample }: { performanceSample: PerformanceSample }): React.JSX.Element {
   return (
@@ -8,21 +8,9 @@ export function PerformancePanel({ performanceSample }: { performanceSample: Per
         <h2 className="section-title">性能采样</h2>
       </div>
       <div className="stat-row">
-        <div className={`metric${performanceSample.exceedsBudget ? ' metric--warn' : ' metric--ok'}`}>
-          <strong>{performanceSample.rssMb}</strong>
-          <span>RSS</span>
-          <small>{performanceSample.exceedsBudget ? '超预算' : '正常'}</small>
-        </div>
-        <div className="metric">
-          <strong>{performanceSample.heapUsedMb}</strong>
-          <span>Heap</span>
-          <small>{`${performanceSample.heapUsedMb} / ${performanceSample.heapTotalMb} MB`}</small>
-        </div>
-        <div className="metric">
-          <strong>{performanceSample.memoryBudgetMb}</strong>
-          <span>预算</span>
-          <small>{performanceSample.mode}</small>
-        </div>
+        <Metric label="RSS" note={performanceSample.exceedsBudget ? '超预算' : '正常'} tone={performanceSample.exceedsBudget ? 'warn' : 'ok'} value={performanceSample.rssMb} />
+        <Metric label="Heap" note={`${performanceSample.heapUsedMb} / ${performanceSample.heapTotalMb} MB`} value={performanceSample.heapUsedMb} />
+        <Metric label="预算" note={performanceSample.mode} value={performanceSample.memoryBudgetMb} />
       </div>
     </section>
   );

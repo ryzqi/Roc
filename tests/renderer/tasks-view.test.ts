@@ -96,7 +96,8 @@ describe('TasksView', () => {
     expect(html).toContain('class="list-rows"');
     expect(html).toContain('class="task-surface-grid"');
     expect(html).toContain('任务');
-    expect(html).toContain('本机 1 个工作区 · 3 条历史');
+    expect(html).toContain('3 个任务 · 运行中 1');
+    expect(html).not.toContain('本机 1 个工作区');
     expect(html).not.toContain('grid-3');
     expect(html).not.toContain('grid-2');
     expect(html).not.toContain('card-title');

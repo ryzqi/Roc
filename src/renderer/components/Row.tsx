@@ -11,7 +11,7 @@ export function Row({
 }): React.JSX.Element {
   return (
     <div className="row">
-      <div>
+      <div className="row-copy">
         <div className="row-title">{title}</div>
         {sub === undefined ? null : <div className="row-sub">{sub}</div>}
       </div>

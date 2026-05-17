@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
-import { Command, MemorySaver, type InterruptPayload } from '@langchain/langgraph';
+import { Command, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
 import type { HITLRequest, HITLResponse } from 'langchain';
 import type {
   ChatPendingApproval,
@@ -15,11 +15,11 @@ import type {
   TaskRun
 } from '../../shared/types';
 import type { AgentService } from './agent-service';
+import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
 import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
-import type { MemoryService } from './memory-service';
 import type { McpService } from './mcp-service';
 import type { RocPaths } from './paths';
 import type { ShellExecutionService } from './shell-execution-service';
@@ -34,12 +34,12 @@ import {
   recordUtils,
   redact,
   RUN_EVENT_NAME,
+  SqliteLangGraphStore,
   tools,
   type ActiveRun,
   type RunExecutionContext,
   type RuntimeSubagent
 } from './deep-agent';
-import type { FilesystemPermission } from 'deepagents';
 
 type ReasoningSource =
   | {
@@ -59,33 +59,11 @@ type ResumeContext = {
   threadId: string;
 };
 
-const WORKSPACE_FILESYSTEM_PERMISSIONS: FilesystemPermission[] = [
-  {
-    operations: ['read', 'write'],
-    paths: ['/workspace/**'],
-    mode: 'allow'
-  },
-  {
-    operations: ['read'],
-    paths: ['/skills/**'],
-    mode: 'allow'
-  },
-  {
-    operations: ['write'],
-    paths: ['/skills/**'],
-    mode: 'deny'
-  },
-  {
-    operations: ['read', 'write'],
-    paths: ['/**'],
-    mode: 'deny'
-  }
-];
-
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly checkpointer = new MemorySaver();
+  private readonly store: BaseStore;
   private readonly pendingInterrupts = new Map<
     string,
     {
@@ -97,7 +75,7 @@ export class DeepAgentRuntimeService {
   constructor(
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly taskService: TaskService,
-    private readonly memoryService: MemoryService,
+    databaseService: DatabaseService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
@@ -106,7 +84,9 @@ export class DeepAgentRuntimeService {
     private readonly shellExecutionService: ShellExecutionService,
     private readonly paths: RocPaths,
     private readonly logService: LogService
-  ) {}
+  ) {
+    this.store = new SqliteLangGraphStore(databaseService);
+  }
 
   onRunEvent(listener: (event: ChatRunEvent) => void): () => void {
     this.eventEmitter.on(RUN_EVENT_NAME, listener);
@@ -353,11 +333,17 @@ export class DeepAgentRuntimeService {
               ? undefined
               : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
           const { subagents, tools: runTools } = await this.createRunTools(context, closers);
+          const runtimeBackend = createBackend({
+            workspaceService: this.workspaceService,
+            paths: this.paths,
+            shellExecutionService: this.taskBoundShellExecutionService(context),
+            store: this.store
+          });
           const agent = createDeepAgent({
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-            backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
-            permissions: WORKSPACE_FILESYSTEM_PERMISSIONS,
+            backend: runtimeBackend.backend,
+            store: this.store,
             skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
             subagents,
             tools: runTools,
@@ -478,11 +464,9 @@ export class DeepAgentRuntimeService {
     context: RunExecutionContext,
     closers: Array<() => Promise<void>>
   ): Promise<{ subagents: RuntimeSubagent[]; tools: ClientTool[] }> {
-    const memorySearchTool = tools.createMemorySearchTool(this.memoryService);
-    const memoryGetTool = tools.createMemoryGetTool(this.memoryService);
     const webReadTool = tools.createWebReadTool(this.webReadService);
     const deleteFileTool = tools.createDeleteFileTool(this.fileService);
-    const runTools: ClientTool[] = [memoryGetTool, memorySearchTool, webReadTool, deleteFileTool];
+    const runTools: ClientTool[] = [webReadTool, deleteFileTool];
     const webSearchTool = await tools.createWebSearchTool({
       mcpService: this.mcpService,
       enabledCapabilities: context.enabledCapabilities,
@@ -493,8 +477,6 @@ export class DeepAgentRuntimeService {
     }
     return {
       subagents: tools.createRunSubagents({
-        memoryGetTool,
-        memorySearchTool,
         webReadTool
       }),
       tools: runTools
@@ -511,11 +493,17 @@ export class DeepAgentRuntimeService {
       const interruptOn =
         context.taskRun === null ? undefined : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
       const { subagents, tools: runTools } = await this.createRunTools(context, closers);
+      const runtimeBackend = createBackend({
+        workspaceService: this.workspaceService,
+        paths: this.paths,
+        shellExecutionService: this.taskBoundShellExecutionService(context),
+        store: this.store
+      });
       const agent = createDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-        backend: createBackend(this.workspaceService, this.paths, this.taskBoundShellExecutionService(context)),
-        permissions: WORKSPACE_FILESYSTEM_PERMISSIONS,
+        backend: runtimeBackend.backend,
+        store: this.store,
         skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
         subagents,
         tools: runTools,

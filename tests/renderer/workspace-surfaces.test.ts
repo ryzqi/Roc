@@ -256,6 +256,8 @@ describe('workspace and diagnostics surfaces', () => {
     expect(doctorHtml).toContain('data-testid="doctor-view"');
     expect(doctorHtml).toContain('class="single-panel"');
     expect(doctorHtml).toContain('健康检查结果');
+    expect(doctorHtml).toContain('通过 3 · 降级 1 · 失败 0');
+    expect(doctorHtml).not.toContain('pass 3 · degraded 1 · fail 0');
     expect(doctorHtml).not.toContain('card-title');
 
     expect(diagnosticsHtml).toContain('data-testid="diagnostics-view"');
@@ -299,6 +301,9 @@ describe('workspace and diagnostics surfaces', () => {
 
     expect(performanceHtml).toContain('class="section"');
     expect(performanceHtml).toContain('class="stat-row"');
+    expect(performanceHtml).toContain('metric-value');
+    expect(performanceHtml).toContain('metric-label');
+    expect(performanceHtml).toContain('metric-note');
     expect(performanceHtml).not.toContain('card-title');
   });
 });

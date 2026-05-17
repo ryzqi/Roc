@@ -200,7 +200,7 @@ export function createAppServices(
   const deepAgentRuntimeService = new DeepAgentRuntimeService(
     langChainModelFactory,
     taskService,
-    memoryService,
+    databaseService,
     agentService,
     workspaceService,
     fileService,

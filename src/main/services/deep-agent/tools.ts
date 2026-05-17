@@ -2,14 +2,13 @@ import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { z } from 'zod';
-import type { ChatStartRunRequest, MemorySearchRequest } from '../../../shared/types';
+import type { ChatStartRunRequest } from '../../../shared/types';
 import { RocDomainError } from '../errors';
 import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
-import type { MemoryService } from '../memory-service';
 import { WebReadService, type WebReadRequest } from '../web-read-service';
 import { toWebSearchFailure } from './error-mapping';
-import type { MemoryGetRequest, RuntimeSubagent } from './types';
+import type { RuntimeSubagent } from './types';
 
 export function createWebReadTool(webReadService: WebReadService): DynamicStructuredTool<any, any, any, string> {
   const schema = z.object({
@@ -24,37 +23,6 @@ export function createWebReadTool(webReadService: WebReadService): DynamicStruct
     schema,
     func: async (input: WebReadRequest) => {
       return await webReadService.read(input);
-    }
-  });
-}
-
-export function createMemorySearchTool(memoryService: MemoryService): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.object({
-    query: z.string().trim().min(1),
-    includeCold: z.boolean().default(false),
-    source: z.enum(['curated', 'session', 'all']).default('curated'),
-    scope: z.string().trim().min(1).optional()
-  });
-  return new DynamicStructuredTool<typeof schema, MemorySearchRequest, MemorySearchRequest, string>({
-    name: 'memory_search',
-    description: '检索 Roc 长期记忆与会话回忆，返回相关条目摘要列表。',
-    schema,
-    func: async (input: MemorySearchRequest) => {
-      return JSON.stringify(memoryService.search(input), null, 2);
-    }
-  });
-}
-
-export function createMemoryGetTool(memoryService: MemoryService): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.object({
-    id: z.string().trim().min(1)
-  });
-  return new DynamicStructuredTool<typeof schema, MemoryGetRequest, MemoryGetRequest, string>({
-    name: 'memory_get',
-    description: '读取指定 Roc 记忆条目的 Markdown 原文。',
-    schema,
-    func: async (input: MemoryGetRequest) => {
-      return memoryService.get(input.id);
     }
   });
 }
@@ -131,8 +99,6 @@ export async function createWebSearchTool(input: {
 }
 
 export function createRunSubagents(input: {
-  memoryGetTool: DynamicStructuredTool<any, any, any, string>;
-  memorySearchTool: DynamicStructuredTool<any, any, any, string>;
   webReadTool: DynamicStructuredTool<any, any, any, string>;
 }): RuntimeSubagent[] {
   const subagents: RuntimeSubagent[] = [];
@@ -140,8 +106,8 @@ export function createRunSubagents(input: {
     name: 'code-review',
     description: '审查代码改动，优先输出 bug、回归风险、边界条件与缺失验证。',
     systemPrompt:
-      '你是 Roc 的代码审查子代理。先找 bug、行为回归、风险和缺失验证，再给出简短结论。不要改写需求，不要淡化风险。需要项目上下文时，先使用 memory_search 和 memory_get。',
-    tools: [input.memorySearchTool, input.memoryGetTool]
+      '你是 Roc 的代码审查子代理。先找 bug、行为回归、风险和缺失验证，再给出简短结论。不要改写需求，不要淡化风险。需要项目上下文时，直接读取 /memory/ 下的持久记忆文件。',
+    tools: []
   });
   subagents.push({
     name: 'research',

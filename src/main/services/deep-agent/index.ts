@@ -1,8 +1,9 @@
 export * as errorMapping from './error-mapping';
 export * as prompt from './prompt';
 export * as recordUtils from './record-utils';
+export { SqliteLangGraphStore } from './sqlite-store';
 export * as tools from './tools';
 export { createBackend } from './backend';
 export { redact } from './redact';
 export { RUN_EVENT_NAME } from './types';
-export type { ActiveRun, MemoryGetRequest, RunExecutionContext, RunFailure, RuntimeSubagent } from './types';
+export type { ActiveRun, RunExecutionContext, RunFailure, RuntimeSubagent } from './types';

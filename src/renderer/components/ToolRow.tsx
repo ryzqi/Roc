@@ -9,8 +9,8 @@ export function ToolRow({
 }): React.JSX.Element {
   return (
     <div className={`tool-row ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span className="tool-row-label">{label}</span>
+      <strong className="tool-row-value">{value}</strong>
     </div>
   );
 }

@@ -108,6 +108,12 @@ describe('MemoryView', () => {
     expect(html).toContain('class="list-rows"');
     expect(html).toContain('memory-record-list');
     expect(html).toContain('class="field-preview"');
+    expect(html).toContain('1 条召回 · 1 个候选');
+    expect(html).toContain('当前范围');
+    expect(html).toContain('project:Roc');
+    expect(html).toContain('markdown');
+    expect(html).not.toContain('本机 1 个工作区');
+    expect(html).not.toContain('global / project:Roc / task threads');
     expect(html).toContain('phase four smoke active memory validates candidate acceptance and recall');
     expect(html).toContain('conflict_detected');
     expect(html).toContain('same_type_scope_contradiction_or_duplicate');

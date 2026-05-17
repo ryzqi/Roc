@@ -87,7 +87,7 @@ describe('isTerminalChatRunEvent', () => {
         type: 'tool_event',
         runId: 'chat_test',
         event: 'start',
-        name: 'memory_search',
+        name: 'web_read',
         data: null
       })
     ).toBe(false);

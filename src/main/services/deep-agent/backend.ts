@@ -1,8 +1,8 @@
 import {
   CompositeBackend,
   FilesystemBackend,
-  LocalShellBackend,
-  StateBackend,
+  StoreBackend,
+  type AnyBackendProtocol,
   type EditResult,
   type ExecuteResponse,
   type FileDownloadResponse,
@@ -12,9 +12,9 @@ import {
   type LsResult,
   type ReadRawResult,
   type ReadResult,
-  type SandboxBackendProtocolV2,
-  type WriteResult
+  type SandboxBackendProtocolV2
 } from 'deepagents';
+import type { BaseStore } from '@langchain/langgraph';
 import type { ShellExecutionResult } from '../../../shared/types';
 import type { RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
@@ -28,155 +28,70 @@ type AgentExecuteAdapter = {
   };
 };
 
-const WORKSPACE_ROUTE = '/workspace';
-const WORKSPACE_ROUTE_PREFIX = '/workspace/';
-const SKILLS_ROUTE = '/skills';
-const SKILLS_ROUTE_PREFIX = '/skills/';
+const WORKSPACE_ROUTE = '/workspace/';
+const SKILLS_ROUTE = '/skills/';
+const MEMORY_ROUTE = '/memory/';
 
-function isWorkspaceRoute(path: string): boolean {
-  return path === WORKSPACE_ROUTE || path.startsWith(WORKSPACE_ROUTE_PREFIX);
-}
+export type RocCompositeBackend = CompositeBackend &
+  SandboxBackendProtocolV2 & {
+    readonly routePrefixes: string[];
+  };
 
-function isSkillsRoute(path: string): boolean {
-  return path === SKILLS_ROUTE || path.startsWith(SKILLS_ROUTE_PREFIX);
-}
+class RocExecuteBackend implements SandboxBackendProtocolV2 {
+  readonly id = 'roc-execute-backend';
+  readonly routePrefixes: string[] = [];
 
-function isCanonicalRoute(path: string): boolean {
-  return isWorkspaceRoute(path) || isSkillsRoute(path);
-}
-
-function invalidRouteError(path: string): string {
-  return `Roc filesystem paths must stay under /workspace/ or /skills/. Received: ${path}`;
-}
-
-function skillsWriteDeniedError(path: string): string {
-  return `Roc skill files are read-only at runtime. Write operations are not allowed for: ${path}`;
-}
-
-class RocAgentBackend implements SandboxBackendProtocolV2 {
-  private readonly fileBackend: CompositeBackend;
-  private readonly shellBackend: LocalShellBackend;
-
-  constructor(
-    workspaceService: WorkspaceService,
-    paths: RocPaths,
-    private readonly shellExecutionService: AgentExecuteAdapter
-  ) {
-    const workspace = workspaceService.getCurrentWorkspace();
-    const shellRoot = workspace?.path ?? paths.root;
-    this.shellBackend = new LocalShellBackend({
-      rootDir: shellRoot,
-      inheritEnv: true
-    });
-    this.fileBackend = new CompositeBackend(
-      new StateBackend(),
-      workspace === null
-        ? {
-            '/skills/': new FilesystemBackend({
-              rootDir: paths.skillsDir,
-              virtualMode: true
-            })
-          }
-        : {
-            '/workspace/': new FilesystemBackend({
-              rootDir: workspace.path,
-              virtualMode: true
-            }),
-            '/skills/': new FilesystemBackend({
-              rootDir: paths.skillsDir,
-              virtualMode: true
-            })
-          }
-    );
-  }
-
-  get id(): string {
-    return this.shellBackend.id;
-  }
-
-  get routePrefixes(): string[] {
-    return this.fileBackend.routePrefixes;
+  constructor(private readonly shellExecutionService: AgentExecuteAdapter) {
   }
 
   ls(path: string): Promise<LsResult> {
-    if (!isCanonicalRoute(path)) {
-      return Promise.resolve({
-        error: invalidRouteError(path)
-      });
+    if (path === '/') {
+      return Promise.resolve({ files: [] });
     }
-    return this.fileBackend.ls(path);
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
-    if (!isCanonicalRoute(filePath)) {
-      return Promise.resolve({
-        error: invalidRouteError(filePath)
-      });
-    }
-    return this.fileBackend.read(filePath, offset, limit);
+  read(_filePath: string, _offset?: number, _limit?: number): Promise<ReadResult> {
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  readRaw(filePath: string): Promise<ReadRawResult> {
-    if (!isCanonicalRoute(filePath)) {
-      return Promise.resolve({
-        error: invalidRouteError(filePath)
-      });
-    }
-    return this.fileBackend.readRaw(filePath);
+  readRaw(_filePath: string): Promise<ReadRawResult> {
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
-    if (path !== null && path !== undefined && !isCanonicalRoute(path)) {
-      return Promise.resolve({
-        error: invalidRouteError(path)
-      });
+  grep(_pattern: string, path?: string, _glob?: string | null): Promise<GrepResult> {
+    if (path === undefined || path === '/') {
+      return Promise.resolve({ matches: [] });
     }
-    return this.fileBackend.grep(pattern, path ?? undefined, glob ?? undefined);
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  glob(pattern: string, path?: string): Promise<GlobResult> {
-    if (path !== undefined && !isCanonicalRoute(path)) {
-      return Promise.resolve({
-        error: invalidRouteError(path)
-      });
+  glob(_pattern: string, path?: string): Promise<GlobResult> {
+    if (path === undefined || path === '/') {
+      return Promise.resolve({ files: [] });
     }
-    return this.fileBackend.glob(pattern, path);
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  write(filePath: string, content: string): Promise<WriteResult> {
-    if (!isCanonicalRoute(filePath)) {
-      return Promise.resolve({
-        error: invalidRouteError(filePath)
-      });
-    }
-    if (!isWorkspaceRoute(filePath)) {
-      return Promise.resolve({
-        error: skillsWriteDeniedError(filePath)
-      });
-    }
-    return this.fileBackend.write(filePath, content);
+  write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
-  edit(filePath: string, oldString: string, newString: string, replaceAll?: boolean): Promise<EditResult> {
-    if (!isCanonicalRoute(filePath)) {
-      return Promise.resolve({
-        error: invalidRouteError(filePath)
-      });
-    }
-    if (!isWorkspaceRoute(filePath)) {
-      return Promise.resolve({
-        error: skillsWriteDeniedError(filePath)
-      });
-    }
-    return this.fileBackend.edit(filePath, oldString, newString, replaceAll);
+  edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
+    return Promise.resolve({ error: 'Roc filesystem paths must stay under /workspace/, /skills/, or /memory/.' });
   }
 
   uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
-    return this.fileBackend.uploadFiles(files);
+    return Promise.resolve(
+      files.map(([path]) => ({
+        path,
+        error: 'invalid_path'
+      }))
+    );
   }
 
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    return this.fileBackend.downloadFiles(paths);
+    return Promise.resolve(paths.map((path) => ({ path, content: null, error: 'file_not_found' })));
   }
 
   execute(command: string): Promise<ExecuteResponse> {
@@ -184,12 +99,48 @@ class RocAgentBackend implements SandboxBackendProtocolV2 {
   }
 }
 
-export function createBackend(
-  workspaceService: WorkspaceService,
-  paths: RocPaths,
-  shellExecutionService: AgentExecuteAdapter
-): SandboxBackendProtocolV2 {
-  const workspace = workspaceService.getCurrentWorkspace();
-  void workspace;
-  return new RocAgentBackend(workspaceService, paths, shellExecutionService);
+function createRouteBackends(input: {
+  workspaceService: WorkspaceService;
+  paths: RocPaths;
+  shellExecutionService: AgentExecuteAdapter;
+  store: BaseStore;
+}): {
+  backend: RocCompositeBackend;
+  memoryRoute: string;
+} {
+  const workspace = input.workspaceService.getCurrentWorkspace();
+  const routes: Record<string, AnyBackendProtocol> = {
+    [SKILLS_ROUTE]: new FilesystemBackend({
+      rootDir: input.paths.skillsDir,
+      virtualMode: true
+    }),
+    [MEMORY_ROUTE]: new StoreBackend({
+      store: input.store,
+      namespace: ['roc', 'memory', 'filesystem']
+    })
+  };
+
+  if (workspace !== null) {
+    routes[WORKSPACE_ROUTE] = new FilesystemBackend({
+      rootDir: workspace.path,
+      virtualMode: true
+    });
+  }
+
+  return {
+    backend: new CompositeBackend(new RocExecuteBackend(input.shellExecutionService), routes) as RocCompositeBackend,
+    memoryRoute: MEMORY_ROUTE
+  };
+}
+
+export function createBackend(input: {
+  workspaceService: WorkspaceService;
+  paths: RocPaths;
+  shellExecutionService: AgentExecuteAdapter;
+  store: BaseStore;
+}): {
+  backend: RocCompositeBackend;
+  memoryRoute: string;
+} {
+  return createRouteBackends(input);
 }

@@ -12,9 +12,9 @@ export function Metric({
   const toneClass = tone === 'neutral' ? '' : ` metric--${tone}`;
   return (
     <div className={`metric${toneClass}`}>
-      <strong>{value}</strong>
-      <span>{label}</span>
-      <small>{note}</small>
+      <strong className="metric-value">{value}</strong>
+      <span className="metric-label">{label}</span>
+      <small className="metric-note">{note}</small>
     </div>
   );
 }
