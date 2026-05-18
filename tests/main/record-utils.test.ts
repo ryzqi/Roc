@@ -164,23 +164,6 @@ describe('record-utils assistant text boundaries', () => {
     ).toBe(true);
   });
 
-  it('identifies skill load content blocks as non-assistant text', () => {
-    expect(
-      isNonAssistantTextMessage({
-        additional_kwargs: {
-          content_blocks: [
-            {
-              type: 'skill_loaded',
-              name: 'project-review',
-              path: '/skills/project-review/SKILL.md',
-              content: '---\nname: project-review\ndescription: Review a project\n---\n# Project Review'
-            }
-          ]
-        }
-      })
-    ).toBe(true);
-  });
-
   it('identifies skill file reads tagged with a /skills/.../SKILL.md path as non-assistant text', () => {
     expect(
       isNonAssistantTextMessage({

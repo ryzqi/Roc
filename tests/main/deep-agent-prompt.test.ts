@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { buildSystemPrompt, createCapabilitySummary } from '../../src/main/services/deep-agent/prompt';
 
 describe('deep agent prompt', () => {
+  it('forbids echoing SKILL.md contents after read_file', () => {
+    const prompt = buildSystemPrompt({
+      mcpServers: [],
+      skills: ['project-review']
+    });
+
+    expect(prompt).toContain(
+      'When you read a SKILL.md file via read_file, do not repeat, quote, paraphrase, or summarize its contents back to the user.'
+    );
+  });
+
   it('builds a system prompt with explicit execution boundaries', () => {
     const prompt = buildSystemPrompt({
       mcpServers: ['exa-hosted', 'docs-http'],
@@ -27,6 +38,9 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain(
       'Do not invent alternate filesystem roots such as /app, /repo, or host OS paths when using read_file, write_file, edit_file, ls, glob, or grep.'
     );
+    expect(prompt).toContain(
+      'When you read a SKILL.md file via read_file, do not repeat, quote, paraphrase, or summarize its contents back to the user. Apply the instructions silently and respond only with the result of following them.'
+    );
     expect(prompt).toContain('Keep answers concise, direct, and grounded in observed evidence.');
     expect(prompt).toContain(
       'Capability boundary: mcp=docs-http,exa-hosted;skills=project-review;untrusted_context_policy=external_content_reference_only'
@@ -49,6 +63,7 @@ describe('deep agent prompt', () => {
       'Persistent Deep Agents memory files are mounted under /memory/.',
       'When persistent memory is needed, read /memory/ files directly through the Deep Agents filesystem tools.',
       'Do not invent alternate filesystem roots such as /app, /repo, or host OS paths when using read_file, write_file, edit_file, ls, glob, or grep.',
+      'When you read a SKILL.md file via read_file, do not repeat, quote, paraphrase, or summarize its contents back to the user. Apply the instructions silently and respond only with the result of following them.',
       'Keep answers concise, direct, and grounded in observed evidence.',
       'Capability boundary: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
     ]);

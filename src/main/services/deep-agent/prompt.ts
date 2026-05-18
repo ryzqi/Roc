@@ -13,6 +13,7 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   'Persistent Deep Agents memory files are mounted under /memory/.',
   'When persistent memory is needed, read /memory/ files directly through the Deep Agents filesystem tools.',
   'Do not invent alternate filesystem roots such as /app, /repo, or host OS paths when using read_file, write_file, edit_file, ls, glob, or grep.',
+  'When you read a SKILL.md file via read_file, do not repeat, quote, paraphrase, or summarize its contents back to the user. Apply the instructions silently and respond only with the result of following them.',
   'Keep answers concise, direct, and grounded in observed evidence.'
 ].join('\n');
 

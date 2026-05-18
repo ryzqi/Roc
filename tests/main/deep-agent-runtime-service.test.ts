@@ -1330,66 +1330,6 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
-  it('keeps Skill raw instruction blocks out of assistant chat text', async () => {
-    const rawSkillContent = '---\nname: project-review\ndescription: RAW_SKILL_DESCRIPTION\n---\n# Project Review';
-    mocked.streamEventsMock.mockResolvedValue({
-      messages: createAsyncIterable([
-        {
-          text: createAsyncIterable([rawSkillContent]),
-          additional_kwargs: {
-            content_blocks: [
-              {
-                type: 'skill_loaded',
-                name: 'project-review',
-                path: '/skills/project-review/SKILL.md',
-                content: rawSkillContent
-              }
-            ]
-          }
-        },
-        {
-          text: createAsyncIterable(['最终回答：已按技能完成审查。'])
-        }
-      ]),
-      toolCalls: createAsyncIterable([]),
-      subagents: createAsyncIterable([]),
-      output: Promise.resolve({})
-    });
-
-    const runtime = createRuntime();
-    const events: ChatRunEvent[] = [];
-    const completed = waitForEvent(runtime, (event) => {
-      events.push(event);
-      return event.type === 'run_completed';
-    });
-    const started = await runtime.startRun({
-      input: '按项目审查技能处理',
-      mode: 'task',
-      enabledCapabilities: {
-        mcpServers: [],
-        skills: ['project-review']
-      }
-    });
-    const finished = await completed;
-
-    const messageText = events
-      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
-      .map((event) => event.delta)
-      .join('');
-    const snapshot = services.taskService.getSnapshot();
-    const assistantMessage = snapshot.recentEvents.find(
-      (event) => event.runId === started.runId && event.type === 'message'
-    );
-
-    expect(messageText).toBe('最终回答：已按技能完成审查。');
-    expect(messageText).not.toContain('RAW_SKILL_DESCRIPTION');
-    expect(finished).toMatchObject({
-      type: 'run_completed',
-      assistantMessage: '最终回答：已按技能完成审查。'
-    });
-    expect(JSON.stringify(assistantMessage?.payload)).not.toContain('RAW_SKILL_DESCRIPTION');
-  });
-
   it('keeps skill file text tagged with /skills/.../SKILL.md metadata out of assistant chat text', async () => {
     const rawSkillBody = '# Project Review\nFollow the review workflow exactly.';
     mocked.streamEventsMock.mockResolvedValue({
@@ -1438,37 +1378,20 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
-  it('keeps skill body echoes after read_file on /skills/.../SKILL.md out of assistant chat text', async () => {
-    const rawSkillContent = [
-      '---',
-      'name: project-review',
-      'description: Review the project carefully',
-      '---',
-      '# Project Review',
-      'Follow the review workflow exactly.'
-    ].join('\n');
-    const rawSkillBody = '# Project Review\nFollow the review workflow exactly.';
-    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
-    writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), rawSkillContent, 'utf8');
+  it('keeps read_file tool messages carrying SKILL.md content out of assistant chat text', async () => {
+    const rawSkillContent = '---\nname: project-review\ndescription: Review a project\n---\n# Project Review';
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
-          text: createAsyncIterable([rawSkillBody])
+          role: 'tool',
+          name: 'read_file',
+          text: createAsyncIterable([rawSkillContent])
         },
         {
           text: createAsyncIterable(['最终回答：已按技能完成审查。'])
         }
       ]),
-      toolCalls: createAsyncIterable([
-        {
-          name: 'read_file',
-          input: {
-            path: '/skills/project-review/SKILL.md',
-            limit: 1000
-          },
-          output: Promise.resolve(rawSkillContent)
-        }
-      ]),
+      toolCalls: createAsyncIterable([]),
       subagents: createAsyncIterable([]),
       output: Promise.resolve({})
     });
@@ -1495,70 +1418,11 @@ describe('DeepAgentRuntimeService', () => {
       .join('');
 
     expect(messageText).toBe('最终回答：已按技能完成审查。');
-    expect(messageText).not.toContain('Follow the review workflow exactly.');
+    expect(messageText).not.toContain('Review a project');
     expect(finished).toMatchObject({
       type: 'run_completed',
       assistantMessage: '最终回答：已按技能完成审查。'
     });
-  });
-
-  it('keeps skill body echoes after read_file on /skills/.../SKILL.md out of visible reasoning', async () => {
-    const rawSkillContent = [
-      '---',
-      'name: project-review',
-      'description: Review the project carefully',
-      '---',
-      '# Project Review',
-      'Follow the review workflow exactly.'
-    ].join('\n');
-    const rawSkillBody = '# Project Review\nFollow the review workflow exactly.';
-    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
-    writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), rawSkillContent, 'utf8');
-    mocked.streamEventsMock.mockResolvedValue({
-      messages: createAsyncIterable([
-        {
-          text: createAsyncIterable(['最终回答：已按技能完成审查。']),
-          reasoning: createAsyncIterable([rawSkillBody])
-        }
-      ]),
-      toolCalls: createAsyncIterable([
-        {
-          name: 'read_file',
-          input: {
-            path: '/skills/project-review/SKILL.md',
-            limit: 1000
-          },
-          output: Promise.resolve(rawSkillContent)
-        }
-      ]),
-      subagents: createAsyncIterable([]),
-      output: Promise.resolve({})
-    });
-
-    const runtime = createRuntime();
-    const events: ChatRunEvent[] = [];
-    const completed = waitForEvent(runtime, (event) => {
-      events.push(event);
-      return event.type === 'run_completed';
-    });
-
-    await runtime.startRun({
-      input: '按项目审查技能处理',
-      mode: 'chat',
-      enabledCapabilities: {
-        mcpServers: [],
-        skills: ['project-review']
-      }
-    });
-    await completed;
-
-    const reasoningText = events
-      .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
-      .map((event) => event.delta)
-      .join('');
-
-    expect(reasoningText).toBe('');
-    expect(reasoningText).not.toContain('Follow the review workflow exactly.');
   });
 
   it('passes the agent interrupt policy into deepagents for task runs', async () => {

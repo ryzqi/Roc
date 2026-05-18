@@ -28,10 +28,7 @@ const NON_ASSISTANT_MESSAGE_TYPES = new Set([
   'mcp_call',
   'mcp_result',
   'mcp_tool_call',
-  'mcp_tool_result',
-  'skill_loaded',
-  'skill_load',
-  'skill_content'
+  'mcp_tool_result'
 ]);
 
 const NON_ASSISTANT_CONTENT_BLOCK_TYPES = new Set([
@@ -46,10 +43,7 @@ const NON_ASSISTANT_CONTENT_BLOCK_TYPES = new Set([
   'mcp_call',
   'mcp_result',
   'mcp_tool_call',
-  'mcp_tool_result',
-  'skill_loaded',
-  'skill_load',
-  'skill_content'
+  'mcp_tool_result'
 ]);
 
 export type StreamedAssistantTextClassification = 'assistant' | 'non_assistant' | 'pending';

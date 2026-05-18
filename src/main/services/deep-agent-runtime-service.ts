@@ -1,7 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { existsSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
@@ -52,13 +50,6 @@ type ReasoningSource =
       kind: 'values';
       values: string[];
     };
-
-type VisibleTextBoundaryState = {
-  pendingSkillEchoes: Array<{
-    candidates: string[] | null;
-  }>;
-  selectedSkillEchoCandidates: string[];
-};
 
 type ResumeContext = {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
@@ -333,7 +324,6 @@ export class DeepAgentRuntimeService {
         attemptProducedVisibleOutput = false;
         const assistantChunks: string[] = [];
         const reasoningChunks: string[] = [];
-        const visibleTextBoundary = this.createVisibleTextBoundaryState(context.enabledCapabilities.skills);
         const usageAccumulator = createUsageAccumulator();
         const closers: Array<() => Promise<void>> = [];
 
@@ -377,7 +367,7 @@ export class DeepAgentRuntimeService {
           );
 
           await Promise.all([
-            this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, visibleTextBoundary, () => {
+            this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, () => {
               attemptProducedVisibleOutput = true;
             }),
             this.consumeMessages(
@@ -385,7 +375,6 @@ export class DeepAgentRuntimeService {
               context,
               assistantChunks,
               reasoningChunks,
-              visibleTextBoundary,
               usageAccumulator,
               () => {
                 attemptProducedVisibleOutput = true;
@@ -506,7 +495,6 @@ export class DeepAgentRuntimeService {
   private async executeResume(context: RunExecutionContext, resumePayload: HITLResponse): Promise<void> {
     const assistantChunks: string[] = [];
     const reasoningChunks: string[] = [];
-    const visibleTextBoundary = this.createVisibleTextBoundaryState(context.enabledCapabilities.skills);
     const usageAccumulator = createUsageAccumulator();
     const closers: Array<() => Promise<void>> = [];
 
@@ -543,13 +531,12 @@ export class DeepAgentRuntimeService {
       });
 
       await Promise.all([
-        this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, visibleTextBoundary),
+        this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
         this.consumeMessages(
           run.messages as AsyncIterable<unknown>,
           context,
           assistantChunks,
           reasoningChunks,
-          visibleTextBoundary,
           usageAccumulator
         ),
         this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
@@ -652,7 +639,6 @@ export class DeepAgentRuntimeService {
     context: RunExecutionContext,
     assistantChunks: string[],
     reasoningChunks: string[],
-    visibleTextBoundary: VisibleTextBoundaryState,
     usageAccumulator: ProviderUsageAccumulator,
     onVisibleOutput?: () => void
   ): Promise<void> {
@@ -679,41 +665,29 @@ export class DeepAgentRuntimeService {
                 }
               });
             }
-              this.emit({
-                type: 'message_delta',
-                runId: context.runId,
-                delta
-              });
-            },
-            visibleTextBoundary
-          );
+            this.emit({
+              type: 'message_delta',
+              runId: context.runId,
+              delta
+            });
+          });
 
       const consumeReasoning = () =>
         this.consumeReasoningSource(
           reasoningSource as ReasoningSource,
           context,
           reasoningChunks,
-          visibleTextBoundary,
           onVisibleOutput
         );
 
-      if (visibleTextBoundary.pendingSkillEchoes.length > 0) {
-        if (reasoningSource !== null) {
-          await consumeReasoning();
-        }
-        if (canStreamAssistantText) {
-          await consumeAssistantText();
-        }
-      } else {
-        const tasks: Array<Promise<void>> = [];
-        if (canStreamAssistantText) {
-          tasks.push(consumeAssistantText());
-        }
-        if (reasoningSource !== null) {
-          tasks.push(consumeReasoning());
-        }
-        await Promise.all(tasks);
+      const tasks: Array<Promise<void>> = [];
+      if (canStreamAssistantText) {
+        tasks.push(consumeAssistantText());
       }
+      if (reasoningSource !== null) {
+        tasks.push(consumeReasoning());
+      }
+      await Promise.all(tasks);
 
       if (reasoningSource === null && reasoningChunks.length === 0) {
         const trailingReasoning = await this.readReasoningFromOutput(message);
@@ -728,8 +702,7 @@ export class DeepAgentRuntimeService {
                 runId: context.runId,
                 delta
               });
-            },
-            visibleTextBoundary
+            }
           );
         }
       }
@@ -778,7 +751,6 @@ export class DeepAgentRuntimeService {
     source: ReasoningSource,
     context: RunExecutionContext,
     reasoningChunks: string[],
-    visibleTextBoundary: VisibleTextBoundaryState,
     onVisibleOutput?: () => void
   ): Promise<void> {
     if (source.kind === 'stream') {
@@ -792,8 +764,7 @@ export class DeepAgentRuntimeService {
             runId: context.runId,
             delta
           });
-        },
-        visibleTextBoundary
+        }
       );
       return;
     }
@@ -808,21 +779,18 @@ export class DeepAgentRuntimeService {
           runId: context.runId,
           delta
         });
-      },
-      visibleTextBoundary
+      }
     );
   }
 
   private async consumeToolCalls(
     calls: AsyncIterable<unknown>,
     context: RunExecutionContext,
-    visibleTextBoundary: VisibleTextBoundaryState,
     onVisibleOutput?: () => void
   ): Promise<void> {
     for await (const call of calls) {
       const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
       const input = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
-      this.beginPendingSkillEcho(name, input, visibleTextBoundary);
       onVisibleOutput?.();
       this.emit({
         type: 'tool_event',
@@ -847,7 +815,6 @@ export class DeepAgentRuntimeService {
 
       try {
         const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
-        this.capturePendingSkillEcho(name, input, output, visibleTextBoundary);
         onVisibleOutput?.();
         this.emit({
           type: 'tool_event',
@@ -870,7 +837,6 @@ export class DeepAgentRuntimeService {
         }
         this.emitTodoEvent(context.runId, output);
       } catch (error) {
-        this.clearPendingSkillEcho(name, input, visibleTextBoundary);
         const message = error instanceof Error ? redact(error.message) : 'Tool 执行失败。';
         onVisibleOutput?.();
         this.emit({
@@ -983,8 +949,7 @@ export class DeepAgentRuntimeService {
 
   private async consumeVisibleTextStream(
     stream: AsyncIterable<unknown>,
-    onDelta: (delta: string) => void,
-    visibleTextBoundary: VisibleTextBoundaryState
+    onDelta: (delta: string) => void
   ): Promise<void> {
     let pending = '';
     let released = false;
@@ -1001,7 +966,7 @@ export class DeepAgentRuntimeService {
       }
 
       pending += delta;
-      const classification = this.classifyVisibleText(pending, visibleTextBoundary);
+      const classification = recordUtils.classifyStreamedAssistantText(pending);
       if (classification === 'non_assistant') {
         pending = '';
         suppressMessage = true;
@@ -1019,149 +984,8 @@ export class DeepAgentRuntimeService {
     });
 
     if (!released && !suppressMessage && pending.length > 0) {
-      if (visibleTextBoundary.pendingSkillEchoes.length > 0) {
-        const finalClassification = this.classifyVisibleText(pending, visibleTextBoundary);
-        if (finalClassification !== 'assistant') {
-          return;
-        }
-        onDelta(pending);
-        return;
-      }
-      this.discardStaleSkillEchoBoundary(pending, visibleTextBoundary);
       onDelta(pending);
     }
-  }
-
-  private classifyVisibleText(
-    pending: string,
-    visibleTextBoundary: VisibleTextBoundaryState
-  ): recordUtils.StreamedAssistantTextClassification {
-    const directClassification = recordUtils.classifyStreamedAssistantText(pending);
-    if (directClassification === 'non_assistant') {
-      return 'non_assistant';
-    }
-
-    const selectedSkillClassification = classifySkillEchoText(pending, visibleTextBoundary.selectedSkillEchoCandidates);
-    if (selectedSkillClassification === 'non_assistant') {
-      return 'non_assistant';
-    }
-    if (selectedSkillClassification === 'pending') {
-      return 'pending';
-    }
-
-    const activeSkillEcho = visibleTextBoundary.pendingSkillEchoes[0];
-    if (activeSkillEcho?.candidates === null) {
-      return 'pending';
-    }
-    const skillEchoCandidates = activeSkillEcho?.candidates ?? [];
-    const skillEchoClassification = classifySkillEchoText(pending, skillEchoCandidates);
-    if (skillEchoClassification === 'non_assistant') {
-      visibleTextBoundary.pendingSkillEchoes.shift();
-      return 'non_assistant';
-    }
-    if (skillEchoClassification === 'pending') {
-      return 'pending';
-    }
-
-    if (skillEchoCandidates.length > 0) {
-      visibleTextBoundary.pendingSkillEchoes.shift();
-    }
-    return directClassification;
-  }
-
-  private discardStaleSkillEchoBoundary(pending: string, visibleTextBoundary: VisibleTextBoundaryState): void {
-    if (visibleTextBoundary.pendingSkillEchoes.length === 0) {
-      return;
-    }
-    const activeSkillEcho = visibleTextBoundary.pendingSkillEchoes[0];
-    if (activeSkillEcho?.candidates === null) {
-      return;
-    }
-    if (classifySkillEchoText(pending, activeSkillEcho.candidates) === 'assistant') {
-      visibleTextBoundary.pendingSkillEchoes.shift();
-    }
-  }
-
-  private beginPendingSkillEcho(
-    toolName: string,
-    input: unknown,
-    visibleTextBoundary: VisibleTextBoundaryState
-  ): void {
-    if (toolName !== 'read_file') {
-      return;
-    }
-    const path = readToolPath(input);
-    if (path === null || !isSkillInstructionPath(path)) {
-      return;
-    }
-    visibleTextBoundary.pendingSkillEchoes.push({
-      candidates: null
-    });
-  }
-
-  private capturePendingSkillEcho(
-    toolName: string,
-    input: unknown,
-    output: unknown,
-    visibleTextBoundary: VisibleTextBoundaryState
-  ): void {
-    if (toolName !== 'read_file') {
-      return;
-    }
-    const path = readToolPath(input);
-    if (path === null || !isSkillInstructionPath(path)) {
-      return;
-    }
-    const outputText = recordUtils.readNonEmptyString(output);
-    if (outputText === null) {
-      this.clearPendingSkillEcho(toolName, input, visibleTextBoundary);
-      return;
-    }
-    const candidates = readSkillEchoCandidates(outputText);
-    if (candidates.length === 0) {
-      this.clearPendingSkillEcho(toolName, input, visibleTextBoundary);
-      return;
-    }
-    const pendingSkillEcho = visibleTextBoundary.pendingSkillEchoes.find((item) => item.candidates === null);
-    if (pendingSkillEcho !== undefined) {
-      pendingSkillEcho.candidates = candidates;
-      return;
-    }
-    visibleTextBoundary.pendingSkillEchoes.push({ candidates });
-  }
-
-  private clearPendingSkillEcho(
-    toolName: string,
-    input: unknown,
-    visibleTextBoundary: VisibleTextBoundaryState
-  ): void {
-    if (toolName !== 'read_file') {
-      return;
-    }
-    const path = readToolPath(input);
-    if (path === null || !isSkillInstructionPath(path)) {
-      return;
-    }
-    const pendingIndex = visibleTextBoundary.pendingSkillEchoes.findIndex((item) => item.candidates === null);
-    if (pendingIndex === -1) {
-      return;
-    }
-    visibleTextBoundary.pendingSkillEchoes.splice(pendingIndex, 1);
-  }
-
-  private createVisibleTextBoundaryState(selectedSkillIds: readonly string[]): VisibleTextBoundaryState {
-    return {
-      pendingSkillEchoes: [],
-      selectedSkillEchoCandidates: selectedSkillIds.flatMap((skillId) => this.readSelectedSkillEchoCandidates(skillId))
-    };
-  }
-
-  private readSelectedSkillEchoCandidates(skillId: string): string[] {
-    const skillFile = join(this.paths.skillsDir, skillId, 'SKILL.md');
-    if (!existsSync(skillFile)) {
-      return [];
-    }
-    return readSkillEchoCandidates(readFileSync(skillFile, 'utf8'));
   }
 
   private emit(event: ChatRunEvent): void {
@@ -1229,70 +1053,6 @@ async function* createStringAsyncIterable(values: readonly string[]): AsyncGener
   for (const value of values) {
     yield value;
   }
-}
-
-function classifySkillEchoText(
-  text: string,
-  candidates: readonly string[]
-): recordUtils.StreamedAssistantTextClassification {
-  const normalizedText = normalizeVisibleBoundaryText(text);
-  if (normalizedText.length === 0 || candidates.length === 0) {
-    return 'assistant';
-  }
-
-  let sawPrefixMatch = false;
-  for (const candidate of candidates) {
-    const normalizedCandidate = normalizeVisibleBoundaryText(candidate);
-    if (normalizedCandidate.length === 0) {
-      continue;
-    }
-    if (normalizedCandidate === normalizedText) {
-      return 'non_assistant';
-    }
-    if (normalizedCandidate.startsWith(normalizedText)) {
-      sawPrefixMatch = true;
-      continue;
-    }
-    if (normalizedText.startsWith(normalizedCandidate)) {
-      return 'non_assistant';
-    }
-  }
-
-  return sawPrefixMatch ? 'pending' : 'assistant';
-}
-
-function normalizeVisibleBoundaryText(text: string): string {
-  return text.replace(/\r\n/g, '\n').trim();
-}
-
-function readSkillEchoCandidates(text: string): string[] {
-  const candidates = new Set<string>();
-  const normalizedText = normalizeVisibleBoundaryText(text);
-  if (normalizedText.length > 0) {
-    candidates.add(normalizedText);
-  }
-
-  const skillBody = normalizeVisibleBoundaryText(text.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, ''));
-  if (skillBody.length > 0) {
-    candidates.add(skillBody);
-  }
-
-  return [...candidates];
-}
-
-function readToolPath(value: unknown): string | null {
-  if (!recordUtils.isRecord(value)) {
-    return null;
-  }
-  return (
-    recordUtils.readNonEmptyString(recordUtils.readRecordValue(value, 'path')) ??
-    recordUtils.readNonEmptyString(recordUtils.readRecordValue(value, 'filePath')) ??
-    recordUtils.readNonEmptyString(recordUtils.readRecordValue(value, 'file_path'))
-  );
-}
-
-function isSkillInstructionPath(path: string): boolean {
-  return path.replaceAll('\\', '/').toLowerCase().endsWith('/skill.md');
 }
 
 type ProviderUsageAccumulator = {

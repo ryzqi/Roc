@@ -101,7 +101,7 @@ class RocExecuteBackend implements SandboxBackendProtocolV2 {
   }
 }
 
-class SelectedSkillsBackend {
+class RocSkillsBackend {
   constructor(
     private readonly delegate: FilesystemBackend,
     selectedSkillIds?: readonly string[]
@@ -149,7 +149,7 @@ class SelectedSkillsBackend {
       return Promise.resolve({ error: DISALLOWED_SKILL_PATH_ERROR });
     }
     return this.delegate.grep(pattern, normalizedPath, glob).then((result) => {
-      if (result.error !== undefined || result.matches === undefined) {
+      if (!this.shouldFilterRootResults(path) || result.error !== undefined || result.matches === undefined) {
         return result;
       }
       return {
@@ -165,7 +165,7 @@ class SelectedSkillsBackend {
       return Promise.resolve({ error: DISALLOWED_SKILL_PATH_ERROR });
     }
     return this.delegate.glob(pattern, normalizedPath).then((result) => {
-      if (result.error !== undefined || result.files === undefined) {
+      if (!this.shouldFilterRootResults(path) || result.error !== undefined || result.files === undefined) {
         return result;
       }
       return {
@@ -247,12 +247,19 @@ class SelectedSkillsBackend {
       ? normalized.slice(SKILLS_ROUTE.length - 1)
       : normalized;
     const candidate = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
-    return this.isAllowedSkillPath(candidate) ? candidate : null;
+    return candidate;
   }
 
   private isSkillsRoot(path: string): boolean {
     const normalized = path.replaceAll('\\', '/');
     return normalized === '/' || normalized === SKILLS_ROUTE || normalized === '/skills';
+  }
+
+  private shouldFilterRootResults(path: string | null | undefined): boolean {
+    if (path === undefined || path === null || path.length === 0) {
+      return true;
+    }
+    return this.isSkillsRoot(path);
   }
 
   private isAllowedSkillPath(path: string): boolean {
@@ -291,7 +298,7 @@ function createRouteBackends(input: {
     virtualMode: true
   });
   const routes: Record<string, AnyBackendProtocol> = {
-    [SKILLS_ROUTE]: new SelectedSkillsBackend(skillsBackendBase, input.selectedSkillIds),
+    [SKILLS_ROUTE]: new RocSkillsBackend(skillsBackendBase, input.selectedSkillIds),
     [MEMORY_ROUTE]: new StoreBackend({
       store: input.store,
       namespace: ['roc', 'memory', 'filesystem']

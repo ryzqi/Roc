@@ -89,10 +89,18 @@ describe('deep agent backend', () => {
     const rootSkills = await backend.ls('/skills/');
     const selectedSkillFile = await backend.read('/skills/project-review/SKILL.md');
     const unselectedSkillDirectory = await backend.ls('/skills/alpha-review/');
+    const rootSkillGrep = await backend.grep('project', '/skills/');
+    const directAlphaGrep = await backend.grep('alpha', '/skills/alpha-review/');
+    const rootSkillGlob = await backend.glob('**/*.md', '/skills/');
+    const directAlphaGlob = await backend.glob('**/*.md', '/skills/alpha-review/');
 
     expect(rootSkills.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/']);
     expect(selectedSkillFile.content).toBe('# project\n');
-    expect(unselectedSkillDirectory.error).toBeTruthy();
+    expect(unselectedSkillDirectory.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
+    expect(rootSkillGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(directAlphaGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
+    expect(rootSkillGlob.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(directAlphaGlob.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
   });
 
   it('runs agent execute in the selected workspace and records bypass metadata when rtk is missing', async () => {
