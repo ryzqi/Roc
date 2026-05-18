@@ -246,9 +246,11 @@ async function waitForCapabilitySelection(page, { mcpCount, skillCount, expected
   try {
     await page.waitForFunction(
       ({ mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
-        const toolText = document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '';
-        const skillText = document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '';
-        return toolText.includes(String(expectedMcpCount)) && skillText.includes(String(expectedSkillCount));
+        const toolTrigger = document.querySelector('[data-testid="chat-tool-trigger"]');
+        const skillTrigger = document.querySelector('[data-testid="chat-skill-trigger"]');
+        const toolActive = toolTrigger instanceof HTMLElement && toolTrigger.classList.contains('active');
+        const skillActive = skillTrigger instanceof HTMLElement && skillTrigger.classList.contains('active');
+        return toolActive === (expectedMcpCount > 0) && skillActive === (expectedSkillCount > 0);
       },
       { mcpCount, skillCount },
       { timeout: 5000 }
@@ -256,7 +258,9 @@ async function waitForCapabilitySelection(page, { mcpCount, skillCount, expected
   } catch (error) {
     const triggerEvidence = await page.evaluate(() => ({
       toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
-      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? ''
+      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '',
+      toolTriggerClass: document.querySelector('[data-testid="chat-tool-trigger"]')?.className ?? '',
+      skillTriggerClass: document.querySelector('[data-testid="chat-skill-trigger"]')?.className ?? ''
     }));
     throw new Error(
       `Capability selection wait failed for mcp=${mcpCount}, skill=${skillCount}: ${JSON.stringify(triggerEvidence)}`,
@@ -293,7 +297,9 @@ async function waitForCapabilitySelection(page, { mcpCount, skillCount, expected
   const triggerEvidence = await page.evaluate(() => {
     return {
       toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
-      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? ''
+      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '',
+      toolTriggerClass: document.querySelector('[data-testid="chat-tool-trigger"]')?.className ?? '',
+      skillTriggerClass: document.querySelector('[data-testid="chat-skill-trigger"]')?.className ?? ''
     };
   });
   return {

@@ -224,3 +224,31 @@ describe('chat composer skills popover', () => {
     expect(html).toContain('class="composer-choice-description composer-choice-description--clamp-2">只保留这一段说明文本。</small>');
   });
 });
+
+describe('chat composer capability triggers', () => {
+  it('keeps tool and skill triggers active without numeric badges', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatComposer, {
+        chatInput: '继续',
+        onChatInputChange: () => {},
+        selectedAttachments: [],
+        onSelectedAttachmentsChange: () => {},
+        activeComposerPopover: null,
+        onActiveComposerPopoverChange: () => {},
+        submitting: false,
+        state: createLoadedState({
+          selectedMcpServers: ['exa-hosted'],
+          selectedSkills: ['deep-review']
+        }),
+        updateLoadedState: () => {},
+        onSubmit: async () => {}
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-tool-trigger"');
+    expect(html).toContain('data-testid="chat-skill-trigger"');
+    expect(html).toContain('composer-tool composer-tool--tools active');
+    expect(html).toContain('composer-tool composer-tool--skills active');
+    expect(html).not.toContain('tool-badge');
+  });
+});

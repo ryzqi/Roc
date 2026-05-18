@@ -156,7 +156,6 @@ export function ChatComposer({
               aria-label="工具"
             >
               <ComposerActionIcon kind="tools" />
-              <span className="tool-badge">{state.selectedMcpServers.length}</span>
             </button>
             {activeComposerPopover !== 'tools' ? null : (
               <div className="composer-popover" data-testid="chat-tool-popover">
@@ -223,7 +222,6 @@ export function ChatComposer({
               aria-label="技能"
             >
               <ComposerActionIcon kind="skills" />
-              <span className="tool-badge">{state.selectedSkills.length}</span>
             </button>
             {activeComposerPopover !== 'skills' ? null : (
               <div className="composer-popover" data-testid="chat-skill-popover">
