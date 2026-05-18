@@ -114,6 +114,12 @@ describe('record-utils assistant text boundaries', () => {
     ).toBe('assistant');
   });
 
+  it('treats raw skill frontmatter text as assistant text unless the message is structurally tagged', () => {
+    expect(
+      classifyStreamedAssistantText('---\nname: project-review\ndescription: Review a project\n---\n# Project Review')
+    ).toBe('assistant');
+  });
+
   it('identifies top-level server tool result messages as non-assistant text', () => {
     expect(
       isNonAssistantTextMessage({

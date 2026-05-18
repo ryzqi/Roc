@@ -1,5 +1,15 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
+import { listSkills, parseSkillMetadata, type LoaderSkillMetadata } from 'deepagents';
 import type {
   SkillFileEntry,
   SkillFilePreviewRequest,
@@ -10,6 +20,7 @@ import type {
   SkillSnapshot
 } from '../../shared/types';
 import { RocDomainError } from './errors';
+import type { LogService } from './log-service';
 import type { RocPaths } from './paths';
 
 type SkillState = {
@@ -43,15 +54,16 @@ export class SkillService {
       return [];
     }
 
+    const officialSkillIndex = this.buildOfficialSkillIndex();
+
     return readdirSync(this.paths.skillsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => this.readSkill(entry.name))
+      .map((entry) => this.readSkill(entry.name, officialSkillIndex))
       .filter((entry): entry is SkillSnapshot => entry !== null);
   }
 
   importSkill(request: SkillImportRequest): SkillSnapshot {
     const sourcePath = this.requireText(request.sourcePath, 'skill_source_empty', 'Skill sourcePath 不能为空。', '请选择本地 Skill 目录。');
-    const id = this.normalizeSkillId(request.id);
     const sourceRoot = resolve(sourcePath);
     const sourceSkillFile = join(sourceRoot, 'SKILL.md');
     if (!existsSync(sourceSkillFile)) {
@@ -63,7 +75,19 @@ export class SkillService {
         userAction: '请选择包含 SKILL.md 的 Skill 目录。'
       });
     }
+    const metadata = parseSkillMetadata(sourceSkillFile, 'user');
+    if (metadata === null) {
+      throw new RocDomainError({
+        code: 'skill_invalid',
+        message: 'SKILL.md 不符合 Deep Agents Skill 规范。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请修复 SKILL.md frontmatter 后重试。'
+      });
+    }
+    const id = this.normalizeSkillId(metadata.name);
     const targetRoot = join(this.paths.skillsDir, id);
+    const priorState = this.readState(id);
     if (resolve(targetRoot) !== sourceRoot) {
       rmSync(targetRoot, { recursive: true, force: true });
       mkdirSync(targetRoot, { recursive: true });
@@ -71,8 +95,8 @@ export class SkillService {
         cpSync(join(sourceRoot, entry), join(targetRoot, entry), { recursive: true });
       }
     }
-    this.writeState(id, defaultSkillState);
-    const imported = this.readSkill(id);
+    this.writeState(id, priorState);
+    const imported = this.readSkill(id, this.buildOfficialSkillIndex());
     if (imported === null) {
       throw new RocDomainError({
         code: 'skill_import_failed',
@@ -85,9 +109,48 @@ export class SkillService {
     return imported;
   }
 
+  migrateLegacySkills(input: { legacySkillsDir: string; logService?: Pick<LogService, 'append'> }): void {
+    const legacyRoot = resolve(input.legacySkillsDir);
+    const currentRoot = resolve(this.paths.skillsDir);
+    if (legacyRoot === currentRoot || !existsSync(legacyRoot)) {
+      return;
+    }
+
+    const entries = readdirSync(legacyRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    if (entries.length === 0) {
+      return;
+    }
+
+    mkdirSync(this.paths.skillsDir, { recursive: true });
+    const summary = {
+      scannedSkills: entries.length,
+      createdSkills: 0,
+      copiedFiles: 0,
+      updatedFiles: 0,
+      skippedFiles: 0
+    };
+
+    for (const entry of entries) {
+      const sourceDir = join(legacyRoot, entry.name);
+      const targetDir = join(this.paths.skillsDir, entry.name);
+      if (!existsSync(targetDir)) {
+        summary.createdSkills += 1;
+      }
+      mkdirSync(targetDir, { recursive: true });
+      this.mergeSkillDirectory(sourceDir, targetDir, summary);
+    }
+
+    input.logService?.append({
+      level: 'info',
+      message: 'Migrated legacy root-scoped skills into the canonical user skill library.',
+      data: summary
+    });
+  }
+
   setEnabled(id: string, enabled: boolean): SkillSnapshot {
     const skillId = this.normalizeSkillId(id);
-    const skill = this.readSkill(skillId);
+    const officialSkillIndex = this.buildOfficialSkillIndex();
+    const skill = this.readSkill(skillId, officialSkillIndex);
     if (skill === null) {
       throw this.notFound(skillId);
     }
@@ -95,7 +158,7 @@ export class SkillService {
       schemaVersion: 1,
       enabled
     });
-    const updated = this.readSkill(skillId);
+    const updated = this.readSkill(skillId, officialSkillIndex);
     if (updated === null) {
       throw this.notFound(skillId);
     }
@@ -230,48 +293,34 @@ export class SkillService {
     };
   }
 
-  private readSkill(id: string): SkillSnapshot | null {
+  private readSkill(id: string, officialSkillIndex: ReadonlyMap<string, LoaderSkillMetadata>): SkillSnapshot | null {
     const skillPath = join(this.paths.skillsDir, id);
     const skillFile = join(skillPath, 'SKILL.md');
     if (!existsSync(skillFile)) {
       return null;
     }
 
+    const metadata = parseSkillMetadata(skillFile, 'user');
+    if (metadata === null) {
+      return this.createInvalidSkillSnapshot(id, skillPath, 'SKILL.md 不符合 Deep Agents Skill 规范。');
+    }
+
+    if (metadata.name !== id || !officialSkillIndex.has(resolve(skillFile))) {
+      return this.createInvalidSkillSnapshot(
+        id,
+        skillPath,
+        `SKILL.md name "${metadata.name}" 必须与目录名 "${id}" 一致。`,
+        metadata.description
+      );
+    }
+
     const state = this.readState(id);
-    const content = readFileSync(skillFile, 'utf8');
-    const nameMatch = /^name:\s*(.+)$/m.exec(content);
-    const descriptionMatch = /^description:\s*(.+)$/m.exec(content);
-
-    if (nameMatch === null) {
-      return {
-        id,
-        name: id,
-        enabled: false,
-        path: skillPath,
-        description: 'SKILL.md 缺少 name frontmatter。',
-        status: 'invalid',
-        lastError: 'SKILL.md 缺少 name frontmatter。'
-      };
-    }
-
-    if (descriptionMatch === null) {
-      return {
-        id,
-        name: nameMatch[1].trim(),
-        enabled: false,
-        path: skillPath,
-        description: 'SKILL.md 缺少 description frontmatter。',
-        status: 'invalid',
-        lastError: 'SKILL.md 缺少 description frontmatter。'
-      };
-    }
-
     return {
-      id,
-      name: nameMatch[1].trim(),
+      id: metadata.name,
+      name: metadata.name,
       enabled: state.enabled,
       path: skillPath,
-      description: descriptionMatch[1].trim(),
+      description: metadata.description,
       status: 'ready',
       lastError: null
     };
@@ -294,6 +343,29 @@ export class SkillService {
 
   private writeState(id: string, state: SkillState): void {
     writeFileSync(join(this.paths.skillsDir, id, 'roc.skill.json'), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  }
+
+  private buildOfficialSkillIndex(): Map<string, LoaderSkillMetadata> {
+    return new Map(
+      listSkills({ userSkillsDir: this.paths.skillsDir }).map((skill) => [resolve(skill.path), skill] as const)
+    );
+  }
+
+  private createInvalidSkillSnapshot(
+    id: string,
+    skillPath: string,
+    lastError: string,
+    description = lastError
+  ): SkillSnapshot {
+    return {
+      id,
+      name: id,
+      enabled: false,
+      path: skillPath,
+      description,
+      status: 'invalid',
+      lastError
+    };
   }
 
   private normalizeSkillId(value: string): string {
@@ -379,5 +451,46 @@ export class SkillService {
 
   private isSkillBinaryBuffer(buffer: Buffer): boolean {
     return buffer.subarray(0, 4096).includes(0);
+  }
+
+  private mergeSkillDirectory(
+    sourceDir: string,
+    targetDir: string,
+    summary: { copiedFiles: number; updatedFiles: number; skippedFiles: number }
+  ): void {
+    for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+      const sourcePath = join(sourceDir, entry.name);
+      const targetPath = join(targetDir, entry.name);
+      if (entry.isDirectory()) {
+        mkdirSync(targetPath, { recursive: true });
+        this.mergeSkillDirectory(sourcePath, targetPath, summary);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      if (!existsSync(targetPath)) {
+        cpSync(sourcePath, targetPath);
+        summary.copiedFiles += 1;
+        continue;
+      }
+
+      if (entry.name === 'roc.skill.json') {
+        summary.skippedFiles += 1;
+        continue;
+      }
+
+      const sourceStat = statSync(sourcePath);
+      const targetStat = statSync(targetPath);
+      if (sourceStat.mtimeMs > targetStat.mtimeMs) {
+        cpSync(sourcePath, targetPath, { force: true });
+        summary.updatedFiles += 1;
+        continue;
+      }
+
+      summary.skippedFiles += 1;
+    }
   }
 }

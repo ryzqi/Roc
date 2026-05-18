@@ -74,7 +74,7 @@ runWorkspaceGit(['remote', 'add', 'origin', remoteRoot]);
 runWorkspaceGit(['push', '-u', 'origin', 'master']);
 writeFileSync(
   join(skillSourceRoot, 'SKILL.md'),
-  '---\nname: Smoke Skill\ndescription: Smoke skill validates Phase 5 import.\n---\n\n# Smoke Skill\n',
+  '---\nname: smoke-skill\ndescription: Smoke skill validates Phase 5 import.\n---\n\n# Smoke Skill\n',
   'utf8'
 );
 
@@ -576,8 +576,7 @@ try {
   };
   const importedSkillId = await page.evaluate(async (sourcePath) => {
     const result = await window.roc.skills.importSkill({
-      sourcePath,
-      id: 'smoke-skill'
+      sourcePath
     });
     if (!result.ok) {
       throw new Error(result.error.message);

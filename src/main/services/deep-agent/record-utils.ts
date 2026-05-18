@@ -93,14 +93,6 @@ export function classifyStreamedAssistantText(text: string): StreamedAssistantTe
     return 'pending';
   }
 
-  if (isSkillFrontMatterText(text)) {
-    return 'non_assistant';
-  }
-
-  if (isPotentialSkillFrontMatterPrefix(text)) {
-    return 'pending';
-  }
-
   return 'assistant';
 }
 
@@ -257,15 +249,6 @@ function isPotentialHostedSearchResultTextPrefix(text: string): boolean {
   }
 
   return expectedIndex < expectedLinePrefixes.length;
-}
-
-function isSkillFrontMatterText(text: string): boolean {
-  return text.startsWith('---\n') && text.includes('\nname: ') && text.includes('\ndescription: ') && text.includes('\n---');
-}
-
-function isPotentialSkillFrontMatterPrefix(text: string): boolean {
-  const normalized = text.replace(/\r\n/g, '\n');
-  return normalized === '---' || normalized.startsWith('---\n') && !normalized.includes('\n---');
 }
 
 function hasSkillInstructionPath(value: unknown): boolean {

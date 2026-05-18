@@ -47,5 +47,5 @@ export type SkillFilePreviewResult = {
 
 export type SkillImportRequest = {
   sourcePath: string;
-  id: string;
+  id?: string;
 };

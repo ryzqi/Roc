@@ -32,6 +32,7 @@ const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
 const MEMORY_ROUTE = '/memory/';
 const DISALLOWED_SKILL_PATH_ERROR = 'Roc 仅允许本轮已选中的 Skill 路径。';
+const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
 
 export type RocCompositeBackend = CompositeBackend &
   SandboxBackendProtocolV2 & {
@@ -103,12 +104,12 @@ class RocExecuteBackend implements SandboxBackendProtocolV2 {
 class SelectedSkillsBackend {
   constructor(
     private readonly delegate: FilesystemBackend,
-    selectedSkillIds: readonly string[]
+    selectedSkillIds?: readonly string[]
   ) {
-    this.selectedSkillIds = new Set(selectedSkillIds);
+    this.selectedSkillIds = selectedSkillIds === undefined ? null : new Set(selectedSkillIds);
   }
 
-  private readonly selectedSkillIds: ReadonlySet<string>;
+  private readonly selectedSkillIds: ReadonlySet<string> | null;
 
   ls(path: string): Promise<LsResult> {
     const normalizedPath = this.normalizeDelegatePath(path);
@@ -179,7 +180,7 @@ class SelectedSkillsBackend {
     if (normalizedPath === null) {
       return Promise.resolve({ error: DISALLOWED_SKILL_PATH_ERROR });
     }
-    return this.delegate.write(normalizedPath, content);
+    return Promise.resolve({ error: READ_ONLY_SKILLS_ERROR });
   }
 
   edit(filePath: string, oldString: string, newString: string, replaceAll?: boolean): Promise<EditResult> {
@@ -187,45 +188,16 @@ class SelectedSkillsBackend {
     if (normalizedPath === null) {
       return Promise.resolve({ error: DISALLOWED_SKILL_PATH_ERROR });
     }
-    return this.delegate.edit(normalizedPath, oldString, newString, replaceAll);
+    return Promise.resolve({ error: READ_ONLY_SKILLS_ERROR });
   }
 
   uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
-    const acceptedFiles: Array<[string, Uint8Array]> = [];
-    const rejectedFiles = new Set<string>();
-
-    for (const [path, content] of files) {
-      const normalizedPath = this.normalizeDelegatePath(path);
-      if (normalizedPath === null) {
-        rejectedFiles.add(path);
-        continue;
-      }
-      acceptedFiles.push([normalizedPath, content]);
-    }
-
-    if (acceptedFiles.length === 0) {
-      return Promise.resolve(
-        files.map(([path]) => ({
-          path,
-          error: rejectedFiles.has(path) ? 'invalid_path' : null
-        }))
-      );
-    }
-
-    return this.delegate.uploadFiles(acceptedFiles).then((responses) => {
-      const acceptedByNormalizedPath = new Map(responses.map((response) => [response.path, response]));
-      return files.map(([path]) => {
-        if (rejectedFiles.has(path)) {
-          return {
-            path,
-            error: 'invalid_path'
-          };
-        }
-        const normalizedPath = this.normalizeDelegatePath(path);
-        const response = normalizedPath === null ? undefined : acceptedByNormalizedPath.get(normalizedPath);
-        return response ?? { path, error: 'invalid_path' };
-      });
-    });
+    return Promise.resolve(
+      files.map(([path]) => ({
+        path,
+        error: this.normalizeDelegatePath(path) === null ? 'invalid_path' : 'permission_denied'
+      }))
+    );
   }
 
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
@@ -284,6 +256,9 @@ class SelectedSkillsBackend {
   }
 
   private isAllowedSkillPath(path: string): boolean {
+    if (this.selectedSkillIds === null) {
+      return true;
+    }
     const normalized = path.replaceAll('\\', '/');
     const withoutPrefix = normalized.startsWith(SKILLS_ROUTE)
       ? normalized.slice(SKILLS_ROUTE.length)
@@ -316,10 +291,7 @@ function createRouteBackends(input: {
     virtualMode: true
   });
   const routes: Record<string, AnyBackendProtocol> = {
-    [SKILLS_ROUTE]:
-      input.selectedSkillIds === undefined
-        ? skillsBackendBase
-        : new SelectedSkillsBackend(skillsBackendBase, input.selectedSkillIds),
+    [SKILLS_ROUTE]: new SelectedSkillsBackend(skillsBackendBase, input.selectedSkillIds),
     [MEMORY_ROUTE]: new StoreBackend({
       store: input.store,
       namespace: ['roc', 'memory', 'filesystem']

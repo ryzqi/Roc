@@ -671,6 +671,46 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
+  it('mounts selected skills as read-only when passed to deepagents', async () => {
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
+      ['---', 'name: project-review', 'description: Review the current project', '---', ''].join('\n'),
+      'utf8'
+    );
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: 'Use the selected skill.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['project-review']
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | { backend?: RocCompositeBackend }
+      | undefined;
+    const writeResult = await call?.backend?.write('/skills/project-review/notes.md', 'mutate\n')!;
+    const editResult = await call?.backend?.edit(
+      '/skills/project-review/SKILL.md',
+      'Review the current project',
+      'mutated'
+    )!;
+
+    expect(writeResult.error).toBeTruthy();
+    expect(editResult.error).toBeTruthy();
+  });
+
   it('exposes only the selected skills under the official /skills/ source root', async () => {
     mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
     writeFileSync(

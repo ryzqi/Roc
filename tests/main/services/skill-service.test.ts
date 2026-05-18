@@ -1,5 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RocDomainError } from '../../../src/main/services/errors';
@@ -33,6 +33,24 @@ afterEach(() => {
 });
 
 describe('SkillService.listFiles', () => {
+  it('stores skills under the configured Roc data root', () => {
+    expect(paths.skillsDir).toBe(join(root, 'skills'));
+  });
+
+  it('marks skills invalid when the directory name does not match the official skill name', () => {
+    writeSkill('alias-review', {
+      'SKILL.md': '---\nname: project-review\ndescription: canonical skill name\n---\n'
+    });
+
+    expect(service.list()).toContainEqual(
+      expect.objectContaining({
+        id: 'alias-review',
+        name: 'alias-review',
+        status: 'invalid'
+      })
+    );
+  });
+
   it('returns root entries sorted with directories first', () => {
     writeSkill('alpha', {
       'SKILL.md': '---\nname: alpha\ndescription: alpha skill\n---\n',
@@ -167,5 +185,25 @@ describe('SkillService.readFile', () => {
     writeSkill('escape-skill', { 'SKILL.md': '---\nname: escape-skill\ndescription: e\n---\n' });
 
     expect(() => service.readFile({ id: 'escape-skill', relativePath: '../alpha/SKILL.md' })).toThrowError(RocDomainError);
+  });
+});
+
+describe('SkillService.importSkill', () => {
+  it('derives the installed skill id from official metadata instead of caller input', () => {
+    const source = mkdtempSync(join(tmpdir(), 'roc-skill-import-source-'));
+    try {
+      writeFileSync(
+        join(source, 'SKILL.md'),
+        '---\nname: imported-review\ndescription: imported skill\n---\n',
+        'utf8'
+      );
+
+      const imported = service.importSkill({ sourcePath: source } as never);
+
+      expect(imported.id).toBe('imported-review');
+      expect(imported.path).toBe(join(paths.skillsDir, 'imported-review'));
+    } finally {
+      rmSync(source, { recursive: true, force: true });
+    }
   });
 });

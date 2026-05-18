@@ -137,6 +137,7 @@ describe('Roc foundation services', () => {
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"providers"');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"mcp"');
     expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
+    expect(services.paths.skillsDir).toBe(join(root, 'skills'));
     expect(existsSync(join(root, 'skills'))).toBe(true);
     expect(existsSync(join(root, 'tasks', 'recovery'))).toBe(true);
     expect(existsSync(join(root, 'rtk', 'tee'))).toBe(true);
@@ -2014,7 +2015,7 @@ describe('Roc foundation services', () => {
         'utf8'
       );
 
-      const imported = services.skillService.importSkill({ sourcePath: source, id: 'project-review' });
+      const imported = services.skillService.importSkill({ sourcePath: source });
       const disabled = services.skillService.setEnabled('project-review', false);
       const enabled = services.skillService.setEnabled('project-review', true);
       const skills = services.skillService.list();

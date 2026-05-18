@@ -1,6 +1,6 @@
+import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
@@ -679,17 +679,23 @@ export class DeepAgentRuntimeService {
                 }
               });
             }
-            this.emit({
-              type: 'message_delta',
-              runId: context.runId,
-              delta
-            });
-          },
-          visibleTextBoundary
-        );
+              this.emit({
+                type: 'message_delta',
+                runId: context.runId,
+                delta
+              });
+            },
+            visibleTextBoundary
+          );
 
       const consumeReasoning = () =>
-        this.consumeReasoningSource(reasoningSource as ReasoningSource, context, reasoningChunks, visibleTextBoundary, onVisibleOutput);
+        this.consumeReasoningSource(
+          reasoningSource as ReasoningSource,
+          context,
+          reasoningChunks,
+          visibleTextBoundary,
+          onVisibleOutput
+        );
 
       if (visibleTextBoundary.pendingSkillEchoes.length > 0) {
         if (reasoningSource !== null) {

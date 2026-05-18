@@ -167,6 +167,31 @@ describe('deep agent backend', () => {
     }
   });
 
+  it('keeps /skills/ mounted read-only during agent runs', async () => {
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
+      '---\nname: project-review\ndescription: project review\n---\n',
+      'utf8'
+    );
+    const backend: RocCompositeBackend = createBackend({
+      workspaceService: services.workspaceService,
+      paths: services.paths,
+      shellExecutionService: services.shellExecutionService,
+      store: new InMemoryStore(),
+      selectedSkillIds: ['project-review']
+    }).backend;
+
+    const writeResult = await backend.write('/skills/project-review/notes.md', 'mutate\n');
+    const editResult = await backend.edit('/skills/project-review/SKILL.md', 'project review', 'mutated');
+
+    expect(writeResult.error).toBeTruthy();
+    expect(editResult.error).toBeTruthy();
+    expect(readFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), 'utf8')).toContain(
+      'description: project review'
+    );
+  });
+
   it('rejects writes outside the mounted routes', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
     try {
