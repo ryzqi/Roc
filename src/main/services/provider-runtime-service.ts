@@ -142,14 +142,15 @@ export class ProviderRuntimeService {
     if (
       request.provider.type !== 'openai_compatible' &&
       request.provider.type !== 'anthropic_compatible' &&
-      request.provider.type !== 'nvidia'
+      request.provider.type !== 'nvidia' &&
+      request.provider.type !== 'llama_cpp'
     ) {
       throw new RocDomainError({
         code: 'provider_type_unsupported',
         message: '当前 Provider 类型尚未支持测试或聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible 或 NVIDIA Provider。'
+        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
       });
     }
     if (this.deterministicTransport !== null) {

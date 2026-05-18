@@ -98,6 +98,19 @@ describe('settings model helpers', () => {
       maxTokens: '',
       thinking: false
     });
+    expect(createProviderDraft('llama_cpp')).toEqual({
+      mode: 'edit',
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:8081/v1',
+      apiKey: '',
+      enabled: true,
+      modelsText: '',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
+    });
   });
 
   it('builds NVIDIA drafts from existing enabled model lists', () => {
@@ -144,6 +157,45 @@ describe('settings model helpers', () => {
       temperature: '0.2',
       maxTokens: '4096',
       thinking: true
+    });
+  });
+
+  it('builds llama.cpp drafts from existing enabled model lists while preserving the saved endpoint', () => {
+    const provider: ProviderConfig = {
+      id: 'llama_cpp',
+      name: 'Ignored llama.cpp Name',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      credentialRef: null,
+      enabled: false,
+      models: [
+        {
+          id: 'qwen3.5-4b',
+          displayName: 'Qwen 3.5 4B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: {
+        temperature: 0.6,
+        maxTokens: 4096,
+        thinking: true
+      }
+    };
+
+    expect(createProviderDraft('llama_cpp', provider)).toEqual({
+      mode: 'edit',
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      apiKey: '',
+      enabled: false,
+      modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
     });
   });
 
@@ -237,6 +289,33 @@ describe('settings model helpers', () => {
         maxTokens: 16384,
         thinking: true
       }
+    });
+  });
+
+  it('builds the fixed llama.cpp provider config from model list text while allowing an empty API key', () => {
+    const draft = {
+      ...createProviderDraft('llama_cpp'),
+      endpoint: 'http://127.0.0.1:9090/v1',
+      modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
+      apiKey: ''
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      credentialRef: null,
+      enabled: true,
+      models: [
+        {
+          id: 'qwen3.5-4b',
+          displayName: 'Qwen 3.5 4B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
     });
   });
 
@@ -590,6 +669,9 @@ describe('settings model helpers', () => {
   it('providerTypeMeta returns Anthropic defaults for anthropic_compatible', () => {
     expect(providerTypeMeta('anthropic_compatible')).toEqual({
       defaultBaseUrl: 'https://api.anthropic.com'
+    });
+    expect(providerTypeMeta('llama_cpp')).toEqual({
+      defaultBaseUrl: 'http://127.0.0.1:8081/v1'
     });
   });
 });

@@ -108,6 +108,48 @@ describe('LangChainModelFactory', () => {
     });
   });
 
+  it('builds a fixed llama.cpp ChatOpenAI model with cache_prompt and no API key requirement', async () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen3.5-4b',
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: null,
+          enabled: true,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+
+    expect(result.provider.id).toBe('llama_cpp');
+    expect(result.modelId).toBe('qwen3.5-4b');
+    expect(result.runtime.providerType).toBe('llama_cpp');
+    expect(result.runtime.baseUrl).toBe('http://127.0.0.1:9090/v1');
+    expect(result.runtime.streaming).toBe(false);
+    expect(result.runtime.modelKwargs).toEqual({
+      cache_prompt: true
+    });
+    expect((result.model as { clientConfig?: { baseURL?: string; maxRetries?: number } }).clientConfig).toMatchObject({
+      baseURL: 'http://127.0.0.1:9090/v1',
+      maxRetries: 0
+    });
+  });
+
   it('passes Anthropic prompt cache TTL through the model factory when requested', async () => {
     services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
     services.configService.saveProviders({

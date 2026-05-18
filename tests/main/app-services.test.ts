@@ -1585,6 +1585,91 @@ describe('Roc foundation services', () => {
     }
   });
 
+  it('tests the fixed llama.cpp provider through the live transport without sending Authorization when no API key is configured', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const fakeProvider = await startFakeProvider(
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'OK'
+            },
+            finish_reason: 'stop'
+          }
+        ],
+        usage: {
+          prompt_tokens: 11,
+          completion_tokens: 1,
+          total_tokens: 12
+        }
+      },
+      200
+    );
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'llama_cpp',
+            name: 'llama.cpp',
+            type: 'llama_cpp',
+            endpoint: fakeProvider.endpoint,
+            credentialRef: null,
+            enabled: true,
+            models: [
+              {
+                id: 'qwen3.5-4b',
+                displayName: 'Qwen 3.5 4B',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+
+      const result = await liveServices.providerRuntimeService.testProvider('llama_cpp');
+
+      expect(result).toMatchObject({
+        providerId: 'llama_cpp',
+        status: 'ready',
+        defaultModelReady: false,
+        modelId: 'qwen3.5-4b',
+        error: null
+      });
+      expect(fakeProvider.requests).toHaveLength(1);
+      expect(fakeProvider.requests[0]).toMatchObject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        authorization: undefined
+      });
+      expect(fakeProvider.requests[0]?.body).toMatchObject({
+        model: 'qwen3.5-4b',
+        stream: false,
+        cache_prompt: true,
+        messages: [
+          expect.objectContaining({
+            role: 'system'
+          }),
+          expect.objectContaining({
+            role: 'user',
+            content: 'Reply with OK only.'
+          })
+        ]
+      });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
   it('returns local validation failures for provider tests without issuing live requests', async () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
     const liveServices = createAppServices(liveRoot);
@@ -1940,6 +2025,7 @@ describe('Roc foundation services', () => {
 
     expect(config.providers.map((provider) => `${provider.type}:${provider.id}`)).toEqual([
       'nvidia:nvidia',
+      'llama_cpp:llama_cpp',
       'openai_compatible:provider-openai-a',
       'openai_compatible:provider-openai-b',
       'anthropic_compatible:provider-anthropic-a',

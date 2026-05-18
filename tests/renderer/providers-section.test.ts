@@ -157,6 +157,50 @@ describe('providers section', () => {
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });
 
+  it('renders fixed llama.cpp details with an editable endpoint and without delete controls', () => {
+    const provider: ProviderConfig = {
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      credentialRef: null,
+      enabled: true,
+      models: [
+        {
+          id: 'qwen3.5-4b',
+          displayName: 'Qwen 3.5 4B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('llama_cpp', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('value="http://127.0.0.1:9090/v1"');
+    expect(html).not.toContain('readOnly=""');
+    expect(html).not.toContain('data-testid="provider-draft-name"');
+    expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
+  });
+
   it('shows the last successful provider test result with the tested model id', () => {
     const provider: ProviderConfig = {
       id: 'provider-openai',

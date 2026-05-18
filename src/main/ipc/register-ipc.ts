@@ -183,6 +183,13 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   ipcMain.handle(ipcChannels.settingsClearProviderSecret, (_event, providerId: string) =>
     wrapIpc(() => {
       services.secretService.clearProviderSecret(providerId);
+      const provider = services.configService.getProviders().providers.find((entry) => entry.id === providerId);
+      if (provider?.type === 'llama_cpp' && provider.credentialRef !== null) {
+        services.configService.upsertProvider({
+          ...provider,
+          credentialRef: null
+        });
+      }
       return { providerId, stored: false as const };
     })
   );

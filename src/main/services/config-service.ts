@@ -1,7 +1,16 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { createFixedNvidiaProviderConfig, isFixedProvider, normalizeFixedNvidiaProvider } from '../../shared/provider-defaults';
+import {
+  createFixedLlamaCppProviderConfig,
+  createFixedNvidiaProviderConfig,
+  createFixedProviderConfig,
+  createFixedProviderConfigForId,
+  fixedProviderTypes,
+  isFixedProvider,
+  normalizeFixedProvider,
+  resolveFixedProviderType
+} from '../../shared/provider-defaults';
 import type {
   ApprovalMode,
   AppSettings,
@@ -66,7 +75,7 @@ const ProviderOptionsSchema = z
 const ProviderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'ollama', 'custom']),
+  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'llama_cpp', 'ollama', 'custom']),
   endpoint: z.string().min(1),
   credentialRef: ProviderCredentialRefSchema,
   enabled: z.boolean(),
@@ -154,7 +163,7 @@ const defaultSettings: RocSettings = {
 const defaultProviders: RocProviders = {
   schemaVersion: 1,
   defaultModelId: null,
-  providers: [createFixedNvidiaProviderConfig()]
+  providers: [createFixedNvidiaProviderConfig(), createFixedLlamaCppProviderConfig()]
 };
 
 const defaultMcpConfig: RocMcpConfig = {
@@ -289,7 +298,9 @@ export class ConfigService {
           config.defaultModelId !== null && provider.models.some((model) => model.id === config.defaultModelId)
             ? null
             : config.defaultModelId,
-        providers: config.providers.map((item) => (item.id === id ? createFixedNvidiaProviderConfig() : item))
+        providers: config.providers.map((item) =>
+          item.id === id ? createFixedProviderConfigForId(id) : item
+        )
       });
       return;
     }
@@ -654,28 +665,25 @@ export class ConfigService {
   }
 
   private normalizeProvidersConfig(config: RocProviders): RocProviders {
+    const fixedProviders = new Map<string, ProviderConfig>();
     const normalizedProviders: ProviderConfig[] = [];
-    let nvidiaFound = false;
 
     for (const provider of config.providers) {
-      if (provider.type === 'nvidia' || isFixedProvider(provider.id)) {
-        if (!nvidiaFound) {
-          normalizedProviders.push(normalizeFixedNvidiaProvider(provider));
-          nvidiaFound = true;
+      const fixedProviderType = resolveFixedProviderType(provider);
+      if (fixedProviderType !== null) {
+        if (!fixedProviders.has(fixedProviderType)) {
+          fixedProviders.set(fixedProviderType, normalizeFixedProvider(provider));
         }
         continue;
       }
       normalizedProviders.push(provider);
     }
 
-    if (!nvidiaFound) {
-      normalizedProviders.unshift(createFixedNvidiaProviderConfig());
-    }
-
     const orderedProviders = [
-      ...normalizedProviders.filter((provider) => isFixedProvider(provider.id)),
-      ...normalizedProviders.filter((provider) => !isFixedProvider(provider.id))
+      ...fixedProviderTypes().map((type) => fixedProviders.get(type) ?? createFixedProviderConfig(type)),
+      ...normalizedProviders
     ];
+
     const nextDefaultModelId = this.sanitizeDefaultModelIdForDisabledProviders(
       orderedProviders,
       config.defaultModelId

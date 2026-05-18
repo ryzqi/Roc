@@ -34,6 +34,8 @@ type CreateModelOptions = {
   streaming?: boolean;
 };
 
+const openAiNoAuthPlaceholderKey = 'roc-no-auth';
+
 class ReasoningAwareChatOpenAI extends ChatOpenAI {
   async *_streamChatModelEvents(
     messages: BaseMessage[],
@@ -196,13 +198,13 @@ export class LangChainModelFactory {
       };
     }
 
-    if (provider.type !== 'openai_compatible' && provider.type !== 'nvidia') {
+    if (provider.type !== 'openai_compatible' && provider.type !== 'nvidia' && provider.type !== 'llama_cpp') {
       throw new RocDomainError({
         code: 'provider_type_unsupported',
         message: '当前 Provider 类型尚未支持 LangChain 聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible 或 NVIDIA Provider。'
+        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
       });
     }
 
@@ -212,33 +214,43 @@ export class LangChainModelFactory {
         thinking: true
       };
     }
+    if (provider.type === 'llama_cpp') {
+      modelKwargs.cache_prompt = true;
+    }
 
     const baseUrl = provider.type === 'nvidia' ? fixedNvidiaBaseUrl : provider.endpoint.trim();
+    const apiKeyForChatModel =
+      provider.type === 'llama_cpp' && apiKey.length === 0 ? openAiNoAuthPlaceholderKey : apiKey;
+    const openAiConfiguration =
+      provider.type === 'llama_cpp' && apiKey.length === 0
+        ? {
+            baseURL: baseUrl,
+            maxRetries: 0,
+            fetch: createFetchWithoutAuthorization()
+          }
+        : {
+            baseURL: baseUrl,
+            maxRetries: 0
+          };
     const chatModel = streaming ? new ReasoningAwareChatOpenAI({
       model: modelId,
-      apiKey,
+      apiKey: apiKeyForChatModel,
       streaming,
       maxRetries: 0,
       temperature,
       maxTokens,
       timeout: providerRequestTimeoutMs,
-      configuration: {
-        baseURL: baseUrl,
-        maxRetries: 0
-      },
+      configuration: openAiConfiguration,
       modelKwargs
     }) : new ChatOpenAI({
       model: modelId,
-      apiKey,
+      apiKey: apiKeyForChatModel,
       streaming,
       maxRetries: 0,
       temperature,
       maxTokens,
       timeout: providerRequestTimeoutMs,
-      configuration: {
-        baseURL: baseUrl,
-        maxRetries: 0
-      },
+      configuration: openAiConfiguration,
       modelKwargs
     });
 
@@ -294,6 +306,9 @@ export class LangChainModelFactory {
   private resolveCredential(provider: ProviderConfig): string {
     const credentialRef = provider.credentialRef;
     if (credentialRef === null) {
+      if (provider.type === 'llama_cpp') {
+        return '';
+      }
       throw new RocDomainError({
         code: 'provider_credential_missing',
         message: 'Provider 缺少凭据引用。',
@@ -364,6 +379,28 @@ export class LangChainModelFactory {
     }
     return value;
   }
+}
+
+function createFetchWithoutAuthorization(): typeof fetch {
+  return async (input, init) => {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    const overrideHeaders = new Headers(init?.headers);
+    overrideHeaders.forEach((value, key) => {
+      headers.set(key, value);
+    });
+    headers.delete('authorization');
+    headers.delete('Authorization');
+    headers.delete('api-key');
+    headers.delete('x-api-key');
+    const nextInit = {
+      ...init,
+      headers
+    };
+    if (input instanceof Request) {
+      return await globalThis.fetch(new Request(input, nextInit));
+    }
+    return await globalThis.fetch(input, nextInit);
+  };
 }
 
 async function* normalizeOpenAiReasoningChunks(

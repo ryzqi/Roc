@@ -5,7 +5,7 @@ import type {
   ProviderSecretStatus,
   ProviderTestResult
 } from '../../../shared/types';
-import { isFixedProvider } from '../../../shared/provider-defaults';
+import { isFixedProvider, isFixedProviderType } from '../../../shared/provider-defaults';
 import {
   providerTypeMeta,
   type CreatableProviderType,
@@ -97,6 +97,8 @@ export function ProvidersSection({
     [providers, draft.id]
   );
   const fixedProviderSelected = selectedProvider !== null && isFixedProvider(selectedProvider.id);
+  const fixedProviderDraft = isFixedProviderType(draft.type);
+  const fixedEndpoint = draft.type === 'nvidia';
 
   const meta = providerTypeMeta(draft.type);
   const isCreating = draft.mode === 'create';
@@ -271,7 +273,7 @@ export function ProvidersSection({
               </div>
             </div>
           ) : null}
-          {draft.type === 'nvidia' ? null : (
+          {fixedProviderDraft ? null : (
             <div className="form-grid">
               <label className="field">
                 <span>名称</span>
@@ -319,16 +321,16 @@ export function ProvidersSection({
             )}
           </label>
           <label className="field">
-            <span>{draft.type === 'nvidia' ? '固定端点' : 'Base URL'}</span>
+            <span>{fixedEndpoint ? '固定端点' : 'Base URL'}</span>
             <input
               data-testid="provider-draft-endpoint"
               onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
               placeholder={meta.defaultBaseUrl}
-              readOnly={draft.type === 'nvidia'}
+              readOnly={fixedEndpoint}
               value={draft.endpoint}
             />
             <span className="field-hint">
-              {draft.type === 'nvidia' ? 'NVIDIA Provider 固定使用官方 OpenAI-compatible 端点。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
+              {fixedEndpoint ? 'NVIDIA Provider 固定使用官方 OpenAI-compatible 端点。' : `留空将回退到默认 ${meta.defaultBaseUrl}`}
             </span>
           </label>
           <label className="field">
@@ -381,7 +383,7 @@ export function ProvidersSection({
           ) : null}
           <div className="provider-detail-actions">
             <button data-testid="provider-save" onClick={() => void onSaveProviderDraft()} type="button">
-              {draft.type === 'nvidia' ? '保存 NVIDIA 配置' : '保存 Provider'}
+              {fixedProviderDraft ? `保存 ${draft.name} 配置` : '保存 Provider'}
             </button>
             {selectedProvider === null || fixedProviderSelected ? null : (
               <button

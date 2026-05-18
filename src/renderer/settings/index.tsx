@@ -116,9 +116,10 @@ export function SettingsView({
     if (
       provider.type !== 'openai_compatible' &&
       provider.type !== 'anthropic_compatible' &&
-      provider.type !== 'nvidia'
+      provider.type !== 'nvidia' &&
+      provider.type !== 'llama_cpp'
     ) {
-      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible 和 NVIDIA provider。');
+      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible、NVIDIA 和 llama.cpp provider。');
       return;
     }
     setProviderDraft(createProviderDraft(provider.type, provider));
@@ -131,6 +132,17 @@ export function SettingsView({
     const apiKey = providerDraft.apiKey.trim();
     try {
       provider = buildProviderConfigFromDraft(providerDraft);
+      if (provider.type === 'llama_cpp' && apiKey.length === 0) {
+        const secretStored = state.providerSecretStatus.some(
+          (entry) => entry.providerId === provider.id && entry.stored === true
+        );
+        if (secretStored) {
+          provider = {
+            ...provider,
+            credentialRef: `secret:${provider.id}`
+          };
+        }
+      }
       if (providerDraft.mode === 'create') {
         assertProviderCreateIdAvailable(state.providers, provider.id);
         if (apiKey.length === 0) {
@@ -399,6 +411,10 @@ function createInitialProviderDraft(providers: ProviderConfig[]): ProviderDraft 
   const nvidia = providers.find((provider) => provider.id === 'nvidia');
   if (nvidia !== undefined) {
     return createProviderDraft('nvidia', nvidia);
+  }
+  const llamaCpp = providers.find((provider) => provider.id === 'llama_cpp');
+  if (llamaCpp !== undefined) {
+    return createProviderDraft('llama_cpp', llamaCpp);
   }
   return createProviderDraft('openai_compatible');
 }

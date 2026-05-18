@@ -13,9 +13,13 @@ import type {
   SkillSnapshot
 } from '../shared/types';
 import {
+  fixedLlamaCppBaseUrl,
+  fixedLlamaCppProviderId,
+  fixedLlamaCppProviderName,
   fixedNvidiaBaseUrl,
   fixedNvidiaProviderId,
   fixedNvidiaProviderName,
+  normalizeFixedLlamaCppProvider,
   normalizeFixedNvidiaProvider
 } from '../shared/provider-defaults';
 
@@ -33,7 +37,7 @@ export type SettingsSection = {
   label: string;
 };
 
-export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible' | 'nvidia'>;
+export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'llama_cpp'>;
 export type CreatableProviderType = Extract<EditableProviderType, 'openai_compatible' | 'anthropic_compatible'>;
 
 export type ProviderDraft = {
@@ -77,7 +81,12 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'capabilities', label: '能力入口' }
 ];
 
-const editableProviderTypes: readonly EditableProviderType[] = ['openai_compatible', 'anthropic_compatible', 'nvidia'];
+const editableProviderTypes: readonly EditableProviderType[] = [
+  'openai_compatible',
+  'anthropic_compatible',
+  'nvidia',
+  'llama_cpp'
+];
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export function selectSettingsSection(current: SettingsSectionId, requested: string): SettingsSectionId {
@@ -107,6 +116,22 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       maxTokens:
         typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
       thinking: normalized.options?.thinking === true
+    };
+  }
+  if (type === 'llama_cpp') {
+    const normalized = normalizeFixedLlamaCppProvider(provider);
+    return {
+      mode: 'edit',
+      id: fixedLlamaCppProviderId,
+      name: fixedLlamaCppProviderName,
+      type: 'llama_cpp',
+      endpoint: normalized.endpoint,
+      apiKey: '',
+      enabled: normalized.enabled,
+      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      temperature: '',
+      maxTokens: '',
+      thinking: false
     };
   }
   if (provider === undefined) {
@@ -229,6 +254,22 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
       ? { ...provider, options: undefined }
       : provider;
   }
+  if (draft.type === 'llama_cpp') {
+    const models = parseProviderModelDraft(draft.modelsText);
+    if (models.length === 0) {
+      throw new Error('llama.cpp 至少需要一个模型。');
+    }
+    return normalizeFixedLlamaCppProvider({
+      id: fixedLlamaCppProviderId,
+      name: fixedLlamaCppProviderName,
+      type: 'llama_cpp',
+      endpoint: draft.endpoint.trim(),
+      credentialRef: draft.apiKey.trim().length === 0 ? null : `secret:${fixedLlamaCppProviderId}`,
+      enabled: draft.enabled,
+      models,
+      options: undefined
+    });
+  }
 
   const id = resolveProviderDraftId(draft);
   const name = draft.name.trim();
@@ -305,6 +346,11 @@ export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
   if (type === 'nvidia') {
     return {
       defaultBaseUrl: fixedNvidiaBaseUrl
+    };
+  }
+  if (type === 'llama_cpp') {
+    return {
+      defaultBaseUrl: fixedLlamaCppBaseUrl
     };
   }
   if (type === 'anthropic_compatible') {

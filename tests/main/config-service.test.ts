@@ -135,6 +135,12 @@ describe('ConfigService unified settings document', () => {
           credentialRef: 'secret:nvidia'
         }),
         expect.objectContaining({
+          id: 'llama_cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081/v1',
+          credentialRef: null
+        }),
+        expect.objectContaining({
           id: 'provider-openai',
           name: 'OpenAI Provider',
           credentialRef: null
@@ -226,6 +232,11 @@ describe('ConfigService unified settings document', () => {
           credentialRef: 'secret:nvidia',
           endpoint: 'https://integrate.api.nvidia.com/v1'
         }),
+        expect.objectContaining({
+          id: 'llama_cpp',
+          credentialRef: null,
+          endpoint: 'http://127.0.0.1:8081/v1'
+        }),
         expect.objectContaining({ id: 'kept-provider', credentialRef: 'secret:kept-provider' }),
         expect.objectContaining({ id: 'legacy-env', credentialRef: null })
       ])
@@ -279,6 +290,12 @@ describe('ConfigService unified settings document', () => {
             id: 'nvidia',
             type: 'nvidia',
             endpoint: 'https://integrate.api.nvidia.com/v1'
+          }),
+          expect.objectContaining({
+            id: 'llama_cpp',
+            type: 'llama_cpp',
+            endpoint: 'http://127.0.0.1:8081/v1',
+            credentialRef: null
           }),
           provider
         ]
@@ -471,6 +488,12 @@ describe('ConfigService unified settings document', () => {
           type: 'nvidia',
           endpoint: 'https://integrate.api.nvidia.com/v1'
         }),
+        expect.objectContaining({
+          id: 'llama_cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081/v1',
+          credentialRef: null
+        }),
         provider
       ]
     });
@@ -484,9 +507,85 @@ describe('ConfigService unified settings document', () => {
             type: 'nvidia',
             endpoint: 'https://integrate.api.nvidia.com/v1'
           }),
+          expect.objectContaining({
+            id: 'llama_cpp',
+            type: 'llama_cpp',
+            endpoint: 'http://127.0.0.1:8081/v1',
+            credentialRef: null
+          }),
           provider
         ]
       }
+    });
+  });
+
+  it('keeps the fixed llama.cpp provider normalized and restores its default config when deleted', () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen3.5-4b',
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'Custom llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: null,
+          enabled: false,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(configService.getProviders().providers).toEqual([
+      expect.objectContaining({
+        id: 'nvidia',
+        type: 'nvidia',
+        endpoint: 'https://integrate.api.nvidia.com/v1',
+        credentialRef: 'secret:nvidia'
+      }),
+      expect.objectContaining({
+        id: 'llama_cpp',
+        name: 'llama.cpp',
+        type: 'llama_cpp',
+        endpoint: 'http://127.0.0.1:9090/v1',
+        credentialRef: null,
+        enabled: false
+      })
+    ]);
+
+    configService.deleteProvider('llama_cpp');
+
+    expect(configService.getProviders()).toEqual({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        expect.objectContaining({
+          id: 'nvidia',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia'
+        }),
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081/v1',
+          credentialRef: null,
+          enabled: true,
+          models: []
+        }
+      ]
     });
   });
 });

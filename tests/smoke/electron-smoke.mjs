@@ -1293,6 +1293,9 @@ try {
     nvidiaListed: false,
     nvidiaFixedDetail: false,
     nvidiaDefaultModelChoicesVisible: false,
+    llamaCppListed: false,
+    llamaCppFixedDetail: false,
+    llamaCppDefaultModelChoicesVisible: false,
     smokeProviderListed: false,
     providerActionsVisible: false,
     addProviderEntryVisible: false,
@@ -1368,6 +1371,49 @@ try {
     undefined,
     { timeout: 5000 }
   );
+  await clickSmokeControl(page, '[data-testid="provider-list-item-llama_cpp"]');
+  await page.waitForSelector('[data-testid="provider-test-llama_cpp"]', { timeout: 5000 });
+  providerSettingsEvidence.llamaCppListed = true;
+  providerSettingsEvidence.llamaCppFixedDetail = await page.evaluate(() => {
+    const models = document.querySelector('[data-testid="provider-draft-models"]');
+    const name = document.querySelector('[data-testid="provider-draft-name"]');
+    const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
+    const deleteButton = document.querySelector('[data-testid="provider-delete-llama_cpp"]');
+    return (
+      models instanceof HTMLTextAreaElement &&
+      name === null &&
+      endpoint instanceof HTMLInputElement &&
+      endpoint.readOnly === false &&
+      endpoint.value === 'http://127.0.0.1:8081/v1' &&
+      deleteButton === null
+    );
+  });
+  await page.fill('[data-testid="provider-draft-models"]', 'qwen3.5-4b | Qwen 3.5 4B');
+  await clickSmokeControl(page, '[data-testid="provider-save"]');
+  await page.waitForFunction(
+    async () => {
+      const result = await window.roc.settings.get();
+      if (!result.ok) {
+        return false;
+      }
+      const provider = result.data.providers.find((entry) => entry.id === 'llama_cpp');
+      const endpoint = document.querySelector('[data-testid="provider-draft-endpoint"]');
+      const models = document.querySelector('[data-testid="provider-draft-models"]');
+      return (
+        provider !== undefined &&
+        provider.credentialRef === null &&
+        provider.endpoint === 'http://127.0.0.1:8081/v1' &&
+        provider.models.length === 1 &&
+        provider.models[0]?.id === 'qwen3.5-4b' &&
+        endpoint instanceof HTMLInputElement &&
+        endpoint.value === 'http://127.0.0.1:8081/v1' &&
+        models instanceof HTMLTextAreaElement &&
+        models.value.includes('qwen3.5-4b | Qwen 3.5 4B')
+      );
+    },
+    undefined,
+    { timeout: 5000 }
+  );
   providerSettingsEvidence.headerChromeRemoved = await page.evaluate(() => {
     const header = document.querySelector('[data-testid="settings-header"]');
     if (!(header instanceof HTMLElement)) {
@@ -1406,12 +1452,14 @@ try {
     () => {
       const kimi = document.querySelector('[data-testid="default-model-moonshotai/kimi-k2.6"]');
       const llama = document.querySelector('[data-testid="default-model-meta/llama-3.3-70b-instruct"]');
-      return kimi instanceof HTMLButtonElement && llama instanceof HTMLButtonElement;
+      const llamaCpp = document.querySelector('[data-testid="default-model-qwen3.5-4b"]');
+      return kimi instanceof HTMLButtonElement && llama instanceof HTMLButtonElement && llamaCpp instanceof HTMLButtonElement;
     },
     undefined,
     { timeout: 5000 }
   );
   providerSettingsEvidence.nvidiaDefaultModelChoicesVisible = true;
+  providerSettingsEvidence.llamaCppDefaultModelChoicesVisible = true;
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
   await page.waitForSelector('[data-testid="provider-add-anthropic"]', { state: 'detached', timeout: 5000 });
   await page.waitForSelector('[data-testid="provider-add-openai"]', { timeout: 5000 });
@@ -2659,6 +2707,9 @@ try {
       providerSettingsEvidence.nvidiaListed &&
       providerSettingsEvidence.nvidiaFixedDetail &&
       providerSettingsEvidence.nvidiaDefaultModelChoicesVisible &&
+      providerSettingsEvidence.llamaCppListed &&
+      providerSettingsEvidence.llamaCppFixedDetail &&
+      providerSettingsEvidence.llamaCppDefaultModelChoicesVisible &&
       providerSettingsEvidence.smokeProviderListed &&
       providerSettingsEvidence.addProviderEntryVisible &&
       providerSettingsEvidence.headerChromeRemoved &&
