@@ -630,6 +630,12 @@ describe('DeepAgentRuntimeService', () => {
 
   it('passes skills to deepagents and keeps skill storage under the configured Roc data root', async () => {
     expect(services.paths.skillsDir).toBe(join(root, 'skills'));
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
+      ['---', 'name: project-review', 'description: Review the current project', '---', ''].join('\n'),
+      'utf8'
+    );
 
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
@@ -652,13 +658,39 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { skills?: string[]; backend?: { routePrefixes?: string[] } }
+      | { skills?: string[]; backend?: { routePrefixes?: string[]; ls: (path: string) => Promise<{ files?: Array<{ path: string }> }> } }
       | undefined;
-    expect(call?.skills).toEqual(['/skills/project-review/']);
+    expect(call?.skills).toEqual(['/skills/']);
+    await expect(call?.backend?.ls('/skills/')).resolves.toMatchObject({
+      files: [
+        expect.objectContaining({
+          path: '/skills/project-review/'
+        })
+      ]
+    });
     expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
-  it('sorts selected skills before passing them to deepagents', async () => {
+  it('exposes only the selected skills under the official /skills/ source root', async () => {
+    mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'),
+      ['---', 'name: alpha-review', 'description: Alpha review skill', '---', ''].join('\n'),
+      'utf8'
+    );
+    mkdirSync(join(services.paths.skillsDir, 'zeta-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'zeta-review', 'SKILL.md'),
+      ['---', 'name: zeta-review', 'description: Zeta review skill', '---', ''].join('\n'),
+      'utf8'
+    );
+    mkdirSync(join(services.paths.skillsDir, 'other-skill'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'other-skill', 'SKILL.md'),
+      ['---', 'name: other-skill', 'description: Other skill', '---', ''].join('\n'),
+      'utf8'
+    );
+
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
       toolCalls: createAsyncIterable([]),
@@ -680,9 +712,18 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { skills?: string[] }
+      | { skills?: string[]; backend?: { ls: (path: string) => Promise<{ files?: Array<{ path: string }> }> } }
       | undefined;
-    expect(call?.skills).toEqual(['/skills/alpha-review/', '/skills/zeta-review/']);
+    expect(call?.skills).toEqual(['/skills/']);
+    await expect(call?.backend?.ls('/skills/')).resolves.toMatchObject({
+      files: expect.arrayContaining([
+        expect.objectContaining({ path: '/skills/alpha-review/' }),
+        expect.objectContaining({ path: '/skills/zeta-review/' })
+      ])
+    });
+    await expect(call?.backend?.ls('/skills/')).resolves.not.toMatchObject({
+      files: expect.arrayContaining([expect.objectContaining({ path: '/skills/other-skill/' })])
+    });
   });
 
   it('creates the deep agent with official filesystem and memory backends instead of custom permissions', async () => {
@@ -1307,6 +1348,54 @@ describe('DeepAgentRuntimeService', () => {
       assistantMessage: '最终回答：已按技能完成审查。'
     });
     expect(JSON.stringify(assistantMessage?.payload)).not.toContain('RAW_SKILL_DESCRIPTION');
+  });
+
+  it('keeps skill file text tagged with /skills/.../SKILL.md metadata out of assistant chat text', async () => {
+    const rawSkillBody = '# Project Review\nFollow the review workflow exactly.';
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable([rawSkillBody]),
+          additional_kwargs: {
+            path: '/skills/project-review/SKILL.md'
+          }
+        },
+        {
+          text: createAsyncIterable(['最终回答：已按技能完成审查。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '按项目审查技能处理',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['project-review']
+      }
+    });
+    const finished = await completed;
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+
+    expect(messageText).toBe('最终回答：已按技能完成审查。');
+    expect(messageText).not.toContain('Follow the review workflow exactly.');
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：已按技能完成审查。'
+    });
   });
 
   it('passes the agent interrupt policy into deepagents for task runs', async () => {

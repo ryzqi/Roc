@@ -175,6 +175,17 @@ describe('record-utils assistant text boundaries', () => {
     ).toBe(true);
   });
 
+  it('identifies skill file reads tagged with a /skills/.../SKILL.md path as non-assistant text', () => {
+    expect(
+      isNonAssistantTextMessage({
+        text: '# Project Review\nFollow the review workflow.',
+        additional_kwargs: {
+          path: '/skills/project-review/SKILL.md'
+        }
+      })
+    ).toBe(true);
+  });
+
   it('keeps ordinary assistant text messages visible', () => {
     expect(
       isNonAssistantTextMessage({

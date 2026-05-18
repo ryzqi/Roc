@@ -337,14 +337,16 @@ export class DeepAgentRuntimeService {
             workspaceService: this.workspaceService,
             paths: this.paths,
             shellExecutionService: this.taskBoundShellExecutionService(context),
-            store: this.store
+            store: this.store,
+            selectedSkillIds: [...context.enabledCapabilities.skills]
           });
+          const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
           const agent = createDeepAgent({
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
             backend: runtimeBackend.backend,
             store: this.store,
-            skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
+            skills: skillSources,
             subagents,
             tools: runTools,
             interruptOn,
@@ -497,14 +499,16 @@ export class DeepAgentRuntimeService {
         workspaceService: this.workspaceService,
         paths: this.paths,
         shellExecutionService: this.taskBoundShellExecutionService(context),
-        store: this.store
+        store: this.store,
+        selectedSkillIds: [...context.enabledCapabilities.skills]
       });
+      const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
       const agent = createDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
         backend: runtimeBackend.backend,
         store: this.store,
-        skills: [...context.enabledCapabilities.skills].sort().map((skillId) => `/skills/${skillId}/`),
+        skills: skillSources,
         subagents,
         tools: runTools,
         interruptOn,

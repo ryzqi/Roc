@@ -72,6 +72,29 @@ describe('deep agent backend', () => {
     }
   });
 
+  it('filters /skills/ root listing to the selected skills when a run narrows skill access', async () => {
+    mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
+    writeFileSync(join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'), '# alpha\n', 'utf8');
+    writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# project\n', 'utf8');
+
+    const backend = createBackend({
+      workspaceService: services.workspaceService,
+      paths: services.paths,
+      shellExecutionService: services.shellExecutionService,
+      store: new InMemoryStore(),
+      selectedSkillIds: ['project-review']
+    }).backend;
+
+    const rootSkills = await backend.ls('/skills/');
+    const selectedSkillFile = await backend.read('/skills/project-review/SKILL.md');
+    const unselectedSkillDirectory = await backend.ls('/skills/alpha-review/');
+
+    expect(rootSkills.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/']);
+    expect(selectedSkillFile.content).toBe('# project\n');
+    expect(unselectedSkillDirectory.error).toBeTruthy();
+  });
+
   it('runs agent execute in the selected workspace and records bypass metadata when rtk is missing', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-execute-'));
     try {

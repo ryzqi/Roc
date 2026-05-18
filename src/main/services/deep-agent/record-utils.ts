@@ -68,6 +68,15 @@ export function isNonAssistantTextMessage(value: unknown): boolean {
     return true;
   }
 
+  if (hasSkillInstructionPath(value) || hasSkillInstructionPath(additionalKwargs)) {
+    return true;
+  }
+
+  const output = readRecordValue(value, 'output');
+  if (isNonAssistantOutput(output)) {
+    return true;
+  }
+
   return readContentBlocks(value).some((block) => isNonAssistantContentBlock(block));
 }
 
@@ -121,6 +130,18 @@ function hasToolCalls(value: unknown): boolean {
   }
 
   return readNonEmptyString(readRecordValue(value, 'tool_call_id')) !== null;
+}
+
+function isNonAssistantOutput(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (hasNonAssistantMessageType(value) || hasToolCalls(value) || hasSkillInstructionPath(value)) {
+    return true;
+  }
+
+  return readContentBlocks(value).some((block) => isNonAssistantContentBlock(block));
 }
 
 function readContentBlocks(value: unknown): unknown[] {
@@ -247,7 +268,11 @@ function isPotentialSkillFrontMatterPrefix(text: string): boolean {
   return normalized === '---' || normalized.startsWith('---\n') && !normalized.includes('\n---');
 }
 
-function hasSkillInstructionPath(value: Record<string, unknown>): boolean {
+function hasSkillInstructionPath(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
   const path = readNonEmptyString(readRecordValue(value, 'path'));
   if (path !== null && isSkillInstructionPath(path)) {
     return true;
