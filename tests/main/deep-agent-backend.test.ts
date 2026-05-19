@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('deep agent backend', () => {
-  it('preserves /workspace, /skills, and /memory routes while exposing execute through the default bridge', async () => {
+  it('preserves /workspace, /skills, /agents, and /memory routes while exposing execute through the default bridge', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-workspace-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -56,14 +56,18 @@ describe('deep agent backend', () => {
       const backend = runtimeBackend.backend;
       const workspaceFiles = await backend.ls('/workspace/');
       const skillFiles = await backend.ls('/skills/project-review/');
+      const agentsFiles = await backend.ls('/agents/');
+      const agentsRule = await backend.read('/agents/AGENTS.md');
       const memoryFiles = await backend.ls('/memory/');
       const rootFiles = await backend.ls('/');
 
       expect(workspaceFiles.files?.map((entry) => entry.path)).toContain('/workspace/notes.txt');
       expect(skillFiles.files?.map((entry) => entry.path)).toContain('/skills/project-review/SKILL.md');
+      expect(agentsFiles.files?.map((entry) => entry.path)).toContain('/agents/AGENTS.md');
+      expect(agentsRule.content).toContain('# Roc Project Rules');
       expect(memoryFiles.files?.map((entry) => entry.path)).toContain('/memory/accepted.md');
       expect(rootFiles.files?.map((entry) => entry.path)).toEqual(
-        expect.arrayContaining(['/workspace/', '/skills/', '/memory/'])
+        expect.arrayContaining(['/workspace/', '/skills/', '/agents/', '/memory/'])
       );
       expect(typeof backend.execute).toBe('function');
       expect(runtimeBackend.memoryRoute).toBe('/memory/');

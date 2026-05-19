@@ -184,6 +184,7 @@ describe('DeepAgentRuntimeService', () => {
       systemPrompt: 'system prompt',
       backend,
       store,
+      memorySources: ['/agents/AGENTS.md'],
       skillSources: ['/skills/project-review/'],
       subagents: [],
       tools: [],
@@ -196,6 +197,7 @@ describe('DeepAgentRuntimeService', () => {
       systemPrompt: 'system prompt',
       backend,
       store,
+      memory: ['/agents/AGENTS.md'],
       skills: ['/skills/project-review/'],
       subagents: [],
       tools: [],
@@ -697,7 +699,36 @@ describe('DeepAgentRuntimeService', () => {
       | { skills?: string[]; backend?: { routePrefixes?: string[]; ls: (path: string) => Promise<{ files?: Array<{ path: string }> }> } }
       | undefined;
     expect(call?.skills).toEqual(['/skills/project-review/']);
-    expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
+    expect(call?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/skills/', '/memory/', '/agents/']));
+  });
+
+  it('passes the project memory sources to deepagents so AGENTS.md is loaded', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Loaded'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: 'Load project rules.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { memory?: string[] } | undefined;
+    expect(call?.memory).toEqual(['/agents/AGENTS.md']);
   });
 
   it('mounts selected skills as read-only when passed to deepagents', async () => {
@@ -821,7 +852,7 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.store).toBeTruthy();
     expect(call?.skills).toEqual(['/skills/project-review/']);
     expect(call?.checkpointer).toBeInstanceOf(MemorySaver);
-    expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
+    expect(call?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/skills/', '/memory/', '/agents/']));
   });
 
   it('uses SqliteSaver checkpoints outside Vitest mode so task approvals can persist across restarts', async () => {
@@ -995,7 +1026,9 @@ describe('DeepAgentRuntimeService', () => {
     expect(toolNames).not.toContain('memory_search');
     expect(toolNames).not.toContain('memory_get');
     expect(createAgentCall?.store).toBeTruthy();
-    expect(createAgentCall?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(createAgentCall?.backend?.routePrefixes).toEqual(
+      expect.arrayContaining(['/workspace/', '/skills/', '/memory/', '/agents/'])
+    );
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
     expect(codeReviewSubagent?.tools ?? []).toEqual([]);
     expect(researchSubagent?.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['web_read']));

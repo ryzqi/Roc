@@ -488,6 +488,15 @@ describe('Roc foundation services', () => {
     expect(projected).toBeNull();
   });
 
+  it('initializes a default AGENTS.md memory file for deepagents startup memory', () => {
+    const agentsPath = join(services.paths.memoryDir, 'AGENTS.md');
+    const agentsContent = normalizeLineEndings(readFileSync(agentsPath, 'utf8'));
+
+    expect(existsSync(agentsPath)).toBe(true);
+    expect(agentsContent).toContain('# Roc Project Rules');
+    expect(agentsContent).toContain('`/workspace/` 是当前工作区，`/memory/` 是只读策展记忆视图。');
+  });
+
   it('rejects providers saved with non-secret credential refs at the schema boundary', () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-'));
     const liveServices = createAppServices(liveRoot);

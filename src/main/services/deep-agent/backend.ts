@@ -32,7 +32,9 @@ type AgentExecuteAdapter = {
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
 const MEMORY_ROUTE = '/memory/';
+const AGENTS_ROUTE = '/agents/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
+const READ_ONLY_AGENTS_ERROR = 'Roc 已将 /agents/ 挂载为只读项目规则目录。';
 
 export type RocCompositeBackend = CompositeBackend &
   SandboxBackendProtocolV2 & {
@@ -40,7 +42,10 @@ export type RocCompositeBackend = CompositeBackend &
   };
 
 class ReadOnlyFilesystemBackend {
-  constructor(private readonly delegate: FilesystemBackend) {
+  constructor(
+    private readonly delegate: FilesystemBackend,
+    private readonly writeError: string
+  ) {
   }
 
   ls(path: string): Promise<LsResult> {
@@ -64,11 +69,11 @@ class ReadOnlyFilesystemBackend {
   }
 
   write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
-    return Promise.resolve({ error: READ_ONLY_SKILLS_ERROR });
+    return Promise.resolve({ error: this.writeError });
   }
 
   edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
-    return Promise.resolve({ error: READ_ONLY_SKILLS_ERROR });
+    return Promise.resolve({ error: this.writeError });
   }
 
   uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
@@ -104,8 +109,13 @@ function createRouteBackends(input: {
     rootDir: input.paths.skillsDir,
     virtualMode: true
   });
+  const agentsBackendBase = new FilesystemBackend({
+    rootDir: input.paths.memoryDir,
+    virtualMode: true
+  });
   const routes: Record<string, AnyBackendProtocol> = {
-    [SKILLS_ROUTE]: new ReadOnlyFilesystemBackend(skillsBackendBase),
+    [SKILLS_ROUTE]: new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR),
+    [AGENTS_ROUTE]: new ReadOnlyFilesystemBackend(agentsBackendBase, READ_ONLY_AGENTS_ERROR),
     [MEMORY_ROUTE]: new StoreBackend({
       store: input.store,
       namespace: ['roc', 'memory', 'filesystem'],

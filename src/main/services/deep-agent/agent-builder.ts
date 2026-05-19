@@ -10,6 +10,7 @@ export type DeepAgentBuildInput = {
   systemPrompt: string;
   backend: RocCompositeBackend;
   store: BaseStore;
+  memorySources: string[];
   skillSources: string[];
   subagents: RuntimeSubagent[];
   tools: ClientTool[];
@@ -23,6 +24,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     systemPrompt: input.systemPrompt,
     backend: input.backend,
     store: input.store,
+    memory: input.memorySources,
     skills: input.skillSources,
     subagents: input.subagents,
     tools: input.tools,
