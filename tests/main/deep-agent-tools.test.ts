@@ -111,7 +111,7 @@ describe('deep agent tools', () => {
         name: 'code-review',
         description: '审查代码改动，优先输出 bug、回归风险、边界条件与缺失验证。',
         systemPrompt:
-          '你是 Roc 的代码审查子代理。先找 bug、行为回归、风险和缺失验证，再给出简短结论。不要改写需求，不要淡化风险。需要项目上下文时，直接读取 /memory/ 下的持久记忆文件。'
+          '你是 Roc 的代码审查子代理。先找 bug、回归风险和缺失验证，再给出简短结论。需要项目上下文时直接读取 /memory/。'
       })
     );
     expect(subagents).toContainEqual(
@@ -119,7 +119,7 @@ describe('deep agent tools', () => {
         name: 'research',
         description: '检索公开资料并读取网页，整理带来源边界的结论。',
         systemPrompt:
-          '你是 Roc 的资料检索子代理。优先使用 web_read 收集外部证据，只输出与问题直接相关的结论，并明确哪些信息来自外部资料且仍需核实。'
+          '你是 Roc 的资料检索子代理。优先使用 web_read 取证，只输出与问题直接相关的结论，并标明哪些内容来自外部资料。'
       })
     );
   });
