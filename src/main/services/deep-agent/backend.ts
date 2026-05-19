@@ -19,6 +19,7 @@ import type { BaseStore } from '@langchain/langgraph';
 import type { ShellExecutionResult } from '../../../shared/types';
 import type { RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
+import { buildDeepAgentMemoryNamespace } from './sqlite-store';
 
 type AgentExecuteAdapter = {
   executeAgentCommand(input: { command: string; cwd?: string }): ExecuteResponse & {
@@ -35,6 +36,7 @@ const MEMORY_ROUTE = '/memory/';
 const AGENTS_ROUTE = '/agents/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
 const READ_ONLY_AGENTS_ERROR = 'Roc 已将 /agents/ 挂载为只读项目规则目录。';
+const READ_ONLY_MEMORY_ERROR = 'Roc 已将 /memory/ 挂载为只读策展记忆视图。';
 
 export type RocCompositeBackend = CompositeBackend &
   SandboxBackendProtocolV2 & {
@@ -90,6 +92,52 @@ class ReadOnlyFilesystemBackend {
   }
 }
 
+class ReadOnlyStoreBackend {
+  constructor(private readonly delegate: StoreBackend) {
+  }
+
+  ls(path: string): Promise<LsResult> {
+    return this.delegate.ls(path);
+  }
+
+  read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
+    return this.delegate.read(filePath, offset, limit);
+  }
+
+  readRaw(filePath: string): Promise<ReadRawResult> {
+    return this.delegate.readRaw(filePath);
+  }
+
+  grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+    return this.delegate.grep(pattern, path ?? undefined, glob);
+  }
+
+  glob(pattern: string, path?: string): Promise<GlobResult> {
+    return this.delegate.glob(pattern, path);
+  }
+
+  write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
+    return Promise.resolve({ error: READ_ONLY_MEMORY_ERROR });
+  }
+
+  edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
+    return Promise.resolve({ error: READ_ONLY_MEMORY_ERROR });
+  }
+
+  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
+    return Promise.resolve(
+      files.map(([path]) => ({
+        path,
+        error: 'permission_denied'
+      }))
+    );
+  }
+
+  downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    return this.delegate.downloadFiles(paths);
+  }
+}
+
 function createRouteBackends(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
@@ -113,14 +161,17 @@ function createRouteBackends(input: {
     rootDir: input.paths.memoryDir,
     virtualMode: true
   });
+  const memoryNamespace = buildDeepAgentMemoryNamespace(workspace?.path ?? null);
   const routes: Record<string, AnyBackendProtocol> = {
     [SKILLS_ROUTE]: new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR),
     [AGENTS_ROUTE]: new ReadOnlyFilesystemBackend(agentsBackendBase, READ_ONLY_AGENTS_ERROR),
-    [MEMORY_ROUTE]: new StoreBackend({
-      store: input.store,
-      namespace: ['roc', 'memory', 'filesystem'],
-      fileFormat: 'v2'
-    })
+    [MEMORY_ROUTE]: new ReadOnlyStoreBackend(
+      new StoreBackend({
+        store: input.store,
+        namespace: [...memoryNamespace],
+        fileFormat: 'v2'
+      })
+    )
   };
 
   if (workspace !== null) {

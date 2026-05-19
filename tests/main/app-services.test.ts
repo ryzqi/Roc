@@ -6,6 +6,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import {
+  DEEP_AGENT_MEMORY_NAMESPACE,
+  buildDeepAgentMemoryKey,
+  buildDeepAgentMemoryNamespace,
+  createDeepAgentStoreFileValue
+} from '../../src/main/services/deep-agent/sqlite-store';
+import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../src/main/services/deep-agent/types';
 import { RocDomainError, wrapIpc } from '../../src/main/services/errors';
 
 let root: string;
@@ -455,14 +462,14 @@ describe('Roc foundation services', () => {
       runnable: false,
       model: 'model-ready',
       memoryAccess: 'store_backend',
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
+      builtInTools: [...DEEP_AGENT_BUILT_IN_TOOLS],
       rocTools: [],
       todoMapping: {
         sourceTool: 'write_todos',
         target: 'task_steps'
       },
       interruptOn: {},
-      reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
+      reason: 'Roc 不在 preview 阶段实际装配 Deep Agents，本结果反映下一轮装配将使用的参数。'
     });
   });
 
@@ -483,7 +490,7 @@ describe('Roc foundation services', () => {
     const runtimeStore = Reflect.get(services.deepAgentRuntimeService as object, 'store') as {
       get: (namespace: string[], key: string) => Promise<unknown>;
     };
-    const projected = await runtimeStore.get(['roc', 'memory', 'filesystem'], `/${accepted.id}.md`);
+    const projected = await runtimeStore.get([...buildDeepAgentMemoryNamespace(null)], `/${accepted.id}.md`);
 
     expect(projected).toBeNull();
   });
@@ -495,6 +502,53 @@ describe('Roc foundation services', () => {
     expect(existsSync(agentsPath)).toBe(true);
     expect(agentsContent).toContain('# Roc Project Rules');
     expect(agentsContent).toContain('`/workspace/` 是当前工作区，`/memory/` 是只读策展记忆视图。');
+  });
+
+  it('migrates legacy filesystem namespace entries into the current deep agent memory namespace on initialize', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-memory-namespace-'));
+    try {
+      const candidate = services.memoryService.writeCandidate({
+        type: 'project_context',
+        scope: 'project:roc',
+        content: '旧命名空间投影需要迁移到当前工作区命名空间。',
+        confidence: 0.9,
+        priority: 'medium',
+        source: 'test',
+        sourceRef: 'test-legacy-namespace-migration'
+      });
+      const accepted = services.memoryService.acceptCandidate(candidate.id);
+      const key = buildDeepAgentMemoryKey(accepted.id);
+      const runtimeStore = Reflect.get(services.deepAgentRuntimeService as object, 'store') as {
+        get: (namespace: string[], key: string) => Promise<{ value?: { content?: string } } | null>;
+        put: (namespace: string[], key: string, value: Record<string, unknown>) => Promise<void>;
+        delete: (namespace: string[], key: string) => Promise<void>;
+      };
+
+      await runtimeStore.put(
+        [...DEEP_AGENT_MEMORY_NAMESPACE],
+        key,
+        createDeepAgentStoreFileValue({
+          content: accepted.content,
+          createdAt: accepted.createdAt,
+          updatedAt: accepted.updatedAt
+        })
+      );
+      await runtimeStore.delete([...buildDeepAgentMemoryNamespace(null)], key);
+
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      services.memoryService.initialize();
+
+      const legacyProjection = await runtimeStore.get([...DEEP_AGENT_MEMORY_NAMESPACE], key);
+      const currentProjection = await runtimeStore.get([...buildDeepAgentMemoryNamespace(workspaceRoot)], key);
+
+      expect(legacyProjection).toBeNull();
+      expect(currentProjection?.value).toMatchObject({
+        content: accepted.content,
+        mimeType: 'text/markdown'
+      });
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it('rejects providers saved with non-secret credential refs at the schema boundary', () => {
@@ -2243,7 +2297,7 @@ describe('Roc foundation services', () => {
     expect(preview.subagents).toContainEqual(
       expect.objectContaining({
         id: 'code-review',
-        inheritsSkills: false
+        skills: []
       })
     );
     expect(preview.skippedCapabilities).toEqual(

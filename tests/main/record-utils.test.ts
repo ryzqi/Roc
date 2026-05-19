@@ -30,7 +30,7 @@ describe('record-utils reasoning helpers', () => {
     ).resolves.toBe('block thinking');
   });
 
-  it('reads reasoning text from snake_case content blocks', async () => {
+  it('ignores snake_case content block fallbacks that are no longer part of the supported contract', async () => {
     await expect(
       readReasoningFromMessageOutput({
         content_blocks: [
@@ -40,7 +40,7 @@ describe('record-utils reasoning helpers', () => {
           }
         ]
       })
-    ).resolves.toBe('snake block thinking');
+    ).resolves.toBeNull();
   });
 
   it('reads OpenAI Responses reasoning summaries from additional kwargs', async () => {
@@ -77,13 +77,13 @@ describe('record-utils reasoning helpers', () => {
     ).resolves.toBeNull();
   });
 
-  it('reads reasoning block text from thinking blocks', () => {
+  it('ignores legacy thinking blocks outside the supported reasoning block shape', () => {
     expect(
       readReasoningBlockText({
         type: 'thinking',
         thinking: 'native thinking'
       })
-    ).toEqual(['native thinking']);
+    ).toEqual([]);
   });
 });
 

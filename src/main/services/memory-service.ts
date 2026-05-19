@@ -3,7 +3,9 @@ import { basename, dirname, join } from 'node:path';
 import {
   SqliteLangGraphStore,
   DEEP_AGENT_MEMORY_NAMESPACE,
+  buildDeepAgentMemoryNamespace,
   buildDeepAgentMemoryKey,
+  buildStoreNamespaceKey,
   createDeepAgentStoreFileValue
 } from './deep-agent/sqlite-store';
 import type { DatabaseService } from './database-service';
@@ -24,6 +26,7 @@ import type {
   SessionSearchResult
 } from '../../shared/types';
 import type { RocPaths } from './paths';
+import type { WorkspaceService } from './workspace-service';
 import { conflict, db, fts, layerStats, markdown, operationsLog, routing, search, validation, WARM_FILES } from './memory';
 
 export class MemoryService {
@@ -31,7 +34,8 @@ export class MemoryService {
 
   constructor(
     private readonly paths: RocPaths,
-    private readonly database: DatabaseService
+    private readonly database: DatabaseService,
+    private readonly workspaceService: WorkspaceService
   ) {
     this.deepAgentStore = new SqliteLangGraphStore(database);
   }
@@ -62,6 +66,7 @@ export class MemoryService {
       ].join('\n')
     );
     markdown.ensureFile(join(this.paths.logsDir, 'memory_operations.log'), '');
+    this.migrateLegacyDeepAgentNamespaceIfNeeded();
     this.syncDeepAgentStoreProjection();
   }
 
@@ -360,7 +365,7 @@ export class MemoryService {
     this.database.db.prepare("UPDATE memory_entries_index SET status = 'archived', updated_at = ? WHERE id = ?").run(now, candidate.id);
     fts.deleteMemoryFts(this.database, candidate.id);
     operationsLog.appendOperation(this.database, this.paths, candidate.id, 'candidate_reject', { sourceRef: candidate.source_ref });
-    void this.deepAgentStore.delete(DEEP_AGENT_MEMORY_NAMESPACE as unknown as string[], buildDeepAgentMemoryKey(candidate.id));
+    this.removeDeepAgentMemoryProjection(candidate.id);
     return this.listCandidates().filter((item) => item.id === candidate.id)[0];
   }
 
@@ -454,7 +459,7 @@ export class MemoryService {
     this.database.db.prepare("UPDATE memory_entries_index SET status = 'archived', updated_at = ? WHERE id = ?").run(now, memoryId);
     fts.deleteMemoryFts(this.database, memoryId);
     operationsLog.appendOperation(this.database, this.paths, memoryId, 'memory_delete', { previousStatus: row.status, recoverable: true });
-    void this.deepAgentStore.delete(DEEP_AGENT_MEMORY_NAMESPACE as unknown as string[], buildDeepAgentMemoryKey(memoryId));
+    this.removeDeepAgentMemoryProjection(memoryId);
     return {
       id: memoryId,
       status: 'archived',
@@ -500,7 +505,75 @@ export class MemoryService {
     };
   }
 
+  private getDeepAgentMemoryNamespace(): string[] {
+    return [...buildDeepAgentMemoryNamespace(this.workspaceService.getCurrentWorkspace()?.path ?? null)];
+  }
+
+  private migrateLegacyDeepAgentNamespaceIfNeeded(): void {
+    const legacyNamespace = [...DEEP_AGENT_MEMORY_NAMESPACE];
+    const targetNamespace = this.getDeepAgentMemoryNamespace();
+    const legacyKey = buildStoreNamespaceKey(legacyNamespace);
+    const targetKey = buildStoreNamespaceKey(targetNamespace);
+    if (legacyKey === targetKey) {
+      return;
+    }
+
+    const legacyRows = this.database.db
+      .prepare(
+        `SELECT item_key, value_json, created_at, updated_at
+         FROM langgraph_store_items
+         WHERE namespace_key = ?`
+      )
+      .all(legacyKey) as Array<{ item_key: string; value_json: string; created_at: string; updated_at: string }>;
+
+    if (legacyRows.length === 0) {
+      return;
+    }
+
+    const insert = this.database.db.prepare(
+      `INSERT OR REPLACE INTO langgraph_store_items (namespace_key, namespace_json, item_key, value_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    const removeLegacy = this.database.db.prepare('DELETE FROM langgraph_store_items WHERE namespace_key = ?');
+    this.database.db.transaction(() => {
+      for (const row of legacyRows) {
+        insert.run(
+          targetKey,
+          JSON.stringify(targetNamespace),
+          row.item_key,
+          row.value_json,
+          row.created_at,
+          row.updated_at
+        );
+      }
+      removeLegacy.run(legacyKey);
+    })();
+  }
+
+  private removeDeepAgentMemoryProjection(memoryId: string): void {
+    const key = buildDeepAgentMemoryKey(memoryId);
+    const namespaces = [
+      this.getDeepAgentMemoryNamespace(),
+      [...buildDeepAgentMemoryNamespace(null)],
+      [...DEEP_AGENT_MEMORY_NAMESPACE]
+    ];
+    const seen = new Set<string>();
+
+    for (const namespace of namespaces) {
+      const namespaceKey = buildStoreNamespaceKey(namespace);
+      if (seen.has(namespaceKey)) {
+        continue;
+      }
+      seen.add(namespaceKey);
+      void this.deepAgentStore.delete(namespace, key);
+    }
+  }
+
+  // langgraph_store_items 是 Markdown 真理源的派生投影，只读，仅供 deepagents /memory/ 路由使用。
+  // 任何来自 agent 的 /memory/ 写入都会被 ReadOnlyStoreBackend 拒绝。
   private syncDeepAgentStoreProjection(): void {
+    const namespace = this.getDeepAgentMemoryNamespace();
+    const namespaceKey = buildStoreNamespaceKey(namespace);
     const rows = this.database.db
       .prepare(
         `SELECT id, markdown_path, created_at, updated_at
@@ -516,18 +589,18 @@ export class MemoryService {
          FROM langgraph_store_items
          WHERE namespace_key = ?`
       )
-      .all('roc\u001fmemory\u001ffilesystem') as Array<{ item_key: string }>;
+      .all(namespaceKey) as Array<{ item_key: string }>;
 
     for (const row of staleRows) {
       if (!activeKeys.has(row.item_key)) {
-        void this.deepAgentStore.delete(DEEP_AGENT_MEMORY_NAMESPACE as unknown as string[], row.item_key);
+        void this.deepAgentStore.delete(namespace, row.item_key);
       }
     }
 
     for (const row of rows) {
       const content = markdown.readMemoryBody(row.markdown_path);
       void this.deepAgentStore.put(
-        DEEP_AGENT_MEMORY_NAMESPACE as unknown as string[],
+        namespace,
         buildDeepAgentMemoryKey(row.id),
         createDeepAgentStoreFileValue({
           content,
@@ -540,7 +613,7 @@ export class MemoryService {
 
   private upsertDeepAgentMemoryProjection(entry: Pick<MemoryEntry, 'id' | 'content' | 'createdAt' | 'updatedAt'>): void {
     void this.deepAgentStore.put(
-      DEEP_AGENT_MEMORY_NAMESPACE as unknown as string[],
+      this.getDeepAgentMemoryNamespace(),
       buildDeepAgentMemoryKey(entry.id),
       createDeepAgentStoreFileValue({
         content: entry.content,

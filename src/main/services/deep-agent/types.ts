@@ -1,4 +1,4 @@
-import type { DynamicStructuredTool } from '@langchain/core/tools';
+import type { SubAgent } from 'deepagents';
 import type {
   ChatStartRunRequest,
   TaskRun
@@ -27,11 +27,18 @@ export type RunFailure = {
   retryable: boolean;
 };
 
-export type RuntimeSubagent = {
-  name: string;
-  description: string;
-  systemPrompt: string;
-  tools: Array<DynamicStructuredTool<any, any, any, string>>;
-};
+export type RuntimeSubagent = SubAgent;
+
+export const DEEP_AGENT_BUILT_IN_TOOLS = [
+  'write_todos',
+  'task',
+  'ls',
+  'read_file',
+  'write_file',
+  'edit_file',
+  'glob',
+  'grep',
+  'execute'
+] as const;
 
 export const RUN_EVENT_NAME = 'run-event';

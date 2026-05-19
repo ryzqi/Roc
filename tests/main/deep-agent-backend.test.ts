@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InMemoryStore } from '@langchain/langgraph';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend, type RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
+import { buildDeepAgentMemoryNamespace } from '../../src/main/services/deep-agent/sqlite-store';
 
 let root: string;
 let userHome: string;
@@ -40,7 +41,7 @@ describe('deep agent backend', () => {
       writeFileSync(join(workspaceRoot, 'notes.txt'), 'hello backend\n', 'utf8');
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# skill\n', 'utf8');
       const store = new InMemoryStore();
-      await store.put(['roc', 'memory', 'filesystem'], '/accepted.md', {
+      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
         content: '# accepted\n',
         created_at: '2026-05-15T00:00:00.000Z',
         modified_at: '2026-05-15T00:00:00.000Z',
@@ -208,6 +209,36 @@ describe('deep agent backend', () => {
     );
   });
 
+  it('keeps /memory/ mounted read-only as a curated projection during agent runs', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-memory-readonly-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      const store = new InMemoryStore();
+      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
+        content: '# accepted\n',
+        created_at: '2026-05-15T00:00:00.000Z',
+        modified_at: '2026-05-15T00:00:00.000Z',
+        mimeType: 'text/markdown'
+      });
+      const backend: RocCompositeBackend = createBackend({
+        workspaceService: services.workspaceService,
+        paths: services.paths,
+        shellExecutionService: services.shellExecutionService,
+        store
+      }).backend;
+
+      const writeResult = await backend.write('/memory/accepted.md', 'mutate\n');
+      const editResult = await backend.edit('/memory/accepted.md', '# accepted\n', 'mutated');
+      const memoryFile = await backend.read('/memory/accepted.md');
+
+      expect(writeResult.error).toBeTruthy();
+      expect(editResult.error).toBeTruthy();
+      expect(memoryFile.content).toBe('# accepted\n');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('allows writes outside the mounted routes through the default StateBackend', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
     try {
@@ -240,7 +271,7 @@ describe('deep agent backend', () => {
       writeFileSync(join(workspaceRoot, 'notes.txt'), 'hello backend\n', 'utf8');
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# hello skill\n', 'utf8');
       const store = new InMemoryStore();
-      await store.put(['roc', 'memory', 'filesystem'], '/accepted.md', {
+      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
         content: 'hello memory\n',
         created_at: '2026-05-15T00:00:00.000Z',
         modified_at: '2026-05-15T00:00:00.000Z',

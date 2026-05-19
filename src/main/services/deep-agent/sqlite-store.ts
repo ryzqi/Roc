@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 import {
   BaseStore,
   type GetOperation,
@@ -30,7 +32,17 @@ type NamespaceRow = {
 };
 
 const NAMESPACE_SEPARATOR = '\u001f';
+/** @deprecated Only used when migrating legacy projections from the pre-3.2 namespace. */
 export const DEEP_AGENT_MEMORY_NAMESPACE = ['roc', 'memory', 'filesystem'] as const;
+
+export function buildDeepAgentMemoryNamespace(workspacePath: string | null): readonly string[] {
+  if (workspacePath === null) {
+    return ['roc', 'memory', 'global'];
+  }
+  const normalizedPath = resolve(workspacePath).toLowerCase();
+  const stableWorkspaceKey = createHash('sha1').update(normalizedPath).digest('hex');
+  return ['roc', 'memory', 'workspace', stableWorkspaceKey];
+}
 
 export function buildStoreNamespaceKey(namespace: readonly string[]): string {
   return namespace.join(NAMESPACE_SEPARATOR);

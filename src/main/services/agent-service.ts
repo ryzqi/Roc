@@ -14,6 +14,7 @@ import type {
   SkippedCapability
 } from '../../shared/types';
 import type { ConfigService } from './config-service';
+import { DEEP_AGENT_BUILT_IN_TOOLS } from './deep-agent/types';
 import type { McpService } from './mcp-service';
 import type { SkillService } from './skill-service';
 
@@ -59,14 +60,14 @@ export class AgentService {
       runnable: false,
       model: defaultModelState.modelId,
       memoryAccess: 'store_backend',
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
+      builtInTools: [...DEEP_AGENT_BUILT_IN_TOOLS],
       rocTools: [],
       todoMapping: {
         sourceTool: 'write_todos',
         target: 'task_steps'
       },
       interruptOn: this.createInterruptPolicy(approvalMode, []),
-      reason: 'W2 只装配配置预览，不执行 Deep Agents run。'
+      reason: 'Roc 不在 preview 阶段实际装配 Deep Agents，本结果反映下一轮装配将使用的参数。'
     };
   }
 
@@ -125,7 +126,7 @@ export class AgentService {
     return {
       runnable: false,
       modelId: defaultModelState.modelId,
-      builtInTools: ['write_todos', 'task', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute'],
+      builtInTools: [...DEEP_AGENT_BUILT_IN_TOOLS],
       selectedCapabilities: {
         mcpServers: selectedMcpServers,
         skills: selectedSkills
@@ -275,14 +276,14 @@ export class AgentService {
         id: 'code-review',
         name: '代码审查子任务',
         purpose: '隔离审查上下文，并把 bug、风险与缺失验证回流主任务轨迹。',
-        inheritsSkills: false,
+        skills: [],
         tools: []
       },
       {
         id: 'research',
         name: '资料检索子任务',
         purpose: '围绕网页阅读整理外部资料结论，并明确来源边界。',
-        inheritsSkills: false,
+        skills: [],
         tools: ['web_read']
       }
     ];

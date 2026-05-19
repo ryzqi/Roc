@@ -106,16 +106,7 @@ function hasToolCalls(value: unknown): boolean {
   }
 
   const toolCalls = readRecordValue(value, 'tool_calls');
-  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-    return true;
-  }
-
-  const toolCallChunks = readRecordValue(value, 'tool_call_chunks');
-  if (Array.isArray(toolCallChunks) && toolCallChunks.length > 0) {
-    return true;
-  }
-
-  return readNonEmptyString(readRecordValue(value, 'tool_call_id')) !== null;
+  return Array.isArray(toolCalls) && toolCalls.length > 0;
 }
 
 function isNonAssistantOutput(value: unknown): boolean {
@@ -137,16 +128,7 @@ function readContentBlocks(value: unknown): unknown[] {
 
   const blocks: unknown[] = [];
   appendArrayValues(blocks, readRecordValue(value, 'contentBlocks'));
-  appendArrayValues(blocks, readRecordValue(value, 'content_blocks'));
   appendArrayValues(blocks, readRecordValue(value, 'content'));
-
-  const additionalKwargs = readRecordValue(value, 'additional_kwargs');
-  if (isRecord(additionalKwargs)) {
-    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'contentBlocks'));
-    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'content_blocks'));
-    appendArrayValues(blocks, readRecordValue(additionalKwargs, 'content'));
-  }
-
   return blocks;
 }
 
@@ -178,9 +160,7 @@ function isNonAssistantContentBlock(block: unknown): boolean {
   if (hasHostedSearchResultText(block)) {
     return true;
   }
-
-  const nestedContent = readRecordValue(block, 'content');
-  return Array.isArray(nestedContent) && nestedContent.some((item) => isNonAssistantContentBlock(item));
+  return false;
 }
 
 function hasHostedSearchResultText(value: Record<string, unknown>): boolean {
@@ -251,37 +231,7 @@ function hasSkillInstructionPath(value: unknown): boolean {
   }
 
   const path = readNonEmptyString(readRecordValue(value, 'path'));
-  if (path !== null && isSkillInstructionPath(path)) {
-    return true;
-  }
-
-  const filePath = readNonEmptyString(readRecordValue(value, 'filePath'));
-  if (filePath !== null && isSkillInstructionPath(filePath)) {
-    return true;
-  }
-
-  const snakeCaseFilePath = readNonEmptyString(readRecordValue(value, 'file_path'));
-  if (snakeCaseFilePath !== null && isSkillInstructionPath(snakeCaseFilePath)) {
-    return true;
-  }
-
-  const metadata = readRecordValue(value, 'metadata');
-  if (!isRecord(metadata)) {
-    return false;
-  }
-
-  const metadataPath = readNonEmptyString(readRecordValue(metadata, 'path'));
-  if (metadataPath !== null && isSkillInstructionPath(metadataPath)) {
-    return true;
-  }
-
-  const metadataFilePath = readNonEmptyString(readRecordValue(metadata, 'filePath'));
-  if (metadataFilePath !== null && isSkillInstructionPath(metadataFilePath)) {
-    return true;
-  }
-
-  const metadataSnakeCaseFilePath = readNonEmptyString(readRecordValue(metadata, 'file_path'));
-  return metadataSnakeCaseFilePath !== null && isSkillInstructionPath(metadataSnakeCaseFilePath);
+  return path !== null && isSkillInstructionPath(path);
 }
 
 function isSkillInstructionPath(path: string): boolean {
@@ -299,7 +249,7 @@ export function readReasoningBlockText(block: unknown): string[] {
   }
 
   const type = readNonEmptyString(readRecordValue(block, 'type'));
-  if (type !== 'reasoning' && type !== 'reasoning_content' && type !== 'thinking') {
+  if (type !== 'reasoning') {
     return [];
   }
 
@@ -312,26 +262,6 @@ export function readReasoningBlockText(block: unknown): string[] {
   const reasoning = readNonEmptyString(readRecordValue(block, 'reasoning'));
   if (reasoning !== null) {
     values.push(reasoning);
-  }
-
-  const thinking = readNonEmptyString(readRecordValue(block, 'thinking'));
-  if (thinking !== null) {
-    values.push(thinking);
-  }
-
-  const reasoningContent = readNonEmptyString(readRecordValue(block, 'reasoning_content'));
-  if (reasoningContent !== null) {
-    values.push(reasoningContent);
-  }
-
-  const summary = readRecordValue(block, 'summary');
-  if (Array.isArray(summary)) {
-    for (const item of summary) {
-      const summaryText = readNonEmptyString(readRecordValue(item, 'text'));
-      if (summaryText !== null) {
-        values.push(summaryText);
-      }
-    }
   }
 
   return values;
@@ -347,11 +277,6 @@ export function readReasoningTextValues(value: unknown): string[] {
     return standardContentBlocks;
   }
 
-  const snakeCaseContentBlocks = readReasoningBlockValues(readRecordValue(value, 'content_blocks'));
-  if (snakeCaseContentBlocks.length > 0) {
-    return snakeCaseContentBlocks;
-  }
-
   const additionalKwargs = readRecordValue(value, 'additional_kwargs');
   const additionalReasoningValues = readOpenAiReasoningSummaryValues(readRecordValue(additionalKwargs, 'reasoning'));
   if (additionalReasoningValues.length > 0) {
@@ -363,24 +288,9 @@ export function readReasoningTextValues(value: unknown): string[] {
     return [additionalReasoningContent];
   }
 
-  const additionalCamelCaseReasoningContent = readNonEmptyString(readRecordValue(additionalKwargs, 'reasoningContent'));
-  if (additionalCamelCaseReasoningContent !== null) {
-    return [additionalCamelCaseReasoningContent];
-  }
-
   const directReasoningContent = readNonEmptyString(readRecordValue(value, 'reasoning_content'));
   if (directReasoningContent !== null) {
     return [directReasoningContent];
-  }
-
-  const directCamelCaseReasoningContent = readNonEmptyString(readRecordValue(value, 'reasoningContent'));
-  if (directCamelCaseReasoningContent !== null) {
-    return [directCamelCaseReasoningContent];
-  }
-
-  const directReasoning = readNonEmptyString(readRecordValue(value, 'reasoning'));
-  if (directReasoning !== null) {
-    return [directReasoning];
   }
 
   return readReasoningBlockValues(readRecordValue(value, 'content'));

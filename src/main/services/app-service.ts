@@ -178,12 +178,12 @@ export function createAppServices(
   const configService = new ConfigService(paths);
   const databaseService = new DatabaseService(paths);
   const logService = new LogService(paths);
-  const memoryService = new MemoryService(paths, databaseService);
   const taskService = new TaskService(databaseService);
   const lifecycleService = new LifecycleService(taskService);
   const mcpService = new McpService(configService);
   const skillService = new SkillService(paths);
   const workspaceService = new WorkspaceService(configService);
+  const memoryService = new MemoryService(paths, databaseService, workspaceService);
   const rtkService = new RtkService(paths);
   const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService);
   const agentService = new AgentService(configService, mcpService, skillService);

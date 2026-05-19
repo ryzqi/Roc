@@ -61,7 +61,7 @@ export type AgentSubagentPreview = {
   id: string;
   name: string;
   purpose: string;
-  inheritsSkills: false;
+  skills: string[];
   tools: string[];
 };
 

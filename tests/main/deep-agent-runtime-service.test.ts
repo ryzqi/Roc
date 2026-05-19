@@ -966,6 +966,8 @@ describe('DeepAgentRuntimeService', () => {
       output: Promise.resolve({})
     });
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-runtime-workspace-'));
+    services.workspaceService.selectWorkspace(workspaceRoot);
     const candidate = services.memoryService.writeCandidate({
       type: 'knowledge_note',
       scope: 'project:roc',
@@ -976,8 +978,6 @@ describe('DeepAgentRuntimeService', () => {
       sourceRef: 'tests/deep-agent-runtime-service'
     });
     const acceptedMemory = services.memoryService.acceptCandidate(candidate.id);
-    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-runtime-workspace-'));
-    services.workspaceService.selectWorkspace(workspaceRoot);
     writeFileSync(join(workspaceRoot, 'runtime-note.txt'), 'runtime note\n', 'utf8');
     const fetchMock = vi.fn().mockResolvedValue(
       new Response('Fetched via Jina Reader', {
@@ -1010,7 +1010,11 @@ describe('DeepAgentRuntimeService', () => {
           };
           store?: unknown;
           tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }>;
-          subagents?: Array<{ name: string; tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }> }>;
+          subagents?: Array<{
+            name: string;
+            tools?: Array<{ name: string; invoke: (input: unknown) => Promise<unknown> }>;
+            skills?: string[];
+          }>;
         }
       | undefined;
     const toolNames = createAgentCall?.tools?.map((tool) => tool.name) ?? [];
@@ -1031,7 +1035,9 @@ describe('DeepAgentRuntimeService', () => {
     );
     expect(subagentNames).toEqual(expect.arrayContaining(['code-review', 'research']));
     expect(codeReviewSubagent?.tools ?? []).toEqual([]);
+    expect(codeReviewSubagent?.skills ?? []).toEqual([]);
     expect(researchSubagent?.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['web_read']));
+    expect(researchSubagent?.skills ?? []).toEqual([]);
     await expect(webSearchTool?.invoke({ query: 'langchain mcp adapters' })).resolves.toBe('Exa search results');
     await expect(backend?.execute?.('dir')).resolves.toMatchObject({
       exitCode: 0,
