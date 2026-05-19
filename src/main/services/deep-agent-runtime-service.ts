@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { createDeepAgent } from 'deepagents';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { Command, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
@@ -28,6 +27,7 @@ import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
 import { executeWithProviderRequestRetry, isRetryableProviderRequestFailure } from './provider-request-retry';
 import {
+  buildDeepAgent,
   createBackend,
   errorMapping,
   prompt,
@@ -341,12 +341,12 @@ export class DeepAgentRuntimeService {
             selectedSkillIds: [...context.enabledCapabilities.skills]
           });
           const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
-          const agent = createDeepAgent({
+          const agent = buildDeepAgent({
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
             backend: runtimeBackend.backend,
             store: this.store,
-            skills: skillSources,
+            skillSources,
             subagents,
             tools: runTools,
             interruptOn,
@@ -510,12 +510,12 @@ export class DeepAgentRuntimeService {
         selectedSkillIds: [...context.enabledCapabilities.skills]
       });
       const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
-      const agent = createDeepAgent({
+      const agent = buildDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
         backend: runtimeBackend.backend,
         store: this.store,
-        skills: skillSources,
+        skillSources,
         subagents,
         tools: runTools,
         interruptOn,

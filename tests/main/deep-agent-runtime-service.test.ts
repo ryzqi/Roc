@@ -172,6 +172,41 @@ afterEach(() => {
 });
 
 describe('DeepAgentRuntimeService', () => {
+  it('delegates deep agent assembly through a single buildDeepAgent helper', async () => {
+    mocked.createDeepAgentMock.mockClear();
+
+    const { buildDeepAgent } = await import('../../src/main/services/deep-agent/agent-builder');
+    const backend = { routePrefixes: ['/memory/'] } as RocCompositeBackend;
+    const store = {} as never;
+    const builtAgent = buildDeepAgent({
+      model: 'model-ready' as never,
+      systemPrompt: 'system prompt',
+      backend,
+      store,
+      skillSources: ['/skills/project-review/'],
+      subagents: [],
+      tools: [],
+      interruptOn: undefined,
+      checkpointer: undefined
+    });
+
+    expect(mocked.createDeepAgentMock).toHaveBeenCalledWith({
+      model: 'model-ready',
+      systemPrompt: 'system prompt',
+      backend,
+      store,
+      skills: ['/skills/project-review/'],
+      subagents: [],
+      tools: [],
+      interruptOn: undefined,
+      checkpointer: undefined
+    });
+    expect(builtAgent).toEqual({
+      streamEvents: mocked.streamEventsMock,
+      invoke: mocked.invokeMock
+    });
+  });
+
   it('emits message, reasoning, and completion events for a chat run', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([

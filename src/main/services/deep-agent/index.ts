@@ -1,6 +1,7 @@
 export * as errorMapping from './error-mapping';
 export * as prompt from './prompt';
 export * as recordUtils from './record-utils';
+export { buildDeepAgent, type DeepAgentBuildInput } from './agent-builder';
 export { SqliteLangGraphStore } from './sqlite-store';
 export * as tools from './tools';
 export { createBackend } from './backend';
