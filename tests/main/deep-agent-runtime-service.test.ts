@@ -695,14 +695,7 @@ describe('DeepAgentRuntimeService', () => {
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
       | { skills?: string[]; backend?: { routePrefixes?: string[]; ls: (path: string) => Promise<{ files?: Array<{ path: string }> }> } }
       | undefined;
-    expect(call?.skills).toEqual(['/skills/']);
-    await expect(call?.backend?.ls('/skills/')).resolves.toMatchObject({
-      files: [
-        expect.objectContaining({
-          path: '/skills/project-review/'
-        })
-      ]
-    });
+    expect(call?.skills).toEqual(['/skills/project-review/']);
     expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
@@ -733,7 +726,7 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { backend?: RocCompositeBackend }
+      | { skills?: string[]; backend?: RocCompositeBackend }
       | undefined;
     const writeResult = await call?.backend?.write('/skills/project-review/notes.md', 'mutate\n')!;
     const editResult = await call?.backend?.edit(
@@ -742,11 +735,12 @@ describe('DeepAgentRuntimeService', () => {
       'mutated'
     )!;
 
+    expect(call?.skills).toEqual(['/skills/project-review/']);
     expect(writeResult.error).toBeTruthy();
     expect(editResult.error).toBeTruthy();
   });
 
-  it('exposes only the selected skills under the official /skills/ source root', async () => {
+  it('passes only the selected skill source directories to deepagents', async () => {
     mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
     writeFileSync(
       join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'),
@@ -787,18 +781,9 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { skills?: string[]; backend?: { ls: (path: string) => Promise<{ files?: Array<{ path: string }> }> } }
+      | { skills?: string[] }
       | undefined;
-    expect(call?.skills).toEqual(['/skills/']);
-    await expect(call?.backend?.ls('/skills/')).resolves.toMatchObject({
-      files: expect.arrayContaining([
-        expect.objectContaining({ path: '/skills/alpha-review/' }),
-        expect.objectContaining({ path: '/skills/zeta-review/' })
-      ])
-    });
-    await expect(call?.backend?.ls('/skills/')).resolves.not.toMatchObject({
-      files: expect.arrayContaining([expect.objectContaining({ path: '/skills/other-skill/' })])
-    });
+    expect(call?.skills).toEqual(['/skills/zeta-review/', '/skills/alpha-review/']);
   });
 
   it('creates the deep agent with official filesystem and memory backends instead of custom permissions', async () => {
@@ -823,10 +808,11 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { permissions?: unknown; store?: unknown; backend?: { routePrefixes?: string[] } }
+      | { permissions?: unknown; store?: unknown; skills?: string[]; backend?: { routePrefixes?: string[] } }
       | undefined;
     expect(call?.permissions).toBeUndefined();
     expect(call?.store).toBeTruthy();
+    expect(call?.skills).toEqual(['/skills/project-review/']);
     expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
   });
 
@@ -1781,6 +1767,12 @@ describe('DeepAgentRuntimeService', () => {
   });
 
   it('resumes the interrupted task run on the same thread via Command({ resume })', async () => {
+    mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
+    writeFileSync(
+      join(services.paths.skillsDir, 'project-review', 'SKILL.md'),
+      ['---', 'name: project-review', 'description: Resume review skill', '---', ''].join('\n'),
+      'utf8'
+    );
     mocked.streamEventsMock.mockResolvedValueOnce({
       messages: createAsyncIterable([]),
       toolCalls: createAsyncIterable([]),
@@ -1822,7 +1814,7 @@ describe('DeepAgentRuntimeService', () => {
       mode: 'task',
       enabledCapabilities: {
         mcpServers: [],
-        skills: []
+        skills: ['project-review']
       }
     });
     await interrupted;
@@ -1842,6 +1834,11 @@ describe('DeepAgentRuntimeService', () => {
     });
 
     const resumeInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0];
+    const resumeCreateAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          skills?: string[];
+        }
+      | undefined;
     const resumeConfig = mocked.streamEventsMock.mock.calls.at(-1)?.[1] as
       | {
           configurable?: {
@@ -1856,6 +1853,7 @@ describe('DeepAgentRuntimeService', () => {
     );
 
     expect(resumeInput).toBeInstanceOf(Command);
+    expect(resumeCreateAgentCall?.skills).toEqual(['/skills/project-review/']);
     expect(resumeConfig?.configurable?.thread_id).toBe(started.threadId);
     expect(decisionEvent?.payload).toMatchObject({
       interruptId: 'interrupt-2',

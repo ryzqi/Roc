@@ -337,10 +337,9 @@ export class DeepAgentRuntimeService {
             workspaceService: this.workspaceService,
             paths: this.paths,
             shellExecutionService: this.taskBoundShellExecutionService(context),
-            store: this.store,
-            selectedSkillIds: [...context.enabledCapabilities.skills]
+            store: this.store
           });
-          const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
+          const skillSources = context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
           const agent = buildDeepAgent({
             model: context.modelHandle.model,
             systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
@@ -506,10 +505,9 @@ export class DeepAgentRuntimeService {
         workspaceService: this.workspaceService,
         paths: this.paths,
         shellExecutionService: this.taskBoundShellExecutionService(context),
-        store: this.store,
-        selectedSkillIds: [...context.enabledCapabilities.skills]
+        store: this.store
       });
-      const skillSources = context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
+      const skillSources = context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
       const agent = buildDeepAgent({
         model: context.modelHandle.model,
         systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),

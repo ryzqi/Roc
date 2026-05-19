@@ -72,34 +72,39 @@ describe('deep agent backend', () => {
     }
   });
 
-  it('filters /skills/ root listing to the selected skills when a run narrows skill access', async () => {
+  it('lists all mounted skills from the read-only /skills/ route without backend-level filtering', async () => {
     mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
-    writeFileSync(join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'), '# alpha\n', 'utf8');
-    writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# project\n', 'utf8');
+    writeFileSync(join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'), '# alpha review\n', 'utf8');
+    writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# project review\n', 'utf8');
 
     const backend = createBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: services.shellExecutionService,
-      store: new InMemoryStore(),
-      selectedSkillIds: ['project-review']
+      store: new InMemoryStore()
     }).backend;
 
     const rootSkills = await backend.ls('/skills/');
-    const selectedSkillFile = await backend.read('/skills/project-review/SKILL.md');
-    const unselectedSkillDirectory = await backend.ls('/skills/alpha-review/');
-    const rootSkillGrep = await backend.grep('project', '/skills/');
+    const projectSkillFile = await backend.read('/skills/project-review/SKILL.md');
+    const alphaSkillDirectory = await backend.ls('/skills/alpha-review/');
+    const rootSkillGrep = await backend.grep('review', '/skills/');
     const directAlphaGrep = await backend.grep('alpha', '/skills/alpha-review/');
     const rootSkillGlob = await backend.glob('**/*.md', '/skills/');
     const directAlphaGlob = await backend.glob('**/*.md', '/skills/alpha-review/');
 
-    expect(rootSkills.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/']);
-    expect(selectedSkillFile.content).toBe('# project\n');
-    expect(unselectedSkillDirectory.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
-    expect(rootSkillGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(rootSkills.files?.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['/skills/alpha-review/', '/skills/project-review/'])
+    );
+    expect(projectSkillFile.content).toBe('# project review\n');
+    expect(alphaSkillDirectory.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
+    expect(rootSkillGrep.matches?.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['/skills/alpha-review/SKILL.md', '/skills/project-review/SKILL.md'])
+    );
     expect(directAlphaGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
-    expect(rootSkillGlob.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(rootSkillGlob.files?.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['/skills/alpha-review/SKILL.md', '/skills/project-review/SKILL.md'])
+    );
     expect(directAlphaGlob.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
   });
 
@@ -186,8 +191,7 @@ describe('deep agent backend', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: services.shellExecutionService,
-      store: new InMemoryStore(),
-      selectedSkillIds: ['project-review']
+      store: new InMemoryStore()
     }).backend;
 
     const writeResult = await backend.write('/skills/project-review/notes.md', 'mutate\n');
