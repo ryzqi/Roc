@@ -30,7 +30,6 @@ export type LangChainChatModelHandle = {
 };
 
 type CreateModelOptions = {
-  cacheTtl?: '5m' | '1h';
   streaming?: boolean;
 };
 
@@ -57,6 +56,19 @@ class ReasoningAwareChatOpenAI extends ChatOpenAI {
       ...config
     };
     return newModel;
+  }
+}
+
+function warnIfAnthropicCacheControlConfigured(model: ChatAnthropic): void {
+  const defaultOptions = (model as ChatAnthropic & {
+    defaultOptions?: {
+      cache_control?: unknown;
+    };
+  }).defaultOptions;
+  if (defaultOptions?.cache_control !== undefined) {
+    console.warn(
+      '[LangChainModelFactory] Anthropic model retained defaultOptions.cache_control; Deep Agents middleware should own prompt caching.'
+    );
   }
 }
 
@@ -151,13 +163,6 @@ export class LangChainModelFactory {
 
     if (provider.type === 'anthropic_compatible') {
       const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
-      const cacheControl =
-        options.cacheTtl === undefined
-          ? undefined
-          : {
-              type: 'ephemeral' as const,
-              ttl: options.cacheTtl
-            };
       const model = new ChatAnthropic({
         model: modelId,
         apiKey,
@@ -171,20 +176,7 @@ export class LangChainModelFactory {
           timeout: providerRequestTimeoutMs
         }
       });
-      if (cacheControl !== undefined) {
-        const anthropicModelWithDefaults = model as ChatAnthropic & {
-          defaultOptions?: {
-            cache_control?: {
-              type: 'ephemeral';
-              ttl?: '5m' | '1h';
-            };
-          };
-        };
-        anthropicModelWithDefaults.defaultOptions = {
-          ...anthropicModelWithDefaults.defaultOptions,
-          cache_control: cacheControl
-        };
-      }
+      warnIfAnthropicCacheControlConfigured(model);
       return {
         provider,
         modelId,

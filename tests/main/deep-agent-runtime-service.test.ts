@@ -1609,7 +1609,7 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.checkpointer).toBeTruthy();
   });
 
-  it('passes Anthropic prompt cache TTL only for task-mode runs', async () => {
+  it('delegates Anthropic prompt caching to deepagents middleware for chat, task, and resume runs', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
       toolCalls: createAsyncIterable([]),
@@ -1727,8 +1727,8 @@ describe('DeepAgentRuntimeService', () => {
     await resumed;
 
     expect(createDefaultChatModelSpy.mock.calls[0]?.[0]).toEqual({ streaming: true });
-    expect(createDefaultChatModelSpy.mock.calls[1]?.[0]).toEqual({ streaming: true, cacheTtl: '1h' });
-    expect(createChatModelByModelIdSpy.mock.calls.at(-1)?.[1]).toEqual({ streaming: true, cacheTtl: '1h' });
+    expect(createDefaultChatModelSpy.mock.calls[1]?.[0]).toEqual({ streaming: true });
+    expect(createChatModelByModelIdSpy.mock.calls.at(-1)?.[1]).toEqual({ streaming: true });
   });
 
   it('maps global default approval mode into interruptOn without affecting execute or web_read', async () => {

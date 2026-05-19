@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AIMessageChunk } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOpenAI } from '@langchain/openai';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
 
@@ -150,7 +151,7 @@ describe('LangChainModelFactory', () => {
     });
   });
 
-  it('passes Anthropic prompt cache TTL through the model factory when requested', async () => {
+  it('ignores legacy Anthropic cache TTL inputs and leaves cache_control to deepagents middleware', async () => {
     services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
@@ -177,12 +178,58 @@ describe('LangChainModelFactory', () => {
     });
 
     const factory = new LangChainModelFactory(services.configService, services.secretService);
-    const result = await factory.createDefaultChatModel({ streaming: true, cacheTtl: '1h' });
+    const result = await factory.createDefaultChatModel({ streaming: true, cacheTtl: '1h' } as never);
 
-    expect((result.model as { defaultOptions?: { cache_control?: { type: string; ttl?: string } } }).defaultOptions?.cache_control).toEqual({
-      type: 'ephemeral',
-      ttl: '1h'
+    expect((result.model as { defaultOptions?: { cache_control?: { type: string; ttl?: string } } }).defaultOptions?.cache_control).toBeUndefined();
+  });
+
+  it('warns if an Anthropic-compatible model still carries cache_control defaults after construction', async () => {
+    services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-5',
+      providers: [
+        {
+          id: 'anthropic-local',
+          name: 'Anthropic Local',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test/v1/messages',
+          credentialRef: 'secret:anthropic-local',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet 4.5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
     });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const originalDefaultOptions = (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions;
+    (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions = {
+      cache_control: {
+        type: 'ephemeral'
+      }
+    };
+
+    try {
+      const factory = new LangChainModelFactory(services.configService, services.secretService);
+      await factory.createDefaultChatModel({ streaming: true });
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cache_control'));
+    } finally {
+      if (originalDefaultOptions === undefined) {
+        delete (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions;
+      } else {
+        (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions = originalDefaultOptions;
+      }
+      warnSpy.mockRestore();
+    }
   });
 
   it('preserves reasoning deltas from provider reasoning_content after withConfig on streaming OpenAI-compatible models', async () => {

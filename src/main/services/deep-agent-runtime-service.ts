@@ -124,8 +124,7 @@ export class DeepAgentRuntimeService {
     }
 
     const modelHandle = await this.langChainModelFactory.createDefaultChatModel({
-      streaming: true,
-      cacheTtl: request.mode === 'task' ? '1h' : undefined
+      streaming: true
     });
     const createdAt = new Date().toISOString();
     const taskRun = this.createTaskRunIfNeeded(request, input, modelHandle.modelId);
@@ -299,8 +298,7 @@ export class DeepAgentRuntimeService {
     return {
       enabledCapabilities: taskRun.enabledCapabilities,
       modelHandle: await this.langChainModelFactory.createChatModelByModelId(taskRun.modelId, {
-        streaming: true,
-        cacheTtl: '1h'
+        streaming: true
       }),
       runId: taskRun.id,
       taskRun,
