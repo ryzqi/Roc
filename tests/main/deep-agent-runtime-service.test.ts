@@ -1037,6 +1037,41 @@ describe('DeepAgentRuntimeService', () => {
     expect(createAgentCall?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/memory/']));
   });
 
+  it('allows writing ephemeral drafts to the default backend route for task runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['草稿已保存'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '保存一份草稿',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const createAgentCall = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          backend?: RocCompositeBackend;
+        }
+      | undefined;
+    const writeResult = await createAgentCall?.backend?.write('/draft.md', 'hello');
+
+    expect(writeResult?.error).toBeUndefined();
+    expect(writeResult?.path).toBe('/draft.md');
+  });
+
   it('records web_search and web_read tool lifecycle events in the task trace', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([

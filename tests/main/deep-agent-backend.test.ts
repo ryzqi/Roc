@@ -200,7 +200,7 @@ describe('deep agent backend', () => {
     );
   });
 
-  it('rejects writes outside the mounted routes', async () => {
+  it('allows writes outside the mounted routes through the default StateBackend', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -214,10 +214,10 @@ describe('deep agent backend', () => {
       const appWrite = await backend.write('/app/hello.txt', 'bad\n');
       const rootWrite = await backend.write('/hello.txt', 'bad\n');
 
-      expect(appWrite.error).toBeTruthy();
-      expect(appWrite.path).toBeUndefined();
-      expect(rootWrite.error).toBeTruthy();
-      expect(rootWrite.path).toBeUndefined();
+      expect(appWrite.error).toBeUndefined();
+      expect(appWrite.path).toBe('/app/hello.txt');
+      expect(rootWrite.error).toBeUndefined();
+      expect(rootWrite.path).toBe('/hello.txt');
       expect(existsSync(join(workspaceRoot, 'hello.txt'))).toBe(false);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
@@ -262,7 +262,7 @@ describe('deep agent backend', () => {
     }
   });
 
-  it('rejects uploadFiles for paths outside mounted routes', async () => {
+  it('allows uploadFiles for paths outside mounted routes through the default StateBackend', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-upload-invalid-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -285,7 +285,7 @@ describe('deep agent backend', () => {
         },
         {
           path: '/app/not-allowed.txt',
-          error: 'invalid_path'
+          error: null
         }
       ]);
       expect(existsSync(join(workspaceRoot, 'ok.txt'))).toBe(true);
