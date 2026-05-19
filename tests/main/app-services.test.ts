@@ -2347,8 +2347,12 @@ describe('Roc foundation services', () => {
       })
     );
     expect(preview.interruptOn).toEqual({
-      delete_file: true,
-      web_search: true
+      delete_file: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      web_search: {
+        allowedDecisions: ['approve', 'reject']
+      }
     });
   });
 

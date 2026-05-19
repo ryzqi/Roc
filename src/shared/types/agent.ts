@@ -5,6 +5,16 @@ export type EnabledCapabilities = {
   skills: string[];
 };
 
+export type InterruptDecisionType = 'approve' | 'edit' | 'reject';
+
+export type AgentInterruptPolicyValue =
+  | true
+  | {
+      allowedDecisions: InterruptDecisionType[];
+    };
+
+export type AgentInterruptPolicy = Record<string, AgentInterruptPolicyValue>;
+
 export type DeepAgentConfigPreview = {
   runnable: false;
   model: string;
@@ -15,7 +25,7 @@ export type DeepAgentConfigPreview = {
     sourceTool: 'write_todos';
     target: 'task_steps';
   };
-  interruptOn: Record<string, boolean>;
+  interruptOn: AgentInterruptPolicy;
   reason: string;
 };
 
@@ -65,7 +75,7 @@ export type AgentCapabilityPreview = {
   toolCards: AgentCapabilityCard[];
   skillCards: AgentCapabilityCard[];
   subagents: AgentSubagentPreview[];
-  interruptOn: Record<string, boolean>;
+  interruptOn: AgentInterruptPolicy;
   untrustedContextPolicy: 'external_content_reference_only';
   reason: string;
 };

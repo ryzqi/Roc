@@ -1,12 +1,14 @@
 import { createDeepAgent } from 'deepagents';
 import type {
   ApprovalMode,
+  AgentInterruptPolicy,
   AgentCapabilityCard,
   AgentCapabilityPreview,
   AgentRuntimeStatus,
   AgentSubagentPreview,
   DeepAgentConfigPreview,
   EnabledCapabilities,
+  InterruptDecisionType,
   McpServerSnapshot,
   SkillSnapshot,
   SkippedCapability
@@ -16,6 +18,14 @@ import type { McpService } from './mcp-service';
 import type { SkillService } from './skill-service';
 
 export class AgentService {
+  private static readonly DELETE_FILE_ALLOWED_DECISIONS: ReadonlyArray<InterruptDecisionType> = [
+    'approve',
+    'edit',
+    'reject'
+  ];
+
+  private static readonly MCP_ALLOWED_DECISIONS: ReadonlyArray<InterruptDecisionType> = ['approve', 'reject'];
+
   constructor(
     private readonly configService: ConfigService,
     private readonly mcpService: McpService,
@@ -282,15 +292,19 @@ export class AgentService {
     return this.configService.getPermissions().mode;
   }
 
-  private createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): Record<string, boolean> {
+  private createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): AgentInterruptPolicy {
     if (approvalMode === 'fully_automatic') {
       return {};
     }
-    const policy: Record<string, boolean> = {
-      delete_file: true
+    const policy: AgentInterruptPolicy = {
+      delete_file: {
+        allowedDecisions: [...AgentService.DELETE_FILE_ALLOWED_DECISIONS]
+      }
     };
     for (const toolName of mcpToolNames) {
-      policy[toolName] = true;
+      policy[toolName] = {
+        allowedDecisions: [...AgentService.MCP_ALLOWED_DECISIONS]
+      };
     }
     return policy;
   }

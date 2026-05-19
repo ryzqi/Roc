@@ -1558,10 +1558,14 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toMatchObject({
-      delete_file: true
+      delete_file: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      }
     });
     expect(call?.interruptOn).toMatchObject({
-      web_search: true
+      web_search: {
+        allowedDecisions: ['approve', 'reject']
+      }
     });
     expect(call?.checkpointer).toBeTruthy();
   });
@@ -1730,8 +1734,12 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toEqual({
-      delete_file: true,
-      search_docs: true
+      delete_file: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      search_docs: {
+        allowedDecisions: ['approve', 'reject']
+      }
     });
   });
 
