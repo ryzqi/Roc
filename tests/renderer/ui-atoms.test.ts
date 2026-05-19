@@ -14,7 +14,7 @@ describe('renderer ui atoms', () => {
       React.createElement(StatusPill, { label: '状态', value: '正常', tone: 'ok' })
     );
     const compactHtml = renderToStaticMarkup(
-      React.createElement(CompactStatusPill, { value: '已启用', tone: 'info' })
+      React.createElement(CompactStatusPill, { className: 'pill', value: '已启用', tone: 'info' })
     );
 
     expect(fullHtml).toContain('status-pill ok');
@@ -22,7 +22,8 @@ describe('renderer ui atoms', () => {
     expect(fullHtml).toContain('正常');
     expect(fullHtml).not.toContain('status-dot');
 
-    expect(compactHtml).toContain('status-pill info');
+    expect(compactHtml).toContain('pill info');
+    expect(compactHtml).not.toContain('status-pill info');
     expect(compactHtml).toContain('已启用');
     expect(compactHtml).not.toContain('status-dot');
   });

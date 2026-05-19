@@ -7,6 +7,7 @@ import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import type { RtkService } from './rtk-service';
 import type { TaskService } from './task-service';
+import { requireText } from './validation';
 
 export class DiagnosticsService {
   constructor(
@@ -101,7 +102,7 @@ export class DiagnosticsService {
   }
 
   createDiagnosticPackage(request: DiagnosticPackageRequest): DiagnosticPackage {
-    const taskId = this.requireText(request.taskId, 'diagnostic_task_id_empty', '诊断包任务 ID 不能为空。', '请选择要诊断的任务。');
+    const taskId = requireText(request.taskId, 'diagnostic_task_id_empty', '诊断包任务 ID 不能为空。', '请选择要诊断的任务。');
     const createdAt = new Date().toISOString();
     const packageId = `diagnostic_${randomUUID()}`;
     const diagnosticsDir = this.paths.diagnosticsDir;
@@ -167,17 +168,4 @@ export class DiagnosticsService {
     return Math.round((value / 1024 / 1024) * 10) / 10;
   }
 
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
-  }
 }

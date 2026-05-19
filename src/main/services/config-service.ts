@@ -1,22 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import {
-  createFixedLlamaCppProviderConfig,
-  createFixedNvidiaProviderConfig,
-  createFixedProviderConfig,
-  createFixedProviderConfigForId,
-  fixedProviderTypes,
-  isFixedProvider,
-  normalizeFixedProvider,
-  resolveFixedProviderType
-} from '../../shared/provider-defaults';
 import type {
-  ApprovalMode,
-  AppSettings,
   DefaultModelState,
-  McpServerConfig,
-  McpServersConfig,
   PermissionsConfig,
   ProviderConfig,
   ProvidersConfig,
@@ -25,162 +11,35 @@ import type {
 } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
+import { requireText } from './validation';
+import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
+import {
+  isCurrentSettingsDocument,
+  isLegacyUnifiedSettingsDocument,
+  migrateLegacySplitConfig,
+  migrateLegacyUnifiedDocument,
+  normalizeLegacyMcpConfig
+} from './config/migration';
+import {
+  defaultModelStateForProviders,
+  deleteProviderFromConfig,
+  normalizeProvidersConfig
+} from './config/provider-rules';
+import {
+  McpServersConfigSchema,
+  PermissionsConfigSchema,
+  ProvidersSchema,
+  SettingsDocumentSchema,
+  SettingsSaveRequestSchema,
+  SettingsSchema,
+  ShortcutsConfigSchema,
+  ProviderSchema
+} from './config/schema';
 
-const PROVIDER_CREDENTIAL_REF_PATTERN = /^secret:[A-Za-z0-9_-]+$/;
-
-const SettingsSchema: z.ZodType<AppSettings> = z.object({
-  schemaVersion: z.literal(2),
-  defaultWorkspace: z.string().nullable(),
-  startup: z.object({
-    openAtLogin: z.boolean(),
-    minimizeToTray: z.boolean()
-  }),
-  notifications: z.object({
-    lowDistraction: z.boolean()
-  }),
-  globalHotkey: z.string().nullable(),
-  memory: z.object({
-    candidateReviewMode: z.enum(['manual', 'auto_after_approval']),
-    warmRecallEnabled: z.boolean(),
-    sessionRetentionDays: z.union([z.literal(30), z.literal(90), z.literal(180)]),
-    crossScopeRecall: z.enum(['explicit_only', 'expanded_with_label']),
-    coldAutoForgetDays: z.union([z.literal(90), z.literal(180), z.literal(365), z.null()])
-  })
-});
-
-const ProviderModelSchema = z.object({
-  id: z.string().min(1),
-  displayName: z.string().min(1),
-  enabled: z.boolean(),
-  supportsStreaming: z.boolean(),
-  supportsToolCalls: z.boolean()
-});
-
-const ProviderCredentialRefSchema = z
-  .string()
-  .nullable()
-  .refine(
-    (value) => value === null || PROVIDER_CREDENTIAL_REF_PATTERN.test(value),
-    'Provider 凭据引用必须为 secret:<providerId> 或 null。'
-  );
-
-const ProviderOptionsSchema = z
-  .object({
-    temperature: z.number().finite().optional(),
-    maxTokens: z.number().int().positive().optional(),
-    thinking: z.boolean().optional()
-  })
-  .optional();
-
-const ProviderSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'llama_cpp', 'ollama', 'custom']),
-  endpoint: z.string().min(1),
-  credentialRef: ProviderCredentialRefSchema,
-  enabled: z.boolean(),
-  models: z.array(ProviderModelSchema),
-  options: ProviderOptionsSchema
-});
-
-const ProvidersSchema: z.ZodType<ProvidersConfig> = z.object({
-  schemaVersion: z.literal(1),
-  defaultModelId: z.string().nullable(),
-  providers: z.array(ProviderSchema)
-});
-
-const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  enabled: z.boolean(),
-  transport: z.enum(['stdio', 'http', 'sse']),
-  preset: z.boolean(),
-  riskLevel: z.enum(['low', 'medium', 'high']),
-  url: z.string().min(1).optional(),
-  command: z.string().min(1).optional(),
-  allowedTools: z.array(z.string().min(1))
-});
-
-const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
-  schemaVersion: z.literal(1),
-  servers: z.array(McpServerSchema)
-});
-
-const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
-
-const PermissionsConfigSchema: z.ZodType<PermissionsConfig> = z.object({
-  schemaVersion: z.literal(3),
-  mode: ApprovalModeSchema,
-  grants: z.array(z.unknown())
-});
-
-const ShortcutsConfigSchema = z.object({
-  schemaVersion: z.literal(1),
-  shortcuts: z.array(z.unknown())
-});
-
-const SettingsSaveRequestSchema: z.ZodType<SettingsSaveRequest> = z.object({
-  settings: SettingsSchema,
-  providers: z.array(ProviderSchema),
-  defaultModelId: z.string().nullable(),
-  permissions: PermissionsConfigSchema
-});
-
-const SettingsDocumentSchema: z.ZodType<RocSettingsDocument> = z.object({
-  schemaVersion: z.literal(4),
-  settings: SettingsSchema,
-  providers: ProvidersSchema,
-  mcp: McpServersConfigSchema,
-  permissions: PermissionsConfigSchema,
-  shortcuts: ShortcutsConfigSchema
-});
-
-export type RocSettings = AppSettings;
-export type RocProviders = z.infer<typeof ProvidersSchema>;
-export type RocMcpConfig = z.infer<typeof McpServersConfigSchema>;
+export type RocSettings = typeof defaultSettings;
+export type RocProviders = ProvidersConfig;
+export type RocMcpConfig = typeof defaultMcpConfig;
 export type RocPermissions = PermissionsConfig;
-
-const defaultSettings: RocSettings = {
-  schemaVersion: 2,
-  defaultWorkspace: null,
-  startup: {
-    openAtLogin: false,
-    minimizeToTray: true
-  },
-  notifications: {
-    lowDistraction: true
-  },
-  globalHotkey: null,
-  memory: {
-    candidateReviewMode: 'manual',
-    warmRecallEnabled: true,
-    sessionRetentionDays: 90,
-    crossScopeRecall: 'explicit_only',
-    coldAutoForgetDays: 90
-  }
-};
-
-const defaultProviders: RocProviders = {
-  schemaVersion: 1,
-  defaultModelId: null,
-  providers: [createFixedNvidiaProviderConfig(), createFixedLlamaCppProviderConfig()]
-};
-
-const defaultMcpConfig: RocMcpConfig = {
-  schemaVersion: 1,
-  servers: []
-};
-
-const defaultPermissions: PermissionsConfig = {
-  schemaVersion: 3,
-  mode: 'fully_automatic',
-  grants: []
-};
-
-const defaultShortcuts = {
-  schemaVersion: 1 as const,
-  shortcuts: []
-};
 
 export class ConfigService {
   constructor(private readonly paths: RocPaths) {}
@@ -204,12 +63,12 @@ export class ConfigService {
   }
 
   getProviders(): RocProviders {
-    return this.normalizeProvidersConfig(this.getSettingsDocument().providers);
+    return normalizeProvidersConfig(this.getSettingsDocument().providers);
   }
 
   saveProviders(providers: RocProviders): void {
     const document = this.getSettingsDocument();
-    const normalizedProviders = this.normalizeProvidersConfig(ProvidersSchema.parse(providers));
+    const normalizedProviders = normalizeProvidersConfig(ProvidersSchema.parse(providers));
     this.writeSettingsDocument({
       ...document,
       providers: normalizedProviders
@@ -242,7 +101,7 @@ export class ConfigService {
 
   saveSettingsSnapshot(request: SettingsSaveRequest): SettingsSaveRequest {
     const parsed = SettingsSaveRequestSchema.parse(request);
-    const normalizedProviders = this.normalizeProvidersConfig({
+    const normalizedProviders = normalizeProvidersConfig({
       schemaVersion: 1,
       defaultModelId: parsed.defaultModelId,
       providers: parsed.providers
@@ -279,7 +138,7 @@ export class ConfigService {
   }
 
   deleteProvider(providerId: string): void {
-    const id = this.requireText(providerId, 'provider_id_empty', 'Provider ID 不能为空。', '请选择要删除的 provider。');
+    const id = requireText(providerId, 'provider_id_empty', 'Provider ID 不能为空。', '请选择要删除的 provider。');
     const config = this.getProviders();
     const provider = config.providers.find((item) => item.id === id);
     if (provider === undefined) {
@@ -291,27 +150,7 @@ export class ConfigService {
         userAction: '请刷新设置页后重试。'
       });
     }
-    if (isFixedProvider(id)) {
-      this.saveProviders({
-        schemaVersion: 1,
-        defaultModelId:
-          config.defaultModelId !== null && provider.models.some((model) => model.id === config.defaultModelId)
-            ? null
-            : config.defaultModelId,
-        providers: config.providers.map((item) =>
-          item.id === id ? createFixedProviderConfigForId(id) : item
-        )
-      });
-      return;
-    }
-    const deletedModelIds = new Set(provider.models.map((model) => model.id));
-    const nextDefaultModelId =
-      config.defaultModelId !== null && deletedModelIds.has(config.defaultModelId) ? null : config.defaultModelId;
-    this.saveProviders({
-      schemaVersion: 1,
-      defaultModelId: nextDefaultModelId,
-      providers: config.providers.filter((item) => item.id !== id)
-    });
+    this.saveProviders(deleteProviderFromConfig(config, id));
   }
 
   setDefaultModel(modelId: string | null): DefaultModelState {
@@ -325,7 +164,7 @@ export class ConfigService {
       return this.getDefaultModelState();
     }
 
-    const id = this.requireText(modelId, 'default_model_id_empty', '默认模型 ID 不能为空。', '请选择一个默认模型。');
+    const id = requireText(modelId, 'default_model_id_empty', '默认模型 ID 不能为空。', '请选择一个默认模型。');
     const config = this.getProviders();
     const targetProvider = config.providers.find((provider) => provider.models.some((model) => model.id === id));
     if (targetProvider === undefined) {
@@ -365,7 +204,7 @@ export class ConfigService {
   }
 
   getDefaultModelState(): DefaultModelState {
-    return this.defaultModelStateFor(this.getProviders());
+    return defaultModelStateForProviders(this.getProviders());
   }
 
   hasDefaultModel(): boolean {
@@ -384,43 +223,29 @@ export class ConfigService {
 
   private ensureSettingsDocument(): void {
     const rawSettings = this.readJsonIfExists('settings.json');
-    if (rawSettings !== undefined && this.looksLikeCurrentDocument(rawSettings)) {
+    if (rawSettings !== undefined && isCurrentSettingsDocument(rawSettings)) {
       this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
       return;
     }
-    if (rawSettings !== undefined && this.looksLikeLegacyDocumentV2(rawSettings)) {
-      this.writeSettingsDocument(this.migrateLegacyV2Document(rawSettings as Record<string, unknown>));
+    if (rawSettings !== undefined && isLegacyUnifiedSettingsDocument(rawSettings)) {
+      this.writeSettingsDocument(migrateLegacyUnifiedDocument(rawSettings as Record<string, unknown>));
       return;
     }
-    this.writeSettingsDocument(this.migrateLegacySplitFiles(rawSettings));
-  }
-
-  private migrateLegacySplitFiles(rawSettings: unknown | undefined): RocSettingsDocument {
-    return {
-      schemaVersion: 4,
-      settings: rawSettings === undefined ? defaultSettings : this.upgradeLegacySettings(rawSettings),
-      providers: this.upgradeLegacyProviders(this.readLegacyConfig('providers.json', defaultProviders)),
-      mcp: this.upgradeLegacyMcpConfig(this.readJsonIfExists('mcp.servers.json')),
-      permissions: this.upgradeLegacyPermissions(this.readJsonIfExists('permissions.json')),
-      shortcuts: this.readLegacyConfigStrict('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
-    };
-  }
-
-  private migrateLegacyV2Document(raw: Record<string, unknown>): RocSettingsDocument {
-    return {
-      schemaVersion: 4,
-      settings: this.upgradeLegacySettings(raw.settings),
-      providers: this.upgradeLegacyProviders(raw.providers ?? defaultProviders),
-      mcp: this.upgradeLegacyMcpConfig(raw.mcp),
-      permissions: this.upgradeLegacyPermissions(raw.permissions),
-      shortcuts: ShortcutsConfigSchema.parse(raw.shortcuts ?? defaultShortcuts)
-    };
+    this.writeSettingsDocument(
+      migrateLegacySplitConfig({
+        rawSettings,
+        legacyProviders: this.readLegacyConfig('providers.json', defaultProviders),
+        legacyMcp: this.readJsonIfExists('mcp.servers.json'),
+        legacyPermissions: this.readJsonIfExists('permissions.json'),
+        legacyShortcuts: this.readLegacyConfigStrict('shortcuts.json', ShortcutsConfigSchema, defaultShortcuts)
+      })
+    );
   }
 
   private getSettingsDocument(): RocSettingsDocument {
     const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
     const document = SettingsDocumentSchema.parse(parsed);
-    const normalizedMcp = this.upgradeLegacyMcpConfig(document.mcp);
+    const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
     if (JSON.stringify(normalizedMcp) !== JSON.stringify(document.mcp)) {
       const normalizedDocument: RocSettingsDocument = {
         ...document,
@@ -435,163 +260,6 @@ export class ConfigService {
   private writeSettingsDocument(document: RocSettingsDocument): void {
     const parsed = SettingsDocumentSchema.parse(document);
     writeFileSync(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
-  }
-
-  private defaultModelStateFor(providersConfig: RocProviders): DefaultModelState {
-    if (providersConfig.defaultModelId === null) {
-      return {
-        status: 'missing',
-        modelId: null,
-        providerId: null,
-        reason: '未配置默认模型。'
-      };
-    }
-
-    for (const provider of providersConfig.providers) {
-      const model = provider.models.find((candidate) => candidate.id === providersConfig.defaultModelId);
-      if (model === undefined) {
-        continue;
-      }
-      if (!provider.enabled) {
-        return {
-          status: 'invalid',
-          modelId: model.id,
-          providerId: provider.id,
-          reason: '默认模型所属 provider 未启用。'
-        };
-      }
-      if (!model.enabled) {
-        return {
-          status: 'invalid',
-          modelId: model.id,
-          providerId: provider.id,
-          reason: '默认模型未启用。'
-        };
-      }
-      return {
-        status: 'ready',
-        modelId: model.id,
-        providerId: provider.id,
-        reason: '默认模型可用。'
-      };
-    }
-
-    return {
-      status: 'invalid',
-      modelId: providersConfig.defaultModelId,
-      providerId: null,
-      reason: '默认模型不存在。'
-    };
-  }
-
-  private sanitizeDefaultModelIdForDisabledProviders(
-    providers: readonly ProviderConfig[],
-    defaultModelId: string | null
-  ): string | null {
-    if (defaultModelId === null) {
-      return null;
-    }
-    if (
-      providers.some(
-        (provider) => !provider.enabled && provider.models.some((model) => model.id === defaultModelId)
-      )
-    ) {
-      return null;
-    }
-    return defaultModelId;
-  }
-
-  private upgradeLegacySettings(raw: unknown): RocSettings {
-    if (raw === null || typeof raw !== 'object') {
-      return defaultSettings;
-    }
-    const value = raw as Record<string, unknown>;
-    const startup = (value.startup ?? {}) as Record<string, unknown>;
-    const notifications = (value.notifications ?? {}) as Record<string, unknown>;
-    const memory = (value.memory ?? {}) as Record<string, unknown>;
-
-    const upgraded: RocSettings = {
-      schemaVersion: 2,
-      defaultWorkspace: typeof value.defaultWorkspace === 'string' ? value.defaultWorkspace : null,
-      startup: {
-        openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false,
-        minimizeToTray: typeof startup.minimizeToTray === 'boolean' ? startup.minimizeToTray : true
-      },
-      notifications: {
-        lowDistraction: typeof notifications.lowDistraction === 'boolean' ? notifications.lowDistraction : true
-      },
-      globalHotkey: typeof value.globalHotkey === 'string' && value.globalHotkey.length > 0 ? value.globalHotkey : null,
-      memory: {
-        candidateReviewMode: memory.candidateReviewMode === 'auto_after_approval' ? 'auto_after_approval' : 'manual',
-        warmRecallEnabled: typeof memory.warmRecallEnabled === 'boolean' ? memory.warmRecallEnabled : true,
-        sessionRetentionDays:
-          memory.sessionRetentionDays === 30 || memory.sessionRetentionDays === 180
-            ? (memory.sessionRetentionDays as 30 | 180)
-            : 90,
-        crossScopeRecall:
-          memory.crossScopeRecall === 'expanded_with_label' ? 'expanded_with_label' : 'explicit_only',
-        coldAutoForgetDays: this.upgradeColdAutoForget(memory.coldAutoForgetDays)
-      }
-    };
-
-    return SettingsSchema.parse(upgraded);
-  }
-
-  private upgradeColdAutoForget(value: unknown): RocSettings['memory']['coldAutoForgetDays'] {
-    if (value === null) {
-      return null;
-    }
-    if (value === 90 || value === 180 || value === 365) {
-      return value;
-    }
-    return 90;
-  }
-
-  private upgradeLegacyProviders(raw: unknown): RocProviders {
-    if (raw === null || typeof raw !== 'object') {
-      return defaultProviders;
-    }
-    const value = raw as Record<string, unknown>;
-    const providersList = Array.isArray(value.providers) ? value.providers : [];
-    const upgradedProviders: ProviderConfig[] = providersList.map((entry) => {
-      const provider = entry as ProviderConfig;
-      const credentialRef = provider.credentialRef;
-      const upgradedRef =
-        typeof credentialRef === 'string' && PROVIDER_CREDENTIAL_REF_PATTERN.test(credentialRef)
-          ? credentialRef
-          : null;
-      return {
-        ...provider,
-        credentialRef: upgradedRef
-      };
-    });
-
-    return this.normalizeProvidersConfig(ProvidersSchema.parse({
-      schemaVersion: 1,
-      defaultModelId: typeof value.defaultModelId === 'string' ? value.defaultModelId : null,
-      providers: upgradedProviders
-    }));
-  }
-
-  private upgradeLegacyMcpConfig(raw: unknown): RocMcpConfig {
-    if (raw === null || raw === undefined || typeof raw !== 'object') {
-      return defaultMcpConfig;
-    }
-
-    const value = raw as Record<string, unknown>;
-    const servers = Array.isArray(value.servers) ? value.servers : [];
-    return McpServersConfigSchema.parse({
-      schemaVersion: 1,
-      servers: servers.map((entry) => {
-        const server = entry as Record<string, unknown>;
-        const { approvalMode: _approvalMode, ...rest } = server;
-        return rest;
-      })
-    });
-  }
-
-  private upgradeLegacyPermissions(raw: unknown): RocPermissions {
-    return defaultPermissions;
   }
 
   private readLegacyConfig(name: string, fallback: RocProviders): unknown {
@@ -618,13 +286,6 @@ export class ConfigService {
     return JSON.parse(readFileSync(target, 'utf8')) as unknown;
   }
 
-  private ensureText(name: string, value: string): void {
-    const target = this.filePath(name);
-    if (!existsSync(target)) {
-      writeFileSync(target, value, 'utf8');
-    }
-  }
-
   private ensureTextAtPath(target: string, value: string): void {
     if (!existsSync(target)) {
       writeFileSync(target, value, 'utf8');
@@ -644,69 +305,7 @@ export class ConfigService {
     ].join('\n');
   }
 
-  private looksLikeCurrentDocument(value: unknown): value is RocSettingsDocument {
-    if (typeof value !== 'object' || value === null) {
-      return false;
-    }
-    const record = value as { schemaVersion?: unknown };
-    return record.schemaVersion === 4;
-  }
-
-  private looksLikeLegacyDocumentV2(value: unknown): boolean {
-    if (typeof value !== 'object' || value === null) {
-      return false;
-    }
-    const record = value as { schemaVersion?: unknown; settings?: unknown; providers?: unknown };
-    return (record.schemaVersion === 2 || record.schemaVersion === 3) && 'settings' in record && 'providers' in record;
-  }
-
   private filePath(name: string): string {
     return join(this.paths.configDir, name);
-  }
-
-  private normalizeProvidersConfig(config: RocProviders): RocProviders {
-    const fixedProviders = new Map<string, ProviderConfig>();
-    const normalizedProviders: ProviderConfig[] = [];
-
-    for (const provider of config.providers) {
-      const fixedProviderType = resolveFixedProviderType(provider);
-      if (fixedProviderType !== null) {
-        if (!fixedProviders.has(fixedProviderType)) {
-          fixedProviders.set(fixedProviderType, normalizeFixedProvider(provider));
-        }
-        continue;
-      }
-      normalizedProviders.push(provider);
-    }
-
-    const orderedProviders = [
-      ...fixedProviderTypes().map((type) => fixedProviders.get(type) ?? createFixedProviderConfig(type)),
-      ...normalizedProviders
-    ];
-
-    const nextDefaultModelId = this.sanitizeDefaultModelIdForDisabledProviders(
-      orderedProviders,
-      config.defaultModelId
-    );
-
-    return {
-      schemaVersion: 1,
-      defaultModelId: nextDefaultModelId,
-      providers: orderedProviders
-    };
-  }
-
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
   }
 }

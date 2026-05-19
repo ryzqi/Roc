@@ -1,0 +1,211 @@
+.memory-search-box {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.memory-library-layout {
+  grid-template-columns: 318px minmax(0, 1fr);
+  gap: 22px;
+  min-height: 0;
+}
+
+.memory-library-sidebar,
+.memory-library-workspace {
+  min-width: 0;
+}
+
+.memory-library-sidebar {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.memory-library-workspace {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+
+.memory-list-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.memory-list-head {
+  padding: 0 0 10px;
+}
+
+.memory-list-body {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-record-list {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-record {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.memory-record:hover {
+  border-color: var(--accent);
+}
+
+.memory-record.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.memory-record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-record-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.memory-record-copy {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.memory-editor-stage {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  padding: 22px 24px 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.memory-editor-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.memory-editor-title {
+  color: var(--ink);
+  font-size: var(--font-h1-size);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.memory-editor-subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.memory-editor-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-editor-main {
+  display: grid;
+  min-height: 0;
+}
+
+.memory-editor-panel {
+  min-height: 0;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.memory-preview-surface {
+  min-height: 120px;
+  padding: 14px 0 14px 14px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.memory-editor-copy {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.memory-editor-textarea {
+  width: 100%;
+  min-height: 220px;
+  resize: none;
+  padding: 14px;
+  border: 1px solid rgba(218, 226, 238, 0.96);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.72;
+  outline: none;
+  overflow: hidden;
+}
+
+.memory-editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-chip-button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(217, 225, 236, 0.96);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.memory-chip-button.primary {
+  color: var(--st-info);
+  border-color: rgba(190, 206, 235, 0.98);
+  background: rgba(242, 247, 255, 0.98);
+}
+
+.memory-chip-button.warn {
+  color: var(--st-warn);
+  border-color: rgba(235, 218, 177, 0.92);
+  background: rgba(255, 248, 236, 0.98);
+}
+
+.memory-chip-button.bad {
+  color: var(--st-bad);
+  border-color: rgba(238, 194, 194, 0.92);
+  background: rgba(255, 244, 244, 0.98);
+}
+

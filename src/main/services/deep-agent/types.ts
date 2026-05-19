@@ -1,6 +1,7 @@
-import type { SubAgent } from 'deepagents';
+import type { ExecuteResponse, SubAgent } from 'deepagents';
 import type {
   ChatStartRunRequest,
+  ShellExecutionResult,
   TaskRun
 } from '../../../shared/types';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
@@ -28,6 +29,15 @@ export type RunFailure = {
 };
 
 export type RuntimeSubagent = SubAgent;
+
+export type AgentExecuteAdapter = {
+  executeAgentCommand(input: { command: string; cwd?: string }): ExecuteResponse & {
+    command: string;
+    cwd: string;
+    usedRtk: boolean;
+    bypassReason?: ShellExecutionResult['bypassReason'];
+  };
+};
 
 export const DEEP_AGENT_BUILT_IN_TOOLS = [
   'write_todos',

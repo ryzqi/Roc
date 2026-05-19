@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import type {
-  IpcResult,
   McpServerSnapshot,
   ProviderConfig,
   ProviderSecretStatus,
@@ -26,6 +25,7 @@ import {
   type ProviderDraft,
   type SettingsSectionId
 } from '../settings-model';
+import { unwrap } from '../loaded-state';
 import { useSettingsDraft } from './use-settings-draft';
 import { ProvidersSection } from './sections/providers-section';
 import { DefaultModelSection } from './sections/default-model-section';
@@ -47,13 +47,6 @@ export type SettingsViewState = {
 };
 
 export type SettingsViewUpdate = (partial: Partial<LoadedSettingsState>) => void;
-
-function unwrap<T>(label: string, result: IpcResult<T>): T {
-  if (result.ok) {
-    return result.data;
-  }
-  throw new Error(`${label} failed: ${result.error.message}`);
-}
 
 export function SettingsView({
   onNavigate,

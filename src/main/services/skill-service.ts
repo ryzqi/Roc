@@ -22,6 +22,7 @@ import type {
 import { RocDomainError } from './errors';
 import type { LogService } from './log-service';
 import type { RocPaths } from './paths';
+import { requireText } from './validation';
 
 type SkillState = {
   schemaVersion: 1;
@@ -63,7 +64,7 @@ export class SkillService {
   }
 
   importSkill(request: SkillImportRequest): SkillSnapshot {
-    const sourcePath = this.requireText(request.sourcePath, 'skill_source_empty', 'Skill sourcePath 不能为空。', '请选择本地 Skill 目录。');
+    const sourcePath = requireText(request.sourcePath, 'skill_source_empty', 'Skill sourcePath 不能为空。', '请选择本地 Skill 目录。');
     const sourceRoot = resolve(sourcePath);
     const sourceSkillFile = join(sourceRoot, 'SKILL.md');
     if (!existsSync(sourceSkillFile)) {
@@ -369,7 +370,7 @@ export class SkillService {
   }
 
   private normalizeSkillId(value: string): string {
-    const trimmed = this.requireText(value, 'skill_id_empty', 'Skill ID 不能为空。', '请提供 Skill ID。');
+    const trimmed = requireText(value, 'skill_id_empty', 'Skill ID 不能为空。', '请提供 Skill ID。');
     const normalized = basename(trimmed);
     if (normalized !== trimmed) {
       throw new RocDomainError({
@@ -391,20 +392,6 @@ export class SkillService {
       retryable: false,
       userAction: '请刷新能力管理页后重试。'
     });
-  }
-
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
   }
 
   private normalizeSkillRelativePath(value: string): string {

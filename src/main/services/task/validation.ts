@@ -1,19 +1,8 @@
 import type { BackgroundTaskPreview } from '../../../shared/types';
 import { RocDomainError } from '../errors';
+import { requireText } from '../validation';
 
-export function requireText(value: string, code: string, message: string, userAction: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    throw new RocDomainError({
-      code,
-      message,
-      category: 'validation',
-      retryable: false,
-      userAction
-    });
-  }
-  return trimmed;
-}
+export { requireText } from '../validation';
 
 export function invalidTransition(message: string): RocDomainError {
   return new RocDomainError({

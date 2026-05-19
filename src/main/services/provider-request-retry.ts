@@ -9,6 +9,24 @@ type RetryOptions = {
   shouldRetry?: (error: unknown) => boolean;
 };
 
+export type ProviderRequestFailureClassification =
+  | {
+      kind: 'abort';
+    }
+  | {
+      kind: 'http';
+      status: number;
+    }
+  | {
+      kind: 'network';
+    }
+  | {
+      kind: 'timeout';
+    }
+  | {
+      kind: 'other';
+    };
+
 export async function executeWithProviderRequestRetry<T>(
   operation: () => Promise<T>,
   options: RetryOptions = {}
@@ -30,42 +48,67 @@ export async function executeWithProviderRequestRetry<T>(
 }
 
 export function isRetryableProviderRequestFailure(error: unknown): boolean {
-  if (isAbortError(error)) {
+  const classification = classifyProviderRequestFailure(error);
+  if (classification.kind === 'abort') {
     return false;
+  }
+  if (classification.kind === 'timeout') {
+    return true;
+  }
+  if (classification.kind === 'network') {
+    return true;
+  }
+  if (classification.kind === 'http') {
+    return isRetryableProviderHttpStatus(classification.status);
+  }
+  return false;
+}
+
+export function classifyProviderRequestFailure(error: unknown): ProviderRequestFailureClassification {
+  if (isAbortError(error)) {
+    return { kind: 'abort' };
   }
 
   if (error instanceof RocDomainError) {
     if (error.code === 'provider_request_timeout') {
-      return true;
+      return { kind: 'timeout' };
     }
     if (error.code === 'provider_network_error') {
-      return true;
+      return { kind: 'network' };
     }
-    if (error.code !== 'provider_http_error') {
-      return false;
+    if (error.code === 'provider_http_error') {
+      const status = readProviderHttpStatus(error);
+      if (status !== null) {
+        return {
+          kind: 'http',
+          status
+        };
+      }
     }
-    const status = readProviderHttpStatus(error);
-    return status !== null && isRetryableProviderHttpStatus(status);
+    return { kind: 'other' };
   }
 
   if (isRecord(error)) {
     const status = readOptionalHttpStatus(error.status);
     if (status !== null) {
-      return isRetryableProviderHttpStatus(status);
+      return {
+        kind: 'http',
+        status
+      };
     }
   }
 
   if (!(error instanceof Error)) {
-    return false;
+    return { kind: 'other' };
   }
 
   if (isTimeoutError(error)) {
-    return true;
+    return { kind: 'timeout' };
   }
   if (isNetworkError(error)) {
-    return true;
+    return { kind: 'network' };
   }
-  return false;
+  return { kind: 'other' };
 }
 
 export function isRetryableProviderHttpStatus(status: number): boolean {

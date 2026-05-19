@@ -2,6 +2,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FilesWorkbench } from '../../src/renderer/workbench/FilesWorkbench';
+import { GitBranchPopover } from '../../src/renderer/workbench/GitBranchPopover';
+import { GitDiffPanel } from '../../src/renderer/workbench/GitDiffPanel';
 import { GitWorkbench } from '../../src/renderer/workbench/GitWorkbench';
 import { TerminalWorkbench } from '../../src/renderer/workbench/TerminalWorkbench';
 import { createLoadedState } from './view-test-helpers';
@@ -88,6 +90,118 @@ describe('workbench surfaces', () => {
     expect(html).toContain('工作区变更');
     expect(html).not.toContain('STAGED CHANGES');
     expect(html).not.toContain('CHANGES');
+  });
+
+  it('renders git branch popover with filtered branches and preserved creation controls', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GitBranchPopover, {
+        actionBusy: false,
+        branchDraft: 'feature/new-worktree',
+        branchSearch: 'feature',
+        checkoutAfterCreate: true,
+        visibleBranches: [
+          { current: false, name: 'feature/alpha' },
+          { current: true, name: 'feature/beta' }
+        ],
+        onBranchDraftChange: () => {},
+        onBranchSearchChange: () => {},
+        onCheckoutAfterCreateChange: () => {},
+        onCheckoutBranch: async () => {},
+        onClose: () => {},
+        onCreateBranch: async () => {}
+      })
+    );
+
+    expect(html).toContain('data-testid="git-branch-controls"');
+    expect(html).toContain('data-testid="git-branch-select"');
+    expect(html).toContain('data-testid="git-branch-create-input"');
+    expect(html).toContain('data-testid="git-branch-create-checkout"');
+    expect(html).toContain('data-testid="git-branch-create"');
+    expect(html).toContain('feature/alpha');
+    expect(html).toContain('feature/beta');
+    expect(html).toContain('checkout');
+    expect(html).not.toContain('main');
+  });
+
+  it('renders git diff panel with selected path and unified diff preview anchor', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GitDiffPanel, {
+        failedPath: null,
+        loadingPath: null,
+        selectedChange: {
+          relativePath: 'src/renderer/App.tsx',
+          porcelain: ' M src/renderer/App.tsx',
+          index: ' ',
+          worktree: 'M'
+        },
+        selectedDiffFile: {
+          oldPath: 'src/renderer/App.tsx',
+          newPath: 'src/renderer/App.tsx',
+          type: 'modify',
+          hunks: [
+            {
+              content: '@@ -1 +1 @@',
+              oldStart: 1,
+              newStart: 1,
+              oldLines: 1,
+              newLines: 1,
+              changes: []
+            }
+          ]
+        } as never,
+        selectionPreview: {
+          workspacePath: 'F:\\Code\\Roc',
+          relativePath: 'src/renderer/App.tsx',
+          patch:
+            'diff --git a/src/renderer/App.tsx b/src/renderer/App.tsx\n--- a/src/renderer/App.tsx\n+++ b/src/renderer/App.tsx\n@@ -1 +1 @@\n-old\n+new\n'
+        },
+        state: createLoadedState({})
+      })
+    );
+
+    expect(html).toContain('data-testid="workbench-git-selection"');
+    expect(html).toContain('data-testid="workbench-git-selection-path"');
+    expect(html).toContain('data-testid="workbench-git-selection-preview"');
+    expect(html).toContain('src/renderer/App.tsx');
+    expect(html).toContain('工作区修改');
+    expect(html).toContain('modify');
+  });
+
+  it('renders git diff panel failure copy when the selected file preview failed', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GitDiffPanel, {
+        failedPath: 'README.md',
+        loadingPath: null,
+        selectedChange: {
+          relativePath: 'README.md',
+          porcelain: ' M README.md',
+          index: ' ',
+          worktree: 'M'
+        },
+        selectedDiffFile: null,
+        selectionPreview: null,
+        state: createLoadedState({
+          gitStatus: {
+            workspacePath: 'F:\\Code\\Roc',
+            isRepository: true,
+            branch: 'main',
+            porcelain: [' M README.md'],
+            changes: [
+              {
+                relativePath: 'README.md',
+                porcelain: ' M README.md',
+                index: ' ',
+                worktree: 'M'
+              }
+            ],
+            changedFiles: 1
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('当前文件 diff 加载失败。');
+    expect(html).toContain('README.md');
   });
 
   it('renders terminal workbench with session shell surface contract', () => {

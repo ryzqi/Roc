@@ -102,11 +102,3 @@ export function buildGitBranchSwitcherModel({
     searchDisabled: actionBusy
   };
 }
-
-export function selectedGitPaths(paths: string[]): Set<string> {
-  return new Set(paths);
-}
-
-export function gitSelectableChanges(status: { changes: GitStatusChange[] } | null): GitStatusChange[] {
-  return status?.changes ?? [];
-}

@@ -1,0 +1,107 @@
+@media (max-width: 1180px) {
+  .thread-meta {
+    max-width: 100%;
+  }
+
+  .workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
+    padding-right: 14px;
+  }
+
+  .sidebar-block-scroll {
+    overflow: visible;
+  }
+
+  .workspace-shell {
+    min-height: 760px;
+  }
+
+  .workspace-shell--with-workbench {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .workspace-shell--chat {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+
+  .workspace-shell--chat-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .workspace-main,
+  .workspace-main--chat {
+    padding: 10px 12px 0;
+  }
+
+  .grid-2,
+  .grid-3,
+  .split,
+  .form-grid,
+  .memory-library-layout,
+  .compact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-flags {
+    justify-content: flex-start;
+  }
+
+  .rail-overlay {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    padding: 8px 0 0;
+    justify-content: flex-end;
+  }
+
+  .workbench {
+    min-height: 520px;
+  }
+
+  .workbench-files {
+    grid-template-columns: 1fr;
+    grid-template-rows: 260px minmax(0, 1fr);
+  }
+
+  .git-control-grid,
+  .git-summary-line {
+    grid-template-columns: 1fr;
+  }
+
+  .git-compose-row {
+    grid-template-columns: 1fr;
+  }
+
+  .git-change-card,
+  .terminal-header,
+  .terminal-status-bar {
+    align-items: flex-start;
+  }
+
+  .git-change-card,
+  .git-change-side {
+    flex-direction: column;
+  }
+
+  .git-change-side {
+    align-items: flex-start;
+  }
+
+  .terminal-header,
+  .terminal-status-bar {
+    flex-direction: column;
+  }
+
+  .terminal-meta {
+    justify-content: flex-start;
+  }
+
+  .app-shell .mini-window,
+  .app-shell .tray-pop {
+    width: 100%;
+    margin: 24px 0 0;
+  }
+}

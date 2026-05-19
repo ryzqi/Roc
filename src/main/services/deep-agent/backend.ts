@@ -16,19 +16,10 @@ import {
   type SandboxBackendProtocolV2
 } from 'deepagents';
 import type { BaseStore } from '@langchain/langgraph';
-import type { ShellExecutionResult } from '../../../shared/types';
 import type { RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
 import { buildDeepAgentMemoryNamespace } from './sqlite-store';
-
-type AgentExecuteAdapter = {
-  executeAgentCommand(input: { command: string; cwd?: string }): ExecuteResponse & {
-    command: string;
-    cwd: string;
-    usedRtk: boolean;
-    bypassReason?: ShellExecutionResult['bypassReason'];
-  };
-};
+import type { AgentExecuteAdapter } from './types';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';

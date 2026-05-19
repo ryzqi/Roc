@@ -55,6 +55,34 @@ function SendIcon(): React.JSX.Element {
   );
 }
 
+function CapabilityPopover({
+  actions,
+  copy,
+  countLabel,
+  items,
+  testId,
+  title
+}: {
+  actions: React.ReactNode;
+  copy: string;
+  countLabel: string;
+  items: React.ReactNode;
+  testId: string;
+  title: string;
+}): React.JSX.Element {
+  return (
+    <div className="composer-popover" data-testid={testId}>
+      <div className="composer-popover-head">
+        <span>{title}</span>
+        <strong>{countLabel}</strong>
+      </div>
+      <div className="composer-popover-copy">{copy}</div>
+      <div className="composer-popover-actions">{actions}</div>
+      <div className="composer-popover-list">{items}</div>
+    </div>
+  );
+}
+
 export function ChatComposer({
   chatInput,
   onChatInputChange,
@@ -158,56 +186,59 @@ export function ChatComposer({
               <ComposerActionIcon kind="tools" />
             </button>
             {activeComposerPopover !== 'tools' ? null : (
-              <div className="composer-popover" data-testid="chat-tool-popover">
-                <div className="composer-popover-head">
-                  <span>工具</span>
-                  <strong>{visibleCapabilityServers.length} 个可用</strong>
-                </div>
-                <div className="composer-popover-copy">展示当前可用工具，并选择本轮要启用的项。</div>
-                <div className="composer-popover-actions">
-                  <button
-                    className="composer-choice composer-choice--action"
-                    data-testid="chat-tool-select-all"
-                    type="button"
-                    onClick={() => void applyTurnSelection(updateLoadedState, {
-                      mcpServers: visibleCapabilityServers.map((server) => server.id),
-                      skills: state.selectedSkills
-                    })}
-                  >
-                    全选
-                  </button>
-                  <button
-                    className="composer-choice composer-choice--action"
-                    data-testid="chat-tool-clear-all"
-                    type="button"
-                    onClick={() => void applyTurnSelection(updateLoadedState, {
-                      mcpServers: [],
-                      skills: state.selectedSkills
-                    })}
-                  >
-                    取消全选
-                  </button>
-                </div>
-                <div className="composer-popover-list">
-                  {visibleCapabilityServers.map((server) => (
+              <CapabilityPopover
+                actions={
+                  <>
                     <button
-                      className={state.selectedMcpServers.includes(server.id) ? 'composer-choice active' : 'composer-choice'}
-                      data-testid={`turn-mcp-${server.id}`}
-                      key={server.id}
+                      className="composer-choice composer-choice--action"
+                      data-testid="chat-tool-select-all"
                       type="button"
-                      onClick={() =>
-                        void applyTurnSelection(updateLoadedState, {
-                          mcpServers: toggleSelection(state.selectedMcpServers, server.id),
-                          skills: state.selectedSkills
-                        })
-                      }
+                      onClick={() => void applyTurnSelection(updateLoadedState, {
+                        mcpServers: visibleCapabilityServers.map((server) => server.id),
+                        skills: state.selectedSkills
+                      })}
                     >
-                      <span>{server.name}</span>
-                      <small>{server.allowedTools?.join(', ') || 'ripgrep 搜索'}</small>
+                      全选
                     </button>
-                  ))}
-                </div>
-              </div>
+                    <button
+                      className="composer-choice composer-choice--action"
+                      data-testid="chat-tool-clear-all"
+                      type="button"
+                      onClick={() => void applyTurnSelection(updateLoadedState, {
+                        mcpServers: [],
+                        skills: state.selectedSkills
+                      })}
+                    >
+                      取消全选
+                    </button>
+                  </>
+                }
+                copy="展示当前可用工具，并选择本轮要启用的项。"
+                countLabel={`${visibleCapabilityServers.length} 个可用`}
+                items={
+                  <>
+                    {visibleCapabilityServers.map((server) => (
+                      <button
+                        className={state.selectedMcpServers.includes(server.id) ? 'composer-choice active' : 'composer-choice'}
+                        data-testid={`turn-mcp-${server.id}`}
+                        key={server.id}
+                        type="button"
+                        onClick={() =>
+                          void applyTurnSelection(updateLoadedState, {
+                            mcpServers: toggleSelection(state.selectedMcpServers, server.id),
+                            skills: state.selectedSkills
+                          })
+                        }
+                      >
+                        <span>{server.name}</span>
+                        <small>{server.allowedTools?.join(', ') || 'ripgrep 搜索'}</small>
+                      </button>
+                    ))}
+                  </>
+                }
+                testId="chat-tool-popover"
+                title="工具"
+              />
             )}
           </div>
           <div
@@ -224,58 +255,61 @@ export function ChatComposer({
               <ComposerActionIcon kind="skills" />
             </button>
             {activeComposerPopover !== 'skills' ? null : (
-              <div className="composer-popover" data-testid="chat-skill-popover">
-                <div className="composer-popover-head">
-                  <span>技能</span>
-                  <strong>{visibleCapabilitySkills.length} 个可用</strong>
-                </div>
-                <div className="composer-popover-copy">展示当前可用技能，并选择本轮要启用的项。</div>
-                <div className="composer-popover-actions">
-                  <button
-                    className="composer-choice composer-choice--action"
-                    data-testid="chat-skill-select-all"
-                    type="button"
-                    onClick={() => void applyTurnSelection(updateLoadedState, {
-                      mcpServers: state.selectedMcpServers,
-                      skills: visibleCapabilitySkills.map((skill) => skill.id)
-                    })}
-                  >
-                    全选
-                  </button>
-                  <button
-                    className="composer-choice composer-choice--action"
-                    data-testid="chat-skill-clear-all"
-                    type="button"
-                    onClick={() => void applyTurnSelection(updateLoadedState, {
-                      mcpServers: state.selectedMcpServers,
-                      skills: []
-                    })}
-                  >
-                    取消全选
-                  </button>
-                </div>
-                <div className="composer-popover-list">
-                  {visibleCapabilitySkills.map((skill) => (
+              <CapabilityPopover
+                actions={
+                  <>
                     <button
-                      className={state.selectedSkills.includes(skill.id) ? 'composer-choice active' : 'composer-choice'}
-                      data-testid={`turn-skill-${skill.id}`}
-                      key={skill.id}
+                      className="composer-choice composer-choice--action"
+                      data-testid="chat-skill-select-all"
                       type="button"
-                      onClick={() =>
-                        void applyTurnSelection(updateLoadedState, {
-                          mcpServers: state.selectedMcpServers,
-                          skills: toggleSelection(state.selectedSkills, skill.id)
-                        })
-                      }
+                      onClick={() => void applyTurnSelection(updateLoadedState, {
+                        mcpServers: state.selectedMcpServers,
+                        skills: visibleCapabilitySkills.map((skill) => skill.id)
+                      })}
                     >
-                      <span className="composer-choice-copy">
-                        <span>{skill.name}</span>
-                        <small className="composer-choice-description composer-choice-description--clamp-2">{skill.description}</small>
-                      </span>
+                      全选
                     </button>
-                  ))}
-                </div>
-              </div>
+                    <button
+                      className="composer-choice composer-choice--action"
+                      data-testid="chat-skill-clear-all"
+                      type="button"
+                      onClick={() => void applyTurnSelection(updateLoadedState, {
+                        mcpServers: state.selectedMcpServers,
+                        skills: []
+                      })}
+                    >
+                      取消全选
+                    </button>
+                  </>
+                }
+                copy="展示当前可用技能，并选择本轮要启用的项。"
+                countLabel={`${visibleCapabilitySkills.length} 个可用`}
+                items={
+                  <>
+                    {visibleCapabilitySkills.map((skill) => (
+                      <button
+                        className={state.selectedSkills.includes(skill.id) ? 'composer-choice active' : 'composer-choice'}
+                        data-testid={`turn-skill-${skill.id}`}
+                        key={skill.id}
+                        type="button"
+                        onClick={() =>
+                          void applyTurnSelection(updateLoadedState, {
+                            mcpServers: state.selectedMcpServers,
+                            skills: toggleSelection(state.selectedSkills, skill.id)
+                          })
+                        }
+                      >
+                        <span className="composer-choice-copy">
+                          <span>{skill.name}</span>
+                          <small className="composer-choice-description composer-choice-description--clamp-2">{skill.description}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                }
+                testId="chat-skill-popover"
+                title="技能"
+              />
             )}
           </div>
           <div

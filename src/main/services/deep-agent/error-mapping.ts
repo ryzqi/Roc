@@ -1,23 +1,12 @@
 import { RocDomainError } from '../errors';
-import { isRetryableProviderHttpStatus, providerRequestTimeoutMessage } from '../provider-request-retry';
+import {
+  classifyProviderRequestFailure,
+  isRetryableProviderHttpStatus,
+  providerRequestTimeoutMessage
+} from '../provider-request-retry';
 import { isRecord } from './record-utils';
 import { redact } from './redact';
 import type { RunFailure } from './types';
-
-function isAbortError(error: unknown): boolean {
-  if (!isRecord(error)) {
-    return false;
-  }
-  return error.name === 'AbortError' || error.code === 'ABORT_ERR';
-}
-
-function isTimeoutError(error: Error): boolean {
-  return /timeout|timed out/i.test(error.message);
-}
-
-function isNetworkError(error: Error): boolean {
-  return /fetch failed|network|socket|econn|enotfound|eai_again/i.test(error.message);
-}
 
 function readHttpStatus(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -37,32 +26,30 @@ export function toRunFailure(error: unknown): RunFailure {
       retryable: error.retryable
     };
   }
-  if (isAbortError(error)) {
+  const classification = classifyProviderRequestFailure(error);
+  if (classification.kind === 'abort') {
     return {
       code: 'chat_run_cancelled',
       message: '当前运行已取消。',
       retryable: true
     };
   }
-  if (isRecord(error)) {
-    const status = readHttpStatus(error.status);
-    if (status !== null) {
-      return {
-        code: 'provider_http_error',
-        message: `Provider 返回 HTTP ${status}。`,
-        retryable: isRetryableProviderHttpStatus(status)
-      };
-    }
+  if (classification.kind === 'http') {
+    return {
+      code: 'provider_http_error',
+      message: `Provider 返回 HTTP ${classification.status}。`,
+      retryable: isRetryableProviderHttpStatus(classification.status)
+    };
   }
   if (error instanceof Error) {
-    if (isTimeoutError(error)) {
+    if (classification.kind === 'timeout') {
       return {
         code: 'provider_request_timeout',
         message: providerRequestTimeoutMessage,
         retryable: true
       };
     }
-    if (isNetworkError(error)) {
+    if (classification.kind === 'network') {
       return {
         code: 'provider_network_error',
         message: `Provider 网络请求失败：${redact(error.message)}`,

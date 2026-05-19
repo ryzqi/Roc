@@ -108,4 +108,29 @@ describe('startup load policy', () => {
 
     expectTargets(intent, ['workspace', 'operations']);
   });
+
+  it('keeps the loader contract asymmetric across resource kinds', () => {
+    const workspaceIntent = getStartupLoadIntent({
+      activeView: 'workspace',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: true
+    });
+    const memoryIntent = getStartupLoadIntent({
+      activeView: 'memory',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+    const operationsIntent = getStartupLoadIntent({
+      activeView: 'diagnostics',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+
+    expectTargets(workspaceIntent, ['workspace']);
+    expectTargets(memoryIntent, ['memory']);
+    expectTargets(operationsIntent, ['operations']);
+    expect(workspaceIntent.targets.has('memory')).toBe(false);
+    expect(memoryIntent.targets.has('workspace')).toBe(false);
+    expect(operationsIntent.targets.has('workspace')).toBe(false);
+  });
 });

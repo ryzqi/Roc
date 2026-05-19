@@ -1,19 +1,8 @@
 import type { MemoryEntry } from '../../../shared/types';
 import { RocDomainError } from '../errors';
+import { requireText } from '../validation';
 
-export function requireText(value: string, code: string, message: string, userAction: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    throw new RocDomainError({
-      code,
-      message,
-      category: 'validation',
-      retryable: false,
-      userAction
-    });
-  }
-  return trimmed;
-}
+export { requireText } from '../validation';
 
 export function validateCandidateInput(entry: Omit<MemoryEntry, 'id' | 'layer' | 'status' | 'createdAt' | 'updatedAt'>): void {
   requireText(entry.type, 'memory_type_empty', '记忆 type 不能为空。', '请选择记忆类型。');

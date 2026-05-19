@@ -1,0 +1,308 @@
+import type { ProviderConfig, ProviderModel, ProviderType } from '../../shared/types';
+import {
+  fixedLlamaCppBaseUrl,
+  fixedLlamaCppProviderId,
+  fixedLlamaCppProviderName,
+  fixedNvidiaBaseUrl,
+  fixedNvidiaProviderId,
+  fixedNvidiaProviderName,
+  normalizeFixedLlamaCppProvider,
+  normalizeFixedNvidiaProvider
+} from '../../shared/provider-defaults';
+
+export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'llama_cpp'>;
+export type CreatableProviderType = Extract<EditableProviderType, 'openai_compatible' | 'anthropic_compatible'>;
+
+export type ProviderDraft = {
+  mode: 'create' | 'edit';
+  id: string;
+  name: string;
+  type: EditableProviderType;
+  endpoint: string;
+  apiKey: string;
+  enabled: boolean;
+  modelsText: string;
+  temperature: string;
+  maxTokens: string;
+  thinking: boolean;
+};
+
+export type EnabledModelOption = {
+  modelId: string;
+  providerId: string;
+  label: string;
+};
+
+export type ProviderTypeMeta = {
+  defaultBaseUrl: string;
+};
+
+const editableProviderTypes: readonly EditableProviderType[] = [
+  'openai_compatible',
+  'anthropic_compatible',
+  'nvidia',
+  'llama_cpp'
+];
+
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+export function createProviderDraft(type: EditableProviderType, provider?: ProviderConfig): ProviderDraft {
+  if (!editableProviderTypes.includes(type)) {
+    throw new Error(`Unsupported provider draft type: ${type}`);
+  }
+  if (type === 'nvidia') {
+    const normalized = normalizeFixedNvidiaProvider(provider);
+    return {
+      mode: 'edit',
+      id: fixedNvidiaProviderId,
+      name: fixedNvidiaProviderName,
+      type: 'nvidia',
+      endpoint: fixedNvidiaBaseUrl,
+      apiKey: '',
+      enabled: normalized.enabled,
+      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      temperature:
+        typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
+      maxTokens:
+        typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
+      thinking: normalized.options?.thinking === true
+    };
+  }
+  if (type === 'llama_cpp') {
+    const normalized = normalizeFixedLlamaCppProvider(provider);
+    return {
+      mode: 'edit',
+      id: fixedLlamaCppProviderId,
+      name: fixedLlamaCppProviderName,
+      type: 'llama_cpp',
+      endpoint: normalized.endpoint,
+      apiKey: '',
+      enabled: normalized.enabled,
+      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      temperature: '',
+      maxTokens: '',
+      thinking: false
+    };
+  }
+  if (provider === undefined) {
+    return {
+      mode: 'create',
+      id: '',
+      name: '',
+      type,
+      endpoint: '',
+      apiKey: '',
+      enabled: true,
+      modelsText: '',
+      temperature: '',
+      maxTokens: '',
+      thinking: false
+    };
+  }
+  if (!editableProviderTypes.includes(provider.type as EditableProviderType)) {
+    throw new Error(`Unsupported provider edit type: ${provider.type}`);
+  }
+  return {
+    mode: 'edit',
+    id: provider.id,
+    name: provider.name,
+    type: provider.type as EditableProviderType,
+    endpoint: provider.endpoint,
+    apiKey: '',
+    enabled: provider.enabled,
+    modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+    temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
+    maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
+    thinking: provider.options?.thinking === true
+  };
+}
+
+export function parseProviderModelDraft(modelsText: string): ProviderModel[] {
+  return modelsText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const separatorIndex = line.indexOf('|');
+      const id = separatorIndex === -1 ? line.trim() : line.slice(0, separatorIndex).trim();
+      const displayName = separatorIndex === -1 ? id : line.slice(separatorIndex + 1).trim();
+      if (id.length === 0) {
+        throw new Error('Provider model ID 不能为空。');
+      }
+      if (displayName.length === 0) {
+        throw new Error('Provider model displayName 不能为空。');
+      }
+      return {
+        id,
+        displayName,
+        enabled: true,
+        supportsStreaming: true,
+        supportsToolCalls: true
+      };
+    });
+}
+
+export function buildProviderIdFromName(name: string): string {
+  const normalizedName = name.trim();
+  if (normalizedName.length === 0) {
+    throw new Error('Provider 名称不能为空。');
+  }
+  const id = normalizedName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (id.length === 0 || !PROVIDER_ID_PATTERN.test(id)) {
+    throw new Error('Provider 名称无法生成合法 ID，请使用字母或数字。');
+  }
+  return id;
+}
+
+function resolveProviderDraftId(draft: ProviderDraft): string {
+  if (draft.mode === 'create') {
+    return buildProviderIdFromName(draft.name);
+  }
+  const id = draft.id.trim();
+  if (id.length === 0) {
+    throw new Error('Provider ID 不能为空。');
+  }
+  if (!PROVIDER_ID_PATTERN.test(id)) {
+    throw new Error('Provider ID 只允许字母、数字、下划线和短横线。');
+  }
+  return id;
+}
+
+export function assertProviderCreateIdAvailable(
+  providers: readonly ProviderConfig[],
+  providerId: string
+): void {
+  const normalizedProviderId = providerId.trim().toLowerCase();
+  if (providers.some((provider) => provider.id.trim().toLowerCase() === normalizedProviderId)) {
+    throw new Error('Provider 名称生成的 ID 已存在，请调整名称后重试。');
+  }
+}
+
+function parseOptionalNumber(value: string, label: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} 必须是数字。`);
+  }
+  return parsed;
+}
+
+function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['options'] {
+  const temperature = parseOptionalNumber(draft.temperature, 'Temperature');
+  const maxTokens = parseOptionalNumber(draft.maxTokens, 'Max tokens');
+  if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens <= 0)) {
+    throw new Error('Max tokens 必须是正整数。');
+  }
+  if (temperature === undefined && maxTokens === undefined && draft.thinking === false) {
+    return undefined;
+  }
+  return {
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(maxTokens === undefined ? {} : { maxTokens }),
+    ...(draft.thinking ? { thinking: true } : {})
+  };
+}
+
+export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {
+  const options = buildProviderOptionsFromDraft(draft);
+  if (draft.type === 'nvidia') {
+    const models = parseProviderModelDraft(draft.modelsText);
+    if (models.length === 0) {
+      throw new Error('NVIDIA 至少需要一个模型。');
+    }
+    const provider = normalizeFixedNvidiaProvider({
+      id: fixedNvidiaProviderId,
+      name: fixedNvidiaProviderName,
+      type: 'nvidia',
+      endpoint: fixedNvidiaBaseUrl,
+      credentialRef: `secret:${fixedNvidiaProviderId}`,
+      enabled: draft.enabled,
+      models,
+      options
+    });
+    return options === undefined ? { ...provider, options: undefined } : provider;
+  }
+  if (draft.type === 'llama_cpp') {
+    const models = parseProviderModelDraft(draft.modelsText);
+    if (models.length === 0) {
+      throw new Error('llama.cpp 至少需要一个模型。');
+    }
+    return normalizeFixedLlamaCppProvider({
+      id: fixedLlamaCppProviderId,
+      name: fixedLlamaCppProviderName,
+      type: 'llama_cpp',
+      endpoint: draft.endpoint.trim(),
+      credentialRef: draft.apiKey.trim().length === 0 ? null : `secret:${fixedLlamaCppProviderId}`,
+      enabled: draft.enabled,
+      models,
+      options: undefined
+    });
+  }
+
+  const id = resolveProviderDraftId(draft);
+  const name = draft.name.trim();
+  const endpoint = draft.endpoint.trim();
+  if (name.length === 0) {
+    throw new Error('Provider 名称不能为空。');
+  }
+  if (endpoint.length === 0) {
+    throw new Error('Provider endpoint 不能为空。');
+  }
+  const models = parseProviderModelDraft(draft.modelsText);
+  if (models.length === 0) {
+    throw new Error('Provider 至少需要一个模型。');
+  }
+  return {
+    id,
+    name,
+    type: draft.type,
+    endpoint,
+    credentialRef: `secret:${id}`,
+    enabled: draft.enabled,
+    models,
+    options
+  };
+}
+
+export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledModelOption[] {
+  return providers
+    .filter((provider) => provider.enabled)
+    .flatMap((provider) =>
+      provider.models
+        .filter((model) => model.enabled)
+        .map((model) => ({
+          modelId: model.id,
+          providerId: provider.id,
+          label: `${provider.name} / ${model.displayName}`
+        }))
+    );
+}
+
+export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
+  if (type === 'nvidia') {
+    return {
+      defaultBaseUrl: fixedNvidiaBaseUrl
+    };
+  }
+  if (type === 'llama_cpp') {
+    return {
+      defaultBaseUrl: fixedLlamaCppBaseUrl
+    };
+  }
+  if (type === 'anthropic_compatible') {
+    return {
+      defaultBaseUrl: 'https://api.anthropic.com'
+    };
+  }
+  return {
+    defaultBaseUrl: 'https://api.openai.com/v1'
+  };
+}

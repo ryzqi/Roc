@@ -1,23 +1,9 @@
 import type React from 'react';
+import { StatusPill as SharedStatusPill } from '../components/StatusPill';
 
 export type PillTone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info';
 
-export function StatusPill({
-  label,
-  tone = 'neutral',
-  value
-}: {
-  label: string;
-  tone?: PillTone;
-  value: string;
-}): React.JSX.Element {
-  return (
-    <span className={`status-pill ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </span>
-  );
-}
+export const StatusPill = SharedStatusPill;
 
 export function InfoRow({
   sub,

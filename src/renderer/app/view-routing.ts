@@ -122,10 +122,6 @@ export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisi
   window.history.replaceState({}, '', url);
 }
 
-export function viewMeta(view: MainViewId): PageMeta {
-  return PAGE_META[view];
-}
-
 export function visibleWorkspaceLabel(state: LoadedState): string {
   return state.appStatus.workspace.label;
 }

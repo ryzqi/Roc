@@ -1,17 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GitBranch, RefreshCw } from 'lucide-react';
-import { Diff, Hunk, parseDiff, type FileData as GitDiffFileData } from 'react-diff-view';
-import type {
-  GitBranchMutationResult,
-  GitFileDiffResult,
-  GitStatusResult
-} from '../../shared/types';
+import type { GitBranchMutationResult, GitStatusResult } from '../../shared/types';
 import { EmptyState } from '../components/EmptyState';
-import { buildGitDiffCacheKey, buildGitDiffTitle, normalizeGitDiffText, selectGitDiffFile } from '../git-diff-adapter';
 import {
   buildGitBranchSwitcherModel,
   buildGitCommitButtonState,
-  buildGitDiffPreviewRequest,
   buildGitSelectionModel,
   clampGitSplitWidth,
   GIT_SPLIT_DEFAULT_WIDTH,
@@ -19,15 +12,15 @@ import {
 } from '../git-workbench';
 import type { LazyLoadState, WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
-import { unwrap } from '../loaded-state';
 import {
-  buildGitChangeStateLabel,
   canUnstageGitChange,
   findNextGitSelection,
-  gitSelectionEmptyMessage,
   gitStatusChanges
 } from './git-helpers';
+import { GitBranchPopover } from './GitBranchPopover';
 import { GitChangeList } from './GitChangeList';
+import { GitDiffPanel } from './GitDiffPanel';
+import { useGitDiffPreview } from './useGitDiffPreview';
 
 export function GitWorkbench({
   loadState,
@@ -50,10 +43,6 @@ export function GitWorkbench({
   const [branchSearch, setBranchSearch] = useState('');
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [gitPaneWidth, setGitPaneWidth] = useState(GIT_SPLIT_DEFAULT_WIDTH);
-  const [loadingGitDiffPath, setLoadingGitDiffPath] = useState<string | null>(null);
-  const [failedGitDiffPath, setFailedGitDiffPath] = useState<string | null>(null);
-  const diffParseCacheRef = useRef(new Map<string, GitDiffFileData[]>());
-  const diffPreviewRequestIdRef = useRef(0);
 
   const changes = state.gitStatus === null ? [] : gitStatusChanges(state.gitStatus);
   const selectedPath = findNextGitSelection(changes, state.gitSelectedPath);
@@ -63,6 +52,13 @@ export function GitWorkbench({
   const selectableChanges = changes;
   const selectedPathSet = new Set(selectedPaths);
   const { allSelectableSelected, selectedCount } = buildGitSelectionModel(selectableChanges, selectedPaths);
+  const { failedPath, loadingPath, loadGitDiffPreview, selectedDiffFile, selectionPreview } = useGitDiffPreview({
+    onActionError: setActionError,
+    selectedChange,
+    selectedPath,
+    selectedPreview: state.gitSelectedPreview,
+    updateWorkspaceData
+  });
 
   useEffect(() => {
     if (state.gitSelectedPath === selectedPath) {
@@ -82,19 +78,6 @@ export function GitWorkbench({
       updateWorkspaceData({ gitSelectedPath: selectedPath, gitSelectedPreview: null });
     }
   }, [selectedPath, state.gitSelectedPath, state.gitSelectedPreview, updateWorkspaceData]);
-
-  useEffect(() => {
-    const request = buildGitDiffPreviewRequest({
-      failedPath: failedGitDiffPath,
-      loadingPath: loadingGitDiffPath,
-      selectedPath,
-      selectedPreview: state.gitSelectedPreview
-    });
-    if (request === null) {
-      return;
-    }
-    void loadGitDiffPreview(request.relativePath);
-  }, [failedGitDiffPath, loadingGitDiffPath, selectedPath, state.gitSelectedPreview]);
 
   useEffect(() => {
     if (changes.length === 0) {
@@ -122,63 +105,6 @@ export function GitWorkbench({
       setBranchTarget(branchInfo.currentBranch);
     }
   }, [branchInfo, branchTarget]);
-
-  const selectionPreview =
-    selectedChange === null || state.gitSelectedPreview === null || state.gitSelectedPreview.relativePath !== selectedChange.relativePath
-      ? null
-      : state.gitSelectedPreview;
-
-  const selectionFiles = useMemo<GitDiffFileData[]>(() => {
-    if (selectionPreview === null) {
-      return [];
-    }
-    const cacheKey = buildGitDiffCacheKey(selectionPreview);
-    const cachedFiles = diffParseCacheRef.current.get(cacheKey);
-    if (cachedFiles !== undefined) {
-      return cachedFiles;
-    }
-    const normalized = normalizeGitDiffText(selectionPreview.patch);
-    const files = parseDiff(normalized, { nearbySequences: 'zip' });
-    diffParseCacheRef.current.set(cacheKey, files);
-    return files;
-  }, [selectionPreview]);
-  const selectedDiffFile = useMemo(() => {
-    if (selectedChange === null || selectionPreview === null) {
-      return null;
-    }
-    return selectGitDiffFile(selectionFiles, selectedChange.relativePath);
-  }, [selectionFiles, selectedChange, selectionPreview]);
-
-  async function loadGitDiffPreview(relativePath: string): Promise<void> {
-    const requestId = diffPreviewRequestIdRef.current + 1;
-    diffPreviewRequestIdRef.current = requestId;
-    setLoadingGitDiffPath(relativePath);
-    setFailedGitDiffPath((current) => (current === relativePath ? null : current));
-    setActionError(null);
-    try {
-      const preview = unwrap<GitFileDiffResult>('git selected file diff', await window.roc.git.fileDiff({ relativePath }));
-      if (diffPreviewRequestIdRef.current !== requestId) {
-        return;
-      }
-      updateWorkspaceData({
-        gitSelectedPath: relativePath,
-        gitSelectedPreview: preview
-      });
-      setLoadingGitDiffPath(null);
-      setFailedGitDiffPath((current) => (current === relativePath ? null : current));
-    } catch (selectionError) {
-      if (diffPreviewRequestIdRef.current !== requestId) {
-        return;
-      }
-      setLoadingGitDiffPath(null);
-      setFailedGitDiffPath(relativePath);
-      setActionError(selectionError instanceof Error ? selectionError.message : '当前 Git Diff 加载失败。');
-      updateWorkspaceData({
-        gitSelectedPath: relativePath,
-        gitSelectedPreview: null
-      });
-    }
-  }
 
   async function selectGitFile(relativePath: string): Promise<void> {
     updateWorkspaceData({
@@ -416,57 +342,6 @@ export function GitWorkbench({
     branchSearch
   });
   const visibleBranches = branchSwitcherModel.visibleBranches;
-  const selectionStatus = selectedChange === null ? null : buildGitChangeStateLabel(selectedChange);
-  const selectionPreviewPanel =
-    selectedChange === null ? (
-      <div className="git-selection-empty" data-testid="workbench-git-selection">
-        <strong>尚未选中文件</strong>
-        <p>{gitSelectionEmptyMessage(state)}</p>
-      </div>
-    ) : failedGitDiffPath === selectedChange.relativePath && loadingGitDiffPath !== selectedChange.relativePath ? (
-      <div className="git-selection-empty" data-testid="workbench-git-selection">
-        <strong>{selectedChange.relativePath}</strong>
-        <p>当前文件 diff 加载失败。</p>
-      </div>
-    ) : selectionPreview === null ? (
-      <div className="git-selection-empty" data-testid="workbench-git-selection">
-        <strong>{selectedChange.relativePath}</strong>
-        <p>正在读取当前文件 diff。</p>
-      </div>
-    ) : selectedDiffFile === null ? (
-      <div className="git-selection-empty" data-testid="workbench-git-selection">
-        <strong>{selectedChange.relativePath}</strong>
-        <p>当前文件没有可显示的 diff。</p>
-      </div>
-    ) : (
-      <div className="git-diff-panel" data-testid="workbench-git-selection">
-        <div className="git-diff-header">
-          <div className="git-diff-titleblock">
-            <div className="git-selection-title" data-testid="workbench-git-selection-path">
-              {selectedChange.relativePath}
-            </div>
-            <div className="git-selection-subtitle">{selectionStatus}</div>
-          </div>
-          <span className="selection-chip active">{selectionStatus}</span>
-        </div>
-        <div className="git-diff-toolbar">
-          <span>{buildGitDiffTitle(selectedDiffFile)}</span>
-          <span>{selectedDiffFile.type}</span>
-        </div>
-        <div className="git-diff-body">
-          <div className="git-diff-scroll" data-testid="workbench-git-selection-preview">
-            <Diff
-              diffType={selectedDiffFile.type}
-              hunks={selectedDiffFile.hunks}
-              viewType="unified"
-            >
-              {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
-            </Diff>
-          </div>
-        </div>
-      </div>
-    );
-
   return (
     <section className="tool-panel workbench-surface workbench-surface--git">
       <div className="workbench-git workbench-git--split" style={{ '--git-pane-width': `${gitPaneWidth}px` } as React.CSSProperties}>
@@ -576,68 +451,22 @@ export function GitWorkbench({
             <span className="git-sync-stat">↑ {dirtyCount}</span>
           </footer>
           {branchSwitcherOpen ? (
-            <section className="git-branch-popover" data-testid="git-branch-controls">
-              <div className="git-branch-popover-head">
-                <strong>SWITCH BRANCH</strong>
-                <button type="button" onClick={() => setBranchSwitcherOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <input
-                className="git-branch-search"
-                data-testid="git-branch-select"
-                disabled={actionBusy}
-                placeholder="Search branches..."
-                value={branchSearch}
-                onChange={(event) => setBranchSearch(event.target.value)}
-              />
-              <div className="git-branch-list">
-                {visibleBranches.map((branch) => (
-                  <button
-                    className={branch.current ? 'git-branch-option active' : 'git-branch-option'}
-                    key={branch.name}
-                    type="button"
-                    onClick={() => {
-                      setBranchTarget(branch.name);
-                      void checkoutNamedBranch(branch.name);
-                    }}
-                  >
-                    <GitBranch size={15} />
-                    <span>{branch.name}</span>
-                    {branch.current ? <strong>•</strong> : null}
-                  </button>
-                ))}
-              </div>
-              <div className="git-branch-create-row">
-                <input
-                  className="git-branch-search"
-                  data-testid="git-branch-create-input"
-                  disabled={actionBusy}
-                  placeholder="new branch name"
-                  value={branchDraft}
-                  onChange={(event) => setBranchDraft(event.target.value)}
-                />
-                <label className="git-branch-checkbox">
-                  <input
-                    checked={checkoutAfterCreate}
-                    data-testid="git-branch-create-checkout"
-                    disabled={actionBusy}
-                    type="checkbox"
-                    onChange={(event) => setCheckoutAfterCreate(event.target.checked)}
-                  />
-                  checkout
-                </label>
-                <button
-                  className="git-branch-create-button"
-                  data-testid="git-branch-create"
-                  disabled={actionBusy || branchDraft.trim().length === 0}
-                  type="button"
-                  onClick={() => void createBranch()}
-                >
-                  Create
-                </button>
-              </div>
-            </section>
+            <GitBranchPopover
+              actionBusy={actionBusy}
+              branchDraft={branchDraft}
+              branchSearch={branchSearch}
+              checkoutAfterCreate={checkoutAfterCreate}
+              visibleBranches={visibleBranches}
+              onBranchDraftChange={setBranchDraft}
+              onBranchSearchChange={setBranchSearch}
+              onCheckoutAfterCreateChange={setCheckoutAfterCreate}
+              onCheckoutBranch={async (targetBranch) => {
+                setBranchTarget(targetBranch);
+                await checkoutNamedBranch(targetBranch);
+              }}
+              onClose={() => setBranchSwitcherOpen(false)}
+              onCreateBranch={createBranch}
+            />
           ) : null}
         </aside>
         <div
@@ -654,7 +483,16 @@ export function GitWorkbench({
               {actionError}
             </span>
           )}
-          <div className="git-selection-slot">{selectionPreviewPanel}</div>
+          <div className="git-selection-slot">
+            <GitDiffPanel
+              failedPath={failedPath}
+              loadingPath={loadingPath}
+              selectedChange={selectedChange}
+              selectedDiffFile={selectedDiffFile}
+              selectionPreview={selectionPreview}
+              state={state}
+            />
+          </div>
           {state.gitLastCommit === null && state.gitLastPush === null ? null : (
             <div className="git-last-result">
               {state.gitLastCommit === null ? null : <span>最近提交：{state.gitLastCommit.commitMessage}</span>}

@@ -1,4 +1,4 @@
-import { PanelLeft, PanelLeftClose, Search, SquarePen } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AgentCapabilityPreview,
@@ -23,9 +23,12 @@ import {
   buildWorkspaceNavItems
 } from './app/nav-items';
 import { SidebarNavGroup } from './app/sidebar/SidebarNavGroup';
+import { WindowWorkband } from './app/WindowWorkband';
 import type {
   LazyLoadState,
+  MemoryData,
   MainViewId,
+  OperationsData,
   ViewId,
   WorkbenchTool,
   WorkspaceData
@@ -47,6 +50,8 @@ import {
   loadTaskSurfaceData,
   loadWorkspaceData
 } from './app/data-loading';
+import { useLazyStartupResource } from './app/use-lazy-startup-resource';
+import { useWindowDrag } from './app/use-window-drag';
 import { PreviewIcon } from './components/PreviewIcon';
 import { filterHistoryItems } from './history-sidebar';
 import type { LoadedState } from './loaded-state';
@@ -96,13 +101,6 @@ export function App(): React.JSX.Element {
   const [workspaceLoadState, setWorkspaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [memoryLoadState, setMemoryLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
-  const windowDragRef = useRef<{
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-    width: number;
-    height: number;
-  } | null>(null);
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
@@ -243,6 +241,7 @@ export function App(): React.JSX.Element {
   const currentAgentExecution = state?.agent.execution ?? null;
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
+  const { continueWindowDrag, finishWindowDrag, startWindowDrag } = useWindowDrag(windowState);
 
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
@@ -369,162 +368,44 @@ export function App(): React.JSX.Element {
     };
   }, [currentAgentExecution, currentSelectedMcpServers, currentSelectedSkills]);
 
-  useEffect(() => {
-    if (state === null) {
-      return;
-    }
+  const startupLoadIntent = getStartupLoadIntent({
+    activeView,
+    activeWorkbenchTool,
+    workbenchVisible
+  });
 
-    const loadIntent = getStartupLoadIntent({
-      activeView,
-      activeWorkbenchTool,
-      workbenchVisible
-    });
-    if (!loadIntent.targets.has('workspace')) {
-      return;
-    }
+  useLazyStartupResource<WorkspaceData>({
+    apply: useCallback((workspaceData) => {
+      setState((current) => (current === null ? current : { ...current, ...workspaceData }));
+    }, []),
+    cacheKey: state === null ? null : currentWorkspace?.path ?? 'no-workspace',
+    enabled: state !== null && startupLoadIntent.targets.has('workspace'),
+    load: useCallback(() => loadWorkspaceData(currentWorkspace), [currentWorkspace]),
+    loadState: workspaceLoadState,
+    setLoadState: setWorkspaceLoadState
+  });
 
-    const workspaceKey = currentWorkspace?.id ?? 'no-workspace';
-    if (workspaceLoadState.key === workspaceKey && workspaceLoadState.status !== 'idle') {
-      return;
-    }
+  useLazyStartupResource<MemoryData>({
+    apply: useCallback((memoryData) => {
+      setState((current) => (current === null ? current : { ...current, ...memoryData }));
+    }, []),
+    cacheKey: currentAppMode,
+    enabled: currentAppMode !== null && startupLoadIntent.targets.has('memory'),
+    load: useCallback(() => loadMemoryData(currentAppMode as AppStatus['mode']), [currentAppMode]),
+    loadState: memoryLoadState,
+    setLoadState: setMemoryLoadState
+  });
 
-    let cancelled = false;
-    setWorkspaceLoadState({
-      status: 'loading',
-      error: null,
-      key: workspaceKey
-    });
-    void loadWorkspaceData(currentWorkspace)
-      .then((workspaceData) => {
-        if (cancelled) {
-          return;
-        }
-        setState((current) => (current === null ? current : { ...current, ...workspaceData }));
-        setWorkspaceLoadState({
-          status: 'ready',
-          error: null,
-          key: workspaceKey
-        });
-      })
-      .catch((loadError: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setWorkspaceLoadState({
-          status: 'error',
-          error: loadError instanceof Error ? loadError.message : 'workspace data failed to load.',
-          key: workspaceKey
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeView, activeWorkbenchTool, currentWorkspace, workbenchVisible]);
-
-  useEffect(() => {
-    if (currentAppMode === null) {
-      return;
-    }
-
-    const loadIntent = getStartupLoadIntent({
-      activeView,
-      activeWorkbenchTool,
-      workbenchVisible
-    });
-    if (!loadIntent.targets.has('memory')) {
-      return;
-    }
-    const memoryKey = currentAppMode;
-    if (memoryLoadState.key === memoryKey && memoryLoadState.status !== 'idle') {
-      return;
-    }
-
-    let cancelled = false;
-    setMemoryLoadState({
-      status: 'loading',
-      error: null,
-      key: memoryKey
-    });
-    void loadMemoryData(currentAppMode)
-      .then((memoryData) => {
-        if (cancelled) {
-          return;
-        }
-        setState((current) => (current === null ? current : { ...current, ...memoryData }));
-        setMemoryLoadState({
-          status: 'ready',
-          error: null,
-          key: memoryKey
-        });
-      })
-      .catch((loadError: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setMemoryLoadState({
-          status: 'error',
-          error: loadError instanceof Error ? loadError.message : 'memory data failed to load.',
-          key: memoryKey
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeView, activeWorkbenchTool, currentAppMode, workbenchVisible]);
-
-  useEffect(() => {
-    if (currentAppMode === null) {
-      return;
-    }
-
-    const loadIntent = getStartupLoadIntent({
-      activeView,
-      activeWorkbenchTool,
-      workbenchVisible
-    });
-    if (!loadIntent.targets.has('operations')) {
-      return;
-    }
-    const operationsKey = currentAppMode;
-    if (operationsLoadState.key === operationsKey && operationsLoadState.status !== 'idle') {
-      return;
-    }
-
-    let cancelled = false;
-    setOperationsLoadState({
-      status: 'loading',
-      error: null,
-      key: operationsKey
-    });
-    void loadOperationsData(currentAppMode)
-      .then((operationsData) => {
-        if (cancelled) {
-          return;
-        }
-        setState((current) => (current === null ? current : { ...current, ...operationsData }));
-        setOperationsLoadState({
-          status: 'ready',
-          error: null,
-          key: operationsKey
-        });
-      })
-      .catch((loadError: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setOperationsLoadState({
-          status: 'error',
-          error: loadError instanceof Error ? loadError.message : 'operations data failed to load.',
-          key: operationsKey
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeView, activeWorkbenchTool, currentAppMode, workbenchVisible]);
+  useLazyStartupResource<OperationsData>({
+    apply: useCallback((operationsData) => {
+      setState((current) => (current === null ? current : { ...current, ...operationsData }));
+    }, []),
+    cacheKey: currentAppMode,
+    enabled: currentAppMode !== null && startupLoadIntent.targets.has('operations'),
+    load: useCallback(() => loadOperationsData(currentAppMode as AppStatus['mode']), [currentAppMode]),
+    loadState: operationsLoadState,
+    setLoadState: setOperationsLoadState
+  });
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -545,58 +426,6 @@ export function App(): React.JSX.Element {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
-  useEffect(() => {
-    return () => {
-      windowDragRef.current = null;
-    };
-  }, []);
-
-  function finishWindowDrag(pointerId?: number): void {
-    const dragSession = windowDragRef.current;
-    if (dragSession === null) {
-      return;
-    }
-    if (pointerId !== undefined && dragSession.pointerId !== pointerId) {
-      return;
-    }
-    windowDragRef.current = null;
-  }
-
-  function continueWindowDrag(clientX: number, clientY: number): void {
-    const dragSession = windowDragRef.current;
-    if (dragSession === null || windowState.maximized || windowState.fullscreen) {
-      return;
-    }
-    const nextBounds: WindowBoundsSnapshot = {
-      x: Math.round(clientX - dragSession.offsetX),
-      y: Math.round(clientY - dragSession.offsetY),
-      width: dragSession.width,
-      height: dragSession.height
-    };
-    void window.roc.window.setBounds(nextBounds);
-  }
-
-  function startWindowDrag(event: React.PointerEvent<HTMLElement>): void {
-    if (event.button !== 0 || windowState.maximized || windowState.fullscreen) {
-      return;
-    }
-    const target = event.target;
-    if (target instanceof Element && target.closest('.workband-actions') !== null) {
-      return;
-    }
-    event.preventDefault();
-    void window.roc.window.getBounds().then((result) => {
-      const bounds = unwrap<WindowBoundsSnapshot>('window bounds', result);
-      windowDragRef.current = {
-        pointerId: event.pointerId,
-        offsetX: event.clientX - bounds.x,
-        offsetY: event.clientY - bounds.y,
-        width: bounds.width,
-        height: bounds.height
-      };
-    });
-  }
-
   async function selectWorkspaceFromDialog(): Promise<void> {
     setWorkspaceSelectError(null);
     const selected = await window.roc.workspace.selectFromDialog();
@@ -615,7 +444,7 @@ export function App(): React.JSX.Element {
     setWorkspaceLoadState({
       status: 'ready',
       error: null,
-      key: selected.data.id
+      key: selected.data.path
     });
     setState((current) =>
       current === null
@@ -675,117 +504,36 @@ export function App(): React.JSX.Element {
 
   return (
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
-      <header
-        className="window-workband"
-        data-testid="window-workband"
-        onPointerDown={startWindowDrag}
-        onPointerMove={(event) => {
+      <WindowWorkband
+        activeView={activeView}
+        chatSidebarCollapsed={chatSidebarCollapsed}
+        onHistorySearchToggle={toggleHistorySearch}
+        onNewConversation={startNewConversation}
+        onSidebarToggle={toggleChatSidebar}
+        onWindowClose={() => {
+          void window.roc.window.close();
+        }}
+        onWindowDragMove={(event) => {
           continueWindowDrag(event.screenX, event.screenY);
         }}
-        onPointerUp={(event) => {
+        onWindowDragStart={startWindowDrag}
+        onWindowDragStop={(event) => {
           finishWindowDrag(event.pointerId);
         }}
-        onPointerCancel={(event) => {
-          finishWindowDrag(event.pointerId);
+        onWindowMaximizeToggle={() => {
+          void window.roc.window.toggleMaximize().then((result) => {
+            setWindowState(unwrap<WindowStateSnapshot>('window toggle maximize', result));
+          });
         }}
-        onPointerLeave={(event) => {
-          if ((event.buttons & 1) === 0) {
-            finishWindowDrag(event.pointerId);
-          }
+        onWindowMinimize={() => {
+          void window.roc.window.minimize().then((result) => {
+            setWindowState(unwrap<WindowStateSnapshot>('window minimize', result));
+          });
         }}
-      >
-        <div className="workband-drag-region">
-          <div className="workband-primary">
-            <div className="brand">
-              <div className="brand-mark">R</div>
-              <span className="brand-text">
-                <strong>Roc</strong>
-                <span className="brand-sep" aria-hidden="true">/</span>
-                <span className="brand-sub">本地工作台</span>
-              </span>
-            </div>
-            {activeView === 'chat' ? (
-              <div className="workband-chat-actions">
-                <button
-                  aria-label={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
-                  aria-pressed={!chatSidebarCollapsed}
-                  className={chatSidebarCollapsed ? 'icon-button workband-chat-action is-active' : 'icon-button workband-chat-action'}
-                  data-testid="chat-sidebar-toggle"
-                  title={chatSidebarCollapsed ? '展开历史侧栏' : '收起历史侧栏'}
-                  type="button"
-                  onClick={toggleChatSidebar}
-                >
-                  {chatSidebarCollapsed ? <PanelLeft aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} /> : <PanelLeftClose aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />}
-                </button>
-                <button
-                  aria-label="搜索历史对话"
-                  aria-pressed={showHistorySearch}
-                  className={showHistorySearch ? 'icon-button workband-chat-action is-active' : 'icon-button workband-chat-action'}
-                  data-testid="chat-history-search-toggle"
-                  title="搜索历史对话"
-                  type="button"
-                  onClick={toggleHistorySearch}
-                >
-                  <Search aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
-                </button>
-                <button
-                  aria-label="新建对话"
-                  className="icon-button workband-chat-action"
-                  data-testid="chat-new-conversation"
-                  title="新建对话"
-                  type="button"
-                  onClick={startNewConversation}
-                >
-                  <SquarePen aria-hidden="true" className="icon-svg" size={16} strokeWidth={1.8} />
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="thread-meta">
-          <PreviewIcon name="folder" />
-          <span>{topMeta}</span>
-        </div>
-        <div className="workband-actions">
-          <button
-            className="icon-button titlebar-button"
-            data-testid="window-minimize"
-            title="最小化"
-            type="button"
-            onClick={() => {
-              void window.roc.window.minimize().then((result) => {
-                setWindowState(unwrap<WindowStateSnapshot>('window minimize', result));
-              });
-            }}
-          >
-            <span className="titlebar-glyph" aria-hidden="true">−</span>
-          </button>
-          <button
-            className="icon-button titlebar-button"
-            data-testid="window-toggle-maximize"
-            title={windowState.maximized ? '还原' : '最大化'}
-            type="button"
-            onClick={() => {
-              void window.roc.window.toggleMaximize().then((result) => {
-                setWindowState(unwrap<WindowStateSnapshot>('window toggle maximize', result));
-              });
-            }}
-          >
-            <span className="titlebar-glyph" aria-hidden="true">{windowState.maximized ? '↙' : '↗'}</span>
-          </button>
-          <button
-            className="icon-button titlebar-button danger"
-            data-testid="window-close"
-            title="关闭"
-            type="button"
-            onClick={() => {
-              void window.roc.window.close();
-            }}
-          >
-            <span className="titlebar-glyph" aria-hidden="true">×</span>
-          </button>
-        </div>
-      </header>
+        showHistorySearch={showHistorySearch}
+        topMeta={topMeta}
+        windowState={windowState}
+      />
 
       <div
         className={

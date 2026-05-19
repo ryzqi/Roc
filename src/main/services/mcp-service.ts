@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { ConfigService } from './config-service';
+import { requireText } from './validation';
 
 const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   id: z.string().min(1),
@@ -70,7 +71,7 @@ export class McpService {
   }
 
   setServerEnabled(id: string, enabled: boolean): McpServerConfig {
-    const serverId = this.requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要修改的 MCP server。');
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要修改的 MCP server。');
     const config = this.readConfig();
     const found = config.servers.find((server) => server.id === serverId);
     if (found === undefined) {
@@ -88,7 +89,7 @@ export class McpService {
   }
 
   deleteServer(id: string): void {
-    const serverId = this.requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要删除的 MCP server。');
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要删除的 MCP server。');
     const config = this.readConfig();
     const found = config.servers.find((server) => server.id === serverId);
     if (found === undefined) {
@@ -101,7 +102,7 @@ export class McpService {
   }
 
   testServer(id: string): McpServerTestResult {
-    const serverId = this.requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要测试的 MCP server。');
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要测试的 MCP server。');
     const server = this.readConfig().servers.find((item) => item.id === serverId);
     if (server === undefined) {
       throw this.notFound(serverId);
@@ -171,17 +172,4 @@ export class McpService {
     });
   }
 
-  private requireText(value: string, code: string, message: string, userAction: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      throw new RocDomainError({
-        code,
-        message,
-        category: 'validation',
-        retryable: false,
-        userAction
-      });
-    }
-    return trimmed;
-  }
 }

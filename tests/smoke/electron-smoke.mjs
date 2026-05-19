@@ -1,13 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import { _electron as electron } from '@playwright/test';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { existsSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { prepareArtifactDir, writeSmokeResult } from './lib/artifacts.mjs';
+import { assertNoRuntimeMockText, waitForAppReady, waitForCapabilitySelection, waitForTerminalSessionReady, waitForTextContent, waitForWindowWithSelector } from './lib/assertions.mjs';
+import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from './lib/fixtures.mjs';
+import { readMainPageText, seedSmokeRuntimeData } from './lib/ipc.mjs';
+import { clickComposerPopoverChoice, clickSmokeControl, hoverComposerPopoverContent, openChatView } from './lib/ui-actions.mjs';
 
-const artifactDir = resolve('.artifacts/wave1');
-mkdirSync(artifactDir, { recursive: true });
+const artifactDir = prepareArtifactDir();
 const packagedExe = resolve('release/win-unpacked/Roc.exe');
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
@@ -30,472 +32,9 @@ const smokeTarget =
         launchArgs: [distMainPath]
       };
 
-const dataRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-'));
-const workspaceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-workspace-'));
-const skillSourceRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-skill-'));
-function buildSmokeContent(label, lines = 1) {
-  return Array.from({ length: lines }, (_, index) => `${label} ${index + 1}`).join('\n') + '\n';
-}
-mkdirSync(join(workspaceRoot, 'assets'));
-writeFileSync(join(workspaceRoot, '00-overview.txt'), 'workspace overview smoke file\n', 'utf8');
-writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\n', 'utf8');
-writeFileSync(join(workspaceRoot, 'batch-stage.txt'), 'batch stage smoke workspace\n', 'utf8');
-writeFileSync(
-  join(workspaceRoot, 'assets', 'smoke-image.png'),
-  Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG3sAAAAASUVORK5CYII=',
-    'base64'
-  )
-);
-function runWorkspaceGit(args) {
-  const result = spawnSync('git', args, {
-    cwd: workspaceRoot,
-    encoding: 'utf8',
-    windowsHide: true
-  });
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
-  }
-}
-runWorkspaceGit(['init']);
-runWorkspaceGit(['config', 'user.email', 'roc-smoke@example.test']);
-runWorkspaceGit(['config', 'user.name', 'Roc Smoke']);
-runWorkspaceGit(['add', '00-overview.txt', 'phase-three-notes.txt', 'batch-stage.txt', 'assets/smoke-image.png']);
-runWorkspaceGit(['commit', '-m', 'initial smoke workspace']);
-writeFileSync(
-  join(workspaceRoot, 'phase-three-notes.txt'),
-  `phase three smoke workspace\n${buildSmokeContent('changed in git line', 80)}`,
-  'utf8'
-);
-writeFileSync(join(workspaceRoot, 'batch-stage.txt'), buildSmokeContent('changed in batch line', 32), 'utf8');
-const remoteRoot = await mkdtemp(join(tmpdir(), 'roc-smoke-remote-'));
-runWorkspaceGit(['init', '--bare', remoteRoot]);
-runWorkspaceGit(['remote', 'add', 'origin', remoteRoot]);
-runWorkspaceGit(['push', '-u', 'origin', 'master']);
-writeFileSync(
-  join(skillSourceRoot, 'SKILL.md'),
-  '---\nname: smoke-skill\ndescription: Smoke skill validates Phase 5 import.\n---\n\n# Smoke Skill\n',
-  'utf8'
-);
-
-function readRequestBody(request) {
-  return new Promise((resolveBody, rejectBody) => {
-    const chunks = [];
-    request.on('data', (chunk) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-    request.on('error', rejectBody);
-    request.on('end', () => {
-      resolveBody(Buffer.concat(chunks).toString('utf8'));
-    });
-  });
-}
-
-async function startSmokeProvider() {
-  const requests = [];
-  const server = createServer((request, response) => {
-    void (async () => {
-      const rawBody = await readRequestBody(request);
-      const parsedBody = rawBody.length === 0 ? null : JSON.parse(rawBody);
-      requests.push({
-        method: request.method,
-        url: request.url,
-        authorization: request.headers.authorization,
-        body: parsedBody
-      });
-      if (parsedBody?.stream === true || request.headers.accept === 'text/event-stream') {
-        response.statusCode = 200;
-        response.setHeader('content-type', 'text/event-stream');
-        response.setHeader('cache-control', 'no-cache');
-        response.setHeader('connection', 'keep-alive');
-        response.write(
-          'data: {"choices":[{"index":0,"delta":{"content":"Smoke Provider 已生成首轮回复。\\n\\n短行一。\\n短行二。\\n短行三。\\n短行四。\\n短行五。\\n短行六。\\n短行七。\\n短行八。"},"finish_reason":null}]}\n\n'
-        );
-        response.write(
-          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":16,"completion_tokens":9,"total_tokens":25}}\n\n'
-        );
-        response.end('data: [DONE]\n\n');
-        return;
-      }
-      response.statusCode = 200;
-      response.setHeader('content-type', 'application/json');
-      response.end(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: 'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。'
-              },
-              finish_reason: 'stop'
-            }
-          ],
-          usage: {
-            prompt_tokens: 16,
-            completion_tokens: 9
-          }
-        })
-      );
-    })().catch((error) => {
-      response.statusCode = 500;
-      response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'provider failed' }));
-    });
-  });
-
-  await new Promise((resolveListen, rejectListen) => {
-    server.once('error', rejectListen);
-    server.listen(0, '127.0.0.1', () => {
-      server.off('error', rejectListen);
-      resolveListen();
-    });
-  });
-  const address = server.address();
-  if (address === null || typeof address === 'string') {
-    throw new Error('Smoke provider did not expose a TCP address.');
-  }
-  const tcpAddress = address;
-  return {
-    endpoint: `http://127.0.0.1:${tcpAddress.port}/v1`,
-    requests,
-    close: () =>
-      new Promise((resolveClose, rejectClose) => {
-        server.close((error) => {
-          if (error !== undefined) {
-            rejectClose(error);
-            return;
-          }
-          resolveClose();
-        });
-      })
-  };
-}
-
-async function waitForWindowWithSelector(app, selector) {
-  const deadline = Date.now() + 10000;
-  while (Date.now() < deadline) {
-    for (const candidate of app.windows()) {
-      if (await candidate.locator(selector).isVisible().catch(() => false)) {
-        return candidate;
-      }
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
-  }
-  throw new Error(`Smoke timed out waiting for window selector: ${selector}`);
-}
-
-async function waitForAppReady(page, label) {
-  await page.waitForSelector('[data-testid="roc-app"], .fatal, .boot', { timeout: 15000 });
-  if ((await page.locator('.fatal').count()) > 0) {
-    const text = await page.textContent('.fatal');
-    writeFileSync(join(artifactDir, `electron-smoke-fatal-${label}.txt`), text ?? '', 'utf8');
-    throw new Error(`Roc renderer fatal during ${label}: ${text}`);
-  }
-  if ((await page.locator('[data-testid="roc-app"]').count()) === 0) {
-    await page.waitForSelector('[data-testid="roc-app"]', { timeout: 15000 });
-  }
-}
-
-async function clickSmokeControl(page, selector) {
-  const target = page.locator(selector);
-  await target.waitFor({ state: 'attached', timeout: 5000 });
-  await target.evaluate((element) => {
-    element.click();
-  });
-}
-
-async function openChatView(page) {
-  const sidebarEntry = page.locator('[data-testid="nav-chat"]');
-  if ((await sidebarEntry.count()) > 0) {
-    await clickSmokeControl(page, '[data-testid="nav-chat"]');
-  } else {
-    await clickSmokeControl(page, '[data-testid="chat-new-conversation"]');
-  }
-  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
-}
-
-async function clickComposerPopoverChoice(page, triggerSelector, choiceSelector) {
-  await page.hover(triggerSelector);
-  await page.waitForSelector(choiceSelector, { timeout: 5000 });
-  await clickSmokeControl(page, choiceSelector);
-}
-
-async function hoverComposerPopoverContent(page, triggerSelector, popoverSelector) {
-  await page.hover(triggerSelector);
-  await page.waitForSelector(popoverSelector, { timeout: 5000 });
-  const popover = page.locator(popoverSelector);
-  const box = await popover.boundingBox();
-  if (box === null) {
-    throw new Error(`Smoke could not measure popover: ${popoverSelector}`);
-  }
-  await page.mouse.move(box.x + Math.min(28, box.width / 2), box.y + Math.min(28, box.height / 2), { steps: 12 });
-  await popover.waitFor({ state: 'visible', timeout: 5000 });
-}
-
-async function waitForTerminalSessionReady(page) {
-  await page.waitForFunction(
-    () => {
-      const host = document.querySelector('[data-testid="terminal-xterm"]');
-      return host !== null;
-    },
-    undefined,
-    { timeout: 10000 }
-  );
-}
-
-async function waitForCapabilitySelection(page, { mcpCount, skillCount, expectedMcpIds = [], expectedSkillIds = [] }) {
-  try {
-    await page.waitForFunction(
-      ({ mcpCount: expectedMcpCount, skillCount: expectedSkillCount }) => {
-        const toolTrigger = document.querySelector('[data-testid="chat-tool-trigger"]');
-        const skillTrigger = document.querySelector('[data-testid="chat-skill-trigger"]');
-        const toolActive = toolTrigger instanceof HTMLElement && toolTrigger.classList.contains('active');
-        const skillActive = skillTrigger instanceof HTMLElement && skillTrigger.classList.contains('active');
-        return toolActive === (expectedMcpCount > 0) && skillActive === (expectedSkillCount > 0);
-      },
-      { mcpCount, skillCount },
-      { timeout: 5000 }
-    );
-  } catch (error) {
-    const triggerEvidence = await page.evaluate(() => ({
-      toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
-      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '',
-      toolTriggerClass: document.querySelector('[data-testid="chat-tool-trigger"]')?.className ?? '',
-      skillTriggerClass: document.querySelector('[data-testid="chat-skill-trigger"]')?.className ?? ''
-    }));
-    throw new Error(
-      `Capability selection wait failed for mcp=${mcpCount}, skill=${skillCount}: ${JSON.stringify(triggerEvidence)}`,
-      { cause: error }
-    );
-  }
-
-  if (expectedMcpIds.length > 0) {
-    await page.hover('[data-testid="chat-tool-trigger"]');
-    await page.waitForFunction(
-      ({ ids }) =>
-        ids.every((id) => {
-          const node = document.querySelector(`[data-testid="turn-mcp-${id}"]`);
-          return node instanceof HTMLElement && node.classList.contains('active');
-        }),
-      { ids: expectedMcpIds },
-      { timeout: 5000 }
-    );
-  }
-
-  if (expectedSkillIds.length > 0) {
-    await page.hover('[data-testid="chat-skill-trigger"]');
-    await page.waitForFunction(
-      ({ ids }) =>
-        ids.every((id) => {
-          const node = document.querySelector(`[data-testid="turn-skill-${id}"]`);
-          return node instanceof HTMLElement && node.classList.contains('active');
-        }),
-      { ids: expectedSkillIds },
-      { timeout: 5000 }
-    );
-  }
-
-  const triggerEvidence = await page.evaluate(() => {
-    return {
-      toolTriggerText: document.querySelector('[data-testid="chat-tool-trigger"]')?.textContent ?? '',
-      skillTriggerText: document.querySelector('[data-testid="chat-skill-trigger"]')?.textContent ?? '',
-      toolTriggerClass: document.querySelector('[data-testid="chat-tool-trigger"]')?.className ?? '',
-      skillTriggerClass: document.querySelector('[data-testid="chat-skill-trigger"]')?.className ?? ''
-    };
-  });
-  return {
-    ...triggerEvidence,
-    mcpActiveIds: expectedMcpIds,
-    skillActiveIds: expectedSkillIds
-  };
-}
-
-async function waitForTextContent(page, selector, expectedText, timeout = 5000) {
-  await page.waitForFunction(
-    ({ selector: targetSelector, expectedText: targetText }) => {
-      const text = document.querySelector(targetSelector)?.textContent ?? '';
-      return text.includes(targetText);
-    },
-    { selector, expectedText },
-    { timeout }
-  );
-}
-
-async function readMainPageText(page, { pageId, viewSelector, label }) {
-  const openedPage = await page.evaluate(async (targetPage) => {
-    const result = await window.roc.app.openMainPage(targetPage);
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-    return result.data.page;
-  }, pageId);
-  if (openedPage !== pageId) {
-    throw new Error(`Smoke navigated to ${openedPage} instead of ${pageId}.`);
-  }
-  await page.waitForSelector(viewSelector, { timeout: 5000 });
-  const text = await page.textContent(viewSelector);
-  if (text === null) {
-    throw new Error(`Smoke could not read ${label} view text.`);
-  }
-  return text;
-}
-
-async function seedSmokeRuntimeData(page, { providerEndpoint }) {
-  await page.evaluate(
-    async ({ providerEndpoint: endpoint, workspacePath }) => {
-      async function unwrap(result, label) {
-        if (!result.ok) {
-          throw new Error(`${label} failed: ${result.error.message}`);
-        }
-        return result.data;
-      }
-
-      const currentSettings = await unwrap(await window.roc.settings.get(), 'settings get');
-      await unwrap(
-        await window.roc.settings.setProviderSecret({
-          providerId: 'smoke-provider',
-          plaintext: 'sk-smoke-seed-secret'
-        }),
-        'settings set provider secret'
-      );
-      await unwrap(
-        await window.roc.settings.save({
-          settings: currentSettings.settings,
-          permissions: currentSettings.permissions,
-          providers: [
-            ...currentSettings.providers,
-            {
-              id: 'smoke-provider',
-              name: 'Smoke Provider',
-              type: 'openai_compatible',
-              endpoint,
-              credentialRef: 'secret:smoke-provider',
-              enabled: true,
-              models: [
-                {
-                  id: 'smoke-model',
-                  displayName: 'Smoke Model',
-                  enabled: true,
-                  supportsStreaming: true,
-                  supportsToolCalls: true
-                }
-              ]
-            }
-          ],
-          defaultModelId: 'smoke-model'
-        }),
-        'settings save'
-      );
-      await unwrap(
-        await window.roc.mcp.upsertServer({
-          id: 'smoke-mcp',
-          name: 'Smoke MCP',
-          enabled: true,
-          transport: 'http',
-          preset: false,
-          riskLevel: 'low',
-          url: 'http://127.0.0.1:65534/mcp',
-          allowedTools: ['smoke_tool']
-        }),
-        'mcp upsert'
-      );
-      await unwrap(await window.roc.mcp.ensureExaPreset(), 'exa preset');
-
-      const backgroundPreview = await unwrap(
-        await window.roc.tasks.createBackgroundTaskPreview({
-          goal: 'Phase 6 smoke background diagnostic task',
-          trigger: {
-            type: 'schedule',
-            description: 'smoke scheduled run',
-            nextRunAt: '2026-04-29T01:00:00.000Z'
-          },
-          workspacePath,
-          allowedActions: ['pnpm test'],
-          forbiddenActions: ['git push'],
-          failurePolicy: 'pause_and_report',
-          notificationPolicy: 'failures_and_confirmations'
-        }),
-        'background task preview'
-      );
-      await unwrap(await window.roc.tasks.createBackgroundTask(backgroundPreview), 'background task create');
-
-      const existing = await unwrap(
-        await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' }),
-        'memory search'
-      );
-      const existingActiveMemory = existing.items.find((item) =>
-        item.summary.includes('phase four smoke active memory validates candidate acceptance and recall.')
-      );
-      if (existingActiveMemory === undefined) {
-        const candidate = await unwrap(
-          await window.roc.memory.writeCandidate({
-            type: 'project_context',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke active memory validates candidate acceptance and recall.',
-            confidence: 0.9,
-            priority: 'medium',
-            source: 'user_explicit',
-            sourceRef: 'smoke:memory'
-          }),
-          'memory candidate'
-        );
-        const accepted = await unwrap(await window.roc.memory.acceptCandidate(candidate.id), 'memory accept');
-        const deleted = await unwrap(await window.roc.memory.delete(accepted.id), 'memory delete');
-        if (!deleted.recoverable) {
-          throw new Error('memory delete did not create a recoverable state.');
-        }
-        await unwrap(await window.roc.memory.restore(accepted.id), 'memory restore');
-        await unwrap(
-          await window.roc.memory.writeCandidate({
-            type: 'project_context',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke active memory does not validate candidate acceptance and recall.',
-            confidence: 0.7,
-            priority: 'medium',
-            source: 'agent_extract:smoke',
-            sourceRef: 'smoke:conflict'
-          }),
-          'memory conflict candidate'
-        );
-        await unwrap(
-          await window.roc.memory.writeSessionRecall({
-            sessionId: 'smoke-session-phase4',
-            title: 'phase four smoke session',
-            summary: 'phase four smoke session recall validates searchable archived conversation.',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke session stores raw recall without promoting it into curated memory.',
-            sourceRef: 'smoke:session'
-          }),
-          'memory session recall'
-        );
-      }
-    },
-    { providerEndpoint, workspacePath: workspaceRoot }
-  );
-}
-
-function assertNoRuntimeMockText(sections) {
-  const forbidden = [
-    { label: '示例数据标签', pattern: /条示例|示例任务|示例数据/u },
-    { label: '硬编码预览流程', pattern: /步骤 3\/5|截图工具未找到浏览器入口|生成页面预览并截图/u },
-    { label: '演示 Provider 地址', pattern: /api\.example\.local/u },
-    { label: '预览工作区故事', pattern: /重构静态页面布局|导出截图|把每个页面都导出为 PNG/u },
-    { label: '英文占位语义', pattern: /\bmock\b|\bdemo\b|\bfake\b|\bplaceholder\b|No preview loaded\./iu }
-  ];
-
-  const leaks = [];
-  for (const section of sections) {
-    for (const rule of forbidden) {
-      const match = section.text.match(rule.pattern);
-      if (match !== null) {
-        leaks.push({ section: section.name, rule: rule.label, text: match[0] });
-      }
-    }
-  }
-
-  if (leaks.length > 0) {
-    throw new Error(`Runtime mock/demo text leaked: ${JSON.stringify(leaks, null, 2)}`);
-  }
-}
+const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
+seedSmokeWorkspace(workspaceRoot, remoteRoot);
+seedSmokeSkillSource(skillSourceRoot);
 
 let app;
 let smokeProvider;
@@ -513,7 +52,7 @@ try {
   });
 
   const page = await app.firstWindow();
-  await waitForAppReady(page, 'initial');
+  await waitForAppReady(page, 'initial', artifactDir);
   await page.addInitScript(() => {
     globalThis.__rocConfirmMessages = [];
     window.confirm = (message) => {
@@ -593,7 +132,7 @@ try {
     throw new Error(`Skill import mismatch: ${importedSkillId}`);
   }
   await page.reload();
-  await waitForAppReady(page, 'after-skill-import');
+  await waitForAppReady(page, 'after-skill-import', artifactDir);
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   const selectedWorkspace = await page.evaluate(async (workspacePath) => {
     const result = await window.roc.workspace.select({ path: workspacePath });
@@ -605,9 +144,9 @@ try {
   if (selectedWorkspace !== workspaceRoot) {
     throw new Error(`Workspace selection mismatch: ${selectedWorkspace}`);
   }
-  await seedSmokeRuntimeData(page, { providerEndpoint: smokeProvider.endpoint });
+  await seedSmokeRuntimeData(page, { providerEndpoint: smokeProvider.endpoint, workspacePath: workspaceRoot });
   await page.reload();
-  await waitForAppReady(page, 'after-runtime-seed');
+  await waitForAppReady(page, 'after-runtime-seed', artifactDir);
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   await page.click('[data-testid="nav-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
@@ -638,9 +177,56 @@ try {
     pageId: 'workspace',
     viewSelector: '[data-testid="workspace-view"]'
   });
-  await waitForTextContent(page, '[data-testid="workspace-view"]', '文件操作预览');
-  await page.waitForSelector('[data-testid="file-tree"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="rtk-panel"]', { timeout: 5000 });
+  try {
+    await waitForTextContent(page, '[data-testid="workspace-view"]', '文件操作预览', 15000);
+  } catch (error) {
+    const workspaceProbe = await page.evaluate(async () => {
+      async function probe(label, operation) {
+        const startedAt = Date.now();
+        try {
+          const result = await Promise.race([
+            operation(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), 3000))
+          ]);
+          return {
+            label,
+            status: 'resolved',
+            elapsedMs: Date.now() - startedAt,
+            result
+          };
+        } catch (probeError) {
+          return {
+            label,
+            status: 'rejected',
+            elapsedMs: Date.now() - startedAt,
+            error: probeError instanceof Error ? probeError.message : String(probeError)
+          };
+        }
+      }
+
+      const tree = await probe('files.listTree', () => window.roc.files.listTree({ relativePath: '' }));
+      const previewTarget =
+        tree.status === 'resolved' &&
+        tree.result.ok &&
+        tree.result.data.entries.find((entry) => entry.type === 'file')?.relativePath;
+      const preview =
+        previewTarget === undefined
+          ? { label: 'files.preview', status: 'skipped', reason: 'no file entry' }
+          : await probe('files.preview', () => window.roc.files.preview({ relativePath: previewTarget }));
+      const gitStatus = await probe('git.status', () => window.roc.git.status());
+      const gitBranches = await probe('git.listBranches', () => window.roc.git.listBranches());
+
+      return {
+        tree,
+        preview,
+        gitStatus,
+        gitBranches
+      };
+    });
+    throw new Error(`Workspace lazy load probe: ${JSON.stringify(workspaceProbe, null, 2)}`, { cause: error });
+  }
+  await page.waitForSelector('[data-testid="file-tree"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="rtk-panel"]', { timeout: 15000 });
   const rtkPanelText = await page.textContent('[data-testid="rtk-panel"]');
   if (rtkPanelText === null) {
     throw new Error('Smoke could not read RTK panel text.');
@@ -1192,7 +778,7 @@ try {
   await page.waitForSelector('[data-testid="skill-management"]', { timeout: 5000 });
   await page.click('[data-testid="skills-filter-enabled"]');
   await page.waitForSelector('[data-testid="skill-row-smoke-skill"]', { timeout: 5000 });
-  await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'Smoke Skill');
+  await waitForTextContent(page, '[data-testid="skill-row-smoke-skill"]', 'smoke-skill');
   const skillLayoutEvidence = await page.evaluate(() => {
     const view = document.querySelector('[data-testid="skills-view"]');
     const filterStrip = document.querySelector('.skills-filter-strip');
@@ -1802,7 +1388,8 @@ try {
       skills: preview.data.skillCards.map((card) => card.id),
       subagents: preview.data.subagents.map((subagent) => ({
         id: subagent.id,
-        inheritsSkills: subagent.inheritsSkills
+        skills: subagent.skills,
+        tools: subagent.tools
       })),
       policy: preview.data.untrustedContextPolicy
     };
@@ -1850,6 +1437,7 @@ try {
     const sendButtonRect = sendButton instanceof HTMLElement ? sendButton.getBoundingClientRect() : null;
     const composer = input.closest('.composer');
     const composerRect = composer instanceof HTMLElement ? composer.getBoundingClientRect() : null;
+    const composerStyle = composer instanceof HTMLElement ? getComputedStyle(composer) : null;
     const chatView = document.querySelector('[data-testid="chat-view"]');
     const chatViewRect = chatView instanceof HTMLElement ? chatView.getBoundingClientRect() : null;
     const bottomStack = document.querySelector('.chat-bottom-stack');
@@ -1874,8 +1462,10 @@ try {
       visibleInViewport &&
       style.visibility === 'visible' &&
       style.opacity !== '0' &&
-      style.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
-      !style.borderTop.startsWith('0px none');
+      composer instanceof HTMLElement &&
+      composerStyle !== null &&
+      composerStyle.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+      !composerStyle.borderTop.startsWith('0px none');
     return {
       exists: true,
       editable: !input.disabled && !input.readOnly,
@@ -1891,6 +1481,8 @@ try {
       sendButtonVisibleInViewport,
       backgroundColor: style.backgroundColor,
       borderTop: style.borderTop,
+      composerBackgroundColor: composerStyle?.backgroundColor ?? null,
+      composerBorderTop: composerStyle?.borderTop ?? null,
       bottomExplanationsAbsent,
       composerBottomGapToViewport: composerRect === null ? null : Math.round(viewport.height - composerRect.bottom),
       inputSettledAtBottom:
@@ -2743,7 +2335,7 @@ try {
       mcpText.includes('smoke-mcp:ready') &&
       mcpText.includes('enabled'),
     skillManagedVisible:
-      skillText.includes('Smoke Skill') &&
+      skillText.includes('smoke-skill') &&
       skillText.includes('ready') &&
       (disabledSkillText ?? '').includes('disabled'),
     skillLayoutCompact:
@@ -2814,8 +2406,8 @@ try {
       sidebarScrollEvidenceAfter.settingsVisible,
     workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
-      chatCapabilityEvidence.toolTriggerText.includes('1') &&
-      chatCapabilityEvidence.skillTriggerText.includes('1') &&
+      chatCapabilityEvidence.toolTriggerClass.includes('active') &&
+      chatCapabilityEvidence.skillTriggerClass.includes('active') &&
       chatCapabilityEvidence.mcpActiveIds.includes('smoke-mcp') &&
       chatCapabilityEvidence.skillActiveIds.includes('smoke-skill'),
     chatCollapsedRailLayoutVisible:
@@ -2856,9 +2448,26 @@ try {
         (item) => item.id === 'missing-mcp' && item.type === 'mcp_server' && item.reason === 'not_found'
       ) &&
       agentPreviewApiEvidence.cards.includes('web:web_read') &&
+      agentPreviewApiEvidence.cards.includes('builtin:execute') &&
+      agentPreviewApiEvidence.cards.includes('builtin:delete_file') &&
       agentPreviewApiEvidence.cards.includes('mcp:smoke-mcp:smoke_tool') &&
       agentPreviewApiEvidence.skills.includes('skill:smoke-skill') &&
-      agentPreviewApiEvidence.subagents.some((subagent) => subagent.id === 'code-review' && subagent.inheritsSkills === false) &&
+      agentPreviewApiEvidence.subagents.some(
+        (subagent) =>
+          subagent.id === 'code-review' &&
+          Array.isArray(subagent.skills) &&
+          subagent.skills.length === 0 &&
+          Array.isArray(subagent.tools) &&
+          subagent.tools.length === 0
+      ) &&
+      agentPreviewApiEvidence.subagents.some(
+        (subagent) =>
+          subagent.id === 'research' &&
+          Array.isArray(subagent.skills) &&
+          subagent.skills.length === 0 &&
+          Array.isArray(subagent.tools) &&
+          subagent.tools.includes('web_read')
+      ) &&
       agentPreviewApiEvidence.policy === 'external_content_reference_only',
     providerChatResultVisible:
       chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
@@ -3104,7 +2713,7 @@ try {
     checkedAt: new Date().toISOString()
   };
 
-  writeFileSync(join(artifactDir, 'electron-smoke.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  writeSmokeResult(artifactDir, result);
 
   if (!passed) {
     console.error(JSON.stringify(result, null, 2));

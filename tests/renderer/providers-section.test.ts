@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { ProviderConfig } from '../../src/shared/types';
 import { ProvidersSection } from '../../src/renderer/settings/sections/providers-section';
-import { createProviderDraft } from '../../src/renderer/settings-model';
+import { createProviderDraft } from '../../src/renderer/settings/provider-draft-model';
 
 describe('providers section', () => {
   it('uses a single add button, keeps API key inside the create form, and renders icon-only secret toggle', () => {

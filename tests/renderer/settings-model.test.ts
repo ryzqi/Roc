@@ -8,22 +8,26 @@ import type {
   SkillSnapshot
 } from '../../src/shared/types';
 import {
-  applySettingsSnapshot,
-  buildImpactRows,
-  assertProviderCreateIdAvailable,
-  buildSettingsSaveRequest,
-  buildEnabledModelOptions,
-  buildProviderIdFromName,
-  buildProviderConfigFromDraft,
-  createProviderDraft,
-  deleteProviderFromSettingsSaveRequest,
-  parseProviderModelDraft,
-  setDefaultModelInSettingsSaveRequest,
   selectSettingsSection,
-  SETTINGS_SECTIONS,
-  providerTypeMeta,
-  upsertProviderInSettingsSaveRequest
+  SETTINGS_SECTIONS
 } from '../../src/renderer/settings-model';
+import {
+  assertProviderCreateIdAvailable,
+  buildEnabledModelOptions,
+  buildProviderConfigFromDraft,
+  buildProviderIdFromName,
+  createProviderDraft,
+  parseProviderModelDraft,
+  providerTypeMeta
+} from '../../src/renderer/settings/provider-draft-model';
+import { buildImpactRows } from '../../src/renderer/settings/impact-model';
+import {
+  applySettingsSnapshot,
+  buildSettingsSaveRequest,
+  deleteProviderFromSettingsSaveRequest,
+  setDefaultModelInSettingsSaveRequest,
+  upsertProviderInSettingsSaveRequest
+} from '../../src/renderer/settings/settings-save-model';
 
 function defaultSettings(): AppSettings {
   return {

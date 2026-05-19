@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { SkillSnapshot } from '../shared/types';
+import { CompactStatusPill } from './components/CompactStatusPill';
 
 export type SkillFilterId = 'all' | 'enabled' | 'disabled' | 'invalid';
 
@@ -141,16 +142,6 @@ function EmptyCard({ detail, title, testId }: { detail: string; title: string; t
   );
 }
 
-function StatusPill({
-  tone,
-  value
-}: {
-  tone: 'ok' | 'warn' | 'bad' | 'info' | 'neutral';
-  value: string;
-}): React.JSX.Element {
-  return <span className={`pill ${tone}`}>{value}</span>;
-}
-
 function SelectionChip({
   active,
   count,
@@ -221,7 +212,7 @@ export function SkillsView({
                       <span className="skill-row-error">{skill.lastError}</span>
                     )}
                   </span>
-                  <StatusPill tone={skill.statusTone} value={skill.statusLabel} />
+                  <CompactStatusPill className="pill" tone={skill.statusTone} value={skill.statusLabel} />
                 </button>
               );
             })

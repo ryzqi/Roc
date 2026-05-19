@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { HumanMessage } from '@langchain/core/messages';
-import type { ClientTool } from '@langchain/core/tools';
 import { Command, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import type { HITLRequest, HITLResponse } from 'langchain';
@@ -28,29 +27,17 @@ import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
 import { executeWithProviderRequestRetry, isRetryableProviderRequestFailure } from './provider-request-retry';
 import {
-  buildDeepAgent,
-  createBackend,
+  createDeepAgentSession,
   errorMapping,
   prompt,
   recordUtils,
   redact,
   RUN_EVENT_NAME,
   SqliteLangGraphStore,
-  tools,
+  streamConsumers,
   type ActiveRun,
-  type RunExecutionContext,
-  type RuntimeSubagent
+  type RunExecutionContext
 } from './deep-agent';
-
-type ReasoningSource =
-  | {
-      kind: 'stream';
-      stream: AsyncIterable<unknown>;
-    }
-  | {
-      kind: 'values';
-      values: string[];
-    };
 
 type ResumeContext = {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
@@ -336,308 +323,97 @@ export class DeepAgentRuntimeService {
       let attemptProducedVisibleOutput = false;
       await executeWithProviderRequestRetry(async () => {
         attemptProducedVisibleOutput = false;
-        const assistantChunks: string[] = [];
-        const reasoningChunks: string[] = [];
-        const usageAccumulator = createUsageAccumulator();
-        const closers: Array<() => Promise<void>> = [];
+        const session = await createDeepAgentSession({
+          agentService: this.agentService,
+          context,
+          fileService: this.fileService,
+          getCheckpointer: () => this.getOrCreateCheckpointer(),
+          mcpService: this.mcpService,
+          paths: this.paths,
+          shellExecutionService: this.taskBoundShellExecutionService(context),
+          store: this.store,
+          webReadService: this.webReadService,
+          workspaceService: this.workspaceService
+        });
 
         try {
-          const interruptOn =
-            context.taskRun === null
-              ? undefined
-              : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
-          const { subagents, tools: runTools } = await this.createRunTools(context, closers);
-          const runtimeBackend = createBackend({
-            workspaceService: this.workspaceService,
-            paths: this.paths,
-            shellExecutionService: this.taskBoundShellExecutionService(context),
-            store: this.store
-          });
-          const skillSources = context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
-          const agent = buildDeepAgent({
-            model: context.modelHandle.model,
-            systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-            backend: runtimeBackend.backend,
-            store: this.store,
-            memorySources: ['/agents/AGENTS.md'],
-            skillSources,
-            subagents,
-            tools: runTools,
-            interruptOn,
-            checkpointer: context.taskRun === null ? undefined : this.getOrCreateCheckpointer()
-          });
-          const run = await agent.streamEvents(
+          const run = await session.agent.streamEvents(
             {
               messages: [new HumanMessage(context.input)]
             },
             {
               version: 'v3',
-              configurable: {
-                thread_id: context.threadId,
-                run_id: context.runId
-              },
+              configurable: session.configurable,
               signal: context.abortController.signal
             }
           );
 
-          await Promise.all([
-            this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context, () => {
-              attemptProducedVisibleOutput = true;
-            }),
-            this.consumeMessages(
-              run.messages as AsyncIterable<unknown>,
-              context,
-              assistantChunks,
-              reasoningChunks,
-              usageAccumulator,
-              () => {
-                attemptProducedVisibleOutput = true;
-              }
-            ),
-            this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context, () => {
-              attemptProducedVisibleOutput = true;
-            })
-          ]);
+          await this.consumeSessionStreams(run, context, session, () => {
+            attemptProducedVisibleOutput = true;
+          });
 
           if (run.interrupted) {
-            const approval = this.readPendingApproval(run.interrupts, context.runId);
-            if (context.taskRun !== null) {
-              this.pendingInterrupts.set(context.runId, {
-                threadId: context.threadId,
-                approval
-              });
-              this.taskService.recordApprovalRequested({
-                runId: context.taskRun.id,
-                payload: approval
-              });
-              this.taskService.markRunWaitingUser(context.taskRun.id);
-            }
-            this.emit({
-              type: 'run_interrupted',
-              runId: context.runId,
-              threadId: context.threadId,
-              interruptId: approval.interruptId,
-              payload: approval
-            });
+            this.handleInterruptedRun(context, run.interrupts);
             return;
           }
 
           await Promise.resolve(run.output);
-          const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
-          const result = prompt.buildProviderExecutionResult({
-            modelHandle: context.modelHandle,
-            createdAt: context.createdAt,
-            startedAtMs: context.startedAtMs,
-            inputLength: context.input.length,
-            assistantMessage,
-            usage: usageAccumulator
-          });
-          this.logProviderUsage(context, usageAccumulator);
-          if (context.taskRun !== null) {
-            this.taskService.completeRunWithProviderResult({
-              runId: context.taskRun.id,
-              result
-            });
-          }
-
-          this.emit({
-            type: 'run_completed',
-            runId: context.runId,
-            threadId: context.threadId,
-            providerId: result.providerId,
-            modelId: result.modelId,
-            createdAt: context.createdAt,
-            durationMs: result.durationMs,
-            summary: result.summary,
-            assistantMessage: result.assistantMessage
-          });
+          this.completeRun(context, session.usageAccumulator, session.assistantChunks);
         } finally {
-          await Promise.allSettled(closers.map(async (close) => close()));
+          await Promise.allSettled(session.closers.map(async (close) => close()));
         }
       }, {
         signal: context.abortController.signal,
         shouldRetry: (error) => !attemptProducedVisibleOutput && isRetryableProviderRequestFailure(error)
       });
     } catch (error) {
-      const failure = errorMapping.toRunFailure(error);
-      if (context.taskRun !== null) {
-        this.taskService.failRunWithProviderError({
-          runId: context.taskRun.id,
-          providerId: context.modelHandle.provider.id,
-          modelId: context.modelHandle.modelId,
-          code: failure.code,
-          message: failure.message,
-          retryable: failure.retryable
-        });
-      }
-      this.emit({
-        type: 'run_failed',
-        runId: context.runId,
-        threadId: context.threadId,
-        code: failure.code,
-        message: failure.message,
-        retryable: failure.retryable
-      });
+      this.failRun(context, error);
     } finally {
       this.activeRuns.delete(context.runId);
     }
   }
 
-  private async createRunTools(
-    context: RunExecutionContext,
-    closers: Array<() => Promise<void>>
-  ): Promise<{ subagents: RuntimeSubagent[]; tools: ClientTool[] }> {
-    const webReadTool = tools.createWebReadTool(this.webReadService);
-    const deleteFileTool = tools.createDeleteFileTool(this.fileService);
-    const runTools: ClientTool[] = [webReadTool, deleteFileTool];
-    const webSearchTool = await tools.createWebSearchTool({
-      mcpService: this.mcpService,
-      enabledCapabilities: context.enabledCapabilities,
-      closers
-    });
-    if (webSearchTool !== null) {
-      runTools.push(webSearchTool);
-    }
-    return {
-      subagents: tools.createRunSubagents({
-        webReadTool
-      }),
-      tools: runTools
-    };
-  }
-
   private async executeResume(context: RunExecutionContext, resumePayload: HITLResponse): Promise<void> {
-    const assistantChunks: string[] = [];
-    const reasoningChunks: string[] = [];
-    const usageAccumulator = createUsageAccumulator();
-    const closers: Array<() => Promise<void>> = [];
+    const session = await createDeepAgentSession({
+      agentService: this.agentService,
+      context,
+      fileService: this.fileService,
+      getCheckpointer: () => this.getOrCreateCheckpointer(),
+      mcpService: this.mcpService,
+      paths: this.paths,
+      shellExecutionService: this.taskBoundShellExecutionService(context),
+      store: this.store,
+      webReadService: this.webReadService,
+      workspaceService: this.workspaceService
+    });
 
     try {
-      const interruptOn =
-        context.taskRun === null ? undefined : this.agentService.getCapabilityPreview(context.enabledCapabilities).interruptOn;
-      const { subagents, tools: runTools } = await this.createRunTools(context, closers);
-      const runtimeBackend = createBackend({
-        workspaceService: this.workspaceService,
-        paths: this.paths,
-        shellExecutionService: this.taskBoundShellExecutionService(context),
-        store: this.store
-      });
-      const skillSources = context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
-      const agent = buildDeepAgent({
-        model: context.modelHandle.model,
-        systemPrompt: prompt.buildSystemPrompt(context.enabledCapabilities),
-        backend: runtimeBackend.backend,
-        store: this.store,
-        memorySources: ['/agents/AGENTS.md'],
-        skillSources,
-        subagents,
-        tools: runTools,
-        interruptOn,
-        checkpointer: context.taskRun === null ? undefined : this.getOrCreateCheckpointer()
-      });
-      const run = await agent.streamEvents(new Command({ resume: resumePayload }), {
+      const run = await session.agent.streamEvents(new Command({ resume: resumePayload }), {
         version: 'v3',
-        configurable: {
-          thread_id: context.threadId,
-          run_id: context.runId
-        },
+        configurable: session.configurable,
         signal: context.abortController.signal
       });
 
-      await Promise.all([
-        this.consumeToolCalls(run.toolCalls as AsyncIterable<unknown>, context),
-        this.consumeMessages(
-          run.messages as AsyncIterable<unknown>,
-          context,
-          assistantChunks,
-          reasoningChunks,
-          usageAccumulator
-        ),
-        this.consumeSubagents(run.subagents as AsyncIterable<unknown>, context)
-      ]);
+      await this.consumeSessionStreams(run, context, session);
 
       if (run.interrupted) {
-        const approval = this.readPendingApproval(run.interrupts, context.runId);
-        if (context.taskRun !== null) {
-          this.pendingInterrupts.set(context.runId, {
-            threadId: context.threadId,
-            approval
-          });
-          this.taskService.recordApprovalRequested({
-            runId: context.taskRun.id,
-            payload: approval
-          });
-          this.taskService.markRunWaitingUser(context.taskRun.id);
-        }
-        this.emit({
-          type: 'run_interrupted',
-          runId: context.runId,
-          threadId: context.threadId,
-          interruptId: approval.interruptId,
-          payload: approval
-        });
+        this.handleInterruptedRun(context, run.interrupts);
         return;
       }
 
       await Promise.resolve(run.output);
-      const assistantMessage = prompt.resolveAssistantMessage(assistantChunks);
-      const result = prompt.buildProviderExecutionResult({
-        modelHandle: context.modelHandle,
-        createdAt: context.createdAt,
-        startedAtMs: context.startedAtMs,
-        inputLength: context.input.length,
-        assistantMessage,
-        usage: usageAccumulator
-      });
-      this.logProviderUsage(context, usageAccumulator);
-      if (context.taskRun !== null) {
-        this.taskService.completeRunWithProviderResult({
-          runId: context.taskRun.id,
-          result
-        });
-      }
-      this.pendingInterrupts.delete(context.runId);
-      this.emit({
-        type: 'run_completed',
-        runId: context.runId,
-        threadId: context.threadId,
-        providerId: result.providerId,
-        modelId: result.modelId,
-        createdAt: context.createdAt,
-        durationMs: result.durationMs,
-        summary: result.summary,
-        assistantMessage: result.assistantMessage
-      });
+      this.completeRun(context, session.usageAccumulator, session.assistantChunks, true);
     } catch (error) {
-      const failure = errorMapping.toRunFailure(error);
-      if (context.taskRun !== null) {
-        this.taskService.failRunWithProviderError({
-          runId: context.taskRun.id,
-          providerId: context.modelHandle.provider.id,
-          modelId: context.modelHandle.modelId,
-          code: failure.code,
-          message: failure.message,
-          retryable: failure.retryable
-        });
-      }
-      this.emit({
-        type: 'run_failed',
-        runId: context.runId,
-        threadId: context.threadId,
-        code: failure.code,
-        message: failure.message,
-        retryable: failure.retryable
-      });
+      this.failRun(context, error);
     } finally {
-      await Promise.allSettled(closers.map(async (close) => close()));
+      await Promise.allSettled(session.closers.map(async (close) => close()));
+      this.activeRuns.delete(context.runId);
     }
   }
 
-  private taskBoundShellExecutionService(context: RunExecutionContext): {
-    executeAgentCommand: (input: { command: string; cwd?: string }) => ReturnType<
-      import('./shell-execution-service').ShellExecutionService['executeAgentCommand']
-    >;
-  } {
+  private taskBoundShellExecutionService(
+    context: RunExecutionContext
+  ): import('./deep-agent').AgentExecuteAdapter {
     return {
       executeAgentCommand: (input) =>
         this.shellExecutionService.executeAgentCommand({
@@ -646,298 +422,6 @@ export class DeepAgentRuntimeService {
           runId: context.taskRun?.id ?? context.runId
         })
     };
-  }
-
-  private async consumeMessages(
-    messages: AsyncIterable<unknown>,
-    context: RunExecutionContext,
-    assistantChunks: string[],
-    reasoningChunks: string[],
-    usageAccumulator: ProviderUsageAccumulator,
-    onVisibleOutput?: () => void
-  ): Promise<void> {
-    for await (const message of messages) {
-      updateUsageAccumulator(usageAccumulator, message);
-      const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
-      const reasoningSource = this.readReasoningSource(message);
-      const canStreamAssistantText = textStream !== null && !recordUtils.isNonAssistantTextMessage(message);
-
-      const consumeAssistantText = () =>
-        this.consumeVisibleTextStream(
-          textStream as AsyncIterable<unknown>,
-          (delta) => {
-            onVisibleOutput?.();
-            assistantChunks.push(delta);
-            if (context.taskRun !== null) {
-              this.taskService.recordEvent({
-                threadId: context.taskRun.threadId,
-                runId: context.taskRun.id,
-                type: 'message_delta',
-                payload: {
-                  role: 'assistant',
-                  delta
-                }
-              });
-            }
-            this.emit({
-              type: 'message_delta',
-              runId: context.runId,
-              delta
-            });
-          });
-
-      const consumeReasoning = () =>
-        this.consumeReasoningSource(
-          reasoningSource as ReasoningSource,
-          context,
-          reasoningChunks,
-          onVisibleOutput
-        );
-
-      const tasks: Array<Promise<void>> = [];
-      if (canStreamAssistantText) {
-        tasks.push(consumeAssistantText());
-      }
-      if (reasoningSource !== null) {
-        tasks.push(consumeReasoning());
-      }
-      await Promise.all(tasks);
-
-      if (reasoningSource === null && reasoningChunks.length === 0) {
-        const trailingReasoning = await this.readReasoningFromOutput(message);
-        if (trailingReasoning !== null) {
-          await this.consumeVisibleTextStream(
-            createStringAsyncIterable([trailingReasoning]),
-            (delta) => {
-              onVisibleOutput?.();
-              reasoningChunks.push(delta);
-              this.emit({
-                type: 'reasoning_delta',
-                runId: context.runId,
-                delta
-              });
-            }
-          );
-        }
-      }
-    }
-  }
-
-  private async readReasoningFromOutput(message: unknown): Promise<string | null> {
-    return await recordUtils.readReasoningFromMessageOutput(recordUtils.readRecordValue(message, 'output'));
-  }
-
-  private readReasoningSource(message: unknown): ReasoningSource | null {
-    const standardReasoning = this.readReasoningFallbackValue(recordUtils.readRecordValue(message, 'reasoning'));
-    if (standardReasoning !== null) {
-      return standardReasoning;
-    }
-
-    const values = recordUtils.readReasoningTextValues(message);
-    if (values.length === 0) {
-      return null;
-    }
-    return {
-      kind: 'values',
-      values
-    };
-  }
-
-  private readReasoningFallbackValue(value: unknown): ReasoningSource | null {
-    const stream = recordUtils.readAsyncIterable(value);
-    if (stream !== null) {
-      return {
-        kind: 'stream',
-        stream
-      };
-    }
-    const text = recordUtils.readNonEmptyString(value);
-    if (text === null) {
-      return null;
-    }
-    return {
-      kind: 'values',
-      values: [text]
-    };
-  }
-
-  private async consumeReasoningSource(
-    source: ReasoningSource,
-    context: RunExecutionContext,
-    reasoningChunks: string[],
-    onVisibleOutput?: () => void
-  ): Promise<void> {
-    if (source.kind === 'stream') {
-      await this.consumeVisibleTextStream(
-        source.stream,
-        (delta) => {
-          onVisibleOutput?.();
-          reasoningChunks.push(delta);
-          this.emit({
-            type: 'reasoning_delta',
-            runId: context.runId,
-            delta
-          });
-        }
-      );
-      return;
-    }
-
-    await this.consumeVisibleTextStream(
-      createStringAsyncIterable(source.values),
-      (delta) => {
-        onVisibleOutput?.();
-        reasoningChunks.push(delta);
-        this.emit({
-          type: 'reasoning_delta',
-          runId: context.runId,
-          delta
-        });
-      }
-    );
-  }
-
-  private async consumeToolCalls(
-    calls: AsyncIterable<unknown>,
-    context: RunExecutionContext,
-    onVisibleOutput?: () => void
-  ): Promise<void> {
-    for await (const call of calls) {
-      const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
-      const input = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
-      onVisibleOutput?.();
-      this.emit({
-        type: 'tool_event',
-        runId: context.runId,
-        event: 'start',
-        name,
-        data: input
-      });
-      if (context.taskRun !== null) {
-        this.taskService.recordEvent({
-          threadId: context.taskRun.threadId,
-          runId: context.taskRun.id,
-          type: 'tool_call',
-          payload: {
-            name,
-            status: 'start',
-            input
-          }
-        });
-      }
-      this.emitTodoEvent(context.runId, input);
-
-      try {
-        const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
-        onVisibleOutput?.();
-        this.emit({
-          type: 'tool_event',
-          runId: context.runId,
-          event: 'end',
-          name,
-          data: output
-        });
-        if (context.taskRun !== null) {
-          this.taskService.recordEvent({
-            threadId: context.taskRun.threadId,
-            runId: context.taskRun.id,
-            type: 'tool_call',
-            payload: {
-              name,
-              status: 'end',
-              output
-            }
-          });
-        }
-        this.emitTodoEvent(context.runId, output);
-      } catch (error) {
-        const message = error instanceof Error ? redact(error.message) : 'Tool 执行失败。';
-        onVisibleOutput?.();
-        this.emit({
-          type: 'tool_event',
-          runId: context.runId,
-          event: 'error',
-          name,
-          data: message
-        });
-        if (context.taskRun !== null) {
-          this.taskService.recordEvent({
-            threadId: context.taskRun.threadId,
-            runId: context.taskRun.id,
-            type: 'tool_call',
-            payload: {
-              name,
-              status: 'error',
-              error: message
-            }
-          });
-        }
-      }
-    }
-  }
-
-  private async consumeSubagents(
-    subagents: AsyncIterable<unknown>,
-    context: RunExecutionContext,
-    onVisibleOutput?: () => void
-  ): Promise<void> {
-    for await (const subagent of subagents) {
-      const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(subagent, 'name')) ?? 'subagent';
-      const taskInput = await Promise.resolve(recordUtils.readRecordValue(subagent, 'taskInput'));
-      const summary = recordUtils.readNonEmptyString(taskInput) ?? null;
-      onVisibleOutput?.();
-      this.emit({
-        type: 'subagent_event',
-        runId: context.runId,
-        subagent: name,
-        status: 'started',
-        summary
-      });
-      if (context.taskRun !== null) {
-        this.taskService.recordEvent({
-          threadId: context.taskRun.threadId,
-          runId: context.taskRun.id,
-          type: 'subagent_started',
-          payload: {
-            name,
-            summary
-          }
-        });
-      }
-
-      try {
-        await Promise.resolve(recordUtils.readRecordValue(subagent, 'output'));
-        onVisibleOutput?.();
-        this.emit({
-          type: 'subagent_event',
-          runId: context.runId,
-          subagent: name,
-          status: 'completed',
-          summary
-        });
-        if (context.taskRun !== null) {
-          this.taskService.recordEvent({
-            threadId: context.taskRun.threadId,
-            runId: context.taskRun.id,
-            type: 'subagent_completed',
-            payload: {
-              name,
-              summary
-            }
-          });
-        }
-      } catch (error) {
-        const failureSummary = error instanceof Error ? redact(error.message) : summary;
-        onVisibleOutput?.();
-        this.emit({
-          type: 'subagent_event',
-          runId: context.runId,
-          subagent: name,
-          status: 'failed',
-          summary: failureSummary
-        });
-      }
-    }
   }
 
   private emitTodoEvent(runId: string, candidate: unknown): void {
@@ -952,61 +436,11 @@ export class DeepAgentRuntimeService {
     });
   }
 
-  private async consumeStringStream(stream: AsyncIterable<unknown>, onDelta: (delta: string) => void): Promise<void> {
-    for await (const item of stream) {
-      const text = recordUtils.readNonEmptyString(item);
-      if (text !== null) {
-        onDelta(text);
-      }
-    }
-  }
-
-  private async consumeVisibleTextStream(
-    stream: AsyncIterable<unknown>,
-    onDelta: (delta: string) => void
-  ): Promise<void> {
-    let pending = '';
-    let released = false;
-    let suppressMessage = false;
-
-    await this.consumeStringStream(stream, (delta) => {
-      if (suppressMessage) {
-        return;
-      }
-
-      if (released) {
-        onDelta(delta);
-        return;
-      }
-
-      pending += delta;
-      const classification = recordUtils.classifyStreamedAssistantText(pending);
-      if (classification === 'non_assistant') {
-        pending = '';
-        suppressMessage = true;
-        return;
-      }
-      if (classification === 'pending') {
-        return;
-      }
-
-      released = true;
-      if (pending.length > 0) {
-        onDelta(pending);
-      }
-      pending = '';
-    });
-
-    if (!released && !suppressMessage && pending.length > 0) {
-      onDelta(pending);
-    }
-  }
-
   private emit(event: ChatRunEvent): void {
     this.eventEmitter.emit(RUN_EVENT_NAME, event);
   }
 
-  private logProviderUsage(context: RunExecutionContext, usage: ProviderUsageAccumulator): void {
+  private logProviderUsage(context: RunExecutionContext, usage: streamConsumers.ProviderUsageAccumulator): void {
     const promptTokens = usage.promptTokens ?? 0;
     const cacheReadTokens = usage.cacheReadTokens ?? 0;
     this.logService.append({
@@ -1061,58 +495,142 @@ export class DeepAgentRuntimeService {
     const reviewConfigs = Reflect.get(value, 'reviewConfigs');
     return Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
   }
-}
 
-async function* createStringAsyncIterable(values: readonly string[]): AsyncGenerator<string> {
-  for (const value of values) {
-    yield value;
-  }
-}
+  private async consumeSessionStreams(
+    run: {
+      messages: AsyncIterable<unknown>;
+      subagents: AsyncIterable<unknown>;
+      toolCalls: AsyncIterable<unknown>;
+    },
+    context: RunExecutionContext,
+    session: {
+      assistantChunks: string[];
+      reasoningChunks: string[];
+      usageAccumulator: streamConsumers.ProviderUsageAccumulator;
+    },
+    onVisibleOutput?: () => void
+  ): Promise<void> {
+    const callbacks = {
+      emitRuntimeEvent: (event: ChatRunEvent) => this.emit(event),
+      emitTodoEvent: (candidate: unknown) => this.emitTodoEvent(context.runId, candidate),
+      markVisibleOutput: onVisibleOutput,
+      recordTaskEvent: (
+        type: 'message_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
+        payload: Record<string, unknown>
+      ) => {
+        if (context.taskRun === null) {
+          return;
+        }
+        this.taskService.recordEvent({
+          threadId: context.taskRun.threadId,
+          runId: context.taskRun.id,
+          type,
+          payload
+        });
+      }
+    };
 
-type ProviderUsageAccumulator = {
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
-};
+    await Promise.all([
+      streamConsumers.consumeToolCallStream({
+        calls: run.toolCalls as AsyncIterable<unknown>,
+        context,
+        callbacks
+      }),
+      streamConsumers.consumeMessageStream({
+        messages: run.messages as AsyncIterable<unknown>,
+        context,
+        assistantChunks: session.assistantChunks,
+        reasoningChunks: session.reasoningChunks,
+        usageAccumulator: session.usageAccumulator,
+        callbacks
+      }),
+      streamConsumers.consumeSubagentStream({
+        subagents: run.subagents as AsyncIterable<unknown>,
+        context,
+        callbacks
+      })
+    ]);
+  }
 
-function createUsageAccumulator(): ProviderUsageAccumulator {
-  return {
-    promptTokens: null,
-    completionTokens: null,
-    totalTokens: null,
-    cacheReadTokens: null,
-    cacheCreationTokens: null
-  };
-}
+  private completeRun(
+    context: RunExecutionContext,
+    usage: streamConsumers.ProviderUsageAccumulator,
+    assistantChunks: readonly string[],
+    clearPendingInterrupt = false
+  ): void {
+    const assistantMessage = prompt.resolveAssistantMessage([...assistantChunks]);
+    const result = prompt.buildProviderExecutionResult({
+      modelHandle: context.modelHandle,
+      createdAt: context.createdAt,
+      startedAtMs: context.startedAtMs,
+      inputLength: context.input.length,
+      assistantMessage,
+      usage
+    });
+    this.logProviderUsage(context, usage);
+    if (context.taskRun !== null) {
+      this.taskService.completeRunWithProviderResult({
+        runId: context.taskRun.id,
+        result
+      });
+    }
+    if (clearPendingInterrupt) {
+      this.pendingInterrupts.delete(context.runId);
+    }
+    this.emit({
+      type: 'run_completed',
+      runId: context.runId,
+      threadId: context.threadId,
+      providerId: result.providerId,
+      modelId: result.modelId,
+      createdAt: context.createdAt,
+      durationMs: result.durationMs,
+      summary: result.summary,
+      assistantMessage: result.assistantMessage
+    });
+  }
 
-function updateUsageAccumulator(target: ProviderUsageAccumulator, message: unknown): void {
-  const usageMetadata = recordUtils.readRecordValue(message, 'usage_metadata');
-  const inputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'input_tokens'));
-  const outputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'output_tokens'));
-  const totalTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'total_tokens'));
-  const inputTokenDetails = recordUtils.readRecordValue(usageMetadata, 'input_token_details');
-  const cacheReadTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_read'));
-  const cacheCreationTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_creation'));
+  private failRun(context: RunExecutionContext, error: unknown): void {
+    const failure = errorMapping.toRunFailure(error);
+    if (context.taskRun !== null) {
+      this.taskService.failRunWithProviderError({
+        runId: context.taskRun.id,
+        providerId: context.modelHandle.provider.id,
+        modelId: context.modelHandle.modelId,
+        code: failure.code,
+        message: failure.message,
+        retryable: failure.retryable
+      });
+    }
+    this.emit({
+      type: 'run_failed',
+      runId: context.runId,
+      threadId: context.threadId,
+      code: failure.code,
+      message: failure.message,
+      retryable: failure.retryable
+    });
+  }
 
-  if (inputTokens !== null) {
-    target.promptTokens = inputTokens;
+  private handleInterruptedRun(context: RunExecutionContext, interrupts: readonly InterruptPayload[]): void {
+    const approval = this.readPendingApproval(interrupts, context.runId);
+    if (context.taskRun !== null) {
+      this.pendingInterrupts.set(context.runId, {
+        threadId: context.threadId,
+        approval
+      });
+      this.taskService.recordApprovalRequested({
+        runId: context.taskRun.id,
+        payload: approval
+      });
+      this.taskService.markRunWaitingUser(context.taskRun.id);
+    }
+    this.emit({
+      type: 'run_interrupted',
+      runId: context.runId,
+      threadId: context.threadId,
+      interruptId: approval.interruptId,
+      payload: approval
+    });
   }
-  if (outputTokens !== null) {
-    target.completionTokens = outputTokens;
-  }
-  if (totalTokens !== null) {
-    target.totalTokens = totalTokens;
-  }
-  if (cacheReadTokens !== null) {
-    target.cacheReadTokens = cacheReadTokens;
-  }
-  if (cacheCreationTokens !== null) {
-    target.cacheCreationTokens = cacheCreationTokens;
-  }
-}
-
-function readNonNegativeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
