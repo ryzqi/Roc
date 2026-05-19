@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Command } from '@langchain/langgraph';
+import { Command, MemorySaver } from '@langchain/langgraph';
+import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
@@ -799,7 +800,7 @@ describe('DeepAgentRuntimeService', () => {
 
     await runtime.startRun({
       input: 'Create a note in the workspace.',
-      mode: 'chat',
+      mode: 'task',
       enabledCapabilities: {
         mcpServers: [],
         skills: ['project-review']
@@ -808,12 +809,54 @@ describe('DeepAgentRuntimeService', () => {
     await completed;
 
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
-      | { permissions?: unknown; store?: unknown; skills?: string[]; backend?: { routePrefixes?: string[] } }
+      | {
+          permissions?: unknown;
+          store?: unknown;
+          skills?: string[];
+          checkpointer?: unknown;
+          backend?: { routePrefixes?: string[] };
+        }
       | undefined;
     expect(call?.permissions).toBeUndefined();
     expect(call?.store).toBeTruthy();
     expect(call?.skills).toEqual(['/skills/project-review/']);
+    expect(call?.checkpointer).toBeInstanceOf(MemorySaver);
     expect(call?.backend?.routePrefixes).toEqual(['/skills/', '/memory/']);
+  });
+
+  it('uses SqliteSaver checkpoints outside Vitest mode so task approvals can persist across restarts', async () => {
+    const previousVitest = process.env.VITEST;
+    process.env.VITEST = '0';
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['OK']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    try {
+      const runtime = createRuntime();
+      const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+      await runtime.startRun({
+        input: 'Persist this approval flow.',
+        mode: 'task',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      await completed;
+
+      const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+        | {
+            checkpointer?: unknown;
+          }
+        | undefined;
+      expect(call?.checkpointer).toBeInstanceOf(SqliteSaver);
+    } finally {
+      process.env.VITEST = previousVitest;
+    }
   });
 
   it('stores selected MCP and Skill capabilities on task runs without claiming unloaded skills were executed', async () => {

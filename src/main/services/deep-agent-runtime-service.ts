@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { HumanMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { Command, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
+import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import type { HITLRequest, HITLResponse } from 'langchain';
 import type {
   ChatPendingApproval,
@@ -62,7 +63,7 @@ type ResumeContext = {
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
-  private readonly checkpointer = new MemorySaver();
+  private checkpointer: MemorySaver | SqliteSaver | null = null;
   private readonly store: BaseStore;
   private readonly pendingInterrupts = new Map<
     string,
@@ -75,7 +76,7 @@ export class DeepAgentRuntimeService {
   constructor(
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly taskService: TaskService,
-    databaseService: DatabaseService,
+    private readonly databaseService: DatabaseService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
@@ -86,6 +87,21 @@ export class DeepAgentRuntimeService {
     private readonly logService: LogService
   ) {
     this.store = new SqliteLangGraphStore(databaseService);
+  }
+
+  private getOrCreateCheckpointer(): MemorySaver | SqliteSaver {
+    if (this.checkpointer !== null) {
+      return this.checkpointer;
+    }
+    if (process.env.VITEST === 'true') {
+      this.checkpointer = new MemorySaver();
+      return this.checkpointer;
+    }
+
+    // App services construct this runtime before DatabaseService.initialize(),
+    // so the shared SQLite checkpointer must be created lazily on first task run.
+    this.checkpointer = new SqliteSaver(this.databaseService.db);
+    return this.checkpointer;
   }
 
   onRunEvent(listener: (event: ChatRunEvent) => void): () => void {
@@ -349,7 +365,7 @@ export class DeepAgentRuntimeService {
             subagents,
             tools: runTools,
             interruptOn,
-            checkpointer: context.taskRun === null ? undefined : this.checkpointer
+            checkpointer: context.taskRun === null ? undefined : this.getOrCreateCheckpointer()
           });
           const run = await agent.streamEvents(
             {
@@ -517,7 +533,7 @@ export class DeepAgentRuntimeService {
         subagents,
         tools: runTools,
         interruptOn,
-        checkpointer: context.taskRun === null ? undefined : this.checkpointer
+        checkpointer: context.taskRun === null ? undefined : this.getOrCreateCheckpointer()
       });
       const run = await agent.streamEvents(new Command({ resume: resumePayload }), {
         version: 'v3',
