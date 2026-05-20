@@ -79,6 +79,7 @@ export async function createDeepAgentSession(input: {
     skillSources,
     subagents,
     tools: runTools.tools,
+    filesystemPermissions: undefined,
     interruptOn,
     checkpointer: input.context.taskRun === null ? undefined : input.getCheckpointer()
   });

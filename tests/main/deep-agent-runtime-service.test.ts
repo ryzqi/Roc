@@ -189,6 +189,7 @@ describe('DeepAgentRuntimeService', () => {
       skillSources: ['/skills/'],
       subagents: [],
       tools: [],
+      filesystemPermissions: undefined,
       interruptOn: undefined,
       checkpointer: undefined
     });
@@ -202,6 +203,7 @@ describe('DeepAgentRuntimeService', () => {
       skills: ['/skills/'],
       subagents: [],
       tools: [],
+      permissions: undefined,
       interruptOn: undefined,
       checkpointer: undefined
     });

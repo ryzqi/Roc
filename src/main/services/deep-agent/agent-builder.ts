@@ -1,6 +1,7 @@
 import { createDeepAgent } from 'deepagents';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ClientTool } from '@langchain/core/tools';
+import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import type { RocCompositeBackend } from './backend';
 import type { RuntimeSubagent } from './types';
@@ -14,6 +15,7 @@ export type DeepAgentBuildInput = {
   skillSources: string[];
   subagents: RuntimeSubagent[];
   tools: ClientTool[];
+  filesystemPermissions: FilesystemPermission[] | undefined;
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   checkpointer: BaseCheckpointSaver | undefined;
 };
@@ -28,6 +30,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     skills: input.skillSources,
     subagents: input.subagents,
     tools: input.tools,
+    permissions: input.filesystemPermissions,
     interruptOn: input.interruptOn,
     checkpointer: input.checkpointer
   });
