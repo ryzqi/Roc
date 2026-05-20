@@ -59,10 +59,11 @@ export async function createDeepAgentSession(input: {
     workspaceService: input.workspaceService,
     paths: input.paths,
     shellExecutionService: input.shellExecutionService,
-    store: input.store
+    store: input.store,
+    selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();
-  const skillSources = input.context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
+  const skillSources = input.context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
   const subagents = tools.createRunSubagents({
     webReadTool: runTools.webReadTool
   });

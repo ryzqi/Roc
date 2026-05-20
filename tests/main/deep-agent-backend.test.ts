@@ -63,7 +63,8 @@ describe('deep agent backend', () => {
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store
+        store,
+        selectedSkillIds: ['project-review']
       });
       const backend = runtimeBackend.backend;
       const workspaceFiles = await backend.ls('/workspace/');
@@ -88,7 +89,7 @@ describe('deep agent backend', () => {
     }
   });
 
-  it('lists all mounted skills from the read-only /skills/ route without backend-level filtering', async () => {
+  it('lists only selected skills from the read-only /skills/ route and denies direct access to unselected skills', async () => {
     mkdirSync(join(services.paths.skillsDir, 'alpha-review'), { recursive: true });
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'), '# alpha review\n', 'utf8');
@@ -98,7 +99,8 @@ describe('deep agent backend', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore()
+      store: new InMemoryStore(),
+      selectedSkillIds: ['project-review']
     }).backend;
 
     const rootSkills = await backend.ls('/skills/');
@@ -108,20 +110,16 @@ describe('deep agent backend', () => {
     const directAlphaGrep = await backend.grep('alpha', '/skills/alpha-review/');
     const rootSkillGlob = await backend.glob('**/*.md', '/skills/');
     const directAlphaGlob = await backend.glob('**/*.md', '/skills/alpha-review/');
+    const directAlphaRead = await backend.read('/skills/alpha-review/SKILL.md');
 
-    expect(rootSkills.files?.map((entry) => entry.path)).toEqual(
-      expect.arrayContaining(['/skills/alpha-review/', '/skills/project-review/'])
-    );
+    expect(rootSkills.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/']);
     expect(projectSkillFile.content).toBe('# project review\n');
-    expect(alphaSkillDirectory.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
-    expect(rootSkillGrep.matches?.map((entry) => entry.path)).toEqual(
-      expect.arrayContaining(['/skills/alpha-review/SKILL.md', '/skills/project-review/SKILL.md'])
-    );
-    expect(directAlphaGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
-    expect(rootSkillGlob.files?.map((entry) => entry.path)).toEqual(
-      expect.arrayContaining(['/skills/alpha-review/SKILL.md', '/skills/project-review/SKILL.md'])
-    );
-    expect(directAlphaGlob.files?.map((entry) => entry.path)).toEqual(['/skills/alpha-review/SKILL.md']);
+    expect(alphaSkillDirectory.error).toBeTruthy();
+    expect(rootSkillGrep.matches?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(directAlphaGrep.error).toBeTruthy();
+    expect(rootSkillGlob.files?.map((entry) => entry.path)).toEqual(['/skills/project-review/SKILL.md']);
+    expect(directAlphaGlob.error).toBeTruthy();
+    expect(directAlphaRead.error).toBeTruthy();
   });
 
   it('runs agent execute in the selected workspace and records bypass metadata when rtk is missing', async () => {
@@ -203,7 +201,8 @@ describe('deep agent backend', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore()
+      store: new InMemoryStore(),
+      selectedSkillIds: ['project-review']
     }).backend;
 
     const writeResult = await backend.write('/skills/project-review/notes.md', 'mutate\n');
@@ -231,7 +230,8 @@ describe('deep agent backend', () => {
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store
+        store,
+        selectedSkillIds: ['project-review']
       }).backend;
 
       const writeResult = await backend.write('/memory/accepted.md', 'mutate\n');
@@ -246,7 +246,7 @@ describe('deep agent backend', () => {
     }
   });
 
-  it('allows writes outside the mounted routes through the default StateBackend', async () => {
+  it('rejects writes outside the mounted routes instead of reporting a false success', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -254,16 +254,17 @@ describe('deep agent backend', () => {
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store: new InMemoryStore()
+        store: new InMemoryStore(),
+        selectedSkillIds: ['project-review']
       }).backend;
 
       const appWrite = await backend.write('/app/hello.txt', 'bad\n');
       const rootWrite = await backend.write('/hello.txt', 'bad\n');
 
-      expect(appWrite.error).toBeUndefined();
-      expect(appWrite.path).toBe('/app/hello.txt');
-      expect(rootWrite.error).toBeUndefined();
-      expect(rootWrite.path).toBe('/hello.txt');
+      expect(appWrite.error).toBeTruthy();
+      expect(appWrite.path).toBeUndefined();
+      expect(rootWrite.error).toBeTruthy();
+      expect(rootWrite.path).toBeUndefined();
       expect(existsSync(join(workspaceRoot, 'hello.txt'))).toBe(false);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
@@ -308,7 +309,7 @@ describe('deep agent backend', () => {
     }
   });
 
-  it('allows uploadFiles for paths outside mounted routes through the default StateBackend', async () => {
+  it('rejects uploadFiles for paths outside mounted routes', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-upload-invalid-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -331,7 +332,7 @@ describe('deep agent backend', () => {
         },
         {
           path: '/app/not-allowed.txt',
-          error: null
+          error: 'permission_denied'
         }
       ]);
       expect(existsSync(join(workspaceRoot, 'ok.txt'))).toBe(true);
