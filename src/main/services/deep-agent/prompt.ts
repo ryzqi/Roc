@@ -10,11 +10,31 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   'Keep answers concise, direct, and grounded in observed evidence.'
 ].join('\n');
 
-export function buildSystemPrompt(enabledCapabilities: ChatStartRunRequest['enabledCapabilities']): string {
+export function buildSystemPrompt(input: {
+  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
+  workspacePath: string | null;
+}): string {
   return [
     ROC_STATIC_SYSTEM_PROMPT,
-    `Capability boundary: ${createCapabilitySummary(enabledCapabilities)}`
+    ...createWorkspaceBoundary(input.workspacePath),
+    `Capability boundary: ${createCapabilitySummary(input.enabledCapabilities)}`
   ].join('\n');
+}
+
+function createWorkspaceBoundary(workspacePath: string | null): string[] {
+  if (workspacePath === null) {
+    return [
+      'Workspace root: not selected.',
+      'Default working directory: unavailable until the user selects a Roc workspace.',
+      'Ask the user to select a workspace before running file or shell operations.'
+    ];
+  }
+  return [
+    `Workspace root: ${workspacePath}`,
+    'Default working directory: the selected Roc workspace root.',
+    'Run file and shell operations inside this workspace unless the user explicitly asks for another path and the operation is allowed.',
+    'Use /workspace/ for Deep Agents file tools when referring to workspace files.'
+  ];
 }
 
 export function createCapabilitySummary(enabledCapabilities: ChatStartRunRequest['enabledCapabilities']): string {

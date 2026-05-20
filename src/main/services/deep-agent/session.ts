@@ -61,13 +61,17 @@ export async function createDeepAgentSession(input: {
     shellExecutionService: input.shellExecutionService,
     store: input.store
   });
+  const workspace = input.workspaceService.getCurrentWorkspace();
   const skillSources = input.context.enabledCapabilities.skills.map((skillId) => `/skills/${skillId}/`);
   const subagents = tools.createRunSubagents({
     webReadTool: runTools.webReadTool
   });
   const agent = buildDeepAgent({
     model: input.context.modelHandle.model,
-    systemPrompt: prompt.buildSystemPrompt(input.context.enabledCapabilities),
+    systemPrompt: prompt.buildSystemPrompt({
+      enabledCapabilities: input.context.enabledCapabilities,
+      workspacePath: workspace?.path ?? null
+    }),
     backend: runtimeBackend.backend,
     store: input.store,
     memorySources: ['/agents/AGENTS.md'],

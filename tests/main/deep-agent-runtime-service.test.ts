@@ -731,6 +731,38 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.memory).toEqual(['/agents/AGENTS.md']);
   });
 
+  it('passes the selected workspace root into the deep agent system prompt', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-runtime-selected-workspace-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      mocked.streamEventsMock.mockResolvedValue({
+        messages: createAsyncIterable([{ text: createAsyncIterable(['Ready']) }]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+
+      const runtime = createRuntime();
+      const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+      await runtime.startRun({
+        input: 'Inspect the selected workspace.',
+        mode: 'chat',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      await completed;
+
+      const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { systemPrompt?: string } | undefined;
+      expect(call?.systemPrompt).toContain(`Workspace root: ${workspaceRoot}`);
+      expect(call?.systemPrompt).toContain('Default working directory: the selected Roc workspace root.');
+      expect(call?.systemPrompt).toContain('Use /workspace/ for Deep Agents file tools when referring to workspace files.');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('mounts selected skills as read-only when passed to deepagents', async () => {
     mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
     writeFileSync(
