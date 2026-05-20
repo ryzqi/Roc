@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyStreamedAssistantText,
   isNonAssistantTextMessage,
+  isSummarizationMessage,
   readReasoningBlockText,
   readReasoningFromMessageOutput
 } from '../../src/main/services/deep-agent/record-utils';
@@ -184,6 +185,28 @@ describe('record-utils assistant text boundaries', () => {
             text: '这是模型最终回答。'
           }
         ]
+      })
+    ).toBe(false);
+  });
+
+  it('identifies projection metadata tagged with lcSource=summarization as internal text', () => {
+    expect(
+      isSummarizationMessage({
+        text: 'internal summary',
+        metadata: {
+          lcSource: 'summarization'
+        }
+      })
+    ).toBe(true);
+  });
+
+  it('does not mark ordinary assistant messages as summarization text', () => {
+    expect(
+      isSummarizationMessage({
+        text: 'visible answer',
+        metadata: {
+          lcSource: 'assistant'
+        }
       })
     ).toBe(false);
   });

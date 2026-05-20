@@ -74,6 +74,13 @@ export function isNonAssistantTextMessage(value: unknown): boolean {
   return readContentBlocks(value).some((block) => isNonAssistantContentBlock(block));
 }
 
+export function isSummarizationMessage(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return hasSummarizationSource(value) || hasSummarizationSource(readRecordValue(value, 'metadata'));
+}
+
 export function classifyStreamedAssistantText(text: string): StreamedAssistantTextClassification {
   if (text.length === 0) {
     return 'assistant';
@@ -175,6 +182,13 @@ function hasHostedSearchResultText(value: Record<string, unknown>): boolean {
   }
 
   return isHostedSearchResultText(text);
+}
+
+function hasSummarizationSource(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return readNonEmptyString(readRecordValue(value, 'lcSource')) === 'summarization';
 }
 
 function isHostedSearchResultText(text: string): boolean {

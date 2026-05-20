@@ -229,4 +229,84 @@ describe('chat run state', () => {
     expect(state.pendingApprovals).toEqual([]);
     expect(state.status).toBe('running');
   });
+
+  it('keeps interleaved tool and subagent events stable while assistant and reasoning deltas continue streaming', () => {
+    let state = createEmptyChatRunState();
+
+    state = applyChatRunEvent(state, {
+      type: 'run_started',
+      runId: 'chat_stream_mix',
+      mode: 'task',
+      threadId: 'thread_stream_mix',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6',
+      createdAt: '2026-05-20T00:00:00.000Z'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'subagent_event',
+      runId: 'chat_stream_mix',
+      subagent: 'research',
+      status: 'started',
+      summary: 'Search docs'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'message_delta',
+      runId: 'chat_stream_mix',
+      delta: '正在整理'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'tool_event',
+      runId: 'chat_stream_mix',
+      event: 'start',
+      name: 'web_search',
+      data: { query: 'roc phase 7' }
+    });
+    state = applyChatRunEvent(state, {
+      type: 'reasoning_delta',
+      runId: 'chat_stream_mix',
+      delta: '先检索。'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'tool_event',
+      runId: 'chat_stream_mix',
+      event: 'error',
+      name: 'web_search',
+      data: '[REDACTED]'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'subagent_event',
+      runId: 'chat_stream_mix',
+      subagent: 'research',
+      status: 'completed',
+      summary: 'Search docs'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'message_delta',
+      runId: 'chat_stream_mix',
+      delta: '完成。'
+    });
+
+    expect(state.status).toBe('running');
+    expect(state.assistantMessage).toBe('正在整理完成。');
+    expect(state.reasoning).toBe('先检索。');
+    expect(state.toolEvents).toEqual([
+      {
+        name: 'web_search',
+        event: 'start',
+        data: { query: 'roc phase 7' }
+      },
+      {
+        name: 'web_search',
+        event: 'error',
+        data: '[REDACTED]'
+      }
+    ]);
+    expect(state.subagents).toEqual([
+      {
+        subagent: 'research',
+        status: 'completed',
+        summary: 'Search docs'
+      }
+    ]);
+  });
 });

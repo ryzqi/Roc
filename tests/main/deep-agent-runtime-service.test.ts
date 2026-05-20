@@ -1425,6 +1425,291 @@ describe('DeepAgentRuntimeService', () => {
     );
   });
 
+  it('redacts secret-bearing tool call inputs before emitting tool start events and persisting task audit rows', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['已完成工具调用。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'execute',
+          input: {
+            command: 'Remove-Item notes.txt',
+            headers: 'Authorization: Bearer sk-secret-value',
+            nested: ['Bearer sk-secret-value']
+          },
+          output: Promise.resolve({ ok: true })
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: '执行带敏感头的命令',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const toolStartEvent = events.find(
+      (event): event is Extract<ChatRunEvent, { type: 'tool_event' }> =>
+        event.type === 'tool_event' && event.event === 'start'
+    );
+    const snapshot = services.taskService.getSnapshot();
+    const persistedToolStart = snapshot.recentEvents.find(
+      (event) =>
+        event.runId === started.runId &&
+        event.type === 'tool_call' &&
+        (event.payload as { status?: string }).status === 'start'
+    );
+
+    expect(toolStartEvent).toMatchObject({
+      type: 'tool_event',
+      name: 'execute',
+      data: {
+        command: 'Remove-Item notes.txt',
+        headers: '[REDACTED]',
+        nested: ['[REDACTED]']
+      }
+    });
+    expect(persistedToolStart?.payload).toMatchObject({
+      name: 'execute',
+      status: 'start',
+      input: {
+        command: 'Remove-Item notes.txt',
+        headers: '[REDACTED]',
+        nested: ['[REDACTED]']
+      }
+    });
+    expect(JSON.stringify(toolStartEvent)).not.toContain('sk-secret-value');
+    expect(JSON.stringify(persistedToolStart?.payload)).not.toContain('sk-secret-value');
+  });
+
+  it('maps top-level subagent projection start completion and failure while keeping nested subagent streams internal', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['协调器最终结论。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([
+        {
+          name: 'research',
+          taskInput: Promise.resolve('Search the docs'),
+          messages: createAsyncIterable([
+            {
+              text: createAsyncIterable(['nested subagent message'])
+            }
+          ]),
+          toolCalls: createAsyncIterable([
+            {
+              name: 'nested_web_search',
+              input: { query: 'should stay internal' },
+              output: Promise.resolve('nested output')
+            }
+          ]),
+          subagents: createAsyncIterable([
+            {
+              name: 'nested-review',
+              taskInput: Promise.resolve('Nested review'),
+              output: Promise.resolve({})
+            }
+          ]),
+          output: Promise.resolve({})
+        },
+        {
+          name: 'code-review',
+          taskInput: Promise.resolve('Review the diff'),
+          subagents: createAsyncIterable([
+            {
+              name: 'nested-failure',
+              taskInput: Promise.resolve('Nested failure'),
+              output: Promise.resolve({})
+            }
+          ]),
+          output: Promise.reject(new Error('subagent crashed'))
+        }
+      ]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: '并行研究后审查代码',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const subagentEvents = events.filter(
+      (event): event is Extract<ChatRunEvent, { type: 'subagent_event' }> => event.type === 'subagent_event'
+    );
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+    const snapshot = services.taskService.getSnapshot();
+    const startedSubagents = snapshot.recentEvents.filter(
+      (event) => event.runId === started.runId && event.type === 'subagent_started'
+    );
+    const completedSubagents = snapshot.recentEvents.filter(
+      (event) => event.runId === started.runId && event.type === 'subagent_completed'
+    );
+
+    expect(subagentEvents).toEqual([
+      {
+        type: 'subagent_event',
+        runId: started.runId,
+        subagent: 'research',
+        status: 'started',
+        summary: 'Search the docs'
+      },
+      {
+        type: 'subagent_event',
+        runId: started.runId,
+        subagent: 'research',
+        status: 'completed',
+        summary: 'Search the docs'
+      },
+      {
+        type: 'subagent_event',
+        runId: started.runId,
+        subagent: 'code-review',
+        status: 'started',
+        summary: 'Review the diff'
+      },
+      {
+        type: 'subagent_event',
+        runId: started.runId,
+        subagent: 'code-review',
+        status: 'failed',
+        summary: 'subagent crashed'
+      }
+    ]);
+    expect(events.filter((event) => event.type === 'tool_event')).toEqual([]);
+    expect(subagentEvents.map((event) => event.subagent)).not.toContain('nested-review');
+    expect(subagentEvents.map((event) => event.subagent)).not.toContain('nested-failure');
+    expect(messageText).toBe('协调器最终结论。');
+    expect(messageText).not.toContain('nested subagent message');
+    expect(startedSubagents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'research',
+            summary: 'Search the docs'
+          })
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'code-review',
+            summary: 'Review the diff'
+          })
+        })
+      ])
+    );
+    expect(completedSubagents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: 'research',
+            summary: 'Search the docs'
+          })
+        })
+      ])
+    );
+  });
+
+  it('handles failed tool outputs deterministically and redacts tool error text', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['工具失败后已给出替代结论。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'web_read',
+          input: { url: 'https://example.com' },
+          output: Promise.reject(new Error('Authorization: Bearer sk-secret-value'))
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: '读取一个会失败的网页',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const toolEvents = events.filter(
+      (event): event is Extract<ChatRunEvent, { type: 'tool_event' }> => event.type === 'tool_event'
+    );
+    const snapshot = services.taskService.getSnapshot();
+    const persistedToolError = snapshot.recentEvents.find(
+      (event) =>
+        event.runId === started.runId &&
+        event.type === 'tool_call' &&
+        (event.payload as { status?: string }).status === 'error'
+    );
+
+    expect(toolEvents).toEqual([
+      {
+        type: 'tool_event',
+        runId: started.runId,
+        event: 'start',
+        name: 'web_read',
+        data: { url: 'https://example.com' }
+      },
+      {
+        type: 'tool_event',
+        runId: started.runId,
+        event: 'error',
+        name: 'web_read',
+        data: '[REDACTED]'
+      }
+    ]);
+    expect(persistedToolError?.payload).toMatchObject({
+      name: 'web_read',
+      status: 'error',
+      error: '[REDACTED]'
+    });
+    expect(JSON.stringify(toolEvents)).not.toContain('sk-secret-value');
+    expect(JSON.stringify(persistedToolError?.payload)).not.toContain('sk-secret-value');
+  });
+
   it('keeps MCP tool_result payloads out of assistant chat text while preserving tool audit events', async () => {
     const rawSearchPayload = '{"results":[{"title":"Exa raw result","text":"RAW_EXA_RESULT_BODY"}]}';
     mocked.streamEventsMock.mockResolvedValue({
@@ -1676,6 +1961,54 @@ describe('DeepAgentRuntimeService', () => {
     expect(finished).toMatchObject({
       type: 'run_completed',
       assistantMessage: '最终回答：已整理成都天气信息。'
+    });
+  });
+
+  it('filters summarization-origin text from assistant chat output when projection metadata marks it internal', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['这段总结只用于内部压缩。']),
+          metadata: {
+            lcSource: 'summarization'
+          }
+        },
+        {
+          text: createAsyncIterable(['最终回答：只显示对用户可见的内容。'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '给我最终回答，不要暴露内部总结',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+
+    expect(messageText).toBe('最终回答：只显示对用户可见的内容。');
+    expect(messageText).not.toContain('内部压缩');
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：只显示对用户可见的内容。'
     });
   });
 

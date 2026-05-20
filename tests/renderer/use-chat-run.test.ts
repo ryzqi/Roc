@@ -44,6 +44,77 @@ describe('applyChatRunEventBatch', () => {
     const state = createEmptyChatRunState();
     expect(applyChatRunEventBatch(state, [])).toBe(state);
   });
+
+  it('applies interleaved message tool and subagent batches in arrival order', () => {
+    const next = applyChatRunEventBatch(createEmptyChatRunState(), [
+      createRunStartedEvent(),
+      {
+        type: 'subagent_event',
+        runId: 'chat_test',
+        subagent: 'research',
+        status: 'started',
+        summary: 'Search docs'
+      },
+      {
+        type: 'message_delta',
+        runId: 'chat_test',
+        delta: 'A'
+      },
+      {
+        type: 'tool_event',
+        runId: 'chat_test',
+        event: 'start',
+        name: 'web_search',
+        data: { query: 'roc' }
+      },
+      {
+        type: 'reasoning_delta',
+        runId: 'chat_test',
+        delta: 'R'
+      },
+      {
+        type: 'subagent_event',
+        runId: 'chat_test',
+        subagent: 'research',
+        status: 'completed',
+        summary: 'Search docs'
+      },
+      {
+        type: 'tool_event',
+        runId: 'chat_test',
+        event: 'end',
+        name: 'web_search',
+        data: 'done'
+      },
+      {
+        type: 'message_delta',
+        runId: 'chat_test',
+        delta: 'B'
+      }
+    ]);
+
+    expect(next.assistantMessage).toBe('AB');
+    expect(next.reasoning).toBe('R');
+    expect(next.subagents).toEqual([
+      {
+        subagent: 'research',
+        status: 'completed',
+        summary: 'Search docs'
+      }
+    ]);
+    expect(next.toolEvents).toEqual([
+      {
+        name: 'web_search',
+        event: 'start',
+        data: { query: 'roc' }
+      },
+      {
+        name: 'web_search',
+        event: 'end',
+        data: 'done'
+      }
+    ]);
+  });
 });
 
 describe('isTerminalChatRunEvent', () => {

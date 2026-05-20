@@ -1,5 +1,6 @@
 import type { ChatRunEvent, TaskRun } from '../../../shared/types';
 import * as recordUtils from './record-utils';
+import { redact } from './redact';
 
 type ReasoningSource =
   | {
@@ -59,7 +60,10 @@ export async function consumeMessageStream(input: {
     updateUsageAccumulator(input.usageAccumulator, message);
     const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
     const reasoningSource = readReasoningSource(message);
-    const canStreamAssistantText = textStream !== null && !recordUtils.isNonAssistantTextMessage(message);
+    const canStreamAssistantText =
+      textStream !== null &&
+      !recordUtils.isNonAssistantTextMessage(message) &&
+      !recordUtils.isSummarizationMessage(message);
 
     const tasks: Array<Promise<void>> = [];
     if (canStreamAssistantText) {
@@ -148,7 +152,8 @@ export async function consumeToolCallStream(input: {
 }): Promise<void> {
   for await (const call of input.calls) {
     const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
-    const callInput = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
+    const rawCallInput = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
+    const callInput = redactUnknown(rawCallInput);
     input.callbacks.markVisibleOutput?.();
     input.callbacks.emitRuntimeEvent({
       type: 'tool_event',
@@ -185,7 +190,7 @@ export async function consumeToolCallStream(input: {
       }
       input.callbacks.emitTodoEvent(output);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Tool 执行失败。';
+      const message = redact(error instanceof Error ? error.message : 'Tool 执行失败。');
       input.callbacks.markVisibleOutput?.();
       input.callbacks.emitRuntimeEvent({
         type: 'tool_event',
@@ -405,4 +410,19 @@ async function* createStringAsyncIterable(values: readonly string[]): AsyncGener
 
 function readNonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function redactUnknown(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return redact(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactUnknown(item));
+  }
+  if (recordUtils.isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, redactUnknown(entry)])
+    );
+  }
+  return value;
 }
