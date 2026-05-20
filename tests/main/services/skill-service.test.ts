@@ -206,4 +206,62 @@ describe('SkillService.importSkill', () => {
       rmSync(source, { recursive: true, force: true });
     }
   });
+
+  it('imports a skill containing official metadata fields without widening SkillSnapshot', () => {
+    const source = mkdtempSync(join(tmpdir(), 'roc-skill-import-metadata-'));
+    try {
+      writeFileSync(
+        join(source, 'SKILL.md'),
+        [
+          '---',
+          'name: metadata-review',
+          'description: imported skill',
+          'allowed-tools: read_file write_file',
+          'module: index.ts',
+          'license: MIT',
+          'compatibility: Roc desktop only',
+          'metadata:',
+          '  owner: test',
+          '  tier: internal',
+          '---',
+          '# Metadata Review'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const imported = service.importSkill({ sourcePath: source } as never);
+
+      expect(imported).toEqual({
+        id: 'metadata-review',
+        name: 'metadata-review',
+        enabled: true,
+        path: join(paths.skillsDir, 'metadata-review'),
+        description: 'imported skill',
+        status: 'ready',
+        lastError: null
+      });
+      expect(imported).not.toHaveProperty('allowedTools');
+      expect(imported).not.toHaveProperty('module');
+      expect(imported).not.toHaveProperty('license');
+      expect(imported).not.toHaveProperty('compatibility');
+      expect(imported).not.toHaveProperty('metadata');
+    } finally {
+      rmSync(source, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid frontmatter through the official parser', () => {
+    const source = mkdtempSync(join(tmpdir(), 'roc-skill-import-invalid-'));
+    try {
+      writeFileSync(
+        join(source, 'SKILL.md'),
+        ['---', 'name: Invalid Name', 'description: invalid skill', '---'].join('\n'),
+        'utf8'
+      );
+
+      expect(() => service.importSkill({ sourcePath: source } as never)).toThrowError(RocDomainError);
+    } finally {
+      rmSync(source, { recursive: true, force: true });
+    }
+  });
 });
