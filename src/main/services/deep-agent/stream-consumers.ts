@@ -26,6 +26,8 @@ type StreamConsumerCallbacks = {
   ) => void;
 };
 
+const maxPersistedAssistantDeltaChars = 512;
+
 export type ProviderUsageAccumulator = {
   promptTokens: number | null;
   completionTokens: number | null;
@@ -52,6 +54,7 @@ export async function consumeMessageStream(input: {
   usageAccumulator: ProviderUsageAccumulator;
   callbacks: StreamConsumerCallbacks;
 }): Promise<void> {
+  const assistantDeltaRecorder = createAssistantDeltaRecorder(input.context, input.callbacks);
   for await (const message of input.messages) {
     updateUsageAccumulator(input.usageAccumulator, message);
     const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
@@ -64,12 +67,7 @@ export async function consumeMessageStream(input: {
         consumeVisibleTextStream(textStream as AsyncIterable<unknown>, (delta) => {
           input.callbacks.markVisibleOutput?.();
           input.assistantChunks.push(delta);
-          if (input.context.taskRun !== null) {
-            input.callbacks.recordTaskEvent('message_delta', {
-              role: 'assistant',
-              delta
-            });
-          }
+          assistantDeltaRecorder.record(delta);
           input.callbacks.emitRuntimeEvent({
             type: 'message_delta',
             runId: input.context.runId,
@@ -105,6 +103,42 @@ export async function consumeMessageStream(input: {
       }
     }
   }
+  assistantDeltaRecorder.flush();
+}
+
+function createAssistantDeltaRecorder(
+  context: StreamConsumerContext,
+  callbacks: StreamConsumerCallbacks
+): {
+  record: (delta: string) => void;
+  flush: () => void;
+} {
+  let pendingDelta = '';
+
+  function flush(): void {
+    if (context.taskRun === null || pendingDelta.length === 0) {
+      pendingDelta = '';
+      return;
+    }
+    callbacks.recordTaskEvent('message_delta', {
+      role: 'assistant',
+      delta: pendingDelta
+    });
+    pendingDelta = '';
+  }
+
+  return {
+    record: (delta) => {
+      if (context.taskRun === null) {
+        return;
+      }
+      pendingDelta += delta;
+      if (pendingDelta.length >= maxPersistedAssistantDeltaChars) {
+        flush();
+      }
+    },
+    flush
+  };
 }
 
 export async function consumeToolCallStream(input: {

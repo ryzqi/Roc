@@ -98,6 +98,54 @@ describe('Roc foundation services git', () => {
     }
   });
 
+  it('provides async git status and branch reads for IPC-visible workbench refreshes', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-git-async-'));
+    const runGit = (args: string[]): void => {
+      const result = spawnSync('git', args, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+      }
+    };
+
+    try {
+      runGit(['init']);
+      runGit(['config', 'user.email', 'roc-test@example.test']);
+      runGit(['config', 'user.name', 'Roc Test']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'initial\n', 'utf8');
+      runGit(['add', 'notes.txt']);
+      runGit(['commit', '-m', 'initial']);
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'changed\n', 'utf8');
+      context.services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const [status, branches, diffStat] = await Promise.all([
+        context.services.gitService.getStatusAsync(),
+        context.services.gitService.listBranchesAsync(),
+        context.services.gitService.getDiffStatAsync()
+      ]);
+
+      expect(status).toMatchObject({
+        workspacePath: workspaceRoot,
+        isRepository: true,
+        changedFiles: 1
+      });
+      expect(status.porcelain).toContain(' M notes.txt');
+      expect(branches.currentBranch).toBe(status.branch);
+      expect(branches.branches).toContainEqual(
+        expect.objectContaining({
+          name: status.branch,
+          current: true
+        })
+      );
+      expect(diffStat.stat).toContain('notes.txt');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('returns structured workspace and git errors instead of implicit fallbacks', async () => {
     const missingWorkspace = await wrapIpc(() => context.services.workspaceService.selectWorkspace(join(context.root, 'missing')));
     expect(missingWorkspace).toEqual({
@@ -818,6 +866,70 @@ describe('Roc foundation services git', () => {
       });
       expect(result.stdout).toContain('记忆系统.md');
       expect(result.stdout).not.toContain('�');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('runs shell commands asynchronously for IPC-visible terminal execution', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-shell-async-'));
+    try {
+      writeFileSync(join(workspaceRoot, '记忆系统.md'), '# 记忆系统\n', 'utf8');
+      context.services.workspaceService.selectWorkspace(workspaceRoot);
+
+      const result = await context.services.shellExecutionService.executeAsync({
+        command: 'dir',
+        cwd: workspaceRoot,
+        source: 'terminal'
+      });
+
+      expect(result).toMatchObject({
+        command: 'dir',
+        cwd: workspaceRoot,
+        exitCode: 0,
+        usedRtk: false,
+        bypassReason: 'user_terminal_raw_output'
+      });
+      expect(result.stdout).toContain('记忆系统.md');
+      expect(result.stdout).not.toContain('�');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('runs allowed agent commands asynchronously and records agent execution events', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-agent-shell-async-'));
+    try {
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'terminal output\n', 'utf8');
+      context.services.workspaceService.selectWorkspace(workspaceRoot);
+      const task = context.services.taskService.createTaskRun({
+        userInput: '读取工作区文件',
+        modelId: 'model-ready',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      context.services.taskService.markRunRunning(task.id);
+
+      const commandResult = await context.services.shellExecutionService.executeAgentCommandAsync({
+        command: 'dir',
+        cwd: workspaceRoot,
+        threadId: task.threadId,
+        runId: task.id
+      });
+      const snapshot = context.services.taskService.getSnapshot();
+
+      expect(commandResult).toMatchObject({
+        command: 'dir',
+        cwd: workspaceRoot,
+        exitCode: 0,
+        truncated: false,
+        usedRtk: false,
+        bypassReason: 'rtk_binary_missing'
+      });
+      expect(commandResult.output).toContain('notes.txt');
+      expect(snapshot.recentEvents.some((event) => event.type === 'agent_execute')).toBe(true);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

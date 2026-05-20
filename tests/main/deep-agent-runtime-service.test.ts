@@ -63,6 +63,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.webReadService,
       services.shellExecutionService,
       services.paths,
+      services.performanceObserverService,
       {
         append: vi.fn()
       } as never
@@ -260,6 +261,182 @@ describe('DeepAgentRuntimeService', () => {
       providerId: 'nvidia',
       modelId: 'moonshotai/kimi-k2.6'
     });
+  });
+
+  it('records provider first-token and completion timing without prompt content', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Latency answer']),
+          usage_metadata: {
+            input_tokens: 11,
+            output_tokens: 2,
+            total_tokens: 13,
+            input_token_details: {
+              cache_read: 7,
+              cache_creation: 1
+            }
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '不要把这段 prompt 写入性能指标',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const samples = services.performanceObserverService.getSnapshot().samples;
+    const firstToken = samples.find((sample) => sample.phase === 'provider_first_token');
+    const completedSample = samples.find((sample) => sample.phase === 'provider_completed');
+
+    expect(firstToken).toMatchObject({
+      phase: 'provider_first_token',
+      label: 'nvidia:moonshotai/kimi-k2.6',
+      metadata: expect.objectContaining({
+        providerId: 'nvidia',
+        providerType: 'nvidia',
+        modelId: 'moonshotai/kimi-k2.6',
+        mode: 'chat',
+        retryCount: 0
+      })
+    });
+    expect(completedSample).toMatchObject({
+      phase: 'provider_completed',
+      label: 'nvidia:moonshotai/kimi-k2.6',
+      metadata: expect.objectContaining({
+        providerId: 'nvidia',
+        providerType: 'nvidia',
+        modelId: 'moonshotai/kimi-k2.6',
+        mode: 'chat',
+        promptTokens: 11,
+        completionTokens: 2,
+        totalTokens: 13,
+        cacheReadTokens: 7,
+        cacheCreationTokens: 1,
+        retryCount: 0
+      })
+    });
+    expect(JSON.stringify(samples)).not.toContain('不要把这段 prompt 写入性能指标');
+  });
+
+  it('batches high-frequency assistant deltas before writing task events', async () => {
+    const tokens = Array.from({ length: 100 }, (_, index) => `token-${index} `);
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(tokens)
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    const started = await runtime.startRun({
+      input: 'Stream a long answer.',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const deltaRows = services.databaseService.db
+      .prepare(
+        `SELECT payload_json
+         FROM task_events
+         WHERE run_id = ? AND type = 'message_delta'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(started.runId) as Array<{ payload_json: string }>;
+    const persistedDeltaText = deltaRows
+      .map((row) => JSON.parse(row.payload_json) as { delta: string })
+      .map((payload) => payload.delta)
+      .join('');
+
+    expect(
+      events.filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+    ).toHaveLength(100);
+    expect(deltaRows.length).toBeLessThanOrEqual(5);
+    expect(
+      deltaRows.map((row) => (JSON.parse(row.payload_json) as { delta: string }).delta.length)
+    ).toEqual(expect.arrayContaining([expect.any(Number)]));
+    expect(
+      deltaRows.every((row) => (JSON.parse(row.payload_json) as { delta: string }).delta.length <= 512)
+    ).toBe(true);
+    expect(persistedDeltaText).toBe(tokens.join(''));
+  });
+
+  it('keeps persisted message_delta rows bounded when the provider splits output across many tiny messages', async () => {
+    const tokens = Array.from({ length: 100 }, (_, index) => `token-${index} `);
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable(
+        tokens.map((token) => ({
+          text: createAsyncIterable([token])
+        }))
+      ),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    const started = await runtime.startRun({
+      input: 'Stream a long answer across many chunks.',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const deltaRows = services.databaseService.db
+      .prepare(
+        `SELECT payload_json
+         FROM task_events
+         WHERE run_id = ? AND type = 'message_delta'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(started.runId) as Array<{ payload_json: string }>;
+    const persistedDeltaText = deltaRows
+      .map((row) => JSON.parse(row.payload_json) as { delta: string })
+      .map((payload) => payload.delta)
+      .join('');
+
+    expect(
+      events.filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+    ).toHaveLength(100);
+    expect(deltaRows.length).toBeLessThanOrEqual(5);
+    expect(
+      deltaRows.every((row) => (JSON.parse(row.payload_json) as { delta: string }).delta.length <= 512)
+    ).toBe(true);
+    expect(persistedDeltaText).toBe(tokens.join(''));
   });
 
   it('emits reasoning deltas from reasoning_content when the standard reasoning stream is missing', async () => {

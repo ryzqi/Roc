@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyChatRunEventBatch,
+  clearPendingChatRunEvents,
   isTerminalChatRunEvent
 } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
@@ -91,5 +92,25 @@ describe('isTerminalChatRunEvent', () => {
         data: null
       })
     ).toBe(false);
+  });
+});
+
+describe('clearPendingChatRunEvents', () => {
+  it('cancels scheduled flush work and drops pending events', () => {
+    const pendingEventsRef = {
+      current: [createDeltaEvent('buffered')]
+    };
+    const rafHandleRef = {
+      current: 42
+    };
+    const cancelledFrames: number[] = [];
+
+    clearPendingChatRunEvents(pendingEventsRef, rafHandleRef, (handle) => {
+      cancelledFrames.push(handle);
+    });
+
+    expect(cancelledFrames).toEqual([42]);
+    expect(rafHandleRef.current).toBeNull();
+    expect(pendingEventsRef.current).toEqual([]);
   });
 });

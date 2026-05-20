@@ -5,6 +5,7 @@ import {
   approvalCardTransition,
   assistantBubbleEnter,
   bubbleEnterTransition,
+  resolveMotionTransition,
   userBubbleEnter
 } from '../animations';
 import type { ChatTranscriptMessage } from '../chat-transcript';
@@ -41,7 +42,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       data-role={message.role}
       data-testid={isAssistant ? 'chat-message-assistant' : 'chat-message-user'}
       initial="initial"
-      transition={bubbleEnterTransition}
+      transition={resolveMotionTransition(bubbleEnterTransition)}
       variants={variants}
     >
       <article className={bubbleClassName}>
@@ -69,7 +70,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                 initial="initial"
                 animate="animate"
                 variants={approvalCardEnter}
-                transition={approvalCardTransition}
+                transition={resolveMotionTransition(approvalCardTransition)}
               >
                 <header className="chat-approval-head">
                   等待审批

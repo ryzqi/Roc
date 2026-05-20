@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "package:dir": "node scripts/package-dir.mjs",
+    "smoke:performance": "node scripts/smoke-performance.mjs",
     "smoke:electron": "node scripts/smoke-electron.mjs",
     "verify:native-packaging": "node scripts/verify-native-packaging.mjs",
     "verify:paths": "node scripts/verify-paths.mjs"

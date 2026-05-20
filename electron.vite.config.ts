@@ -31,7 +31,9 @@ export default defineConfig({
       outDir: 'dist/renderer',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'index.html')
+          index: resolve(__dirname, 'index.html'),
+          quick: resolve(__dirname, 'quick-entry.html'),
+          tray: resolve(__dirname, 'tray-entry.html')
         }
       }
     }

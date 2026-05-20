@@ -399,24 +399,36 @@ export class TaskService {
   }
 
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent {
+    return this.recordEvents([input])[0]!;
+  }
+
+  recordEvents(inputs: Array<{ threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }>): TaskEvent[] {
+    if (inputs.length === 0) {
+      return [];
+    }
     const now = new Date().toISOString();
-    const eventId = `event_${randomUUID()}`;
+    const insert = this.database.db.prepare(
+      `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    const events: TaskEvent[] = [];
 
-    this.database.db
-      .prepare(
-        `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(eventId, input.threadId, input.runId, input.type, JSON.stringify(input.payload), now);
+    this.database.db.transaction(() => {
+      for (const input of inputs) {
+        const event: TaskEvent = {
+          id: `event_${randomUUID()}`,
+          threadId: input.threadId,
+          runId: input.runId,
+          type: input.type,
+          payload: input.payload,
+          createdAt: now
+        };
+        insert.run(event.id, event.threadId, event.runId, event.type, JSON.stringify(event.payload), event.createdAt);
+        events.push(event);
+      }
+    })();
 
-    return {
-      id: eventId,
-      threadId: input.threadId,
-      runId: input.runId,
-      type: input.type,
-      payload: input.payload,
-      createdAt: now
-    };
+    return events;
   }
 
   markRunRunning(runId: string): void {

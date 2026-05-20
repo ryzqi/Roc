@@ -17,6 +17,26 @@ export function isTerminalChatRunEvent(event: ChatRunEvent): boolean {
   return event.type === 'run_started' || event.type === 'run_completed' || event.type === 'run_failed';
 }
 
+type PendingChatRunEventsRef = {
+  current: ChatRunEvent[];
+};
+
+type RafHandleRef = {
+  current: number | null;
+};
+
+export function clearPendingChatRunEvents(
+  pendingEventsRef: PendingChatRunEventsRef,
+  rafHandleRef: RafHandleRef,
+  cancelFrame: (handle: number) => void = cancelAnimationFrame
+): void {
+  if (rafHandleRef.current !== null) {
+    cancelFrame(rafHandleRef.current);
+    rafHandleRef.current = null;
+  }
+  pendingEventsRef.current = [];
+}
+
 export type ChatRunController = {
   state: ChatRunState;
   reset: () => void;
@@ -66,20 +86,12 @@ export function useChatRun(): ChatRunController {
 
     return () => {
       unsubscribe();
-      if (rafHandleRef.current !== null) {
-        cancelAnimationFrame(rafHandleRef.current);
-        rafHandleRef.current = null;
-      }
-      pendingEventsRef.current = [];
+      clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     };
   }, []);
 
   const reset = (): void => {
-    if (rafHandleRef.current !== null) {
-      cancelAnimationFrame(rafHandleRef.current);
-      rafHandleRef.current = null;
-    }
-    pendingEventsRef.current = [];
+    clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     setState(createEmptyChatRunState());
     setErrorMessage(null);
   };

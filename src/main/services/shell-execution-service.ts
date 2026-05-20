@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
 import type { ShellExecutionDecision, ShellExecutionRequest, ShellExecutionResult } from '../../shared/types';
 import { RocDomainError } from './errors';
@@ -124,6 +124,55 @@ export class ShellExecutionService {
     return result;
   }
 
+  async executeAsync(request: ShellExecutionRequest): Promise<ShellExecutionResult> {
+    const decision = this.evaluate(request);
+    if (decision.status !== 'allowed') {
+      throw new RocDomainError({
+        code: 'command_requires_confirmation',
+        message: '命令需要确认，未执行。',
+        category: 'permission',
+        retryable: false,
+        userAction: '请在任务确认卡片中查看命令、作用目录和风险原因后再决定是否执行。'
+      });
+    }
+
+    const cwd = this.resolveCwd(request);
+    const startedAt = Date.now();
+    const execution =
+      request.source === 'agent'
+        ? await this.runAgentCommandAsync(request.command, cwd)
+        : await this.executeTerminalCommandAsync(request.command, cwd);
+    const result: ShellExecutionResult = {
+      command: request.command,
+      normalizedCommand: decision.normalizedCommand,
+      cwd,
+      stdout: execution.stdout,
+      stderr: execution.stderr,
+      exitCode: execution.exitCode,
+      durationMs: Date.now() - startedAt,
+      usedRtk: execution.usedRtk,
+      bypassReason: execution.bypassReason
+    };
+
+    if (request.source === 'agent' && request.threadId !== undefined && request.runId !== undefined) {
+      this.taskService.recordEvent({
+        threadId: request.threadId,
+        runId: request.runId,
+        type: 'agent_execute',
+        payload: {
+          command: result.command,
+          normalizedCommand: result.normalizedCommand,
+          cwd: result.cwd,
+          exitCode: result.exitCode,
+          usedRtk: result.usedRtk,
+          bypassReason: result.bypassReason
+        }
+      });
+    }
+
+    return result;
+  }
+
   executeAgentCommand(input: {
     command: string;
     cwd?: string;
@@ -138,6 +187,51 @@ export class ShellExecutionService {
     const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
     const startedAt = Date.now();
     const execution = this.runAgentCommand(input.command, cwd);
+    const output = this.combineOutput(execution.stdout, execution.stderr);
+
+    if (input.threadId !== undefined && input.runId !== undefined) {
+      this.taskService.recordEvent({
+        threadId: input.threadId,
+        runId: input.runId,
+        type: 'agent_execute',
+        payload: {
+          command: input.command,
+          cwd,
+          exitCode: execution.exitCode,
+          durationMs: Date.now() - startedAt,
+          usedRtk: execution.usedRtk,
+          bypassReason: execution.bypassReason
+        }
+      });
+    }
+
+    return {
+      command: input.command,
+      cwd,
+      output,
+      exitCode: execution.exitCode,
+      truncated: false,
+      usedRtk: execution.usedRtk,
+      bypassReason: execution.bypassReason
+    };
+  }
+
+  async executeAgentCommandAsync(input: {
+    command: string;
+    cwd?: string;
+    threadId?: string;
+    runId?: string;
+  }): Promise<
+    ExecuteResponse & {
+      command: string;
+      cwd: string;
+      usedRtk: boolean;
+      bypassReason?: ShellExecutionResult['bypassReason'];
+    }
+  > {
+    const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
+    const startedAt = Date.now();
+    const execution = await this.runAgentCommandAsync(input.command, cwd);
     const output = this.combineOutput(execution.stdout, execution.stderr);
 
     if (input.threadId !== undefined && input.runId !== undefined) {
@@ -195,8 +289,45 @@ export class ShellExecutionService {
     };
   }
 
+  private async runAgentCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
+    const rtk = this.rtkService.getExecutionMetadata();
+    if (rtk.resourceState !== 'ready') {
+      const fallback = await this.executePowerShellAsync(command, cwd);
+      return {
+        ...fallback,
+        usedRtk: false,
+        bypassReason: rtk.bypassReason
+      };
+    }
+
+    const rtkArgs = this.resolveRtkArgs(command);
+    if (rtkArgs === null) {
+      const fallback = await this.executePowerShellAsync(command, cwd);
+      return {
+        ...fallback,
+        usedRtk: false,
+        bypassReason: 'command_not_supported'
+      };
+    }
+
+    const execution = await this.executeRtkAsync(rtkArgs, cwd, rtk);
+    return {
+      ...execution,
+      usedRtk: true
+    };
+  }
+
   private executeTerminalCommand(command: string, cwd: string): ExecutedShellCommand {
     const execution = this.executePowerShell(command, cwd);
+    return {
+      ...execution,
+      usedRtk: false,
+      bypassReason: 'user_terminal_raw_output'
+    };
+  }
+
+  private async executeTerminalCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
+    const execution = await this.executePowerShellAsync(command, cwd);
     return {
       ...execution,
       usedRtk: false,
@@ -219,9 +350,32 @@ export class ShellExecutionService {
     });
   }
 
+  private async executeRtkAsync(
+    args: string[],
+    cwd: string,
+    metadata: RtkExecutionMetadata
+  ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
+    return await this.execFileAsync(metadata.binaryPath, args, cwd, {
+      APPDATA: metadata.runtimeRoot,
+      LOCALAPPDATA: metadata.runtimeRoot,
+      XDG_CONFIG_HOME: metadata.runtimeRoot,
+      XDG_DATA_HOME: metadata.runtimeRoot,
+      RTK_DB_PATH: metadata.trackingDatabasePath,
+      RTK_TEE_DIR: metadata.teeDir
+    });
+  }
+
   private executePowerShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
     const encodedCommand = `${powershellUtf8Prefix} ${command}`;
     return this.execFile('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd);
+  }
+
+  private async executePowerShellAsync(
+    command: string,
+    cwd: string
+  ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
+    const encodedCommand = `${powershellUtf8Prefix} ${command}`;
+    return await this.execFileAsync('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd);
   }
 
   protected execFile(
@@ -256,6 +410,48 @@ export class ShellExecutionService {
       }
       throw error;
     }
+  }
+
+  protected async execFileAsync(
+    file: string,
+    args: string[],
+    cwd: string,
+    extraEnv: Record<string, string> = {}
+  ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        file,
+        args,
+        {
+          cwd,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            ...extraEnv
+          },
+          windowsHide: true
+        },
+        (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => {
+          if (error === null) {
+            resolve({
+              stdout: typeof stdout === 'string' ? stdout : stdout.toString('utf8'),
+              stderr: typeof stderr === 'string' ? stderr : stderr.toString('utf8'),
+              exitCode: 0
+            });
+            return;
+          }
+          if (typeof error === 'object' && error !== null && 'code' in error) {
+            resolve({
+              stdout: this.toText(stdout as Buffer | string | undefined),
+              stderr: this.toText(stderr as Buffer | string | undefined),
+              exitCode: typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : 1
+            });
+            return;
+          }
+          reject(error);
+        }
+      );
+    });
   }
 
   private resolveCwd(request: ShellExecutionRequest): string {

@@ -50,6 +50,20 @@ describe('Roc foundation services', () => {
     expect(tableNames).toContain('skills');
   });
 
+  it('separates critical and deferred startup initialization', () => {
+    cleanupAppServicesTest(context);
+    context = initializeAppServicesTest({ skipInitialize: true });
+    const { root, services } = context;
+
+    services.appService.initializeCritical();
+    expect(() => services.databaseService.db).not.toThrow();
+    expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(false);
+
+    services.appService.initializeDeferred();
+    expect(services.memoryService.status().root).toBe(join(root, 'memory'));
+    expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
+  });
+
   it('returns a real empty task snapshot from SQLite', () => {
     const { services } = context;
     const snapshot = services.taskService.getSnapshot();
@@ -75,6 +89,19 @@ describe('Roc foundation services', () => {
 
   it('records performance samples and exposes the package directory script target', () => {
     const { services } = context;
+    services.performanceObserverService.record({
+      phase: 'provider_first_token',
+      label: 'nvidia:model',
+      startedAtMs: 1,
+      durationMs: 12,
+      metadata: {
+        providerId: 'nvidia',
+        providerType: 'nvidia',
+        modelId: 'model',
+        mode: 'chat',
+        retryCount: 0
+      }
+    });
     const sample = services.diagnosticsService.samplePerformance({
       mode: 'test',
       memoryBudgetMb: 300
@@ -87,6 +114,37 @@ describe('Roc foundation services', () => {
     expect(sample.rssMb).toBeGreaterThan(0);
     expect(sample.heapUsedMb).toBeGreaterThan(0);
     expect(typeof sample.exceedsBudget).toBe('boolean');
+    expect(sample.timing.samples).toContainEqual(
+      expect.objectContaining({
+        phase: 'provider_first_token',
+        label: 'nvidia:model'
+      })
+    );
     expect(existsSync(resolve('scripts/package-dir.mjs'))).toBe(true);
+  });
+
+  it('keeps diagnostics timing snapshots bounded to the newest performance samples', () => {
+    const { services } = context;
+
+    for (let index = 0; index < 510; index += 1) {
+      services.performanceObserverService.record({
+        phase: 'ipc_call',
+        label: `channel-${index}`,
+        startedAtMs: index,
+        durationMs: index + 1,
+        metadata: {
+          index
+        }
+      });
+    }
+
+    const sample = services.diagnosticsService.samplePerformance({
+      mode: 'test',
+      memoryBudgetMb: 300
+    });
+
+    expect(sample.timing.samples).toHaveLength(500);
+    expect(sample.timing.samples[0]?.label).toBe('channel-10');
+    expect(sample.timing.samples.at(-1)?.label).toBe('channel-509');
   });
 });

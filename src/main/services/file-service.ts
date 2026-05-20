@@ -1,5 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import type {
   FilePreviewRequest,
@@ -21,6 +33,9 @@ import type { WorkspaceService } from './workspace-service';
 const defaultPreviewBytes = 64 * 1024;
 const defaultListLimit = 200;
 const defaultSearchLimit = 100;
+const binaryProbeBytes = 4096;
+const defaultSearchMaxVisitedFiles = 2000;
+const defaultSearchMaxBytes = 4 * 1024 * 1024;
 const imageMediaTypes = new Map<string, string>([
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],
@@ -104,13 +119,27 @@ export class FileService {
     const workspace = this.workspaceService.requireWorkspace();
     const maxResults = this.positiveLimit(request.maxResults, defaultSearchLimit);
     const matches: FileSearchResult['matches'] = [];
+    let truncated = false;
+    let visitedFiles = 0;
+    let scannedBytes = 0;
     this.visitFiles(workspace.path, (absolutePath) => {
       if (matches.length >= maxResults) {
+        truncated = true;
         return true;
       }
-      const buffer = this.readSearchBuffer(absolutePath);
+      if (visitedFiles >= defaultSearchMaxVisitedFiles || scannedBytes >= defaultSearchMaxBytes) {
+        truncated = true;
+        return true;
+      }
+      visitedFiles += 1;
+      const remainingBytes = defaultSearchMaxBytes - scannedBytes;
+      const buffer = this.readSearchBuffer(absolutePath, remainingBytes);
       if (buffer === null) {
         return false;
+      }
+      scannedBytes += buffer.byteLength;
+      if (buffer.truncated) {
+        truncated = true;
       }
       if (this.isBinaryBuffer(buffer)) {
         return false;
@@ -128,6 +157,7 @@ export class FileService {
           preview: line.trim()
         });
         if (matches.length >= maxResults) {
+          truncated = true;
           return true;
         }
       }
@@ -137,7 +167,7 @@ export class FileService {
     return {
       query,
       matches,
-      truncated: matches.length >= maxResults
+      truncated
     };
   }
 
@@ -156,25 +186,36 @@ export class FileService {
     }
 
     const maxBytes = this.positiveLimit(request.maxBytes, defaultPreviewBytes);
-    const buffer = readFileSync(absolutePath);
     const imageMediaType = this.imageMediaTypeForPath(relativePath);
     if (imageMediaType !== null) {
+      if (stat.size > maxBytes) {
+        return {
+          relativePath,
+          kind: 'binary',
+          mediaType: imageMediaType,
+          content: '',
+          truncated: true,
+          sizeBytes: stat.size
+        };
+      }
+      const imageBuffer = readFileSync(absolutePath);
       return {
         relativePath,
         kind: 'image',
         mediaType: imageMediaType,
-        content: `data:${imageMediaType};base64,${buffer.toString('base64')}`,
+        content: `data:${imageMediaType};base64,${imageBuffer.toString('base64')}`,
         truncated: false,
-        sizeBytes: buffer.byteLength
+        sizeBytes: imageBuffer.byteLength
       };
     }
+    const buffer = this.readFilePrefix(absolutePath, Math.min(stat.size, Math.max(maxBytes, binaryProbeBytes)));
     if (this.isBinaryBuffer(buffer)) {
       return {
         relativePath,
         kind: 'binary',
         content: '',
-        truncated: false,
-        sizeBytes: buffer.byteLength
+        truncated: stat.size > buffer.byteLength,
+        sizeBytes: stat.size
       };
     }
 
@@ -182,8 +223,8 @@ export class FileService {
       relativePath,
       kind: 'text',
       content: buffer.subarray(0, maxBytes).toString('utf8'),
-      truncated: buffer.byteLength > maxBytes,
-      sizeBytes: buffer.byteLength
+      truncated: stat.size > maxBytes,
+      sizeBytes: stat.size
     };
   }
 
@@ -301,14 +342,32 @@ export class FileService {
     return false;
   }
 
-  private readSearchBuffer(absolutePath: string): Buffer | null {
+  private readSearchBuffer(absolutePath: string, maxBytes: number): (Buffer & { truncated: boolean }) | null {
     try {
-      return readFileSync(absolutePath);
+      const stat = statSync(absolutePath);
+      if (!stat.isFile()) {
+        return null;
+      }
+      const buffer = this.readFilePrefix(absolutePath, Math.min(stat.size, maxBytes)) as Buffer & { truncated: boolean };
+      buffer.truncated = stat.size > buffer.byteLength;
+      return buffer;
     } catch (error) {
       if (this.isRecoverableFileSystemError(error)) {
         return null;
       }
       throw error;
+    }
+  }
+
+  private readFilePrefix(absolutePath: string, byteLimit: number): Buffer {
+    const targetBytes = Math.max(0, byteLimit);
+    const buffer = Buffer.alloc(targetBytes);
+    const fd = openSync(absolutePath, 'r');
+    try {
+      const bytesRead = readSync(fd, buffer, 0, targetBytes, 0);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      closeSync(fd);
     }
   }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { AnimatePresence, motion } from 'motion/react';
 import type { ChatTranscriptMessage } from '../chat-transcript';
 import { ChatMessageRow } from './chat-message-row';
-import { scrollBottomFade, scrollBottomTransition } from '../animations';
+import { resolveMotionTransition, scrollBottomFade, scrollBottomTransition } from '../animations';
 import type { ChatResumeDecision } from '../../shared/types';
 
 type ChatTranscriptPanelProps = {
@@ -13,6 +13,10 @@ type ChatTranscriptPanelProps = {
 };
 
 const BOTTOM_THRESHOLD_PX = 96;
+
+export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): ScrollToOptions {
+  return { top: scrollHeight };
+}
 
 export function ChatTranscriptPanel({
   messages,
@@ -72,7 +76,7 @@ export function ChatTranscriptPanel({
       rafHandleRef.current = null;
       const node = scrollContainerRef.current;
       if (node !== null) {
-        node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+        node.scrollTo(buildStreamingAutoFollowScrollOptions(node.scrollHeight));
       }
     });
   }, [liveSignal, measureAtBottom, messages, scrollContainerRef]);
@@ -113,7 +117,7 @@ export function ChatTranscriptPanel({
             animate="animate"
             exit="exit"
             variants={scrollBottomFade}
-            transition={scrollBottomTransition}
+            transition={resolveMotionTransition(scrollBottomTransition)}
             onClick={handleScrollBottomClick}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -812,6 +812,23 @@ describe('Roc foundation services providers', () => {
     });
   });
 
+  it('keeps the Exa preset visible after critical-only startup initialization', () => {
+    cleanupAppServicesTest(context);
+    context = initializeAppServicesTest({ skipInitialize: true });
+
+    context.services.appService.initializeCritical();
+    const exaServer = context.services.mcpService.listServers().find((server) => server.id === 'exa-hosted');
+
+    expect(exaServer).toMatchObject({
+      id: 'exa-hosted',
+      name: 'Exa Hosted MCP',
+      transport: 'http',
+      preset: true,
+      enabled: false,
+      url: 'https://mcp.exa.ai/mcp'
+    });
+  });
+
   it('imports, disables, enables, and deletes local skills without a marketplace', () => {
     const source = mkdtempSync(join(tmpdir(), 'roc-skill-source-'));
     try {

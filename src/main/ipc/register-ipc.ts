@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import type { ProviderSecretSetRequest, SettingsSnapshot } from '../../shared/types';
+import type { IpcResult, ProviderSecretSetRequest, SettingsSnapshot } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowBounds, getWindowState } from '../window-shell';
@@ -11,6 +11,11 @@ export type AppWindowControls = {
   openTrayEntry: () => Promise<void>;
   broadcastTaskUpdated: () => void;
 };
+
+type IpcHandler<T> = () => Promise<IpcResult<T>> | IpcResult<T>;
+type IpcMainHandler = (...args: any[]) => Promise<IpcResult<unknown>> | IpcResult<unknown>;
+
+const slowIpcThresholdMs = 50;
 
 function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
   const providersConfig = services.configService.getProviders();
@@ -29,46 +34,103 @@ function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
 }
 
 export function registerIpc(services: AppServices, mainWindow: BrowserWindow, controls: AppWindowControls): void {
-  ipcMain.handle(ipcChannels.appGetStatus, () => wrapIpc(() => services.appService.getStatus()));
-  ipcMain.handle(ipcChannels.appOpenSettings, () =>
+  function timedIpc<T>(channel: string, operation: IpcHandler<T>): Promise<IpcResult<T>> {
+    const startedAtMs = performance.now();
+    return Promise.resolve(operation()).then((result) => {
+      const durationMs = performance.now() - startedAtMs;
+      services.performanceObserverService.record({
+        phase: 'ipc_call',
+        label: channel,
+        startedAtMs,
+        durationMs,
+        metadata: {
+          channel,
+          ok: result.ok
+        }
+      });
+      if (durationMs > slowIpcThresholdMs) {
+        services.logService.append({
+          level: 'warn',
+          message: 'Slow IPC handler recorded.',
+          data: {
+            channel,
+            durationMs,
+            ok: result.ok
+          }
+        });
+      }
+      return result;
+    }).catch((error: unknown) => {
+      const durationMs = performance.now() - startedAtMs;
+      services.performanceObserverService.record({
+        phase: 'ipc_call',
+        label: channel,
+        startedAtMs,
+        durationMs,
+        metadata: {
+          channel,
+          ok: false
+        }
+      });
+      if (durationMs > slowIpcThresholdMs) {
+        services.logService.append({
+          level: 'warn',
+          message: 'Slow IPC handler recorded.',
+          data: {
+            channel,
+            durationMs,
+            ok: false
+          }
+        });
+      }
+      throw error;
+    });
+  }
+
+  function timedHandle(channel: string, handler: IpcMainHandler): void {
+    ipcMain.handle(channel, (...args: any[]) => timedIpc(channel, () => handler(...args)));
+  }
+
+  timedHandle(ipcChannels.appGetStatus, () => wrapIpc(() => services.appService.getStatus()));
+  timedHandle(ipcChannels.appOpenSettings, () =>
     wrapIpc(() => {
       controls.openMainPage('settings');
       return { opened: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.appOpenMainPage, (_event, page: string) =>
+  timedHandle(ipcChannels.appOpenMainPage, (_event, page: string) =>
     wrapIpc(() => {
       controls.openMainPage(page);
       return { opened: true as const, page };
     })
   );
-  ipcMain.handle(ipcChannels.appOpenQuickEntry, () =>
+  timedHandle(ipcChannels.appOpenQuickEntry, () =>
     wrapIpc(async () => {
       await controls.openQuickEntry();
       return { opened: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.appOpenTrayEntry, () =>
+  timedHandle(ipcChannels.appOpenTrayEntry, () =>
     wrapIpc(async () => {
       await controls.openTrayEntry();
       return { opened: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.windowGetState, () => wrapIpc(() => getWindowState(mainWindow)));
-  ipcMain.handle(ipcChannels.windowGetBounds, () => wrapIpc(() => getWindowBounds(mainWindow)));
-  ipcMain.handle(ipcChannels.windowSetBounds, (_event, bounds) =>
+  timedHandle(ipcChannels.windowGetState, () => wrapIpc(() => getWindowState(mainWindow)));
+  timedHandle(ipcChannels.windowGetBounds, () => wrapIpc(() => getWindowBounds(mainWindow)));
+  timedHandle(ipcChannels.windowSetBounds, (_event, bounds) =>
     wrapIpc(() => {
       mainWindow.setBounds(bounds);
       return getWindowBounds(mainWindow);
     })
   );
-  ipcMain.handle(ipcChannels.windowMinimize, () =>
+  timedHandle(ipcChannels.windowMinimize, () =>
     wrapIpc(() => {
       mainWindow.minimize();
       return getWindowState(mainWindow);
     })
   );
-  ipcMain.handle(ipcChannels.windowToggleMaximize, () =>
+  timedHandle(ipcChannels.windowToggleMaximize, () =>
     wrapIpc(() => {
       if (mainWindow.isMaximized()) {
         mainWindow.unmaximize();
@@ -78,109 +140,109 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       return getWindowState(mainWindow);
     })
   );
-  ipcMain.handle(ipcChannels.windowClose, () =>
+  timedHandle(ipcChannels.windowClose, () =>
     wrapIpc(() => {
       mainWindow.close();
       return { closed: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.tasksGetSnapshot, () => wrapIpc(() => services.taskService.getSnapshot()));
-  ipcMain.handle(ipcChannels.tasksGetThreadMessages, (_event, request) =>
+  timedHandle(ipcChannels.tasksGetSnapshot, () => wrapIpc(() => services.taskService.getSnapshot()));
+  timedHandle(ipcChannels.tasksGetThreadMessages, (_event, request) =>
     wrapIpc(() => services.taskService.listThreadMessages(request.threadId))
   );
-  ipcMain.handle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => services.taskService.listBackgroundTasks()));
-  ipcMain.handle(ipcChannels.tasksDeleteThread, (_event, request) =>
+  timedHandle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => services.taskService.listBackgroundTasks()));
+  timedHandle(ipcChannels.tasksDeleteThread, (_event, request) =>
     wrapIpc(() => {
       const result = services.taskService.archiveThread(request.threadId);
       controls.broadcastTaskUpdated();
       return result;
     })
   );
-  ipcMain.handle(ipcChannels.tasksCreateBackgroundPreview, (_event, request) =>
+  timedHandle(ipcChannels.tasksCreateBackgroundPreview, (_event, request) =>
     wrapIpc(() => services.taskService.createBackgroundTaskPreview(request))
   );
-  ipcMain.handle(ipcChannels.tasksCreateBackgroundTask, (_event, preview) =>
+  timedHandle(ipcChannels.tasksCreateBackgroundTask, (_event, preview) =>
     wrapIpc(() => {
       const task = services.taskService.createBackgroundTask(preview);
       controls.broadcastTaskUpdated();
       return task;
     })
   );
-  ipcMain.handle(ipcChannels.tasksPauseBackgroundTask, (_event, id: string) =>
+  timedHandle(ipcChannels.tasksPauseBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.pauseBackgroundTask(id);
       controls.broadcastTaskUpdated();
       return task;
     })
   );
-  ipcMain.handle(ipcChannels.tasksResumeBackgroundTask, (_event, id: string) =>
+  timedHandle(ipcChannels.tasksResumeBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.resumeBackgroundTask(id);
       controls.broadcastTaskUpdated();
       return task;
     })
   );
-  ipcMain.handle(ipcChannels.tasksCancelBackgroundTask, (_event, id: string) =>
+  timedHandle(ipcChannels.tasksCancelBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.cancelBackgroundTask(id);
       controls.broadcastTaskUpdated();
       return task;
     })
   );
-  ipcMain.handle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
-  ipcMain.handle(ipcChannels.lifecyclePauseBackground, () =>
+  timedHandle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
+  timedHandle(ipcChannels.lifecyclePauseBackground, () =>
     wrapIpc(() => services.lifecycleService.pauseBackgroundExecution())
   );
-  ipcMain.handle(ipcChannels.lifecycleResumeBackground, () =>
+  timedHandle(ipcChannels.lifecycleResumeBackground, () =>
     wrapIpc(() => services.lifecycleService.resumeBackgroundExecution())
   );
-  ipcMain.handle(ipcChannels.diagnosticsSamplePerformance, (_event, request) =>
+  timedHandle(ipcChannels.diagnosticsSamplePerformance, (_event, request) =>
     wrapIpc(() => services.diagnosticsService.samplePerformance(request))
   );
-  ipcMain.handle(ipcChannels.diagnosticsCreatePackage, (_event, request) =>
+  timedHandle(ipcChannels.diagnosticsCreatePackage, (_event, request) =>
     wrapIpc(() => services.diagnosticsService.createDiagnosticPackage(request))
   );
-  ipcMain.handle(ipcChannels.memoryStatus, () => wrapIpc(() => services.memoryService.status()));
-  ipcMain.handle(ipcChannels.memorySearch, (_event, request) => wrapIpc(() => services.memoryService.search(request)));
-  ipcMain.handle(ipcChannels.memoryGet, (_event, id: string) => wrapIpc(() => services.memoryService.get(id)));
-  ipcMain.handle(ipcChannels.memoryListCandidates, () => wrapIpc(() => services.memoryService.listCandidates()));
-  ipcMain.handle(ipcChannels.memoryListConflicts, () => wrapIpc(() => services.memoryService.listConflicts()));
-  ipcMain.handle(ipcChannels.memoryAcceptCandidate, (_event, id: string) =>
+  timedHandle(ipcChannels.memoryStatus, () => wrapIpc(() => services.memoryService.status()));
+  timedHandle(ipcChannels.memorySearch, (_event, request) => wrapIpc(() => services.memoryService.search(request)));
+  timedHandle(ipcChannels.memoryGet, (_event, id: string) => wrapIpc(() => services.memoryService.get(id)));
+  timedHandle(ipcChannels.memoryListCandidates, () => wrapIpc(() => services.memoryService.listCandidates()));
+  timedHandle(ipcChannels.memoryListConflicts, () => wrapIpc(() => services.memoryService.listConflicts()));
+  timedHandle(ipcChannels.memoryAcceptCandidate, (_event, id: string) =>
     wrapIpc(() => services.memoryService.acceptCandidate(id))
   );
-  ipcMain.handle(ipcChannels.memoryRejectCandidate, (_event, id: string) =>
+  timedHandle(ipcChannels.memoryRejectCandidate, (_event, id: string) =>
     wrapIpc(() => services.memoryService.rejectCandidate(id))
   );
-  ipcMain.handle(ipcChannels.memoryWriteCandidate, (_event, entry) =>
+  timedHandle(ipcChannels.memoryWriteCandidate, (_event, entry) =>
     wrapIpc(() => services.memoryService.writeCandidate(entry))
   );
-  ipcMain.handle(ipcChannels.memoryWriteSessionRecall, (_event, request) =>
+  timedHandle(ipcChannels.memoryWriteSessionRecall, (_event, request) =>
     wrapIpc(() => services.memoryService.writeSessionRecall(request))
   );
-  ipcMain.handle(ipcChannels.memorySessionSearch, (_event, request) =>
+  timedHandle(ipcChannels.memorySessionSearch, (_event, request) =>
     wrapIpc(() => services.memoryService.sessionSearch(request))
   );
-  ipcMain.handle(ipcChannels.memoryDelete, (_event, id: string) => wrapIpc(() => services.memoryService.deleteMemory(id)));
-  ipcMain.handle(ipcChannels.memoryRestore, (_event, id: string) =>
+  timedHandle(ipcChannels.memoryDelete, (_event, id: string) => wrapIpc(() => services.memoryService.deleteMemory(id)));
+  timedHandle(ipcChannels.memoryRestore, (_event, id: string) =>
     wrapIpc(() => services.memoryService.restoreMemory(id))
   );
-  ipcMain.handle(ipcChannels.settingsGet, () => wrapIpc(() => buildSettingsSnapshot(services)));
-  ipcMain.handle(ipcChannels.settingsSave, (_event, settings) =>
+  timedHandle(ipcChannels.settingsGet, () => wrapIpc(() => buildSettingsSnapshot(services)));
+  timedHandle(ipcChannels.settingsSave, (_event, settings) =>
     wrapIpc(() => {
       services.configService.saveSettingsSnapshot(settings);
       return buildSettingsSnapshot(services);
     })
   );
-  ipcMain.handle(ipcChannels.settingsTestProvider, (_event, id: string) =>
+  timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>
     wrapIpc(() => services.providerRuntimeService.testProvider(id))
   );
-  ipcMain.handle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
+  timedHandle(ipcChannels.settingsSetProviderSecret, (_event, request: ProviderSecretSetRequest) =>
     wrapIpc(() => {
       services.secretService.setProviderSecret(request.providerId, request.plaintext);
       return { providerId: request.providerId, stored: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.settingsClearProviderSecret, (_event, providerId: string) =>
+  timedHandle(ipcChannels.settingsClearProviderSecret, (_event, providerId: string) =>
     wrapIpc(() => {
       services.secretService.clearProviderSecret(providerId);
       const provider = services.configService.getProviders().providers.find((entry) => entry.id === providerId);
@@ -193,55 +255,55 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       return { providerId, stored: false as const };
     })
   );
-  ipcMain.handle(ipcChannels.mcpListServers, () => wrapIpc(() => services.mcpService.listServers()));
-  ipcMain.handle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));
-  ipcMain.handle(ipcChannels.mcpUpsertServer, (_event, server) => wrapIpc(() => services.mcpService.upsertServer(server)));
-  ipcMain.handle(ipcChannels.mcpSetServerEnabled, (_event, request) =>
+  timedHandle(ipcChannels.mcpListServers, () => wrapIpc(() => services.mcpService.listServers()));
+  timedHandle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));
+  timedHandle(ipcChannels.mcpUpsertServer, (_event, server) => wrapIpc(() => services.mcpService.upsertServer(server)));
+  timedHandle(ipcChannels.mcpSetServerEnabled, (_event, request) =>
     wrapIpc(() => services.mcpService.setServerEnabled(request.id, request.enabled))
   );
-  ipcMain.handle(ipcChannels.mcpDeleteServer, (_event, id: string) =>
+  timedHandle(ipcChannels.mcpDeleteServer, (_event, id: string) =>
     wrapIpc(() => {
       services.mcpService.deleteServer(id);
       return { deleted: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.mcpTestServer, (_event, id: string) => wrapIpc(() => services.mcpService.testServer(id)));
-  ipcMain.handle(ipcChannels.skillsList, () => wrapIpc(() => services.skillService.list()));
-  ipcMain.handle(ipcChannels.skillsImport, (_event, request) => wrapIpc(() => services.skillService.importSkill(request)));
-  ipcMain.handle(ipcChannels.skillsSetEnabled, (_event, request) =>
+  timedHandle(ipcChannels.mcpTestServer, (_event, id: string) => wrapIpc(() => services.mcpService.testServer(id)));
+  timedHandle(ipcChannels.skillsList, () => wrapIpc(() => services.skillService.list()));
+  timedHandle(ipcChannels.skillsImport, (_event, request) => wrapIpc(() => services.skillService.importSkill(request)));
+  timedHandle(ipcChannels.skillsSetEnabled, (_event, request) =>
     wrapIpc(() => services.skillService.setEnabled(request.id, request.enabled))
   );
-  ipcMain.handle(ipcChannels.skillsDelete, (_event, id: string) =>
+  timedHandle(ipcChannels.skillsDelete, (_event, id: string) =>
     wrapIpc(() => {
       services.skillService.deleteSkill(id);
       return { deleted: true as const };
     })
   );
-  ipcMain.handle(ipcChannels.skillsListFiles, (_event, request) =>
+  timedHandle(ipcChannels.skillsListFiles, (_event, request) =>
     wrapIpc(() => services.skillService.listFiles(request))
   );
-  ipcMain.handle(ipcChannels.skillsReadFile, (_event, request) =>
+  timedHandle(ipcChannels.skillsReadFile, (_event, request) =>
     wrapIpc(() => services.skillService.readFile(request))
   );
-  ipcMain.handle(ipcChannels.agentGetStatus, () => wrapIpc(() => services.agentService.getStatus()));
-  ipcMain.handle(ipcChannels.agentGetConfigPreview, () => wrapIpc(() => services.agentService.getDeepAgentConfigPreview()));
-  ipcMain.handle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>
+  timedHandle(ipcChannels.agentGetStatus, () => wrapIpc(() => services.agentService.getStatus()));
+  timedHandle(ipcChannels.agentGetConfigPreview, () => wrapIpc(() => services.agentService.getDeepAgentConfigPreview()));
+  timedHandle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>
     wrapIpc(() => services.agentService.getCapabilityPreview(request))
   );
-  ipcMain.handle(ipcChannels.chatStartRun, (_event, request) =>
+  timedHandle(ipcChannels.chatStartRun, (_event, request) =>
     wrapIpc(() => services.deepAgentRuntimeService.startRun(request))
   );
-  ipcMain.handle(ipcChannels.chatCancelRun, (_event, runId: string) =>
+  timedHandle(ipcChannels.chatCancelRun, (_event, runId: string) =>
     wrapIpc(() => services.deepAgentRuntimeService.cancelRun(runId))
   );
-  ipcMain.handle(ipcChannels.chatResumeRun, (_event, request) =>
+  timedHandle(ipcChannels.chatResumeRun, (_event, request) =>
     wrapIpc(() => services.deepAgentRuntimeService.resumeRun(request))
   );
-  ipcMain.handle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => services.workspaceService.getCurrentWorkspace()));
-  ipcMain.handle(ipcChannels.workspaceSelect, (_event, request) =>
+  timedHandle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => services.workspaceService.getCurrentWorkspace()));
+  timedHandle(ipcChannels.workspaceSelect, (_event, request) =>
     wrapIpc(() => services.workspaceService.selectWorkspace(request.path))
   );
-  ipcMain.handle(ipcChannels.workspaceSelectFromDialog, () =>
+  timedHandle(ipcChannels.workspaceSelectFromDialog, () =>
     wrapIpc(async () => {
       const result = await dialog.showOpenDialog(mainWindow, {
         title: '选择工作区',
@@ -263,7 +325,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       return services.workspaceService.selectWorkspace(selectedPath);
     })
   );
-  ipcMain.handle(ipcChannels.filesSelectFromDialog, () =>
+  timedHandle(ipcChannels.filesSelectFromDialog, () =>
     wrapIpc(async () => {
       if (process.env.ROC_SMOKE === '1') {
         const smokeWorkspace = services.workspaceService.getCurrentWorkspace();
@@ -285,50 +347,50 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       };
     })
   );
-  ipcMain.handle(ipcChannels.filesListTree, (_event, request) => wrapIpc(() => services.fileService.listTree(request)));
-  ipcMain.handle(ipcChannels.filesSearch, (_event, request) => wrapIpc(() => services.fileService.search(request)));
-  ipcMain.handle(ipcChannels.filesPreview, (_event, request) => wrapIpc(() => services.fileService.readPreview(request)));
-  ipcMain.handle(ipcChannels.filesWriteText, (_event, request) => wrapIpc(() => services.fileService.writeTextFile(request)));
-  ipcMain.handle(ipcChannels.gitStatus, () => wrapIpc(() => services.gitService.getStatus()));
-  ipcMain.handle(ipcChannels.gitDiffStat, () => wrapIpc(() => services.gitService.getDiffStat()));
-  ipcMain.handle(ipcChannels.gitFileDiff, (_event, request) =>
-    wrapIpc(() => services.gitService.getFileDiff(request.relativePath))
+  timedHandle(ipcChannels.filesListTree, (_event, request) => wrapIpc(() => services.fileService.listTree(request)));
+  timedHandle(ipcChannels.filesSearch, (_event, request) => wrapIpc(() => services.fileService.search(request)));
+  timedHandle(ipcChannels.filesPreview, (_event, request) => wrapIpc(() => services.fileService.readPreview(request)));
+  timedHandle(ipcChannels.filesWriteText, (_event, request) => wrapIpc(() => services.fileService.writeTextFile(request)));
+  timedHandle(ipcChannels.gitStatus, () => wrapIpc(() => services.gitService.getStatusAsync()));
+  timedHandle(ipcChannels.gitDiffStat, () => wrapIpc(() => services.gitService.getDiffStatAsync()));
+  timedHandle(ipcChannels.gitFileDiff, (_event, request) =>
+    wrapIpc(() => services.gitService.getFileDiffAsync(request.relativePath))
   );
-  ipcMain.handle(ipcChannels.gitStageFile, (_event, request) =>
+  timedHandle(ipcChannels.gitStageFile, (_event, request) =>
     wrapIpc(() => services.gitService.stageFile(request.relativePath))
   );
-  ipcMain.handle(ipcChannels.gitStageFiles, (_event, request) =>
+  timedHandle(ipcChannels.gitStageFiles, (_event, request) =>
     wrapIpc(() => services.gitService.stageFiles(request.relativePaths))
   );
-  ipcMain.handle(ipcChannels.gitUnstageFile, (_event, request) =>
+  timedHandle(ipcChannels.gitUnstageFile, (_event, request) =>
     wrapIpc(() => services.gitService.unstageFile(request.relativePath))
   );
-  ipcMain.handle(ipcChannels.gitDiscardFile, (_event, request) =>
+  timedHandle(ipcChannels.gitDiscardFile, (_event, request) =>
     wrapIpc(() => services.gitService.discardFileChanges(request.relativePath))
   );
-  ipcMain.handle(ipcChannels.gitCommit, (_event, request) => wrapIpc(() => services.gitService.commit(request.message)));
-  ipcMain.handle(ipcChannels.gitPush, () => wrapIpc(() => services.gitService.push()));
-  ipcMain.handle(ipcChannels.gitListBranches, () => wrapIpc(() => services.gitService.listBranches()));
-  ipcMain.handle(ipcChannels.gitCreateBranch, (_event, request) =>
+  timedHandle(ipcChannels.gitCommit, (_event, request) => wrapIpc(() => services.gitService.commit(request.message)));
+  timedHandle(ipcChannels.gitPush, () => wrapIpc(() => services.gitService.push()));
+  timedHandle(ipcChannels.gitListBranches, () => wrapIpc(() => services.gitService.listBranchesAsync()));
+  timedHandle(ipcChannels.gitCreateBranch, (_event, request) =>
     wrapIpc(() => services.gitService.createBranch(request.name, request.checkoutAfterCreate))
   );
-  ipcMain.handle(ipcChannels.gitCheckoutBranch, (_event, request) =>
+  timedHandle(ipcChannels.gitCheckoutBranch, (_event, request) =>
     wrapIpc(() => services.gitService.checkoutBranch(request.name))
   );
-  ipcMain.handle(ipcChannels.terminalCreateSession, (_event, request) =>
+  timedHandle(ipcChannels.terminalCreateSession, (_event, request) =>
     wrapIpc(() => services.terminalSessionService.createSession(request))
   );
-  ipcMain.handle(ipcChannels.terminalWriteInput, (_event, request) =>
+  timedHandle(ipcChannels.terminalWriteInput, (_event, request) =>
     wrapIpc(() => services.terminalSessionService.writeInput(request))
   );
-  ipcMain.handle(ipcChannels.terminalResize, (_event, request) =>
+  timedHandle(ipcChannels.terminalResize, (_event, request) =>
     wrapIpc(() => services.terminalSessionService.resize(request))
   );
-  ipcMain.handle(ipcChannels.terminalCloseSession, (_event, request) =>
+  timedHandle(ipcChannels.terminalCloseSession, (_event, request) =>
     wrapIpc(() => services.terminalSessionService.closeSession(request))
   );
-  ipcMain.handle(ipcChannels.rtkStatus, () => wrapIpc(() => services.rtkService.getStatus()));
-  ipcMain.handle(ipcChannels.shellExecute, (_event, request) =>
-    wrapIpc(() => services.shellExecutionService.execute(request))
+  timedHandle(ipcChannels.rtkStatus, () => wrapIpc(() => services.rtkService.getStatus()));
+  timedHandle(ipcChannels.shellExecute, (_event, request) =>
+    wrapIpc(() => services.shellExecutionService.executeAsync(request))
   );
 }

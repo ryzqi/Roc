@@ -15,7 +15,7 @@ export type StartupLoadViewId =
 
 export type StartupWorkbenchTool = 'files' | 'git' | 'terminal';
 
-export type StartupLoadTarget = 'workspace' | 'memory' | 'operations';
+export type StartupLoadTarget = 'workspace' | 'memory' | 'operations' | 'taskSurface';
 
 export type StartupLoadIntent = {
   targets: Set<StartupLoadTarget>;
@@ -49,6 +49,10 @@ export function getStartupLoadIntent(input: StartupLoadPolicyInput): StartupLoad
 
   if (input.activeView === 'memory') {
     targets.add('memory');
+  }
+
+  if (input.activeView === 'tasks' || input.activeView === 'tray') {
+    targets.add('taskSurface');
   }
 
   if (OPERATIONS_VIEWS.has(input.activeView) || input.includeOperations === true) {

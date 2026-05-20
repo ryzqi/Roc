@@ -73,3 +73,14 @@ export const scrollBottomTransition: Transition = {
   duration: 0.18,
   ease: EASING_STANDARD_TUPLE
 };
+
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+export function resolveMotionTransition(transition: Transition): Transition {
+  if (!prefersReducedMotion()) {
+    return transition;
+  }
+  return { duration: 0 };
+}

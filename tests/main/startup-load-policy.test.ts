@@ -20,6 +20,18 @@ describe('startup load policy', () => {
     expectTargets(intent, []);
   });
 
+  it('keeps settings detail out of the base chat startup surface', () => {
+    const intent = getStartupLoadIntent({
+      activeView: 'chat',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+
+    expect(Array.from(intent.targets)).not.toContain('settings');
+    expect(Array.from(intent.targets)).not.toContain('operations');
+    expect(Array.from(intent.targets)).not.toContain('memory');
+  });
+
   it('loads workspace data for workspace-native views', () => {
     for (const activeView of ['workspace', 'git', 'preview'] as const) {
       const intent = getStartupLoadIntent({
@@ -86,8 +98,8 @@ describe('startup load policy', () => {
     }
   });
 
-  it('keeps tasks, quick, and tray views on the base startup surface', () => {
-    for (const activeView of ['tasks', 'quick', 'tray'] as const) {
+  it('keeps quick view on the base startup surface', () => {
+    for (const activeView of ['quick'] as const) {
       const intent = getStartupLoadIntent({
         activeView,
         activeWorkbenchTool: 'files',
@@ -96,6 +108,28 @@ describe('startup load policy', () => {
 
       expectTargets(intent, []);
     }
+  });
+
+  it('loads task surface only when the current view presents task or tray data', () => {
+    const tasksIntent = getStartupLoadIntent({
+      activeView: 'tasks',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+    const trayIntent = getStartupLoadIntent({
+      activeView: 'tray',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+    const chatIntent = getStartupLoadIntent({
+      activeView: 'chat',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+
+    expectTargets(tasksIntent, ['taskSurface']);
+    expectTargets(trayIntent, ['taskSurface']);
+    expect(chatIntent.targets.has('taskSurface')).toBe(false);
   });
 
   it('can request multiple data groups when a view needs them together', () => {

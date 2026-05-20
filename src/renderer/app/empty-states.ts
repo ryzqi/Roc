@@ -1,5 +1,5 @@
 import type { AppStatus } from '../../shared/types';
-import type { LazyLoadState, MemoryData, OperationsData, WorkspaceData } from './types';
+import type { LazyLoadState, MemoryData, OperationsData, TaskSurfaceData, WorkspaceData } from './types';
 
 export function emptyWorkspaceData(): WorkspaceData {
   return {
@@ -63,7 +63,31 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
       heapUsedMb: 0,
       heapTotalMb: 0,
       memoryBudgetMb: 300,
-      exceedsBudget: false
+      exceedsBudget: false,
+      timing: {
+        generatedAt: '',
+        samples: []
+      }
+    }
+  };
+}
+
+export function emptyTaskSurfaceData(): TaskSurfaceData {
+  return {
+    backgroundTask: null,
+    backgroundTasks: [],
+    traySummary: {
+      residentEnabled: true,
+      backgroundPaused: false,
+      backgroundTasks: {
+        total: 0,
+        running: 0,
+        failed: 0,
+        pendingConfirmation: 0,
+        nextRunAt: null
+      },
+      nextRunAt: null,
+      updatedAt: ''
     }
   };
 }

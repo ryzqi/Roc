@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type React from 'react';
-import { modalBackdropFade, modalPop, modalPopTransition } from '../animations';
+import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../animations';
 
 export function SettingsModal({
   children,
@@ -31,7 +31,7 @@ export function SettingsModal({
         initial="initial"
         onClick={onClose}
         role="presentation"
-        transition={{ duration: 0.16 }}
+        transition={resolveMotionTransition({ duration: 0.16 })}
         variants={modalBackdropFade}
       >
         <motion.div
@@ -44,7 +44,7 @@ export function SettingsModal({
           initial="initial"
           onClick={(event) => event.stopPropagation()}
           role="dialog"
-          transition={modalPopTransition}
+          transition={resolveMotionTransition(modalPopTransition)}
           variants={modalPop}
         >
           <header className="settings-modal-titlebar">

@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
@@ -13,6 +13,7 @@ import type {
 import {
   emptyMemoryData,
   emptyOperationsData,
+  emptyTaskSurfaceData,
   emptyWorkspaceData,
   idleLazyLoadState
 } from './app/empty-states';
@@ -29,6 +30,7 @@ import type {
   MemoryData,
   MainViewId,
   OperationsData,
+  TaskSurfaceData,
   ViewId,
   WorkbenchTool,
   WorkspaceData
@@ -62,9 +64,12 @@ import { getStartupLoadIntent } from './startup-load-policy';
 import { sanitizeTestId } from './utils/sanitize-test-id';
 import { ViewContent } from './views/ViewContent';
 import { RailOverlay } from './workbench/RailOverlay';
-import { WorkbenchPanel } from './workbench/WorkbenchPanel';
 import '@xterm/xterm/css/xterm.css';
 import 'react-diff-view/style/index.css';
+
+const WorkbenchPanel = lazy(() =>
+  import('./workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
+);
 
 type HistoryContextMenuState = {
   threadId: string;
@@ -101,6 +106,7 @@ export function App(): React.JSX.Element {
   const [workspaceLoadState, setWorkspaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [memoryLoadState, setMemoryLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
+  const [taskSurfaceLoadState, setTaskSurfaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
@@ -173,7 +179,6 @@ export function App(): React.JSX.Element {
 
       const loadedWorkspace = unwrap<Workspace | null>('workspace', workspace);
       const loadedAppStatus = unwrap<AppStatus>('app status', appStatus);
-      const taskSurfaceData = await loadTaskSurfaceData();
       const refreshedAppStatus =
         loadedAppStatus.mode === 'smoke'
           ? unwrap<AppStatus>('refreshed app status', await window.roc.app.getStatus())
@@ -196,7 +201,7 @@ export function App(): React.JSX.Element {
         ...settingsSnapshot,
         selectedMcpServers,
         selectedSkills,
-        ...taskSurfaceData,
+        ...emptyTaskSurfaceData(),
         ...emptyOperationsData(refreshedAppStatus.mode),
         agent: loadedAgent,
         agentCapabilityPreview: null,
@@ -405,6 +410,17 @@ export function App(): React.JSX.Element {
     load: useCallback(() => loadOperationsData(currentAppMode as AppStatus['mode']), [currentAppMode]),
     loadState: operationsLoadState,
     setLoadState: setOperationsLoadState
+  });
+
+  useLazyStartupResource<TaskSurfaceData>({
+    apply: useCallback((taskSurfaceData) => {
+      setState((current) => (current === null ? current : { ...current, ...taskSurfaceData }));
+    }, []),
+    cacheKey: state === null ? null : 'task-surface',
+    enabled: state !== null && startupLoadIntent.targets.has('taskSurface'),
+    load: useCallback(() => loadTaskSurfaceData(), []),
+    loadState: taskSurfaceLoadState,
+    setLoadState: setTaskSurfaceLoadState
   });
 
   useEffect(() => {
@@ -714,21 +730,23 @@ export function App(): React.JSX.Element {
             />
           ) : null}
           {hasWorkbench ? (
-            <WorkbenchPanel
-              activeTool={activeWorkbenchTool}
-              activeView={activeView}
-              onToolChange={setActiveWorkbenchTool}
-              onClose={() => {
-                setActiveView('chat');
-                setWorkbenchVisible(false);
-              }}
-              state={state}
-              updateWorkspaceData={updateWorkspaceData}
-              workspaceLoadState={workspaceLoadState}
-              width={workbenchWidth}
-              onWidthChange={setWorkbenchWidth}
-              windowState={windowState}
-            />
+            <Suspense fallback={<aside className="workbench" data-testid="workbench-panel" />}>
+              <WorkbenchPanel
+                activeTool={activeWorkbenchTool}
+                activeView={activeView}
+                onToolChange={setActiveWorkbenchTool}
+                onClose={() => {
+                  setActiveView('chat');
+                  setWorkbenchVisible(false);
+                }}
+                state={state}
+                updateWorkspaceData={updateWorkspaceData}
+                workspaceLoadState={workspaceLoadState}
+                width={workbenchWidth}
+                onWidthChange={setWorkbenchWidth}
+                windowState={windowState}
+              />
+            </Suspense>
           ) : null}
         </div>
       </div>

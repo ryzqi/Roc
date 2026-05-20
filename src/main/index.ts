@@ -8,21 +8,30 @@ import { broadcastToWindows, sendToWindow } from './window-messaging';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
+const mainReadyStartedAtMs = performance.now();
 
 let mainWindow: BrowserWindow | null = null;
 let quickEntryWindow: BrowserWindow | null = null;
 let trayEntryWindow: BrowserWindow | null = null;
 
-async function loadRenderer(window: BrowserWindow, params?: URLSearchParams): Promise<void> {
+async function loadMainRenderer(window: BrowserWindow): Promise<void> {
+  if (isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined) {
+    await window.loadURL(process.env.ELECTRON_RENDERER_URL);
+    return;
+  }
+  await window.loadFile(join(__dirname, '../renderer/index.html'));
+}
+
+async function loadFloatingRenderer(window: BrowserWindow, kind: 'quick' | 'tray'): Promise<void> {
+  const pagePath = kind === 'quick' ? 'quick-entry.html' : 'tray-entry.html';
   if (isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined) {
     const url = new URL(process.env.ELECTRON_RENDERER_URL);
-    params?.forEach((value, key) => {
-      url.searchParams.set(key, value);
-    });
+    url.pathname = `/${pagePath}`;
+    url.searchParams.set('page', kind);
     await window.loadURL(url.toString());
     return;
   }
-  await window.loadFile(join(__dirname, '../renderer/index.html'), params === undefined ? undefined : { query: Object.fromEntries(params) });
+  await window.loadFile(join(__dirname, `../renderer/${pagePath}`), { query: { page: kind } });
 }
 
 function showMainPage(page: string): void {
@@ -70,7 +79,7 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
     trayEntryWindow = entryWindow;
   }
 
-  await loadRenderer(entryWindow, new URLSearchParams({ page: kind }));
+  await loadFloatingRenderer(entryWindow, kind);
 }
 
 async function createWindow(): Promise<void> {
@@ -82,9 +91,44 @@ async function createWindow(): Promise<void> {
     },
     createElectronSafeStorageBackend()
   );
-  services.appService.initialize();
+  services.performanceObserverService.record({
+    phase: 'main_ready',
+    label: 'app.whenReady',
+    startedAtMs: mainReadyStartedAtMs,
+    durationMs: performance.now() - mainReadyStartedAtMs,
+    metadata: {
+      packaged: app.isPackaged
+    }
+  });
+  services.performanceObserverService.measure('services_critical_initialized', 'appService.initializeCritical', () => {
+    services.appService.initializeCritical();
+  });
+  let deferredInitialized = false;
+  function initializeDeferredServices(): void {
+    if (deferredInitialized) {
+      return;
+    }
+    deferredInitialized = true;
+    setImmediate(() => {
+      try {
+        services.performanceObserverService.measure('services_deferred_initialized', 'appService.initializeDeferred', () => {
+          services.appService.initializeDeferred();
+        });
+      } catch (error) {
+        services.logService.append({
+          level: 'error',
+          message: 'Roc deferred services failed to initialize.',
+          data: {
+            error: error instanceof Error ? error.message : String(error)
+          }
+        });
+      }
+    });
+  }
 
-  mainWindow = new BrowserWindow(buildMainWindowOptions(preloadPath));
+  mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
+    new BrowserWindow(buildMainWindowOptions(preloadPath))
+  );
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on('closed', () => {
@@ -119,10 +163,20 @@ async function createWindow(): Promise<void> {
   });
 
   mainWindow.once('ready-to-show', () => {
+    services.performanceObserverService.record({
+      phase: 'ready_to_show',
+      label: 'mainWindow.ready-to-show',
+      startedAtMs: mainReadyStartedAtMs,
+      durationMs: performance.now() - mainReadyStartedAtMs,
+      metadata: {
+        window: 'main'
+      }
+    });
     mainWindow?.show();
+    initializeDeferredServices();
   });
 
-  await loadRenderer(mainWindow);
+  await services.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
 }
 
 app.whenReady().then(createWindow).catch((error: unknown) => {

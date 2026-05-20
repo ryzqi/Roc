@@ -10,10 +10,12 @@ export type AppServicesTestContext = {
   services: AppServices;
 };
 
-export function initializeAppServicesTest(): AppServicesTestContext {
+export function initializeAppServicesTest(options: { skipInitialize?: boolean } = {}): AppServicesTestContext {
   const root = mkdtempSync(join(tmpdir(), 'roc-test-'));
   const services = createAppServices(root);
-  services.appService.initialize();
+  if (options.skipInitialize !== true) {
+    services.appService.initialize();
+  }
   services.providerRuntimeService.setDeterministicResponse({
     content: 'Provider runtime 测试回复。',
     finishReason: 'stop',

@@ -12,6 +12,17 @@ let userHome: string;
 let previousUserProfile: string | undefined;
 let services: AppServices;
 
+function createShellExecutionAdapter(overrides?: { threadId?: string; runId?: string }) {
+  return {
+    executeAgentCommand: async (input: { command: string; cwd?: string }) =>
+      await services.shellExecutionService.executeAgentCommandAsync({
+        ...input,
+        threadId: overrides?.threadId,
+        runId: overrides?.runId
+      })
+  } as const;
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-deep-agent-backend-'));
   userHome = mkdtempSync(join(tmpdir(), 'roc-deep-agent-backend-home-'));
@@ -51,7 +62,7 @@ describe('deep agent backend', () => {
       const runtimeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store
       });
       const backend = runtimeBackend.backend;
@@ -86,7 +97,7 @@ describe('deep agent backend', () => {
     const backend = createBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
-      shellExecutionService: services.shellExecutionService,
+      shellExecutionService: createShellExecutionAdapter(),
       store: new InMemoryStore()
     }).backend;
 
@@ -130,14 +141,10 @@ describe('deep agent backend', () => {
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: {
-          executeAgentCommand: (input: { command: string; cwd?: string }) =>
-          services.shellExecutionService.executeAgentCommand({
-            ...input,
-            threadId: task.threadId,
-            runId: task.id
-          })
-        } as never,
+        shellExecutionService: createShellExecutionAdapter({
+          threadId: task.threadId,
+          runId: task.id
+        }),
         store: new InMemoryStore()
       }).backend;
 
@@ -168,7 +175,7 @@ describe('deep agent backend', () => {
       const backend: RocCompositeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store: new InMemoryStore()
       }).backend;
 
@@ -195,7 +202,7 @@ describe('deep agent backend', () => {
     const backend: RocCompositeBackend = createBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
-      shellExecutionService: services.shellExecutionService,
+      shellExecutionService: createShellExecutionAdapter(),
       store: new InMemoryStore()
     }).backend;
 
@@ -223,7 +230,7 @@ describe('deep agent backend', () => {
       const backend: RocCompositeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store
       }).backend;
 
@@ -246,7 +253,7 @@ describe('deep agent backend', () => {
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store: new InMemoryStore()
       }).backend;
 
@@ -281,7 +288,7 @@ describe('deep agent backend', () => {
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store
       }).backend;
 
@@ -308,7 +315,7 @@ describe('deep agent backend', () => {
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: services.shellExecutionService,
+        shellExecutionService: createShellExecutionAdapter(),
         store: new InMemoryStore()
       }).backend;
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'motion/react';
 import { App } from './App';
 import './styles/index.css';
 import 'highlight.js/styles/github.css';
@@ -11,6 +12,8 @@ if (root === null) {
 
 createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </React.StrictMode>
 );

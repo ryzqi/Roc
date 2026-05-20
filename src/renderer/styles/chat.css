@@ -217,8 +217,8 @@
 }
 
 @keyframes reasoning-expand {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 600px; }
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes reasoning-shimmer {

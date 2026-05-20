@@ -173,8 +173,7 @@ function createRouteBackends(input: {
   }
 
   const backend = new CompositeBackend(stateBackend, routes) as RocCompositeBackend;
-  backend.execute = (command: string) =>
-    Promise.resolve(input.shellExecutionService.executeAgentCommand({ command }));
+  backend.execute = (command: string) => input.shellExecutionService.executeAgentCommand({ command });
 
   return {
     backend,

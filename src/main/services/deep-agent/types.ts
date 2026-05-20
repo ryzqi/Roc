@@ -31,12 +31,14 @@ export type RunFailure = {
 export type RuntimeSubagent = SubAgent;
 
 export type AgentExecuteAdapter = {
-  executeAgentCommand(input: { command: string; cwd?: string }): ExecuteResponse & {
-    command: string;
-    cwd: string;
-    usedRtk: boolean;
-    bypassReason?: ShellExecutionResult['bypassReason'];
-  };
+  executeAgentCommand(input: { command: string; cwd?: string }): Promise<
+    ExecuteResponse & {
+      command: string;
+      cwd: string;
+      usedRtk: boolean;
+      bypassReason?: ShellExecutionResult['bypassReason'];
+    }
+  >;
 };
 
 export const DEEP_AGENT_BUILT_IN_TOOLS = [

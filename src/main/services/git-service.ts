@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type {
@@ -17,6 +17,29 @@ import type { WorkspaceService } from './workspace-service';
 
 export class GitService {
   constructor(private readonly workspaceService: WorkspaceService) {}
+
+  async getStatusAsync(): Promise<GitStatusResult> {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const [branchOutput, porcelainOutput, changes] = await Promise.all([
+      this.runGitAsync(workspace.path, ['branch', '--show-current']),
+      this.runGitAsync(workspace.path, ['status', '--porcelain']),
+      this.getStatusChangesAsync(workspace.path)
+    ]);
+    const porcelain = porcelainOutput
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0);
+
+    return {
+      workspacePath: workspace.path,
+      isRepository: true,
+      branch: branchOutput.trim(),
+      porcelain,
+      changes,
+      changedFiles: porcelain.length
+    };
+  }
 
   getStatus(): GitStatusResult {
     const workspace = this.workspaceService.requireWorkspace();
@@ -38,12 +61,50 @@ export class GitService {
     };
   }
 
+  async getDiffStatAsync(): Promise<GitDiffStatResult> {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    return {
+      workspacePath: workspace.path,
+      stat: await this.runGitAsync(workspace.path, ['diff', '--stat'])
+    };
+  }
+
   getDiffStat(): GitDiffStatResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
     return {
       workspacePath: workspace.path,
       stat: this.runGit(workspace.path, ['diff', '--stat'])
+    };
+  }
+
+  async getFileDiffAsync(relativePath: string): Promise<GitFileDiffResult> {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    const normalizedPath = this.normalizeGitPath(relativePath);
+    this.workspaceService.resolveInsideWorkspace(normalizedPath);
+    const change = (await this.getStatusChangesAsync(workspace.path)).find((item) => item.relativePath === normalizedPath);
+    if (change === undefined) {
+      throw new RocDomainError({
+        code: 'git_file_change_missing',
+        message: '当前文件没有可预览的 Git 变更。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '请选择一个存在未提交变更的文件。'
+      });
+    }
+    const patch =
+      change.index === '?'
+        ? await this.runGitAllowingDiffExitCodeAsync(workspace.path, ['diff', '--no-index', '--unified=1', '--', '/dev/null', normalizedPath])
+        : change.index !== ' ' && change.worktree === ' '
+          ? await this.runGitAsync(workspace.path, ['diff', '--cached', '--find-renames', '--unified=1', '--', normalizedPath])
+          : await this.runGitAsync(workspace.path, ['diff', '--find-renames', '--unified=1', '--', normalizedPath]);
+
+    return {
+      workspacePath: workspace.path,
+      relativePath: normalizedPath,
+      patch
     };
   }
 
@@ -201,6 +262,12 @@ export class GitService {
     return this.readBranchList(workspace.path);
   }
 
+  async listBranchesAsync(): Promise<GitBranchListResult> {
+    const workspace = this.workspaceService.requireWorkspace();
+    this.ensureGitRepository(workspace.path);
+    return await this.readBranchListAsync(workspace.path);
+  }
+
   createBranch(name: string, checkoutAfterCreate: boolean): GitBranchMutationResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
@@ -264,6 +331,28 @@ export class GitService {
     }
   }
 
+  private async runGitAsync(cwd: string, args: string[]): Promise<string> {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        'git',
+        args,
+        {
+          cwd,
+          encoding: 'utf8',
+          windowsHide: true,
+          maxBuffer: 10 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          if (error !== null) {
+            reject(this.toGitCommandError(args, { ...error, stdout, stderr }));
+            return;
+          }
+          resolve(stdout.toString());
+        }
+      );
+    });
+  }
+
   private runGitAllowingDiffExitCode(cwd: string, args: string[]): string {
     try {
       return execFileSync('git', args, {
@@ -280,6 +369,33 @@ export class GitService {
     }
   }
 
+  private async runGitAllowingDiffExitCodeAsync(cwd: string, args: string[]): Promise<string> {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        'git',
+        args,
+        {
+          cwd,
+          encoding: 'utf8',
+          windowsHide: true,
+          maxBuffer: 10 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          if (error === null) {
+            resolve(stdout.toString());
+            return;
+          }
+          const failed = { ...error, stdout: stdout.toString(), stderr: stderr.toString(), status: error.code };
+          if (this.isGitDiffExitCodeOne(failed)) {
+            resolve(failed.stdout);
+            return;
+          }
+          reject(this.toGitCommandError(args, failed));
+        }
+      );
+    });
+  }
+
   private isGitDiffExitCodeOne(error: unknown): error is { status: number; stdout: string } {
     return (
       typeof error === 'object' &&
@@ -293,6 +409,15 @@ export class GitService {
 
   private getStatusChanges(cwd: string): GitStatusChange[] {
     const rawStatus = this.runGit(cwd, ['status', '--porcelain=v1', '-z']);
+    return this.parseStatusChanges(rawStatus);
+  }
+
+  private async getStatusChangesAsync(cwd: string): Promise<GitStatusChange[]> {
+    const rawStatus = await this.runGitAsync(cwd, ['status', '--porcelain=v1', '-z']);
+    return this.parseStatusChanges(rawStatus);
+  }
+
+  private parseStatusChanges(rawStatus: string): GitStatusChange[] {
     const records = rawStatus.split('\0').filter((record) => record.length > 0);
     const changes: GitStatusChange[] = [];
 
@@ -323,6 +448,27 @@ export class GitService {
   private readBranchList(cwd: string): GitBranchListResult {
     const currentBranch = this.runGit(cwd, ['branch', '--show-current']).trim();
     const branchLines = this.runGit(cwd, ['branch', '--format=%(refname:short)'])
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const branches: GitBranchSummary[] = branchLines.map((name) => ({
+      name,
+      current: name === currentBranch
+    }));
+    return {
+      workspacePath: cwd,
+      currentBranch,
+      branches
+    };
+  }
+
+  private async readBranchListAsync(cwd: string): Promise<GitBranchListResult> {
+    const [currentBranchOutput, branchOutput] = await Promise.all([
+      this.runGitAsync(cwd, ['branch', '--show-current']),
+      this.runGitAsync(cwd, ['branch', '--format=%(refname:short)'])
+    ]);
+    const currentBranch = currentBranchOutput.trim();
+    const branchLines = branchOutput
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);

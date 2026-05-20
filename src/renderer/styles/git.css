@@ -194,7 +194,6 @@
   background: transparent;
   color: var(--text);
   text-align: left;
-  cursor: pointer;
 }
 
 .git-change-meta input[type='checkbox'] {

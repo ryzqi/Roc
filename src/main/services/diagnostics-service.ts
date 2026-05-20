@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { DiagnosticPackage, DiagnosticPackageRequest, PerformanceSample, PerformanceSampleRequest } from '../../shared/types';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
+import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
 import type { RtkService } from './rtk-service';
 import type { TaskService } from './task-service';
@@ -14,7 +15,8 @@ export class DiagnosticsService {
     private readonly paths: RocPaths,
     private readonly database: DatabaseService,
     private readonly taskService: TaskService,
-    private readonly rtkService: RtkService
+    private readonly rtkService: RtkService,
+    private readonly performanceObserverService: PerformanceObserverService
   ) {}
 
   samplePerformance(request: PerformanceSampleRequest): PerformanceSample {
@@ -38,7 +40,8 @@ export class DiagnosticsService {
       heapUsedMb: this.bytesToMb(memoryUsage.heapUsed),
       heapTotalMb: this.bytesToMb(memoryUsage.heapTotal),
       memoryBudgetMb: request.memoryBudgetMb,
-      exceedsBudget: this.bytesToMb(memoryUsage.rss) > request.memoryBudgetMb
+      exceedsBudget: this.bytesToMb(memoryUsage.rss) > request.memoryBudgetMb,
+      timing: this.performanceObserverService.getSnapshot()
     };
 
     this.database.db
@@ -97,7 +100,8 @@ export class DiagnosticsService {
       heapUsedMb: row.heap_used_mb,
       heapTotalMb: row.heap_total_mb,
       memoryBudgetMb: row.memory_budget_mb,
-      exceedsBudget: row.exceeds_budget === 1
+      exceedsBudget: row.exceeds_budget === 1,
+      timing: this.performanceObserverService.getSnapshot()
     };
   }
 

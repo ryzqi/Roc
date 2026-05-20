@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ChatView } from '../../src/renderer/chat/chat-view';
+import { buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
+import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
+import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
+import { bubbleEnterTransition, resolveMotionTransition } from '../../src/renderer/animations';
 import { createLoadedState } from './view-test-helpers';
 
 beforeAll(() => {
@@ -58,5 +62,58 @@ describe('chat view', () => {
     expect(chatCss).toContain('padding: 0;');
     expect(chatCss).not.toContain('.chat-bottom-stack--empty {\r\n  justify-items: center;\r\n  padding: 0 0 36px;');
     expect(chatCss).not.toContain('.chat-bottom-stack--empty {\n  justify-items: center;\n  padding: 0 0 36px;');
+  });
+
+  it('applies many chat deltas as one bounded frame batch', () => {
+    const state = createEmptyChatRunState();
+    const events = [
+      {
+        type: 'run_started' as const,
+        runId: 'run_perf',
+        mode: 'chat' as const,
+        threadId: null,
+        providerId: 'provider',
+        modelId: 'model',
+        createdAt: '2026-05-20T00:00:00.000Z'
+      },
+      ...Array.from({ length: 100 }, (_, index) => ({
+        type: 'message_delta' as const,
+        runId: 'run_perf',
+        delta: String(index % 10)
+      }))
+    ];
+
+    const next = applyChatRunEventBatch(state, events);
+
+    expect(next.runId).toBe('run_perf');
+    expect(next.assistantMessage).toHaveLength(100);
+    expect(next.assistantMessage).toBe('0123456789'.repeat(10));
+  });
+
+  it('keeps streaming auto-follow scroll instant in the hot path', () => {
+    const options = buildStreamingAutoFollowScrollOptions(1234);
+
+    expect(options).toEqual({ top: 1234 });
+    expect('behavior' in options).toBe(false);
+  });
+
+  it('keeps chat reasoning animation off layout-affecting max-height', () => {
+    const chatCss = readFileSync('src/renderer/styles/chat.css', 'utf8');
+    const reasoningAnimation = chatCss.match(/@keyframes reasoning-expand \{[\s\S]*?\n\}/)?.[0] ?? '';
+
+    expect(reasoningAnimation).not.toContain('max-height');
+    expect(reasoningAnimation).toContain('opacity');
+    expect(reasoningAnimation).toContain('transform');
+  });
+
+  it('disables motion durations when the system requests reduced motion', () => {
+    const originalMatchMedia = globalThis.window.matchMedia;
+    globalThis.window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+
+    try {
+      expect(resolveMotionTransition(bubbleEnterTransition)).toEqual({ duration: 0 });
+    } finally {
+      globalThis.window.matchMedia = originalMatchMedia;
+    }
   });
 });

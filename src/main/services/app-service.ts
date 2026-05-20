@@ -13,6 +13,7 @@ import { McpService } from './mcp-service';
 import { MemoryService } from './memory-service';
 import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
+import { PerformanceObserverService } from './performance-observer-service';
 import { RtkService } from './rtk-service';
 import { SecretService, type SafeStorageBackend } from './secret-service';
 import { ShellExecutionService } from './shell-execution-service';
@@ -37,6 +38,8 @@ export type AppServices = {
   langChainModelFactory: LangChainModelFactory;
   deepAgentRuntimeService: DeepAgentRuntimeService;
   providerRuntimeService: ProviderRuntimeService;
+  performanceObserverService: PerformanceObserverService;
+  logService: LogService;
   workspaceService: WorkspaceService;
   fileService: FileService;
   gitService: GitService;
@@ -74,6 +77,7 @@ export class AppService {
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly deepAgentRuntimeService: DeepAgentRuntimeService,
     private readonly providerRuntimeService: ProviderRuntimeService,
+    private readonly performanceObserverService: PerformanceObserverService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
     private readonly gitService: GitService,
@@ -86,13 +90,22 @@ export class AppService {
   ) {}
 
   initialize(): void {
+    this.initializeCritical();
+    this.initializeDeferred();
+  }
+
+  initializeCritical(): void {
     this.paths.ensureTree();
     this.configService.initialize();
     this.mcpService.ensureExaPreset();
     this.databaseService.initialize();
     this.logService.initialize();
+    this.logService.append({ level: 'info', message: 'Roc critical services initialized.' });
+  }
+
+  initializeDeferred(): void {
     this.memoryService.initialize();
-    this.logService.append({ level: 'info', message: 'Roc foundation services initialized.' });
+    this.logService.append({ level: 'info', message: 'Roc deferred services initialized.' });
   }
 
   getStatus(): AppStatus {
@@ -133,7 +146,10 @@ export class AppService {
     };
   }
 
-  get services(): Omit<AppServices, 'appService' | 'paths' | 'configService' | 'databaseService' | 'secretService'> {
+  get services(): Omit<
+    AppServices,
+    'appService' | 'paths' | 'configService' | 'databaseService' | 'logService' | 'secretService'
+  > {
     return {
       memoryService: this.memoryService,
       taskService: this.taskService,
@@ -145,6 +161,7 @@ export class AppService {
       langChainModelFactory: this.langChainModelFactory,
       deepAgentRuntimeService: this.deepAgentRuntimeService,
       providerRuntimeService: this.providerRuntimeService,
+      performanceObserverService: this.performanceObserverService,
       workspaceService: this.workspaceService,
       fileService: this.fileService,
       gitService: this.gitService,
@@ -185,7 +202,8 @@ export function createAppServices(
   const workspaceService = new WorkspaceService(configService);
   const memoryService = new MemoryService(paths, databaseService, workspaceService);
   const rtkService = new RtkService(paths);
-  const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService);
+  const performanceObserverService = new PerformanceObserverService();
+  const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService, performanceObserverService);
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
@@ -203,6 +221,7 @@ export function createAppServices(
     webReadService,
     shellExecutionService,
     paths,
+    performanceObserverService,
     logService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
@@ -222,6 +241,7 @@ export function createAppServices(
     langChainModelFactory,
     deepAgentRuntimeService,
     providerRuntimeService,
+    performanceObserverService,
     workspaceService,
     fileService,
     gitService,
@@ -248,6 +268,8 @@ export function createAppServices(
     langChainModelFactory,
     deepAgentRuntimeService,
     providerRuntimeService,
+    performanceObserverService,
+    logService,
     workspaceService,
     fileService,
     gitService,

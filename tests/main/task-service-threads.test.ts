@@ -16,6 +16,7 @@ type TaskServiceThreadLifecycleApi = AppServices['taskService'] & {
   archiveThread(threadId: string): { deleted: true; threadId: string };
   listThreadMessages(threadId: string): TaskEvent[];
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent;
+  recordEvents(inputs: Array<{ threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }>): TaskEvent[];
 };
 
 const emptyCapabilities: EnabledCapabilities = {
@@ -102,6 +103,52 @@ describe('TaskService thread lifecycle', () => {
     expect(secondRun.threadId).toBe(firstRun.threadId);
     expect(snapshotMessageContents).toEqual(['第二轮输入']);
     expect(threadMessageContents).toEqual(['第一轮输入', '第二轮输入']);
+  });
+
+  it('records multiple task events in insertion order with a shared timestamp', () => {
+    const taskService = services.taskService as TaskServiceThreadLifecycleApi;
+    const run = taskService.createTaskRun({
+      userInput: '批量记录事件',
+      modelId: 'model-alpha',
+      enabledCapabilities: emptyCapabilities
+    });
+
+    const events = taskService.recordEvents([
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: 'hello '
+        }
+      },
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: 'world'
+        }
+      }
+    ]);
+    const rows = services.databaseService.db
+      .prepare(
+        `SELECT id, payload_json, created_at
+         FROM task_events
+         WHERE run_id = ? AND type = 'message_delta'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(run.id) as Array<{ id: string; payload_json: string; created_at: string }>;
+
+    expect(events.map((event) => (event.payload as { delta: string }).delta)).toEqual(['hello ', 'world']);
+    expect(new Set(events.map((event) => event.createdAt)).size).toBe(1);
+    expect(rows.map((row) => JSON.parse(row.payload_json) as { delta: string }).map((payload) => payload.delta)).toEqual([
+      'hello ',
+      'world'
+    ]);
+    expect(rows.map((row) => row.id)).toEqual(events.map((event) => event.id));
   });
 
   it('archives a thread without deleting its runs or events', () => {

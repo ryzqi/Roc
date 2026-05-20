@@ -195,7 +195,11 @@ describe('workspace and diagnostics surfaces', () => {
         heapUsedMb: 48,
         heapTotalMb: 96,
         memoryBudgetMb: 256,
-        exceedsBudget: false
+        exceedsBudget: false,
+        timing: {
+          generatedAt: '2026-05-16T08:00:00.000Z',
+          samples: []
+        }
       },
       taskSnapshot: {
         generatedAt: '2026-05-16T08:00:00.000Z',
@@ -253,13 +257,29 @@ describe('workspace and diagnostics surfaces', () => {
           mode: 'test',
           uptimeSeconds: 42,
           rssMb: 128,
-          heapUsedMb: 48,
-          heapTotalMb: 96,
-          memoryBudgetMb: 256,
-          exceedsBudget: false
+        heapUsedMb: 48,
+        heapTotalMb: 96,
+        memoryBudgetMb: 256,
+        exceedsBudget: false,
+        timing: {
+          generatedAt: '2026-05-16T08:00:00.000Z',
+          samples: [
+            {
+              id: 'timing-1',
+              phase: 'provider_first_token',
+              label: 'nvidia:model',
+              startedAtMs: 1,
+              durationMs: 42,
+              metadata: {
+                providerId: 'nvidia',
+                modelId: 'model'
+              }
+            }
+          ]
         }
-      })
-    );
+      }
+    })
+  );
 
     expect(diagnosticHtml).toContain('class="section"');
     expect(diagnosticHtml).toContain('task_snapshot');
@@ -270,6 +290,10 @@ describe('workspace and diagnostics surfaces', () => {
     expect(performanceHtml).toContain('metric-value');
     expect(performanceHtml).toContain('metric-label');
     expect(performanceHtml).toContain('metric-note');
+    expect(performanceHtml).toContain('Electron/Chromium/Node 基线内');
+    expect(performanceHtml).toContain('Provider 首 token');
+    expect(performanceHtml).toContain('42');
+    expect(performanceHtml).not.toContain('正常');
     expect(performanceHtml).not.toContain('card-title');
   });
 });

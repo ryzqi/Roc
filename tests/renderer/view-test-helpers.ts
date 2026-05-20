@@ -124,7 +124,11 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       heapUsedMb: 0,
       heapTotalMb: 0,
       memoryBudgetMb: 0,
-      exceedsBudget: false
+      exceedsBudget: false,
+      timing: {
+        generatedAt: '2026-05-13T00:00:00.000Z',
+        samples: []
+      }
     },
     agent: {
       deepAgentsPackage: 'available',

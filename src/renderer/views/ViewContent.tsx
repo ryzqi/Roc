@@ -1,17 +1,21 @@
+import { Suspense, lazy } from 'react';
 import { ChatView } from '../chat/chat-view';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
-import { DiagnosticsView } from './diagnostics/DiagnosticsView';
 import { QuickEntryView } from './floating/QuickEntryView';
 import { TrayEntryView } from './floating/TrayEntryView';
-import { GitView } from './git/GitView';
-import { McpView } from './mcp/McpView';
-import { MemoryView } from './memory/MemoryView';
-import { PreviewView } from './preview/PreviewView';
-import { SkillsHostView } from './skills/SkillsHostView';
-import { TasksView } from './tasks/TasksView';
-import { TerminalView } from './terminal/TerminalView';
-import { WorkspaceView } from './workspace/WorkspaceView';
+
+const TasksView = lazy(() => import('./tasks/TasksView').then((module) => ({ default: module.TasksView })));
+const WorkspaceView = lazy(() => import('./workspace/WorkspaceView').then((module) => ({ default: module.WorkspaceView })));
+const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
+const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
+const PreviewView = lazy(() => import('./preview/PreviewView').then((module) => ({ default: module.PreviewView })));
+const McpView = lazy(() => import('./mcp/McpView').then((module) => ({ default: module.McpView })));
+const SkillsHostView = lazy(() => import('./skills/SkillsHostView').then((module) => ({ default: module.SkillsHostView })));
+const MemoryView = lazy(() => import('./memory/MemoryView').then((module) => ({ default: module.MemoryView })));
+const DiagnosticsView = lazy(() =>
+  import('./diagnostics/DiagnosticsView').then((module) => ({ default: module.DiagnosticsView }))
+);
 
 export function ViewContent({
   activeView,
@@ -36,32 +40,36 @@ export function ViewContent({
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   workspaceLoadState: LazyLoadState;
 }): React.JSX.Element {
+  function renderLazyView(node: React.JSX.Element): React.JSX.Element {
+    return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
+  }
+
   if (activeView === 'tasks') {
-    return <TasksView state={state} updateLoadedState={updateLoadedState} />;
+    return renderLazyView(<TasksView state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'workspace') {
-    return <WorkspaceView loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />;
+    return renderLazyView(<WorkspaceView loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);
   }
   if (activeView === 'git') {
-    return <GitView loadState={workspaceLoadState} state={state} />;
+    return renderLazyView(<GitView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'terminal') {
-    return <TerminalView state={state} />;
+    return renderLazyView(<TerminalView state={state} />);
   }
   if (activeView === 'preview') {
-    return <PreviewView loadState={workspaceLoadState} state={state} />;
+    return renderLazyView(<PreviewView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'mcp') {
-    return <McpView state={state} updateLoadedState={updateLoadedState} />;
+    return renderLazyView(<McpView state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'skills') {
-    return <SkillsHostView state={state} updateLoadedState={updateLoadedState} />;
+    return renderLazyView(<SkillsHostView state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'memory') {
-    return <MemoryView loadState={memoryLoadState} state={state} />;
+    return renderLazyView(<MemoryView loadState={memoryLoadState} state={state} />);
   }
   if (activeView === 'diagnostics') {
-    return <DiagnosticsView loadState={operationsLoadState} state={state} />;
+    return renderLazyView(<DiagnosticsView loadState={operationsLoadState} state={state} />);
   }
   if (activeView === 'quick') {
     return <QuickEntryView onSubmitChatTask={onSubmitChatTask} state={state} />;

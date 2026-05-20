@@ -207,6 +207,30 @@ export class DatabaseService {
         updated_at TEXT NOT NULL,
         PRIMARY KEY(namespace_key, item_key)
       );
+
+      CREATE INDEX IF NOT EXISTS idx_task_threads_active_updated
+      ON task_threads(archived_at, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_task_events_thread_type_created
+      ON task_events(thread_id, type, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_task_events_recent_active_threads
+      ON task_events(thread_id, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_background_tasks_updated
+      ON background_tasks(updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_memory_entries_status_layer_updated
+      ON memory_entries_index(status, layer, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_memory_entries_scope_status_updated
+      ON memory_entries_index(scope, status, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_session_recall_scope_created
+      ON session_recall_index(scope, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_langgraph_store_namespace
+      ON langgraph_store_items(namespace_key);
      `);
 
     db.prepare(

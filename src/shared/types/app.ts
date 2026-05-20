@@ -1,4 +1,5 @@
 import type { RocPathsSnapshot, RocRunMode, ServiceStatus } from './common';
+import type { PerformanceSnapshot } from './performance';
 
 export type AppStatus = {
   appName: string;
@@ -41,6 +42,7 @@ export type PerformanceSample = {
   heapTotalMb: number;
   memoryBudgetMb: number;
   exceedsBudget: boolean;
+  timing: PerformanceSnapshot;
 };
 
 export type PerformanceSampleRequest = {

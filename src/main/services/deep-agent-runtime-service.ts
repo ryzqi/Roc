@@ -20,6 +20,7 @@ import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
 import type { McpService } from './mcp-service';
+import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
 import type { ShellExecutionService } from './shell-execution-service';
 import type { TaskService } from './task-service';
@@ -71,6 +72,7 @@ export class DeepAgentRuntimeService {
     private readonly webReadService: WebReadService,
     private readonly shellExecutionService: ShellExecutionService,
     private readonly paths: RocPaths,
+    private readonly performanceObserverService: PerformanceObserverService,
     private readonly logService: LogService
   ) {
     this.store = new SqliteLangGraphStore(databaseService);
@@ -321,8 +323,11 @@ export class DeepAgentRuntimeService {
   private async executeRun(context: RunExecutionContext): Promise<void> {
     try {
       let attemptProducedVisibleOutput = false;
+      let retryCount = 0;
       await executeWithProviderRequestRetry(async () => {
         attemptProducedVisibleOutput = false;
+        const providerStartedAtMs = performance.now();
+        let firstVisibleTokenRecorded = false;
         const session = await createDeepAgentSession({
           agentService: this.agentService,
           context,
@@ -350,6 +355,10 @@ export class DeepAgentRuntimeService {
 
           await this.consumeSessionStreams(run, context, session, () => {
             attemptProducedVisibleOutput = true;
+            if (!firstVisibleTokenRecorded) {
+              firstVisibleTokenRecorded = true;
+              this.recordProviderTiming('provider_first_token', context, providerStartedAtMs, retryCount, session.usageAccumulator);
+            }
           });
 
           if (run.interrupted) {
@@ -358,13 +367,19 @@ export class DeepAgentRuntimeService {
           }
 
           await Promise.resolve(run.output);
-          this.completeRun(context, session.usageAccumulator, session.assistantChunks);
+          this.completeRun(context, session.usageAccumulator, session.assistantChunks, false, providerStartedAtMs, retryCount);
         } finally {
           await Promise.allSettled(session.closers.map(async (close) => close()));
         }
       }, {
         signal: context.abortController.signal,
-        shouldRetry: (error) => !attemptProducedVisibleOutput && isRetryableProviderRequestFailure(error)
+        shouldRetry: (error) => {
+          const retryable = !attemptProducedVisibleOutput && isRetryableProviderRequestFailure(error);
+          if (retryable) {
+            retryCount += 1;
+          }
+          return retryable;
+        }
       });
     } catch (error) {
       this.failRun(context, error);
@@ -387,14 +402,21 @@ export class DeepAgentRuntimeService {
       workspaceService: this.workspaceService
     });
 
+    const providerStartedAtMs = performance.now();
     try {
+      let firstVisibleTokenRecorded = false;
       const run = await session.agent.streamEvents(new Command({ resume: resumePayload }), {
         version: 'v3',
         configurable: session.configurable,
         signal: context.abortController.signal
       });
 
-      await this.consumeSessionStreams(run, context, session);
+      await this.consumeSessionStreams(run, context, session, () => {
+        if (!firstVisibleTokenRecorded) {
+          firstVisibleTokenRecorded = true;
+          this.recordProviderTiming('provider_first_token', context, providerStartedAtMs, 0, session.usageAccumulator);
+        }
+      });
 
       if (run.interrupted) {
         this.handleInterruptedRun(context, run.interrupts);
@@ -402,7 +424,7 @@ export class DeepAgentRuntimeService {
       }
 
       await Promise.resolve(run.output);
-      this.completeRun(context, session.usageAccumulator, session.assistantChunks, true);
+      this.completeRun(context, session.usageAccumulator, session.assistantChunks, true, providerStartedAtMs, 0);
     } catch (error) {
       this.failRun(context, error);
     } finally {
@@ -415,8 +437,8 @@ export class DeepAgentRuntimeService {
     context: RunExecutionContext
   ): import('./deep-agent').AgentExecuteAdapter {
     return {
-      executeAgentCommand: (input) =>
-        this.shellExecutionService.executeAgentCommand({
+      executeAgentCommand: async (input) =>
+        await this.shellExecutionService.executeAgentCommandAsync({
           ...input,
           threadId: context.taskRun?.threadId ?? context.threadId,
           runId: context.taskRun?.id ?? context.runId
@@ -456,6 +478,33 @@ export class DeepAgentRuntimeService {
         cache_read: usage.cacheReadTokens,
         cache_creation: usage.cacheCreationTokens,
         cache_hit_ratio: promptTokens > 0 ? cacheReadTokens / promptTokens : 0
+      }
+    });
+  }
+
+  private recordProviderTiming(
+    phase: 'provider_first_token' | 'provider_completed',
+    context: RunExecutionContext,
+    providerStartedAtMs: number,
+    retryCount: number,
+    usage: streamConsumers.ProviderUsageAccumulator
+  ): void {
+    this.performanceObserverService.record({
+      phase,
+      label: `${context.modelHandle.provider.id}:${context.modelHandle.modelId}`,
+      startedAtMs: providerStartedAtMs,
+      durationMs: performance.now() - providerStartedAtMs,
+      metadata: {
+        providerId: context.modelHandle.provider.id,
+        providerType: context.modelHandle.provider.type,
+        modelId: context.modelHandle.modelId,
+        mode: context.mode,
+        retryCount,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheCreationTokens: usage.cacheCreationTokens
       }
     });
   }
@@ -510,6 +559,12 @@ export class DeepAgentRuntimeService {
     },
     onVisibleOutput?: () => void
   ): Promise<void> {
+    const taskEvents: Array<{
+      threadId: string;
+      runId: string;
+      type: 'message_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed';
+      payload: Record<string, unknown>;
+    }> = [];
     const callbacks = {
       emitRuntimeEvent: (event: ChatRunEvent) => this.emit(event),
       emitTodoEvent: (candidate: unknown) => this.emitTodoEvent(context.runId, candidate),
@@ -521,7 +576,7 @@ export class DeepAgentRuntimeService {
         if (context.taskRun === null) {
           return;
         }
-        this.taskService.recordEvent({
+        taskEvents.push({
           threadId: context.taskRun.threadId,
           runId: context.taskRun.id,
           type,
@@ -530,33 +585,41 @@ export class DeepAgentRuntimeService {
       }
     };
 
-    await Promise.all([
-      streamConsumers.consumeToolCallStream({
-        calls: run.toolCalls as AsyncIterable<unknown>,
-        context,
-        callbacks
-      }),
-      streamConsumers.consumeMessageStream({
-        messages: run.messages as AsyncIterable<unknown>,
-        context,
-        assistantChunks: session.assistantChunks,
-        reasoningChunks: session.reasoningChunks,
-        usageAccumulator: session.usageAccumulator,
-        callbacks
-      }),
-      streamConsumers.consumeSubagentStream({
-        subagents: run.subagents as AsyncIterable<unknown>,
-        context,
-        callbacks
-      })
-    ]);
+    try {
+      await Promise.all([
+        streamConsumers.consumeToolCallStream({
+          calls: run.toolCalls as AsyncIterable<unknown>,
+          context,
+          callbacks
+        }),
+        streamConsumers.consumeMessageStream({
+          messages: run.messages as AsyncIterable<unknown>,
+          context,
+          assistantChunks: session.assistantChunks,
+          reasoningChunks: session.reasoningChunks,
+          usageAccumulator: session.usageAccumulator,
+          callbacks
+        }),
+        streamConsumers.consumeSubagentStream({
+          subagents: run.subagents as AsyncIterable<unknown>,
+          context,
+          callbacks
+        })
+      ]);
+    } finally {
+      if (taskEvents.length > 0) {
+        this.taskService.recordEvents(taskEvents);
+      }
+    }
   }
 
   private completeRun(
     context: RunExecutionContext,
     usage: streamConsumers.ProviderUsageAccumulator,
     assistantChunks: readonly string[],
-    clearPendingInterrupt = false
+    clearPendingInterrupt = false,
+    providerStartedAtMs: number | null = null,
+    retryCount = 0
   ): void {
     const assistantMessage = prompt.resolveAssistantMessage([...assistantChunks]);
     const result = prompt.buildProviderExecutionResult({
@@ -568,6 +631,9 @@ export class DeepAgentRuntimeService {
       usage
     });
     this.logProviderUsage(context, usage);
+    if (providerStartedAtMs !== null) {
+      this.recordProviderTiming('provider_completed', context, providerStartedAtMs, retryCount, usage);
+    }
     if (context.taskRun !== null) {
       this.taskService.completeRunWithProviderResult({
         runId: context.taskRun.id,

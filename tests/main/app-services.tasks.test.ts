@@ -123,6 +123,17 @@ describe('Roc foundation services tasks', () => {
   });
 
   it('generates redacted diagnostic packages with task, RTK and performance evidence', () => {
+    for (let index = 0; index < 505; index += 1) {
+      context.services.performanceObserverService.record({
+        phase: 'db_query',
+        label: `query-${index}`,
+        startedAtMs: index,
+        durationMs: 2,
+        metadata: {
+          index
+        }
+      });
+    }
     const preview = context.services.taskService.createBackgroundTaskPreview({
       goal: '生成诊断包',
       trigger: {
@@ -148,6 +159,9 @@ describe('Roc foundation services tasks', () => {
       redacted: true,
       includes: expect.arrayContaining(['task_snapshot', 'performance_sample', 'rtk_status'])
     });
+    expect(content).toContain('"timing"');
+    expect(content).toContain('"label": "query-504"');
+    expect(content).not.toContain('"label": "query-0"');
     expect(content).toContain('[REDACTED]');
     expect(content).not.toContain('sk-secret-value');
     expect(content).not.toContain('Bearer sk-secret-value');
