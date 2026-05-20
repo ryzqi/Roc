@@ -1,6 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { FileEntryShape } from '../../src/shared/types';
+import { flattenTreeEntries } from '../../src/renderer/workbench/file-tree-helpers';
 import { FilesWorkbench } from '../../src/renderer/workbench/FilesWorkbench';
 import { GitBranchPopover } from '../../src/renderer/workbench/GitBranchPopover';
 import { GitDiffPanel } from '../../src/renderer/workbench/GitDiffPanel';
@@ -51,6 +53,32 @@ describe('workbench surfaces', () => {
     expect(html).toContain('pane-title">文件树');
     expect(html).toContain('workbench-surface workbench-surface--files');
     expect(html).not.toContain('EXPLORER');
+  });
+
+  it('does not keep a directory visually expanded after the root tree refresh clears cached children', () => {
+    const rootEntries: FileEntryShape[] = [
+      {
+        name: 'src',
+        relativePath: 'src',
+        type: 'directory' as const
+      }
+    ];
+    const staleExpandedDirectories = new Set(['src']);
+    const staleDirectoryChildren: Record<string, FileEntryShape[]> = {
+      src: [
+        {
+          name: 'App.tsx',
+          relativePath: 'src/App.tsx',
+          type: 'file' as const
+        }
+      ]
+    };
+
+    const expandedNodes = flattenTreeEntries(rootEntries, staleExpandedDirectories, staleDirectoryChildren);
+    const refreshedNodes = flattenTreeEntries(rootEntries, new Set(), {});
+
+    expect(expandedNodes.map(({ entry }) => entry.relativePath)).toEqual(['src', 'src/App.tsx']);
+    expect(refreshedNodes.map(({ entry }) => entry.relativePath)).toEqual(['src']);
   });
 
   it('renders git workbench without legacy uppercase section labels', () => {

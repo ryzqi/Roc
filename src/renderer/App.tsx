@@ -52,6 +52,7 @@ import {
   loadTaskSurfaceData,
   loadWorkspaceData
 } from './app/data-loading';
+import { createWorkspaceRefreshSubscription } from './app/workspace-refresh';
 import { useLazyStartupResource } from './app/use-lazy-startup-resource';
 import { useWindowDrag } from './app/use-window-drag';
 import { PreviewIcon } from './components/PreviewIcon';
@@ -108,6 +109,12 @@ export function App(): React.JSX.Element {
   const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [taskSurfaceLoadState, setTaskSurfaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceRefreshSubscriptionRef = useRef<ReturnType<typeof createWorkspaceRefreshSubscription> | null>(null);
+  const workspaceRefreshSnapshotRef = useRef({
+    workspace: null as Workspace | null,
+    previewRelativePath: null as string | null,
+    gitSelectedPath: null as string | null
+  });
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
     const [taskSnapshot, taskSurfaceData] = await Promise.all([window.roc.tasks.getSnapshot(), loadTaskSurfaceData()]);
@@ -248,6 +255,16 @@ export function App(): React.JSX.Element {
   const currentSelectedSkills = state?.selectedSkills ?? [];
   const { continueWindowDrag, finishWindowDrag, startWindowDrag } = useWindowDrag(windowState);
 
+  useEffect(() => {
+    const nextSnapshot = {
+      workspace: state?.workspace ?? null,
+      previewRelativePath: state?.filePreview?.relativePath ?? null,
+      gitSelectedPath: state?.gitSelectedPath ?? null
+    };
+    workspaceRefreshSnapshotRef.current = nextSnapshot;
+    workspaceRefreshSubscriptionRef.current?.updateSnapshot(nextSnapshot);
+  }, [state?.workspace, state?.filePreview?.relativePath, state?.gitSelectedPath]);
+
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
     setSelectedThreadId(null);
@@ -372,6 +389,45 @@ export function App(): React.JSX.Element {
       cancelled = true;
     };
   }, [currentAgentExecution, currentSelectedMcpServers, currentSelectedSkills]);
+
+  useEffect(() => {
+    const subscription = createWorkspaceRefreshSubscription({
+      initialSnapshot: workspaceRefreshSnapshotRef.current,
+      load: async (workspace, options) => {
+        const workspaceData = await loadWorkspaceData(workspace, options);
+        return {
+          fileTree: workspaceData.fileTree,
+          filePreview: workspaceData.filePreview,
+          gitStatus: workspaceData.gitStatus,
+          gitBranches: workspaceData.gitBranches,
+          gitError: workspaceData.gitError,
+          gitSelectedPath: workspaceData.gitSelectedPath,
+          gitSelectedPreview: workspaceData.gitSelectedPreview
+        };
+      },
+      apply: (workspacePath, workspaceData) => {
+        setState((current) => {
+          if (current === null || current.workspace?.path !== workspacePath) {
+            return current;
+          }
+          return {
+            ...current,
+            ...workspaceData
+          };
+        });
+      },
+      onError: (message) => {
+        setError(message);
+      },
+      subscribe: (listener) => window.roc.chat.onRunEvent(listener)
+    });
+    workspaceRefreshSubscriptionRef.current = subscription;
+
+    return () => {
+      workspaceRefreshSubscriptionRef.current = null;
+      subscription.dispose();
+    };
+  }, []);
 
   const startupLoadIntent = getStartupLoadIntent({
     activeView,

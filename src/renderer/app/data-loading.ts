@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AppStatus,
   BackgroundTask,
+  FilePreviewRequest,
   DiagnosticPackage,
   FilePreviewResult,
   FileTreeResult,
@@ -23,23 +24,35 @@ import type {
 } from '../../shared/types';
 import { unwrap } from '../loaded-state';
 import { applySettingsSnapshot } from '../settings-model';
+import { findNextGitSelection } from '../workbench/git-helpers';
 import { emptyWorkspaceData } from './empty-states';
 import type { MemoryData, OperationsData, TaskSurfaceData, WorkspaceData } from './types';
 
-export async function loadWorkspaceData(workspace: Workspace | null): Promise<WorkspaceData> {
+export type WorkspaceDataLoadOptions = {
+  previewRelativePath?: string | null;
+  fallbackToFirstFilePreview?: boolean;
+  gitSelectedPath?: string | null;
+};
+
+export async function loadWorkspaceData(
+  workspace: Workspace | null,
+  options: WorkspaceDataLoadOptions = {}
+): Promise<WorkspaceData> {
   if (workspace === null) {
     return emptyWorkspaceData();
   }
 
   const fileTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath: '' }));
-  const firstFile = fileTree.entries.find((entry) => entry.type === 'file');
-  const filePreview =
-    firstFile === undefined
-      ? null
-      : unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath: firstFile.relativePath }));
+  const filePreview = await loadWorkspaceFilePreview(fileTree, options);
   const fileSearch = null;
   const gitResult = await window.roc.git.status();
   const gitBranchesResult = gitResult.ok ? await window.roc.git.listBranches() : null;
+  const gitSelectedPath =
+    options.gitSelectedPath === undefined || !gitResult.ok
+      ? null
+      : findNextGitSelection(gitResult.data.changes, options.gitSelectedPath);
+  const gitSelectedPreview =
+    gitSelectedPath === null ? null : await loadGitSelectedPreview({ relativePath: gitSelectedPath });
 
   return {
     fileTree,
@@ -48,13 +61,44 @@ export async function loadWorkspaceData(workspace: Workspace | null): Promise<Wo
     gitStatus: gitResult.ok ? gitResult.data : null,
     gitBranches: gitBranchesResult !== null && gitBranchesResult.ok ? gitBranchesResult.data : null,
     gitError: gitResult.ok ? (gitBranchesResult !== null && !gitBranchesResult.ok ? gitBranchesResult.error.message : null) : gitResult.error.message,
-    gitSelectedPath: null,
-    gitSelectedPreview: null,
+    gitSelectedPath,
+    gitSelectedPreview,
     gitLastCommit: null,
     gitLastPush: null,
     terminalError: null,
     terminalSession: null
   };
+}
+
+async function loadWorkspaceFilePreview(
+  fileTree: FileTreeResult,
+  options: WorkspaceDataLoadOptions
+): Promise<FilePreviewResult | null> {
+  const previewRelativePath = options.previewRelativePath;
+  if (previewRelativePath !== undefined) {
+    if (previewRelativePath === null) {
+      return null;
+    }
+    return await loadOptionalFilePreview({ relativePath: previewRelativePath });
+  }
+  if (options.fallbackToFirstFilePreview === false) {
+    return null;
+  }
+  const firstFile = fileTree.entries.find((entry) => entry.type === 'file');
+  if (firstFile === undefined) {
+    return null;
+  }
+  return await loadOptionalFilePreview({ relativePath: firstFile.relativePath });
+}
+
+async function loadOptionalFilePreview(request: FilePreviewRequest): Promise<FilePreviewResult | null> {
+  const previewResult = await window.roc.files.preview(request);
+  return previewResult.ok ? previewResult.data : null;
+}
+
+async function loadGitSelectedPreview(request: { relativePath: string }): Promise<WorkspaceData['gitSelectedPreview']> {
+  const previewResult = await window.roc.git.fileDiff(request);
+  return previewResult.ok ? previewResult.data : null;
 }
 
 export async function loadTaskSurfaceData(): Promise<TaskSurfaceData> {

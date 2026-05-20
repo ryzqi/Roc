@@ -30,6 +30,12 @@ export function FilesWorkbench({
     setFilePaneWidth(304);
   }, [state.workspace?.path]);
 
+  useEffect(() => {
+    setExpandedDirectories(new Set());
+    setDirectoryChildren({});
+    setDirectoryLoadingPath(null);
+  }, [state.fileTree]);
+
   async function openFilePreview(relativePath: string): Promise<void> {
     const preview = unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath }));
     updateWorkspaceData({ filePreview: preview, fileSearch: null });
