@@ -9,7 +9,7 @@ type ChatTranscriptPanelProps = {
   messages: ChatTranscriptMessage[];
   liveSignal: string;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  onApprovalDecision?: (approvalId: string, decision: ChatResumeDecision) => void;
+  onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
 
 const BOTTOM_THRESHOLD_PX = 96;

@@ -16,6 +16,20 @@ type ChatViewProps = {
   onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
+export function buildChatResumeRunRequest(input: {
+  runId: string;
+  threadId: string;
+  interruptId: string;
+  decisions: ChatResumeDecision[];
+}) {
+  return {
+    runId: input.runId,
+    threadId: input.threadId,
+    interruptId: input.interruptId,
+    decisions: input.decisions
+  };
+}
+
 export function ChatView({
   chatSelectionVersion,
   selectedThreadId,
@@ -146,17 +160,17 @@ export function ChatView({
     }
   }
 
-  async function handleApprovalDecision(approvalId: string, decision: ChatResumeDecision): Promise<void> {
+  async function handleApprovalDecision(approvalId: string, decisions: ChatResumeDecision[]): Promise<void> {
     if (chatRun.state.runId === null || chatRun.state.threadId === null) {
       chatRun.setError('当前没有可恢复的审批运行。');
       return;
     }
-    const result = await window.roc.chat.resumeRun({
+    const result = await window.roc.chat.resumeRun(buildChatResumeRunRequest({
       runId: chatRun.state.runId,
       threadId: chatRun.state.threadId,
       interruptId: approvalId,
-      decision
-    });
+      decisions
+    }));
     if (!result.ok) {
       chatRun.setError(result.error.message);
     }
@@ -183,8 +197,8 @@ export function ChatView({
                 messages={chatTranscript}
                 liveSignal={liveSignal}
                 scrollContainerRef={transcriptScrollRef}
-                onApprovalDecision={(approvalId, decision) => {
-                  void handleApprovalDecision(approvalId, decision);
+                onApprovalDecision={(approvalId, decisions) => {
+                  void handleApprovalDecision(approvalId, decisions);
                 }}
               />
             </div>

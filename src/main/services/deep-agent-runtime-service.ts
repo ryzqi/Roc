@@ -219,14 +219,15 @@ export class DeepAgentRuntimeService {
     this.activeRuns.set(request.runId, activeRun);
 
     const resumedAt = new Date().toISOString();
+    const decisions = this.resolveResumeDecisions(request, pending.approval);
     const resumePayload: HITLResponse = {
-      decisions: [request.decision]
+      decisions
     };
     this.taskService.recordApprovalDecision({
       runId: resumeContext.taskRun.id,
       payload: {
         interruptId: pending.approval.interruptId,
-        decision: request.decision
+        decisions
       }
     });
     this.taskService.markRunResumed(resumeContext.taskRun.id);
@@ -534,6 +535,51 @@ export class DeepAgentRuntimeService {
       interruptId: interrupt.interruptId,
       ...payload
     };
+  }
+
+  private resolveResumeDecisions(request: ChatResumeRunRequest, approval: ChatPendingApproval): HITLResponse['decisions'] {
+    if (request.decisions.length !== approval.actionRequests.length) {
+      throw new RocDomainError({
+        code: 'chat_resume_decision_count_mismatch',
+        message: '审批恢复提交的决策数量与待审批动作数量不一致。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请按当前审批卡展示的全部动作重新提交审批。'
+      });
+    }
+
+    return request.decisions.map((decision, index) => {
+      const actionRequest = approval.actionRequests[index];
+      const reviewConfig = approval.reviewConfigs[index];
+      if (actionRequest === undefined || reviewConfig === undefined) {
+        throw new RocDomainError({
+          code: 'chat_interrupt_payload_invalid',
+          message: '审批中断负载结构无效，无法恢复审批请求。',
+          category: 'validation',
+          retryable: false,
+          userAction: '请重新发起本轮任务。'
+        });
+      }
+      if (reviewConfig.actionName !== actionRequest.name) {
+        throw new RocDomainError({
+          code: 'chat_interrupt_payload_invalid',
+          message: '审批中断负载结构无效，审批动作与决策配置不匹配。',
+          category: 'validation',
+          retryable: false,
+          userAction: '请重新发起本轮任务。'
+        });
+      }
+      if (!reviewConfig.allowedDecisions.includes(decision.type)) {
+        throw new RocDomainError({
+          code: 'chat_resume_decision_not_allowed',
+          message: `审批动作 ${actionRequest.name} 不允许决策类型 ${decision.type}。`,
+          category: 'validation',
+          retryable: false,
+          userAction: '请按审批卡允许的决策类型重新提交。'
+        });
+      }
+      return decision;
+    });
   }
 
   private isHitlRequest(value: unknown): value is HITLRequest {

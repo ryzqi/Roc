@@ -14,7 +14,7 @@ import type { ChatResumeDecision } from '../../shared/types';
 
 type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
-  onApprovalDecision?: (approvalId: string, decision: ChatResumeDecision) => void;
+  onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
 
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
@@ -94,29 +94,41 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                   <button
                     type="button"
                     className="approval-btn approval-btn--approve"
-                    onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'approve' })}
+                    onClick={() =>
+                      onApprovalDecision?.(
+                        approval.interruptId,
+                        approval.actionRequests.map(() => ({ type: 'approve' }))
+                      )
+                    }
                   >
                     approve
                   </button>
                   <button
                     type="button"
                     className="approval-btn approval-btn--reject"
-                    onClick={() => onApprovalDecision?.(approval.interruptId, { type: 'reject' })}
+                    onClick={() =>
+                      onApprovalDecision?.(
+                        approval.interruptId,
+                        approval.actionRequests.map(() => ({ type: 'reject' }))
+                      )
+                    }
                   >
                     reject
                   </button>
-                  {approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
+                  {approval.actionRequests.length === 1 && approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
                     <button
                       type="button"
                       className="approval-btn approval-btn--edit"
                       onClick={() =>
-                        onApprovalDecision?.(approval.interruptId, {
-                          type: 'edit',
-                          editedAction: approval.actionRequests[0] ?? {
-                            name: 'unknown',
-                            args: {}
+                        onApprovalDecision?.(approval.interruptId, [
+                          {
+                            type: 'edit',
+                            editedAction: approval.actionRequests[0] ?? {
+                              name: 'unknown',
+                              args: {}
+                            }
                           }
-                        })
+                        ])
                       }
                     >
                       edit

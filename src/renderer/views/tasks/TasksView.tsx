@@ -23,9 +23,21 @@ function describeTaskEvent(event: TaskSnapshot['recentEvents'][number]): string 
     return '等待审批';
   }
   if (event.type === 'approval_decision' && typeof event.payload === 'object' && event.payload !== null) {
-    const decision = Reflect.get(event.payload, 'decision');
-    if (typeof decision === 'object' && decision !== null && typeof Reflect.get(decision, 'type') === 'string') {
-      return `审批决策 · ${Reflect.get(decision, 'type') as string}`;
+    const decisions = Reflect.get(event.payload, 'decisions');
+    if (Array.isArray(decisions) && decisions.length > 0) {
+      const summary = decisions
+        .map((decision) => {
+          if (typeof decision !== 'object' || decision === null) {
+            return null;
+          }
+          const type = Reflect.get(decision, 'type');
+          return typeof type === 'string' ? type : null;
+        })
+        .filter((type): type is string => type !== null)
+        .join(' / ');
+      if (summary.length > 0) {
+        return `审批决策 · ${summary}`;
+      }
     }
     return '审批决策';
   }

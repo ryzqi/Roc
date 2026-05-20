@@ -1820,6 +1820,43 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.checkpointer).toBeTruthy();
   });
 
+  it('does not enable interrupts in chat mode without a checkpointer', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    services.configService.savePermissions({
+      schemaVersion: 3,
+      mode: 'default',
+      grants: []
+    });
+    services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: 'chat mode should stay non-interrupting',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: []
+      }
+    });
+    await completed;
+
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as
+      | {
+          interruptOn?: Record<string, unknown>;
+          checkpointer?: unknown;
+        }
+      | undefined;
+
+    expect(call?.interruptOn).toBeUndefined();
+    expect(call?.checkpointer).toBeUndefined();
+  });
+
   it('delegates Anthropic prompt caching to deepagents middleware for chat, task, and resume runs', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
@@ -1931,9 +1968,11 @@ describe('DeepAgentRuntimeService', () => {
       runId: interruption.runId,
       threadId: interruption.threadId as string,
       interruptId: interruption.interruptId,
-      decision: {
-        type: 'approve'
-      }
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
     });
     await resumed;
 
@@ -2125,9 +2164,11 @@ describe('DeepAgentRuntimeService', () => {
       runtime.resumeRun({
         runId: started.runId,
         threadId: started.threadId as string,
-        decision: {
-          type: 'approve'
-        }
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
       })
     ).resolves.toMatchObject({
       runId: started.runId,
@@ -2158,9 +2199,125 @@ describe('DeepAgentRuntimeService', () => {
     expect(resumeConfig?.configurable?.thread_id).toBe(started.threadId);
     expect(decisionEvent?.payload).toMatchObject({
       interruptId: 'interrupt-2',
-      decision: {
-        type: 'approve'
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
+    });
+  });
+
+  it('resumes with ordered decisions for multiple action requests on the same thread', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-multi',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              },
+              {
+                name: 'web_search',
+                args: {
+                  query: 'roc phase 6'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              },
+              {
+                actionName: 'web_search',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+    mocked.invokeMock.mockResolvedValue({
+      messages: [{ role: 'assistant', content: '已按顺序恢复' }]
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行多步审批任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
       }
+    });
+    await interrupted;
+
+    const orderedDecisions = [
+      {
+        type: 'edit' as const,
+        editedAction: {
+          name: 'execute',
+          args: {
+            command: 'git diff --stat'
+          }
+        }
+      },
+      {
+        type: 'approve' as const
+      }
+    ];
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-multi',
+        decisions: orderedDecisions
+      })
+    ).resolves.toMatchObject({
+      runId: started.runId,
+      threadId: started.threadId
+    });
+
+    const resumeInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0] as Command;
+    const resumeConfig = mocked.streamEventsMock.mock.calls.at(-1)?.[1] as
+      | {
+          configurable?: {
+            thread_id?: string;
+            run_id?: string;
+          };
+        }
+      | undefined;
+    const snapshot = services.taskService.getSnapshot();
+    const decisionEvent = snapshot.recentEvents.find(
+      (candidate) => candidate.runId === started.runId && candidate.type === 'approval_decision'
+    );
+
+    expect(resumeInput).toBeInstanceOf(Command);
+    expect(resumeInput).toMatchObject({
+      resume: {
+        decisions: orderedDecisions
+      }
+    });
+    expect(resumeConfig?.configurable).toMatchObject({
+      thread_id: started.threadId,
+      run_id: started.runId
+    });
+    expect(decisionEvent?.payload).toMatchObject({
+      interruptId: 'interrupt-multi',
+      decisions: orderedDecisions
     });
   });
 
@@ -2227,9 +2384,11 @@ describe('DeepAgentRuntimeService', () => {
         runId: started.runId,
         threadId: started.threadId as string,
         interruptId: 'interrupt-resume-after-eviction',
-        decision: {
-          type: 'approve'
-        }
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
       })
     ).resolves.toMatchObject({
       runId: started.runId,
@@ -2302,13 +2461,76 @@ describe('DeepAgentRuntimeService', () => {
         runId: started.runId,
         threadId: started.threadId as string,
         interruptId: 'interrupt-unexpected',
-        decision: {
-          type: 'approve'
-        }
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
       })
     ).rejects.toMatchObject({
       code: 'chat_resume_interrupt_mismatch',
       message: '恢复运行时的审批中断 ID 与待处理审批不匹配。'
+    });
+  });
+
+  it('rejects respond for delete_file with the configured product policy', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-delete-file-respond',
+          payload: {
+            actionRequests: [
+              {
+                name: 'delete_file',
+                args: {
+                  path: 'danger.txt'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'delete_file',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '删除危险文件',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-delete-file-respond',
+        decisions: [
+          {
+            type: 'respond',
+            text: '先别删'
+          } as unknown as import('../../src/shared/types').ChatResumeDecision
+        ]
+      })
+    ).rejects.toMatchObject({
+      code: 'chat_resume_decision_not_allowed'
     });
   });
 

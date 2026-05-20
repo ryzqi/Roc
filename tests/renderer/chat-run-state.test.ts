@@ -157,4 +157,76 @@ describe('chat run state', () => {
     expect(state.pendingApprovals).toEqual([]);
     expect(state.reasoning).toBe('先分析命令风险。\n审批通过，继续执行。');
   });
+
+  it('keeps multiple action requests in approval order until the matching interrupt resumes', () => {
+    let state = createEmptyChatRunState();
+
+    state = applyChatRunEvent(state, {
+      type: 'run_started',
+      runId: 'chat_multi_approval',
+      mode: 'task',
+      threadId: 'thread_multi_approval',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6',
+      createdAt: '2026-05-21T00:00:00.000Z'
+    });
+    state = applyChatRunEvent(state, {
+      type: 'run_interrupted',
+      runId: 'chat_multi_approval',
+      threadId: 'thread_multi_approval',
+      interruptId: 'interrupt-multi',
+      payload: {
+        actionRequests: [
+          {
+            name: 'execute',
+            args: {
+              command: 'git status'
+            }
+          },
+          {
+            name: 'web_search',
+            args: {
+              query: 'roc phase 6'
+            }
+          }
+        ],
+        reviewConfigs: [
+          {
+            actionName: 'execute',
+            allowedDecisions: ['approve', 'edit', 'reject']
+          },
+          {
+            actionName: 'web_search',
+            allowedDecisions: ['approve', 'reject']
+          }
+        ]
+      }
+    });
+
+    expect(state.status).toBe('waiting_user');
+    expect(state.pendingApprovals[0]?.actionRequests).toEqual([
+      {
+        name: 'execute',
+        args: {
+          command: 'git status'
+        }
+      },
+      {
+        name: 'web_search',
+        args: {
+          query: 'roc phase 6'
+        }
+      }
+    ]);
+
+    state = applyChatRunEvent(state, {
+      type: 'run_resumed',
+      runId: 'chat_multi_approval',
+      threadId: 'thread_multi_approval',
+      interruptId: 'interrupt-multi'
+    });
+
+    expect(state.pendingApprovals).toEqual([]);
+    expect(state.status).toBe('running');
+  });
 });

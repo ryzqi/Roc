@@ -22,7 +22,7 @@ export type ChatResumeRunRequest = {
   runId: string;
   threadId: string;
   interruptId?: string;
-  decision: ChatResumeDecision;
+  decisions: ChatResumeDecision[];
 };
 
 export type ChatResumeRunResult = {

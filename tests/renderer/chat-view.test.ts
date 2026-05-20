@@ -2,7 +2,7 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { ChatView } from '../../src/renderer/chat/chat-view';
+import { buildChatResumeRunRequest, ChatView } from '../../src/renderer/chat/chat-view';
 import { buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
 import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
@@ -115,5 +115,29 @@ describe('chat view', () => {
     } finally {
       globalThis.window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('builds approval resume IPC requests with a decisions array', () => {
+    expect(
+      buildChatResumeRunRequest({
+        runId: 'run_approval',
+        threadId: 'thread_approval',
+        interruptId: 'interrupt-approval',
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
+      })
+    ).toEqual({
+      runId: 'run_approval',
+      threadId: 'thread_approval',
+      interruptId: 'interrupt-approval',
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
+    });
   });
 });
