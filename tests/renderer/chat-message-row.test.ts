@@ -98,4 +98,49 @@ describe('chat message row', () => {
     expect(html).toContain('approve / edit / reject');
     expect(html).not.toContain('chat-approval-dot');
   });
+
+  it('renders the task approval card for background task proposals', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-task-approval',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          approval: {
+            interruptId: 'interrupt-task-1',
+            actionRequests: [
+              {
+                name: 'propose_background_task',
+                args: {
+                  goal: '每天检查测试状态',
+                  trigger: {
+                    type: 'cron',
+                    description: '每天 09:00',
+                    cronExpression: '0 9 * * *',
+                    nextRunAt: '2026-05-22T01:00:00.000Z'
+                  },
+                  workspacePath: 'F:\\Code\\Roc',
+                  allowedActions: ['pnpm test'],
+                  forbiddenActions: ['git push']
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'propose_background_task',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              }
+            ]
+          },
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="task-approval-card"');
+    expect(html).toContain('创建定时任务');
+    expect(html).toContain('编辑后批准');
+    expect(html).toContain('每天检查测试状态');
+  });
 });

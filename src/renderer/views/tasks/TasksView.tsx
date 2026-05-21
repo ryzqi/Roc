@@ -4,8 +4,10 @@ import { EmptyState } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import { Row } from '../../components/Row';
+import { loadTaskSurfaceData } from '../../app/data-loading';
 import { buildTopMeta } from '../../app/view-routing';
 import type { LoadedState } from '../../loaded-state';
+import { unwrap } from '../../loaded-state';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { TaskListSection } from './TaskListSection';
@@ -36,6 +38,7 @@ export function TasksView({
     selectedBackgroundTaskId === null
       ? []
       : state.scheduledRuns.filter((run) => run.backgroundTaskId === selectedBackgroundTaskId);
+  const selectedTaskSurfaceId = selectedTaskId === null || selectedTaskId.startsWith('thread_') ? null : selectedTaskId;
 
   useEffect(() => {
     if (selectedItem !== null && (selectedItem.taskId ?? selectedItem.threadId) === selectedTaskId) {
@@ -148,7 +151,21 @@ export function TasksView({
         )}
         <p className="muted">在聊天里告诉我“帮我创建一个定时任务”，或点击右上角“新建任务”。</p>
       </section>
-      <TaskCreateDialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} />
+      <TaskCreateDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        onCreated={async () => {
+          const [taskSnapshot, taskSurfaceData] = await Promise.all([
+            window.roc.tasks.getSnapshot(),
+            loadTaskSurfaceData(selectedTaskSurfaceId)
+          ]);
+          updateLoadedState({
+            taskSnapshot: unwrap('task snapshot', taskSnapshot),
+            ...taskSurfaceData
+          });
+        }}
+        state={state}
+      />
     </>
   );
 }
