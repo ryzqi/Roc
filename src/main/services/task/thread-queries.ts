@@ -17,13 +17,14 @@ export function nextRunNumber(database: DatabaseService, threadId: string): numb
 export function requireActiveThread(database: DatabaseService, threadId: string): TaskThread {
   const row = database.db
     .prepare(
-      `SELECT id, title, goal, status, created_at, updated_at
+      `SELECT id, kind, title, goal, status, created_at, updated_at
        FROM task_threads
        WHERE id = ? AND archived_at IS NULL`
     )
     .get(threadId) as
     | {
         id: string;
+        kind: TaskThread['kind'];
         title: string;
         goal: string;
         status: TaskThread['status'];
@@ -44,6 +45,7 @@ export function requireActiveThread(database: DatabaseService, threadId: string)
 
   return {
     id: row.id,
+    kind: row.kind,
     title: row.title,
     goal: row.goal,
     status: row.status,

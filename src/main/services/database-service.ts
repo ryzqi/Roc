@@ -39,6 +39,7 @@ export class DatabaseService {
 
       CREATE TABLE IF NOT EXISTS task_threads (
         id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'chat',
         title TEXT NOT NULL,
         goal TEXT NOT NULL,
         status TEXT NOT NULL,
@@ -80,6 +81,7 @@ export class DatabaseService {
         trigger_type TEXT NOT NULL,
         trigger_description TEXT NOT NULL,
         next_run_at TEXT,
+        cron_expression TEXT,
         workspace_path TEXT NOT NULL,
         allowed_actions_json TEXT NOT NULL,
         forbidden_actions_json TEXT NOT NULL,
@@ -87,9 +89,23 @@ export class DatabaseService {
         notification_policy TEXT NOT NULL,
         risk_level TEXT NOT NULL,
         requires_confirmation INTEGER NOT NULL,
+        last_run_at TEXT,
+        last_run_status TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(thread_id) REFERENCES task_threads(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS scheduled_task_runs (
+        id TEXT PRIMARY KEY,
+        background_task_id TEXT NOT NULL,
+        task_run_id TEXT,
+        scheduled_at TEXT NOT NULL,
+        triggered_at TEXT,
+        status TEXT NOT NULL,
+        skip_reason TEXT,
+        FOREIGN KEY(background_task_id) REFERENCES background_tasks(id)
       );
 
       CREATE TABLE IF NOT EXISTS recovery_points (
@@ -220,6 +236,12 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_background_tasks_updated
       ON background_tasks(updated_at DESC);
 
+      CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_task_status
+      ON scheduled_task_runs(background_task_id, status, scheduled_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_task_threads_kind_status
+      ON task_threads(kind, status, updated_at DESC);
+
       CREATE INDEX IF NOT EXISTS idx_memory_entries_status_layer_updated
       ON memory_entries_index(status, layer, updated_at DESC);
 
@@ -235,8 +257,13 @@ export class DatabaseService {
 
     db.prepare(
       `INSERT OR REPLACE INTO app_config_versions (id, schema_version, updated_at)
-       VALUES (1, 1, ?)`
+       VALUES (1, 2, ?)`
     ).run(new Date().toISOString());
+    this.ensureColumn(db, 'task_threads', 'kind', "TEXT NOT NULL DEFAULT 'chat'");
+    this.ensureColumn(db, 'background_tasks', 'cron_expression', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'last_run_at', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'last_run_status', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
     this.tryCreateFtsTables(db);
   }

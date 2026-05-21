@@ -20,8 +20,9 @@ describe('Roc foundation services tasks', () => {
     const preview = context.services.taskService.createBackgroundTaskPreview({
       goal: '每天检查项目测试状态',
       trigger: {
-        type: 'schedule',
+        type: 'cron',
         description: '每天 09:00',
+        cronExpression: '0 9 * * *',
         nextRunAt: '2026-04-29T01:00:00.000Z'
       },
       workspacePath: context.root,
@@ -40,6 +41,7 @@ describe('Roc foundation services tasks', () => {
       goal: '每天检查项目测试状态',
       scheduled: true,
       nextRunAt: '2026-04-29T01:00:00.000Z',
+      cronExpression: '0 9 * * *',
       riskLevel: 'medium',
       requiresConfirmation: false
     });
@@ -47,7 +49,11 @@ describe('Roc foundation services tasks', () => {
       goal: '每天检查项目测试状态',
       status: 'running',
       triggerDescription: '每天 09:00',
-      nextRunAt: '2026-04-29T01:00:00.000Z'
+      nextRunAt: '2026-04-29T01:00:00.000Z',
+      cronExpression: '0 9 * * *',
+      lastRunAt: null,
+      lastRunStatus: null,
+      runCount: 0
     });
     expect(paused.status).toBe('paused');
     expect(resumed.status).toBe('running');
@@ -96,8 +102,7 @@ describe('Roc foundation services tasks', () => {
       goal: '检查取消状态',
       trigger: {
         type: 'manual',
-        description: '手动触发',
-        nextRunAt: null
+        description: '手动触发'
       },
       workspacePath: context.root,
       allowedActions: ['pnpm test'],
@@ -138,8 +143,7 @@ describe('Roc foundation services tasks', () => {
       goal: '生成诊断包',
       trigger: {
         type: 'manual',
-        description: '手动触发',
-        nextRunAt: null
+        description: '手动触发'
       },
       workspacePath: context.root,
       allowedActions: ['echo diagnostic'],

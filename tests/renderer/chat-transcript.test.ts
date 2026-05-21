@@ -6,6 +6,7 @@ import type { ChatRunState } from '../../src/renderer/chat-run-state';
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
   return {
     id,
+    kind: 'chat',
     title,
     goal: title,
     status: 'completed',

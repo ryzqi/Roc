@@ -6,6 +6,7 @@ import { buildHistoryItems } from '../../src/renderer/history-sidebar';
 function createThread(id: string, title: string): TaskThread {
   return {
     id,
+    kind: 'chat',
     title,
     goal: title,
     status: 'completed',
@@ -22,8 +23,10 @@ function createBackgroundTask(threadId: string): BackgroundTask {
     goal: '后台定时任务',
     status: 'running',
     scheduled: true,
+    triggerType: 'cron',
     triggerDescription: 'schedule',
     nextRunAt: '2026-05-08T16:00:00.000Z',
+    cronExpression: '0 * * * *',
     workspacePath: 'F:\\Code\\Roc',
     allowedActions: ['pnpm test'],
     forbiddenActions: [],
@@ -31,6 +34,9 @@ function createBackgroundTask(threadId: string): BackgroundTask {
     notificationPolicy: 'failures_and_confirmations',
     riskLevel: 'low',
     requiresConfirmation: false,
+    lastRunAt: null,
+    lastRunStatus: null,
+    runCount: 0,
     createdAt: '2026-05-08T15:00:00.000Z',
     updatedAt: '2026-05-08T15:30:45.000Z'
   };

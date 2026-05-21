@@ -43,8 +43,10 @@ export class TaskService {
       '后台任务作用目录不能为空。',
       '请选择后台任务作用目录。'
     );
-    const scheduled = request.trigger.type === 'schedule';
-    if (scheduled && request.trigger.nextRunAt === null) {
+    const nextRunAt = request.trigger.type === 'manual' ? null : request.trigger.nextRunAt;
+    const cronExpression = request.trigger.type === 'cron' ? request.trigger.cronExpression : null;
+    const scheduled = request.trigger.type !== 'manual';
+    if (scheduled && nextRunAt === null) {
       throw new RocDomainError({
         code: 'background_task_next_run_missing',
         message: '定时后台任务必须包含下次运行时间。',
@@ -54,17 +56,26 @@ export class TaskService {
       });
     }
 
+    const trigger =
+      request.trigger.type === 'manual'
+        ? { type: 'manual' as const, description: triggerDescription }
+        : request.trigger.type === 'once'
+          ? { type: 'once' as const, description: triggerDescription, nextRunAt: request.trigger.nextRunAt }
+          : {
+              type: 'cron' as const,
+              description: triggerDescription,
+              cronExpression: request.trigger.cronExpression,
+              nextRunAt: request.trigger.nextRunAt
+            };
+
     return {
       ...request,
       goal,
-      trigger: {
-        type: request.trigger.type,
-        description: triggerDescription,
-        nextRunAt: request.trigger.nextRunAt
-      },
+      trigger,
       workspacePath,
       scheduled,
-      nextRunAt: request.trigger.nextRunAt,
+      nextRunAt,
+      cronExpression,
       riskLevel: inferBackgroundRisk(request.allowedActions, request.forbiddenActions),
       requiresConfirmation: request.forbiddenActions.length > 0 && request.allowedActions.length === 0
     };
@@ -85,10 +96,10 @@ export class TaskService {
     const transaction = this.database.db.transaction(() => {
       this.database.db
         .prepare(
-          `INSERT INTO task_threads (id, title, goal, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(threadId, title, preview.goal, status, now, now);
+        .run(threadId, 'background', title, preview.goal, status, now, now);
 
       this.database.db
         .prepare(
@@ -101,10 +112,10 @@ export class TaskService {
       this.database.db
         .prepare(
           `INSERT INTO background_tasks
-           (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, workspace_path,
+           (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, cron_expression, workspace_path,
             allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-            requires_confirmation, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           taskId,
@@ -116,6 +127,7 @@ export class TaskService {
           preview.trigger.type,
           preview.trigger.description,
           preview.nextRunAt,
+          preview.cronExpression,
           preview.workspacePath,
           JSON.stringify(preview.allowedActions),
           JSON.stringify(preview.forbiddenActions),
@@ -123,6 +135,9 @@ export class TaskService {
           preview.notificationPolicy,
           preview.riskLevel,
           preview.requiresConfirmation ? 1 : 0,
+          null,
+          null,
+          0,
           now,
           now
         );
@@ -148,8 +163,10 @@ export class TaskService {
       goal: preview.goal,
       status,
       scheduled: preview.scheduled,
+      triggerType: preview.trigger.type,
       triggerDescription: preview.trigger.description,
       nextRunAt: preview.nextRunAt,
+      cronExpression: preview.cronExpression,
       workspacePath: preview.workspacePath,
       allowedActions: preview.allowedActions,
       forbiddenActions: preview.forbiddenActions,
@@ -157,6 +174,9 @@ export class TaskService {
       notificationPolicy: preview.notificationPolicy,
       riskLevel: preview.riskLevel,
       requiresConfirmation: preview.requiresConfirmation,
+      lastRunAt: null,
+      lastRunStatus: null,
+      runCount: 0,
       createdAt: now,
       updatedAt: now
     };
@@ -193,8 +213,9 @@ export class TaskService {
     const rows = this.database.db
       .prepare(
         `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+                trigger_type, cron_expression,
                 allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-                requires_confirmation, created_at, updated_at
+                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
          FROM background_tasks
          ORDER BY updated_at DESC
          LIMIT 50`
@@ -253,10 +274,10 @@ export class TaskService {
         const title = input.userInput.trim().slice(0, 60);
         this.database.db
           .prepare(
-            `INSERT INTO task_threads (id, title, goal, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
+            `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
           )
-          .run(threadId, title, input.userInput, 'waiting_next_turn', now, now);
+          .run(threadId, 'chat', title, input.userInput, 'waiting_next_turn', now, now);
       } else {
         requireActiveThread(this.database, threadId);
         this.database.db
@@ -604,7 +625,7 @@ export class TaskService {
   getSnapshot(): TaskSnapshot {
     const threads = this.database.db
       .prepare(
-        `SELECT id, title, goal, status, created_at, updated_at
+        `SELECT id, kind, title, goal, status, created_at, updated_at
          FROM task_threads
          WHERE archived_at IS NULL
          ORDER BY updated_at DESC
@@ -612,6 +633,7 @@ export class TaskService {
       )
       .all() as Array<{
       id: string;
+      kind: TaskThread['kind'];
       title: string;
       goal: string;
       status: TaskThread['status'];
@@ -638,6 +660,7 @@ export class TaskService {
 
     const normalizedThreads: TaskThread[] = threads.map((thread) => ({
       id: thread.id,
+      kind: thread.kind,
       title: thread.title,
       goal: thread.goal,
       status: thread.status,

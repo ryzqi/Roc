@@ -12,8 +12,10 @@ export function backgroundTaskFromRow(row: BackgroundTaskRow): BackgroundTask {
     goal: row.goal,
     status: row.status,
     scheduled: row.scheduled === 1,
+    triggerType: row.trigger_type,
     triggerDescription: row.trigger_description,
     nextRunAt: row.next_run_at,
+    cronExpression: row.cron_expression,
     workspacePath: row.workspace_path,
     allowedActions: JSON.parse(row.allowed_actions_json) as string[],
     forbiddenActions: JSON.parse(row.forbidden_actions_json) as string[],
@@ -21,6 +23,9 @@ export function backgroundTaskFromRow(row: BackgroundTaskRow): BackgroundTask {
     notificationPolicy: row.notification_policy,
     riskLevel: row.risk_level,
     requiresConfirmation: row.requires_confirmation === 1,
+    lastRunAt: row.last_run_at,
+    lastRunStatus: row.last_run_status,
+    runCount: row.run_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -30,9 +35,10 @@ export function requireBackgroundTask(database: DatabaseService, id: string): Ba
   const taskId = requireText(id, 'background_task_id_empty', '后台任务 ID 不能为空。', '请选择一个后台任务。');
   const row = database.db
     .prepare(
-      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at,
+              cron_expression, workspace_path,
               allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-              requires_confirmation, created_at, updated_at
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
        FROM background_tasks
        WHERE id = ?`
     )

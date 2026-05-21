@@ -82,8 +82,9 @@ export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePa
         await window.roc.tasks.createBackgroundTaskPreview({
           goal: 'Phase 6 smoke background diagnostic task',
           trigger: {
-            type: 'schedule',
+            type: 'cron',
             description: 'smoke scheduled run',
+            cronExpression: '0 9 * * *',
             nextRunAt: '2026-04-29T01:00:00.000Z'
           },
           workspacePath: rootPath,

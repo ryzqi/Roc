@@ -13,8 +13,11 @@ export type TaskStatus =
   | 'completed'
   | 'archived';
 
+export type TaskKind = 'chat' | 'background' | 'long_running';
+
 export type TaskThread = {
   id: string;
+  kind: TaskKind;
   title: string;
   goal: string;
   status: TaskStatus;
@@ -48,6 +51,7 @@ export type TaskEvent = {
     | 'background_task_paused'
     | 'background_task_resumed'
     | 'background_task_cancelled'
+    | 'long_running_promoted'
     | 'diagnostic'
     | 'verification'
     | 'error'
@@ -93,11 +97,22 @@ export type TaskDeleteThreadResult = {
   threadId: string;
 };
 
-export type BackgroundTaskTrigger = {
-  type: 'manual' | 'schedule';
-  description: string;
-  nextRunAt: string | null;
-};
+export type BackgroundTaskTrigger =
+  | {
+      type: 'manual';
+      description: string;
+    }
+  | {
+      type: 'once';
+      description: string;
+      nextRunAt: string;
+    }
+  | {
+      type: 'cron';
+      description: string;
+      cronExpression: string;
+      nextRunAt: string;
+    };
 
 export type BackgroundTaskPreviewRequest = {
   goal: string;
@@ -112,6 +127,7 @@ export type BackgroundTaskPreviewRequest = {
 export type BackgroundTaskPreview = BackgroundTaskPreviewRequest & {
   scheduled: boolean;
   nextRunAt: string | null;
+  cronExpression: string | null;
   riskLevel: ShellCommandRisk;
   requiresConfirmation: boolean;
 };
@@ -123,8 +139,10 @@ export type BackgroundTask = {
   goal: string;
   status: TaskStatus;
   scheduled: boolean;
+  triggerType: BackgroundTaskTrigger['type'];
   triggerDescription: string;
   nextRunAt: string | null;
+  cronExpression: string | null;
   workspacePath: string;
   allowedActions: string[];
   forbiddenActions: string[];
@@ -132,8 +150,69 @@ export type BackgroundTask = {
   notificationPolicy: 'failures_and_confirmations';
   riskLevel: ShellCommandRisk;
   requiresConfirmation: boolean;
+  lastRunAt: string | null;
+  lastRunStatus: 'success' | 'failed' | 'cancelled' | null;
+  runCount: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ActiveTaskItem = {
+  kind: 'background' | 'long_running';
+  threadId: string;
+  taskId: string | null;
+  title: string;
+  goal: string;
+  status: TaskStatus;
+  trigger: BackgroundTaskTrigger | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  riskLevel: ShellCommandRisk;
+  workspacePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ScheduledTaskRun = {
+  id: string;
+  backgroundTaskId: string;
+  taskRunId: string | null;
+  scheduledAt: string;
+  triggeredAt: string | null;
+  status: 'pending' | 'fired' | 'skipped' | 'failed';
+  skipReason: string | null;
+};
+
+export type TaskDetail = {
+  threadId: string;
+  taskId: string | null;
+  thread: TaskThread;
+  backgroundTask: BackgroundTask | null;
+  lastRunId: string | null;
+  runHistory: TaskRun[];
+  recentEvents: TaskEvent[];
+  schedulerRegistered: boolean;
+};
+
+export type UpdateBackgroundTaskRequest = {
+  taskId: string;
+  patch: Partial<BackgroundTaskPreviewRequest>;
+  reason: string;
+};
+
+export type TaskUpdateEvent =
+  | { kind: 'task_created'; taskId: string }
+  | { kind: 'task_status_changed'; taskId: string; status: TaskStatus }
+  | { kind: 'task_run_fired'; taskId: string; runId: string }
+  | { kind: 'thread_promoted'; threadId: string; reason: string }
+  | { kind: 'scheduler_health_changed'; healthy: boolean };
+
+export type SchedulerStatus = {
+  running: boolean;
+  registeredTaskCount: number;
+  nextFireAt: string | null;
+  recentSkippedCount: number;
+  lastError: string | null;
 };
 
 export type BackgroundTaskSummary = {
