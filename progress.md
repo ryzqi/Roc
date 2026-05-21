@@ -17,3 +17,9 @@
 - `pnpm test tests/main/task-cron-parser.test.ts tests/main/task-scheduler-service.test.ts` passed with 12 tests.
 - `pnpm test tests/main/database-indexes.test.ts tests/main/app-services.tasks.test.ts tests/main/task-service-threads.test.ts tests/main/task-cron-parser.test.ts tests/main/task-scheduler-service.test.ts tests/main/app-services.test.ts` passed with 31 tests.
 - `pnpm typecheck` passed.
+- Phase 2 committed as `d694af2 feat(tasks): add background task scheduler`.
+- Phase 3 RED/GREEN continued from prior session: added `background-task-tools.ts`, background task approval side effects, scheduler attach/refresh hooks, and always-on interrupt policy for background task tools.
+- `pnpm test tests/main/background-task-tools.test.ts tests/main/task-scheduler-service.test.ts tests/main/app-services.tasks.test.ts tests/main/deep-agent-runtime-service.test.ts` passed with 71 tests.
+- `pnpm typecheck` passed.
+- `pnpm test tests/main/background-task-tools.test.ts tests/main/deep-agent-tools.test.ts tests/main/deep-agent-runtime-service.test.ts tests/main/app-services.provider.test.ts` passed with 88 tests.
+- `git diff --check` passed; only CRLF normalization warnings were reported by Git.

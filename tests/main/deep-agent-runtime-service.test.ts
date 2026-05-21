@@ -52,7 +52,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
 }
 
   function createRuntime(): DeepAgentRuntimeService {
-    return new DeepAgentRuntimeService(
+    const runtime = new DeepAgentRuntimeService(
       services.langChainModelFactory,
       services.taskService,
       services.databaseService,
@@ -68,6 +68,8 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
         append: vi.fn()
       } as never
     );
+    runtime.attachScheduler(services.taskSchedulerService);
+    return runtime;
   }
 
 function waitForEvent(
@@ -1236,7 +1238,14 @@ describe('DeepAgentRuntimeService', () => {
     const webSearchTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_search');
     const webReadTool = createAgentCall?.tools?.find((tool) => tool.name === 'web_read');
 
-    expect(toolNames).toEqual(['web_read', 'delete_file', 'web_search']);
+    expect(toolNames).toEqual([
+      'web_read',
+      'delete_file',
+      'propose_background_task',
+      'update_background_task',
+      'cancel_background_task',
+      'web_search'
+    ]);
     expect(toolNames).not.toContain('terminal_command');
     expect(toolNames).not.toContain('memory_search');
     expect(toolNames).not.toContain('memory_get');
@@ -2141,6 +2150,15 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toMatchObject({
+      propose_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
+      },
       delete_file: {
         allowedDecisions: ['approve', 'edit', 'reject']
       }
@@ -2356,6 +2374,15 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toEqual({
+      propose_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
+      },
       delete_file: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },

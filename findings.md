@@ -36,3 +36,12 @@
 - `LifecycleService.resumeBackgroundExecution()` recomputes future cron runs from the current time; Electron `powerMonitor` resume still performs missed-run catch-up.
 - Once tasks are marked `completed` after being fired once. The real agent run lifecycle remains owned by `DeepAgentRuntimeService`.
 - Official Electron docs confirm `powerMonitor` has a `resume` event; main process now forwards it to scheduler catch-up.
+
+## Phase 3 Decisions
+
+- Added `propose_background_task`, `update_background_task`, and `cancel_background_task` as Deep Agents structured tools.
+- Tool invocation only produces structured approval payloads; database writes happen during HITL resume after approve/edit.
+- `propose_background_task` and `update_background_task` allow approve/edit/reject; `cancel_background_task` allows approve/reject.
+- Background task tools always require interrupt approval, including `fully_automatic` mode.
+- `DeepAgentRuntimeService` applies background task side effects before resuming LangGraph and returns the resulting task operation payload as the edited action args.
+- `TaskSchedulerService.refreshTask()` clears old timers before registering updated schedule definitions.

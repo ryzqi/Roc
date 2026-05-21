@@ -26,6 +26,11 @@ export class AgentService {
   ];
 
   private static readonly MCP_ALLOWED_DECISIONS: ReadonlyArray<InterruptDecisionType> = ['approve', 'reject'];
+  private static readonly BACKGROUND_TASK_ALLOWED_DECISIONS: ReadonlyArray<InterruptDecisionType> = [
+    'approve',
+    'edit',
+    'reject'
+  ];
 
   constructor(
     private readonly configService: ConfigService,
@@ -121,7 +126,15 @@ export class AgentService {
     const webReadCard = this.createWebReadCard();
     const executeCard = this.createExecuteCard();
     const deleteFileCard = this.createDeleteFileCard(approvalMode);
-    const toolCards = [executeCard, webReadCard, deleteFileCard, ...selectedMcpCards];
+    const toolCards = [
+      executeCard,
+      webReadCard,
+      deleteFileCard,
+      this.createBackgroundTaskCard('propose_background_task', '提议创建后台或定时任务。', approvalMode),
+      this.createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', approvalMode),
+      this.createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', approvalMode),
+      ...selectedMcpCards
+    ];
 
     return {
       runnable: false,
@@ -270,6 +283,25 @@ export class AgentService {
     };
   }
 
+  private createBackgroundTaskCard(name: string, description: string, approvalMode: ApprovalMode): AgentCapabilityCard {
+    return {
+      id: `builtin:${name}`,
+      name,
+      capabilityType: 'terminal_tool',
+      description,
+      requiredInput: 'background task structured request',
+      scope: 'app',
+      dependencies: ['TaskService', 'TaskSchedulerService'],
+      sideEffects: ['background_task_change_request'],
+      requiresApproval: true,
+      supportsLongTermGrant: false,
+      revokeGrantHint: '后台任务创建、修改和取消始终需要本次审批。',
+      riskLevel: 'high',
+      auditCategory: 'background_task',
+      untrustedContext: false
+    };
+  }
+
   private createSubagents(): AgentSubagentPreview[] {
     return [
       {
@@ -294,13 +326,22 @@ export class AgentService {
   }
 
   private createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): AgentInterruptPolicy {
-    if (approvalMode === 'fully_automatic') {
-      return {};
-    }
     const policy: AgentInterruptPolicy = {
-      delete_file: {
-        allowedDecisions: [...AgentService.DELETE_FILE_ALLOWED_DECISIONS]
+      propose_background_task: {
+        allowedDecisions: [...AgentService.BACKGROUND_TASK_ALLOWED_DECISIONS]
+      },
+      update_background_task: {
+        allowedDecisions: [...AgentService.BACKGROUND_TASK_ALLOWED_DECISIONS]
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
       }
+    };
+    if (approvalMode === 'fully_automatic') {
+      return policy;
+    }
+    policy.delete_file = {
+      allowedDecisions: [...AgentService.DELETE_FILE_ALLOWED_DECISIONS]
     };
     for (const toolName of mcpToolNames) {
       policy[toolName] = {

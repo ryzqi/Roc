@@ -4,8 +4,11 @@ import type { AgentService } from '../agent-service';
 import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
 import type { RocPaths } from '../paths';
+import type { TaskSchedulerService } from '../task-scheduler-service';
+import type { TaskService } from '../task-service';
 import type { WebReadService } from '../web-read-service';
 import type { WorkspaceService } from '../workspace-service';
+import { createBackgroundTaskTools } from './background-task-tools';
 import { createUsageAccumulator, type ProviderUsageAccumulator } from './stream-consumers';
 import { buildDeepAgent } from './agent-builder';
 import { createBackend, type RocCompositeBackend } from './backend';
@@ -37,6 +40,8 @@ export async function createDeepAgentSession(input: {
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
   store: BaseStore;
+  taskSchedulerService: TaskSchedulerService;
+  taskService: TaskService;
   webReadService: WebReadService;
   workspaceService: WorkspaceService;
 }): Promise<DeepAgentSession> {
@@ -53,6 +58,8 @@ export async function createDeepAgentSession(input: {
     enabledCapabilities: input.context.enabledCapabilities,
     fileService: input.fileService,
     mcpService: input.mcpService,
+    taskSchedulerService: input.taskSchedulerService,
+    taskService: input.taskService,
     webReadService: input.webReadService
   });
   const runtimeBackend = createBackend({
@@ -105,6 +112,8 @@ async function createRunTools(input: {
   enabledCapabilities: RunExecutionContext['enabledCapabilities'];
   fileService: FileService;
   mcpService: McpService;
+  taskSchedulerService: TaskSchedulerService;
+  taskService: TaskService;
   webReadService: WebReadService;
 }): Promise<{
   tools: ClientTool[];
@@ -112,7 +121,11 @@ async function createRunTools(input: {
 }> {
   const webReadTool = tools.createWebReadTool(input.webReadService);
   const deleteFileTool = tools.createDeleteFileTool(input.fileService);
-  const runTools: ClientTool[] = [webReadTool, deleteFileTool];
+  const backgroundTaskTools = createBackgroundTaskTools({
+    taskService: input.taskService,
+    schedulerService: input.taskSchedulerService
+  });
+  const runTools: ClientTool[] = [webReadTool, deleteFileTool, ...backgroundTaskTools];
   const webSearchTool = await tools.createWebSearchTool({
     mcpService: input.mcpService,
     enabledCapabilities: input.enabledCapabilities,

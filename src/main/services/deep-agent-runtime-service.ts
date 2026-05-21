@@ -23,10 +23,12 @@ import type { McpService } from './mcp-service';
 import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
 import type { ShellExecutionService } from './shell-execution-service';
+import type { TaskSchedulerService } from './task-scheduler-service';
 import type { TaskService } from './task-service';
 import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
 import { executeWithProviderRequestRetry, isRetryableProviderRequestFailure } from './provider-request-retry';
+import { applyBackgroundTaskToolDecision } from './deep-agent/background-task-tools';
 import {
   createDeepAgentSession,
   errorMapping,
@@ -53,6 +55,7 @@ export class DeepAgentRuntimeService {
   private readonly activeRuns = new Map<string, ActiveRun>();
   private checkpointer: MemorySaver | SqliteSaver | null = null;
   private readonly store: BaseStore;
+  private taskSchedulerService: TaskSchedulerService | null = null;
   private readonly pendingInterrupts = new Map<
     string,
     {
@@ -76,6 +79,10 @@ export class DeepAgentRuntimeService {
     private readonly logService: LogService
   ) {
     this.store = new SqliteLangGraphStore(databaseService);
+  }
+
+  attachScheduler(taskSchedulerService: TaskSchedulerService): void {
+    this.taskSchedulerService = taskSchedulerService;
   }
 
   private getOrCreateCheckpointer(): MemorySaver | SqliteSaver {
@@ -338,6 +345,8 @@ export class DeepAgentRuntimeService {
           paths: this.paths,
           shellExecutionService: this.taskBoundShellExecutionService(context),
           store: this.store,
+          taskSchedulerService: this.requireTaskSchedulerService(),
+          taskService: this.taskService,
           webReadService: this.webReadService,
           workspaceService: this.workspaceService
         });
@@ -399,6 +408,8 @@ export class DeepAgentRuntimeService {
       paths: this.paths,
       shellExecutionService: this.taskBoundShellExecutionService(context),
       store: this.store,
+      taskSchedulerService: this.requireTaskSchedulerService(),
+      taskService: this.taskService,
       webReadService: this.webReadService,
       workspaceService: this.workspaceService
     });
@@ -445,6 +456,13 @@ export class DeepAgentRuntimeService {
           runId: context.taskRun?.id ?? context.runId
         })
     };
+  }
+
+  private requireTaskSchedulerService(): TaskSchedulerService {
+    if (this.taskSchedulerService === null) {
+      throw new Error('TaskSchedulerService has not been attached.');
+    }
+    return this.taskSchedulerService;
   }
 
   private emitTodoEvent(runId: string, candidate: unknown): void {
@@ -587,6 +605,22 @@ export class DeepAgentRuntimeService {
           userAction: '请按审批卡允许的决策类型重新提交。'
         });
       }
+      if (this.isBackgroundTaskAction(actionRequest.name)) {
+        const result = applyBackgroundTaskToolDecision({
+          taskService: this.taskService,
+          schedulerService: this.requireTaskSchedulerService(),
+          actionName: actionRequest.name,
+          actionArgs: actionRequest.args,
+          decision
+        });
+        return {
+          ...decision,
+          editedAction: {
+            name: actionRequest.name,
+            args: result
+          }
+        };
+      }
       if (decision.type === 'edit') {
         const editedAction = Reflect.get(decision, 'editedAction');
         const editedActionName =
@@ -614,6 +648,12 @@ export class DeepAgentRuntimeService {
     const actionRequests = Reflect.get(value, 'actionRequests');
     const reviewConfigs = Reflect.get(value, 'reviewConfigs');
     return Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
+  }
+
+  private isBackgroundTaskAction(
+    name: string
+  ): name is 'propose_background_task' | 'update_background_task' | 'cancel_background_task' {
+    return name === 'propose_background_task' || name === 'update_background_task' || name === 'cancel_background_task';
   }
 
   private async consumeSessionStreams(

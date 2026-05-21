@@ -96,6 +96,15 @@ export class TaskSchedulerService {
     this.timers.set(task.id, timer);
   }
 
+  unregisterTask(taskId: string): void {
+    this.clearTimer(taskId);
+  }
+
+  refreshTask(task: BackgroundTask): void {
+    this.unregisterTask(task.id);
+    this.registerTask(task);
+  }
+
   async fire(taskId: string): Promise<void> {
     if (this.firingTaskIds.has(taskId)) {
       const task = this.findTask(taskId);

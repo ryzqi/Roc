@@ -236,6 +236,7 @@ export function createAppServices(
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
   const taskSchedulerService = new TaskSchedulerService(taskService, deepAgentRuntimeService);
+  deepAgentRuntimeService.attachScheduler(taskSchedulerService);
   lifecycleService.attachScheduler(taskSchedulerService);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);

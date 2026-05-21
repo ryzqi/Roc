@@ -140,7 +140,17 @@ describe('Roc foundation services providers', () => {
         sourceTool: 'write_todos',
         target: 'task_steps'
       },
-      interruptOn: {},
+      interruptOn: {
+        propose_background_task: {
+          allowedDecisions: ['approve', 'edit', 'reject']
+        },
+        update_background_task: {
+          allowedDecisions: ['approve', 'edit', 'reject']
+        },
+        cancel_background_task: {
+          allowedDecisions: ['approve', 'reject']
+        }
+      },
       reason: 'Roc 不在 preview 阶段实际装配 Deep Agents，本结果反映下一轮装配将使用的参数。'
     });
   });
@@ -982,9 +992,16 @@ describe('Roc foundation services providers', () => {
       ])
     );
     expect(preview.interruptOn).toMatchObject({
-      // fully_automatic 默认不挂 interrupt
+      propose_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
+      }
     });
-    expect(preview.interruptOn).toEqual({});
   });
 
   it('normalizes the Exa preset into a single web_search capability card', () => {
@@ -1028,7 +1045,17 @@ describe('Roc foundation services providers', () => {
         name: 'web_search_exa'
       })
     );
-    expect(preview.interruptOn).toEqual({});
+    expect(preview.interruptOn).toMatchObject({
+      propose_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
+      }
+    });
   });
 
   it('switches capability preview to default approval mode for MCP and delete_file only', () => {
@@ -1084,6 +1111,15 @@ describe('Roc foundation services providers', () => {
       })
     );
     expect(preview.interruptOn).toEqual({
+      propose_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'reject']
+      },
       delete_file: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },

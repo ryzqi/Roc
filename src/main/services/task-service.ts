@@ -12,7 +12,8 @@ import type {
   TaskEvent,
   TaskRun,
   TaskSnapshot,
-  TaskThread
+  TaskThread,
+  UpdateBackgroundTaskRequest
 } from '../../shared/types';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
@@ -208,6 +209,81 @@ export class TaskService {
       throw invalidTransition('后台任务当前状态不能取消。');
     }
     return this.transitionBackgroundTask(task, 'cancelled', 'background_task_cancelled');
+  }
+
+  updateBackgroundTask(request: UpdateBackgroundTaskRequest): BackgroundTask {
+    const task = requireBackgroundTask(this.database, request.taskId);
+    const nextGoal = request.patch.goal ?? task.goal;
+    const nextTrigger = request.patch.trigger ?? this.triggerFromBackgroundTask(task);
+    const nextWorkspacePath = request.patch.workspacePath ?? task.workspacePath;
+    const nextAllowedActions = request.patch.allowedActions ?? task.allowedActions;
+    const nextForbiddenActions = request.patch.forbiddenActions ?? task.forbiddenActions;
+    const preview = this.createBackgroundTaskPreview({
+      goal: nextGoal,
+      trigger: nextTrigger,
+      workspacePath: nextWorkspacePath,
+      allowedActions: nextAllowedActions,
+      forbiddenActions: nextForbiddenActions,
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const now = new Date().toISOString();
+
+    const transaction = this.database.db.transaction(() => {
+      this.database.db
+        .prepare(
+          `UPDATE background_tasks
+           SET goal = ?, scheduled = ?, trigger_type = ?, trigger_description = ?, next_run_at = ?, cron_expression = ?,
+               workspace_path = ?, allowed_actions_json = ?, forbidden_actions_json = ?, risk_level = ?,
+               requires_confirmation = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(
+          preview.goal,
+          preview.scheduled ? 1 : 0,
+          preview.trigger.type,
+          preview.trigger.description,
+          preview.nextRunAt,
+          preview.cronExpression,
+          preview.workspacePath,
+          JSON.stringify(preview.allowedActions),
+          JSON.stringify(preview.forbiddenActions),
+          preview.riskLevel,
+          preview.requiresConfirmation ? 1 : 0,
+          now,
+          task.id
+        );
+      this.database.db
+        .prepare('UPDATE task_threads SET title = ?, goal = ?, updated_at = ? WHERE id = ?')
+        .run(preview.goal.slice(0, 60), preview.goal, now, task.threadId);
+      this.recordEvent({
+        threadId: task.threadId,
+        runId: task.runId,
+        type: 'background_task_resumed',
+        payload: {
+          taskId: task.id,
+          reason: request.reason,
+          updated: true
+        }
+      });
+    });
+    transaction();
+
+    return {
+      ...task,
+      goal: preview.goal,
+      scheduled: preview.scheduled,
+      triggerType: preview.trigger.type,
+      triggerDescription: preview.trigger.description,
+      nextRunAt: preview.nextRunAt,
+      cronExpression: preview.cronExpression,
+      workspacePath: preview.workspacePath,
+      allowedActions: preview.allowedActions,
+      forbiddenActions: preview.forbiddenActions,
+      riskLevel: preview.riskLevel,
+      requiresConfirmation: preview.requiresConfirmation,
+      updatedAt: now
+    };
   }
 
   listBackgroundTasks(): BackgroundTask[] {
@@ -843,6 +919,34 @@ export class TaskService {
       ...task,
       status,
       updatedAt: now
+    };
+  }
+
+  private triggerFromBackgroundTask(task: BackgroundTask): BackgroundTaskPreviewRequest['trigger'] {
+    if (task.triggerType === 'manual') {
+      return {
+        type: 'manual',
+        description: task.triggerDescription
+      };
+    }
+    if (task.triggerType === 'once') {
+      if (task.nextRunAt === null) {
+        throw new Error(`Once background task ${task.id} is missing next_run_at.`);
+      }
+      return {
+        type: 'once',
+        description: task.triggerDescription,
+        nextRunAt: task.nextRunAt
+      };
+    }
+    if (task.nextRunAt === null || task.cronExpression === null) {
+      throw new Error(`Cron background task ${task.id} is missing schedule fields.`);
+    }
+    return {
+      type: 'cron',
+      description: task.triggerDescription,
+      cronExpression: task.cronExpression,
+      nextRunAt: task.nextRunAt
     };
   }
 }
