@@ -127,6 +127,48 @@ describe('Roc foundation services tasks', () => {
     });
   });
 
+  it('stages background task edit context for the next chat turn and records a visible system message', () => {
+    const preview = context.services.taskService.createBackgroundTaskPreview({
+      goal: '修改每天检查项目测试状态',
+      trigger: {
+        type: 'cron',
+        description: '每天 09:00',
+        cronExpression: '0 9 * * *',
+        nextRunAt: '2026-04-29T01:00:00.000Z'
+      },
+      workspacePath: context.root,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: ['git push'],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const task = context.services.taskService.createBackgroundTask(preview);
+
+    const opened = context.services.taskService.openBackgroundTaskInChat(task.id);
+    const messages = context.services.taskService.listThreadMessages(task.threadId);
+    const firstContext = context.services.taskService.takePendingThreadContext(task.threadId);
+    const secondContext = context.services.taskService.takePendingThreadContext(task.threadId);
+
+    expect(opened).toEqual({
+      threadId: task.threadId
+    });
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message',
+          payload: expect.objectContaining({
+            role: 'assistant',
+            content: expect.stringContaining(task.id)
+          })
+        })
+      ])
+    );
+    expect(firstContext).toContain(task.id);
+    expect(firstContext).toContain('"goal": "修改每天检查项目测试状态"');
+    expect(firstContext).toContain('update_background_task');
+    expect(secondContext).toBeNull();
+  });
+
   it('generates redacted diagnostic packages with task, RTK and performance evidence', () => {
     for (let index = 0; index < 505; index += 1) {
       context.services.performanceObserverService.record({

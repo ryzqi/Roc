@@ -164,6 +164,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksCreateBackgroundTask, (_event, preview) =>
     wrapIpc(() => {
       const task = services.taskService.createBackgroundTask(preview);
+      services.taskSchedulerService.registerTask(task);
       controls.broadcastTaskUpdated();
       return task;
     })
@@ -171,6 +172,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksPauseBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.pauseBackgroundTask(id);
+      services.taskSchedulerService.unregisterTask(task.id);
       controls.broadcastTaskUpdated();
       return task;
     })
@@ -178,6 +180,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksResumeBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.resumeBackgroundTask(id);
+      services.taskSchedulerService.registerTask(task);
       controls.broadcastTaskUpdated();
       return task;
     })

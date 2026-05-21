@@ -334,6 +334,69 @@ describe('DeepAgentRuntimeService', () => {
     expect(JSON.stringify(samples)).not.toContain('不要把这段 prompt 写入性能指标');
   });
 
+  it('prepends pending thread context to the next task turn input once', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['已更新'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    const preview = services.taskService.createBackgroundTaskPreview({
+      goal: '更新后台任务配置',
+      trigger: {
+        type: 'once',
+        description: '明天一次',
+        nextRunAt: '2026-05-22T01:00:00.000Z'
+      },
+      workspacePath: root,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const task = services.taskService.createBackgroundTask(preview);
+    services.taskService.openBackgroundTaskInChat(task.id);
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '把它改成每天 10 点运行',
+      mode: 'task',
+      threadId: task.threadId,
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const startedInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0]?.messages?.[0]?.content;
+    expect(typeof startedInput).toBe('string');
+    expect(String(startedInput)).toContain(task.id);
+    expect(String(startedInput)).toContain('"goal": "更新后台任务配置"');
+    expect(String(startedInput)).toContain('把它改成每天 10 点运行');
+
+    mocked.streamEventsMock.mockClear();
+    const completedAgain = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '再次提交',
+      mode: 'task',
+      threadId: task.threadId,
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completedAgain;
+
+    const secondInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0]?.messages?.[0]?.content;
+    expect(String(secondInput)).toBe('再次提交');
+  });
+
   it('batches high-frequency assistant deltas before writing task events', async () => {
     const tokens = Array.from({ length: 100 }, (_, index) => `token-${index} `);
     mocked.streamEventsMock.mockResolvedValue({

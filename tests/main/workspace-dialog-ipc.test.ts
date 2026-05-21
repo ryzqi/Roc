@@ -227,8 +227,65 @@ describe('workspace dialog IPC', () => {
       lastError: null
     });
     const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue(null);
+    const registerTaskSpy = vi.spyOn(services.taskSchedulerService, 'registerTask').mockImplementation(() => {});
+    const unregisterTaskSpy = vi.spyOn(services.taskSchedulerService, 'unregisterTask').mockImplementation(() => {});
+    const createdTask = {
+      id: 'task_created',
+      threadId: 'thread_created',
+      runId: 'run_created',
+      goal: '新建后台任务',
+      status: 'running',
+      scheduled: true,
+      triggerType: 'once',
+      triggerDescription: '一次',
+      nextRunAt: '2026-05-22T01:00:00.000Z',
+      cronExpression: null,
+      workspacePath: workspaceRoot,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      riskLevel: 'medium',
+      requiresConfirmation: false,
+      lastRunAt: null,
+      lastRunStatus: null,
+      runCount: 0,
+      createdAt: '2026-05-22T00:00:00.000Z',
+      updatedAt: '2026-05-22T00:00:00.000Z'
+    };
+    const pausedTask = {
+      ...createdTask,
+      id: 'task_paused',
+      status: 'paused'
+    };
+    const resumedTask = {
+      ...createdTask,
+      id: 'task_resumed',
+      status: 'running'
+    };
+    const createBackgroundTaskSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & { createBackgroundTask: (preview: unknown) => unknown },
+        'createBackgroundTask'
+      )
+      .mockReturnValue(createdTask);
+    const pauseBackgroundTaskSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & { pauseBackgroundTask: (taskId: string) => unknown },
+        'pauseBackgroundTask'
+      )
+      .mockReturnValue(pausedTask);
+    const resumeBackgroundTaskSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & { resumeBackgroundTask: (taskId: string) => unknown },
+        'resumeBackgroundTask'
+      )
+      .mockReturnValue(resumedTask);
 
     const handlers = [
+      ipcChannels.tasksCreateBackgroundTask,
+      ipcChannels.tasksPauseBackgroundTask,
+      ipcChannels.tasksResumeBackgroundTask,
       ipcChannels.tasksGetActiveTasks,
       ipcChannels.tasksGetTaskDetail,
       ipcChannels.tasksListScheduledRuns,
@@ -243,6 +300,11 @@ describe('workspace dialog IPC', () => {
       expect(electronMock.handlers.has(channel)).toBe(true);
     }
 
+    await electronMock.handlers.get(ipcChannels.tasksCreateBackgroundTask)?.({}, {
+      goal: '新建后台任务'
+    });
+    await electronMock.handlers.get(ipcChannels.tasksPauseBackgroundTask)?.({}, 'task_paused');
+    await electronMock.handlers.get(ipcChannels.tasksResumeBackgroundTask)?.({}, 'task_resumed');
     await electronMock.handlers.get(ipcChannels.tasksGetActiveTasks)?.({});
     await electronMock.handlers.get(ipcChannels.tasksGetTaskDetail)?.({}, { taskId: 'task_1' });
     await electronMock.handlers.get(ipcChannels.tasksListScheduledRuns)?.({}, { taskId: 'task_1', limit: 5 });
@@ -257,6 +319,14 @@ describe('workspace dialog IPC', () => {
     await electronMock.handlers.get(ipcChannels.tasksPromoteThread)?.({}, { threadId: 'thread_1', reason: 'manual' });
     await electronMock.handlers.get(ipcChannels.tasksGetSchedulerStatus)?.({});
 
+    expect(createBackgroundTaskSpy).toHaveBeenCalledWith({
+      goal: '新建后台任务'
+    });
+    expect(registerTaskSpy).toHaveBeenCalledWith(createdTask);
+    expect(pauseBackgroundTaskSpy).toHaveBeenCalledWith('task_paused');
+    expect(unregisterTaskSpy).toHaveBeenCalledWith('task_paused');
+    expect(resumeBackgroundTaskSpy).toHaveBeenCalledWith('task_resumed');
+    expect(registerTaskSpy).toHaveBeenCalledWith(resumedTask);
     expect(getActiveTasksSpy).toHaveBeenCalled();
     expect(getTaskDetailSpy).toHaveBeenCalledWith({
       taskId: 'task_1',

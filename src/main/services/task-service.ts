@@ -33,6 +33,8 @@ import {
 import { evaluateLongRunningCandidate, type LongRunningPromotionPayload } from './task/long-running-evaluator';
 
 export class TaskService {
+  private readonly pendingThreadContexts = new Map<string, string>();
+
   constructor(
     private readonly database: DatabaseService,
     private readonly configService: ConfigService
@@ -467,18 +469,38 @@ export class TaskService {
 
   openBackgroundTaskInChat(taskId: string): { threadId: string } {
     const task = requireBackgroundTask(this.database, taskId);
+    const contextMessage = [
+      `[系统] 用户正在请求修改后台任务 ${task.id}。当前定义：`,
+      JSON.stringify(task, null, 2),
+      '你可以调用 update_background_task 工具完成修改。'
+    ].join('\n');
+    this.pendingThreadContexts.set(task.threadId, contextMessage);
     this.recordEvent({
       threadId: task.threadId,
       runId: task.runId,
-      type: 'context_manifest',
+      type: 'message',
       payload: {
-        kind: 'background_task_edit_context',
-        task
+        role: 'assistant',
+        content: contextMessage
       }
     });
     return {
       threadId: task.threadId
     };
+  }
+
+  takePendingThreadContext(threadId: string): string | null {
+    const normalizedThreadId = requireText(
+      threadId,
+      'task_thread_id_empty',
+      '任务会话 ID 不能为空。',
+      '请选择一个有效的会话后再继续发送。'
+    );
+    const pending = this.pendingThreadContexts.get(normalizedThreadId) ?? null;
+    if (pending !== null) {
+      this.pendingThreadContexts.delete(normalizedThreadId);
+    }
+    return pending;
   }
 
   promoteThread(input: { threadId: string; reason: 'manual' }): TaskThread {

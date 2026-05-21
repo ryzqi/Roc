@@ -124,7 +124,10 @@ export class DeepAgentRuntimeService {
       streaming: true
     });
     const createdAt = new Date().toISOString();
-    const taskRun = this.createTaskRunIfNeeded(request, input, modelHandle.modelId);
+    const preparedInput = request.mode === 'task' && typeof request.threadId === 'string'
+      ? this.prependPendingThreadContext(request.threadId, input)
+      : input;
+    const taskRun = this.createTaskRunIfNeeded(request, preparedInput, modelHandle.modelId);
     const threadId = request.mode === 'task' && taskRun !== null ? taskRun.threadId : prompt.resolveThreadId(request.threadId);
     const runId = request.mode === 'task' && taskRun !== null ? taskRun.id : `chat_${randomUUID()}`;
     const abortController = new AbortController();
@@ -152,7 +155,7 @@ export class DeepAgentRuntimeService {
 
     const context: RunExecutionContext = {
       ...activeRun,
-      input,
+      input: preparedInput,
       startedAtMs: Date.now()
     };
     this.scheduleLongRunningEvaluation(taskRun);
@@ -329,6 +332,14 @@ export class DeepAgentRuntimeService {
       preview: capabilityPreview
     });
     return run;
+  }
+
+  private prependPendingThreadContext(threadId: string, input: string): string {
+    const pendingContext = this.taskService.takePendingThreadContext(threadId);
+    if (pendingContext === null) {
+      return input;
+    }
+    return `${pendingContext}\n\n[用户最新请求]\n${input}`;
   }
 
   private async executeRun(context: RunExecutionContext): Promise<void> {
