@@ -19,6 +19,7 @@ import { SecretService, type SafeStorageBackend } from './secret-service';
 import { ShellExecutionService } from './shell-execution-service';
 import { SkillService } from './skill-service';
 import { TaskService } from './task-service';
+import { TaskSchedulerService } from './task-scheduler-service';
 import { TerminalSessionService } from './terminal-session-service';
 import { WebReadService } from './web-read-service';
 import { WorkspaceService } from './workspace-service';
@@ -30,6 +31,7 @@ export type AppServices = {
   databaseService: DatabaseService;
   memoryService: MemoryService;
   taskService: TaskService;
+  taskSchedulerService: TaskSchedulerService;
   lifecycleService: LifecycleService;
   diagnosticsService: DiagnosticsService;
   mcpService: McpService;
@@ -69,6 +71,7 @@ export class AppService {
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
     private readonly taskService: TaskService,
+    private readonly taskSchedulerService: TaskSchedulerService,
     private readonly lifecycleService: LifecycleService,
     private readonly diagnosticsService: DiagnosticsService,
     private readonly mcpService: McpService,
@@ -105,7 +108,13 @@ export class AppService {
 
   initializeDeferred(): void {
     this.memoryService.initialize();
+    this.taskSchedulerService.start();
     this.logService.append({ level: 'info', message: 'Roc deferred services initialized.' });
+  }
+
+  shutdown(): void {
+    this.taskSchedulerService.stop();
+    this.databaseService.close();
   }
 
   getStatus(): AppStatus {
@@ -153,6 +162,7 @@ export class AppService {
     return {
       memoryService: this.memoryService,
       taskService: this.taskService,
+      taskSchedulerService: this.taskSchedulerService,
       lifecycleService: this.lifecycleService,
       diagnosticsService: this.diagnosticsService,
       mcpService: this.mcpService,
@@ -225,6 +235,8 @@ export function createAppServices(
     logService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
+  const taskSchedulerService = new TaskSchedulerService(taskService, deepAgentRuntimeService);
+  lifecycleService.attachScheduler(taskSchedulerService);
   const gitService = new GitService(workspaceService);
   const terminalSessionService = new TerminalSessionService(paths, workspaceService);
   const appService = new AppService(
@@ -233,6 +245,7 @@ export function createAppServices(
     databaseService,
     memoryService,
     taskService,
+    taskSchedulerService,
     lifecycleService,
     diagnosticsService,
     mcpService,
@@ -260,6 +273,7 @@ export function createAppServices(
     databaseService,
     memoryService,
     taskService,
+    taskSchedulerService,
     lifecycleService,
     diagnosticsService,
     mcpService,

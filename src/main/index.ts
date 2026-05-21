@@ -1,5 +1,5 @@
 import './proxy-runtime';
-import { BrowserWindow, Menu, app, protocol, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, app, powerMonitor, protocol, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
@@ -187,6 +187,9 @@ async function createWindow(): Promise<void> {
     if (event.runId.startsWith('run_')) {
       broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
     }
+  });
+  powerMonitor.on('resume', () => {
+    services.taskSchedulerService.handlePowerResume();
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -29,7 +29,7 @@ export function initializeAppServicesTest(options: { skipInitialize?: boolean } 
 }
 
 export function cleanupAppServicesTest(input: AppServicesTestContext): void {
-  input.services.databaseService.close();
+  input.services.appService.shutdown();
   rmSync(input.root, { recursive: true, force: true });
 }
 

@@ -27,3 +27,12 @@
 - No legacy `schedule` trigger alias is retained. Tests and smoke seed data now use `cron`.
 - `manual` triggers no longer carry `nextRunAt`; scheduled triggers are `once` or `cron`.
 - Schema v2 is additive via `CREATE TABLE IF NOT EXISTS` plus `ensureColumn()` for upgraded databases.
+
+## Phase 2 Decisions
+
+- `TaskSchedulerService` owns timers, catch-up, suspend/resume, and firing guards.
+- Scheduler SQL writes are routed through `TaskService` methods to keep database ownership local.
+- `LifecycleService.pauseBackgroundExecution()` suspends timers without changing task database status.
+- `LifecycleService.resumeBackgroundExecution()` recomputes future cron runs from the current time; Electron `powerMonitor` resume still performs missed-run catch-up.
+- Once tasks are marked `completed` after being fired once. The real agent run lifecycle remains owned by `DeepAgentRuntimeService`.
+- Official Electron docs confirm `powerMonitor` has a `resume` event; main process now forwards it to scheduler catch-up.

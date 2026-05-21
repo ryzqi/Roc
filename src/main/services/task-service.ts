@@ -8,6 +8,7 @@ import type {
   BackgroundTaskSummary,
   EnabledCapabilities,
   ProviderExecutionResult,
+  ScheduledTaskRun,
   TaskEvent,
   TaskRun,
   TaskSnapshot,
@@ -245,6 +246,132 @@ export class TaskService {
       pendingConfirmation: rows.filter((row) => row.status === 'pending_confirmation').length,
       nextRunAt: futureRuns.length === 0 ? null : futureRuns[0]
     };
+  }
+
+  listSchedulableBackgroundTasks(): BackgroundTask[] {
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+                trigger_type, cron_expression,
+                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
+         FROM background_tasks
+         WHERE scheduled = 1
+           AND status IN ('running', 'pending_confirmation', 'paused')
+         ORDER BY next_run_at ASC, updated_at DESC`
+      )
+      .all() as BackgroundTaskRow[];
+
+    return rows.map((row) => backgroundTaskFromRow(row));
+  }
+
+  recordScheduledTaskRun(input: {
+    backgroundTaskId: string;
+    scheduledAt: string;
+    status: ScheduledTaskRun['status'];
+    taskRunId?: string | null;
+    triggeredAt?: string | null;
+    skipReason?: string | null;
+  }): ScheduledTaskRun {
+    const now = new Date().toISOString();
+    const scheduledRun: ScheduledTaskRun = {
+      id: `scheduled_${randomUUID()}`,
+      backgroundTaskId: input.backgroundTaskId,
+      taskRunId: input.taskRunId ?? null,
+      scheduledAt: input.scheduledAt,
+      triggeredAt: input.triggeredAt ?? now,
+      status: input.status,
+      skipReason: input.skipReason ?? null
+    };
+
+    this.database.db
+      .prepare(
+        `INSERT INTO scheduled_task_runs
+         (id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        scheduledRun.id,
+        scheduledRun.backgroundTaskId,
+        scheduledRun.taskRunId,
+        scheduledRun.scheduledAt,
+        scheduledRun.triggeredAt,
+        scheduledRun.status,
+        scheduledRun.skipReason
+      );
+
+    return scheduledRun;
+  }
+
+  countRecentSkippedScheduledRuns(since: string): number {
+    const row = this.database.db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM scheduled_task_runs
+         WHERE status = 'skipped'
+           AND scheduled_at >= ?`
+      )
+      .get(since) as { count: number };
+    return row.count;
+  }
+
+  markBackgroundTaskFired(input: { taskId: string; runId: string; firedAt: string; nextRunAt: string | null }): BackgroundTask {
+    const task = requireBackgroundTask(this.database, input.taskId);
+    const status = task.triggerType === 'once' ? 'completed' : task.status;
+    const now = new Date().toISOString();
+
+    this.database.db
+      .prepare(
+        `UPDATE background_tasks
+         SET status = ?, last_run_at = ?, last_run_status = ?, run_count = run_count + 1, next_run_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(status, input.firedAt, 'success', input.nextRunAt, now, input.taskId);
+    this.database.db
+      .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+      .run(status, now, task.threadId);
+
+    return {
+      ...task,
+      status,
+      nextRunAt: input.nextRunAt,
+      lastRunAt: input.firedAt,
+      lastRunStatus: 'success',
+      runCount: task.runCount + 1,
+      updatedAt: now
+    };
+  }
+
+  updateBackgroundTaskNextRunAt(taskId: string, nextRunAt: string | null): BackgroundTask {
+    const task = requireBackgroundTask(this.database, taskId);
+    const now = new Date().toISOString();
+    this.database.db
+      .prepare('UPDATE background_tasks SET next_run_at = ?, updated_at = ? WHERE id = ?')
+      .run(nextRunAt, now, taskId);
+    return {
+      ...task,
+      nextRunAt,
+      updatedAt: now
+    };
+  }
+
+  pauseBackgroundTaskForScheduler(input: { taskId: string; runId: string; reason: string }): BackgroundTask {
+    const task = requireBackgroundTask(this.database, input.taskId);
+    if (task.status === 'paused') {
+      return task;
+    }
+    const paused = this.transitionBackgroundTask(task, 'paused', 'background_task_paused');
+    this.recordEvent({
+      threadId: task.threadId,
+      runId: task.runId,
+      type: 'diagnostic',
+      payload: {
+        code: input.reason,
+        taskId: input.taskId,
+        scheduledRunId: input.runId
+      }
+    });
+    return paused;
   }
 
   createTaskRun(input: {
