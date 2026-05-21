@@ -29,3 +29,12 @@
 - Phase 5 verification: pnpm test tests/main/task-long-running-evaluator.test.ts tests/main/app-services.test.ts tests/renderer/workspace-surfaces.test.ts tests/main/config-service.test.ts passed as part of the 11-file targeted run with 55 tests.
 - pnpm typecheck passed after Phase 5 changes.
 - node --check tests\\smoke\\electron-smoke.mjs && node --check tests\\smoke\\lib\\ipc.mjs passed after updating smoke selectors/API checks for the active task workbench and diagnostics checks.
+- Final fresh targeted verification passed: `pnpm vitest run tests/main/database-indexes.test.ts tests/main/task-scheduler-service.test.ts tests/main/task-cron-parser.test.ts tests/main/task-long-running-evaluator.test.ts tests/main/background-task-tools.test.ts tests/main/task-service-active-tasks.test.ts tests/main/app-services.tasks.test.ts tests/main/app-services.test.ts tests/main/workspace-dialog-ipc.test.ts tests/renderer/task-view-model.test.ts tests/renderer/task-surface-data.test.ts tests/renderer/tasks-view.test.ts tests/renderer/chat-transcript.test.ts tests/renderer/history-sidebar.test.ts tests/renderer/workspace-surfaces.test.ts` reported 15 files and 77 tests passed.
+- `pnpm test` reported 70 files and 444 tests passed. It printed a `node-pty` `AttachConsole failed` stderr message, but Vitest exited 0 and reported all tests passed.
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
+- `pnpm smoke:electron` passed against the dist target.
+- `pnpm package:dir` passed and produced `release\win-unpacked\Roc.exe`.
+- `$env:ROC_SMOKE_TARGET='packaged'; pnpm smoke:electron` passed against the packaged executable; `.artifacts\wave1\electron-smoke.json` records `"passed": true` and `"kind": "packaged-exe"`.
+- `git diff --check` and `git diff --cached --check` passed.
+- Stop hook reported `Task incomplete (0/0 phases done)` because `task_plan.md` used only a markdown table. Added hook-compatible `### Phase` headings and `**Status:** complete` markers.

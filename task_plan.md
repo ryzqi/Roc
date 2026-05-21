@@ -24,6 +24,44 @@ Implement `任务工作台重构计划.md` in phases, preserving scope:
 | Phase 4: Workbench UI | complete | Renderer/task service IPC tests passed; `pnpm typecheck` passed |
 | Phase 5: Long-running promotion and Doctor | complete | Promotion/Doctor renderer tests passed; smoke scripts syntax checked |
 
+## Hook-Compatible Phase Status
+
+### Phase 0: Read plan and current code
+
+**Status:** complete
+
+**Verification:** `findings.md` records the source of truth, code reading notes, and implementation boundaries.
+
+### Phase 1: Data model and migration
+
+**Status:** complete
+
+**Verification:** `9084579 feat(tasks): add task workbench schema v2`; targeted database/task tests and `pnpm typecheck` passed.
+
+### Phase 2: Scheduler core
+
+**Status:** complete
+
+**Verification:** `d694af2 feat(tasks): add background task scheduler`; scheduler, cron, app-service tests and `pnpm typecheck` passed.
+
+### Phase 3: AI tools
+
+**Status:** complete
+
+**Verification:** `ec01a7b feat(tasks): add background task agent tools`; background-task tool/runtime tests and `pnpm typecheck` passed.
+
+### Phase 4: Workbench UI
+
+**Status:** complete
+
+**Verification:** `4431440 feat(tasks): complete task workbench refactor`; active task workbench renderer/IPC tests passed.
+
+### Phase 5: Long-running promotion and Doctor
+
+**Status:** complete
+
+**Verification:** `4431440 feat(tasks): complete task workbench refactor`; promotion/Doctor tests, `pnpm build`, `pnpm package:dir`, and packaged Electron smoke passed.
+
 ## Current Boundaries
 
 - No third-party cron library.
@@ -36,3 +74,4 @@ Implement `任务工作台重构计划.md` in phases, preserving scope:
 
 | Error | Attempt | Resolution |
 | --- | --- | --- |
+| planning hook reported `0/0 phases done` | Stop hook checked `task_plan.md` after implementation | Added hook-compatible `### Phase` headings with `**Status:** complete` markers while preserving the original phase table. |
