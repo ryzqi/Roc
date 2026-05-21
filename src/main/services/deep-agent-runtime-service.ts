@@ -511,6 +511,15 @@ export class DeepAgentRuntimeService {
   }
 
   private readPendingApproval(interrupts: readonly InterruptPayload[], runId: string): ChatPendingApproval {
+    if (interrupts.length > 1) {
+      throw new RocDomainError({
+        code: 'chat_interrupt_payload_unsupported',
+        message: '当前版本暂不支持同一轮运行同时返回多个顶层审批中断。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请调整本轮任务拆分方式后重试。'
+      });
+    }
     const interrupt = interrupts[0];
     if (interrupt === undefined) {
       throw new RocDomainError({
@@ -577,6 +586,22 @@ export class DeepAgentRuntimeService {
           retryable: false,
           userAction: '请按审批卡允许的决策类型重新提交。'
         });
+      }
+      if (decision.type === 'edit') {
+        const editedAction = Reflect.get(decision, 'editedAction');
+        const editedActionName =
+          typeof editedAction === 'object' && editedAction !== null
+            ? Reflect.get(editedAction, 'name')
+            : undefined;
+        if (editedActionName !== actionRequest.name) {
+          throw new RocDomainError({
+            code: 'chat_resume_edited_action_mismatch',
+            message: `审批动作 ${actionRequest.name} 只允许编辑参数，不允许改成 ${String(editedActionName ?? 'unknown')}。`,
+            category: 'validation',
+            retryable: false,
+            userAction: '请仅编辑当前审批动作的参数后重新提交。'
+          });
+        }
       }
       return decision;
     });

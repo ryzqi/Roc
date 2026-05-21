@@ -2654,6 +2654,150 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('rejects edit decisions that try to change the approved action name', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-edit-name-mismatch',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+
+    const runtime = createRuntime();
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行可编辑审批任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-edit-name-mismatch',
+        decisions: [
+          {
+            type: 'edit',
+            editedAction: {
+              name: 'web_search',
+              args: {
+                query: 'should be rejected'
+              }
+            }
+          } as unknown as import('../../src/shared/types').ChatResumeDecision
+        ]
+      })
+    ).rejects.toMatchObject({
+      code: 'chat_resume_edited_action_mismatch'
+    });
+  });
+
+  it('fails the run clearly when Deep Agents surfaces more than one top-level interrupt payload', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-first',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        },
+        {
+          interruptId: 'interrupt-second',
+          payload: {
+            actionRequests: [
+              {
+                name: 'web_search',
+                args: {
+                  query: 'roc multi interrupt'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'web_search',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+
+    const runtime = createRuntime();
+    const interrupted = vi.fn();
+    runtime.onRunEvent((event) => {
+      if (event.type === 'run_interrupted') {
+        interrupted(event);
+      }
+    });
+    const failed = waitForEvent(runtime, (event) => event.type === 'run_failed');
+    const started = await runtime.startRun({
+      input: '触发多个顶层审批中断',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const failure = await failed;
+
+    expect(started.runId).toBeTruthy();
+    expect(interrupted).not.toHaveBeenCalled();
+    expect(failure).toMatchObject({
+      type: 'run_failed',
+      runId: started.runId,
+      code: 'chat_interrupt_payload_unsupported'
+    });
+  });
+
   it('resumes an interrupted task run even after the in-memory active run context is gone', async () => {
     mocked.streamEventsMock
       .mockResolvedValueOnce({
