@@ -125,4 +125,160 @@ describe('loadTaskSurfaceData', () => {
       })
     });
   });
+
+  it('loads task detail and scheduled runs for the explicitly selected task id', async () => {
+    const getTaskDetail = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        threadId: 'thread-2',
+        taskId: 'task-2',
+        thread: {
+          id: 'thread-2',
+          kind: 'background',
+          title: '每周检查',
+          goal: '每周检查',
+          status: 'paused',
+          createdAt: '2026-05-21T00:00:00.000Z',
+          updatedAt: '2026-05-21T00:00:00.000Z'
+        },
+        backgroundTask: null,
+        lastRunId: null,
+        runHistory: [],
+        recentEvents: [],
+        schedulerRegistered: false
+      }
+    });
+    const listScheduledRuns = vi.fn().mockResolvedValue({
+      ok: true,
+      data: []
+    });
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          getActiveTasks: vi.fn().mockResolvedValue({
+            ok: true,
+            data: [
+              {
+                kind: 'background',
+                threadId: 'thread-1',
+                taskId: 'task-1',
+                title: '每日检查',
+                goal: '每日检查',
+                status: 'running',
+                trigger: null,
+                nextRunAt: null,
+                lastRunAt: null,
+                riskLevel: 'low',
+                workspacePath: 'F:\\Code\\Roc',
+                createdAt: '2026-05-21T00:00:00.000Z',
+                updatedAt: '2026-05-21T00:00:00.000Z'
+              },
+              {
+                kind: 'background',
+                threadId: 'thread-2',
+                taskId: 'task-2',
+                title: '每周检查',
+                goal: '每周检查',
+                status: 'paused',
+                trigger: null,
+                nextRunAt: null,
+                lastRunAt: null,
+                riskLevel: 'medium',
+                workspacePath: 'F:\\Code\\Roc',
+                createdAt: '2026-05-21T00:00:00.000Z',
+                updatedAt: '2026-05-21T00:00:00.000Z'
+              }
+            ]
+          }),
+          getTaskDetail,
+          listScheduledRuns,
+          getSchedulerStatus: vi.fn().mockResolvedValue({
+            ok: true,
+            data: {
+              running: true,
+              registeredTaskCount: 2,
+              nextFireAt: '2026-05-21T01:00:00.000Z',
+              recentSkippedCount: 0,
+              lastError: null
+            }
+          })
+        },
+        lifecycle: {
+          getTraySummary: vi.fn().mockResolvedValue({
+            ok: true,
+            data: {
+              residentEnabled: true,
+              backgroundPaused: false,
+              backgroundTasks: {
+                total: 2,
+                running: 1,
+                failed: 0,
+                pendingConfirmation: 0,
+                nextRunAt: null
+              },
+              nextRunAt: null,
+              updatedAt: '2026-05-21T00:00:00.000Z'
+            }
+          })
+        }
+      }
+    });
+
+    await loadTaskSurfaceData('task-2');
+
+    expect(getTaskDetail).toHaveBeenCalledWith({ taskId: 'task-2' });
+    expect(listScheduledRuns).toHaveBeenCalledWith({ taskId: 'task-2' });
+  });
+
+  it('skips task detail loading when the explicit selection is null', async () => {
+    const getTaskDetail = vi.fn();
+    const listScheduledRuns = vi.fn();
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          getActiveTasks: vi.fn().mockResolvedValue({
+            ok: true,
+            data: []
+          }),
+          getTaskDetail,
+          listScheduledRuns,
+          getSchedulerStatus: vi.fn().mockResolvedValue({
+            ok: true,
+            data: {
+              running: true,
+              registeredTaskCount: 0,
+              nextFireAt: null,
+              recentSkippedCount: 0,
+              lastError: null
+            }
+          })
+        },
+        lifecycle: {
+          getTraySummary: vi.fn().mockResolvedValue({
+            ok: true,
+            data: {
+              residentEnabled: true,
+              backgroundPaused: false,
+              backgroundTasks: {
+                total: 0,
+                running: 0,
+                failed: 0,
+                pendingConfirmation: 0,
+                nextRunAt: null
+              },
+              nextRunAt: null,
+              updatedAt: '2026-05-21T00:00:00.000Z'
+            }
+          })
+        }
+      }
+    });
+
+    const result = await loadTaskSurfaceData(null);
+
+    expect(getTaskDetail).not.toHaveBeenCalled();
+    expect(listScheduledRuns).not.toHaveBeenCalled();
+    expect(result.taskDetail).toBeNull();
+    expect(result.scheduledRuns).toEqual([]);
+  });
 });

@@ -85,6 +85,7 @@ export function App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [state, setState] = useState<LoadedState | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
@@ -118,7 +119,10 @@ export function App(): React.JSX.Element {
   });
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
-    const [taskSnapshot, taskSurfaceData] = await Promise.all([window.roc.tasks.getSnapshot(), loadTaskSurfaceData()]);
+    const [taskSnapshot, taskSurfaceData] = await Promise.all([
+      window.roc.tasks.getSnapshot(),
+      loadTaskSurfaceData(selectedTaskSurfaceTaskId)
+    ]);
     setState((current) =>
       current === null
         ? current
@@ -128,7 +132,7 @@ export function App(): React.JSX.Element {
             ...taskSurfaceData
           }
     );
-  }, []);
+  }, [selectedTaskSurfaceTaskId]);
 
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
@@ -275,6 +279,13 @@ export function App(): React.JSX.Element {
   }, []);
 
   const selectHistoryThread = useCallback((threadId: string): void => {
+    setActiveView('chat');
+    setSelectedThreadId(threadId);
+    setHistoryContextMenu(null);
+    setChatSelectionVersion((current) => current + 1);
+  }, []);
+
+  const navigateToTaskThread = useCallback((threadId: string): void => {
     setActiveView('chat');
     setSelectedThreadId(threadId);
     setHistoryContextMenu(null);
@@ -475,9 +486,16 @@ export function App(): React.JSX.Element {
     apply: useCallback((taskSurfaceData) => {
       setState((current) => (current === null ? current : { ...current, ...taskSurfaceData }));
     }, []),
-    cacheKey: state === null ? null : 'task-surface',
+    cacheKey:
+      state === null
+        ? null
+        : selectedTaskSurfaceTaskId === undefined
+          ? 'task-surface:auto'
+          : selectedTaskSurfaceTaskId === null
+            ? 'task-surface:none'
+            : `task-surface:${selectedTaskSurfaceTaskId}`,
     enabled: state !== null && startupLoadIntent.targets.has('taskSurface'),
-    load: useCallback(() => loadTaskSurfaceData(), []),
+    load: useCallback(() => loadTaskSurfaceData(selectedTaskSurfaceTaskId), [selectedTaskSurfaceTaskId]),
     loadState: taskSurfaceLoadState,
     setLoadState: setTaskSurfaceLoadState
   });
@@ -552,9 +570,11 @@ export function App(): React.JSX.Element {
           activeView={activeView}
           chatSelectionVersion={chatSelectionVersion}
           memoryLoadState={memoryLoadState}
+          onNavigateToTaskThread={navigateToTaskThread}
           operationsLoadState={operationsLoadState}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={startTaskRun}
+          onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
           selectedThreadId={selectedThreadId}
           state={state}
           updateLoadedState={(partial) =>
@@ -762,9 +782,11 @@ export function App(): React.JSX.Element {
                   activeView={activeView}
                   chatSelectionVersion={chatSelectionVersion}
                   memoryLoadState={memoryLoadState}
+                  onNavigateToTaskThread={navigateToTaskThread}
                   operationsLoadState={operationsLoadState}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={startTaskRun}
+                  onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
                   selectedThreadId={selectedThreadId}
                   state={state}
                   updateLoadedState={(partial) =>

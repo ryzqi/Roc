@@ -21,9 +21,11 @@ export function ViewContent({
   activeView,
   chatSelectionVersion,
   memoryLoadState,
+  onNavigateToTaskThread,
   operationsLoadState,
   onSelectWorkspace,
   onSubmitChatTask,
+  onTaskSurfaceSelectionChange,
   selectedThreadId,
   state,
   updateLoadedState,
@@ -32,9 +34,11 @@ export function ViewContent({
   activeView: ViewId;
   chatSelectionVersion: number;
   memoryLoadState: LazyLoadState;
+  onNavigateToTaskThread: (threadId: string) => void;
   operationsLoadState: LazyLoadState;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onTaskSurfaceSelectionChange: (taskId: string | null | undefined) => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -45,7 +49,14 @@ export function ViewContent({
   }
 
   if (activeView === 'tasks') {
-    return renderLazyView(<TasksView state={state} updateLoadedState={updateLoadedState} />);
+    return renderLazyView(
+      <TasksView
+        state={state}
+        updateLoadedState={updateLoadedState}
+        onNavigateToThread={onNavigateToTaskThread}
+        onSelectedTaskIdChange={onTaskSurfaceSelectionChange}
+      />
+    );
   }
   if (activeView === 'workspace') {
     return renderLazyView(<WorkspaceView loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);

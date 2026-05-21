@@ -666,9 +666,20 @@
   background: var(--surface);
 }
 
+.task-detail-tabs button,
 .task-detail-tabs span {
   color: var(--muted);
   font-size: var(--font-meta-size);
+}
+
+.task-detail-tabs button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.task-detail-tabs button[aria-pressed='true'] {
+  color: var(--ink);
 }
 
 .empty-state p,

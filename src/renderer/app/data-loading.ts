@@ -124,7 +124,7 @@ async function loadGitSelectedPreview(request: { relativePath: string }): Promis
   return previewResult.ok ? previewResult.data : null;
 }
 
-export async function loadTaskSurfaceData(): Promise<TaskSurfaceData> {
+export async function loadTaskSurfaceData(selectedTaskId?: string | null): Promise<TaskSurfaceData> {
   const [activeTasksResult, schedulerStatusResult, traySummaryResult] = await Promise.all([
     window.roc.tasks.getActiveTasks(),
     window.roc.tasks.getSchedulerStatus(),
@@ -133,7 +133,15 @@ export async function loadTaskSurfaceData(): Promise<TaskSurfaceData> {
   const activeTasks = unwrap<ActiveTaskItem[]>('active tasks', activeTasksResult);
   const schedulerStatus = unwrap('scheduler status', schedulerStatusResult);
   const traySummary = unwrap<TraySummary>('tray summary', traySummaryResult);
-  const primaryTaskId = activeTasks.find((task) => task.taskId !== null)?.taskId ?? null;
+  const firstBackgroundTaskId = activeTasks.find((task) => task.taskId !== null)?.taskId ?? null;
+  const primaryTaskId =
+    selectedTaskId === undefined
+      ? firstBackgroundTaskId
+      : selectedTaskId === null
+        ? null
+        : activeTasks.some((task) => task.taskId === selectedTaskId)
+          ? selectedTaskId
+          : firstBackgroundTaskId;
   const [taskDetailResult, scheduledRunsResult] =
     primaryTaskId === null
       ? [null, null]

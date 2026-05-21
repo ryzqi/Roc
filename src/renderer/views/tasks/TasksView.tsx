@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ActiveTaskItem } from '../../../shared/types';
 import { EmptyState } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
@@ -14,16 +14,40 @@ import { useTaskActions } from './use-task-actions';
 
 export function TasksView({
   state,
-  updateLoadedState
+  updateLoadedState,
+  onNavigateToThread,
+  onSelectedTaskIdChange
 }: {
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
+  onNavigateToThread: (threadId: string) => void;
+  onSelectedTaskIdChange: (taskId: string | null | undefined) => void;
 }): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(state.activeTasks[0]?.taskId ?? state.activeTasks[0]?.threadId ?? null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const model = useMemo(() => buildTaskViewModel(state), [state]);
-  const actions = useTaskActions(updateLoadedState);
+  const actions = useTaskActions(updateLoadedState, {
+    navigateToChat: onNavigateToThread,
+    selectedTaskId: selectedTaskId === null || selectedTaskId.startsWith('thread_') ? null : selectedTaskId
+  });
   const selectedItem = model.allItems.find((item) => (item.taskId ?? item.threadId) === selectedTaskId) ?? model.allItems[0] ?? null;
+  const selectedBackgroundTaskId = selectedItem?.taskId ?? null;
+  const selectedScheduledRuns =
+    selectedBackgroundTaskId === null
+      ? []
+      : state.scheduledRuns.filter((run) => run.backgroundTaskId === selectedBackgroundTaskId);
+
+  useEffect(() => {
+    if (selectedItem !== null && (selectedItem.taskId ?? selectedItem.threadId) === selectedTaskId) {
+      return;
+    }
+    const fallbackId = model.allItems[0]?.taskId ?? model.allItems[0]?.threadId ?? null;
+    setSelectedTaskId(fallbackId);
+  }, [model.allItems, selectedItem, selectedTaskId]);
+
+  useEffect(() => {
+    onSelectedTaskIdChange(selectedBackgroundTaskId);
+  }, [onSelectedTaskIdChange, selectedBackgroundTaskId]);
 
   function selectTask(item: ActiveTaskItem): void {
     setSelectedTaskId(item.taskId ?? item.threadId);
@@ -71,11 +95,14 @@ export function TasksView({
               </div>
               <TaskDetailDrawer
                 item={selectedItem}
+                detail={selectedBackgroundTaskId === state.taskDetail?.taskId ? state.taskDetail : null}
+                scheduledRuns={selectedScheduledRuns}
                 onCancel={actions.cancelTask}
                 onOpenInChat={actions.openInChat}
                 onPause={actions.pauseTask}
                 onResume={actions.resumeTask}
                 onRunNow={actions.runNow}
+                onOpenChat={onNavigateToThread}
               />
             </div>
             <section className="section">
@@ -83,10 +110,10 @@ export function TasksView({
                 <h2 className="section-title">最近调度</h2>
               </div>
               <div className="list-rows">
-                {state.scheduledRuns.length === 0 ? (
+                {selectedScheduledRuns.length === 0 ? (
                   <Row title="调度记录" sub="当前没有最近调度记录。" tag="空" tone="warn" />
                 ) : (
-                  state.scheduledRuns.slice(0, 3).map((run) => (
+                  selectedScheduledRuns.slice(0, 3).map((run) => (
                     <Row
                       key={run.id}
                       title={run.status}
@@ -94,7 +121,7 @@ export function TasksView({
                       tag={run.skipReason ?? 'ok'}
                       tone={run.status === 'failed' || run.status === 'skipped' ? 'warn' : 'info'}
                     />
-                  ))
+                    ))
                 )}
               </div>
             </section>

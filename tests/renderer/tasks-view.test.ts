@@ -115,7 +115,9 @@ describe('TasksView', () => {
             recentEvents: []
           }
         }),
-        updateLoadedState: () => {}
+        updateLoadedState: () => {},
+        onNavigateToThread: () => {},
+        onSelectedTaskIdChange: () => {}
       })
     );
 
@@ -128,6 +130,7 @@ describe('TasksView', () => {
     expect(html).toContain('每小时检查一次');
     expect(html).toContain('让 AI 修改');
     expect(html).toContain('立即运行');
+    expect(html).toContain('bg-1');
     expect(html).toContain('class="stat-row"');
     expect(html).toContain('class="section task-list-section"');
     expect(html).toContain('class="section-head"');
@@ -143,7 +146,9 @@ describe('TasksView', () => {
         state: createLoadedState({
           activeTasks: []
         }),
-        updateLoadedState: () => {}
+        updateLoadedState: () => {},
+        onNavigateToThread: () => {},
+        onSelectedTaskIdChange: () => {}
       })
     );
 
