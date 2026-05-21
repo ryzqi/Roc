@@ -1,3 +1,4 @@
+import './proxy-runtime';
 import { BrowserWindow, Menu, app, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';

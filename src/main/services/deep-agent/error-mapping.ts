@@ -42,6 +42,10 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
+    const toolFailure = readToolFailure(error);
+    if (toolFailure !== null) {
+      return toolFailure;
+    }
     if (classification.kind === 'timeout') {
       return {
         code: 'provider_request_timeout',
@@ -67,6 +71,76 @@ export function toRunFailure(error: unknown): RunFailure {
     message: 'Provider 执行失败。',
     retryable: true
   };
+}
+
+function readToolFailure(error: Error): RunFailure | null {
+  const message = redact(error.message);
+  if (message.startsWith('web_read 请求超时。')) {
+    return {
+      code: 'web_read_timeout',
+      message,
+      retryable: true
+    };
+  }
+  if (message.startsWith('web_read 请求失败：HTTP ')) {
+    const statusMatch = /\bHTTP\s+(\d{3})\b/iu.exec(message);
+    const status = statusMatch === null ? null : Number(statusMatch[1]);
+    return {
+      code: 'web_read_http_error',
+      message,
+      retryable: status === null ? true : status === 429 || status >= 500
+    };
+  }
+  if (message.startsWith('web_read 未返回可读正文。')) {
+    return {
+      code: 'web_read_empty_response',
+      message,
+      retryable: true
+    };
+  }
+  if (message.startsWith('web_read url 不能为空。')) {
+    return {
+      code: 'web_read_url_empty',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read 只支持合法的 HTTP/HTTPS URL。')) {
+    return {
+      code: 'web_read_url_invalid',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read timeoutSeconds 必须是 1 到 120 之间的整数。')) {
+    return {
+      code: 'web_read_timeout_invalid',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read 请求失败')) {
+    return {
+      code: 'web_read_request_failed',
+      message,
+      retryable: true
+    };
+  }
+  if (message.startsWith('web_search 不可用')) {
+    return {
+      code: 'web_search_unavailable',
+      message,
+      retryable: true
+    };
+  }
+  if (message.startsWith('web_search 当前不可用。')) {
+    return {
+      code: 'web_search_unavailable',
+      message,
+      retryable: true
+    };
+  }
+  return null;
 }
 
 export function toWebSearchFailure(error: unknown): RocDomainError {
