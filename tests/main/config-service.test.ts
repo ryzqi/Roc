@@ -361,6 +361,17 @@ describe('ConfigService unified settings document', () => {
         sessionRetentionDays: 30,
         crossScopeRecall: 'expanded_with_label',
         coldAutoForgetDays: 365
+      },
+      tasks: {
+        longRunningThresholds: {
+          runningSeconds: 90,
+          toolCallCount: 8,
+          subagentCount: 1
+        },
+        scheduler: {
+          catchUpOnStartup: true,
+          maxRegisteredTasks: 256
+        }
       }
     };
 
@@ -382,6 +393,32 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 3,
       mode: 'default',
       grants: []
+    });
+  });
+
+  it('returns default task thresholds when settings.json omits task settings', () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    expect(
+      (
+        configService as ConfigService & {
+          getTaskSettings: () => {
+            longRunningThresholds: { runningSeconds: number; toolCallCount: number; subagentCount: number };
+            scheduler: { catchUpOnStartup: boolean; maxRegisteredTasks: number };
+          };
+        }
+      ).getTaskSettings()
+    ).toEqual({
+      longRunningThresholds: {
+        runningSeconds: 90,
+        toolCallCount: 8,
+        subagentCount: 1
+      },
+      scheduler: {
+        catchUpOnStartup: true,
+        maxRegisteredTasks: 256
+      }
     });
   });
 

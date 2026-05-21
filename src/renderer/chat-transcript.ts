@@ -1,4 +1,4 @@
-import type { BackgroundTask, ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
+import type { ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
 import type { ChatRunState } from './chat-run-state';
 
 export type ChatTranscriptMessage = {
@@ -56,7 +56,7 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
 }
 
 export function buildChatTranscript(input: {
-  backgroundTasks: BackgroundTask[];
+  promotedThreadIds: Set<string>;
   chatRunState: ChatRunState;
   pendingUserInput: string | null;
   persistedMessages?: TaskEvent[];
@@ -76,11 +76,14 @@ export function buildChatTranscript(input: {
             approval: null,
             isStreaming: false
           }
-        ];
+      ];
   }
 
   const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;
   const messages = buildPersistedTranscriptMessages(persistedMessageEvents, activeThreadId);
+  if (input.promotedThreadIds.has(activeThreadId) && input.chatRunState.threadId !== activeThreadId) {
+    return messages;
+  }
   if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
     messages.push({
       key: 'pending-user-message',

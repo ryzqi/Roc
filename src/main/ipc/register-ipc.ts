@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import type { IpcResult, ProviderSecretSetRequest, SettingsSnapshot } from '../../shared/types';
+import type { IpcResult, ProviderSecretSetRequest, SettingsSnapshot, TaskUpdateEvent } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowBounds, getWindowState } from '../window-shell';
@@ -9,7 +9,7 @@ export type AppWindowControls = {
   openMainPage: (page: string) => void;
   openQuickEntry: () => Promise<void>;
   openTrayEntry: () => Promise<void>;
-  broadcastTaskUpdated: () => void;
+  broadcastTaskUpdated: (event?: TaskUpdateEvent) => void;
 };
 
 type IpcHandler<T> = () => Promise<IpcResult<T>> | IpcResult<T>;
@@ -185,10 +185,56 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksCancelBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const task = services.taskService.cancelBackgroundTask(id);
-      controls.broadcastTaskUpdated();
+      controls.broadcastTaskUpdated({ kind: 'task_status_changed', taskId: task.id, status: task.status });
       return task;
     })
   );
+  timedHandle(ipcChannels.tasksGetActiveTasks, () => wrapIpc(() => services.taskService.getActiveTasks()));
+  timedHandle(ipcChannels.tasksGetTaskDetail, (_event, request) =>
+    wrapIpc(() =>
+      services.taskService.getTaskDetail({
+        taskId: request.taskId,
+        schedulerRegistered: services.taskSchedulerService.getStatus().registeredTaskCount > 0
+      })
+    )
+  );
+  timedHandle(ipcChannels.tasksListScheduledRuns, (_event, request) =>
+    wrapIpc(() => services.taskService.listScheduledRuns(request))
+  );
+  timedHandle(ipcChannels.tasksRunBackgroundNow, async (_event, id: string) =>
+    wrapIpc(async () => {
+      const runId = await services.taskSchedulerService.fire(id);
+      const resolvedRunId = runId ?? id;
+      controls.broadcastTaskUpdated({ kind: 'task_run_fired', taskId: id, runId: resolvedRunId });
+      return { taskId: id, runId: resolvedRunId };
+    })
+  );
+  timedHandle(ipcChannels.tasksDeleteBackgroundTask, (_event, id: string) =>
+    wrapIpc(() => {
+      const result = services.taskService.deleteBackgroundTask(id);
+      controls.broadcastTaskUpdated();
+      return result;
+    })
+  );
+  timedHandle(ipcChannels.tasksUpdateBackgroundTask, (_event, request) =>
+    wrapIpc(() => {
+      const task = services.taskService.updateBackgroundTask(request);
+      services.taskSchedulerService.refreshTask(task);
+      controls.broadcastTaskUpdated({ kind: 'task_status_changed', taskId: task.id, status: task.status });
+      return task;
+    })
+  );
+  timedHandle(ipcChannels.tasksOpenInChat, (_event, request) =>
+    wrapIpc(() => services.taskService.openBackgroundTaskInChat(request.taskId))
+  );
+  timedHandle(ipcChannels.tasksPromoteThread, (_event, request) =>
+    wrapIpc(() => {
+      const thread = services.taskService.promoteThread(request);
+      controls.broadcastTaskUpdated({ kind: 'thread_promoted', threadId: thread.id, reason: request.reason });
+      return thread;
+    })
+  );
+  timedHandle(ipcChannels.tasksGetSchedulerStatus, () => wrapIpc(() => services.taskSchedulerService.getStatus()));
   timedHandle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
   timedHandle(ipcChannels.lifecyclePauseBackground, () =>
     wrapIpc(() => services.lifecycleService.pauseBackgroundExecution())
@@ -201,6 +247,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   );
   timedHandle(ipcChannels.diagnosticsCreatePackage, (_event, request) =>
     wrapIpc(() => services.diagnosticsService.createDiagnosticPackage(request))
+  );
+  timedHandle(ipcChannels.diagnosticsRunChecks, () =>
+    wrapIpc(() => services.diagnosticsService.runChecks(services.taskSchedulerService.getStatus()))
   );
   timedHandle(ipcChannels.memoryStatus, () => wrapIpc(() => services.memoryService.status()));
   timedHandle(ipcChannels.memorySearch, (_event, request) => wrapIpc(() => services.memoryService.search(request)));

@@ -57,7 +57,11 @@ export function ChatView({
   const chatTranscript = useMemo(
     () =>
       buildChatTranscript({
-        backgroundTasks: state.backgroundTasks,
+        promotedThreadIds: new Set(
+          state.activeTasks
+            .filter((item) => item.kind === 'background' || item.kind === 'long_running')
+            .map((item) => item.threadId)
+        ),
         chatRunState: {
           ...chatRun.state,
           assistantMessage: deferredAssistantMessage,
@@ -75,7 +79,7 @@ export function ChatView({
       pendingUserInput,
       persistedMessages,
       selectedThreadId,
-      state.backgroundTasks,
+      state.activeTasks,
       state.taskSnapshot
     ]
   );

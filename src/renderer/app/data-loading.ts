@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   AppStatus,
+  ActiveTaskItem,
   BackgroundTask,
   FilePreviewRequest,
   DiagnosticPackage,
@@ -124,13 +125,28 @@ async function loadGitSelectedPreview(request: { relativePath: string }): Promis
 }
 
 export async function loadTaskSurfaceData(): Promise<TaskSurfaceData> {
-  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await window.roc.tasks.listBackgroundTasks());
-  const backgroundTask = backgroundTasks[0] ?? null;
-  const traySummary = unwrap<TraySummary>('tray summary', await window.roc.lifecycle.getTraySummary());
+  const [activeTasksResult, schedulerStatusResult, traySummaryResult] = await Promise.all([
+    window.roc.tasks.getActiveTasks(),
+    window.roc.tasks.getSchedulerStatus(),
+    window.roc.lifecycle.getTraySummary()
+  ]);
+  const activeTasks = unwrap<ActiveTaskItem[]>('active tasks', activeTasksResult);
+  const schedulerStatus = unwrap('scheduler status', schedulerStatusResult);
+  const traySummary = unwrap<TraySummary>('tray summary', traySummaryResult);
+  const primaryTaskId = activeTasks.find((task) => task.taskId !== null)?.taskId ?? null;
+  const [taskDetailResult, scheduledRunsResult] =
+    primaryTaskId === null
+      ? [null, null]
+      : await Promise.all([
+          window.roc.tasks.getTaskDetail({ taskId: primaryTaskId }),
+          window.roc.tasks.listScheduledRuns({ taskId: primaryTaskId })
+        ]);
 
   return {
-    backgroundTask,
-    backgroundTasks,
+    activeTasks,
+    taskDetail: taskDetailResult === null ? null : unwrap('task detail', taskDetailResult),
+    scheduledRuns: scheduledRunsResult === null ? [] : unwrap('scheduled runs', scheduledRunsResult),
+    schedulerStatus,
     traySummary
   };
 }
@@ -145,6 +161,7 @@ export async function loadOperationsData(mode: AppStatus['mode']): Promise<Opera
       memoryBudgetMb: 300
     })
   );
+  const diagnosticChecks = unwrap('diagnostic checks', await window.roc.diagnostics.runChecks());
   const diagnosticPackage =
     backgroundTask === null
       ? null
@@ -157,6 +174,7 @@ export async function loadOperationsData(mode: AppStatus['mode']): Promise<Opera
         );
 
   return {
+    diagnosticChecks,
     diagnosticPackage,
     performanceSample
   };

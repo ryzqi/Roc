@@ -1,10 +1,11 @@
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
+  ActiveTaskItem,
   AppSettings,
   AppStatus,
-  BackgroundTask,
   DiagnosticPackage,
+  DiagnosticCheck,
   FilePreviewResult,
   FilesWorkbenchPdfPreview,
   FileSearchResult,
@@ -27,8 +28,11 @@ import type {
   ProviderSecretStatus,
   ProviderTestResult,
   RtkStatus,
+  SchedulerStatus,
+  ScheduledTaskRun,
   SessionSearchResult,
   SkillSnapshot,
+  TaskDetail,
   TaskSnapshot,
   TerminalSessionSnapshot,
   TraySummary,
@@ -55,10 +59,13 @@ export type LoadedState = {
   skills: SkillSnapshot[];
   selectedMcpServers: string[];
   selectedSkills: string[];
-  backgroundTask: BackgroundTask | null;
-  backgroundTasks: BackgroundTask[];
+  activeTasks: ActiveTaskItem[];
+  taskDetail: TaskDetail | null;
+  scheduledRuns: ScheduledTaskRun[];
+  schedulerStatus: SchedulerStatus;
   traySummary: TraySummary;
   diagnosticPackage: DiagnosticPackage | null;
+  diagnosticChecks: DiagnosticCheck[];
   performanceSample: PerformanceSample;
   agent: AgentRuntimeStatus;
   agentCapabilityPreview: AgentCapabilityPreview | null;

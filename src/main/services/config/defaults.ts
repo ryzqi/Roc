@@ -27,6 +27,17 @@ export const defaultSettings: AppSettings = {
     sessionRetentionDays: 90,
     crossScopeRecall: 'explicit_only',
     coldAutoForgetDays: 90
+  },
+  tasks: {
+    longRunningThresholds: {
+      runningSeconds: 90,
+      toolCallCount: 8,
+      subagentCount: 1
+    },
+    scheduler: {
+      catchUpOnStartup: true,
+      maxRegisteredTasks: 256
+    }
   }
 };
 

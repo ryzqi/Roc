@@ -1,4 +1,4 @@
-import type { BackgroundTask, TaskThread } from '../shared/types';
+import type { TaskThread } from '../shared/types';
 import { formatBeijingDateTime } from './format-time';
 
 export type HistorySidebarItem = {
@@ -16,10 +16,11 @@ const SYSTEM_HISTORY_THREAD_TITLES = new Set([
   '任务工作台记录'
 ]);
 
-export function buildHistoryItems(threads: TaskThread[], backgroundTasks: BackgroundTask[]): HistorySidebarItem[] {
-  const backgroundThreadIds = new Set(backgroundTasks.map((task) => task.threadId));
+export function buildHistoryItems(threads: TaskThread[], promotedThreadIds: Iterable<string>): HistorySidebarItem[] {
+  const backgroundThreadIds = new Set(promotedThreadIds);
   return threads
     .filter((thread) => !backgroundThreadIds.has(thread.id))
+    .filter((thread) => !isActivePromotedThread(thread))
     .filter((thread) => !SYSTEM_HISTORY_THREAD_TITLES.has(thread.title))
     .map((thread) => ({
       id: thread.id,
@@ -27,6 +28,13 @@ export function buildHistoryItems(threads: TaskThread[], backgroundTasks: Backgr
       meta: formatBeijingDateTime(thread.updatedAt),
       icon: 'history'
     }));
+}
+
+function isActivePromotedThread(thread: TaskThread): boolean {
+  return (
+    (thread.kind === 'long_running' || thread.kind === 'background') &&
+    ['running', 'waiting_user', 'waiting_next_turn', 'paused', 'pending_confirmation'].includes(thread.status)
+  );
 }
 
 export function filterHistoryItems(items: HistorySidebarItem[], query: string): HistorySidebarItem[] {

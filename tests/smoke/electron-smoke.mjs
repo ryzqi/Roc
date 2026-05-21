@@ -151,9 +151,7 @@ try {
   await page.click('[data-testid="nav-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="background-task-summary"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="background-task-controls"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="background-pause"]', { timeout: 5000 });
-  const backgroundTaskControlsText = await page.textContent('[data-testid="background-task-controls"]');
+  await page.waitForSelector('[data-testid^="task-list-section-"]', { timeout: 5000 });
   const taskText = await page.textContent('[data-testid="tasks-view"]');
   if (taskText === null) {
     throw new Error('Smoke could not read tasks view text.');
@@ -161,13 +159,23 @@ try {
   const backgroundTaskApiEvidence = await page.evaluate(async () => {
     const tray = await window.roc.lifecycle.getTraySummary();
     const snapshot = await window.roc.tasks.getSnapshot();
+    const activeTasks = await window.roc.tasks.getActiveTasks();
+    const schedulerStatus = await window.roc.tasks.getSchedulerStatus();
     if (!tray.ok) {
       throw new Error(tray.error.message);
     }
     if (!snapshot.ok) {
       throw new Error(snapshot.error.message);
     }
+    if (!activeTasks.ok) {
+      throw new Error(activeTasks.error.message);
+    }
+    if (!schedulerStatus.ok) {
+      throw new Error(schedulerStatus.error.message);
+    }
     return {
+      activeTasks: activeTasks.data,
+      schedulerStatus: schedulerStatus.data,
       tray: tray.data,
       hasCreatedEvent: snapshot.data.recentEvents.some((item) => item.type === 'background_task_created')
     };
@@ -2150,17 +2158,22 @@ try {
     smokeTargetPath: smokeTarget.path,
     packagedExeExists: existsSync(packagedExe),
     backgroundTaskVisible:
-      backgroundTaskControlsText !== null &&
-      backgroundTaskControlsText.includes('Phase 6 smoke background diagnostic task') &&
+      taskText.includes('Phase 6 smoke background diagnostic task') &&
+      backgroundTaskApiEvidence.activeTasks.some((item) => item.goal === 'Phase 6 smoke background diagnostic task') &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
-      backgroundTaskApiEvidence.tray.nextRunAt === '2026-04-29T01:00:00.000Z' &&
+      backgroundTaskApiEvidence.tray.nextRunAt === '2026-05-22T01:00:00.000Z' &&
       backgroundTaskApiEvidence.hasCreatedEvent,
     traySummaryVisible:
-      taskText.includes('托盘摘要') &&
-      taskText.includes('后台执行') &&
+      taskText.includes('活跃任务') &&
+      taskText.includes('调度器') &&
+      backgroundTaskApiEvidence.schedulerStatus.running &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
       backgroundTaskApiEvidence.hasCreatedEvent,
-    diagnosticPackageVisible: diagnosticsText.includes('脱敏') && diagnosticsText.includes('task_snapshot'),
+    diagnosticPackageVisible:
+      diagnosticsText.includes('脱敏') &&
+      diagnosticsText.includes('task_snapshot') &&
+      diagnosticsText.includes('Doctor 检查') &&
+      diagnosticsText.includes('调度器运行'),
     performanceSampleVisible:
       diagnosticsText.includes('RSS') &&
       phase6ApiEvidence.sample.rssMb > 0 &&
@@ -2588,14 +2601,18 @@ try {
       boundary.taskKeys.includes('createBackgroundTask') &&
       boundary.taskKeys.includes('pauseBackgroundTask') &&
       boundary.taskKeys.includes('resumeBackgroundTask') &&
-      boundary.taskKeys.includes('cancelBackgroundTask'),
+      boundary.taskKeys.includes('cancelBackgroundTask') &&
+      boundary.taskKeys.includes('getActiveTasks') &&
+      boundary.taskKeys.includes('getSchedulerStatus') &&
+      boundary.taskKeys.includes('openInChat'),
     lifecycleApiExpanded:
       boundary.lifecycleKeys.includes('getTraySummary') &&
       boundary.lifecycleKeys.includes('pauseBackgroundExecution') &&
       boundary.lifecycleKeys.includes('resumeBackgroundExecution'),
     diagnosticsApiExpanded:
       boundary.diagnosticsKeys.includes('samplePerformance') &&
-      boundary.diagnosticsKeys.includes('createDiagnosticPackage'),
+      boundary.diagnosticsKeys.includes('createDiagnosticPackage') &&
+      boundary.diagnosticsKeys.includes('runChecks'),
     toolPopoverHoverSticky: buttonInteractionEvidence.toolPopoverHoverSticky,
     skillPopoverHoverSticky: buttonInteractionEvidence.skillPopoverHoverSticky,
     modelPopoverHoverSticky: buttonInteractionEvidence.modelPopoverHoverSticky,

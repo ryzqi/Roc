@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BackgroundTask, TaskSnapshot, TaskThread } from '../../src/shared/types';
+import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
 import { buildChatTranscript } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 
@@ -27,10 +27,6 @@ function createSnapshot(input: { threads: TaskThread[]; recentEvents: TaskSnapsh
     threads: input.threads,
     recentEvents: input.recentEvents
   };
-}
-
-function createBackgroundTasks(): BackgroundTask[] {
-  return [];
 }
 
 function createIdleRunState(): ChatRunState {
@@ -74,7 +70,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: createIdleRunState(),
       pendingUserInput: null,
       selectedThreadId: null,
@@ -111,7 +107,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: {
         ...createIdleRunState(),
         runId: 'run-current',
@@ -169,7 +165,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: {
         ...createIdleRunState(),
         runId: 'run-current',
@@ -219,7 +215,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: {
         ...createIdleRunState(),
         runId: 'run-current',
@@ -278,7 +274,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: createIdleRunState(),
       pendingUserInput: null,
       selectedThreadId: 'thread-older',
@@ -332,7 +328,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: {
         ...createIdleRunState(),
         runId: 'run-current',
@@ -382,7 +378,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: createIdleRunState(),
       pendingUserInput: null,
       selectedThreadId: 'thread-current',
@@ -459,7 +455,7 @@ describe('chat transcript helpers', () => {
     });
 
     const messages = buildChatTranscript({
-      backgroundTasks: createBackgroundTasks(),
+      promotedThreadIds: new Set(),
       chatRunState: {
         ...createIdleRunState(),
         runId: 'run-current',

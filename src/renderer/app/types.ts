@@ -1,6 +1,7 @@
 import type { HistorySidebarItem } from '../history-sidebar';
 import type {
-  BackgroundTask,
+  ActiveTaskItem,
+  DiagnosticCheck,
   DiagnosticPackage,
   FileEntryShape,
   FilePreviewLike,
@@ -19,7 +20,10 @@ import type {
   MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
+  SchedulerStatus,
+  ScheduledTaskRun,
   SessionSearchResult,
+  TaskDetail,
   TaskSnapshot,
   TerminalSessionSnapshot,
   TraySummary
@@ -106,12 +110,15 @@ export type MemoryData = {
 };
 
 export type TaskSurfaceData = {
-  backgroundTask: BackgroundTask | null;
-  backgroundTasks: BackgroundTask[];
+  activeTasks: ActiveTaskItem[];
+  taskDetail: TaskDetail | null;
+  scheduledRuns: ScheduledTaskRun[];
+  schedulerStatus: SchedulerStatus;
   traySummary: TraySummary;
 };
 
 export type OperationsData = {
+  diagnosticChecks: DiagnosticCheck[];
   diagnosticPackage: DiagnosticPackage | null;
   performanceSample: PerformanceSample;
 };

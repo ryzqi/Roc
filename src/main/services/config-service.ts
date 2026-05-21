@@ -40,6 +40,7 @@ export type RocSettings = typeof defaultSettings;
 export type RocProviders = ProvidersConfig;
 export type RocMcpConfig = typeof defaultMcpConfig;
 export type RocPermissions = PermissionsConfig;
+export type RocTaskSettings = RocSettings['tasks'];
 
 export class ConfigService {
   constructor(private readonly paths: RocPaths) {}
@@ -52,6 +53,10 @@ export class ConfigService {
 
   getSettings(): RocSettings {
     return this.getSettingsDocument().settings;
+  }
+
+  getTaskSettings(): RocTaskSettings {
+    return this.getSettings().tasks;
   }
 
   saveSettings(settings: RocSettings): void {

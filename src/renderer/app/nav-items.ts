@@ -1,5 +1,6 @@
 import { buildHistoryItems as buildHistorySidebarItems } from '../history-sidebar';
 import type { LoadedState } from '../loaded-state';
+import { countTaskNavMeta } from '../views/tasks/task-view-model';
 import type { HistorySidebarItem, NavItem, ViewId } from './types';
 
 export function buildHistoryNavItems(selectedThreadId: string | null, activeView: ViewId): NavItem[] {
@@ -18,15 +19,19 @@ export function buildHistoryNavItems(selectedThreadId: string | null, activeView
 }
 
 export function buildHistoryItems(state: LoadedState): HistorySidebarItem[] {
-  return buildHistorySidebarItems(state.taskSnapshot.threads, state.backgroundTasks);
+  return buildHistorySidebarItems(
+    state.taskSnapshot.threads,
+    state.activeTasks.map((item) => item.threadId)
+  );
 }
 
 export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
+  const taskCounts = countTaskNavMeta(state.activeTasks);
   return [
     {
       id: 'tasks',
       label: '任务工作台',
-      meta: `${state.taskSnapshot.counts.running} 运行中 · ${state.taskSnapshot.counts.pendingConfirmation} 待确认`,
+      meta: `${taskCounts.activeCount} 活跃 · ${taskCounts.pendingApprovalCount} 待确认 · ${taskCounts.scheduledCount} 定时`,
       icon: 'clipboard'
     },
     {

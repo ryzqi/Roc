@@ -21,8 +21,8 @@ Implement `任务工作台重构计划.md` in phases, preserving scope:
 | Phase 1: Data model and migration | complete | `pnpm test tests/main/database-indexes.test.ts ...` passed; `pnpm typecheck` passed |
 | Phase 2: Scheduler core | complete | Scheduler and cron tests passed; app service regression passed; `pnpm typecheck` passed |
 | Phase 3: AI tools | complete | `pnpm test tests/main/background-task-tools.test.ts ...` passed; `pnpm typecheck` passed |
-| Phase 4: Workbench UI | pending | Renderer view-model tests and typecheck |
-| Phase 5: Long-running promotion and Doctor | pending | Promotion tests, Doctor checks, smoke path |
+| Phase 4: Workbench UI | complete | Renderer/task service IPC tests passed; `pnpm typecheck` passed |
+| Phase 5: Long-running promotion and Doctor | complete | Promotion/Doctor renderer tests passed; smoke scripts syntax checked |
 
 ## Current Boundaries
 

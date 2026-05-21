@@ -85,7 +85,7 @@ export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePa
             type: 'cron',
             description: 'smoke scheduled run',
             cronExpression: '0 9 * * *',
-            nextRunAt: '2026-04-29T01:00:00.000Z'
+            nextRunAt: '2026-05-22T01:00:00.000Z'
           },
           workspacePath: rootPath,
           allowedActions: ['pnpm test'],

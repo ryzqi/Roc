@@ -259,6 +259,24 @@ describe('workspace and diagnostics surfaces', () => {
           samples: []
         }
       },
+      diagnosticChecks: [
+        {
+          id: 'scheduler_running',
+          label: '调度器运行',
+          status: 'pass',
+          severity: 'info',
+          message: '调度器正在运行。',
+          checkedAt: '2026-05-16T08:00:00.000Z'
+        },
+        {
+          id: 'scheduler_missed_runs_recent',
+          label: '近期错过调度',
+          status: 'warn',
+          severity: 'warning',
+          message: '过去 24 小时存在 1 条 skipped 调度。',
+          checkedAt: '2026-05-16T08:00:00.000Z'
+        }
+      ],
       taskSnapshot: {
         generatedAt: '2026-05-16T08:00:00.000Z',
         counts: {
@@ -291,6 +309,8 @@ describe('workspace and diagnostics surfaces', () => {
     expect(diagnosticsHtml).toContain('data-testid="diagnostics-view"');
     expect(diagnosticsHtml).toContain('class="single-panel"');
     expect(diagnosticsHtml).toContain('task_snapshot');
+    expect(diagnosticsHtml).toContain('调度器运行');
+    expect(diagnosticsHtml).toContain('近期错过调度');
     expect(diagnosticsHtml).not.toContain('card-title');
   });
 

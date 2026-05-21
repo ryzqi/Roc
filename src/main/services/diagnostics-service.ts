@@ -1,13 +1,21 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { DiagnosticPackage, DiagnosticPackageRequest, PerformanceSample, PerformanceSampleRequest } from '../../shared/types';
+import type {
+  DiagnosticCheck,
+  DiagnosticPackage,
+  DiagnosticPackageRequest,
+  PerformanceSample,
+  PerformanceSampleRequest,
+  SchedulerStatus
+} from '../../shared/types';
 import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
 import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
 import type { RtkService } from './rtk-service';
 import type { TaskService } from './task-service';
+import { parseCronExpression } from './task/cron-parser';
 import { requireText } from './validation';
 
 export class DiagnosticsService {
@@ -105,6 +113,56 @@ export class DiagnosticsService {
     };
   }
 
+  runChecks(schedulerStatus: SchedulerStatus): DiagnosticCheck[] {
+    const checkedAt = new Date().toISOString();
+    const scheduledTaskCount = this.countScheduledRunningTasks();
+    const recentSkippedCount = this.taskService.countRecentSkippedScheduledRuns(
+      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    );
+    const invalidCronCount = this.countInvalidCronExpressions();
+    const registeredMatches = schedulerStatus.registeredTaskCount === scheduledTaskCount;
+
+    return [
+      {
+        id: 'scheduler_running',
+        label: '调度器运行',
+        status: schedulerStatus.running ? 'pass' : 'fail',
+        severity: schedulerStatus.running ? 'info' : 'error',
+        message: schedulerStatus.running ? '调度器正在运行。' : '调度器未启动。',
+        checkedAt
+      },
+      {
+        id: 'scheduler_tasks_registered',
+        label: '调度任务注册',
+        status: registeredMatches ? 'pass' : 'warn',
+        severity: registeredMatches ? 'info' : 'warning',
+        message: registeredMatches
+          ? `已注册 ${schedulerStatus.registeredTaskCount} 个调度任务。`
+          : `已注册 ${schedulerStatus.registeredTaskCount} 个调度任务，数据库中有 ${scheduledTaskCount} 个运行中的计划任务。`,
+        checkedAt
+      },
+      {
+        id: 'scheduler_missed_runs_recent',
+        label: '近期错过调度',
+        status: recentSkippedCount === 0 ? 'pass' : 'warn',
+        severity: recentSkippedCount === 0 ? 'info' : 'warning',
+        message:
+          recentSkippedCount === 0
+            ? '过去 24 小时没有 skipped 调度。'
+            : `过去 24 小时存在 ${recentSkippedCount} 条 skipped 调度。`,
+        checkedAt
+      },
+      {
+        id: 'cron_expressions_valid',
+        label: 'Cron 表达式',
+        status: invalidCronCount === 0 ? 'pass' : 'fail',
+        severity: invalidCronCount === 0 ? 'info' : 'error',
+        message: invalidCronCount === 0 ? '所有 cron 表达式均可解析。' : `${invalidCronCount} 个 cron 表达式无效。`,
+        checkedAt
+      }
+    ];
+  }
+
   createDiagnosticPackage(request: DiagnosticPackageRequest): DiagnosticPackage {
     const taskId = requireText(request.taskId, 'diagnostic_task_id_empty', '诊断包任务 ID 不能为空。', '请选择要诊断的任务。');
     const createdAt = new Date().toISOString();
@@ -170,6 +228,38 @@ export class DiagnosticsService {
 
   private bytesToMb(value: number): number {
     return Math.round((value / 1024 / 1024) * 10) / 10;
+  }
+
+  private countScheduledRunningTasks(): number {
+    const row = this.database.db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM background_tasks
+         WHERE scheduled = 1
+           AND status = 'running'`
+      )
+      .get() as { count: number };
+    return row.count;
+  }
+
+  private countInvalidCronExpressions(): number {
+    const rows = this.database.db
+      .prepare(
+        `SELECT cron_expression
+         FROM background_tasks
+         WHERE trigger_type = 'cron'
+           AND cron_expression IS NOT NULL`
+      )
+      .all() as Array<{ cron_expression: string }>;
+    let invalidCount = 0;
+    for (const row of rows) {
+      try {
+        parseCronExpression(row.cron_expression);
+      } catch {
+        invalidCount += 1;
+      }
+    }
+    return invalidCount;
   }
 
 }

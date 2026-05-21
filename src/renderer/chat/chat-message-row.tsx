@@ -11,6 +11,7 @@ import {
 import type { ChatTranscriptMessage } from '../chat-transcript';
 import { MarkdownView } from './markdown-view';
 import type { ChatResumeDecision } from '../../shared/types';
+import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
 
 type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
@@ -63,7 +64,9 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
               </details>
             )}
             {message.content.length === 0 ? null : <MarkdownView text={message.content} />}
-            {approval === null ? null : (
+            {approval !== null && isTaskApproval(approval) ? (
+              <TaskApprovalCard approval={approval} onApprovalDecision={onApprovalDecision} />
+            ) : approval === null ? null : (
               <motion.div
                 className="chat-approval-card"
                 data-testid="chat-approval-card"

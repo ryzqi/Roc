@@ -61,6 +61,26 @@ export function DiagnosticsView({
           </div>
         </section>
         <div className="diagnostics-surface-grid">
+          <section className="section" data-testid="diagnostic-checks">
+            <div className="section-head">
+              <h2 className="section-title">Doctor 检查</h2>
+            </div>
+            <div className="list-rows">
+              {state.diagnosticChecks.length === 0 ? (
+                <Row title="调度检查" sub="尚未运行检查。" tag="空" tone="warn" />
+              ) : (
+                state.diagnosticChecks.map((check) => (
+                  <Row
+                    key={check.id}
+                    title={check.label}
+                    sub={check.message}
+                    tag={check.status}
+                    tone={check.severity === 'error' ? 'bad' : check.severity === 'warning' ? 'warn' : 'ok'}
+                  />
+                ))
+              )}
+            </div>
+          </section>
           <DiagnosticPackagePanel diagnosticPackage={state.diagnosticPackage} />
           <PerformancePanel performanceSample={state.performanceSample} />
         </div>

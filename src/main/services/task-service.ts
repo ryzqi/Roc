@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   AgentCapabilityManifest,
   AgentCapabilityPreview,
+  ActiveTaskItem,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
@@ -9,6 +10,7 @@ import type {
   EnabledCapabilities,
   ProviderExecutionResult,
   ScheduledTaskRun,
+  TaskDetail,
   TaskEvent,
   TaskRun,
   TaskSnapshot,
@@ -16,6 +18,7 @@ import type {
   UpdateBackgroundTaskRequest
 } from '../../shared/types';
 import type { DatabaseService } from './database-service';
+import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
   backgroundTaskFromRow,
@@ -27,9 +30,13 @@ import {
   requireText,
   type BackgroundTaskRow
 } from './task';
+import { evaluateLongRunningCandidate, type LongRunningPromotionPayload } from './task/long-running-evaluator';
 
 export class TaskService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly configService: ConfigService
+  ) {}
 
   createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview {
     const goal = requireText(request.goal, 'background_task_goal_empty', '后台任务目标不能为空。', '请输入后台任务目标。');
@@ -211,6 +218,31 @@ export class TaskService {
     return this.transitionBackgroundTask(task, 'cancelled', 'background_task_cancelled');
   }
 
+  deleteBackgroundTask(id: string): { deleted: true; taskId: string } {
+    const task = requireBackgroundTask(this.database, id);
+    if (task.status !== 'completed' && task.status !== 'cancelled' && task.status !== 'failed') {
+      throw new RocDomainError({
+        code: 'background_task_delete_not_terminal',
+        message: '只能删除已完成、已取消或已失败的后台任务。',
+        category: 'conflict',
+        retryable: false,
+        userAction: '请先暂停或取消该任务，再删除。'
+      });
+    }
+    const now = new Date().toISOString();
+    const transaction = this.database.db.transaction(() => {
+      this.database.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE id = ?').run('archived', now, task.id);
+      this.database.db
+        .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
+        .run('archived', now, now, task.threadId);
+    });
+    transaction();
+    return {
+      deleted: true,
+      taskId: task.id
+    };
+  }
+
   updateBackgroundTask(request: UpdateBackgroundTaskRequest): BackgroundTask {
     const task = requireBackgroundTask(this.database, request.taskId);
     const nextGoal = request.patch.goal ?? task.goal;
@@ -339,6 +371,175 @@ export class TaskService {
       .all() as BackgroundTaskRow[];
 
     return rows.map((row) => backgroundTaskFromRow(row));
+  }
+
+  getActiveTasks(): ActiveTaskItem[] {
+    const backgroundItems = this.listBackgroundTasks()
+      .filter((task) => task.status !== 'archived')
+      .map((task) => this.activeItemFromBackgroundTask(task));
+    const backgroundThreadIds = new Set(backgroundItems.map((task) => task.threadId));
+    const longRunningRows = this.database.db
+      .prepare(
+        `SELECT id, kind, title, goal, status, created_at, updated_at
+         FROM task_threads
+         WHERE archived_at IS NULL
+           AND kind = 'long_running'
+         ORDER BY updated_at DESC
+         LIMIT 50`
+      )
+      .all() as Array<{
+      id: string;
+      kind: TaskThread['kind'];
+      title: string;
+      goal: string;
+      status: TaskThread['status'];
+      created_at: string;
+      updated_at: string;
+    }>;
+    const longRunningItems = longRunningRows
+      .filter((thread) => !backgroundThreadIds.has(thread.id))
+      .map((thread): ActiveTaskItem => ({
+        kind: 'long_running',
+        threadId: thread.id,
+        taskId: null,
+        title: thread.title,
+        goal: thread.goal,
+        status: thread.status,
+        trigger: null,
+        nextRunAt: null,
+        lastRunAt: null,
+        riskLevel: 'low',
+        workspacePath: null,
+        createdAt: thread.created_at,
+        updatedAt: thread.updated_at
+      }));
+
+    return [...backgroundItems, ...longRunningItems].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  getTaskDetail(input: { taskId: string; schedulerRegistered: boolean }): TaskDetail {
+    const task = requireBackgroundTask(this.database, input.taskId);
+    const thread = requireActiveThread(this.database, task.threadId);
+    const runHistory = this.listRunsForThread(task.threadId, 20);
+    const recentEvents = this.listRecentEventsForThread(task.threadId, 20);
+    return {
+      threadId: task.threadId,
+      taskId: task.id,
+      thread,
+      backgroundTask: task,
+      lastRunId: runHistory[0]?.id ?? null,
+      runHistory,
+      recentEvents,
+      schedulerRegistered: input.schedulerRegistered
+    };
+  }
+
+  listScheduledRuns(input: { taskId: string; limit?: number }): ScheduledTaskRun[] {
+    const task = requireBackgroundTask(this.database, input.taskId);
+    const limit = input.limit ?? 20;
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason
+         FROM scheduled_task_runs
+         WHERE background_task_id = ?
+         ORDER BY scheduled_at DESC, rowid DESC
+         LIMIT ?`
+      )
+      .all(task.id, limit) as Array<{
+      id: string;
+      background_task_id: string;
+      task_run_id: string | null;
+      scheduled_at: string;
+      triggered_at: string | null;
+      status: ScheduledTaskRun['status'];
+      skip_reason: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      backgroundTaskId: row.background_task_id,
+      taskRunId: row.task_run_id,
+      scheduledAt: row.scheduled_at,
+      triggeredAt: row.triggered_at,
+      status: row.status,
+      skipReason: row.skip_reason
+    }));
+  }
+
+  openBackgroundTaskInChat(taskId: string): { threadId: string } {
+    const task = requireBackgroundTask(this.database, taskId);
+    this.recordEvent({
+      threadId: task.threadId,
+      runId: task.runId,
+      type: 'context_manifest',
+      payload: {
+        kind: 'background_task_edit_context',
+        task
+      }
+    });
+    return {
+      threadId: task.threadId
+    };
+  }
+
+  promoteThread(input: { threadId: string; reason: 'manual' }): TaskThread {
+    const thread = requireActiveThread(this.database, input.threadId);
+    if (thread.kind === 'long_running' || thread.kind === 'background') {
+      return thread;
+    }
+    const now = new Date().toISOString();
+    this.database.db
+      .prepare('UPDATE task_threads SET kind = ?, updated_at = ? WHERE id = ? AND kind = ?')
+      .run('long_running', now, thread.id, 'chat');
+    this.recordEvent({
+      threadId: thread.id,
+      runId: this.findLatestRunId(thread.id) ?? thread.id,
+      type: 'long_running_promoted',
+      payload: {
+        reason: input.reason,
+        threshold: null,
+        observedValue: null
+      } satisfies LongRunningPromotionPayload
+    });
+    return {
+      ...thread,
+      kind: 'long_running',
+      updatedAt: now
+    };
+  }
+
+  evaluateLongRunningPromotion(threadId: string): TaskThread {
+    const thread = requireActiveThread(this.database, threadId);
+    if (thread.kind !== 'chat') {
+      return thread;
+    }
+
+    const thresholds = this.configService.getTaskSettings().longRunningThresholds;
+    const latestRun = this.findLatestRun(thread.id);
+    if (latestRun === null) {
+      return thread;
+    }
+
+    const trigger = this.resolvePromotionTrigger(thread.id, latestRun.id, thresholds);
+    if (trigger === null) {
+      return thread;
+    }
+
+    const now = new Date().toISOString();
+    this.database.db
+      .prepare('UPDATE task_threads SET kind = ?, updated_at = ? WHERE id = ? AND kind = ?')
+      .run('long_running', now, thread.id, 'chat');
+    this.recordEvent({
+      threadId: thread.id,
+      runId: latestRun.id,
+      type: 'long_running_promoted',
+      payload: trigger
+    });
+
+    return {
+      ...thread,
+      kind: 'long_running',
+      updatedAt: now
+    };
   }
 
   recordScheduledTaskRun(input: {
@@ -922,6 +1123,97 @@ export class TaskService {
     };
   }
 
+  private activeItemFromBackgroundTask(task: BackgroundTask): ActiveTaskItem {
+    return {
+      kind: 'background',
+      threadId: task.threadId,
+      taskId: task.id,
+      title: task.goal.slice(0, 60),
+      goal: task.goal,
+      status: task.status,
+      trigger: this.triggerFromBackgroundTask(task),
+      nextRunAt: task.nextRunAt,
+      lastRunAt: task.lastRunAt,
+      riskLevel: task.riskLevel,
+      workspacePath: task.workspacePath,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    };
+  }
+
+  private listRunsForThread(threadId: string, limit: number): TaskRun[] {
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
+         FROM task_runs
+         WHERE thread_id = ?
+         ORDER BY run_number DESC
+         LIMIT ?`
+      )
+      .all(threadId, limit) as Array<{
+      id: string;
+      thread_id: string;
+      run_number: number;
+      user_input: string;
+      status: TaskRun['status'];
+      started_at: string;
+      ended_at: string | null;
+      model_id: string | null;
+      enabled_capabilities_json: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      threadId: row.thread_id,
+      runNumber: row.run_number,
+      userInput: row.user_input,
+      status: row.status,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      modelId: row.model_id,
+      enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
+    }));
+  }
+
+  private listRecentEventsForThread(threadId: string, limit: number): TaskEvent[] {
+    const rows = this.database.db
+      .prepare(
+        `SELECT id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ?
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT ?`
+      )
+      .all(threadId, limit) as Array<{
+      id: string;
+      thread_id: string;
+      run_id: string;
+      type: TaskEvent['type'];
+      payload_json: string;
+      created_at: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      threadId: row.thread_id,
+      runId: row.run_id,
+      type: row.type,
+      payload: JSON.parse(row.payload_json) as unknown,
+      createdAt: row.created_at
+    }));
+  }
+
+  private findLatestRunId(threadId: string): string | null {
+    const row = this.database.db
+      .prepare(
+        `SELECT id
+         FROM task_runs
+         WHERE thread_id = ?
+         ORDER BY run_number DESC
+         LIMIT 1`
+      )
+      .get(threadId) as { id: string } | undefined;
+    return row?.id ?? null;
+  }
+
   private triggerFromBackgroundTask(task: BackgroundTask): BackgroundTaskPreviewRequest['trigger'] {
     if (task.triggerType === 'manual') {
       return {
@@ -948,5 +1240,66 @@ export class TaskService {
       cronExpression: task.cronExpression,
       nextRunAt: task.nextRunAt
     };
+  }
+
+  private findLatestRun(threadId: string): TaskRun | null {
+    const row = this.database.db
+      .prepare(
+        `SELECT id
+         FROM task_runs
+         WHERE thread_id = ?
+         ORDER BY run_number DESC
+         LIMIT 1`
+      )
+      .get(threadId) as { id: string } | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return this.getRun(row.id);
+  }
+
+  private resolvePromotionTrigger(
+    threadId: string,
+    runId: string,
+    thresholds: { runningSeconds: number; toolCallCount: number; subagentCount: number }
+  ): LongRunningPromotionPayload | null {
+    return evaluateLongRunningCandidate({
+      run: this.getRun(runId),
+      thresholds,
+      toolCallCount: this.countEvents({
+        threadId,
+        runId,
+        type: 'tool_call'
+      }),
+      subagentCount: this.countEvents({
+        threadId,
+        type: 'subagent_started'
+      })
+    });
+  }
+
+  private countEvents(input: { threadId: string; type: TaskEvent['type']; runId?: string }): number {
+    if (input.runId === undefined) {
+      const row = this.database.db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM task_events
+           WHERE thread_id = ?
+             AND type = ?`
+        )
+        .get(input.threadId, input.type) as { count: number };
+      return row.count;
+    }
+
+    const row = this.database.db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM task_events
+         WHERE thread_id = ?
+           AND run_id = ?
+           AND type = ?`
+      )
+      .get(input.threadId, input.runId, input.type) as { count: number };
+    return row.count;
   }
 }

@@ -205,7 +205,7 @@ export function createAppServices(
   const configService = new ConfigService(paths);
   const databaseService = new DatabaseService(paths);
   const logService = new LogService(paths);
-  const taskService = new TaskService(databaseService);
+  const taskService = new TaskService(databaseService, configService);
   const lifecycleService = new LifecycleService(taskService);
   const mcpService = new McpService(configService);
   const skillService = new SkillService(paths);

@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeStatus,
   AgentCapabilityPreview,
+  ActiveTaskItem,
   AppSettings,
   AppStatus,
   BackgroundTask,
@@ -15,6 +16,7 @@ import type {
   DeepAgentConfigPreview,
   DiagnosticPackage,
   DiagnosticPackageRequest,
+  DiagnosticCheck,
   FilePreviewRequest,
   FilePreviewResult,
   FilesWorkbenchPdfPreviewRequest,
@@ -77,12 +79,18 @@ import type {
   TerminalSessionOutputEvent,
   TerminalSessionResizeRequest,
   TerminalSessionSnapshot,
+  SchedulerStatus,
+  ScheduledTaskRun,
+  TaskDetail,
   TaskEvent,
   TaskSnapshot,
   TaskMessageHistoryRequest,
   TaskDeleteThreadRequest,
   TaskDeleteThreadResult,
+  TaskThread,
+  TaskUpdateEvent,
   TraySummary,
+  UpdateBackgroundTaskRequest,
   Workspace,
   FileDialogSelection,
   WorkspaceSelectRequest,
@@ -111,11 +119,21 @@ export const ipcChannels = {
   tasksPauseBackgroundTask: 'roc:tasks:pause-background-task',
   tasksResumeBackgroundTask: 'roc:tasks:resume-background-task',
   tasksCancelBackgroundTask: 'roc:tasks:cancel-background-task',
+  tasksGetActiveTasks: 'roc:tasks:get-active-tasks',
+  tasksGetTaskDetail: 'roc:tasks:get-task-detail',
+  tasksListScheduledRuns: 'roc:tasks:list-scheduled-runs',
+  tasksRunBackgroundNow: 'roc:tasks:run-background-now',
+  tasksDeleteBackgroundTask: 'roc:tasks:delete-background-task',
+  tasksUpdateBackgroundTask: 'roc:tasks:update-background-task',
+  tasksOpenInChat: 'roc:tasks:open-in-chat',
+  tasksPromoteThread: 'roc:tasks:promote-thread',
+  tasksGetSchedulerStatus: 'roc:tasks:get-scheduler-status',
   lifecycleGetTraySummary: 'roc:lifecycle:get-tray-summary',
   lifecyclePauseBackground: 'roc:lifecycle:pause-background',
   lifecycleResumeBackground: 'roc:lifecycle:resume-background',
   diagnosticsSamplePerformance: 'roc:diagnostics:sample-performance',
   diagnosticsCreatePackage: 'roc:diagnostics:create-package',
+  diagnosticsRunChecks: 'roc:diagnostics:run-checks',
   memoryStatus: 'roc:memory:status',
   memorySearch: 'roc:memory:search',
   memoryGet: 'roc:memory:get',
@@ -208,7 +226,16 @@ export type RocPreloadApi = {
     pauseBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
     resumeBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
     cancelBackgroundTask: (id: string) => Promise<IpcResult<BackgroundTask>>;
-    onUpdated: (callback: () => void) => () => void;
+    getActiveTasks: () => Promise<IpcResult<ActiveTaskItem[]>>;
+    getTaskDetail: (request: { taskId: string }) => Promise<IpcResult<TaskDetail>>;
+    listScheduledRuns: (request: { taskId: string; limit?: number }) => Promise<IpcResult<ScheduledTaskRun[]>>;
+    runBackgroundNow: (id: string) => Promise<IpcResult<{ taskId: string; runId: string }>>;
+    deleteBackgroundTask: (id: string) => Promise<IpcResult<{ deleted: true; taskId: string }>>;
+    updateBackgroundTask: (request: UpdateBackgroundTaskRequest) => Promise<IpcResult<BackgroundTask>>;
+    openInChat: (request: { taskId: string }) => Promise<IpcResult<{ threadId: string }>>;
+    promoteThread: (request: { threadId: string; reason: 'manual' }) => Promise<IpcResult<TaskThread>>;
+    getSchedulerStatus: () => Promise<IpcResult<SchedulerStatus>>;
+    onUpdated: (callback: (event: TaskUpdateEvent | null) => void) => () => void;
   };
   lifecycle: {
     getTraySummary: () => Promise<IpcResult<TraySummary>>;
@@ -218,6 +245,7 @@ export type RocPreloadApi = {
   diagnostics: {
     samplePerformance: (request: PerformanceSampleRequest) => Promise<IpcResult<PerformanceSample>>;
     createDiagnosticPackage: (request: DiagnosticPackageRequest) => Promise<IpcResult<DiagnosticPackage>>;
+    runChecks: () => Promise<IpcResult<DiagnosticCheck[]>>;
   };
   memory: {
     status: () => Promise<IpcResult<MemoryStatus>>;

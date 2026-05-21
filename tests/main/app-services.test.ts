@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeAppServicesTest, cleanupAppServicesTest, normalizeLineEndings, type AppServicesTestContext } from './app-service-fixtures';
 
 describe('Roc foundation services', () => {
@@ -146,5 +146,129 @@ describe('Roc foundation services', () => {
     expect(sample.timing.samples).toHaveLength(500);
     expect(sample.timing.samples[0]?.label).toBe('channel-10');
     expect(sample.timing.samples.at(-1)?.label).toBe('channel-509');
+  });
+
+  it('runs scheduler diagnostics checks for Doctor', () => {
+    const { root, services } = context;
+    vi.spyOn(services.taskSchedulerService, 'getStatus').mockReturnValue({
+      running: true,
+      registeredTaskCount: 1,
+      nextFireAt: '2026-05-21T01:00:00.000Z',
+      recentSkippedCount: 1,
+      lastError: null
+    });
+    const preview = services.taskService.createBackgroundTaskPreview({
+      goal: 'Doctor scheduler check',
+      trigger: {
+        type: 'cron',
+        description: '每天 09:00',
+        cronExpression: '0 9 * * *',
+        nextRunAt: '2026-05-21T01:00:00.000Z'
+      },
+      workspacePath: root,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    services.taskService.createBackgroundTask(preview);
+    services.taskService.recordScheduledTaskRun({
+      backgroundTaskId: services.taskService.listBackgroundTasks()[0]!.id,
+      scheduledAt: new Date().toISOString(),
+      status: 'skipped',
+      skipReason: 'missed_startup'
+    });
+
+    const checks = services.diagnosticsService.runChecks(services.taskSchedulerService.getStatus());
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'scheduler_running', status: 'pass', severity: 'info' }),
+        expect.objectContaining({ id: 'scheduler_tasks_registered', status: 'pass', severity: 'info' }),
+        expect.objectContaining({ id: 'scheduler_missed_runs_recent', status: 'warn', severity: 'warning' }),
+        expect.objectContaining({ id: 'cron_expressions_valid', status: 'pass', severity: 'info' })
+      ])
+    );
+  });
+
+  it('reports scheduler diagnostics errors when scheduler is stopped and cron rows are invalid', () => {
+    const { services } = context;
+    vi.spyOn(services.taskSchedulerService, 'getStatus').mockReturnValue({
+      running: false,
+      registeredTaskCount: 0,
+      nextFireAt: null,
+      recentSkippedCount: 0,
+      lastError: 'scheduler_not_started'
+    });
+    services.databaseService.db
+      .prepare('INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        'thread-invalid-cron',
+        'background',
+        'Invalid cron',
+        'Invalid cron',
+        'running',
+        '2026-05-21T00:00:00.000Z',
+        '2026-05-21T00:00:00.000Z'
+      );
+    services.databaseService.db
+      .prepare(
+        `INSERT INTO task_runs
+         (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        'run-invalid-cron',
+        'thread-invalid-cron',
+        1,
+        'Invalid cron',
+        'running',
+        '2026-05-21T00:00:00.000Z',
+        null,
+        null,
+        '{"mcpServers":[],"skills":[]}'
+      );
+    services.databaseService.db
+      .prepare(
+        `INSERT INTO background_tasks
+         (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, cron_expression, workspace_path,
+          allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+          requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        'background-invalid-cron',
+        'thread-invalid-cron',
+        'run-invalid-cron',
+        'Invalid cron',
+        'running',
+        1,
+        'cron',
+        'invalid',
+        '2026-05-21T01:00:00.000Z',
+        'bad cron',
+        'F:\\Code\\Roc',
+        '[]',
+        '[]',
+        'pause_and_report',
+        'failures_and_confirmations',
+        'low',
+        0,
+        null,
+        null,
+        0,
+        '2026-05-21T00:00:00.000Z',
+        '2026-05-21T00:00:00.000Z'
+      );
+
+    const checks = services.diagnosticsService.runChecks(services.taskSchedulerService.getStatus());
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'scheduler_running', status: 'fail', severity: 'error' }),
+        expect.objectContaining({ id: 'scheduler_tasks_registered', status: 'warn', severity: 'warning' }),
+        expect.objectContaining({ id: 'cron_expressions_valid', status: 'fail', severity: 'error' })
+      ])
+    );
   });
 });

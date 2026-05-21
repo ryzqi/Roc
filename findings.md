@@ -45,3 +45,17 @@
 - Background task tools always require interrupt approval, including `fully_automatic` mode.
 - `DeepAgentRuntimeService` applies background task side effects before resuming LangGraph and returns the resulting task operation payload as the edited action args.
 - `TaskSchedulerService.refreshTask()` clears old timers before registering updated schedule definitions.
+
+## Phase 4 Decisions
+
+- Keep legacy background task APIs available for tray/operations, but make activeTasks the renderer workbench source of truth.
+- loadTaskSurfaceData() loads active tasks, scheduler status, tray summary, and first background task detail/runs for the detail drawer.
+- History hides active background and long_running threads, while completed promoted threads return to history.
+
+## Phase 5 Decisions
+
+- Long-running promotion is evaluated from TaskService.evaluateLongRunningPromotion(threadId) using live ConfigService.getTaskSettings() thresholds.
+- Promotion reasons are tool_calls_exceeded, subagent_spawned, approval_waiting, running_over_90s, and manual promotion.
+- Completed, failed, cancelled, and archived chat threads are not promoted after the fact.
+- DeepAgentRuntimeService clears the 90-second evaluation timer when the run ends, so completed short runs are not promoted later.
+- Doctor scheduler checks are exposed through diagnostics as runChecks() and rendered in the existing diagnostics surface, avoiding a separate Doctor route.

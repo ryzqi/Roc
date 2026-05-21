@@ -23,3 +23,9 @@
 - `pnpm typecheck` passed.
 - `pnpm test tests/main/background-task-tools.test.ts tests/main/deep-agent-tools.test.ts tests/main/deep-agent-runtime-service.test.ts tests/main/app-services.provider.test.ts` passed with 88 tests.
 - `git diff --check` passed; only CRLF normalization warnings were reported by Git.
+- Phase 4 GREEN: active task workbench UI, task IPC/preload extensions, active task projection, task surface loading, history filtering, and task approval card rendering are implemented.
+- Phase 4 verification: pnpm test tests/main/task-service-active-tasks.test.ts tests/main/workspace-dialog-ipc.test.ts tests/renderer/task-view-model.test.ts tests/renderer/history-sidebar.test.ts tests/renderer/tasks-view.test.ts tests/renderer/task-surface-data.test.ts tests/renderer/empty-states.test.ts passed with 19 tests.
+- Phase 5 RED/GREEN: expanded long-running promotion tests for tool calls, subagent spawn, approval wait, running duration, idempotency, and completed thread protection; added scheduler Doctor diagnostics checks and renderer diagnostics display.
+- Phase 5 verification: pnpm test tests/main/task-long-running-evaluator.test.ts tests/main/app-services.test.ts tests/renderer/workspace-surfaces.test.ts tests/main/config-service.test.ts passed as part of the 11-file targeted run with 55 tests.
+- pnpm typecheck passed after Phase 5 changes.
+- node --check tests\\smoke\\electron-smoke.mjs && node --check tests\\smoke\\lib\\ipc.mjs passed after updating smoke selectors/API checks for the active task workbench and diagnostics checks.

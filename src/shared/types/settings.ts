@@ -25,6 +25,17 @@ export type AppSettings = {
     crossScopeRecall: MemoryCrossScopeRecall;
     coldAutoForgetDays: MemoryColdAutoForgetDays;
   };
+  tasks: {
+    longRunningThresholds: {
+      runningSeconds: number;
+      toolCallCount: number;
+      subagentCount: number;
+    };
+    scheduler: {
+      catchUpOnStartup: boolean;
+      maxRegisteredTasks: number;
+    };
+  };
 };
 
 export type ApprovalMode = 'fully_automatic' | 'default';

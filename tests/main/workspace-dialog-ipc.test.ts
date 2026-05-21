@@ -168,6 +168,113 @@ describe('workspace dialog IPC', () => {
     });
   });
 
+  it('registers task workbench IPC handlers and delegates to task services', async () => {
+    registerWorkspaceHandlers();
+    const getActiveTasksSpy = vi
+      .spyOn(services.taskService as AppServices['taskService'] & { getActiveTasks: () => unknown[] }, 'getActiveTasks')
+      .mockReturnValue([]);
+    const getTaskDetailSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & { getTaskDetail: (request: unknown) => unknown },
+        'getTaskDetail'
+      )
+      .mockReturnValue({ taskId: 'task_1', schedulerRegistered: true });
+    const listScheduledRunsSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & {
+          listScheduledRuns: (request: unknown) => unknown[];
+        },
+        'listScheduledRuns'
+      )
+      .mockReturnValue([]);
+    const updateBackgroundTaskSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & { updateBackgroundTask: (request: unknown) => unknown },
+        'updateBackgroundTask'
+      )
+      .mockReturnValue({ id: 'task_1' });
+    const deleteBackgroundTaskSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & {
+          deleteBackgroundTask: (taskId: string) => { deleted: true };
+        },
+        'deleteBackgroundTask'
+      )
+      .mockReturnValue({ deleted: true });
+    const openInChatSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & {
+          openBackgroundTaskInChat: (taskId: string) => { threadId: string };
+        },
+        'openBackgroundTaskInChat'
+      )
+      .mockReturnValue({
+        threadId: 'thread_1'
+      });
+    const promoteThreadSpy = vi
+      .spyOn(
+        services.taskService as AppServices['taskService'] & {
+          promoteThread: (request: unknown) => unknown;
+        },
+        'promoteThread'
+      )
+      .mockReturnValue({ id: 'thread_1' });
+    const schedulerStatusSpy = vi.spyOn(services.taskSchedulerService, 'getStatus').mockReturnValue({
+      running: true,
+      registeredTaskCount: 1,
+      nextFireAt: '2026-05-22T01:00:00.000Z',
+      recentSkippedCount: 0,
+      lastError: null
+    });
+    const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue(null);
+
+    const handlers = [
+      ipcChannels.tasksGetActiveTasks,
+      ipcChannels.tasksGetTaskDetail,
+      ipcChannels.tasksListScheduledRuns,
+      ipcChannels.tasksRunBackgroundNow,
+      ipcChannels.tasksDeleteBackgroundTask,
+      ipcChannels.tasksUpdateBackgroundTask,
+      ipcChannels.tasksOpenInChat,
+      ipcChannels.tasksPromoteThread,
+      ipcChannels.tasksGetSchedulerStatus
+    ];
+    for (const channel of handlers) {
+      expect(electronMock.handlers.has(channel)).toBe(true);
+    }
+
+    await electronMock.handlers.get(ipcChannels.tasksGetActiveTasks)?.({});
+    await electronMock.handlers.get(ipcChannels.tasksGetTaskDetail)?.({}, { taskId: 'task_1' });
+    await electronMock.handlers.get(ipcChannels.tasksListScheduledRuns)?.({}, { taskId: 'task_1', limit: 5 });
+    await electronMock.handlers.get(ipcChannels.tasksRunBackgroundNow)?.({}, 'task_1');
+    await electronMock.handlers.get(ipcChannels.tasksDeleteBackgroundTask)?.({}, 'task_1');
+    await electronMock.handlers.get(ipcChannels.tasksUpdateBackgroundTask)?.({}, {
+      taskId: 'task_1',
+      patch: {},
+      reason: 'test'
+    });
+    await electronMock.handlers.get(ipcChannels.tasksOpenInChat)?.({}, { taskId: 'task_1' });
+    await electronMock.handlers.get(ipcChannels.tasksPromoteThread)?.({}, { threadId: 'thread_1', reason: 'manual' });
+    await electronMock.handlers.get(ipcChannels.tasksGetSchedulerStatus)?.({});
+
+    expect(getActiveTasksSpy).toHaveBeenCalled();
+    expect(getTaskDetailSpy).toHaveBeenCalledWith({
+      taskId: 'task_1',
+      schedulerRegistered: true
+    });
+    expect(listScheduledRunsSpy).toHaveBeenCalledWith({ taskId: 'task_1', limit: 5 });
+    expect(runNowSpy).toHaveBeenCalledWith('task_1');
+    expect(deleteBackgroundTaskSpy).toHaveBeenCalledWith('task_1');
+    expect(updateBackgroundTaskSpy).toHaveBeenCalledWith({
+      taskId: 'task_1',
+      patch: {},
+      reason: 'test'
+    });
+    expect(openInChatSpy).toHaveBeenCalledWith('task_1');
+    expect(promoteThreadSpy).toHaveBeenCalledWith({ threadId: 'thread_1', reason: 'manual' });
+    expect(schedulerStatusSpy).toHaveBeenCalled();
+  });
+
   it('records timing metadata for registered IPC handlers', async () => {
     registerWorkspaceHandlers();
     vi.spyOn(

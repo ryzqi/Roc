@@ -54,6 +54,7 @@ export function emptyMemoryData(): MemoryData {
 
 export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
   return {
+    diagnosticChecks: [],
     diagnosticPackage: null,
     performanceSample: {
       id: '',
@@ -75,8 +76,16 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
 
 export function emptyTaskSurfaceData(): TaskSurfaceData {
   return {
-    backgroundTask: null,
-    backgroundTasks: [],
+    activeTasks: [],
+    taskDetail: null,
+    scheduledRuns: [],
+    schedulerStatus: {
+      running: false,
+      registeredTaskCount: 0,
+      nextFireAt: null,
+      recentSkippedCount: 0,
+      lastError: null
+    },
     traySummary: {
       residentEnabled: true,
       backgroundPaused: false,

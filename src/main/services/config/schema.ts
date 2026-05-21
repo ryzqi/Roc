@@ -30,6 +30,17 @@ export const SettingsSchema: z.ZodType<AppSettings> = z.object({
     sessionRetentionDays: z.union([z.literal(30), z.literal(90), z.literal(180)]),
     crossScopeRecall: z.enum(['explicit_only', 'expanded_with_label']),
     coldAutoForgetDays: z.union([z.literal(90), z.literal(180), z.literal(365), z.null()])
+  }),
+  tasks: z.object({
+    longRunningThresholds: z.object({
+      runningSeconds: z.number().int().nonnegative(),
+      toolCallCount: z.number().int().nonnegative(),
+      subagentCount: z.number().int().nonnegative()
+    }),
+    scheduler: z.object({
+      catchUpOnStartup: z.boolean(),
+      maxRegisteredTasks: z.number().int().positive()
+    })
   })
 });
 

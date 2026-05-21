@@ -34,8 +34,6 @@ function buildFloatingLoadedState(input: {
     workspace: null,
     ...emptyWorkspaceData(),
     rtkStatus: input.rtkStatus,
-    backgroundTask: null,
-    backgroundTasks: [],
     traySummary: input.traySummary,
     windowState: input.windowState
   } as LoadedState & { windowState: WindowStateSnapshot };

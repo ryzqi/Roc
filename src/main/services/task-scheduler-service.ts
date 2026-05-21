@@ -105,7 +105,7 @@ export class TaskSchedulerService {
     this.registerTask(task);
   }
 
-  async fire(taskId: string): Promise<void> {
+  async fire(taskId: string): Promise<string | null> {
     if (this.firingTaskIds.has(taskId)) {
       const task = this.findTask(taskId);
       if (task !== null) {
@@ -116,12 +116,12 @@ export class TaskSchedulerService {
           skipReason: 'already_running'
         });
       }
-      return;
+      return null;
     }
 
     const task = this.findTask(taskId);
     if (task === null) {
-      return;
+      return null;
     }
     this.clearTimer(task.id);
     this.firingTaskIds.add(task.id);
@@ -141,7 +141,7 @@ export class TaskSchedulerService {
           runId: skipped.id,
           reason: skipReason
         });
-        return;
+        return null;
       }
 
       const result = await this.runtimeStarter.startRun({
@@ -171,6 +171,7 @@ export class TaskSchedulerService {
       if (updated.status === 'running') {
         this.registerTask(updated);
       }
+      return result.runId;
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
       const failed = this.taskService.recordScheduledTaskRun({
@@ -184,6 +185,7 @@ export class TaskSchedulerService {
         runId: failed.id,
         reason: 'fire_failed'
       });
+      return null;
     } finally {
       this.firingTaskIds.delete(task.id);
     }

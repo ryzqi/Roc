@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { BackgroundTask, TaskThread } from '../../src/shared/types';
+import type { TaskThread } from '../../src/shared/types';
 import * as historySidebar from '../../src/renderer/history-sidebar';
 import { buildHistoryItems } from '../../src/renderer/history-sidebar';
 
-function createThread(id: string, title: string): TaskThread {
+function createThread(id: string, title: string, input: Partial<TaskThread> = {}): TaskThread {
   return {
     id,
     kind: 'chat',
@@ -11,34 +11,8 @@ function createThread(id: string, title: string): TaskThread {
     goal: title,
     status: 'completed',
     createdAt: '2026-05-08T15:00:00.000Z',
-    updatedAt: '2026-05-08T15:30:45.000Z'
-  };
-}
-
-function createBackgroundTask(threadId: string): BackgroundTask {
-  return {
-    id: `background-${threadId}`,
-    threadId,
-    runId: `run-${threadId}`,
-    goal: '后台定时任务',
-    status: 'running',
-    scheduled: true,
-    triggerType: 'cron',
-    triggerDescription: 'schedule',
-    nextRunAt: '2026-05-08T16:00:00.000Z',
-    cronExpression: '0 * * * *',
-    workspacePath: 'F:\\Code\\Roc',
-    allowedActions: ['pnpm test'],
-    forbiddenActions: [],
-    failurePolicy: 'pause_and_report',
-    notificationPolicy: 'failures_and_confirmations',
-    riskLevel: 'low',
-    requiresConfirmation: false,
-    lastRunAt: null,
-    lastRunStatus: null,
-    runCount: 0,
-    createdAt: '2026-05-08T15:00:00.000Z',
-    updatedAt: '2026-05-08T15:30:45.000Z'
+    updatedAt: '2026-05-08T15:30:45.000Z',
+    ...input
   };
 }
 
@@ -52,7 +26,7 @@ describe('history sidebar helpers', () => {
       createThread('memory-thread', '记忆整理裁决'),
       createThread('task-thread', '任务工作台记录'),
       createThread('background-thread', '后台定时任务')
-    ], [createBackgroundTask('background-thread')]);
+    ], ['background-thread']);
 
     expect(items).toEqual([
       {
@@ -99,5 +73,31 @@ describe('history sidebar helpers', () => {
     expect(filterHistoryItems(items, 'REPORT')).toEqual([items[1]]);
     expect(filterHistoryItems(items, 'missing')).toEqual([]);
     expect(filterHistoryItems(items, '   ')).toEqual(items);
+  });
+
+  it('hides active promoted threads but returns completed promoted threads to history', () => {
+    const items = buildHistoryItems([
+      createThread('long-running-active', '活跃长任务', {
+        kind: 'long_running',
+        status: 'running'
+      }),
+      createThread('background-active', '活跃后台任务', {
+        kind: 'background',
+        status: 'paused'
+      }),
+      createThread('long-running-completed', '已完成长任务', {
+        kind: 'long_running',
+        status: 'completed'
+      })
+    ], []);
+
+    expect(items).toEqual([
+      {
+        id: 'long-running-completed',
+        label: '已完成长任务',
+        meta: '2026-05-08 23:30',
+        icon: 'history'
+      }
+    ]);
   });
 });

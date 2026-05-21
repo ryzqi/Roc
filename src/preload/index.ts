@@ -32,8 +32,17 @@ const rocApi: RocPreloadApi = {
     pauseBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksPauseBackgroundTask, id),
     resumeBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksResumeBackgroundTask, id),
     cancelBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksCancelBackgroundTask, id),
+    getActiveTasks: () => ipcRenderer.invoke(ipcChannels.tasksGetActiveTasks),
+    getTaskDetail: (request) => ipcRenderer.invoke(ipcChannels.tasksGetTaskDetail, request),
+    listScheduledRuns: (request) => ipcRenderer.invoke(ipcChannels.tasksListScheduledRuns, request),
+    runBackgroundNow: (id) => ipcRenderer.invoke(ipcChannels.tasksRunBackgroundNow, id),
+    deleteBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksDeleteBackgroundTask, id),
+    updateBackgroundTask: (request) => ipcRenderer.invoke(ipcChannels.tasksUpdateBackgroundTask, request),
+    openInChat: (request) => ipcRenderer.invoke(ipcChannels.tasksOpenInChat, request),
+    promoteThread: (request) => ipcRenderer.invoke(ipcChannels.tasksPromoteThread, request),
+    getSchedulerStatus: () => ipcRenderer.invoke(ipcChannels.tasksGetSchedulerStatus),
     onUpdated: (callback) => {
-      const listener = () => callback();
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on('roc:tasks:updated', listener);
       return () => ipcRenderer.off('roc:tasks:updated', listener);
     }
@@ -45,7 +54,8 @@ const rocApi: RocPreloadApi = {
   },
   diagnostics: {
     samplePerformance: (request) => ipcRenderer.invoke(ipcChannels.diagnosticsSamplePerformance, request),
-    createDiagnosticPackage: (request) => ipcRenderer.invoke(ipcChannels.diagnosticsCreatePackage, request)
+    createDiagnosticPackage: (request) => ipcRenderer.invoke(ipcChannels.diagnosticsCreatePackage, request),
+    runChecks: () => ipcRenderer.invoke(ipcChannels.diagnosticsRunChecks)
   },
   memory: {
     status: () => ipcRenderer.invoke(ipcChannels.memoryStatus),

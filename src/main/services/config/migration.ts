@@ -66,7 +66,8 @@ export function upgradeLegacySettings(raw: unknown): AppSettings {
       crossScopeRecall:
         memory.crossScopeRecall === 'expanded_with_label' ? 'expanded_with_label' : 'explicit_only',
       coldAutoForgetDays: upgradeColdAutoForget(memory.coldAutoForgetDays)
-    }
+    },
+    tasks: defaultSettings.tasks
   });
 }
 

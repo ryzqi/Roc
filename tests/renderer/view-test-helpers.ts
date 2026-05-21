@@ -83,6 +83,17 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
         sessionRetentionDays: 30,
         crossScopeRecall: 'explicit_only',
         coldAutoForgetDays: 90
+      },
+      tasks: {
+        longRunningThresholds: {
+          runningSeconds: 90,
+          toolCallCount: 8,
+          subagentCount: 1
+        },
+        scheduler: {
+          catchUpOnStartup: true,
+          maxRegisteredTasks: 256
+        }
       }
     },
     providers: [],
@@ -99,8 +110,16 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     skills: [],
     selectedMcpServers: [],
     selectedSkills: [],
-    backgroundTask: null,
-    backgroundTasks: [],
+    activeTasks: [],
+    taskDetail: null,
+    scheduledRuns: [],
+    schedulerStatus: {
+      running: false,
+      registeredTaskCount: 0,
+      nextFireAt: null,
+      recentSkippedCount: 0,
+      lastError: null
+    },
     traySummary: {
       residentEnabled: false,
       backgroundPaused: false,
@@ -115,6 +134,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       }
     },
     diagnosticPackage: null,
+    diagnosticChecks: [],
     performanceSample: {
       id: 'perf-sample',
       sampledAt: '2026-05-13T00:00:00.000Z',

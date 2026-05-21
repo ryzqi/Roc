@@ -156,8 +156,8 @@ async function createWindow(): Promise<void> {
     openMainPage: showMainPage,
     openQuickEntry: () => openFloatingEntry('quick'),
     openTrayEntry: () => openFloatingEntry('tray'),
-    broadcastTaskUpdated: () => {
-      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+    broadcastTaskUpdated: (event) => {
+      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', event ?? null);
     }
   });
   if (!pdfPreviewProtocolRegistered) {
