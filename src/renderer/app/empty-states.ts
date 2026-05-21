@@ -6,6 +6,7 @@ export function emptyWorkspaceData(): WorkspaceData {
     fileTree: null,
     fileSearch: null,
     filePreview: null,
+    fileWorkbenchPdfPreview: null,
     gitStatus: null,
     gitBranches: null,
     gitError: null,

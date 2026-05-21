@@ -113,6 +113,7 @@ export function App(): React.JSX.Element {
   const workspaceRefreshSnapshotRef = useRef({
     workspace: null as Workspace | null,
     previewRelativePath: null as string | null,
+    fileWorkbenchPdfRelativePath: null as string | null,
     gitSelectedPath: null as string | null
   });
 
@@ -259,11 +260,12 @@ export function App(): React.JSX.Element {
     const nextSnapshot = {
       workspace: state?.workspace ?? null,
       previewRelativePath: state?.filePreview?.relativePath ?? null,
+      fileWorkbenchPdfRelativePath: state?.fileWorkbenchPdfPreview?.relativePath ?? null,
       gitSelectedPath: state?.gitSelectedPath ?? null
     };
     workspaceRefreshSnapshotRef.current = nextSnapshot;
     workspaceRefreshSubscriptionRef.current?.updateSnapshot(nextSnapshot);
-  }, [state?.workspace, state?.filePreview?.relativePath, state?.gitSelectedPath]);
+  }, [state?.workspace, state?.filePreview?.relativePath, state?.fileWorkbenchPdfPreview?.relativePath, state?.gitSelectedPath]);
 
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
@@ -398,6 +400,7 @@ export function App(): React.JSX.Element {
         return {
           fileTree: workspaceData.fileTree,
           filePreview: workspaceData.filePreview,
+          fileWorkbenchPdfPreview: workspaceData.fileWorkbenchPdfPreview,
           gitStatus: workspaceData.gitStatus,
           gitBranches: workspaceData.gitBranches,
           gitError: workspaceData.gitError,

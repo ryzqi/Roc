@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FilePreviewResult, FileTreeResult } from '../../shared/types';
+import type { FilePreviewResult, FileTreeResult, FilesWorkbenchPdfPreviewResult } from '../../shared/types';
 import { CompactStatusPill } from '../components/CompactStatusPill';
 import { EmptyState } from '../components/EmptyState';
 import { TreeItem } from '../components/TreeItem';
@@ -21,7 +21,8 @@ export function FilesWorkbench({
   const [directoryChildren, setDirectoryChildren] = useState<Record<string, FileTreeResult['entries']>>({});
   const [directoryLoadingPath, setDirectoryLoadingPath] = useState<string | null>(null);
   const [filePaneWidth, setFilePaneWidth] = useState(304);
-  const previewPath = state.filePreview?.relativePath ?? '当前没有可预览文件';
+  const selectedPreviewRelativePath = state.fileWorkbenchPdfPreview?.relativePath ?? state.filePreview?.relativePath ?? null;
+  const previewPath = selectedPreviewRelativePath ?? '当前没有可预览文件';
 
   useEffect(() => {
     setExpandedDirectories(new Set());
@@ -38,7 +39,11 @@ export function FilesWorkbench({
 
   async function openFilePreview(relativePath: string): Promise<void> {
     const preview = unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath }));
-    updateWorkspaceData({ filePreview: preview, fileSearch: null });
+    const pdfPreview =
+      preview.mediaType === 'application/pdf'
+        ? unwrap<FilesWorkbenchPdfPreviewResult>('file pdf preview', await window.roc.files.previewPdf({ relativePath }))
+        : null;
+    updateWorkspaceData({ filePreview: preview, fileWorkbenchPdfPreview: pdfPreview, fileSearch: null });
   }
 
   async function toggleDirectory(relativePath: string): Promise<void> {
@@ -64,10 +69,10 @@ export function FilesWorkbench({
   }
 
   useEffect(() => {
-    if (state.filePreview === null) {
+    if (selectedPreviewRelativePath === null) {
       return;
     }
-    const parentPath = parentRelativePath(state.filePreview.relativePath);
+    const parentPath = parentRelativePath(selectedPreviewRelativePath);
     if (parentPath === null) {
       return;
     }
@@ -79,7 +84,7 @@ export function FilesWorkbench({
       next.add(parentPath);
       return next;
     });
-  }, [state.filePreview?.relativePath]);
+  }, [selectedPreviewRelativePath]);
 
   if (state.workspace === null) {
     return (
@@ -108,7 +113,16 @@ export function FilesWorkbench({
   const previewBody = previewTextBody(state.filePreview);
   const treeNodes = state.fileTree === null ? [] : flattenTreeEntries(state.fileTree.entries, expandedDirectories, directoryChildren);
   const previewPanel =
-    state.filePreview === null ? (
+    state.fileWorkbenchPdfPreview !== null ? (
+      <div className="workbench-file-pdf-stage" data-testid="workbench-file-preview">
+        <iframe
+          className="workbench-file-pdf-frame"
+          data-testid="workbench-file-pdf-preview"
+          src={state.fileWorkbenchPdfPreview.resourceUrl}
+          title={state.fileWorkbenchPdfPreview.relativePath}
+        />
+      </div>
+    ) : state.filePreview === null ? (
       <div className="workbench-file-empty" data-testid="workbench-file-preview">
         <strong>尚未选中文件</strong>
         <p>从左侧文件树选择一个文件后，这里会显示原内容、图片或不可直接阅读的说明。</p>
@@ -169,7 +183,7 @@ export function FilesWorkbench({
             ) : (
               treeNodes.slice(0, 240).map(({ entry, depth }) => (
                 <TreeItem
-                  active={state.filePreview?.relativePath === entry.relativePath}
+                  active={selectedPreviewRelativePath === entry.relativePath}
                   depth={depth}
                   expanded={expandedDirectories.has(entry.relativePath)}
                   entry={entry}
@@ -197,7 +211,15 @@ export function FilesWorkbench({
               <div className="pane-path">{previewPath}</div>
             </div>
           </header>
-          <div className={state.filePreview?.kind === 'text' ? 'workbench-file-body workbench-file-body--code' : 'workbench-file-body'}>
+          <div
+            className={
+              state.filePreview?.kind === 'text'
+                ? 'workbench-file-body workbench-file-body--code'
+                : state.fileWorkbenchPdfPreview !== null
+                  ? 'workbench-file-body workbench-file-body--pdf'
+                  : 'workbench-file-body'
+            }
+          >
             {previewPanel}
           </div>
         </section>

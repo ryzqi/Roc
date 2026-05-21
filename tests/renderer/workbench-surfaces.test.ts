@@ -55,6 +55,57 @@ describe('workbench surfaces', () => {
     expect(html).not.toContain('EXPLORER');
   });
 
+  it('renders PDF previews in the files workbench from a dedicated workbench preview resource', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(FilesWorkbench, {
+        loadState: { status: 'ready', error: null, key: 'workspace' },
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          fileTree: {
+            workspacePath: 'F:\\Code\\Roc',
+            relativePath: '',
+            truncated: false,
+            entries: [
+              {
+                name: 'spec.pdf',
+                relativePath: 'docs/spec.pdf',
+                type: 'file',
+                size: 1024,
+                updatedAt: '2026-05-16T08:00:00.000Z'
+              }
+            ]
+          },
+          filePreview: {
+            relativePath: 'docs/spec.pdf',
+            kind: 'binary',
+            content: 'PDF 文件需要在文件工作台中预览。',
+            truncated: false,
+            sizeBytes: 1024,
+            mediaType: 'application/pdf'
+          },
+          fileWorkbenchPdfPreview: {
+            relativePath: 'docs/spec.pdf',
+            resourceUrl: 'roc-preview://workspace/pdf/docs%2Fspec.pdf#toolbar=0&navpanes=0&scrollbar=0',
+            sizeBytes: 1024,
+            mediaType: 'application/pdf'
+          } as never
+        }),
+        updateWorkspaceData: () => {}
+      })
+    );
+
+    expect(html).toContain('data-testid="workbench-file-pdf-preview"');
+    expect(html).toContain('roc-preview://workspace/pdf/docs%2Fspec.pdf#toolbar=0&amp;navpanes=0&amp;scrollbar=0');
+    expect(html).not.toContain('该文件不能直接作为文本阅读');
+    expect(html).not.toContain('PDF 预览已加载。');
+  });
+
   it('does not keep a directory visually expanded after the root tree refresh clears cached children', () => {
     const rootEntries: FileEntryShape[] = [
       {

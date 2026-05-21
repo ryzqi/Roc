@@ -31,9 +31,14 @@ export function runWorkspaceGit(workspaceRoot, args) {
 
 export function seedSmokeWorkspace(workspaceRoot, remoteRoot) {
   mkdirSync(join(workspaceRoot, 'assets'));
+  mkdirSync(join(workspaceRoot, 'docs'));
   writeFileSync(join(workspaceRoot, '00-overview.txt'), 'workspace overview smoke file\n', 'utf8');
   writeFileSync(join(workspaceRoot, 'phase-three-notes.txt'), 'phase three smoke workspace\n', 'utf8');
   writeFileSync(join(workspaceRoot, 'batch-stage.txt'), 'batch stage smoke workspace\n', 'utf8');
+  writeFileSync(
+    join(workspaceRoot, 'docs', 'smoke-preview.pdf'),
+    Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF', 'utf8')
+  );
   writeFileSync(
     join(workspaceRoot, 'assets', 'smoke-image.png'),
     Buffer.from(
@@ -44,7 +49,14 @@ export function seedSmokeWorkspace(workspaceRoot, remoteRoot) {
   runWorkspaceGit(workspaceRoot, ['init']);
   runWorkspaceGit(workspaceRoot, ['config', 'user.email', 'roc-smoke@example.test']);
   runWorkspaceGit(workspaceRoot, ['config', 'user.name', 'Roc Smoke']);
-  runWorkspaceGit(workspaceRoot, ['add', '00-overview.txt', 'phase-three-notes.txt', 'batch-stage.txt', 'assets/smoke-image.png']);
+  runWorkspaceGit(workspaceRoot, [
+    'add',
+    '00-overview.txt',
+    'phase-three-notes.txt',
+    'batch-stage.txt',
+    'assets/smoke-image.png',
+    'docs/smoke-preview.pdf'
+  ]);
   runWorkspaceGit(workspaceRoot, ['commit', '-m', 'initial smoke workspace']);
   writeFileSync(
     join(workspaceRoot, 'phase-three-notes.txt'),

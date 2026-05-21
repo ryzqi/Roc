@@ -350,6 +350,9 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.filesListTree, (_event, request) => wrapIpc(() => services.fileService.listTree(request)));
   timedHandle(ipcChannels.filesSearch, (_event, request) => wrapIpc(() => services.fileService.search(request)));
   timedHandle(ipcChannels.filesPreview, (_event, request) => wrapIpc(() => services.fileService.readPreview(request)));
+  timedHandle(ipcChannels.filesPreviewPdf, (_event, request) =>
+    wrapIpc(() => services.fileService.readPdfWorkbenchPreview(request))
+  );
   timedHandle(ipcChannels.filesWriteText, (_event, request) => wrapIpc(() => services.fileService.writeTextFile(request)));
   timedHandle(ipcChannels.gitStatus, () => wrapIpc(() => services.gitService.getStatusAsync()));
   timedHandle(ipcChannels.gitDiffStat, () => wrapIpc(() => services.gitService.getDiffStatAsync()));

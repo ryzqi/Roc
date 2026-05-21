@@ -116,6 +116,64 @@ describe('workspace and diagnostics surfaces', () => {
     expect(html).not.toContain('card-title');
   });
 
+  it('renders workspace view PDF previews through the shared text fallback contract', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WorkspaceView, {
+        loadState: { status: 'ready', error: null, key: 'workspace' },
+        onSelectWorkspace: async () => {},
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          filePreview: {
+            relativePath: 'docs/spec.pdf',
+            kind: 'binary',
+            content: 'PDF 文件需要在文件工作台中预览。',
+            truncated: false,
+            sizeBytes: 1024,
+            mediaType: 'application/pdf'
+          }
+        })
+      })
+    );
+
+    expect(html).toContain('PDF 文件需要在文件工作台中预览。');
+    expect(html).not.toContain('application/pdf');
+  });
+
+  it('renders preview view PDF previews through shared preview text without iframe UI', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(PreviewView, {
+        loadState: { status: 'ready', error: null, key: 'preview' },
+        state: createLoadedState({
+          workspace: {
+            id: 'workspace-1',
+            path: 'F:\\Code\\Roc',
+            displayName: 'Roc',
+            lastOpenedAt: '2026-05-16T08:00:00.000Z',
+            trustState: 'trusted'
+          },
+          filePreview: {
+            relativePath: 'docs/spec.pdf',
+            kind: 'binary',
+            content: 'PDF 文件需要在文件工作台中预览。',
+            truncated: false,
+            sizeBytes: 1024,
+            mediaType: 'application/pdf'
+          },
+          fileSearch: null
+        })
+      })
+    );
+
+    expect(html).toContain('PDF 文件需要在文件工作台中预览。');
+    expect(html).not.toContain('iframe');
+  });
+
   it('renders terminal view with section copy and shell surface', () => {
     const html = renderToStaticMarkup(
       React.createElement(TerminalView, {

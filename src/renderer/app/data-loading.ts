@@ -4,6 +4,7 @@ import type {
   BackgroundTask,
   FilePreviewRequest,
   DiagnosticPackage,
+  FilesWorkbenchPdfPreviewResult,
   FilePreviewResult,
   FileTreeResult,
   McpServerSnapshot,
@@ -30,6 +31,7 @@ import type { MemoryData, OperationsData, TaskSurfaceData, WorkspaceData } from 
 
 export type WorkspaceDataLoadOptions = {
   previewRelativePath?: string | null;
+  fileWorkbenchPdfRelativePath?: string | null;
   fallbackToFirstFilePreview?: boolean;
   gitSelectedPath?: string | null;
 };
@@ -44,6 +46,7 @@ export async function loadWorkspaceData(
 
   const fileTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath: '' }));
   const filePreview = await loadWorkspaceFilePreview(fileTree, options);
+  const fileWorkbenchPdfPreview = await loadWorkspacePdfWorkbenchPreview(filePreview, options);
   const fileSearch = null;
   const gitResult = await window.roc.git.status();
   const gitBranchesResult = gitResult.ok ? await window.roc.git.listBranches() : null;
@@ -58,6 +61,7 @@ export async function loadWorkspaceData(
     fileTree,
     fileSearch,
     filePreview,
+    fileWorkbenchPdfPreview,
     gitStatus: gitResult.ok ? gitResult.data : null,
     gitBranches: gitBranchesResult !== null && gitBranchesResult.ok ? gitBranchesResult.data : null,
     gitError: gitResult.ok ? (gitBranchesResult !== null && !gitBranchesResult.ok ? gitBranchesResult.error.message : null) : gitResult.error.message,
@@ -93,6 +97,24 @@ async function loadWorkspaceFilePreview(
 
 async function loadOptionalFilePreview(request: FilePreviewRequest): Promise<FilePreviewResult | null> {
   const previewResult = await window.roc.files.preview(request);
+  return previewResult.ok ? previewResult.data : null;
+}
+
+async function loadWorkspacePdfWorkbenchPreview(
+  filePreview: FilePreviewResult | null,
+  options: WorkspaceDataLoadOptions
+): Promise<FilesWorkbenchPdfPreviewResult | null> {
+  if (options.fileWorkbenchPdfRelativePath === undefined || options.fileWorkbenchPdfRelativePath === null) {
+    return null;
+  }
+  const sharedPreview =
+    filePreview?.relativePath === options.fileWorkbenchPdfRelativePath
+      ? filePreview
+      : await loadOptionalFilePreview({ relativePath: options.fileWorkbenchPdfRelativePath });
+  if (sharedPreview === null || sharedPreview.mediaType !== 'application/pdf') {
+    return null;
+  }
+  const previewResult = await window.roc.files.previewPdf({ relativePath: options.fileWorkbenchPdfRelativePath });
   return previewResult.ok ? previewResult.data : null;
 }
 

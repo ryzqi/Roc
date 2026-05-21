@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { Workspace } from '../../shared/types';
 import type { ConfigService } from './config-service';
@@ -89,6 +89,21 @@ export class WorkspaceService {
   isPathInsideCurrentWorkspace(path: string): boolean {
     const workspace = this.requireWorkspace();
     return this.isInsideWorkspace(resolve(path), workspace.path);
+  }
+
+  assertRealPathInsideWorkspace(path: string): void {
+    const workspace = this.requireWorkspace();
+    const realWorkspace = realpathSync.native(workspace.path);
+    const realTarget = realpathSync.native(path);
+    if (!this.isInsideWorkspace(realTarget, realWorkspace)) {
+      throw new RocDomainError({
+        code: 'workspace_real_path_outside',
+        message: '目标文件的真实路径不在当前工作区内。',
+        category: 'permission',
+        retryable: false,
+        userAction: '请改为预览工作区内真实存在的文件。'
+      });
+    }
   }
 
   private createWorkspace(path: string): Workspace {

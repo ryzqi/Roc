@@ -109,6 +109,7 @@ const rocApi: RocPreloadApi = {
     listTree: (request) => ipcRenderer.invoke(ipcChannels.filesListTree, request),
     search: (request) => ipcRenderer.invoke(ipcChannels.filesSearch, request),
     preview: (request) => ipcRenderer.invoke(ipcChannels.filesPreview, request),
+    previewPdf: (request) => ipcRenderer.invoke(ipcChannels.filesPreviewPdf, request),
     writeText: (request) => ipcRenderer.invoke(ipcChannels.filesWriteText, request)
   },
   git: {

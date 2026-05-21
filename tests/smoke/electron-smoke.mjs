@@ -388,6 +388,29 @@ try {
       boardBackgroundImage: boardStyle?.backgroundImage ?? ''
     };
   });
+  await page.click('[data-testid="workbench-directory-docs"]');
+  await page.waitForSelector('[data-testid="workbench-file-docs-smoke-preview.pdf"]', { timeout: 5000 });
+  await page.click('[data-testid="workbench-file-docs-smoke-preview.pdf"]');
+  await page.waitForSelector('[data-testid="workbench-file-pdf-preview"]', { timeout: 5000 });
+  const pdfPreviewEvidence = await page.evaluate(() => {
+    const frame = document.querySelector('[data-testid="workbench-file-pdf-preview"]');
+    const previewBody = document.querySelector('.workbench-file-body--pdf');
+    const stage = document.querySelector('.workbench-file-pdf-stage');
+    const workbenchBar = document.querySelector('.workbench-bar');
+    const frameRect = frame?.getBoundingClientRect();
+    const previewBodyRect = previewBody?.getBoundingClientRect();
+    const stageRect = stage?.getBoundingClientRect();
+    const workbenchBarRect = workbenchBar?.getBoundingClientRect();
+    return {
+      src: frame?.getAttribute('src') ?? '',
+      hintExists: document.querySelector('.workbench-file-pdf-hint') !== null,
+      title: frame?.getAttribute('title') ?? '',
+      frameHeight: frameRect?.height ?? 0,
+      previewBodyHeight: previewBodyRect?.height ?? 0,
+      stageHeight: stageRect?.height ?? 0,
+      workbenchBarHeight: workbenchBarRect?.height ?? 0
+    };
+  });
   const filePreviewStatsEvidence = await page.evaluate(() => {
     const contentHeaderText = document.querySelector('.workbench-content-pane .pane-subtitle--content')?.textContent?.trim() ?? '';
     const metaStripText = document.querySelector('.workbench-file-meta-strip')?.textContent?.trim() ?? '';
@@ -2160,7 +2183,9 @@ try {
         (previewText.includes('assets/smoke-image.png') &&
           previewText.includes('图片预览已加载。') &&
           previewPageImageEvidence.exists &&
-          previewPageImageEvidence.src.startsWith('data:image/png;base64,'))) &&
+          previewPageImageEvidence.src.startsWith('data:image/png;base64,')) ||
+        (previewText.includes('docs/smoke-preview.pdf') &&
+          previewText.includes('PDF 文件需要在文件工作台中预览。'))) &&
       filePreviewBeforeClick !== filePreviewAfterClick &&
       filePreviewAfterClick?.includes('changed in git') === true,
     workbenchDirectoryExpandable: directoryExpandEvidence,
@@ -2168,6 +2193,15 @@ try {
       imagePreviewEvidence.exists &&
       imagePreviewEvidence.src.startsWith('data:image/png;base64,') &&
       imagePreviewEvidence.alt.includes('assets/smoke-image.png'),
+    workbenchPdfPreviewVisible:
+      pdfPreviewEvidence.src === 'roc-preview://workspace/pdf/docs%2Fsmoke-preview.pdf#toolbar=0&navpanes=0&scrollbar=0' &&
+      pdfPreviewEvidence.hintExists === false &&
+      pdfPreviewEvidence.frameHeight > 0 &&
+      pdfPreviewEvidence.previewBodyHeight > 0 &&
+      pdfPreviewEvidence.stageHeight >= pdfPreviewEvidence.frameHeight &&
+      pdfPreviewEvidence.frameHeight >= pdfPreviewEvidence.previewBodyHeight - 48 &&
+      pdfPreviewEvidence.title.includes('docs/smoke-preview.pdf'),
+    workbenchBarCompact: pdfPreviewEvidence.workbenchBarHeight > 0 && pdfPreviewEvidence.workbenchBarHeight <= 48,
     workbenchImagePreviewFrameless:
       !imagePreviewEvidence.boardExists &&
       imagePreviewEvidence.imageBorderTopWidth === '0px' &&
@@ -2600,6 +2634,8 @@ try {
     previewFileVisible: rendererBoundary.previewFileVisible,
     workbenchDirectoryExpandable: rendererBoundary.workbenchDirectoryExpandable,
     workbenchImagePreviewVisible: rendererBoundary.workbenchImagePreviewVisible,
+    workbenchPdfPreviewVisible: rendererBoundary.workbenchPdfPreviewVisible,
+    workbenchBarCompact: rendererBoundary.workbenchBarCompact,
     workbenchImagePreviewFrameless: rendererBoundary.workbenchImagePreviewFrameless,
     workbenchPreviewModeRemoved: rendererBoundary.workbenchPreviewModeRemoved,
     explorerHeaderTrimmed: rendererBoundary.explorerHeaderTrimmed,

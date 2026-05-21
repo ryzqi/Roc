@@ -6,6 +6,7 @@ import type {
   BackgroundTask,
   DiagnosticPackage,
   FilePreviewResult,
+  FilesWorkbenchPdfPreview,
   FileSearchResult,
   FileTreeResult,
   GitBranchListResult,
@@ -65,6 +66,7 @@ export type LoadedState = {
   fileTree: FileTreeResult | null;
   fileSearch: FileSearchResult | null;
   filePreview: FilePreviewResult | null;
+  fileWorkbenchPdfPreview: FilesWorkbenchPdfPreview | null;
   gitStatus: GitStatusResult | null;
   gitBranches: GitBranchListResult | null;
   gitError: string | null;

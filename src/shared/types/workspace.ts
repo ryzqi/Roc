@@ -80,6 +80,19 @@ export type FilePreviewLike = {
   truncated?: boolean;
 };
 
+export type FilesWorkbenchPdfPreview = {
+  relativePath: string;
+  resourceUrl: string;
+  sizeBytes: number;
+  mediaType: 'application/pdf';
+};
+
+export type FilesWorkbenchPdfPreviewRequest = {
+  relativePath: string;
+};
+
+export type FilesWorkbenchPdfPreviewResult = FilesWorkbenchPdfPreview;
+
 export type FileWriteTextRequest = {
   relativePath: string;
   content: string;

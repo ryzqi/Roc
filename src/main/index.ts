@@ -1,5 +1,5 @@
 import './proxy-runtime';
-import { BrowserWindow, Menu, app, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, app, protocol, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
@@ -10,6 +10,21 @@ import { broadcastToWindows, sendToWindow } from './window-messaging';
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
 const mainReadyStartedAtMs = performance.now();
+const pdfPreviewScheme = 'roc-preview';
+let pdfPreviewServices: ReturnType<typeof createAppServices> | null = null;
+let pdfPreviewProtocolRegistered = false;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: pdfPreviewScheme,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true
+    }
+  }
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let quickEntryWindow: BrowserWindow | null = null;
@@ -92,6 +107,7 @@ async function createWindow(): Promise<void> {
     },
     createElectronSafeStorageBackend()
   );
+  pdfPreviewServices = services;
   services.performanceObserverService.record({
     phase: 'main_ready',
     label: 'app.whenReady',
@@ -144,6 +160,21 @@ async function createWindow(): Promise<void> {
       broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
     }
   });
+  if (!pdfPreviewProtocolRegistered) {
+    protocol.handle(pdfPreviewScheme, (request) => {
+      const activeServices = pdfPreviewServices;
+      if (activeServices === null) {
+        return new Response('Preview service unavailable', { status: 503 });
+      }
+      const url = new URL(request.url);
+      if (url.hostname !== 'workspace' || !url.pathname.startsWith('/pdf/')) {
+        return new Response('Not found', { status: 404 });
+      }
+      const relativePath = url.pathname.slice('/pdf/'.length);
+      return activeServices.fileService.streamPdfPreviewResource(relativePath);
+    });
+    pdfPreviewProtocolRegistered = true;
+  }
 
   services.terminalSessionService.onOutput((event) => {
     broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:output', event);

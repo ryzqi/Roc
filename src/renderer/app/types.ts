@@ -4,6 +4,7 @@ import type {
   DiagnosticPackage,
   FileEntryShape,
   FilePreviewLike,
+  FilesWorkbenchPdfPreview,
   FilePreviewResult,
   FileSearchResult,
   FileTreeResult,
@@ -83,6 +84,7 @@ export type WorkspaceData = {
   fileTree: FileTreeResult | null;
   fileSearch: FileSearchResult | null;
   filePreview: FilePreviewResult | null;
+  fileWorkbenchPdfPreview: FilesWorkbenchPdfPreview | null;
   gitStatus: GitStatusResult | null;
   gitBranches: GitBranchListResult | null;
   gitError: string | null;

@@ -17,6 +17,8 @@ import type {
   DiagnosticPackageRequest,
   FilePreviewRequest,
   FilePreviewResult,
+  FilesWorkbenchPdfPreviewRequest,
+  FilesWorkbenchPdfPreviewResult,
   FileSearchRequest,
   FileSearchResult,
   FileTreeRequest,
@@ -157,6 +159,7 @@ export const ipcChannels = {
   filesListTree: 'roc:files:list-tree',
   filesSearch: 'roc:files:search',
   filesPreview: 'roc:files:preview',
+  filesPreviewPdf: 'roc:files:preview-pdf',
   filesWriteText: 'roc:files:write-text',
   gitStatus: 'roc:git:status',
   gitDiffStat: 'roc:git:diff-stat',
@@ -276,6 +279,7 @@ export type RocPreloadApi = {
     listTree: (request: FileTreeRequest) => Promise<IpcResult<FileTreeResult>>;
     search: (request: FileSearchRequest) => Promise<IpcResult<FileSearchResult>>;
     preview: (request: FilePreviewRequest) => Promise<IpcResult<FilePreviewResult>>;
+    previewPdf: (request: FilesWorkbenchPdfPreviewRequest) => Promise<IpcResult<FilesWorkbenchPdfPreviewResult>>;
     writeText: (request: FileWriteTextRequest) => Promise<IpcResult<FileWriteResult>>;
   };
   git: {

@@ -31,6 +31,7 @@ const refreshedWorkspaceData: WorkspaceLiveData = {
     ]
   },
   filePreview: null,
+  fileWorkbenchPdfPreview: null,
   gitStatus: {
     workspacePath: workspace.path,
     isRepository: true,
@@ -106,7 +107,8 @@ describe('workspace refresh helpers', () => {
     const controller = createWorkspaceRefreshController({
       readSnapshot: () => ({
         workspace,
-        previewRelativePath: 'notes.md'
+        previewRelativePath: 'notes.md',
+        fileWorkbenchPdfRelativePath: null
       }),
       load,
       apply,
@@ -126,6 +128,7 @@ describe('workspace refresh helpers', () => {
 
     expect(load).toHaveBeenCalledWith(workspace, {
       previewRelativePath: 'notes.md',
+      fileWorkbenchPdfRelativePath: null,
       fallbackToFirstFilePreview: false
     });
     expect(apply).toHaveBeenCalledWith(workspace.path, refreshedWorkspaceData);
@@ -137,7 +140,8 @@ describe('workspace refresh helpers', () => {
     const controller = createWorkspaceRefreshController({
       readSnapshot: () => ({
         workspace,
-        previewRelativePath: null
+        previewRelativePath: null,
+        fileWorkbenchPdfRelativePath: null
       }),
       load,
       apply: vi.fn(),
@@ -166,6 +170,7 @@ describe('workspace refresh helpers', () => {
       initialSnapshot: {
         workspace,
         previewRelativePath: 'before-delete.md',
+        fileWorkbenchPdfRelativePath: null,
         gitSelectedPath: 'before-delete.md'
       },
       load,
@@ -194,6 +199,7 @@ describe('workspace refresh helpers', () => {
     subscription.updateSnapshot({
       workspace,
       previewRelativePath: 'after-delete.md',
+      fileWorkbenchPdfRelativePath: null,
       gitSelectedPath: 'after-delete.md'
     });
 
@@ -202,6 +208,7 @@ describe('workspace refresh helpers', () => {
 
     expect(load).toHaveBeenCalledWith(workspace, {
       previewRelativePath: 'after-delete.md',
+      fileWorkbenchPdfRelativePath: null,
       fallbackToFirstFilePreview: false,
       gitSelectedPath: 'after-delete.md'
     });
@@ -209,5 +216,76 @@ describe('workspace refresh helpers', () => {
 
     subscription.dispose();
     expect(runEventListener).toBeNull();
+  });
+
+  it('preserves files workbench PDF selection separately from shared preview state', async () => {
+    vi.useFakeTimers();
+    const load = vi.fn(async () => ({
+      ...refreshedWorkspaceData,
+      fileWorkbenchPdfPreview: {
+        relativePath: 'docs/spec.pdf',
+        resourceUrl: 'roc-preview://workspace/pdf/docs%2Fspec.pdf',
+        sizeBytes: 1024,
+        mediaType: 'application/pdf' as const
+      }
+    }));
+    const apply = vi.fn();
+    const errors: string[] = [];
+    const listenerRef: { current: ((event: ChatRunEvent) => void) | null } = { current: null };
+
+    const subscription = createWorkspaceRefreshSubscription({
+      initialSnapshot: {
+        workspace,
+        previewRelativePath: null,
+        fileWorkbenchPdfRelativePath: 'docs/spec.pdf',
+        gitSelectedPath: null
+      },
+      load,
+      apply,
+      onError: (message) => {
+        errors.push(message);
+      },
+      subscribe: (nextListener) => {
+        listenerRef.current = nextListener;
+        return () => {
+          listenerRef.current = null;
+        };
+      }
+    });
+
+    const runEventListener = listenerRef.current;
+    if (runEventListener === null) {
+      throw new Error('run event listener was not registered');
+    }
+
+    runEventListener({
+      type: 'tool_event',
+      runId: 'run-delete',
+      event: 'end',
+      name: 'delete_file',
+      data: { relativePath: 'docs/spec.pdf' }
+    });
+
+    await vi.advanceTimersByTimeAsync(150);
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledWith(workspace, {
+      previewRelativePath: null,
+      fileWorkbenchPdfRelativePath: 'docs/spec.pdf',
+      fallbackToFirstFilePreview: false,
+      gitSelectedPath: null
+    });
+    expect(apply).toHaveBeenCalledWith(workspace.path, {
+      ...refreshedWorkspaceData,
+      fileWorkbenchPdfPreview: {
+        relativePath: 'docs/spec.pdf',
+        resourceUrl: 'roc-preview://workspace/pdf/docs%2Fspec.pdf',
+        sizeBytes: 1024,
+        mediaType: 'application/pdf'
+      }
+    });
+    expect(errors).toEqual([]);
+
+    subscription.dispose();
   });
 });

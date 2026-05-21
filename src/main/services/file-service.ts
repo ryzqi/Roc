@@ -14,13 +14,15 @@ import {
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import type {
+  FileDeleteResult,
   FilePreviewRequest,
   FilePreviewResult,
-  FileDeleteResult,
   FileSearchRequest,
   FileSearchResult,
   FileTreeRequest,
   FileTreeResult,
+  FilesWorkbenchPdfPreviewRequest,
+  FilesWorkbenchPdfPreviewResult,
   FileWriteResult,
   FileWriteTextRequest,
   RecoveryPoint
@@ -208,6 +210,16 @@ export class FileService {
         sizeBytes: imageBuffer.byteLength
       };
     }
+    if (this.isPdfPath(relativePath)) {
+      return {
+        relativePath,
+        kind: 'binary',
+        mediaType: 'application/pdf',
+        content: 'PDF 文件需要在文件工作台中预览。',
+        truncated: false,
+        sizeBytes: stat.size
+      };
+    }
     const buffer = this.readFilePrefix(absolutePath, Math.min(stat.size, Math.max(maxBytes, binaryProbeBytes)));
     if (this.isBinaryBuffer(buffer)) {
       return {
@@ -278,6 +290,49 @@ export class FileService {
       relativePath,
       recoveryPoint
     };
+  }
+
+  readPdfWorkbenchPreview(request: FilesWorkbenchPdfPreviewRequest): FilesWorkbenchPdfPreviewResult {
+    const relativePath = this.normalizeRelativePath(request.relativePath);
+    const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
+    this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
+    const stat = statSync(absolutePath);
+    if (!stat.isFile() || !this.isPdfPath(relativePath)) {
+      throw new RocDomainError({
+        code: 'file_preview_not_pdf',
+        message: 'PDF 预览目标必须是 PDF 文件。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请选择一个 PDF 文件。'
+      });
+    }
+    return {
+      relativePath,
+      resourceUrl: `roc-preview://workspace/pdf/${encodeURIComponent(relativePath)}#toolbar=0&navpanes=0&scrollbar=0`,
+      sizeBytes: stat.size,
+      mediaType: 'application/pdf'
+    };
+  }
+
+  streamPdfPreviewResource(relativePathInput: string): Response {
+    const relativePath = this.normalizeRelativePath(decodeURIComponent(relativePathInput));
+    if (!this.isPdfPath(relativePath)) {
+      return new Response('Not found', { status: 404 });
+    }
+    const absolutePath = this.workspaceService.resolveInsideWorkspace(relativePath);
+    this.workspaceService.assertRealPathInsideWorkspace(absolutePath);
+    const stat = statSync(absolutePath);
+    if (!stat.isFile()) {
+      return new Response('Not found', { status: 404 });
+    }
+    const buffer = readFileSync(absolutePath);
+    return new Response(buffer, {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'cache-control': 'no-store'
+      }
+    });
   }
 
   private createRecoveryPoint(relativePath: string, absolutePath: string, source: string): RecoveryPoint {
@@ -418,5 +473,9 @@ export class FileService {
       }
     }
     return null;
+  }
+
+  private isPdfPath(relativePath: string): boolean {
+    return relativePath.toLowerCase().endsWith('.pdf');
   }
 }

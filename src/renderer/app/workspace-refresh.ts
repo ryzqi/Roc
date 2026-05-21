@@ -31,12 +31,20 @@ const mutatingExecutePrefixes = [
 
 export type WorkspaceLiveData = Pick<
   WorkspaceData,
-  'fileTree' | 'filePreview' | 'gitStatus' | 'gitBranches' | 'gitError' | 'gitSelectedPath' | 'gitSelectedPreview'
+  | 'fileTree'
+  | 'filePreview'
+  | 'fileWorkbenchPdfPreview'
+  | 'gitStatus'
+  | 'gitBranches'
+  | 'gitError'
+  | 'gitSelectedPath'
+  | 'gitSelectedPreview'
 >;
 
 export type WorkspaceRefreshSnapshot = {
   workspace: Workspace | null;
   previewRelativePath: string | null;
+  fileWorkbenchPdfRelativePath: string | null;
   gitSelectedPath?: string | null;
 };
 
@@ -63,6 +71,7 @@ export function createWorkspaceRefreshController(input: {
     workspace: Workspace,
     options: {
       previewRelativePath: string | null;
+      fileWorkbenchPdfRelativePath: string | null;
       fallbackToFirstFilePreview: boolean;
       gitSelectedPath?: string | null;
     }
@@ -84,6 +93,7 @@ export function createWorkspaceRefreshController(input: {
     try {
       const data = await input.load(snapshot.workspace, {
         previewRelativePath: snapshot.previewRelativePath,
+        fileWorkbenchPdfRelativePath: snapshot.fileWorkbenchPdfRelativePath,
         fallbackToFirstFilePreview: false,
         gitSelectedPath: snapshot.gitSelectedPath
       });
@@ -132,6 +142,7 @@ export function createWorkspaceRefreshSubscription(input: {
     workspace: Workspace,
     options: {
       previewRelativePath: string | null;
+      fileWorkbenchPdfRelativePath: string | null;
       fallbackToFirstFilePreview: boolean;
       gitSelectedPath?: string | null;
     }

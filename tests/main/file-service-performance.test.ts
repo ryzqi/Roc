@@ -52,6 +52,38 @@ describe('FileService performance guardrails', () => {
     });
   });
 
+  it('keeps shared PDF previews out of the global preview contract payload', () => {
+    const relativePath = 'docs/spec.pdf';
+    const absolutePath = join(workspaceRoot, 'docs', 'spec.pdf');
+    const pdfBytes = Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF', 'utf8');
+    mkdirSync(join(workspaceRoot, 'docs'), { recursive: true });
+    writeFileSync(absolutePath, pdfBytes);
+
+    const preview = services.fileService.readPreview({ relativePath, maxBytes: 16 });
+
+    expect(preview).toMatchObject({
+      relativePath,
+      kind: 'binary',
+      content: 'PDF 文件需要在文件工作台中预览。',
+      truncated: false,
+      sizeBytes: pdfBytes.byteLength,
+      mediaType: 'application/pdf'
+    });
+    expect(preview.content).not.toContain('%PDF-1.7');
+    expect('fileUrl' in preview).toBe(false);
+  });
+
+  it('builds a PDF preview resource URL that hides toolbar download and print actions', () => {
+    const relativePath = 'docs/spec.pdf';
+    const absolutePath = join(workspaceRoot, 'docs', 'spec.pdf');
+    mkdirSync(join(workspaceRoot, 'docs'), { recursive: true });
+    writeFileSync(absolutePath, Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF', 'utf8'));
+
+    const preview = services.fileService.readPdfWorkbenchPreview({ relativePath });
+
+    expect(preview.resourceUrl).toBe('roc-preview://workspace/pdf/docs%2Fspec.pdf#toolbar=0&navpanes=0&scrollbar=0');
+  });
+
   it('truncates workspace search when the visited file guardrail is reached', () => {
     for (let index = 0; index < 2100; index += 1) {
       writeFileSync(join(workspaceRoot, `file-${String(index).padStart(4, '0')}.txt`), 'no match\n', 'utf8');
