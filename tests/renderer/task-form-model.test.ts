@@ -6,7 +6,7 @@ import {
 } from '../../src/renderer/views/tasks/task-form-model';
 
 describe('task form model', () => {
-  it('builds a background task preview request from the draft fields', () => {
+  it('builds an approval edit preview request from the draft fields', () => {
     const request = buildBackgroundTaskPreviewRequest({
       goal: '每天检查测试',
       triggerType: 'cron',

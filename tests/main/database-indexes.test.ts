@@ -72,16 +72,43 @@ describe('database indexes', () => {
 
   it('upgrades an existing schema v1 task database without losing task rows', () => {
     services.databaseService.close();
+    rmSync(join(root, 'roc.sqlite'), { force: true });
+    rmSync(join(root, 'roc.sqlite-shm'), { force: true });
+    rmSync(join(root, 'roc.sqlite-wal'), { force: true });
+
     const legacy = new Database(join(root, 'roc.sqlite'));
+    legacy.exec(`
+      CREATE TABLE task_threads (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT
+      );
+
+      CREATE TABLE app_config_versions (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        schema_version INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
     legacy
       .prepare(
         `INSERT INTO task_threads (id, title, goal, status, created_at, updated_at, archived_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run('thread-legacy', '旧任务', '旧任务目标', 'completed', '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z', null);
+    legacy
+      .prepare(
+        `INSERT INTO app_config_versions (id, schema_version, updated_at)
+         VALUES (1, 1, ?)`
+      )
+      .run('2026-05-01T00:00:00.000Z');
     legacy.close();
 
-    services.databaseService.initialize();
+    expect(() => services.databaseService.initialize()).not.toThrow();
 
     const thread = services.databaseService.db
       .prepare('SELECT kind, title FROM task_threads WHERE id = ?')

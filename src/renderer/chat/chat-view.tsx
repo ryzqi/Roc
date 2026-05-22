@@ -10,6 +10,8 @@ type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
 type ChatViewProps = {
   chatSelectionVersion: number;
+  queuedTaskPrompt: string | null;
+  onQueuedTaskPromptHandled: () => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -32,6 +34,8 @@ export function buildChatResumeRunRequest(input: {
 
 export function ChatView({
   chatSelectionVersion,
+  queuedTaskPrompt,
+  onQueuedTaskPromptHandled,
   selectedThreadId,
   state,
   updateLoadedState,
@@ -45,6 +49,7 @@ export function ChatView({
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
   const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const queuedTaskPromptInFlightRef = useRef<string | null>(null);
 
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
   const deferredReasoning = useDeferredValue(chatRun.state.reasoning);
@@ -143,6 +148,36 @@ export function ChatView({
     // chatRun.reset 引用每次渲染都会变；只依赖版本号触发重置
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatSelectionVersion]);
+
+  useEffect(() => {
+    if (queuedTaskPrompt === null) {
+      return;
+    }
+    if (state.agent.execution !== 'ready') {
+      return;
+    }
+    if (queuedTaskPromptInFlightRef.current === queuedTaskPrompt) {
+      return;
+    }
+
+    queuedTaskPromptInFlightRef.current = queuedTaskPrompt;
+    setSubmitting(true);
+    void onSubmitChatTask(queuedTaskPrompt)
+      .then((result) => {
+        if (result.ok) {
+          setPendingUserInput(queuedTaskPrompt);
+          queuedTaskPromptInFlightRef.current = null;
+          onQueuedTaskPromptHandled();
+        } else {
+          chatRun.setError(result.error);
+          queuedTaskPromptInFlightRef.current = null;
+          onQueuedTaskPromptHandled();
+        }
+      })
+      .finally(() => {
+        setSubmitting(false);
+      });
+  }, [onQueuedTaskPromptHandled, onSubmitChatTask, queuedTaskPrompt, state.agent.execution]);
 
   async function submitCurrentInput(): Promise<void> {
     const trimmedInput = chatInput.trim();

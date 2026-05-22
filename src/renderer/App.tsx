@@ -87,6 +87,7 @@ export function App(): React.JSX.Element {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
+  const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
@@ -334,12 +335,29 @@ export function App(): React.JSX.Element {
       if (!result.ok) {
         return { ok: false, error: result.error.message };
       }
+      if (result.data.threadId === null) {
+        return { ok: false, error: '任务运行没有返回可打开的会话。' };
+      }
       setSelectedThreadId(result.data.threadId);
       setHistoryContextMenu(null);
       return { ok: true };
     },
     [currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
   );
+
+  const queueTaskPrompt = useCallback(async (input: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    setSelectedThreadId(null);
+    setQueuedTaskPrompt(input);
+    setActiveView('chat');
+    setWorkbenchVisible(false);
+    setHistoryContextMenu(null);
+    setChatSelectionVersion((current) => current + 1);
+    return { ok: true };
+  }, []);
+
+  const handleQueuedTaskPromptHandled = useCallback((): void => {
+    setQueuedTaskPrompt(null);
+  }, []);
 
   const deleteHistoryThread = useCallback(
     async (threadId: string): Promise<void> => {
@@ -572,6 +590,9 @@ export function App(): React.JSX.Element {
           memoryLoadState={memoryLoadState}
           onNavigateToTaskThread={navigateToTaskThread}
           operationsLoadState={operationsLoadState}
+          onQueueTaskPrompt={queueTaskPrompt}
+          queuedTaskPrompt={queuedTaskPrompt}
+          onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
           onSelectWorkspace={selectWorkspaceFromDialog}
           onSubmitChatTask={startTaskRun}
           onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
@@ -784,6 +805,9 @@ export function App(): React.JSX.Element {
                   memoryLoadState={memoryLoadState}
                   onNavigateToTaskThread={navigateToTaskThread}
                   operationsLoadState={operationsLoadState}
+                  onQueueTaskPrompt={queueTaskPrompt}
+                  queuedTaskPrompt={queuedTaskPrompt}
+                  onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
                   onSelectWorkspace={selectWorkspaceFromDialog}
                   onSubmitChatTask={startTaskRun}
                   onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}

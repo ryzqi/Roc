@@ -224,6 +224,17 @@ export class DatabaseService {
         PRIMARY KEY(namespace_key, item_key)
       );
 
+     `);
+
+    this.ensureColumn(db, 'task_threads', 'kind', "TEXT NOT NULL DEFAULT 'chat'");
+    this.ensureColumn(db, 'background_tasks', 'cron_expression', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'last_run_at', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'last_run_status', 'TEXT');
+    this.ensureColumn(db, 'background_tasks', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
+
+    db.exec(`
+
       CREATE INDEX IF NOT EXISTS idx_task_threads_active_updated
       ON task_threads(archived_at, updated_at DESC);
 
@@ -259,12 +270,6 @@ export class DatabaseService {
       `INSERT OR REPLACE INTO app_config_versions (id, schema_version, updated_at)
        VALUES (1, 2, ?)`
     ).run(new Date().toISOString());
-    this.ensureColumn(db, 'task_threads', 'kind', "TEXT NOT NULL DEFAULT 'chat'");
-    this.ensureColumn(db, 'background_tasks', 'cron_expression', 'TEXT');
-    this.ensureColumn(db, 'background_tasks', 'last_run_at', 'TEXT');
-    this.ensureColumn(db, 'background_tasks', 'last_run_status', 'TEXT');
-    this.ensureColumn(db, 'background_tasks', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
-    this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
     this.tryCreateFtsTables(db);
   }
 

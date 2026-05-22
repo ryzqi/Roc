@@ -1,188 +1,145 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { LoadedState } from '../../loaded-state';
-import { buildBackgroundTaskPreviewRequest, createTaskFormDraft, type TaskFormDraft } from './task-form-model';
+import { AnimatePresence, motion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../../animations';
 
 export function TaskCreateDialog({
   open,
   onClose,
-  onCreated,
-  state
+  onSubmitDescription
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => Promise<void>;
-  state: LoadedState;
+  onSubmitDescription: (description: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }): React.JSX.Element | null {
-  const [draft, setDraft] = useState<TaskFormDraft>(emptyDraft(state));
+  const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const suggestedWorkspace = useMemo(
-    () => state.workspace?.path ?? state.appStatus.workspace.selectedPath ?? '',
-    [state.appStatus.workspace.selectedPath, state.workspace?.path]
-  );
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    setDraft(emptyDraft(state));
+    setDescription('');
     setError(null);
-  }, [open, state]);
+  }, [open]);
 
-  if (!open) {
-    return null;
-  }
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function handleKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
 
   async function submit(): Promise<void> {
+    const trimmedDescription = description.trim();
+    if (trimmedDescription.length === 0) {
+      setError('请输入任务描述。');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
-      const request = buildBackgroundTaskPreviewRequest({
-        ...draft,
-        workspacePath: draft.workspacePath.trim().length === 0 ? suggestedWorkspace : draft.workspacePath
-      });
-      const previewResult = await window.roc.tasks.createBackgroundTaskPreview(request);
-      if (!previewResult.ok) {
-        setError(previewResult.error.message);
+      const result = await onSubmitDescription(trimmedDescription);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-      const preview = previewResult.data;
-      const needsConfirmation = preview.riskLevel === 'high' || (preview.allowedActions.length === 0 && preview.forbiddenActions.length === 0);
-      if (needsConfirmation) {
-        const confirmed = window.confirm('这个任务风险较高或未声明动作边界。确认继续创建？');
-        if (!confirmed) {
-          return;
-        }
-      }
-      const createResult = await window.roc.tasks.createBackgroundTask(preview);
-      if (!createResult.ok) {
-        setError(createResult.error.message);
-        return;
-      }
-      await onCreated();
+      setDescription('');
       onClose();
-      setDraft(emptyDraft(state));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="task-create-dialog" data-testid="task-create-dialog" role="dialog" aria-modal="true" aria-label="新建任务">
-      <div className="section-head">
-        <h2 className="section-title">新建任务</h2>
-        <button type="button" onClick={onClose}>关闭</button>
-      </div>
-      <div className="task-form-grid">
-        <label className="task-form-field">
-          <span>目标</span>
-          <textarea
-            data-testid="task-create-goal"
-            rows={3}
-            value={draft.goal}
-            onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value }))}
-          />
-        </label>
-        <label className="task-form-field">
-          <span>触发类型</span>
-          <select
-            data-testid="task-create-trigger-type"
-            value={draft.triggerType}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                triggerType: event.target.value as TaskFormDraft['triggerType']
-              }))
-            }
-          >
-            <option value="manual">手动</option>
-            <option value="once">一次</option>
-            <option value="cron">定时</option>
-          </select>
-        </label>
-        <label className="task-form-field">
-          <span>触发描述</span>
-          <input
-            data-testid="task-create-trigger-description"
-            type="text"
-            value={draft.triggerDescription}
-            onChange={(event) => setDraft((current) => ({ ...current, triggerDescription: event.target.value }))}
-          />
-        </label>
-        {draft.triggerType === 'manual' ? null : (
-          <label className="task-form-field">
-            <span>下次运行时间</span>
-            <input
-              data-testid="task-create-next-run-at"
-              type="datetime-local"
-              value={draft.nextRunAt}
-              onChange={(event) => setDraft((current) => ({ ...current, nextRunAt: event.target.value }))}
-            />
-          </label>
-        )}
-        {draft.triggerType !== 'cron' ? null : (
-          <label className="task-form-field">
-            <span>Cron 表达式</span>
-            <input
-              data-testid="task-create-cron-expression"
-              type="text"
-              value={draft.cronExpression}
-              onChange={(event) => setDraft((current) => ({ ...current, cronExpression: event.target.value }))}
-            />
-          </label>
-        )}
-        <label className="task-form-field">
-          <span>工作区路径</span>
-          <input
-            data-testid="task-create-workspace-path"
-            type="text"
-            value={draft.workspacePath}
-            onChange={(event) => setDraft((current) => ({ ...current, workspacePath: event.target.value }))}
-          />
-        </label>
-        <label className="task-form-field">
-          <span>允许动作</span>
-          <textarea
-            data-testid="task-create-allowed-actions"
-            rows={4}
-            value={draft.allowedActionsText}
-            onChange={(event) => setDraft((current) => ({ ...current, allowedActionsText: event.target.value }))}
-          />
-        </label>
-        <label className="task-form-field">
-          <span>禁止动作</span>
-          <textarea
-            data-testid="task-create-forbidden-actions"
-            rows={4}
-            value={draft.forbiddenActionsText}
-            onChange={(event) => setDraft((current) => ({ ...current, forbiddenActionsText: event.target.value }))}
-          />
-        </label>
-      </div>
-      {error === null ? null : <span className="pill warn" data-testid="task-create-error">{error}</span>}
-      <div className="action-strip">
-        <button type="button" onClick={() => void submit()} disabled={submitting}>
-          {submitting ? '创建中' : '创建任务'}
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            setDraft(emptyDraft(state))
-          }
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          animate="animate"
+          className="task-create-dialog-backdrop"
+          data-testid="task-create-dialog-backdrop"
+          exit="exit"
+          initial="initial"
+          onClick={onClose}
+          role="presentation"
+          transition={resolveMotionTransition({ duration: 0.16 })}
+          variants={modalBackdropFade}
         >
-          重置
-        </button>
-      </div>
-    </div>
+          <motion.div
+            animate="animate"
+            aria-label="新建任务"
+            aria-modal="true"
+            className="task-create-dialog-panel"
+            data-testid="task-create-dialog-panel"
+            exit="exit"
+            initial="initial"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            transition={resolveMotionTransition(modalPopTransition)}
+            variants={modalPop}
+          >
+            <div className="task-create-dialog-shell" data-testid="task-create-dialog-shell">
+              <div className="task-create-dialog" data-testid="task-create-dialog">
+                <header className="task-create-dialog-header">
+                  <div className="task-create-dialog-heading">
+                    <span className="task-create-dialog-kicker">Task Control</span>
+                    <h2 className="task-create-dialog-title">新建任务</h2>
+                    <p className="task-create-dialog-copy">描述你想要的后台任务，AI 会生成待审批提议。</p>
+                  </div>
+                  <button
+                    aria-label="关闭新建任务"
+                    className="task-create-dialog-close"
+                    data-testid="task-create-dialog-close"
+                    onClick={onClose}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </header>
+                <div className="task-create-dialog-body">
+                  <section className="task-create-section">
+                    <div className="task-create-section-head">
+                      <h3>任务描述</h3>
+                      <p>写下目标、触发时机、工作区和动作边界；缺失的信息会由 AI 按保守规则补齐。</p>
+                    </div>
+                    <div className="task-create-form-grid">
+                      <label className="task-form-field task-form-field--wide">
+                        <span>自然语言描述</span>
+                        <textarea
+                          data-testid="task-create-description"
+                          rows={8}
+                          value={description}
+                          onChange={(event) => {
+                            setDescription(event.target.value);
+                            setError(null);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </section>
+                  {error === null ? null : <span className="pill warn" data-testid="task-create-error">{error}</span>}
+                </div>
+                <div className="task-create-dialog-actions action-strip">
+                  <button data-testid="task-create-submit" type="button" onClick={() => void submit()} disabled={submitting}>
+                    {submitting ? '提交中' : '生成任务提议'}
+                  </button>
+                  <button type="button" onClick={onClose}>
+                    关闭
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
-}
-
-function emptyDraft(state: LoadedState): TaskFormDraft {
-  return createTaskFormDraft({
-    workspacePath: state.workspace?.path ?? state.appStatus.workspace.selectedPath ?? '',
-    trigger: {
-      type: 'manual',
-      description: '手动触发'
-    }
-  });
 }

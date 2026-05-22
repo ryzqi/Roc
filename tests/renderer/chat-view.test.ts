@@ -40,6 +40,8 @@ describe('chat view', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatView, {
         chatSelectionVersion: 1,
+        queuedTaskPrompt: null,
+        onQueuedTaskPromptHandled: () => {},
         selectedThreadId: null,
         state: createLoadedState({}),
         updateLoadedState: () => {},

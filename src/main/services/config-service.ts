@@ -18,6 +18,7 @@ import {
   isLegacyUnifiedSettingsDocument,
   migrateLegacySplitConfig,
   migrateLegacyUnifiedDocument,
+  normalizeCurrentSettingsDocument,
   normalizeLegacyMcpConfig
 } from './config/migration';
 import {
@@ -229,7 +230,7 @@ export class ConfigService {
   private ensureSettingsDocument(): void {
     const rawSettings = this.readJsonIfExists('settings.json');
     if (rawSettings !== undefined && isCurrentSettingsDocument(rawSettings)) {
-      this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
+      this.writeSettingsDocument(normalizeCurrentSettingsDocument(rawSettings as Record<string, unknown>));
       return;
     }
     if (rawSettings !== undefined && isLegacyUnifiedSettingsDocument(rawSettings)) {

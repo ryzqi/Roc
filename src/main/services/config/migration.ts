@@ -36,6 +36,57 @@ export function upgradeColdAutoForget(value: unknown): AppSettings['memory']['co
   return 90;
 }
 
+function upgradeTaskSettings(raw: unknown): AppSettings['tasks'] {
+  if (raw === null || typeof raw !== 'object') {
+    return defaultSettings.tasks;
+  }
+
+  const value = raw as Record<string, unknown>;
+  const longRunningThresholds =
+    value.longRunningThresholds !== null && typeof value.longRunningThresholds === 'object'
+      ? (value.longRunningThresholds as Record<string, unknown>)
+      : {};
+  const scheduler =
+    value.scheduler !== null && typeof value.scheduler === 'object'
+      ? (value.scheduler as Record<string, unknown>)
+      : {};
+
+  return {
+    longRunningThresholds: {
+      runningSeconds:
+        typeof longRunningThresholds.runningSeconds === 'number' &&
+        Number.isInteger(longRunningThresholds.runningSeconds) &&
+        longRunningThresholds.runningSeconds >= 0
+          ? longRunningThresholds.runningSeconds
+          : defaultSettings.tasks.longRunningThresholds.runningSeconds,
+      toolCallCount:
+        typeof longRunningThresholds.toolCallCount === 'number' &&
+        Number.isInteger(longRunningThresholds.toolCallCount) &&
+        longRunningThresholds.toolCallCount >= 0
+          ? longRunningThresholds.toolCallCount
+          : defaultSettings.tasks.longRunningThresholds.toolCallCount,
+      subagentCount:
+        typeof longRunningThresholds.subagentCount === 'number' &&
+        Number.isInteger(longRunningThresholds.subagentCount) &&
+        longRunningThresholds.subagentCount >= 0
+          ? longRunningThresholds.subagentCount
+          : defaultSettings.tasks.longRunningThresholds.subagentCount
+    },
+    scheduler: {
+      catchUpOnStartup:
+        typeof scheduler.catchUpOnStartup === 'boolean'
+          ? scheduler.catchUpOnStartup
+          : defaultSettings.tasks.scheduler.catchUpOnStartup,
+      maxRegisteredTasks:
+        typeof scheduler.maxRegisteredTasks === 'number' &&
+        Number.isInteger(scheduler.maxRegisteredTasks) &&
+        scheduler.maxRegisteredTasks > 0
+          ? scheduler.maxRegisteredTasks
+          : defaultSettings.tasks.scheduler.maxRegisteredTasks
+    }
+  };
+}
+
 export function upgradeLegacySettings(raw: unknown): AppSettings {
   if (raw === null || typeof raw !== 'object') {
     return defaultSettings;
@@ -67,7 +118,7 @@ export function upgradeLegacySettings(raw: unknown): AppSettings {
         memory.crossScopeRecall === 'expanded_with_label' ? 'expanded_with_label' : 'explicit_only',
       coldAutoForgetDays: upgradeColdAutoForget(memory.coldAutoForgetDays)
     },
-    tasks: defaultSettings.tasks
+    tasks: upgradeTaskSettings(value.tasks)
   });
 }
 
@@ -143,6 +194,15 @@ export function migrateLegacyUnifiedDocument(raw: Record<string, unknown>): RocS
     providers: upgradeLegacyProviders(raw.providers ?? defaultProviders),
     mcp: normalizeLegacyMcpConfig(raw.mcp),
     permissions: upgradeLegacyPermissions(raw.permissions),
+    shortcuts: ShortcutsConfigSchema.parse((raw.shortcuts ?? defaultShortcuts) as ShortcutsConfig)
+  });
+}
+
+export function normalizeCurrentSettingsDocument(raw: Record<string, unknown>): RocSettingsDocument {
+  return SettingsDocumentSchema.parse({
+    ...raw,
+    settings: upgradeLegacySettings(raw.settings),
+    mcp: normalizeLegacyMcpConfig(raw.mcp),
     shortcuts: ShortcutsConfigSchema.parse((raw.shortcuts ?? defaultShortcuts) as ShortcutsConfig)
   });
 }

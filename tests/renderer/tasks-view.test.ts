@@ -117,21 +117,26 @@ describe('TasksView', () => {
         }),
         updateLoadedState: () => {},
         onNavigateToThread: () => {},
-        onSelectedTaskIdChange: () => {}
+        onSelectedTaskIdChange: () => {},
+        onSubmitTaskPrompt: async () => ({ ok: true as const })
       })
     );
 
+    expect(html).toContain('class="canvas-stage stage-grid task-command-center"');
+    expect(html).toContain('class="task-summary-band"');
     expect(html).toContain('data-testid="tasks-view"');
     expect(html).toContain('活跃任务');
     expect(html).toContain('详情');
     expect(html).toContain('最近调度');
     expect(html).toContain('调度器');
+    expect(html).not.toContain('data-testid="task-create-dialog-panel"');
+    expect(html).not.toContain('data-testid="task-create-dialog-backdrop"');
     expect(html).toContain('整理工作区变更');
     expect(html).toContain('每小时检查一次');
     expect(html).toContain('让 AI 修改');
     expect(html).toContain('立即运行');
     expect(html).toContain('bg-1');
-    expect(html).toContain('class="stat-row"');
+    expect(html).toContain('class="task-summary-band"');
     expect(html).toContain('class="section task-list-section"');
     expect(html).toContain('class="section-head"');
     expect(html).toContain('class="list-rows"');
@@ -148,12 +153,17 @@ describe('TasksView', () => {
         }),
         updateLoadedState: () => {},
         onNavigateToThread: () => {},
-        onSelectedTaskIdChange: () => {}
+        onSelectedTaskIdChange: () => {},
+        onSubmitTaskPrompt: async () => ({ ok: true as const })
       })
     );
 
     expect(html).toContain('data-testid="tasks-empty-state"');
+    expect(html).toContain('class="task-empty-shell"');
+    expect(html).toContain('class="canvas-stage stage-grid task-command-center"');
     expect(html).toContain('帮我创建一个定时任务');
     expect(html).toContain('新建任务');
+    expect(html).not.toContain('data-testid="task-create-dialog-panel"');
+    expect(html).not.toContain('data-testid="task-create-dialog-backdrop"');
   });
 });

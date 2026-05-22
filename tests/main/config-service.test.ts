@@ -397,8 +397,51 @@ describe('ConfigService unified settings document', () => {
   });
 
   it('returns default task thresholds when settings.json omits task settings', () => {
+    writeFileSync(
+      join(root, 'config', 'settings.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 4,
+          settings: {
+            schemaVersion: 2,
+            defaultWorkspace: null,
+            startup: { openAtLogin: false, minimizeToTray: true },
+            notifications: { lowDistraction: true },
+            globalHotkey: null,
+            memory: {
+              candidateReviewMode: 'manual',
+              warmRecallEnabled: true,
+              sessionRetentionDays: 90,
+              crossScopeRecall: 'explicit_only',
+              coldAutoForgetDays: 90
+            }
+          },
+          providers: defaultProviders,
+          mcp: defaultMcpConfig,
+          permissions: defaultPermissions,
+          shortcuts: {
+            schemaVersion: 1,
+            shortcuts: []
+          }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
     const configService = new ConfigService(paths);
-    configService.initialize();
+    expect(
+      () =>
+        (
+          configService as ConfigService & {
+            getTaskSettings: () => {
+              longRunningThresholds: { runningSeconds: number; toolCallCount: number; subagentCount: number };
+              scheduler: { catchUpOnStartup: boolean; maxRegisteredTasks: number };
+            };
+          }
+        ).initialize()
+    ).not.toThrow();
 
     expect(
       (
@@ -418,6 +461,12 @@ describe('ConfigService unified settings document', () => {
       scheduler: {
         catchUpOnStartup: true,
         maxRegisteredTasks: 256
+      }
+    });
+
+    expect(readSettingsDocument()).toMatchObject({
+      settings: {
+        tasks: defaultSettings.tasks
       }
     });
   });

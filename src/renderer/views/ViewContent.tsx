@@ -23,6 +23,9 @@ export function ViewContent({
   memoryLoadState,
   onNavigateToTaskThread,
   operationsLoadState,
+  onQueueTaskPrompt,
+  queuedTaskPrompt,
+  onQueuedTaskPromptHandled,
   onSelectWorkspace,
   onSubmitChatTask,
   onTaskSurfaceSelectionChange,
@@ -36,6 +39,9 @@ export function ViewContent({
   memoryLoadState: LazyLoadState;
   onNavigateToTaskThread: (threadId: string) => void;
   operationsLoadState: LazyLoadState;
+  onQueueTaskPrompt: (prompt: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  queuedTaskPrompt: string | null;
+  onQueuedTaskPromptHandled: () => void;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   onTaskSurfaceSelectionChange: (taskId: string | null | undefined) => void;
@@ -55,6 +61,7 @@ export function ViewContent({
         updateLoadedState={updateLoadedState}
         onNavigateToThread={onNavigateToTaskThread}
         onSelectedTaskIdChange={onTaskSurfaceSelectionChange}
+        onSubmitTaskPrompt={onQueueTaskPrompt}
       />
     );
   }
@@ -92,6 +99,8 @@ export function ViewContent({
     <ChatView
       chatSelectionVersion={chatSelectionVersion}
       onSubmitChatTask={onSubmitChatTask}
+      queuedTaskPrompt={queuedTaskPrompt}
+      onQueuedTaskPromptHandled={onQueuedTaskPromptHandled}
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
