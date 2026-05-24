@@ -21,10 +21,15 @@ import {
   type ChatOpenAICallOptions,
   type ChatOpenAIFields
 } from '@langchain/openai';
-import { fixedNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ProviderConfig, ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
+import {
+  nvidiaSupportsThinkingViaSystemPrompt,
+  nvidiaThinkingParameterName,
+  resolveNvidiaModelFamily
+} from './nvidia-model-family';
 import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
 
@@ -80,12 +85,33 @@ class ReasoningAwareChatOpenAI extends ChatOpenAI {
 }
 
 class NvidiaCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
+  private readonly nvidiaModelId: string;
+  private readonly nvidiaProviderOptions: NonNullable<ProviderConfig['options']>;
+  private readonly nvidiaThinkingViaSystemPrompt: 'on' | 'off' | null;
+
+  constructor(fields: ChatOpenAIFields, extra: { modelId: string; providerOptions?: ProviderConfig['options'] }) {
+    super({
+      ...fields,
+      completions: new NvidiaCompatibleChatOpenAICompletions(fields, extra.providerOptions)
+    });
+    this.nvidiaModelId = extra.modelId;
+    this.nvidiaProviderOptions = extra.providerOptions ?? {};
+    const family = resolveNvidiaModelFamily(extra.modelId);
+    if (typeof this.nvidiaProviderOptions.thinking === 'boolean' && nvidiaSupportsThinkingViaSystemPrompt(family)) {
+      this.nvidiaThinkingViaSystemPrompt = this.nvidiaProviderOptions.thinking ? 'on' : 'off';
+    } else {
+      this.nvidiaThinkingViaSystemPrompt = null;
+    }
+  }
+
   override async _generate(
     messages: BaseMessage[],
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun
   ): Promise<ChatResult> {
-    return await super._generate(normalizeNvidiaTextOnlyMessages(messages), sanitizeNvidiaToolOptions(options), runManager);
+    const transformed = normalizeNvidiaTextOnlyMessages(this.withThinkingSystemPrompt(messages));
+    const result = await super._generate(transformed, sanitizeNvidiaToolOptions(options, this.nvidiaProviderOptions), runManager);
+    return rebuildResultWithReasoningContent(result);
   }
 
   override async *_streamResponseChunks(
@@ -93,11 +119,45 @@ class NvidiaCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatGenerationChunk> {
-    yield* super._streamResponseChunks(normalizeNvidiaTextOnlyMessages(messages), sanitizeNvidiaToolOptions(options), runManager);
+    const transformed = normalizeNvidiaTextOnlyMessages(this.withThinkingSystemPrompt(messages));
+    yield* super._streamResponseChunks(transformed, sanitizeNvidiaToolOptions(options, this.nvidiaProviderOptions), runManager);
   }
 
   protected override cloneWithFields(): ReasoningAwareChatOpenAI {
-    return new NvidiaCompatibleChatOpenAI(this.fields);
+    return new NvidiaCompatibleChatOpenAI(this.fields ?? {}, {
+      modelId: this.nvidiaModelId,
+      providerOptions: this.nvidiaProviderOptions
+    });
+  }
+
+  private withThinkingSystemPrompt(messages: BaseMessage[]): BaseMessage[] {
+    if (this.nvidiaThinkingViaSystemPrompt === null) {
+      return messages;
+    }
+    return [
+      new SystemMessage(`detailed thinking ${this.nvidiaThinkingViaSystemPrompt}`),
+      ...messages
+    ];
+  }
+}
+
+class NvidiaCompatibleChatOpenAICompletions extends ChatOpenAICompletions {
+  private readonly nvidiaProviderOptions: ProviderConfig['options'];
+
+  constructor(fields?: ChatOpenAIFields, providerOptions?: ProviderConfig['options']) {
+    super(fields);
+    this.nvidiaProviderOptions = providerOptions;
+  }
+
+  override invocationParams(
+    options?: this['ParsedCallOptions'],
+    extra?: { streaming?: boolean }
+  ): ReturnType<ChatOpenAICompletions['invocationParams']> {
+    const params = super.invocationParams(options, extra);
+    if (typeof this.nvidiaProviderOptions?.parallelToolCalls !== 'boolean') {
+      delete (params as Record<string, unknown>).parallel_tool_calls;
+    }
+    return params;
   }
 }
 
@@ -149,12 +209,20 @@ function normalizeNvidiaTextOnlyMessages(messages: BaseMessage[]): BaseMessage[]
   return messages.map((message) => normalizeNvidiaTextOnlyMessage(message));
 }
 
-function sanitizeNvidiaToolOptions<TOptions extends ChatOpenAICallOptions>(options: TOptions): TOptions {
-  return {
+function sanitizeNvidiaToolOptions<TOptions extends ChatOpenAICallOptions>(
+  options: TOptions,
+  providerOptions: ProviderConfig['options']
+): TOptions {
+  const next = {
     ...options,
-    parallel_tool_calls: false,
     tools: Array.isArray(options.tools) ? options.tools.map((tool) => sanitizeNvidiaTool(tool)) : options.tools
   };
+  if (typeof providerOptions?.parallelToolCalls === 'boolean') {
+    (next as unknown as Record<string, unknown>).parallel_tool_calls = providerOptions.parallelToolCalls;
+  } else {
+    delete (next as unknown as Record<string, unknown>).parallel_tool_calls;
+  }
+  return next;
 }
 
 function sanitizeNvidiaTool<TTool>(tool: TTool): TTool {
@@ -538,16 +606,14 @@ export class LangChainModelFactory {
     }
 
     const modelKwargs: Record<string, unknown> = {};
-    if (provider.type === 'nvidia' && provider.options?.thinking === true) {
-      modelKwargs.chat_template_kwargs = {
-        thinking: true
-      };
+    if (provider.type === 'nvidia') {
+      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, provider.options ?? {}, streaming));
     }
     if (provider.type === 'llama_cpp') {
       modelKwargs.cache_prompt = true;
     }
 
-    const baseUrl = provider.type === 'nvidia' ? fixedNvidiaBaseUrl : provider.endpoint.trim();
+    const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
     const apiKeyForChatModel =
       provider.type === 'llama_cpp' && apiKey.length === 0 ? openAiNoAuthPlaceholderKey : apiKey;
     const openAiConfiguration =
@@ -561,35 +627,25 @@ export class LangChainModelFactory {
             baseURL: baseUrl,
             maxRetries: 0
           };
-    const OpenAiChatModelClass =
+    const OpenAiChatModelClass = provider.type === 'llama_cpp' ? LlamaCppCompatibleChatOpenAI : ReasoningAwareChatOpenAI;
+    const chatModelFields: ChatOpenAIFields = {
+      model: modelId,
+      apiKey: apiKeyForChatModel,
+      streaming,
+      streamUsage: resolveStreamUsage(provider, streaming),
+      maxRetries: 0,
+      temperature,
+      maxTokens,
+      timeout: requestTimeoutMs,
+      configuration: openAiConfiguration,
+      modelKwargs
+    };
+    const chatModel =
       provider.type === 'nvidia'
-        ? NvidiaCompatibleChatOpenAI
-        : provider.type === 'llama_cpp'
-          ? LlamaCppCompatibleChatOpenAI
-          : ReasoningAwareChatOpenAI;
-    const chatModel = streaming ? new OpenAiChatModelClass({
-      model: modelId,
-      apiKey: apiKeyForChatModel,
-      streaming,
-      streamUsage: provider.type === 'nvidia' || provider.type === 'llama_cpp' ? false : undefined,
-      maxRetries: 0,
-      temperature,
-      maxTokens,
-      timeout: requestTimeoutMs,
-      configuration: openAiConfiguration,
-      modelKwargs
-    }) : new ChatOpenAI({
-      model: modelId,
-      apiKey: apiKeyForChatModel,
-      streaming,
-      streamUsage: provider.type === 'nvidia' ? false : undefined,
-      maxRetries: 0,
-      temperature,
-      maxTokens,
-      timeout: requestTimeoutMs,
-      configuration: openAiConfiguration,
-      modelKwargs
-    });
+        ? new NvidiaCompatibleChatOpenAI(chatModelFields, { modelId, providerOptions: provider.options })
+        : streaming
+          ? new OpenAiChatModelClass(chatModelFields)
+          : new ChatOpenAI(chatModelFields);
 
     return {
       provider,
@@ -718,6 +774,121 @@ export class LangChainModelFactory {
   }
 }
 
+function buildNvidiaModelKwargs(
+  modelId: string,
+  options: NonNullable<ProviderConfig['options']>,
+  streaming: boolean
+): Record<string, unknown> {
+  const kwargs: Record<string, unknown> = {};
+  const family = resolveNvidiaModelFamily(modelId);
+
+  if (typeof options.thinking === 'boolean') {
+    const paramName = nvidiaThinkingParameterName(family);
+    if (paramName !== null) {
+      kwargs.chat_template_kwargs = { [paramName]: options.thinking };
+    }
+  }
+  if (typeof options.includeReasoning === 'boolean' && !streaming) {
+    kwargs.include_reasoning = options.includeReasoning;
+  }
+  if (typeof options.topP === 'number') {
+    kwargs.top_p = options.topP;
+  }
+  if (typeof options.topK === 'number') {
+    kwargs.top_k = options.topK;
+  }
+  if (typeof options.minP === 'number') {
+    kwargs.min_p = options.minP;
+  }
+  if (typeof options.frequencyPenalty === 'number') {
+    kwargs.frequency_penalty = options.frequencyPenalty;
+  }
+  if (typeof options.presencePenalty === 'number') {
+    kwargs.presence_penalty = options.presencePenalty;
+  }
+  if (typeof options.repetitionPenalty === 'number') {
+    kwargs.repetition_penalty = options.repetitionPenalty;
+  }
+  if (typeof options.seed === 'number') {
+    kwargs.seed = options.seed;
+  }
+  if (Array.isArray(options.stop) && options.stop.length > 0) {
+    kwargs.stop = [...options.stop];
+  }
+  if (options.toolChoice !== undefined) {
+    kwargs.tool_choice = options.toolChoice;
+  }
+
+  const nvext: Record<string, unknown> = {};
+  if (options.guidedJson !== undefined) {
+    nvext.guided_json = options.guidedJson;
+  }
+  if (typeof options.guidedRegex === 'string') {
+    nvext.guided_regex = options.guidedRegex;
+  }
+  if (Array.isArray(options.guidedChoice) && options.guidedChoice.length > 0) {
+    nvext.guided_choice = [...options.guidedChoice];
+  }
+  if (typeof options.guidedGrammar === 'string') {
+    nvext.guided_grammar = options.guidedGrammar;
+  }
+  if (Object.keys(nvext).length > 0) {
+    kwargs.nvext = nvext;
+  }
+
+  return kwargs;
+}
+
+function resolveStreamUsage(provider: ProviderConfig, streaming: boolean): boolean | undefined {
+  if (!streaming) {
+    return undefined;
+  }
+  if (provider.type === 'llama_cpp') {
+    return false;
+  }
+  if (provider.type === 'nvidia') {
+    return provider.options?.streamUsage ?? true;
+  }
+  return undefined;
+}
+
+function rebuildResultWithReasoningContent(result: ChatResult): ChatResult {
+  return {
+    ...result,
+    generations: result.generations.map((generation) => {
+      const message = generation.message;
+      const reasoningText = readProviderReasoningFromMessage(message);
+      if (reasoningText === null || typeof message.content !== 'string' || !AIMessage.isInstance(message)) {
+        return generation;
+      }
+      const rebuiltMessage = new AIMessage({
+        id: message.id,
+        name: message.name,
+        contentBlocks: [
+          {
+            type: 'reasoning',
+            reasoning: reasoningText
+          },
+          {
+            type: 'text',
+            text: message.content
+          }
+        ],
+        additional_kwargs: stripProviderReasoningDelta(message.additional_kwargs),
+        response_metadata: message.response_metadata,
+        tool_calls: message.tool_calls,
+        invalid_tool_calls: message.invalid_tool_calls,
+        usage_metadata: message.usage_metadata
+      });
+      return {
+        ...generation,
+        message: rebuiltMessage,
+        text: message.content
+      };
+    })
+  };
+}
+
 function createFetchWithoutAuthorization(): typeof fetch {
   return async (input, init) => {
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
@@ -780,17 +951,29 @@ async function* normalizeOpenAiReasoningChunks(
 }
 
 function readProviderReasoningDelta(message: ChatGenerationChunk['message']): string | null {
+  return readProviderReasoningFromMessage(message);
+}
+
+function readProviderReasoningFromMessage(message: Pick<BaseMessage, 'additional_kwargs' | 'response_metadata'>): string | null {
   const additionalKwargs = message.additional_kwargs;
-  if (additionalKwargs === null || additionalKwargs === undefined || typeof additionalKwargs !== 'object') {
+  const reasoningFromAdditionalKwargs = readProviderReasoningFromRecord(additionalKwargs);
+  if (reasoningFromAdditionalKwargs !== null) {
+    return reasoningFromAdditionalKwargs;
+  }
+  return readProviderReasoningFromRecord(message.response_metadata);
+}
+
+function readProviderReasoningFromRecord(value: unknown): string | null {
+  if (value === null || value === undefined || typeof value !== 'object') {
     return null;
   }
 
-  const reasoningContent = additionalKwargs.reasoning_content;
+  const reasoningContent = (value as Record<string, unknown>).reasoning_content;
   if (typeof reasoningContent === 'string' && reasoningContent.length > 0) {
     return reasoningContent;
   }
 
-  const camelCaseReasoningContent = additionalKwargs.reasoningContent;
+  const camelCaseReasoningContent = (value as Record<string, unknown>).reasoningContent;
   if (typeof camelCaseReasoningContent === 'string' && camelCaseReasoningContent.length > 0) {
     return camelCaseReasoningContent;
   }

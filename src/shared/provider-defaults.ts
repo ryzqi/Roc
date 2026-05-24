@@ -47,6 +47,14 @@ export function normalizeFixedNvidiaProvider(provider?: ProviderConfig): Provide
   };
 }
 
+export function resolveNvidiaBaseUrl(provider: ProviderConfig): string {
+  const override = provider.options?.endpointOverride?.trim();
+  if (typeof override === 'string' && override.length > 0) {
+    return override;
+  }
+  return fixedNvidiaBaseUrl;
+}
+
 export function createFixedLlamaCppProviderConfig(): ProviderConfig {
   return {
     id: fixedLlamaCppProviderId,

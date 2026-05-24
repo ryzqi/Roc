@@ -86,6 +86,40 @@ describe('fixed NVIDIA provider config', () => {
     });
   });
 
+  it('honors endpointOverride for self-hosted NIM containers', () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'Self-hosted',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            endpointOverride: 'http://localhost:8000/v1'
+          }
+        }
+      ]
+    });
+
+    const nvidia = services.configService.getProviders().providers.find((provider) => provider.id === 'nvidia');
+
+    expect(nvidia?.endpoint).toBe('https://integrate.api.nvidia.com/v1');
+    expect(nvidia?.options?.endpointOverride).toBe('http://localhost:8000/v1');
+  });
+
   it('always exposes a normalized built-in llama.cpp provider with a writable endpoint and optional credentials', () => {
     services.configService.saveProviders({
       schemaVersion: 1,
