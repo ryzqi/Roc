@@ -1,6 +1,10 @@
 import { createAppServices } from '../../src/main/services/app-service';
 import { RocDomainError } from '../../src/main/services/errors';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../src/main/services/deep-agent/types';
+import {
+  nvidiaProviderTestPrompt,
+  providerTestPromptForProvider
+} from '../../src/main/services/provider-runtime-service';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -313,6 +317,24 @@ describe('Roc foundation services providers', () => {
       await fakeProvider.close();
       rmSync(liveRoot, { recursive: true, force: true });
     }
+  });
+
+  it('rejects NVIDIA provider secrets without nvapi- prefix', () => {
+    expect(() => context.services.secretService.setProviderSecret('nvidia', 'sk-wrong-prefix')).toThrow(/nvapi-/u);
+  });
+
+  it('accepts NVIDIA provider secrets with nvapi- prefix', () => {
+    expect(() => context.services.secretService.setProviderSecret('nvidia', 'nvapi-abcdef123')).not.toThrow();
+  });
+
+  it('does not enforce nvapi- prefix for non-nvidia providers', () => {
+    expect(() => context.services.secretService.setProviderSecret('openai-foo', 'sk-foo')).not.toThrow();
+  });
+
+  it('uses NVIDIA-specific provider test prompt', () => {
+    expect(nvidiaProviderTestPrompt).toBe('What is 1+1? Reply with the number only.');
+    expect(providerTestPromptForProvider({ type: 'nvidia' } as never)).toBe(nvidiaProviderTestPrompt);
+    expect(providerTestPromptForProvider({ type: 'openai_compatible' } as never)).toBe('Reply with OK only.');
   });
 
   it('tests the fixed llama.cpp provider through the live transport without sending Authorization when no API key is configured', async () => {

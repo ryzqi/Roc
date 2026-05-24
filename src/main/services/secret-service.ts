@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fixedNvidiaProviderId } from '../../shared/provider-defaults';
 import type { ProviderSecretStatus } from '../../shared/types';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
@@ -29,6 +30,7 @@ export class SecretService {
         userAction: '请输入有效的 API Key 后再保存。'
       });
     }
+    this.validateProviderSecret(id, plaintext);
     if (!this.backend.isEncryptionAvailable()) {
       throw new RocDomainError({
         code: 'secret_storage_unavailable',
@@ -115,5 +117,21 @@ export class SecretService {
       });
     }
     return trimmed;
+  }
+
+  private validateProviderSecret(providerId: string, plaintext: string): void {
+    if (providerId !== fixedNvidiaProviderId) {
+      return;
+    }
+    if (plaintext.startsWith('nvapi-')) {
+      return;
+    }
+    throw new RocDomainError({
+      code: 'provider_credential_format_invalid',
+      message: 'NVIDIA Provider 凭据必须以 nvapi- 起始。',
+      category: 'validation',
+      retryable: false,
+      userAction: '请到 build.nvidia.com 获取以 nvapi- 起始的 API Key 后重新录入。'
+    });
   }
 }

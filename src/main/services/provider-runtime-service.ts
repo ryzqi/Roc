@@ -27,7 +27,12 @@ type ProviderTransportResponse = {
 };
 
 type ProviderTransport = (request: ProviderTransportRequest) => ProviderTransportResponse | Promise<ProviderTransportResponse>;
-const providerTestPrompt = 'Reply with OK only.';
+export const providerTestPrompt = 'Reply with OK only.';
+export const nvidiaProviderTestPrompt = 'What is 1+1? Reply with the number only.';
+
+export function providerTestPromptForProvider(provider: Pick<ProviderConfig, 'type'>): string {
+  return provider.type === 'nvidia' ? nvidiaProviderTestPrompt : providerTestPrompt;
+}
 
 export class ProviderRuntimeService {
   private deterministicTransport: ProviderTransport | null = null;
@@ -81,7 +86,7 @@ export class ProviderRuntimeService {
         const result = await this.executeTransportRequest({
           provider,
           modelId: enabledModel.id,
-          input: providerTestPrompt,
+          input: providerTestPromptForProvider(provider),
           capabilitySummary: this.createCapabilitySummary({
             mcpServers: [],
             skills: []
