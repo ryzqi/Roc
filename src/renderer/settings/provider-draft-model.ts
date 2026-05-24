@@ -1,4 +1,4 @@
-import type { ProviderConfig, ProviderModel, ProviderType } from '../../shared/types';
+import type { NvidiaToolChoice, ProviderConfig, ProviderModel, ProviderType } from '../../shared/types';
 import {
   fixedLlamaCppBaseUrl,
   fixedLlamaCppProviderId,
@@ -24,7 +24,7 @@ export type ProviderDraft = {
   modelsText: string;
   temperature: string;
   maxTokens: string;
-  thinking: boolean;
+  thinking: 'unset' | 'true' | 'false';
   topP: string;
   topK: string;
   minP: string;
@@ -36,6 +36,8 @@ export type ProviderDraft = {
   includeReasoning: 'unset' | 'true' | 'false';
   parallelToolCalls: 'unset' | 'true' | 'false';
   streamUsage: 'unset' | 'true' | 'false';
+  toolChoice: 'unset' | 'auto' | 'required' | 'none' | 'function';
+  toolChoiceFunctionName: string;
   endpointOverride: string;
   guidedJson: string;
   guidedRegex: string;
@@ -75,6 +77,8 @@ type NvidiaAdvancedDraftFields = Pick<
   | 'includeReasoning'
   | 'parallelToolCalls'
   | 'streamUsage'
+  | 'toolChoice'
+  | 'toolChoiceFunctionName'
   | 'endpointOverride'
   | 'guidedJson'
   | 'guidedRegex'
@@ -95,6 +99,8 @@ function defaultNvidiaAdvancedFields(): NvidiaAdvancedDraftFields {
     includeReasoning: 'unset',
     parallelToolCalls: 'unset',
     streamUsage: 'unset',
+    toolChoice: 'unset',
+    toolChoiceFunctionName: '',
     endpointOverride: '',
     guidedJson: '',
     guidedRegex: '',
@@ -108,6 +114,23 @@ function booleanDraftValue(value: boolean | undefined): 'unset' | 'true' | 'fals
     return 'unset';
   }
   return value ? 'true' : 'false';
+}
+
+function toolChoiceDraftValue(value: NvidiaToolChoice | undefined): ProviderDraft['toolChoice'] {
+  if (value === 'auto' || value === 'required' || value === 'none') {
+    return value;
+  }
+  if (value !== undefined && typeof value === 'object' && value.type === 'function') {
+    return 'function';
+  }
+  return 'unset';
+}
+
+function toolChoiceFunctionNameDraftValue(value: NvidiaToolChoice | undefined): string {
+  if (value !== undefined && typeof value === 'object' && value.type === 'function') {
+    return value.function.name;
+  }
+  return '';
 }
 
 function jsonDraftValue(value: Record<string, unknown> | undefined): string {
@@ -129,6 +152,8 @@ function createNvidiaAdvancedFields(provider?: ProviderConfig): NvidiaAdvancedDr
     includeReasoning: booleanDraftValue(options?.includeReasoning),
     parallelToolCalls: booleanDraftValue(options?.parallelToolCalls),
     streamUsage: booleanDraftValue(options?.streamUsage),
+    toolChoice: toolChoiceDraftValue(options?.toolChoice),
+    toolChoiceFunctionName: toolChoiceFunctionNameDraftValue(options?.toolChoice),
     endpointOverride: typeof options?.endpointOverride === 'string' ? options.endpointOverride : '',
     guidedJson: jsonDraftValue(options?.guidedJson),
     guidedRegex: typeof options?.guidedRegex === 'string' ? options.guidedRegex : '',
@@ -156,7 +181,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
         typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
       maxTokens:
         typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
-      thinking: normalized.options?.thinking === true,
+      thinking: booleanDraftValue(normalized.options?.thinking),
       ...createNvidiaAdvancedFields(normalized)
     };
   }
@@ -173,7 +198,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaAdvancedFields()
     };
   }
@@ -189,7 +214,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaAdvancedFields()
     };
   }
@@ -207,7 +232,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
     temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
     maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
-    thinking: provider.options?.thinking === true,
+    thinking: booleanDraftValue(provider.options?.thinking),
     ...defaultNvidiaAdvancedFields()
   };
 }
@@ -317,6 +342,25 @@ function parseOptionalBoolean(value: 'unset' | 'true' | 'false'): boolean | unde
   return value === 'true';
 }
 
+function parseNvidiaToolChoice(draft: ProviderDraft): NvidiaToolChoice | undefined {
+  if (draft.toolChoice === 'unset') {
+    return undefined;
+  }
+  if (draft.toolChoice === 'auto' || draft.toolChoice === 'required' || draft.toolChoice === 'none') {
+    return draft.toolChoice;
+  }
+  const functionName = draft.toolChoiceFunctionName.trim();
+  if (functionName.length === 0) {
+    throw new Error('tool_choice function name 不能为空。');
+  }
+  return {
+    type: 'function',
+    function: {
+      name: functionName
+    }
+  };
+}
+
 function parseOptionalJsonObject(value: string, label: string): Record<string, unknown> | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
@@ -343,7 +387,8 @@ function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['op
     const options: NonNullable<ProviderConfig['options']> = {};
     if (temperature !== undefined) options.temperature = temperature;
     if (maxTokens !== undefined) options.maxTokens = maxTokens;
-    if (draft.thinking) options.thinking = true;
+    const thinking = parseOptionalBoolean(draft.thinking);
+    if (thinking !== undefined) options.thinking = thinking;
     const topP = parseOptionalNumber(draft.topP, 'top_p');
     if (topP !== undefined) options.topP = topP;
     const topK = parseOptionalInteger(draft.topK, 'top_k');
@@ -366,6 +411,8 @@ function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['op
     if (parallelToolCalls !== undefined) options.parallelToolCalls = parallelToolCalls;
     const streamUsage = parseOptionalBoolean(draft.streamUsage);
     if (streamUsage !== undefined) options.streamUsage = streamUsage;
+    const toolChoice = parseNvidiaToolChoice(draft);
+    if (toolChoice !== undefined) options.toolChoice = toolChoice;
     const endpointOverride = draft.endpointOverride.trim();
     if (endpointOverride.length > 0) options.endpointOverride = endpointOverride;
     const guidedJson = parseOptionalJsonObject(draft.guidedJson, 'guided_json');
@@ -378,13 +425,14 @@ function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['op
     if (guidedGrammar.length > 0) options.guidedGrammar = guidedGrammar;
     return Object.keys(options).length === 0 ? undefined : options;
   }
-  if (temperature === undefined && maxTokens === undefined && draft.thinking === false) {
+  const thinking = parseOptionalBoolean(draft.thinking);
+  if (temperature === undefined && maxTokens === undefined && thinking === undefined) {
     return undefined;
   }
   return {
     ...(temperature === undefined ? {} : { temperature }),
     ...(maxTokens === undefined ? {} : { maxTokens }),
-    ...(draft.thinking ? { thinking: true } : {})
+    ...(thinking === undefined ? {} : { thinking })
   };
 }
 

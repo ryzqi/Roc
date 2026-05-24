@@ -18,7 +18,8 @@ import {
   buildProviderIdFromName,
   createProviderDraft,
   parseProviderModelDraft,
-  providerTypeMeta
+  providerTypeMeta,
+  type ProviderDraft
 } from '../../src/renderer/settings/provider-draft-model';
 import { buildImpactRows } from '../../src/renderer/settings/impact-model';
 import {
@@ -78,6 +79,8 @@ function defaultNvidiaDraftFields() {
     includeReasoning: 'unset',
     parallelToolCalls: 'unset',
     streamUsage: 'unset',
+    toolChoice: 'unset',
+    toolChoiceFunctionName: '',
     endpointOverride: '',
     guidedJson: '',
     guidedRegex: '',
@@ -113,7 +116,7 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaDraftFields()
     });
     expect(createProviderDraft('anthropic_compatible')).toMatchObject({
@@ -133,7 +136,7 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaDraftFields()
     });
     expect(createProviderDraft('llama_cpp')).toEqual({
@@ -147,7 +150,7 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaDraftFields()
     });
   });
@@ -195,7 +198,7 @@ describe('settings model helpers', () => {
         'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct | Llama 3.3 70B',
       temperature: '0.2',
       maxTokens: '4096',
-      thinking: true,
+      thinking: 'true',
       ...defaultNvidiaDraftFields()
     });
   });
@@ -235,7 +238,7 @@ describe('settings model helpers', () => {
       modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
       temperature: '',
       maxTokens: '',
-      thinking: false,
+      thinking: 'unset',
       ...defaultNvidiaDraftFields()
     });
   });
@@ -293,13 +296,13 @@ describe('settings model helpers', () => {
   });
 
   it('builds the fixed NVIDIA provider config from model list text and NVIDIA options', () => {
-    const draft = {
+    const draft: ProviderDraft = {
       ...createProviderDraft('nvidia'),
       modelsText: 'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct',
       apiKey: 'nvapi-test',
       temperature: '0.4',
       maxTokens: '16384',
-      thinking: true
+      thinking: 'true'
     };
 
     expect(buildProviderConfigFromDraft(draft)).toEqual({
@@ -365,6 +368,12 @@ describe('settings model helpers', () => {
         includeReasoning: true,
         parallelToolCalls: true,
         streamUsage: true,
+        toolChoice: {
+          type: 'function',
+          function: {
+            name: 'lookup'
+          }
+        },
         endpointOverride: 'http://localhost:8000/v1',
         guidedJson: { type: 'object', properties: { name: { type: 'string' } } },
         guidedRegex: '^[A-Z]{3}-\\d{4}$',
@@ -384,6 +393,9 @@ describe('settings model helpers', () => {
       includeReasoning: 'true',
       parallelToolCalls: 'true',
       streamUsage: 'true',
+      thinking: 'true',
+      toolChoice: 'function',
+      toolChoiceFunctionName: 'lookup',
       endpointOverride: 'http://localhost:8000/v1',
       guidedRegex: '^[A-Z]{3}-\\d{4}$',
       guidedChoice: 'yes\nno',
@@ -393,6 +405,54 @@ describe('settings model helpers', () => {
 
     const rebuilt = buildProviderConfigFromDraft(draft);
     expect(rebuilt.options).toMatchObject(provider.options!);
+  });
+
+  it('round-trips explicit NVIDIA thinking false through draft and ProviderConfig', () => {
+    const provider: ProviderConfig = {
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      credentialRef: 'secret:nvidia',
+      enabled: true,
+      models: [
+        {
+          id: 'qwen/qwen3-235b-a22b',
+          displayName: 'Qwen3',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: {
+        thinking: false
+      }
+    };
+
+    const draft = createProviderDraft('nvidia', provider);
+
+    expect(draft.thinking).toBe('false');
+    expect(buildProviderConfigFromDraft(draft).options).toMatchObject({
+      thinking: false
+    });
+  });
+
+  it('builds NVIDIA named tool_choice from draft fields', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('nvidia'),
+      modelsText: 'meta/llama-3.3-70b-instruct | Llama 3.3',
+      toolChoice: 'function',
+      toolChoiceFunctionName: 'lookup'
+    };
+
+    expect(buildProviderConfigFromDraft(draft).options).toMatchObject({
+      toolChoice: {
+        type: 'function',
+        function: {
+          name: 'lookup'
+        }
+      }
+    });
   });
 
   it('builds the fixed llama.cpp provider config from model list text while allowing an empty API key', () => {

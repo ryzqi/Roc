@@ -369,17 +369,17 @@ export function ProvidersSection({
                   />
                 </label>
               </div>
-              <label className="provider-detail-toggle provider-detail-toggle--inline">
-                <input
-                  checked={draft.thinking}
+              <label className="field">
+                <span>thinking / reasoning</span>
+                <select
                   data-testid="provider-draft-thinking"
-                  onChange={(event) => onUpdateDraft({ thinking: event.currentTarget.checked })}
-                  type="checkbox"
-                />
-                <span className="provider-detail-toggle-track" aria-hidden="true">
-                  <span className="provider-detail-toggle-thumb" />
-                </span>
-                <span>启用 thinking / reasoning（按模型族自动选择 enable_thinking / thinking / detailed thinking on）</span>
+                  onChange={(event) => onUpdateDraft({ thinking: event.currentTarget.value as ProviderDraft['thinking'] })}
+                  value={draft.thinking}
+                >
+                  <option value="unset">默认（按模型决定）</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
               </label>
               <details className="provider-nvidia-advanced">
                 <summary>NVIDIA NIM 高级参数</summary>
@@ -502,6 +502,30 @@ export function ProvidersSection({
                       <option value="true">true</option>
                       <option value="false">false</option>
                     </select>
+                  </label>
+                  <label className="field">
+                    <span>tool_choice</span>
+                    <select
+                      data-testid="provider-draft-tool-choice"
+                      onChange={(event) => onUpdateDraft({ toolChoice: event.currentTarget.value as ProviderDraft['toolChoice'] })}
+                      value={draft.toolChoice}
+                    >
+                      <option value="unset">默认</option>
+                      <option value="auto">auto</option>
+                      <option value="required">required</option>
+                      <option value="none">none</option>
+                      <option value="function">指定 function</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>tool_choice function.name</span>
+                    <input
+                      data-testid="provider-draft-tool-choice-function-name"
+                      disabled={draft.toolChoice !== 'function'}
+                      onChange={(event) => onUpdateDraft({ toolChoiceFunctionName: event.currentTarget.value })}
+                      placeholder="lookup"
+                      value={draft.toolChoiceFunctionName}
+                    />
                   </label>
                   <label className="field field--full">
                     <span>endpoint_override（自托管 NIM URL，留空使用官方端点）</span>
