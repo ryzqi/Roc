@@ -25,6 +25,10 @@ afterEach(() => {
 });
 
 describe('background task deep-agent tools', () => {
+  function futureOnceRunAt(): string {
+    return new Date(Date.now() + 60_000).toISOString();
+  }
+
   it('proposes a background task without writing a database row before approval', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
@@ -95,13 +99,14 @@ describe('background task deep-agent tools', () => {
       schedulerService: services.taskSchedulerService
     });
     services.taskSchedulerService.start();
+    const nextRunAt = futureOnceRunAt();
     const payload = JSON.parse(
       await propose.invoke({
         goal: '1 分钟后检查测试',
         trigger: {
           type: 'once',
           description: '一分钟后',
-          nextRunAt: '2026-05-22T01:00:00.000Z'
+          nextRunAt
         },
         workspacePath: root,
         allowedActions: ['pnpm test'],
@@ -120,7 +125,7 @@ describe('background task deep-agent tools', () => {
     expect(applied).toMatchObject({
       ok: true,
       taskId: expect.stringMatching(/^background_/),
-      scheduledNextRunAt: '2026-05-22T01:00:00.000Z'
+      scheduledNextRunAt: nextRunAt
     });
     expect(services.taskService.listBackgroundTasks()).toEqual([
       expect.objectContaining({
@@ -309,4 +314,3 @@ describe('background task deep-agent tools', () => {
     ).toThrow(RocDomainError);
   });
 });
-
