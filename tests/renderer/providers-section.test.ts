@@ -157,6 +157,61 @@ describe('providers section', () => {
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });
 
+  it('renders NVIDIA advanced parameter panel with all NIM fields', () => {
+    const provider: ProviderConfig = {
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      credentialRef: 'secret:nvidia',
+      enabled: true,
+      models: [
+        {
+          id: 'qwen/qwen3-235b-a22b',
+          displayName: 'Qwen3',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('nvidia', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [{ providerId: provider.id, stored: true }],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-top-p"');
+    expect(html).toContain('data-testid="provider-draft-top-k"');
+    expect(html).toContain('data-testid="provider-draft-min-p"');
+    expect(html).toContain('data-testid="provider-draft-frequency-penalty"');
+    expect(html).toContain('data-testid="provider-draft-presence-penalty"');
+    expect(html).toContain('data-testid="provider-draft-repetition-penalty"');
+    expect(html).toContain('data-testid="provider-draft-seed"');
+    expect(html).toContain('data-testid="provider-draft-stop"');
+    expect(html).toContain('data-testid="provider-draft-include-reasoning"');
+    expect(html).toContain('data-testid="provider-draft-parallel-tool-calls"');
+    expect(html).toContain('data-testid="provider-draft-stream-usage"');
+    expect(html).toContain('data-testid="provider-draft-endpoint-override"');
+    expect(html).toContain('data-testid="provider-draft-guided-json"');
+    expect(html).toContain('data-testid="provider-draft-guided-regex"');
+    expect(html).toContain('data-testid="provider-draft-guided-choice"');
+    expect(html).toContain('data-testid="provider-draft-guided-grammar"');
+  });
+
   it('renders fixed llama.cpp details with an editable endpoint and without delete controls', () => {
     const provider: ProviderConfig = {
       id: 'llama_cpp',

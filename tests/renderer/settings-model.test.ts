@@ -65,6 +65,27 @@ function defaultPermissions(): PermissionsConfig {
   };
 }
 
+function defaultNvidiaDraftFields() {
+  return {
+    topP: '',
+    topK: '',
+    minP: '',
+    frequencyPenalty: '',
+    presencePenalty: '',
+    repetitionPenalty: '',
+    seed: '',
+    stop: '',
+    includeReasoning: 'unset',
+    parallelToolCalls: 'unset',
+    streamUsage: 'unset',
+    endpointOverride: '',
+    guidedJson: '',
+    guidedRegex: '',
+    guidedChoice: '',
+    guidedGrammar: ''
+  };
+}
+
 describe('settings model helpers', () => {
   it('switches only to known settings sections', () => {
     expect(SETTINGS_SECTIONS.map((section) => section.label)).toEqual([
@@ -92,7 +113,8 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaDraftFields()
     });
     expect(createProviderDraft('anthropic_compatible')).toMatchObject({
       mode: 'create',
@@ -111,7 +133,8 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaDraftFields()
     });
     expect(createProviderDraft('llama_cpp')).toEqual({
       mode: 'edit',
@@ -124,7 +147,8 @@ describe('settings model helpers', () => {
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaDraftFields()
     });
   });
 
@@ -171,7 +195,8 @@ describe('settings model helpers', () => {
         'moonshotai/kimi-k2.6 | Kimi K2.6\nmeta/llama-3.3-70b-instruct | Llama 3.3 70B',
       temperature: '0.2',
       maxTokens: '4096',
-      thinking: true
+      thinking: true,
+      ...defaultNvidiaDraftFields()
     });
   });
 
@@ -210,7 +235,8 @@ describe('settings model helpers', () => {
       modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaDraftFields()
     });
   });
 
@@ -305,6 +331,68 @@ describe('settings model helpers', () => {
         thinking: true
       }
     });
+  });
+
+  it('round-trips NVIDIA advanced options through draft and ProviderConfig', () => {
+    const provider: ProviderConfig = {
+      id: 'nvidia',
+      name: 'NVIDIA',
+      type: 'nvidia',
+      endpoint: 'https://integrate.api.nvidia.com/v1',
+      credentialRef: 'secret:nvidia',
+      enabled: true,
+      models: [
+        {
+          id: 'qwen/qwen3-235b-a22b',
+          displayName: 'Qwen3',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: {
+        thinking: true,
+        temperature: 0.6,
+        maxTokens: 16384,
+        topP: 0.95,
+        topK: 20,
+        minP: 0,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+        repetitionPenalty: 1.0,
+        seed: 42,
+        stop: ['<|end|>'],
+        includeReasoning: true,
+        parallelToolCalls: true,
+        streamUsage: true,
+        endpointOverride: 'http://localhost:8000/v1',
+        guidedJson: { type: 'object', properties: { name: { type: 'string' } } },
+        guidedRegex: '^[A-Z]{3}-\\d{4}$',
+        guidedChoice: ['yes', 'no'],
+        guidedGrammar: '?start: "ok"'
+      }
+    };
+
+    const draft = createProviderDraft('nvidia', provider);
+
+    expect(draft).toMatchObject({
+      topP: '0.95',
+      topK: '20',
+      minP: '0',
+      seed: '42',
+      stop: '<|end|>',
+      includeReasoning: 'true',
+      parallelToolCalls: 'true',
+      streamUsage: 'true',
+      endpointOverride: 'http://localhost:8000/v1',
+      guidedRegex: '^[A-Z]{3}-\\d{4}$',
+      guidedChoice: 'yes\nno',
+      guidedGrammar: '?start: "ok"'
+    });
+    expect(draft.guidedJson).toContain('"type": "object"');
+
+    const rebuilt = buildProviderConfigFromDraft(draft);
+    expect(rebuilt.options).toMatchObject(provider.options!);
   });
 
   it('builds the fixed llama.cpp provider config from model list text while allowing an empty API key', () => {

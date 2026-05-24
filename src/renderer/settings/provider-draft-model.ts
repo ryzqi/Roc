@@ -25,6 +25,22 @@ export type ProviderDraft = {
   temperature: string;
   maxTokens: string;
   thinking: boolean;
+  topP: string;
+  topK: string;
+  minP: string;
+  frequencyPenalty: string;
+  presencePenalty: string;
+  repetitionPenalty: string;
+  seed: string;
+  stop: string;
+  includeReasoning: 'unset' | 'true' | 'false';
+  parallelToolCalls: 'unset' | 'true' | 'false';
+  streamUsage: 'unset' | 'true' | 'false';
+  endpointOverride: string;
+  guidedJson: string;
+  guidedRegex: string;
+  guidedChoice: string;
+  guidedGrammar: string;
 };
 
 export type EnabledModelOption = {
@@ -46,6 +62,81 @@ const editableProviderTypes: readonly EditableProviderType[] = [
 
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+type NvidiaAdvancedDraftFields = Pick<
+  ProviderDraft,
+  | 'topP'
+  | 'topK'
+  | 'minP'
+  | 'frequencyPenalty'
+  | 'presencePenalty'
+  | 'repetitionPenalty'
+  | 'seed'
+  | 'stop'
+  | 'includeReasoning'
+  | 'parallelToolCalls'
+  | 'streamUsage'
+  | 'endpointOverride'
+  | 'guidedJson'
+  | 'guidedRegex'
+  | 'guidedChoice'
+  | 'guidedGrammar'
+>;
+
+function defaultNvidiaAdvancedFields(): NvidiaAdvancedDraftFields {
+  return {
+    topP: '',
+    topK: '',
+    minP: '',
+    frequencyPenalty: '',
+    presencePenalty: '',
+    repetitionPenalty: '',
+    seed: '',
+    stop: '',
+    includeReasoning: 'unset',
+    parallelToolCalls: 'unset',
+    streamUsage: 'unset',
+    endpointOverride: '',
+    guidedJson: '',
+    guidedRegex: '',
+    guidedChoice: '',
+    guidedGrammar: ''
+  };
+}
+
+function booleanDraftValue(value: boolean | undefined): 'unset' | 'true' | 'false' {
+  if (value === undefined) {
+    return 'unset';
+  }
+  return value ? 'true' : 'false';
+}
+
+function jsonDraftValue(value: Record<string, unknown> | undefined): string {
+  return value === undefined ? '' : JSON.stringify(value, null, 2);
+}
+
+function createNvidiaAdvancedFields(provider?: ProviderConfig): NvidiaAdvancedDraftFields {
+  const options = provider?.options;
+  return {
+    ...defaultNvidiaAdvancedFields(),
+    topP: typeof options?.topP === 'number' ? String(options.topP) : '',
+    topK: typeof options?.topK === 'number' ? String(options.topK) : '',
+    minP: typeof options?.minP === 'number' ? String(options.minP) : '',
+    frequencyPenalty: typeof options?.frequencyPenalty === 'number' ? String(options.frequencyPenalty) : '',
+    presencePenalty: typeof options?.presencePenalty === 'number' ? String(options.presencePenalty) : '',
+    repetitionPenalty: typeof options?.repetitionPenalty === 'number' ? String(options.repetitionPenalty) : '',
+    seed: typeof options?.seed === 'number' ? String(options.seed) : '',
+    stop: Array.isArray(options?.stop) ? options.stop.join('\n') : '',
+    includeReasoning: booleanDraftValue(options?.includeReasoning),
+    parallelToolCalls: booleanDraftValue(options?.parallelToolCalls),
+    streamUsage: booleanDraftValue(options?.streamUsage),
+    endpointOverride: typeof options?.endpointOverride === 'string' ? options.endpointOverride : '',
+    guidedJson: jsonDraftValue(options?.guidedJson),
+    guidedRegex: typeof options?.guidedRegex === 'string' ? options.guidedRegex : '',
+    guidedChoice: Array.isArray(options?.guidedChoice) ? options.guidedChoice.join('\n') : '',
+    guidedGrammar: typeof options?.guidedGrammar === 'string' ? options.guidedGrammar : ''
+  };
+}
+
 export function createProviderDraft(type: EditableProviderType, provider?: ProviderConfig): ProviderDraft {
   if (!editableProviderTypes.includes(type)) {
     throw new Error(`Unsupported provider draft type: ${type}`);
@@ -65,7 +156,8 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
         typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
       maxTokens:
         typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
-      thinking: normalized.options?.thinking === true
+      thinking: normalized.options?.thinking === true,
+      ...createNvidiaAdvancedFields(normalized)
     };
   }
   if (type === 'llama_cpp') {
@@ -81,7 +173,8 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaAdvancedFields()
     };
   }
   if (provider === undefined) {
@@ -96,7 +189,8 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       modelsText: '',
       temperature: '',
       maxTokens: '',
-      thinking: false
+      thinking: false,
+      ...defaultNvidiaAdvancedFields()
     };
   }
   if (!editableProviderTypes.includes(provider.type as EditableProviderType)) {
@@ -113,7 +207,8 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
     temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
     maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
-    thinking: provider.options?.thinking === true
+    thinking: provider.options?.thinking === true,
+    ...defaultNvidiaAdvancedFields()
   };
 }
 
@@ -195,11 +290,93 @@ function parseOptionalNumber(value: string, label: string): number | undefined {
   return parsed;
 }
 
+function parseOptionalInteger(value: string, label: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${label} 必须是整数。`);
+  }
+  return parsed;
+}
+
+function parseStringList(value: string): string[] | undefined {
+  const items = value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return items.length === 0 ? undefined : items;
+}
+
+function parseOptionalBoolean(value: 'unset' | 'true' | 'false'): boolean | undefined {
+  if (value === 'unset') {
+    return undefined;
+  }
+  return value === 'true';
+}
+
+function parseOptionalJsonObject(value: string, label: string): Record<string, unknown> | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${label} 必须是 JSON 对象。`);
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error(`${label} 必须是合法 JSON 对象。`);
+  }
+}
+
 function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['options'] {
   const temperature = parseOptionalNumber(draft.temperature, 'Temperature');
   const maxTokens = parseOptionalNumber(draft.maxTokens, 'Max tokens');
   if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens <= 0)) {
     throw new Error('Max tokens 必须是正整数。');
+  }
+  if (draft.type === 'nvidia') {
+    const options: NonNullable<ProviderConfig['options']> = {};
+    if (temperature !== undefined) options.temperature = temperature;
+    if (maxTokens !== undefined) options.maxTokens = maxTokens;
+    if (draft.thinking) options.thinking = true;
+    const topP = parseOptionalNumber(draft.topP, 'top_p');
+    if (topP !== undefined) options.topP = topP;
+    const topK = parseOptionalInteger(draft.topK, 'top_k');
+    if (topK !== undefined) options.topK = topK;
+    const minP = parseOptionalNumber(draft.minP, 'min_p');
+    if (minP !== undefined) options.minP = minP;
+    const frequencyPenalty = parseOptionalNumber(draft.frequencyPenalty, 'frequency_penalty');
+    if (frequencyPenalty !== undefined) options.frequencyPenalty = frequencyPenalty;
+    const presencePenalty = parseOptionalNumber(draft.presencePenalty, 'presence_penalty');
+    if (presencePenalty !== undefined) options.presencePenalty = presencePenalty;
+    const repetitionPenalty = parseOptionalNumber(draft.repetitionPenalty, 'repetition_penalty');
+    if (repetitionPenalty !== undefined) options.repetitionPenalty = repetitionPenalty;
+    const seed = parseOptionalInteger(draft.seed, 'seed');
+    if (seed !== undefined) options.seed = seed;
+    const stop = parseStringList(draft.stop);
+    if (stop !== undefined) options.stop = stop;
+    const includeReasoning = parseOptionalBoolean(draft.includeReasoning);
+    if (includeReasoning !== undefined) options.includeReasoning = includeReasoning;
+    const parallelToolCalls = parseOptionalBoolean(draft.parallelToolCalls);
+    if (parallelToolCalls !== undefined) options.parallelToolCalls = parallelToolCalls;
+    const streamUsage = parseOptionalBoolean(draft.streamUsage);
+    if (streamUsage !== undefined) options.streamUsage = streamUsage;
+    const endpointOverride = draft.endpointOverride.trim();
+    if (endpointOverride.length > 0) options.endpointOverride = endpointOverride;
+    const guidedJson = parseOptionalJsonObject(draft.guidedJson, 'guided_json');
+    if (guidedJson !== undefined) options.guidedJson = guidedJson;
+    const guidedRegex = draft.guidedRegex.trim();
+    if (guidedRegex.length > 0) options.guidedRegex = guidedRegex;
+    const guidedChoice = parseStringList(draft.guidedChoice);
+    if (guidedChoice !== undefined) options.guidedChoice = guidedChoice;
+    const guidedGrammar = draft.guidedGrammar.trim();
+    if (guidedGrammar.length > 0) options.guidedGrammar = guidedGrammar;
+    return Object.keys(options).length === 0 ? undefined : options;
   }
   if (temperature === undefined && maxTokens === undefined && draft.thinking === false) {
     return undefined;
