@@ -60,11 +60,40 @@ export const ProviderCredentialRefSchema = z
     'Provider 凭据引用必须为 secret:<providerId> 或 null。'
   );
 
+const NvidiaToolChoiceSchema = z.union([
+  z.literal('auto'),
+  z.literal('required'),
+  z.literal('none'),
+  z.object({
+    type: z.literal('function'),
+    function: z.object({
+      name: z.string().min(1)
+    })
+  })
+]);
+
 export const ProviderOptionsSchema = z
   .object({
     temperature: z.number().finite().optional(),
     maxTokens: z.number().int().positive().optional(),
-    thinking: z.boolean().optional()
+    thinking: z.boolean().optional(),
+    topP: z.number().min(0).max(1).optional(),
+    topK: z.number().int().min(-1).optional(),
+    minP: z.number().min(0).max(1).optional(),
+    frequencyPenalty: z.number().min(-2).max(2).optional(),
+    presencePenalty: z.number().min(-2).max(2).optional(),
+    repetitionPenalty: z.number().min(0).max(2).optional(),
+    seed: z.number().int().optional(),
+    stop: z.array(z.string().min(1)).max(4).optional(),
+    includeReasoning: z.boolean().optional(),
+    parallelToolCalls: z.boolean().optional(),
+    streamUsage: z.boolean().optional(),
+    toolChoice: NvidiaToolChoiceSchema.optional(),
+    guidedJson: z.record(z.string(), z.unknown()).optional(),
+    guidedRegex: z.string().min(1).optional(),
+    guidedChoice: z.array(z.string().min(1)).min(1).optional(),
+    guidedGrammar: z.string().min(1).optional(),
+    endpointOverride: z.string().url().optional()
   })
   .optional();
 

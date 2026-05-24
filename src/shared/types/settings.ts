@@ -53,10 +53,33 @@ export type ShortcutsConfig = {
 
 export type ProviderType = 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'llama_cpp' | 'ollama' | 'custom';
 
+export type NvidiaToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { type: 'function'; function: { name: string } };
+
 export type ProviderOptions = {
   temperature?: number;
   maxTokens?: number;
   thinking?: boolean;
+  topP?: number;
+  topK?: number;
+  minP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+  seed?: number;
+  stop?: string[];
+  includeReasoning?: boolean;
+  parallelToolCalls?: boolean;
+  streamUsage?: boolean;
+  toolChoice?: NvidiaToolChoice;
+  guidedJson?: Record<string, unknown>;
+  guidedRegex?: string;
+  guidedChoice?: string[];
+  guidedGrammar?: string;
+  endpointOverride?: string;
 };
 
 export type ProviderModel = {
