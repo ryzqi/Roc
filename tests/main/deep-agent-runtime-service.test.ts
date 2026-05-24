@@ -999,9 +999,10 @@ describe('DeepAgentRuntimeService', () => {
       await completed;
 
       const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { systemPrompt?: string } | undefined;
-      expect(call?.systemPrompt).toContain(`Workspace root: ${workspaceRoot}`);
-      expect(call?.systemPrompt).toContain('Default working directory: the selected Roc workspace root.');
-      expect(call?.systemPrompt).toContain('Use /workspace/ for Deep Agents file tools when referring to workspace files.');
+      expect(call?.systemPrompt).toContain(`Workspace: ${workspaceRoot}`);
+      expect(call?.systemPrompt).toContain(
+        'Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.'
+      );
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

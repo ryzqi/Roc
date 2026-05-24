@@ -61,6 +61,11 @@ export type FakeProvider = {
   close: () => Promise<void>;
 };
 
+type FakeProviderResponseOptions = {
+  contentType?: string;
+  rawBody?: string;
+};
+
 function readBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolveBody, rejectBody) => {
     const chunks: Buffer[] = [];
@@ -74,7 +79,11 @@ function readBody(request: IncomingMessage): Promise<string> {
   });
 }
 
-export async function startFakeProvider(responseBody: unknown, statusCode: number): Promise<FakeProvider> {
+export async function startFakeProvider(
+  responseBody: unknown,
+  statusCode: number,
+  options: FakeProviderResponseOptions = {}
+): Promise<FakeProvider> {
   const requests: CapturedProviderRequest[] = [];
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
@@ -91,8 +100,8 @@ export async function startFakeProvider(responseBody: unknown, statusCode: numbe
         body: parsedBody
       });
       response.statusCode = statusCode;
-      response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify(responseBody));
+      response.setHeader('content-type', options.contentType ?? 'application/json');
+      response.end(options.rawBody ?? JSON.stringify(responseBody));
     })().catch((error: unknown) => {
       response.statusCode = 500;
       response.setHeader('content-type', 'application/json');

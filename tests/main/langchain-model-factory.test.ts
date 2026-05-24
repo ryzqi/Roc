@@ -1,11 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AIMessageChunk } from '@langchain/core/messages';
+import { AIMessageChunk, SystemMessage } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
+import { tool } from '@langchain/core/tools';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
 
@@ -70,6 +72,208 @@ describe('LangChainModelFactory', () => {
     });
     expect((result.model as { timeout?: number }).timeout).toBe(60_000);
     expect((result.model as { clientConfig?: { maxRetries?: number } }).clientConfig?.maxRetries).toBe(0);
+  });
+
+  it('keeps OpenAI-compatible models on the standard provider request timeout', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as { timeout?: number }).timeout).toBe(60_000);
+  });
+
+  it('sends NVIDIA text-only content blocks as string chat content without streaming usage options', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'moonshotai/kimi-k2.6',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'moonshotai/kimi-k2.6',
+              displayName: 'Kimi K2.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ messages?: Array<{ content?: unknown }>; parallel_tool_calls?: unknown; stream_options?: unknown }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { messages?: Array<{ content?: unknown }>; parallel_tool_calls?: unknown; stream_options?: unknown });
+      yield {
+        choices: [
+          {
+            delta: {
+              role: 'assistant',
+              content: 'OK'
+            },
+            index: 0,
+            finish_reason: 'stop'
+          }
+        ]
+      };
+    };
+
+    await result.model.invoke([
+      new SystemMessage({
+        contentBlocks: [
+          {
+            type: 'text',
+            text: 'Roc system prompt'
+          },
+          {
+            type: 'text',
+            text: 'Deep Agents base prompt'
+          }
+        ]
+      })
+    ]);
+
+    expect(requests[0]?.messages?.[0]?.content).toBe('Roc system prompt\n\nDeep Agents base prompt');
+    expect(requests[0]?.parallel_tool_calls).toBe(false);
+    expect(requests[0]?.stream_options).toBeUndefined();
+  });
+
+  it('simplifies NVIDIA tool schemas before sending OpenAI tool definitions', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'moonshotai/kimi-k2.6',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'moonshotai/kimi-k2.6',
+              displayName: 'Kimi K2.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ tools?: Array<{ function?: { parameters?: unknown } }> }> = [];
+    const completionModel = (result.model as ChatOpenAI).bindTools([
+      tool(async () => 'ok', {
+        name: 'lookup',
+        description: 'Lookup a value.',
+        schema: {
+          type: 'object',
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          additionalProperties: false,
+          required: ['query'],
+          properties: {
+            query: {
+              anyOf: [
+                {
+                  type: 'string'
+                },
+                {
+                  type: 'null'
+                }
+              ],
+              default: null,
+              description: 'Lookup query.'
+            },
+            limit: {
+              type: 'integer',
+              default: 5,
+              additionalProperties: {
+                type: 'string'
+              }
+            }
+          }
+        }
+      })
+    ]) as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+      invoke: (input: unknown) => Promise<unknown>;
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { tools?: Array<{ function?: { parameters?: unknown } }> });
+      yield {
+        choices: [
+          {
+            delta: {
+              role: 'assistant',
+              content: 'OK'
+            },
+            index: 0,
+            finish_reason: 'stop'
+          }
+        ]
+      };
+    };
+
+    await completionModel.invoke('Use no tools and reply OK.');
+
+    expect(requests[0]?.tools?.[0]?.function?.parameters).toEqual({
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Lookup query.'
+        },
+        limit: {
+          type: 'integer'
+        }
+      }
+    });
   });
 
   it('builds anthropic-compatible models with a 60 second request timeout', async () => {
@@ -141,7 +345,7 @@ describe('LangChainModelFactory', () => {
     expect(result.modelId).toBe('qwen3.5-4b');
     expect(result.runtime.providerType).toBe('llama_cpp');
     expect(result.runtime.baseUrl).toBe('http://127.0.0.1:9090/v1');
-    expect(result.runtime.streaming).toBe(false);
+    expect(result.runtime.streaming).toBe(true);
     expect(result.runtime.modelKwargs).toEqual({
       cache_prompt: true
     });
@@ -149,6 +353,168 @@ describe('LangChainModelFactory', () => {
       baseURL: 'http://127.0.0.1:9090/v1',
       maxRetries: 0
     });
+    expect((result.model as { timeout?: number }).timeout).toBe(600_000);
+  });
+
+  it('sanitizes llama.cpp tool schemas before grammar generation', async () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen3.5-4b',
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: null,
+          enabled: true,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+    expect(result.runtime.streaming).toBe(true);
+    const requests: Array<{
+      cache_prompt?: unknown;
+      parallel_tool_calls?: unknown;
+      stream?: unknown;
+      stream_options?: unknown;
+      tools?: Array<{ function?: { parameters?: unknown } }>;
+    }> = [];
+    const completionModel = (result.model as ChatOpenAI).bindTools([
+      tool(async () => 'ok', {
+        name: 'schedule_once',
+        description: 'Schedule a one-time task.',
+        schema: z.object({
+          nextRunAt: z.string().datetime(),
+          goal: z.string().min(1).max(500)
+        })
+      })
+    ]) as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => Promise<AsyncIterable<unknown>>;
+      };
+      invoke: (input: unknown) => Promise<unknown>;
+    };
+    completionModel.completions.completionWithRetry = async (request) => {
+      requests.push(
+        request as {
+          cache_prompt?: unknown;
+          parallel_tool_calls?: unknown;
+          stream?: unknown;
+          stream_options?: unknown;
+          tools?: Array<{ function?: { parameters?: unknown } }>;
+        }
+      );
+      return (async function* () {
+        yield {
+          choices: [
+            {
+              delta: {
+                role: 'assistant',
+                content: 'OK'
+              },
+              finish_reason: 'stop',
+              index: 0
+            }
+          ]
+        };
+      })();
+    };
+
+    await completionModel.invoke('Reply OK without calling tools.');
+
+    expect(requests[0]).toMatchObject({
+      cache_prompt: true,
+      stream: true,
+      parallel_tool_calls: false
+    });
+    expect(requests[0]).not.toHaveProperty('stream_options');
+    expect(requests[0]?.tools?.[0]?.function?.parameters).toEqual({
+      type: 'object',
+      required: ['nextRunAt', 'goal'],
+      properties: {
+        nextRunAt: {
+          type: 'string',
+          description: expect.stringContaining('ISO 8601 UTC timestamp')
+        },
+        goal: {
+          type: 'string'
+        }
+      }
+    });
+  });
+
+  it('keeps OpenAI-compatible non-streaming requests on the non-streaming path', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+    const requests: Array<{ stream?: unknown }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => Promise<unknown>;
+      };
+      invoke: (input: unknown) => Promise<unknown>;
+    };
+    completionModel.completions.completionWithRetry = async (request) => {
+      requests.push(request as { stream?: unknown });
+      return {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'OK'
+            },
+            finish_reason: 'stop',
+            index: 0
+          }
+        ],
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+          total_tokens: 2
+        }
+      };
+    };
+
+    await completionModel.invoke('Reply OK without calling tools.');
+
+    expect(result.runtime.streaming).toBe(false);
+    expect(requests[0]?.stream).toBe(false);
   });
 
   it('ignores legacy Anthropic cache TTL inputs and leaves cache_control to deepagents middleware', async () => {

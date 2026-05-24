@@ -319,23 +319,20 @@ describe('Roc foundation services providers', () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-provider-test-'));
     const liveServices = createAppServices(liveRoot);
     const fakeProvider = await startFakeProvider(
+      null,
+      200,
       {
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'OK'
-            },
-            finish_reason: 'stop'
-          }
-        ],
-        usage: {
-          prompt_tokens: 11,
-          completion_tokens: 1,
-          total_tokens: 12
-        }
-      },
-      200
+        contentType: 'text/event-stream',
+        rawBody: [
+          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"qwen3.5-4b","choices":[{"index":0,"delta":{"role":"assistant","content":"OK"},"finish_reason":null}]}',
+          '',
+          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"qwen3.5-4b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+          '',
+          'data: [DONE]',
+          '',
+          ''
+        ].join('\n')
+      }
     );
 
     try {
@@ -381,7 +378,7 @@ describe('Roc foundation services providers', () => {
       });
       expect(fakeProvider.requests[0]?.body).toMatchObject({
         model: 'qwen3.5-4b',
-        stream: false,
+        stream: true,
         cache_prompt: true,
         messages: [
           expect.objectContaining({
