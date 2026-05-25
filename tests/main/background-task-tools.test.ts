@@ -29,7 +29,118 @@ describe('background task deep-agent tools', () => {
     return new Date(Date.now() + 60_000).toISOString();
   }
 
-  it('proposes a background task without writing a database row before approval', async () => {
+  it('creates and registers a daily 21:50 cron task with the canonical trigger schema', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+    services.taskSchedulerService.start();
+    const nextRunAt = futureOnceRunAt();
+
+    const result = JSON.parse(
+      await propose.invoke({
+        goal: '每天晚上9点抓取AI的最新新闻，然后写到当前目录下的docx文件记录',
+        trigger: {
+          type: 'cron',
+          description: '每天晚上21:50触发',
+          cronExpression: '50 21 * * *',
+          nextRunAt
+        },
+        workspacePath: root,
+        allowedActions: ['web_search', 'web_read', 'write_file', 'edit_file', 'read_file', 'ls'],
+        forbiddenActions: ['delete_file', 'execute'],
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
+
+    expect(result).toMatchObject({
+      ok: true,
+      taskId: expect.stringMatching(/^background_/),
+      scheduledNextRunAt: nextRunAt
+    });
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: result.taskId,
+        goal: '每天晚上9点抓取AI的最新新闻，然后写到当前目录下的docx文件记录',
+        triggerType: 'cron',
+        cronExpression: '50 21 * * *',
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    ]);
+    expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
+  });
+
+  it('rejects trigger.schedule payloads at the tool schema boundary without creating a task', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    await expect(
+      propose.invoke({
+        goal: '每天晚上9点抓取AI的最新新闻，并写入当前工作区目录下的docx文件进行记录',
+        trigger: {
+          schedule: '50 21 * * *'
+        },
+        workspacePath: root,
+        allowedActions: ['web_search', 'web_read', 'write_file', 'edit_file', 'execute'],
+        forbiddenActions: ['delete_file']
+      })
+    ).rejects.toThrow(/schema|trigger|invalid/i);
+
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+  });
+
+  it('rejects cron expr aliases without normalizing them into cronExpression', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    await expect(
+      propose.invoke({
+        goal: '每天晚上9点抓取AI的最新新闻，然后写到当前目录下的docx文件记录',
+        trigger: {
+          type: 'cron',
+          description: '每天晚上21:50触发',
+          expr: '50 21 * * *',
+          nextRunAt: futureOnceRunAt()
+        },
+        workspacePath: root,
+        allowedActions: ['web_search', 'web_read', 'write_file', 'read_file', 'ls', 'docx'],
+        forbiddenActions: ['execute', 'delete_file']
+      })
+    ).rejects.toThrow(/schema|cronExpression|invalid/i);
+
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+  });
+
+  it('rejects notificationPolicy on_error without creating a task', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    await expect(
+      propose.invoke({
+        goal: '每天晚上21:50检查新闻',
+        trigger: {
+          type: 'cron',
+          description: '每天晚上21:50触发',
+          cronExpression: '50 21 * * *',
+          nextRunAt: futureOnceRunAt()
+        },
+        workspacePath: root,
+        allowedActions: ['web_search'],
+        forbiddenActions: [],
+        notificationPolicy: 'on_error'
+      })
+    ).rejects.toThrow(/schema|notificationPolicy|invalid/i);
+
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+  });
+
+  it('creates a manual background task immediately when propose_background_task is invoked', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
       schedulerService: services.taskSchedulerService
@@ -37,36 +148,41 @@ describe('background task deep-agent tools', () => {
 
     const result = JSON.parse(
       await propose.invoke({
-        goal: '每天检查测试状态',
+        goal: '手动检查测试状态',
         trigger: {
-          type: 'cron',
-          description: '每天 09:00',
-          cronExpression: '0 9 * * *',
-          nextRunAt: '2026-05-22T01:00:00.000Z'
+          type: 'manual',
+          description: '手动触发'
         },
         workspacePath: root,
         allowedActions: ['pnpm test'],
         forbiddenActions: ['git push']
       })
     ) as {
-      kind: string;
-      preview: unknown;
-      risk: string;
-      requiredFields: string[];
+      ok: boolean;
+      taskId: string;
+      threadId: string;
+      scheduledNextRunAt: string | null;
     };
 
     expect(result).toMatchObject({
-      kind: 'propose_background_task',
-      risk: 'medium',
-      requiredFields: ['decision'],
-      preview: {
-        goal: '每天检查测试状态',
-        cronExpression: '0 9 * * *',
+      ok: true,
+      taskId: expect.stringMatching(/^background_/),
+      threadId: expect.stringMatching(/^thread_/),
+      scheduledNextRunAt: null
+    });
+    expect(result).not.toHaveProperty('requiredFields');
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: result.taskId,
+        threadId: result.threadId,
+        goal: '手动检查测试状态',
+        triggerType: 'manual',
+        scheduled: false,
+        nextRunAt: null,
         failurePolicy: 'pause_and_report',
         notificationPolicy: 'failures_and_confirmations'
-      }
-    });
-    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+      })
+    ]);
   });
 
   it('rejects invalid cron expressions before approval', async () => {
@@ -93,7 +209,7 @@ describe('background task deep-agent tools', () => {
     });
   });
 
-  it('enabledCapabilities 未传 -> preview 字段为 null', async () => {
+  it('enabledCapabilities 未传 -> 创建的任务字段为 null', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
       schedulerService: services.taskSchedulerService
@@ -110,12 +226,17 @@ describe('background task deep-agent tools', () => {
         },
         workspacePath: root
       })
-    ) as { preview: { enabledCapabilities: unknown } };
+    ) as { taskId: string };
 
-    expect(output.preview.enabledCapabilities).toBeNull();
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: output.taskId,
+        enabledCapabilities: null
+      })
+    ]);
   });
 
-  it('enabledCapabilities 显式传入 -> preview 字段透传', async () => {
+  it('enabledCapabilities 显式传入 -> 创建的任务字段透传', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
       schedulerService: services.taskSchedulerService
@@ -133,19 +254,24 @@ describe('background task deep-agent tools', () => {
         workspacePath: root,
         enabledCapabilities: { mcpServers: ['github'], skills: [] }
       })
-    ) as { preview: { enabledCapabilities: unknown } };
+    ) as { taskId: string };
 
-    expect(output.preview.enabledCapabilities).toEqual({ mcpServers: ['github'], skills: [] });
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: output.taskId,
+        enabledCapabilities: { mcpServers: ['github'], skills: [] }
+      })
+    ]);
   });
 
-  it('applies approve and registers the scheduled task', async () => {
+  it('creates and registers a once scheduled task immediately', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
       schedulerService: services.taskSchedulerService
     });
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
-    const payload = JSON.parse(
+    const result = JSON.parse(
       await propose.invoke({
         goal: '1 分钟后检查测试',
         trigger: {
@@ -157,17 +283,9 @@ describe('background task deep-agent tools', () => {
         allowedActions: ['pnpm test'],
         forbiddenActions: []
       })
-    ) as { preview: unknown };
+    ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
-    const applied = applyBackgroundTaskToolDecision({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService,
-      actionName: 'propose_background_task',
-      actionArgs: payload.preview,
-      decision: { type: 'approve' } as ChatResumeDecision
-    });
-
-    expect(applied).toMatchObject({
+    expect(result).toMatchObject({
       ok: true,
       taskId: expect.stringMatching(/^background_/),
       scheduledNextRunAt: nextRunAt
@@ -181,71 +299,80 @@ describe('background task deep-agent tools', () => {
     expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
   });
 
-  it('applies edited approval values before creating the task', async () => {
-    const payload = services.taskService.createBackgroundTaskPreview({
-      goal: '原始任务',
-      trigger: {
-        type: 'manual',
-        description: '手动'
-      },
-      workspacePath: root,
-      allowedActions: [],
-      forbiddenActions: [],
-      failurePolicy: 'pause_and_report',
-      notificationPolicy: 'failures_and_confirmations'
-    });
-
-    applyBackgroundTaskToolDecision({
+  it('creates and registers a cron scheduled task immediately', async () => {
+    const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
-      schedulerService: services.taskSchedulerService,
-      actionName: 'propose_background_task',
-      actionArgs: payload,
-      decision: {
-        type: 'edit',
-        editedAction: {
-          name: 'propose_background_task',
-          args: {
-            ...payload,
-            goal: '编辑后的任务'
-          }
-        }
-      } as ChatResumeDecision
+      schedulerService: services.taskSchedulerService
     });
+    services.taskSchedulerService.start();
+    const nextRunAt = futureOnceRunAt();
+    const result = JSON.parse(
+      await propose.invoke({
+        goal: '每分钟检查测试',
+        trigger: {
+          type: 'cron',
+          description: '每分钟',
+          cronExpression: '* * * * *',
+          nextRunAt
+        },
+        workspacePath: root,
+        allowedActions: ['pnpm test'],
+        forbiddenActions: []
+      })
+    ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
+    expect(result).toMatchObject({
+      ok: true,
+      taskId: expect.stringMatching(/^background_/),
+      scheduledNextRunAt: nextRunAt
+    });
     expect(services.taskService.listBackgroundTasks()).toEqual([
       expect.objectContaining({
-        goal: '编辑后的任务'
+        id: result.taskId,
+        goal: '每分钟检查测试',
+        triggerType: 'cron',
+        cronExpression: '* * * * *'
       })
     ]);
+    expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
   });
 
-  it('reject leaves the database unchanged', () => {
-    const payload = services.taskService.createBackgroundTaskPreview({
-      goal: '拒绝任务',
-      trigger: {
-        type: 'manual',
-        description: '手动'
-      },
-      workspacePath: root,
-      allowedActions: [],
-      forbiddenActions: [],
-      failurePolicy: 'pause_and_report',
-      notificationPolicy: 'failures_and_confirmations'
-    });
-
-    const result = applyBackgroundTaskToolDecision({
+  it('does not leave direct-created scheduled tasks pending confirmation when only forbidden actions are provided', async () => {
+    const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
-      schedulerService: services.taskSchedulerService,
-      actionName: 'propose_background_task',
-      actionArgs: payload,
-      decision: { type: 'reject' } as ChatResumeDecision
+      schedulerService: services.taskSchedulerService
     });
+    services.taskSchedulerService.start();
+    const nextRunAt = futureOnceRunAt();
+    const result = JSON.parse(
+      await propose.invoke({
+        goal: '禁止发布但继续检查测试',
+        trigger: {
+          type: 'cron',
+          description: '每分钟',
+          cronExpression: '* * * * *',
+          nextRunAt
+        },
+        workspacePath: root,
+        allowedActions: [],
+        forbiddenActions: ['git push']
+      })
+    ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
 
-    expect(result).toEqual({
-      ok: false,
-      reason: 'rejected'
+    expect(result).toMatchObject({
+      ok: true,
+      taskId: expect.stringMatching(/^background_/),
+      scheduledNextRunAt: nextRunAt
     });
-    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: result.taskId,
+        status: 'running',
+        requiresConfirmation: false,
+        triggerType: 'cron'
+      })
+    ]);
+    expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
   });
 
   it('updates cron definitions and re-registers the scheduler timer', () => {
@@ -341,12 +468,12 @@ describe('background task deep-agent tools', () => {
     );
   });
 
-  it('throws when applying an edited action to the wrong tool', () => {
+  it('throws when applying an edited update action to the wrong tool', () => {
     expect(() =>
       applyBackgroundTaskToolDecision({
         taskService: services.taskService,
         schedulerService: services.taskSchedulerService,
-        actionName: 'propose_background_task',
+        actionName: 'update_background_task',
         actionArgs: {},
         decision: {
           type: 'edit',

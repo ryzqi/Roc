@@ -92,7 +92,7 @@ export function TaskCreateDialog({
                   <div className="task-create-dialog-heading">
                     <span className="task-create-dialog-kicker">Task Control</span>
                     <h2 className="task-create-dialog-title">新建任务</h2>
-                    <p className="task-create-dialog-copy">描述你想要的后台任务，AI 会生成待审批提议。</p>
+                    <p className="task-create-dialog-copy">描述你想要的后台任务，由 AI 生成并创建。</p>
                   </div>
                   <button
                     aria-label="关闭新建任务"
@@ -129,7 +129,7 @@ export function TaskCreateDialog({
                 </div>
                 <div className="task-create-dialog-actions action-strip">
                   <button data-testid="task-create-submit" type="button" onClick={() => void submit()} disabled={submitting}>
-                    {submitting ? '提交中' : '生成任务提议'}
+                    {submitting ? '提交中' : '创建任务'}
                   </button>
                   <button type="button" onClick={onClose}>
                     关闭

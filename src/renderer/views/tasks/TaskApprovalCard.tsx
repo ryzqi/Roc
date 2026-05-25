@@ -150,7 +150,7 @@ export function TaskApprovalCard({
           className="approval-btn approval-btn--approve"
           onClick={() => onApprovalDecision?.(approval.interruptId, [{ type: 'approve' }])}
         >
-          {action.name === 'cancel_background_task' ? '批准取消' : '批准创建'}
+          {action.name === 'cancel_background_task' ? '批准取消' : '批准修改'}
         </button>
         <button
           type="button"
@@ -195,9 +195,7 @@ export function isTaskApproval(approval: ChatPendingApproval): boolean {
     return false;
   }
   const request = approval.actionRequests[0];
-  return request?.name === 'propose_background_task' ||
-    request?.name === 'update_background_task' ||
-    request?.name === 'cancel_background_task';
+  return request?.name === 'update_background_task' || request?.name === 'cancel_background_task';
 }
 
 function formatTaskApprovalTitle(name: string): string {
@@ -207,7 +205,7 @@ function formatTaskApprovalTitle(name: string): string {
   if (name === 'cancel_background_task') {
     return '取消任务';
   }
-  return '创建定时任务';
+  return '后台任务';
 }
 
 function createDraftFromApproval(approval: ChatPendingApproval): TaskFormDraft {

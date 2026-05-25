@@ -663,8 +663,8 @@ export class DeepAgentRuntimeService {
 
   private isBackgroundTaskAction(
     name: string
-  ): name is 'propose_background_task' | 'update_background_task' | 'cancel_background_task' {
-    return name === 'propose_background_task' || name === 'update_background_task' || name === 'cancel_background_task';
+  ): name is 'update_background_task' | 'cancel_background_task' {
+    return name === 'update_background_task' || name === 'cancel_background_task';
   }
 
   private async consumeSessionStreams(

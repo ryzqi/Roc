@@ -2214,9 +2214,6 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toMatchObject({
-      propose_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
       update_background_task: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },
@@ -2438,9 +2435,6 @@ describe('DeepAgentRuntimeService', () => {
       | undefined;
 
     expect(call?.interruptOn).toEqual({
-      propose_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
       update_background_task: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },

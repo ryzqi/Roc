@@ -99,7 +99,7 @@ describe('chat message row', () => {
     expect(html).not.toContain('chat-approval-dot');
   });
 
-  it('renders the task approval card for background task proposals', () => {
+  it('renders the task approval card for background task updates', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -111,24 +111,28 @@ describe('chat message row', () => {
             interruptId: 'interrupt-task-1',
             actionRequests: [
               {
-                name: 'propose_background_task',
+                name: 'update_background_task',
                 args: {
-                  goal: '每天检查测试状态',
-                  trigger: {
-                    type: 'cron',
-                    description: '每天 09:00',
-                    cronExpression: '0 9 * * *',
-                    nextRunAt: '2026-05-22T01:00:00.000Z'
+                  taskId: 'background-1',
+                  patch: {
+                    goal: '每天检查测试状态',
+                    trigger: {
+                      type: 'cron',
+                      description: '每天 09:00',
+                      cronExpression: '0 9 * * *',
+                      nextRunAt: '2026-05-22T01:00:00.000Z'
+                    },
+                    workspacePath: 'F:\\Code\\Roc',
+                    allowedActions: ['pnpm test'],
+                    forbiddenActions: ['git push']
                   },
-                  workspacePath: 'F:\\Code\\Roc',
-                  allowedActions: ['pnpm test'],
-                  forbiddenActions: ['git push']
+                  reason: '调整调度'
                 }
               }
             ],
             reviewConfigs: [
               {
-                actionName: 'propose_background_task',
+                actionName: 'update_background_task',
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
@@ -139,12 +143,13 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid="task-approval-card"');
-    expect(html).toContain('创建定时任务');
+    expect(html).toContain('修改任务');
+    expect(html).toContain('批准修改');
     expect(html).toContain('编辑后批准');
     expect(html).toContain('每天检查测试状态');
   });
 
-  it('uses the generic approval card when a background task proposal is bundled with another action', () => {
+  it('uses the generic approval card when a direct creation payload appears in an approval bundle', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {

@@ -49,7 +49,10 @@ describe('TaskCreateDialog', () => {
     expect(html).toContain('data-testid="task-create-dialog"');
     expect(html).toContain('data-testid="task-create-description"');
     expect(html).toContain('data-testid="task-create-submit"');
-    expect(html).toContain('生成任务提议');
+    expect(html).toContain('由 AI 生成并创建');
+    expect(html).toContain('创建任务');
+    expect(html).not.toContain('生成任务提议');
+    expect(html).not.toContain('待审批提议');
     expect(html).not.toContain('data-testid="task-create-goal"');
     expect(html).not.toContain('data-testid="task-create-trigger-type"');
     expect(html).not.toContain('data-testid="task-create-workspace-path"');

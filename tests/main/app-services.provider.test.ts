@@ -145,9 +145,6 @@ describe('Roc foundation services providers', () => {
         target: 'task_steps'
       },
       interruptOn: {
-        propose_background_task: {
-          allowedDecisions: ['approve', 'edit', 'reject']
-        },
         update_background_task: {
           allowedDecisions: ['approve', 'edit', 'reject']
         },
@@ -989,6 +986,15 @@ describe('Roc foundation services providers', () => {
         untrustedContext: true
       })
     );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:propose_background_task',
+        name: 'propose_background_task',
+        description: '直接创建后台或定时任务。',
+        sideEffects: ['background_task_create'],
+        requiresApproval: false
+      })
+    );
     expect(preview.skillCards).toContainEqual(
       expect.objectContaining({
         id: 'skill:project-review',
@@ -1011,9 +1017,6 @@ describe('Roc foundation services providers', () => {
       ])
     );
     expect(preview.interruptOn).toMatchObject({
-      propose_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
       update_background_task: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },
@@ -1065,9 +1068,6 @@ describe('Roc foundation services providers', () => {
       })
     );
     expect(preview.interruptOn).toMatchObject({
-      propose_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
       update_background_task: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },
@@ -1130,9 +1130,6 @@ describe('Roc foundation services providers', () => {
       })
     );
     expect(preview.interruptOn).toEqual({
-      propose_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
       update_background_task: {
         allowedDecisions: ['approve', 'edit', 'reject']
       },

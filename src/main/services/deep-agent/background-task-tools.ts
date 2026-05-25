@@ -12,18 +12,18 @@ import type { TaskSchedulerService } from '../task-scheduler-service';
 import type { TaskService } from '../task-service';
 import { parseCronExpression } from '../task/cron-parser';
 
-const manualTriggerSchema = z.object({
+const manualTriggerSchema = z.strictObject({
   type: z.literal('manual'),
   description: z.string().min(1)
 });
 
-const onceTriggerSchema = z.object({
+const onceTriggerSchema = z.strictObject({
   type: z.literal('once'),
   description: z.string().min(1),
   nextRunAt: z.string().datetime()
 });
 
-const cronTriggerSchema = z.object({
+const cronTriggerSchema = z.strictObject({
   type: z.literal('cron'),
   description: z.string().min(1),
   cronExpression: z.string().min(1),
@@ -71,9 +71,9 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
   return [
     new DynamicStructuredTool<typeof proposeInputSchema, z.infer<typeof proposeInputSchema>, z.infer<typeof proposeInputSchema>, string>({
       name: 'propose_background_task',
-      description: '提议创建后台或定时任务。可选字段 enabledCapabilities：仅当用户明确要求限定 MCP 或技能时填写，否则不传，运行时将自动跟随当前全局启用集合。只返回审批预览，用户批准前不会创建任务。',
+      description: '直接创建后台或定时任务。可选字段 enabledCapabilities：仅当用户明确要求限定 MCP 或技能时填写，否则不传，运行时将自动跟随当前全局启用集合。',
       schema: proposeInputSchema,
-      func: async (rawInput) => JSON.stringify(createProposalPayload(input.taskService, rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(createBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
       name: 'update_background_task',
@@ -103,7 +103,7 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
 export function applyBackgroundTaskToolDecision(input: {
   taskService: TaskService;
   schedulerService: TaskSchedulerService;
-  actionName: 'propose_background_task' | 'update_background_task' | 'cancel_background_task';
+  actionName: 'update_background_task' | 'cancel_background_task';
   actionArgs: unknown;
   decision: ChatResumeDecision;
 }): Record<string, unknown> {
@@ -115,18 +115,6 @@ export function applyBackgroundTaskToolDecision(input: {
   }
 
   const actionArgs = readApprovedActionArgs(input.actionName, input.actionArgs, input.decision);
-  if (input.actionName === 'propose_background_task') {
-    const preview = normalizePreview(input.taskService, actionArgs);
-    const task = input.taskService.createBackgroundTask(preview);
-    input.schedulerService.registerTask(task);
-    return {
-      ok: true,
-      taskId: task.id,
-      threadId: task.threadId,
-      scheduledNextRunAt: task.nextRunAt
-    };
-  }
-
   if (input.actionName === 'update_background_task') {
     const request = updateInputSchema.parse(actionArgs);
     validatePatch(request.patch);
@@ -151,14 +139,18 @@ export function applyBackgroundTaskToolDecision(input: {
   };
 }
 
-function createProposalPayload(taskService: TaskService, rawInput: unknown): Record<string, unknown> {
-  const parsed = proposeInputSchema.parse(rawInput);
-  const preview = normalizePreview(taskService, parsed);
+function createBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
+  const preview = {
+    ...normalizePreview(input.taskService, rawInput),
+    requiresConfirmation: false
+  };
+  const task = input.taskService.createBackgroundTask(preview);
+  input.schedulerService.registerTask(task);
   return {
-    kind: 'propose_background_task',
-    preview,
-    risk: preview.riskLevel,
-    requiredFields: ['decision']
+    ok: true,
+    taskId: task.id,
+    threadId: task.threadId,
+    scheduledNextRunAt: task.nextRunAt
   };
 }
 
@@ -184,7 +176,7 @@ function normalizePreview(taskService: TaskService, rawInput: unknown): Backgrou
     allowedActions: parsed.allowedActions,
     forbiddenActions: parsed.forbiddenActions,
     failurePolicy: 'pause_and_report',
-    notificationPolicy: parsed.notificationPolicy,
+    notificationPolicy: 'failures_and_confirmations',
     enabledCapabilities: parsed.enabledCapabilities ?? null
   });
 }

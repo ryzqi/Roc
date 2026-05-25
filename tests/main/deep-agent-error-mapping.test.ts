@@ -3,6 +3,20 @@ import { RocDomainError } from '../../src/main/services/errors';
 import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
 
 describe('deep agent error mapping', () => {
+  it('maps LangChain tool schema failures before provider network classification', () => {
+    const error = new Error(
+      "Error invoking tool 'propose_background_task' with kwargs {'trigger': {'schedule': '50 21 * * *'}} with error:\n" +
+        "Received tool input did not match expected schema: Invalid input: expected 'manual' | 'once' | 'cron' at trigger.type\n" +
+        'Please fix your mistakes.'
+    );
+
+    expect(toRunFailure(error)).toEqual({
+      code: 'tool_input_schema_invalid',
+      message: '任务工具参数不符合 schema：propose_background_task 的输入不符合工具契约。',
+      retryable: true
+    });
+  });
+
   it('keeps web_read domain failures instead of re-labeling them as provider network errors', () => {
     const error = new RocDomainError({
       code: 'web_read_request_failed',

@@ -130,9 +130,9 @@ export class AgentService {
       executeCard,
       webReadCard,
       deleteFileCard,
-      this.createBackgroundTaskCard('propose_background_task', '提议创建后台或定时任务。', approvalMode),
-      this.createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', approvalMode),
-      this.createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', approvalMode),
+      this.createBackgroundTaskCard('propose_background_task', '直接创建后台或定时任务。', false),
+      this.createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', true),
+      this.createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', true),
       ...selectedMcpCards
     ];
 
@@ -283,7 +283,7 @@ export class AgentService {
     };
   }
 
-  private createBackgroundTaskCard(name: string, description: string, approvalMode: ApprovalMode): AgentCapabilityCard {
+  private createBackgroundTaskCard(name: string, description: string, requiresApproval: boolean): AgentCapabilityCard {
     return {
       id: `builtin:${name}`,
       name,
@@ -292,10 +292,10 @@ export class AgentService {
       requiredInput: 'background task structured request',
       scope: 'app',
       dependencies: ['TaskService', 'TaskSchedulerService'],
-      sideEffects: ['background_task_change_request'],
-      requiresApproval: true,
+      sideEffects: name === 'propose_background_task' ? ['background_task_create'] : ['background_task_change_request'],
+      requiresApproval,
       supportsLongTermGrant: false,
-      revokeGrantHint: '后台任务创建、修改和取消始终需要本次审批。',
+      revokeGrantHint: requiresApproval ? '后台任务修改和取消始终需要本次审批。' : '后台任务创建由工具调用直接完成，不创建长期授权。',
       riskLevel: 'high',
       auditCategory: 'background_task',
       untrustedContext: false
@@ -327,9 +327,6 @@ export class AgentService {
 
   private createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): AgentInterruptPolicy {
     const policy: AgentInterruptPolicy = {
-      propose_background_task: {
-        allowedDecisions: [...AgentService.BACKGROUND_TASK_ALLOWED_DECISIONS]
-      },
       update_background_task: {
         allowedDecisions: [...AgentService.BACKGROUND_TASK_ALLOWED_DECISIONS]
       },

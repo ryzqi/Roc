@@ -26,6 +26,12 @@ export function toRunFailure(error: unknown): RunFailure {
       retryable: error.retryable
     };
   }
+  if (error instanceof Error) {
+    const toolFailure = readToolFailure(error);
+    if (toolFailure !== null) {
+      return toolFailure;
+    }
+  }
   const classification = classifyProviderRequestFailure(error);
   if (classification.kind === 'abort') {
     return {
@@ -42,10 +48,6 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
-    const toolFailure = readToolFailure(error);
-    if (toolFailure !== null) {
-      return toolFailure;
-    }
     if (classification.kind === 'timeout') {
       return {
         code: 'provider_request_timeout',
@@ -75,6 +77,10 @@ export function toRunFailure(error: unknown): RunFailure {
 
 function readToolFailure(error: Error): RunFailure | null {
   const message = redact(error.message);
+  const toolSchemaFailure = readToolSchemaFailure(message);
+  if (toolSchemaFailure !== null) {
+    return toolSchemaFailure;
+  }
   if (message.startsWith('web_read 请求超时。')) {
     return {
       code: 'web_read_timeout',
@@ -141,6 +147,30 @@ function readToolFailure(error: Error): RunFailure | null {
     };
   }
   return null;
+}
+
+function readToolSchemaFailure(message: string): RunFailure | null {
+  if (!message.startsWith('Error invoking tool ')) {
+    return null;
+  }
+  if (!/did not match expected schema|Received tool input did not match expected schema|Invalid input/iu.test(message)) {
+    return null;
+  }
+
+  const toolName = readInvokedToolName(message);
+  return {
+    code: 'tool_input_schema_invalid',
+    message: `任务工具参数不符合 schema：${toolName} 的输入不符合工具契约。`,
+    retryable: true
+  };
+}
+
+function readInvokedToolName(message: string): string {
+  const match = /^Error invoking tool ['"]([^'"]+)['"]/u.exec(message);
+  if (match === null) {
+    return '工具';
+  }
+  return match[1];
 }
 
 export function toWebSearchFailure(error: unknown): RocDomainError {
