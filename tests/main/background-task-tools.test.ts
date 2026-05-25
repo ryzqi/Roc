@@ -93,6 +93,51 @@ describe('background task deep-agent tools', () => {
     });
   });
 
+  it('enabledCapabilities 未传 -> preview 字段为 null', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    const output = JSON.parse(
+      await propose.invoke({
+        goal: '每天 9 点提醒',
+        trigger: {
+          type: 'cron',
+          description: 'daily 9am',
+          cronExpression: '0 9 * * *',
+          nextRunAt: '2026-05-22T01:00:00.000Z'
+        },
+        workspacePath: root
+      })
+    ) as { preview: { enabledCapabilities: unknown } };
+
+    expect(output.preview.enabledCapabilities).toBeNull();
+  });
+
+  it('enabledCapabilities 显式传入 -> preview 字段透传', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    const output = JSON.parse(
+      await propose.invoke({
+        goal: '每天 9 点提醒',
+        trigger: {
+          type: 'cron',
+          description: 'daily 9am',
+          cronExpression: '0 9 * * *',
+          nextRunAt: '2026-05-22T01:00:00.000Z'
+        },
+        workspacePath: root,
+        enabledCapabilities: { mcpServers: ['github'], skills: [] }
+      })
+    ) as { preview: { enabledCapabilities: unknown } };
+
+    expect(output.preview.enabledCapabilities).toEqual({ mcpServers: ['github'], skills: [] });
+  });
+
   it('applies approve and registers the scheduled task', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,

@@ -143,4 +143,60 @@ describe('chat message row', () => {
     expect(html).toContain('编辑后批准');
     expect(html).toContain('每天检查测试状态');
   });
+
+  it('uses the generic approval card when a background task proposal is bundled with another action', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-mixed-task-approval',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          approval: {
+            interruptId: 'interrupt-mixed-task',
+            actionRequests: [
+              {
+                name: 'propose_background_task',
+                args: {
+                  goal: '每天检查测试状态',
+                  trigger: {
+                    type: 'cron',
+                    description: '每天 09:00',
+                    cronExpression: '0 9 * * *',
+                    nextRunAt: '2026-05-22T01:00:00.000Z'
+                  },
+                  workspacePath: 'F:\\Code\\Roc',
+                  allowedActions: ['pnpm test'],
+                  forbiddenActions: ['git push']
+                }
+              },
+              {
+                name: 'execute',
+                args: {
+                  command: 'pnpm test'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'propose_background_task',
+                allowedDecisions: ['approve', 'edit', 'reject']
+              },
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          },
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-approval-card"');
+    expect(html).not.toContain('data-testid="task-approval-card"');
+    expect(html).toContain('data-testid="chat-approval-tool-name">propose_background_task<');
+    expect(html).toContain('data-testid="chat-approval-tool-name">execute<');
+    expect(html).toContain('chat-approval-count">2</span>');
+  });
 });

@@ -126,7 +126,6 @@ export const ipcChannels = {
   tasksDeleteBackgroundTask: 'roc:tasks:delete-background-task',
   tasksUpdateBackgroundTask: 'roc:tasks:update-background-task',
   tasksOpenInChat: 'roc:tasks:open-in-chat',
-  tasksPromoteThread: 'roc:tasks:promote-thread',
   tasksGetSchedulerStatus: 'roc:tasks:get-scheduler-status',
   lifecycleGetTraySummary: 'roc:lifecycle:get-tray-summary',
   lifecyclePauseBackground: 'roc:lifecycle:pause-background',
@@ -233,7 +232,6 @@ export type RocPreloadApi = {
     deleteBackgroundTask: (id: string) => Promise<IpcResult<{ deleted: true; taskId: string }>>;
     updateBackgroundTask: (request: UpdateBackgroundTaskRequest) => Promise<IpcResult<BackgroundTask>>;
     openInChat: (request: { taskId: string }) => Promise<IpcResult<{ threadId: string }>>;
-    promoteThread: (request: { threadId: string; reason: 'manual' }) => Promise<IpcResult<TaskThread>>;
     getSchedulerStatus: () => Promise<IpcResult<SchedulerStatus>>;
     onUpdated: (callback: (event: TaskUpdateEvent | null) => void) => () => void;
   };

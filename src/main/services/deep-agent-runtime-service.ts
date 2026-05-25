@@ -53,7 +53,6 @@ type ResumeContext = {
 export class DeepAgentRuntimeService {
   private readonly eventEmitter = new EventEmitter();
   private readonly activeRuns = new Map<string, ActiveRun>();
-  private readonly longRunningTimers = new Map<string, NodeJS.Timeout>();
   private checkpointer: MemorySaver | SqliteSaver | null = null;
   private readonly store: BaseStore;
   private taskSchedulerService: TaskSchedulerService | null = null;
@@ -158,7 +157,6 @@ export class DeepAgentRuntimeService {
       input: preparedInput,
       startedAtMs: Date.now()
     };
-    this.scheduleLongRunningEvaluation(taskRun);
     void this.executeRun(context);
 
     return {
@@ -325,7 +323,6 @@ export class DeepAgentRuntimeService {
       enabledCapabilities: request.enabledCapabilities
     });
     this.taskService.markRunRunning(run.id);
-    this.taskService.evaluateLongRunningPromotion(run.threadId);
     this.taskService.recordAgentCapabilityManifest({
       threadId: run.threadId,
       runId: run.id,
@@ -408,7 +405,6 @@ export class DeepAgentRuntimeService {
     } catch (error) {
       this.failRun(context, error);
     } finally {
-      this.clearLongRunningEvaluation(context.runId);
       this.activeRuns.delete(context.runId);
     }
   }
@@ -456,32 +452,8 @@ export class DeepAgentRuntimeService {
       this.failRun(context, error);
     } finally {
       await Promise.allSettled(session.closers.map(async (close) => close()));
-      this.clearLongRunningEvaluation(context.runId);
       this.activeRuns.delete(context.runId);
     }
-  }
-
-  private scheduleLongRunningEvaluation(taskRun: TaskRun | null): void {
-    if (taskRun === null) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      this.longRunningTimers.delete(taskRun.id);
-      if (!this.activeRuns.has(taskRun.id)) {
-        return;
-      }
-      this.taskService.evaluateLongRunningPromotion(taskRun.threadId);
-    }, 90_000);
-    this.longRunningTimers.set(taskRun.id, timer);
-  }
-
-  private clearLongRunningEvaluation(runId: string): void {
-    const timer = this.longRunningTimers.get(runId);
-    if (timer === undefined) {
-      return;
-    }
-    clearTimeout(timer);
-    this.longRunningTimers.delete(runId);
   }
 
   private taskBoundShellExecutionService(
@@ -759,9 +731,6 @@ export class DeepAgentRuntimeService {
     } finally {
       if (taskEvents.length > 0) {
         this.taskService.recordEvents(taskEvents);
-        if (context.taskRun !== null) {
-          this.taskService.evaluateLongRunningPromotion(context.taskRun.threadId);
-        }
       }
     }
   }
@@ -843,7 +812,6 @@ export class DeepAgentRuntimeService {
         payload: approval
       });
       this.taskService.markRunWaitingUser(context.taskRun.id);
-      this.taskService.evaluateLongRunningPromotion(context.taskRun.threadId);
     }
     this.emit({
       type: 'run_interrupted',

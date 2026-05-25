@@ -230,13 +230,6 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksOpenInChat, (_event, request) =>
     wrapIpc(() => services.taskService.openBackgroundTaskInChat(request.taskId))
   );
-  timedHandle(ipcChannels.tasksPromoteThread, (_event, request) =>
-    wrapIpc(() => {
-      const thread = services.taskService.promoteThread(request);
-      controls.broadcastTaskUpdated({ kind: 'thread_promoted', threadId: thread.id, reason: request.reason });
-      return thread;
-    })
-  );
   timedHandle(ipcChannels.tasksGetSchedulerStatus, () => wrapIpc(() => services.taskSchedulerService.getStatus()));
   timedHandle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
   timedHandle(ipcChannels.lifecyclePauseBackground, () =>

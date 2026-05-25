@@ -39,7 +39,6 @@ const rocApi: RocPreloadApi = {
     deleteBackgroundTask: (id) => ipcRenderer.invoke(ipcChannels.tasksDeleteBackgroundTask, id),
     updateBackgroundTask: (request) => ipcRenderer.invoke(ipcChannels.tasksUpdateBackgroundTask, request),
     openInChat: (request) => ipcRenderer.invoke(ipcChannels.tasksOpenInChat, request),
-    promoteThread: (request) => ipcRenderer.invoke(ipcChannels.tasksPromoteThread, request),
     getSchedulerStatus: () => ipcRenderer.invoke(ipcChannels.tasksGetSchedulerStatus),
     onUpdated: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);

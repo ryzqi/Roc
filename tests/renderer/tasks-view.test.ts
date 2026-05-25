@@ -67,7 +67,8 @@ describe('TasksView', () => {
               lastRunStatus: null,
               runCount: 0,
               createdAt: '2026-05-16T07:00:00.000Z',
-              updatedAt: '2026-05-16T07:05:00.000Z'
+              updatedAt: '2026-05-16T07:05:00.000Z',
+              enabledCapabilities: null
             },
             runHistory: [],
             recentEvents: []

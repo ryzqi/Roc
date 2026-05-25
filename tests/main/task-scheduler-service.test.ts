@@ -31,7 +31,12 @@ function createScheduler(maxRegisteredTasks = 256): TaskSchedulerService {
         };
       }
     },
-    { maxRegisteredTasks }
+    {
+      maxRegisteredTasks,
+      capabilityResolver: {
+        resolveCurrentEnabledCapabilities: () => ({ mcpServers: [], skills: [] })
+      }
+    }
   );
 }
 

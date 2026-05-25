@@ -104,7 +104,7 @@ export function ChatView({
       buildChatTranscript({
         promotedThreadIds: new Set(
           state.activeTasks
-            .filter((item) => item.kind === 'background' || item.kind === 'long_running')
+            .filter((item) => item.kind === 'background')
             .map((item) => item.threadId)
         ),
         chatRunState: {

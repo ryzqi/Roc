@@ -14,9 +14,9 @@ function task(input: Partial<ActiveTaskItem> & Pick<ActiveTaskItem, 'threadId' |
     ...rest
   } = input;
   return {
-    kind: 'long_running',
+    kind: 'background',
     threadId,
-    taskId: null,
+    taskId: `background-${threadId}`,
     title,
     goal: goal ?? title,
     status,
@@ -83,25 +83,20 @@ describe('task workbench view model', () => {
     expect(model.groups.find((group) => group.id === 'paused')?.defaultExpanded).toBe(false);
   });
 
-  it('prefers a background item when a thread also has a long-running projection', () => {
+  it('keeps one item per background thread', () => {
     const state = createLoadedState({
       activeTasks: [
         task({
-          kind: 'long_running',
           threadId: 'same-thread',
-          title: '长任务副本',
+          taskId: 'background-first',
+          title: '后台任务一',
           status: 'running'
         }),
         task({
-          kind: 'background',
           threadId: 'same-thread',
-          taskId: 'background-same-thread',
-          title: '后台任务',
-          status: 'running',
-          trigger: {
-            type: 'manual',
-            description: '手动'
-          }
+          taskId: 'background-second',
+          title: '后台任务二',
+          status: 'running'
         })
       ]
     });
@@ -112,7 +107,7 @@ describe('task workbench view model', () => {
       expect.objectContaining({
         kind: 'background',
         threadId: 'same-thread',
-        taskId: 'background-same-thread'
+        taskId: 'background-first'
       })
     ]);
   });

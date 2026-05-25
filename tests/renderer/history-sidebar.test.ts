@@ -75,26 +75,28 @@ describe('history sidebar helpers', () => {
     expect(filterHistoryItems(items, '   ')).toEqual(items);
   });
 
-  it('hides active promoted threads but returns completed promoted threads to history', () => {
+  it('long_running thread 即使活跃也按 chat 处理（不再过滤）', () => {
+    const longRunningThread = {
+      id: 'long-running-active',
+      kind: 'long_running',
+      title: '残留长任务',
+      goal: '残留长任务',
+      status: 'running',
+      createdAt: '2026-05-08T15:00:00.000Z',
+      updatedAt: '2026-05-08T15:30:45.000Z'
+    } as unknown as TaskThread;
     const items = buildHistoryItems([
-      createThread('long-running-active', '活跃长任务', {
-        kind: 'long_running',
-        status: 'running'
-      }),
-      createThread('background-active', '活跃后台任务', {
+      longRunningThread,
+      createThread('background-active', '后台', {
         kind: 'background',
-        status: 'paused'
-      }),
-      createThread('long-running-completed', '已完成长任务', {
-        kind: 'long_running',
-        status: 'completed'
+        status: 'running'
       })
     ], []);
 
     expect(items).toEqual([
       {
-        id: 'long-running-completed',
-        label: '已完成长任务',
+        id: 'long-running-active',
+        label: '残留长任务',
         meta: '2026-05-08 23:30',
         icon: 'history'
       }

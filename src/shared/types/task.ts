@@ -13,7 +13,7 @@ export type TaskStatus =
   | 'completed'
   | 'archived';
 
-export type TaskKind = 'chat' | 'background' | 'long_running';
+export type TaskKind = 'chat' | 'background';
 
 export type TaskThread = {
   id: string;
@@ -122,6 +122,7 @@ export type BackgroundTaskPreviewRequest = {
   forbiddenActions: string[];
   failurePolicy: 'pause_and_report';
   notificationPolicy: 'failures_and_confirmations';
+  enabledCapabilities?: EnabledCapabilities | null;
 };
 
 export type BackgroundTaskPreview = BackgroundTaskPreviewRequest & {
@@ -130,6 +131,7 @@ export type BackgroundTaskPreview = BackgroundTaskPreviewRequest & {
   cronExpression: string | null;
   riskLevel: ShellCommandRisk;
   requiresConfirmation: boolean;
+  enabledCapabilities: EnabledCapabilities | null;
 };
 
 export type BackgroundTask = {
@@ -155,12 +157,13 @@ export type BackgroundTask = {
   runCount: number;
   createdAt: string;
   updatedAt: string;
+  enabledCapabilities: EnabledCapabilities | null;
 };
 
 export type ActiveTaskItem = {
-  kind: 'background' | 'long_running';
+  kind: 'background';
   threadId: string;
-  taskId: string | null;
+  taskId: string;
   title: string;
   goal: string;
   status: TaskStatus;
@@ -204,7 +207,6 @@ export type TaskUpdateEvent =
   | { kind: 'task_created'; taskId: string }
   | { kind: 'task_status_changed'; taskId: string; status: TaskStatus }
   | { kind: 'task_run_fired'; taskId: string; runId: string }
-  | { kind: 'thread_promoted'; threadId: string; reason: string }
   | { kind: 'scheduler_health_changed'; healthy: boolean };
 
 export type SchedulerStatus = {

@@ -96,8 +96,7 @@ export function buildTaskViewModel(state: LoadedState, nowIso = new Date().toISO
 function dedupeBackgroundFirst(items: ActiveTaskItem[]): ActiveTaskItem[] {
   const byThread = new Map<string, ActiveTaskItem>();
   for (const item of items) {
-    const existing = byThread.get(item.threadId);
-    if (existing === undefined || (existing.kind === 'long_running' && item.kind === 'background')) {
+    if (!byThread.has(item.threadId)) {
       byThread.set(item.threadId, item);
     }
   }

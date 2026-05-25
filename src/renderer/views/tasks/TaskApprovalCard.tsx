@@ -191,11 +191,13 @@ export function TaskApprovalCard({
 }
 
 export function isTaskApproval(approval: ChatPendingApproval): boolean {
-  return approval.actionRequests.some((request) =>
-    request.name === 'propose_background_task' ||
-    request.name === 'update_background_task' ||
-    request.name === 'cancel_background_task'
-  );
+  if (approval.actionRequests.length !== 1) {
+    return false;
+  }
+  const request = approval.actionRequests[0];
+  return request?.name === 'propose_background_task' ||
+    request?.name === 'update_background_task' ||
+    request?.name === 'cancel_background_task';
 }
 
 function formatTaskApprovalTitle(name: string): string {

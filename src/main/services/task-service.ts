@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type {
   AgentCapabilityManifest,
   AgentCapabilityPreview,
@@ -14,457 +13,77 @@ import type {
   TaskEvent,
   TaskRun,
   TaskSnapshot,
-  TaskThread,
   UpdateBackgroundTaskRequest
 } from '../../shared/types';
 import type { DatabaseService } from './database-service';
-import type { ConfigService } from './config-service';
-import { RocDomainError } from './errors';
-import {
-  backgroundTaskFromRow,
-  inferBackgroundRisk,
-  invalidTransition,
-  nextRunNumber,
-  requireActiveThread,
-  requireBackgroundTask,
-  requireText,
-  type BackgroundTaskRow
-} from './task';
-import { evaluateLongRunningCandidate, type LongRunningPromotionPayload } from './task/long-running-evaluator';
+import { requireBackgroundTask } from './task';
+import * as backgroundTaskCreate from './task/background-task-create';
+import * as backgroundTaskLifecycle from './task/background-task-lifecycle';
+import * as taskRunManagement from './task/task-run-management';
+import * as scheduledRunStore from './task/scheduled-run-store';
+import * as taskEventRecorder from './task/task-event-recorder';
+import * as snapshotBuilders from './task/snapshot-builders';
+import { PendingThreadContextStore } from './task/pending-thread-context';
 
 export class TaskService {
-  private readonly pendingThreadContexts = new Map<string, string>();
+  private readonly pendingThreadContexts = new PendingThreadContextStore();
 
-  constructor(
-    private readonly database: DatabaseService,
-    private readonly configService: ConfigService
-  ) {}
+  constructor(private readonly database: DatabaseService) {}
 
   createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview {
-    const goal = requireText(request.goal, 'background_task_goal_empty', '后台任务目标不能为空。', '请输入后台任务目标。');
-    const triggerDescription = requireText(
-      request.trigger.description,
-      'background_task_trigger_empty',
-      '后台任务触发条件不能为空。',
-      '请填写后台任务触发方式。'
-    );
-    const workspacePath = requireText(
-      request.workspacePath,
-      'background_task_workspace_empty',
-      '后台任务作用目录不能为空。',
-      '请选择后台任务作用目录。'
-    );
-    const nextRunAt = request.trigger.type === 'manual' ? null : request.trigger.nextRunAt;
-    const cronExpression = request.trigger.type === 'cron' ? request.trigger.cronExpression : null;
-    const scheduled = request.trigger.type !== 'manual';
-    if (scheduled && nextRunAt === null) {
-      throw new RocDomainError({
-        code: 'background_task_next_run_missing',
-        message: '定时后台任务必须包含下次运行时间。',
-        category: 'validation',
-        retryable: false,
-        userAction: '请为定时任务设置下次运行时间。'
-      });
-    }
-
-    const trigger =
-      request.trigger.type === 'manual'
-        ? { type: 'manual' as const, description: triggerDescription }
-        : request.trigger.type === 'once'
-          ? { type: 'once' as const, description: triggerDescription, nextRunAt: request.trigger.nextRunAt }
-          : {
-              type: 'cron' as const,
-              description: triggerDescription,
-              cronExpression: request.trigger.cronExpression,
-              nextRunAt: request.trigger.nextRunAt
-            };
-
-    return {
-      ...request,
-      goal,
-      trigger,
-      workspacePath,
-      scheduled,
-      nextRunAt,
-      cronExpression,
-      riskLevel: inferBackgroundRisk(request.allowedActions, request.forbiddenActions),
-      requiresConfirmation: request.forbiddenActions.length > 0 && request.allowedActions.length === 0
-    };
+    return backgroundTaskCreate.createBackgroundTaskPreview({ request });
   }
 
   createBackgroundTask(preview: BackgroundTaskPreview): BackgroundTask {
-    const now = new Date().toISOString();
-    const taskId = `background_${randomUUID()}`;
-    const threadId = `thread_${randomUUID()}`;
-    const runId = `run_${randomUUID()}`;
-    const status = preview.requiresConfirmation ? 'pending_confirmation' : 'running';
-    const title = preview.goal.slice(0, 60);
-    const capabilities: EnabledCapabilities = {
-      mcpServers: [],
-      skills: []
-    };
-
-    const transaction = this.database.db.transaction(() => {
-      this.database.db
-        .prepare(
-          `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(threadId, 'background', title, preview.goal, status, now, now);
-
-      this.database.db
-        .prepare(
-          `INSERT INTO task_runs
-           (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(runId, threadId, 1, preview.goal, status, now, null, null, JSON.stringify(capabilities));
-
-      this.database.db
-        .prepare(
-          `INSERT INTO background_tasks
-           (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, cron_expression, workspace_path,
-            allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-            requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          taskId,
-          threadId,
-          runId,
-          preview.goal,
-          status,
-          preview.scheduled ? 1 : 0,
-          preview.trigger.type,
-          preview.trigger.description,
-          preview.nextRunAt,
-          preview.cronExpression,
-          preview.workspacePath,
-          JSON.stringify(preview.allowedActions),
-          JSON.stringify(preview.forbiddenActions),
-          preview.failurePolicy,
-          preview.notificationPolicy,
-          preview.riskLevel,
-          preview.requiresConfirmation ? 1 : 0,
-          null,
-          null,
-          0,
-          now,
-          now
-        );
-
-      this.recordEvent({
-        threadId,
-        runId,
-        type: 'background_task_created',
-        payload: {
-          taskId,
-          goal: preview.goal,
-          scheduled: preview.scheduled,
-          nextRunAt: preview.nextRunAt
-        }
-      });
-    });
-    transaction();
-
-    return {
-      id: taskId,
-      threadId,
-      runId,
-      goal: preview.goal,
-      status,
-      scheduled: preview.scheduled,
-      triggerType: preview.trigger.type,
-      triggerDescription: preview.trigger.description,
-      nextRunAt: preview.nextRunAt,
-      cronExpression: preview.cronExpression,
-      workspacePath: preview.workspacePath,
-      allowedActions: preview.allowedActions,
-      forbiddenActions: preview.forbiddenActions,
-      failurePolicy: preview.failurePolicy,
-      notificationPolicy: preview.notificationPolicy,
-      riskLevel: preview.riskLevel,
-      requiresConfirmation: preview.requiresConfirmation,
-      lastRunAt: null,
-      lastRunStatus: null,
-      runCount: 0,
-      createdAt: now,
-      updatedAt: now
-    };
+    return backgroundTaskCreate.createBackgroundTask({ database: this.database, preview });
   }
 
   pauseBackgroundTask(id: string): BackgroundTask {
-    const task = requireBackgroundTask(this.database, id);
-    if (task.status !== 'running' && task.status !== 'pending_confirmation') {
-      throw invalidTransition('后台任务当前状态不能暂停。');
-    }
-    return this.transitionBackgroundTask(task, 'paused', 'background_task_paused');
+    return backgroundTaskLifecycle.pauseBackgroundTask({ database: this.database, id });
   }
 
   resumeBackgroundTask(id: string): BackgroundTask {
-    const task = requireBackgroundTask(this.database, id);
-    if (task.status !== 'paused') {
-      throw invalidTransition('后台任务当前状态不能继续。');
-    }
-    return this.transitionBackgroundTask(task, 'running', 'background_task_resumed');
+    return backgroundTaskLifecycle.resumeBackgroundTask({ database: this.database, id });
   }
 
   cancelBackgroundTask(id: string): BackgroundTask {
-    const task = requireBackgroundTask(this.database, id);
-    if (task.status === 'cancelled') {
-      return task;
-    }
-    if (task.status === 'completed' || task.status === 'archived') {
-      throw invalidTransition('后台任务当前状态不能取消。');
-    }
-    return this.transitionBackgroundTask(task, 'cancelled', 'background_task_cancelled');
+    return backgroundTaskLifecycle.cancelBackgroundTask({ database: this.database, id });
   }
 
   deleteBackgroundTask(id: string): { deleted: true; taskId: string } {
-    const task = requireBackgroundTask(this.database, id);
-    if (task.status !== 'completed' && task.status !== 'cancelled' && task.status !== 'failed') {
-      throw new RocDomainError({
-        code: 'background_task_delete_not_terminal',
-        message: '只能删除已完成、已取消或已失败的后台任务。',
-        category: 'conflict',
-        retryable: false,
-        userAction: '请先暂停或取消该任务，再删除。'
-      });
-    }
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE id = ?').run('archived', now, task.id);
-      this.database.db
-        .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
-        .run('archived', now, now, task.threadId);
-    });
-    transaction();
-    return {
-      deleted: true,
-      taskId: task.id
-    };
+    return backgroundTaskLifecycle.deleteBackgroundTask({ database: this.database, id });
   }
 
   updateBackgroundTask(request: UpdateBackgroundTaskRequest): BackgroundTask {
-    const task = requireBackgroundTask(this.database, request.taskId);
-    const nextGoal = request.patch.goal ?? task.goal;
-    const nextTrigger = request.patch.trigger ?? this.triggerFromBackgroundTask(task);
-    const nextWorkspacePath = request.patch.workspacePath ?? task.workspacePath;
-    const nextAllowedActions = request.patch.allowedActions ?? task.allowedActions;
-    const nextForbiddenActions = request.patch.forbiddenActions ?? task.forbiddenActions;
-    const preview = this.createBackgroundTaskPreview({
-      goal: nextGoal,
-      trigger: nextTrigger,
-      workspacePath: nextWorkspacePath,
-      allowedActions: nextAllowedActions,
-      forbiddenActions: nextForbiddenActions,
-      failurePolicy: 'pause_and_report',
-      notificationPolicy: 'failures_and_confirmations'
+    return backgroundTaskLifecycle.updateBackgroundTask({
+      database: this.database,
+      request,
+      createPreview: (previewRequest) => this.createBackgroundTaskPreview(previewRequest)
     });
-    const now = new Date().toISOString();
-
-    const transaction = this.database.db.transaction(() => {
-      this.database.db
-        .prepare(
-          `UPDATE background_tasks
-           SET goal = ?, scheduled = ?, trigger_type = ?, trigger_description = ?, next_run_at = ?, cron_expression = ?,
-               workspace_path = ?, allowed_actions_json = ?, forbidden_actions_json = ?, risk_level = ?,
-               requires_confirmation = ?, updated_at = ?
-           WHERE id = ?`
-        )
-        .run(
-          preview.goal,
-          preview.scheduled ? 1 : 0,
-          preview.trigger.type,
-          preview.trigger.description,
-          preview.nextRunAt,
-          preview.cronExpression,
-          preview.workspacePath,
-          JSON.stringify(preview.allowedActions),
-          JSON.stringify(preview.forbiddenActions),
-          preview.riskLevel,
-          preview.requiresConfirmation ? 1 : 0,
-          now,
-          task.id
-        );
-      this.database.db
-        .prepare('UPDATE task_threads SET title = ?, goal = ?, updated_at = ? WHERE id = ?')
-        .run(preview.goal.slice(0, 60), preview.goal, now, task.threadId);
-      this.recordEvent({
-        threadId: task.threadId,
-        runId: task.runId,
-        type: 'background_task_resumed',
-        payload: {
-          taskId: task.id,
-          reason: request.reason,
-          updated: true
-        }
-      });
-    });
-    transaction();
-
-    return {
-      ...task,
-      goal: preview.goal,
-      scheduled: preview.scheduled,
-      triggerType: preview.trigger.type,
-      triggerDescription: preview.trigger.description,
-      nextRunAt: preview.nextRunAt,
-      cronExpression: preview.cronExpression,
-      workspacePath: preview.workspacePath,
-      allowedActions: preview.allowedActions,
-      forbiddenActions: preview.forbiddenActions,
-      riskLevel: preview.riskLevel,
-      requiresConfirmation: preview.requiresConfirmation,
-      updatedAt: now
-    };
   }
 
   listBackgroundTasks(): BackgroundTask[] {
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
-                trigger_type, cron_expression,
-                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
-         FROM background_tasks
-         ORDER BY updated_at DESC
-         LIMIT 50`
-      )
-      .all() as BackgroundTaskRow[];
-
-    return rows.map((row) => backgroundTaskFromRow(row));
+    return backgroundTaskLifecycle.listBackgroundTasks({ database: this.database });
   }
 
   getBackgroundTaskSummary(): BackgroundTaskSummary {
-    const rows = this.database.db
-      .prepare(
-        `SELECT status, next_run_at
-         FROM background_tasks
-         ORDER BY updated_at DESC`
-      )
-      .all() as Array<{ status: TaskThread['status']; next_run_at: string | null }>;
-    const futureRuns = rows
-      .map((row) => row.next_run_at)
-      .filter((value): value is string => value !== null)
-      .sort();
-
-    return {
-      total: rows.length,
-      running: rows.filter((row) => row.status === 'running').length,
-      failed: rows.filter((row) => row.status === 'failed').length,
-      pendingConfirmation: rows.filter((row) => row.status === 'pending_confirmation').length,
-      nextRunAt: futureRuns.length === 0 ? null : futureRuns[0]
-    };
+    return snapshotBuilders.getBackgroundTaskSummary({ database: this.database });
   }
 
   listSchedulableBackgroundTasks(): BackgroundTask[] {
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
-                trigger_type, cron_expression,
-                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
-         FROM background_tasks
-         WHERE scheduled = 1
-           AND status IN ('running', 'pending_confirmation', 'paused')
-         ORDER BY next_run_at ASC, updated_at DESC`
-      )
-      .all() as BackgroundTaskRow[];
-
-    return rows.map((row) => backgroundTaskFromRow(row));
+    return backgroundTaskLifecycle.listSchedulableBackgroundTasks({ database: this.database });
   }
 
   getActiveTasks(): ActiveTaskItem[] {
-    const backgroundItems = this.listBackgroundTasks()
-      .filter((task) => task.status !== 'archived')
-      .map((task) => this.activeItemFromBackgroundTask(task));
-    const backgroundThreadIds = new Set(backgroundItems.map((task) => task.threadId));
-    const longRunningRows = this.database.db
-      .prepare(
-        `SELECT id, kind, title, goal, status, created_at, updated_at
-         FROM task_threads
-         WHERE archived_at IS NULL
-           AND kind = 'long_running'
-         ORDER BY updated_at DESC
-         LIMIT 50`
-      )
-      .all() as Array<{
-      id: string;
-      kind: TaskThread['kind'];
-      title: string;
-      goal: string;
-      status: TaskThread['status'];
-      created_at: string;
-      updated_at: string;
-    }>;
-    const longRunningItems = longRunningRows
-      .filter((thread) => !backgroundThreadIds.has(thread.id))
-      .map((thread): ActiveTaskItem => ({
-        kind: 'long_running',
-        threadId: thread.id,
-        taskId: null,
-        title: thread.title,
-        goal: thread.goal,
-        status: thread.status,
-        trigger: null,
-        nextRunAt: null,
-        lastRunAt: null,
-        riskLevel: 'low',
-        workspacePath: null,
-        createdAt: thread.created_at,
-        updatedAt: thread.updated_at
-      }));
-
-    return [...backgroundItems, ...longRunningItems].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return snapshotBuilders.getActiveTasks({ database: this.database });
   }
 
   getTaskDetail(input: { taskId: string; schedulerRegistered: boolean }): TaskDetail {
-    const task = requireBackgroundTask(this.database, input.taskId);
-    const thread = requireActiveThread(this.database, task.threadId);
-    const runHistory = this.listRunsForThread(task.threadId, 20);
-    const recentEvents = this.listRecentEventsForThread(task.threadId, 20);
-    return {
-      threadId: task.threadId,
-      taskId: task.id,
-      thread,
-      backgroundTask: task,
-      lastRunId: runHistory[0]?.id ?? null,
-      runHistory,
-      recentEvents,
-      schedulerRegistered: input.schedulerRegistered
-    };
+    return snapshotBuilders.getTaskDetail({ database: this.database, ...input });
   }
 
   listScheduledRuns(input: { taskId: string; limit?: number }): ScheduledTaskRun[] {
-    const task = requireBackgroundTask(this.database, input.taskId);
-    const limit = input.limit ?? 20;
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason
-         FROM scheduled_task_runs
-         WHERE background_task_id = ?
-         ORDER BY scheduled_at DESC, rowid DESC
-         LIMIT ?`
-      )
-      .all(task.id, limit) as Array<{
-      id: string;
-      background_task_id: string;
-      task_run_id: string | null;
-      scheduled_at: string;
-      triggered_at: string | null;
-      status: ScheduledTaskRun['status'];
-      skip_reason: string | null;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      backgroundTaskId: row.background_task_id,
-      taskRunId: row.task_run_id,
-      scheduledAt: row.scheduled_at,
-      triggeredAt: row.triggered_at,
-      status: row.status,
-      skipReason: row.skip_reason
-    }));
+    return scheduledRunStore.listScheduledRuns({ database: this.database, ...input });
   }
 
   openBackgroundTaskInChat(taskId: string): { threadId: string } {
@@ -474,7 +93,7 @@ export class TaskService {
       JSON.stringify(task, null, 2),
       '你可以调用 update_background_task 工具完成修改。'
     ].join('\n');
-    this.pendingThreadContexts.set(task.threadId, contextMessage);
+    this.pendingThreadContexts.enqueue(task.threadId, contextMessage);
     this.recordEvent({
       threadId: task.threadId,
       runId: task.runId,
@@ -490,78 +109,7 @@ export class TaskService {
   }
 
   takePendingThreadContext(threadId: string): string | null {
-    const normalizedThreadId = requireText(
-      threadId,
-      'task_thread_id_empty',
-      '任务会话 ID 不能为空。',
-      '请选择一个有效的会话后再继续发送。'
-    );
-    const pending = this.pendingThreadContexts.get(normalizedThreadId) ?? null;
-    if (pending !== null) {
-      this.pendingThreadContexts.delete(normalizedThreadId);
-    }
-    return pending;
-  }
-
-  promoteThread(input: { threadId: string; reason: 'manual' }): TaskThread {
-    const thread = requireActiveThread(this.database, input.threadId);
-    if (thread.kind === 'long_running' || thread.kind === 'background') {
-      return thread;
-    }
-    const now = new Date().toISOString();
-    this.database.db
-      .prepare('UPDATE task_threads SET kind = ?, updated_at = ? WHERE id = ? AND kind = ?')
-      .run('long_running', now, thread.id, 'chat');
-    this.recordEvent({
-      threadId: thread.id,
-      runId: this.findLatestRunId(thread.id) ?? thread.id,
-      type: 'long_running_promoted',
-      payload: {
-        reason: input.reason,
-        threshold: null,
-        observedValue: null
-      } satisfies LongRunningPromotionPayload
-    });
-    return {
-      ...thread,
-      kind: 'long_running',
-      updatedAt: now
-    };
-  }
-
-  evaluateLongRunningPromotion(threadId: string): TaskThread {
-    const thread = requireActiveThread(this.database, threadId);
-    if (thread.kind !== 'chat') {
-      return thread;
-    }
-
-    const thresholds = this.configService.getTaskSettings().longRunningThresholds;
-    const latestRun = this.findLatestRun(thread.id);
-    if (latestRun === null) {
-      return thread;
-    }
-
-    const trigger = this.resolvePromotionTrigger(thread.id, latestRun.id, thresholds);
-    if (trigger === null) {
-      return thread;
-    }
-
-    const now = new Date().toISOString();
-    this.database.db
-      .prepare('UPDATE task_threads SET kind = ?, updated_at = ? WHERE id = ? AND kind = ?')
-      .run('long_running', now, thread.id, 'chat');
-    this.recordEvent({
-      threadId: thread.id,
-      runId: latestRun.id,
-      type: 'long_running_promoted',
-      payload: trigger
-    });
-
-    return {
-      ...thread,
-      kind: 'long_running',
-      updatedAt: now
-    };
+    return this.pendingThreadContexts.take(threadId);
   }
 
   recordScheduledTaskRun(input: {
@@ -572,105 +120,23 @@ export class TaskService {
     triggeredAt?: string | null;
     skipReason?: string | null;
   }): ScheduledTaskRun {
-    const now = new Date().toISOString();
-    const scheduledRun: ScheduledTaskRun = {
-      id: `scheduled_${randomUUID()}`,
-      backgroundTaskId: input.backgroundTaskId,
-      taskRunId: input.taskRunId ?? null,
-      scheduledAt: input.scheduledAt,
-      triggeredAt: input.triggeredAt ?? now,
-      status: input.status,
-      skipReason: input.skipReason ?? null
-    };
-
-    this.database.db
-      .prepare(
-        `INSERT INTO scheduled_task_runs
-         (id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        scheduledRun.id,
-        scheduledRun.backgroundTaskId,
-        scheduledRun.taskRunId,
-        scheduledRun.scheduledAt,
-        scheduledRun.triggeredAt,
-        scheduledRun.status,
-        scheduledRun.skipReason
-      );
-
-    return scheduledRun;
+    return scheduledRunStore.recordScheduledTaskRun({ database: this.database, ...input });
   }
 
   countRecentSkippedScheduledRuns(since: string): number {
-    const row = this.database.db
-      .prepare(
-        `SELECT COUNT(*) AS count
-         FROM scheduled_task_runs
-         WHERE status = 'skipped'
-           AND scheduled_at >= ?`
-      )
-      .get(since) as { count: number };
-    return row.count;
+    return scheduledRunStore.countRecentSkippedScheduledRuns({ database: this.database, since });
   }
 
   markBackgroundTaskFired(input: { taskId: string; runId: string; firedAt: string; nextRunAt: string | null }): BackgroundTask {
-    const task = requireBackgroundTask(this.database, input.taskId);
-    const status = task.triggerType === 'once' ? 'completed' : task.status;
-    const now = new Date().toISOString();
-
-    this.database.db
-      .prepare(
-        `UPDATE background_tasks
-         SET status = ?, last_run_at = ?, last_run_status = ?, run_count = run_count + 1, next_run_at = ?, updated_at = ?
-         WHERE id = ?`
-      )
-      .run(status, input.firedAt, 'success', input.nextRunAt, now, input.taskId);
-    this.database.db
-      .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
-      .run(status, now, task.threadId);
-
-    return {
-      ...task,
-      status,
-      nextRunAt: input.nextRunAt,
-      lastRunAt: input.firedAt,
-      lastRunStatus: 'success',
-      runCount: task.runCount + 1,
-      updatedAt: now
-    };
+    return backgroundTaskLifecycle.markBackgroundTaskFired({ database: this.database, ...input });
   }
 
   updateBackgroundTaskNextRunAt(taskId: string, nextRunAt: string | null): BackgroundTask {
-    const task = requireBackgroundTask(this.database, taskId);
-    const now = new Date().toISOString();
-    this.database.db
-      .prepare('UPDATE background_tasks SET next_run_at = ?, updated_at = ? WHERE id = ?')
-      .run(nextRunAt, now, taskId);
-    return {
-      ...task,
-      nextRunAt,
-      updatedAt: now
-    };
+    return backgroundTaskLifecycle.updateBackgroundTaskNextRunAt({ database: this.database, taskId, nextRunAt });
   }
 
   pauseBackgroundTaskForScheduler(input: { taskId: string; runId: string; reason: string }): BackgroundTask {
-    const task = requireBackgroundTask(this.database, input.taskId);
-    if (task.status === 'paused') {
-      return task;
-    }
-    const paused = this.transitionBackgroundTask(task, 'paused', 'background_task_paused');
-    this.recordEvent({
-      threadId: task.threadId,
-      runId: task.runId,
-      type: 'diagnostic',
-      payload: {
-        code: input.reason,
-        taskId: input.taskId,
-        scheduledRunId: input.runId
-      }
-    });
-    return paused;
+    return backgroundTaskLifecycle.pauseBackgroundTaskForScheduler({ database: this.database, ...input });
   }
 
   createTaskRun(input: {
@@ -679,316 +145,51 @@ export class TaskService {
     enabledCapabilities: EnabledCapabilities;
     threadId?: string;
   }): TaskRun {
-    const now = new Date().toISOString();
-    const runId = `run_${randomUUID()}`;
-    const eventId = `event_${randomUUID()}`;
-    const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
-    const existingThreadId =
-      input.threadId === undefined
-        ? null
-        : requireText(
-            input.threadId,
-            'task_thread_id_empty',
-            '任务会话 ID 不能为空。',
-            '请选择一个有效的会话后再继续发送。'
-          );
-    const threadId = existingThreadId ?? `thread_${randomUUID()}`;
-    const runNumber = existingThreadId === null ? 1 : nextRunNumber(this.database, threadId);
-
-    const transaction = this.database.db.transaction(() => {
-      if (existingThreadId === null) {
-        const title = input.userInput.trim().slice(0, 60);
-        this.database.db
-          .prepare(
-            `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(threadId, 'chat', title, input.userInput, 'waiting_next_turn', now, now);
-      } else {
-        requireActiveThread(this.database, threadId);
-        this.database.db
-          .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
-          .run('waiting_next_turn', now, threadId);
-      }
-
-      this.database.db
-        .prepare(
-          `INSERT INTO task_runs
-           (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(runId, threadId, runNumber, input.userInput, 'waiting_next_turn', now, null, input.modelId, enabledCapabilitiesJson);
-
-      this.database.db
-        .prepare(
-          `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          eventId,
-          threadId,
-          runId,
-          'message',
-          JSON.stringify({
-            role: 'user',
-            content: input.userInput,
-            enabledCapabilities: input.enabledCapabilities
-          }),
-          now
-        );
-    });
-    transaction();
-
-    return {
-      id: runId,
-      threadId,
-      runNumber,
-      userInput: input.userInput,
-      status: 'waiting_next_turn',
-      startedAt: now,
-      endedAt: null,
-      modelId: input.modelId,
-      enabledCapabilities: input.enabledCapabilities
-    };
+    return taskRunManagement.createTaskRun({ database: this.database, ...input });
   }
 
   archiveThread(threadId: string): { deleted: true; threadId: string } {
-    const normalizedThreadId = requireText(
-      threadId,
-      'task_thread_id_empty',
-      '任务会话 ID 不能为空。',
-      '请选择一个要删除的历史会话。'
-    );
-    requireActiveThread(this.database, normalizedThreadId);
-    const now = new Date().toISOString();
-
-    this.database.db
-      .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
-      .run('archived', now, now, normalizedThreadId);
-
-    return {
-      deleted: true,
-      threadId: normalizedThreadId
-    };
+    return taskRunManagement.archiveThread({ database: this.database, threadId });
   }
 
   getRun(id: string): TaskRun {
-    const row = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
-         FROM task_runs
-         WHERE id = ?`
-      )
-      .get(id) as
-      | {
-          id: string;
-          thread_id: string;
-          run_number: number;
-          user_input: string;
-          status: TaskRun['status'];
-          started_at: string;
-          ended_at: string | null;
-          model_id: string | null;
-          enabled_capabilities_json: string;
-        }
-      | undefined;
-
-    if (row === undefined) {
-      throw new Error(`Task run not found: ${id}`);
-    }
-
-    return {
-      id: row.id,
-      threadId: row.thread_id,
-      runNumber: row.run_number,
-      userInput: row.user_input,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      modelId: row.model_id,
-      enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
-    };
+    return taskRunManagement.getRun({ database: this.database, id });
   }
 
   listThreadMessages(threadId: string): TaskEvent[] {
-    const normalizedThreadId = requireText(
-      threadId,
-      'task_thread_id_empty',
-      '任务会话 ID 不能为空。',
-      '请选择一个有效的会话后再继续查看消息。'
-    );
-    requireActiveThread(this.database, normalizedThreadId);
-
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, type, payload_json, created_at
-         FROM task_events
-         WHERE thread_id = ? AND type = 'message'
-         ORDER BY created_at ASC, rowid ASC`
-      )
-      .all(normalizedThreadId) as Array<{
-      id: string;
-      thread_id: string;
-      run_id: string;
-      type: TaskEvent['type'];
-      payload_json: string;
-      created_at: string;
-    }>;
-
-    return rows.map((event) => ({
-      id: event.id,
-      threadId: event.thread_id,
-      runId: event.run_id,
-      type: event.type,
-      payload: JSON.parse(event.payload_json) as unknown,
-      createdAt: event.created_at
-    }));
+    return taskRunManagement.listThreadMessages({ database: this.database, threadId });
   }
 
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent {
-    return this.recordEvents([input])[0]!;
+    return taskEventRecorder.recordEvent({ database: this.database, ...input });
   }
 
   recordEvents(inputs: Array<{ threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }>): TaskEvent[] {
-    if (inputs.length === 0) {
-      return [];
-    }
-    const now = new Date().toISOString();
-    const insert = this.database.db.prepare(
-      `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    );
-    const events: TaskEvent[] = [];
-
-    this.database.db.transaction(() => {
-      for (const input of inputs) {
-        const event: TaskEvent = {
-          id: `event_${randomUUID()}`,
-          threadId: input.threadId,
-          runId: input.runId,
-          type: input.type,
-          payload: input.payload,
-          createdAt: now
-        };
-        insert.run(event.id, event.threadId, event.runId, event.type, JSON.stringify(event.payload), event.createdAt);
-        events.push(event);
-      }
-    })();
-
-    return events;
+    return taskEventRecorder.recordEvents({ database: this.database, inputs });
   }
 
   markRunRunning(runId: string): void {
-    const run = this.getRun(runId);
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('running', now, run.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('running', run.id);
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'agent_update',
-        payload: {
-          status: 'running'
-        }
-      });
-    });
-    transaction();
+    taskRunManagement.markRunRunning({ database: this.database, runId });
   }
 
   markRunWaitingUser(runId: string): void {
-    const run = this.getRun(runId);
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db
-        .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
-        .run('waiting_user', now, run.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('waiting_user', run.id);
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'agent_update',
-        payload: {
-          status: 'waiting_user'
-        }
-      });
-    });
-    transaction();
+    taskRunManagement.markRunWaitingUser({ database: this.database, runId });
   }
 
   markRunResumed(runId: string): void {
-    const run = this.getRun(runId);
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db
-        .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
-        .run('running', now, run.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('running', run.id);
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'agent_update',
-        payload: {
-          status: 'running',
-          resumed: true
-        }
-      });
-    });
-    transaction();
+    taskRunManagement.markRunResumed({ database: this.database, runId });
   }
 
   recordApprovalRequested(input: { runId: string; payload: unknown }): TaskEvent {
-    const run = this.getRun(input.runId);
-    return this.recordEvent({
-      threadId: run.threadId,
-      runId: run.id,
-      type: 'approval_requested',
-      payload: input.payload
-    });
+    return taskEventRecorder.recordApprovalRequested({ database: this.database, ...input });
   }
 
   recordApprovalDecision(input: { runId: string; payload: unknown }): TaskEvent {
-    const run = this.getRun(input.runId);
-    return this.recordEvent({
-      threadId: run.threadId,
-      runId: run.id,
-      type: 'approval_decision',
-      payload: input.payload
-    });
+    return taskEventRecorder.recordApprovalDecision({ database: this.database, ...input });
   }
 
   completeRunWithProviderResult(input: { runId: string; result: ProviderExecutionResult }): void {
-    const run = this.getRun(input.runId);
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('completed', now, run.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('completed', now, run.id);
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'agent_update',
-        payload: {
-          providerId: input.result.providerId,
-          modelId: input.result.modelId,
-          durationMs: input.result.durationMs,
-          finishReason: input.result.finishReason,
-          usage: input.result.usage,
-          summary: input.result.summary
-        }
-      });
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'message',
-        payload: {
-          role: 'assistant',
-          content: input.result.assistantMessage,
-          providerId: input.result.providerId,
-          modelId: input.result.modelId
-        }
-      });
-    });
-    transaction();
+    taskRunManagement.completeRunWithProviderResult({ database: this.database, ...input });
   }
 
   failRunWithProviderError(input: {
@@ -999,25 +200,7 @@ export class TaskService {
     message: string;
     retryable: boolean;
   }): void {
-    const run = this.getRun(input.runId);
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('failed', now, run.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('failed', now, run.id);
-      this.recordEvent({
-        threadId: run.threadId,
-        runId: run.id,
-        type: 'error',
-        payload: {
-          code: input.code,
-          message: input.message,
-          providerId: input.providerId,
-          modelId: input.modelId,
-          retryable: input.retryable
-        }
-      });
-    });
-    transaction();
+    taskRunManagement.failRunWithProviderError({ database: this.database, ...input });
   }
 
   recordAgentCapabilityManifest(input: {
@@ -1025,303 +208,10 @@ export class TaskService {
     runId: string;
     preview: AgentCapabilityPreview;
   }): AgentCapabilityManifest {
-    const manifest: AgentCapabilityManifest = {
-      requestedCapabilities: input.preview.requestedCapabilities,
-      resolvedCapabilities: input.preview.selectedCapabilities,
-      skippedCapabilities: input.preview.skippedCapabilities,
-      toolCards: [...input.preview.toolCards, ...input.preview.skillCards].map((card) => ({
-        id: card.id,
-        name: card.name,
-        capabilityType: card.capabilityType,
-        riskLevel: card.riskLevel,
-        scope: card.scope,
-        requiresApproval: card.requiresApproval
-      })),
-      untrustedContextPolicy: input.preview.untrustedContextPolicy
-    };
-    this.recordEvent({
-      threadId: input.threadId,
-      runId: input.runId,
-      type: 'context_manifest',
-      payload: manifest
-    });
-    return manifest;
+    return taskRunManagement.recordAgentCapabilityManifest({ database: this.database, ...input });
   }
 
   getSnapshot(): TaskSnapshot {
-    const threads = this.database.db
-      .prepare(
-        `SELECT id, kind, title, goal, status, created_at, updated_at
-         FROM task_threads
-         WHERE archived_at IS NULL
-         ORDER BY updated_at DESC
-         LIMIT 50`
-      )
-      .all() as Array<{
-      id: string;
-      kind: TaskThread['kind'];
-      title: string;
-      goal: string;
-      status: TaskThread['status'];
-      created_at: string;
-      updated_at: string;
-    }>;
-
-    const recentEvents = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, type, payload_json, created_at
-         FROM task_events
-         WHERE thread_id IN (SELECT id FROM task_threads WHERE archived_at IS NULL)
-         ORDER BY created_at DESC, rowid DESC
-         LIMIT 50`
-      )
-      .all() as Array<{
-      id: string;
-      thread_id: string;
-      run_id: string;
-      type: TaskEvent['type'];
-      payload_json: string;
-      created_at: string;
-    }>;
-
-    const normalizedThreads: TaskThread[] = threads.map((thread) => ({
-      id: thread.id,
-      kind: thread.kind,
-      title: thread.title,
-      goal: thread.goal,
-      status: thread.status,
-      createdAt: thread.created_at,
-      updatedAt: thread.updated_at
-    }));
-
-    return {
-      generatedAt: new Date().toISOString(),
-      counts: {
-        total: normalizedThreads.length,
-        running: normalizedThreads.filter((thread) => thread.status === 'running').length,
-        failed: normalizedThreads.filter((thread) => thread.status === 'failed').length,
-        pendingConfirmation: normalizedThreads.filter((thread) => thread.status === 'pending_confirmation').length
-      },
-      threads: normalizedThreads,
-      recentEvents: recentEvents.map((event) => ({
-        id: event.id,
-        threadId: event.thread_id,
-        runId: event.run_id,
-        type: event.type,
-        payload: JSON.parse(event.payload_json) as unknown,
-        createdAt: event.created_at
-      }))
-    };
-  }
-
-  private transitionBackgroundTask(
-    task: BackgroundTask,
-    status: BackgroundTask['status'],
-    eventType: Extract<TaskEvent['type'], 'background_task_paused' | 'background_task_resumed' | 'background_task_cancelled'>
-  ): BackgroundTask {
-    const now = new Date().toISOString();
-    const transaction = this.database.db.transaction(() => {
-      this.database.db
-        .prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE id = ?')
-        .run(status, now, task.id);
-      this.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run(status, now, task.threadId);
-      this.database.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run(status, task.runId);
-      this.recordEvent({
-        threadId: task.threadId,
-        runId: task.runId,
-        type: eventType,
-        payload: {
-          taskId: task.id,
-          status
-        }
-      });
-    });
-    transaction();
-
-    return {
-      ...task,
-      status,
-      updatedAt: now
-    };
-  }
-
-  private activeItemFromBackgroundTask(task: BackgroundTask): ActiveTaskItem {
-    return {
-      kind: 'background',
-      threadId: task.threadId,
-      taskId: task.id,
-      title: task.goal.slice(0, 60),
-      goal: task.goal,
-      status: task.status,
-      trigger: this.triggerFromBackgroundTask(task),
-      nextRunAt: task.nextRunAt,
-      lastRunAt: task.lastRunAt,
-      riskLevel: task.riskLevel,
-      workspacePath: task.workspacePath,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt
-    };
-  }
-
-  private listRunsForThread(threadId: string, limit: number): TaskRun[] {
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
-         FROM task_runs
-         WHERE thread_id = ?
-         ORDER BY run_number DESC
-         LIMIT ?`
-      )
-      .all(threadId, limit) as Array<{
-      id: string;
-      thread_id: string;
-      run_number: number;
-      user_input: string;
-      status: TaskRun['status'];
-      started_at: string;
-      ended_at: string | null;
-      model_id: string | null;
-      enabled_capabilities_json: string;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      threadId: row.thread_id,
-      runNumber: row.run_number,
-      userInput: row.user_input,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      modelId: row.model_id,
-      enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
-    }));
-  }
-
-  private listRecentEventsForThread(threadId: string, limit: number): TaskEvent[] {
-    const rows = this.database.db
-      .prepare(
-        `SELECT id, thread_id, run_id, type, payload_json, created_at
-         FROM task_events
-         WHERE thread_id = ?
-         ORDER BY created_at DESC, rowid DESC
-         LIMIT ?`
-      )
-      .all(threadId, limit) as Array<{
-      id: string;
-      thread_id: string;
-      run_id: string;
-      type: TaskEvent['type'];
-      payload_json: string;
-      created_at: string;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      threadId: row.thread_id,
-      runId: row.run_id,
-      type: row.type,
-      payload: JSON.parse(row.payload_json) as unknown,
-      createdAt: row.created_at
-    }));
-  }
-
-  private findLatestRunId(threadId: string): string | null {
-    const row = this.database.db
-      .prepare(
-        `SELECT id
-         FROM task_runs
-         WHERE thread_id = ?
-         ORDER BY run_number DESC
-         LIMIT 1`
-      )
-      .get(threadId) as { id: string } | undefined;
-    return row?.id ?? null;
-  }
-
-  private triggerFromBackgroundTask(task: BackgroundTask): BackgroundTaskPreviewRequest['trigger'] {
-    if (task.triggerType === 'manual') {
-      return {
-        type: 'manual',
-        description: task.triggerDescription
-      };
-    }
-    if (task.triggerType === 'once') {
-      if (task.nextRunAt === null) {
-        throw new Error(`Once background task ${task.id} is missing next_run_at.`);
-      }
-      return {
-        type: 'once',
-        description: task.triggerDescription,
-        nextRunAt: task.nextRunAt
-      };
-    }
-    if (task.nextRunAt === null || task.cronExpression === null) {
-      throw new Error(`Cron background task ${task.id} is missing schedule fields.`);
-    }
-    return {
-      type: 'cron',
-      description: task.triggerDescription,
-      cronExpression: task.cronExpression,
-      nextRunAt: task.nextRunAt
-    };
-  }
-
-  private findLatestRun(threadId: string): TaskRun | null {
-    const row = this.database.db
-      .prepare(
-        `SELECT id
-         FROM task_runs
-         WHERE thread_id = ?
-         ORDER BY run_number DESC
-         LIMIT 1`
-      )
-      .get(threadId) as { id: string } | undefined;
-    if (row === undefined) {
-      return null;
-    }
-    return this.getRun(row.id);
-  }
-
-  private resolvePromotionTrigger(
-    threadId: string,
-    runId: string,
-    thresholds: { runningSeconds: number; toolCallCount: number; subagentCount: number }
-  ): LongRunningPromotionPayload | null {
-    return evaluateLongRunningCandidate({
-      run: this.getRun(runId),
-      thresholds,
-      toolCallCount: this.countEvents({
-        threadId,
-        runId,
-        type: 'tool_call'
-      }),
-      subagentCount: this.countEvents({
-        threadId,
-        type: 'subagent_started'
-      })
-    });
-  }
-
-  private countEvents(input: { threadId: string; type: TaskEvent['type']; runId?: string }): number {
-    if (input.runId === undefined) {
-      const row = this.database.db
-        .prepare(
-          `SELECT COUNT(*) AS count
-           FROM task_events
-           WHERE thread_id = ?
-             AND type = ?`
-        )
-        .get(input.threadId, input.type) as { count: number };
-      return row.count;
-    }
-
-    const row = this.database.db
-      .prepare(
-        `SELECT COUNT(*) AS count
-         FROM task_events
-         WHERE thread_id = ?
-           AND run_id = ?
-           AND type = ?`
-      )
-      .get(input.threadId, input.runId, input.type) as { count: number };
-    return row.count;
+    return snapshotBuilders.getSnapshot({ database: this.database });
   }
 }

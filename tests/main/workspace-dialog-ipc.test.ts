@@ -211,14 +211,6 @@ describe('workspace dialog IPC', () => {
       .mockReturnValue({
         threadId: 'thread_1'
       });
-    const promoteThreadSpy = vi
-      .spyOn(
-        services.taskService as AppServices['taskService'] & {
-          promoteThread: (request: unknown) => unknown;
-        },
-        'promoteThread'
-      )
-      .mockReturnValue({ id: 'thread_1' });
     const schedulerStatusSpy = vi.spyOn(services.taskSchedulerService, 'getStatus').mockReturnValue({
       running: true,
       registeredTaskCount: 1,
@@ -293,7 +285,6 @@ describe('workspace dialog IPC', () => {
       ipcChannels.tasksDeleteBackgroundTask,
       ipcChannels.tasksUpdateBackgroundTask,
       ipcChannels.tasksOpenInChat,
-      ipcChannels.tasksPromoteThread,
       ipcChannels.tasksGetSchedulerStatus
     ];
     for (const channel of handlers) {
@@ -316,7 +307,6 @@ describe('workspace dialog IPC', () => {
       reason: 'test'
     });
     await electronMock.handlers.get(ipcChannels.tasksOpenInChat)?.({}, { taskId: 'task_1' });
-    await electronMock.handlers.get(ipcChannels.tasksPromoteThread)?.({}, { threadId: 'thread_1', reason: 'manual' });
     await electronMock.handlers.get(ipcChannels.tasksGetSchedulerStatus)?.({});
 
     expect(createBackgroundTaskSpy).toHaveBeenCalledWith({
@@ -341,7 +331,6 @@ describe('workspace dialog IPC', () => {
       reason: 'test'
     });
     expect(openInChatSpy).toHaveBeenCalledWith('task_1');
-    expect(promoteThreadSpy).toHaveBeenCalledWith({ threadId: 'thread_1', reason: 'manual' });
     expect(schedulerStatusSpy).toHaveBeenCalled();
   });
 

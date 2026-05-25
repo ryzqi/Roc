@@ -94,6 +94,7 @@ export class DatabaseService {
         run_count INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        enabled_capabilities_json TEXT,
         FOREIGN KEY(thread_id) REFERENCES task_threads(id)
       );
 
@@ -231,7 +232,14 @@ export class DatabaseService {
     this.ensureColumn(db, 'background_tasks', 'last_run_at', 'TEXT');
     this.ensureColumn(db, 'background_tasks', 'last_run_status', 'TEXT');
     this.ensureColumn(db, 'background_tasks', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn(db, 'background_tasks', 'enabled_capabilities_json', 'TEXT');
     this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
+
+    db.prepare(
+      `UPDATE task_threads
+       SET kind = 'chat', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       WHERE kind = 'long_running'`
+    ).run();
 
     db.exec(`
 

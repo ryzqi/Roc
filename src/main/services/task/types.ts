@@ -23,4 +23,5 @@ export type BackgroundTaskRow = {
   run_count: number;
   created_at: string;
   updated_at: string;
+  enabled_capabilities_json: string | null;
 };

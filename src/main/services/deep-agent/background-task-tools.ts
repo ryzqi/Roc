@@ -32,13 +32,19 @@ const cronTriggerSchema = z.object({
 
 const triggerSchema = z.discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema]);
 
+const enabledCapabilitiesSchema = z.object({
+  mcpServers: z.array(z.string()).default([]),
+  skills: z.array(z.string()).default([])
+});
+
 const proposeInputSchema = z.object({
   goal: z.string().min(1).max(500),
   trigger: triggerSchema,
   workspacePath: z.string().min(1),
   allowedActions: z.array(z.string()).default([]),
   forbiddenActions: z.array(z.string()).default([]),
-  notificationPolicy: z.literal('failures_and_confirmations').default('failures_and_confirmations')
+  notificationPolicy: z.literal('failures_and_confirmations').default('failures_and_confirmations'),
+  enabledCapabilities: enabledCapabilitiesSchema.nullable().optional()
 });
 
 const updateInputSchema = z.object({
@@ -65,7 +71,7 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
   return [
     new DynamicStructuredTool<typeof proposeInputSchema, z.infer<typeof proposeInputSchema>, z.infer<typeof proposeInputSchema>, string>({
       name: 'propose_background_task',
-      description: '提议创建后台或定时任务。只返回审批预览，用户批准前不会创建任务。',
+      description: '提议创建后台或定时任务。可选字段 enabledCapabilities：仅当用户明确要求限定 MCP 或技能时填写，否则不传，运行时将自动跟随当前全局启用集合。只返回审批预览，用户批准前不会创建任务。',
       schema: proposeInputSchema,
       func: async (rawInput) => JSON.stringify(createProposalPayload(input.taskService, rawInput), null, 2)
     }),
@@ -178,7 +184,8 @@ function normalizePreview(taskService: TaskService, rawInput: unknown): Backgrou
     allowedActions: parsed.allowedActions,
     forbiddenActions: parsed.forbiddenActions,
     failurePolicy: 'pause_and_report',
-    notificationPolicy: parsed.notificationPolicy
+    notificationPolicy: parsed.notificationPolicy,
+    enabledCapabilities: parsed.enabledCapabilities ?? null
   });
 }
 
@@ -257,4 +264,3 @@ function validateWorkspacePath(workspacePath: string): void {
     });
   }
 }
-

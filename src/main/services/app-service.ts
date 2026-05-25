@@ -15,6 +15,7 @@ import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
 import { PerformanceObserverService } from './performance-observer-service';
 import { RtkService } from './rtk-service';
+import { createRuntimeCapabilityResolver } from './runtime-capability-resolver';
 import { SecretService, type SafeStorageBackend } from './secret-service';
 import { ShellExecutionService } from './shell-execution-service';
 import { SkillService } from './skill-service';
@@ -205,7 +206,7 @@ export function createAppServices(
   const configService = new ConfigService(paths);
   const databaseService = new DatabaseService(paths);
   const logService = new LogService(paths);
-  const taskService = new TaskService(databaseService, configService);
+  const taskService = new TaskService(databaseService);
   const lifecycleService = new LifecycleService(taskService);
   const mcpService = new McpService(configService);
   const skillService = new SkillService(paths);
@@ -235,7 +236,9 @@ export function createAppServices(
     logService
   );
   const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
-  const taskSchedulerService = new TaskSchedulerService(taskService, deepAgentRuntimeService);
+  const taskSchedulerService = new TaskSchedulerService(taskService, deepAgentRuntimeService, {
+    capabilityResolver: createRuntimeCapabilityResolver({ configService, skillService })
+  });
   deepAgentRuntimeService.attachScheduler(taskSchedulerService);
   lifecycleService.attachScheduler(taskSchedulerService);
   const gitService = new GitService(workspaceService);

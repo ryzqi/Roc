@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('TaskService active task projection', () => {
-  it('projects background tasks and promoted long-running threads into one active task list', () => {
+  it('projects background tasks into the active task list', () => {
     const background = services.taskService.createBackgroundTask(
       services.taskService.createBackgroundTaskPreview({
         goal: '每天检查测试状态',
@@ -36,32 +36,10 @@ describe('TaskService active task projection', () => {
         notificationPolicy: 'failures_and_confirmations'
       })
     );
-    const run = services.taskService.createTaskRun({
-      userInput: '持续分析当前重构',
-      modelId: 'model-alpha',
-      enabledCapabilities: {
-        mcpServers: [],
-        skills: []
-      }
-    });
-    const promoted = services.taskService.promoteThread({
-      threadId: run.threadId,
-      reason: 'manual'
-    });
 
     const activeTasks = services.taskService.getActiveTasks();
 
-    expect(promoted.kind).toBe('long_running');
     expect(activeTasks).toEqual([
-      expect.objectContaining({
-        kind: 'long_running',
-        threadId: run.threadId,
-        taskId: null,
-        title: '持续分析当前重构',
-        goal: '持续分析当前重构',
-        trigger: null,
-        workspacePath: null
-      }),
       expect.objectContaining({
         kind: 'background',
         threadId: background.threadId,

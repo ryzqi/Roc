@@ -124,6 +124,128 @@ describe('database indexes', () => {
     expect(version.schema_version).toBe(2);
   });
 
+  it('migrates historical long_running threads to chat and preserves legacy background task rows', () => {
+    services.databaseService.close();
+    rmSync(join(root, 'roc.sqlite'), { force: true });
+    rmSync(join(root, 'roc.sqlite-shm'), { force: true });
+    rmSync(join(root, 'roc.sqlite-wal'), { force: true });
+
+    const legacy = new Database(join(root, 'roc.sqlite'));
+    legacy.exec(`
+      CREATE TABLE task_threads (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'chat',
+        title TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT
+      );
+
+      CREATE TABLE background_tasks (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        scheduled INTEGER NOT NULL,
+        trigger_type TEXT NOT NULL,
+        trigger_description TEXT NOT NULL,
+        next_run_at TEXT,
+        cron_expression TEXT,
+        workspace_path TEXT NOT NULL,
+        allowed_actions_json TEXT NOT NULL,
+        forbidden_actions_json TEXT NOT NULL,
+        failure_policy TEXT NOT NULL,
+        notification_policy TEXT NOT NULL,
+        risk_level TEXT NOT NULL,
+        requires_confirmation INTEGER NOT NULL,
+        last_run_at TEXT,
+        last_run_status TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE app_config_versions (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        schema_version INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    legacy
+      .prepare(
+        `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        'thread-long-running',
+        'long_running',
+        '历史长跑对话',
+        '历史长跑目标',
+        'running',
+        '2026-05-01T00:00:00.000Z',
+        '2026-05-01T00:00:00.000Z',
+        null
+      );
+    legacy
+      .prepare(
+        `INSERT INTO background_tasks
+         (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, cron_expression, workspace_path,
+          allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+          requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        'background-legacy',
+        'thread-long-running',
+        'run-legacy',
+        '历史后台任务',
+        'running',
+        1,
+        'cron',
+        '每天 09:00',
+        '2026-05-21T01:00:00.000Z',
+        '0 9 * * *',
+        root,
+        '[]',
+        '[]',
+        'pause_and_report',
+        'failures_and_confirmations',
+        'low',
+        0,
+        null,
+        null,
+        0,
+        '2026-05-01T00:00:00.000Z',
+        '2026-05-01T00:00:00.000Z'
+      );
+    legacy
+      .prepare(
+        `INSERT INTO app_config_versions (id, schema_version, updated_at)
+         VALUES (1, 2, ?)`
+      )
+      .run('2026-05-01T00:00:00.000Z');
+    legacy.close();
+
+    expect(() => services.databaseService.initialize()).not.toThrow();
+
+    const thread = services.databaseService.db
+      .prepare('SELECT kind FROM task_threads WHERE id = ?')
+      .get('thread-long-running') as { kind: string };
+    const backgroundTask = services.databaseService.db
+      .prepare('SELECT enabled_capabilities_json FROM background_tasks WHERE id = ?')
+      .get('background-legacy') as { enabled_capabilities_json: string | null };
+    const backgroundColumns = services.databaseService.db
+      .prepare('PRAGMA table_info(background_tasks)')
+      .all() as Array<{ name: string }>;
+
+    expect(thread.kind).toBe('chat');
+    expect(backgroundTask.enabled_capabilities_json).toBeNull();
+    expect(backgroundColumns.map((column) => column.name)).toContain('enabled_capabilities_json');
+  });
+
   it('uses an index for task snapshot thread lookup', () => {
     const plan = services.databaseService.db
       .prepare(

@@ -1,4 +1,4 @@
-import type { BackgroundTask } from '../../../shared/types';
+import type { BackgroundTask, EnabledCapabilities } from '../../../shared/types';
 import type { DatabaseService } from '../database-service';
 import { RocDomainError } from '../errors';
 import { requireText } from './validation';
@@ -27,7 +27,8 @@ export function backgroundTaskFromRow(row: BackgroundTaskRow): BackgroundTask {
     lastRunStatus: row.last_run_status,
     runCount: row.run_count,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    enabledCapabilities: parseEnabledCapabilities(row.enabled_capabilities_json)
   };
 }
 
@@ -38,7 +39,8 @@ export function requireBackgroundTask(database: DatabaseService, id: string): Ba
       `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at,
               cron_expression, workspace_path,
               allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
-              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
        FROM background_tasks
        WHERE id = ?`
     )
@@ -55,4 +57,26 @@ export function requireBackgroundTask(database: DatabaseService, id: string): Ba
   }
 
   return backgroundTaskFromRow(row);
+}
+
+function parseEnabledCapabilities(raw: string | null): EnabledCapabilities | null {
+  if (raw === null || raw.length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null;
+    }
+    const value = parsed as { mcpServers?: unknown; skills?: unknown };
+    if (!Array.isArray(value.mcpServers) || !Array.isArray(value.skills)) {
+      return null;
+    }
+    return {
+      mcpServers: value.mcpServers.filter((item): item is string => typeof item === 'string'),
+      skills: value.skills.filter((item): item is string => typeof item === 'string')
+    };
+  } catch {
+    return null;
+  }
 }

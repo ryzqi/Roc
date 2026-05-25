@@ -32,7 +32,7 @@ export function buildHistoryItems(threads: TaskThread[], promotedThreadIds: Iter
 
 function isActivePromotedThread(thread: TaskThread): boolean {
   return (
-    (thread.kind === 'long_running' || thread.kind === 'background') &&
+    thread.kind === 'background' &&
     ['running', 'waiting_user', 'waiting_next_turn', 'paused', 'pending_confirmation'].includes(thread.status)
   );
 }

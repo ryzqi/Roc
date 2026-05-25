@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { BackgroundTask, ChatStartRunRequest, ChatStartRunResult, SchedulerStatus } from '../../shared/types';
 import { RocDomainError } from './errors';
+import type { RuntimeCapabilityResolver } from './runtime-capability-resolver';
 import type { TaskService } from './task-service';
 import { computeNextRunAt } from './task/next-run-calculator';
 
@@ -10,6 +11,7 @@ type RuntimeStarter = {
 
 type TaskSchedulerOptions = {
   maxRegisteredTasks?: number;
+  capabilityResolver: RuntimeCapabilityResolver;
 };
 
 const maxTimeoutDelayMs = 24 * 24 * 60 * 60 * 1000;
@@ -18,6 +20,7 @@ export class TaskSchedulerService {
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly firingTaskIds = new Set<string>();
   private readonly maxRegisteredTasks: number;
+  private readonly capabilityResolver: RuntimeCapabilityResolver;
   private running = false;
   private suspended = false;
   private lastError: string | null = null;
@@ -25,9 +28,10 @@ export class TaskSchedulerService {
   constructor(
     private readonly taskService: TaskService,
     private readonly runtimeStarter: RuntimeStarter,
-    options: TaskSchedulerOptions = {}
+    options: TaskSchedulerOptions
   ) {
     this.maxRegisteredTasks = options.maxRegisteredTasks ?? 256;
+    this.capabilityResolver = options.capabilityResolver;
   }
 
   start(): void {
@@ -144,14 +148,12 @@ export class TaskSchedulerService {
         return null;
       }
 
+      const enabledCapabilities = task.enabledCapabilities ?? this.capabilityResolver.resolveCurrentEnabledCapabilities();
       const result = await this.runtimeStarter.startRun({
         input: task.goal,
         mode: 'task',
         threadId: task.threadId,
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        }
+        enabledCapabilities
       });
       const firedAt = new Date().toISOString();
       this.taskService.recordScheduledTaskRun({
