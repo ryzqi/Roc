@@ -297,7 +297,8 @@ describe('providers section', () => {
           defaultModelReady: false,
           checked: ['id', 'enabled', 'models', 'credentials', 'transport'],
           modelId: 'gpt-test',
-          error: null
+          error: null,
+          latencyMs: 1234
         },
         secretBusyProviderId: null
       })
@@ -346,7 +347,8 @@ describe('providers section', () => {
           defaultModelReady: false,
           checked: ['id', 'enabled', 'models', 'credentials', 'transport'],
           modelId: 'gpt-test',
-          error: 'Provider 请求失败：HTTP 401 [REDACTED]'
+          error: 'Provider 请求失败：HTTP 401 [REDACTED]',
+          latencyMs: 567
         },
         secretBusyProviderId: null
       })

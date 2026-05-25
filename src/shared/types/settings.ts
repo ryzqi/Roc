@@ -108,6 +108,7 @@ export type ProviderTestResult = {
   checked: string[];
   modelId?: string | null;
   error: string | null;
+  latencyMs: number | null;
 };
 
 export type ProviderExecutionUsage = {

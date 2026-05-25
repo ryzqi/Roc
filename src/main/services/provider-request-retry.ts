@@ -1,6 +1,6 @@
 import { RocDomainError } from './errors';
 
-export const providerRequestTimeoutMs = 60_000;
+export const providerRequestTimeoutMs = 120_000;
 export const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
 export const providerRequestTimeoutMessage = 'Provider 请求超时，请稍后重试或检查 Provider endpoint。';
 

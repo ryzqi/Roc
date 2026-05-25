@@ -8,6 +8,46 @@ import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
+const CHAT_WAIT_INDICATOR_THRESHOLD_MS = 5_000;
+
+function ChatWaitingIndicator({
+  startedAtMs,
+  visible
+}: {
+  startedAtMs: number | null;
+  visible: boolean;
+}): React.JSX.Element | null {
+  const [elapsedMs, setElapsedMs] = useState<number>(() =>
+    startedAtMs === null ? 0 : Date.now() - startedAtMs
+  );
+
+  useEffect(() => {
+    if (!visible || startedAtMs === null) {
+      return;
+    }
+    setElapsedMs(Date.now() - startedAtMs);
+    const handle = window.setInterval(() => {
+      setElapsedMs(Date.now() - startedAtMs);
+    }, 500);
+    return () => {
+      window.clearInterval(handle);
+    };
+  }, [visible, startedAtMs]);
+
+  if (!visible || startedAtMs === null || elapsedMs < CHAT_WAIT_INDICATOR_THRESHOLD_MS) {
+    return null;
+  }
+  const seconds = Math.floor(elapsedMs / 1000);
+  return (
+    <div className="chat-wait-indicator" data-testid="chat-wait-indicator" role="status" aria-live="polite">
+      <span className="chat-wait-indicator-spinner" aria-hidden="true" />
+      <span className="chat-wait-indicator-text">
+        上游响应等待中（{seconds} 秒）。NVIDIA 公共 endpoint 在高峰时段 P95 可达 70 秒；如需稳定低延时，可切换其他 Provider。
+      </span>
+    </div>
+  );
+}
+
 type ChatViewProps = {
   chatSelectionVersion: number;
   queuedTaskPrompt: string | null;
@@ -217,6 +257,17 @@ export function ChatView({
 
   const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredReasoning.length}`;
   const showEmptyState = chatTranscript.length === 0;
+  const isAwaitingFirstByte =
+    chatRun.state.status === 'running' &&
+    deferredAssistantMessage.length === 0 &&
+    deferredReasoning.length === 0;
+  const chatRunStartedAtMs = useMemo(() => {
+    if (chatRun.state.createdAt === null) {
+      return null;
+    }
+    const parsed = Date.parse(chatRun.state.createdAt);
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [chatRun.state.createdAt]);
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">
@@ -240,6 +291,7 @@ export function ChatView({
                   void handleApprovalDecision(approvalId, decisions);
                 }}
               />
+              <ChatWaitingIndicator startedAtMs={chatRunStartedAtMs} visible={isAwaitingFirstByte} />
             </div>
           </div>
         </div>

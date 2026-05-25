@@ -3,6 +3,7 @@ import type {
   ProviderConfig,
   ProviderTestResult
 } from '../../shared/types';
+import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import { LangChainModelFactory } from './langchain-model-factory';
@@ -66,7 +67,8 @@ export class ProviderRuntimeService {
         defaultModelReady,
         checked,
         modelId: null,
-        error: 'Provider 未启用。'
+        error: 'Provider 未启用。',
+        latencyMs: null
       };
     }
     const enabledModel = provider.models.find((model) => model.enabled);
@@ -77,10 +79,41 @@ export class ProviderRuntimeService {
         defaultModelReady,
         checked,
         modelId: null,
-        error: 'Provider 没有已启用模型。'
+        error: 'Provider 没有已启用模型。',
+        latencyMs: null
       };
     }
 
+    const startedAt = Date.now();
+    if (provider.type === 'nvidia' && this.deterministicTransport === null) {
+      try {
+        const probe = await this.langChainModelFactory.probeNvidiaTtfb(
+          provider,
+          enabledModel.id,
+          providerTestPromptForProvider(provider)
+        );
+        return {
+          providerId: provider.id,
+          status: 'ready',
+          defaultModelReady,
+          checked,
+          modelId: enabledModel.id,
+          error: null,
+          latencyMs: probe.latencyMs
+        };
+      } catch (error) {
+        const safeError = this.toSafeProviderError(error);
+        return {
+          providerId: provider.id,
+          status: 'invalid',
+          defaultModelReady,
+          checked,
+          modelId: enabledModel.id,
+          error: safeError.message,
+          latencyMs: Date.now() - startedAt
+        };
+      }
+    }
     try {
       const response = await executeWithProviderRequestRetry(async () => {
         const result = await this.executeTransportRequest({
@@ -92,7 +125,7 @@ export class ProviderRuntimeService {
             skills: []
           })
         });
-        this.requireResponseContent(result);
+        this.requireResponseContent(result, provider);
         return result;
       });
       return {
@@ -101,7 +134,8 @@ export class ProviderRuntimeService {
         defaultModelReady,
         checked,
         modelId: enabledModel.id,
-        error: null
+        error: null,
+        latencyMs: Date.now() - startedAt
       };
     } catch (error) {
       const safeError = this.toSafeProviderError(error);
@@ -111,7 +145,8 @@ export class ProviderRuntimeService {
         defaultModelReady,
         checked,
         modelId: enabledModel.id,
-        error: safeError.message
+        error: safeError.message,
+        latencyMs: Date.now() - startedAt
       };
     }
   }
@@ -164,9 +199,14 @@ export class ProviderRuntimeService {
     return await this.executeLangChainRequest(request);
   }
 
-  private requireResponseContent(response: ProviderTransportResponse): string {
+  private requireResponseContent(response: ProviderTransportResponse, provider: ProviderConfig): string {
     const content = response.content.trim();
     if (content.length === 0) {
+      // NVIDIA NIM 在部分模型（kimi-k2 等）上偶尔会返回空 content + finish_reason=stop，
+      // 表示模型已正常停止但文本通道未输出。对探活而言这等同"连通成功"。
+      if (provider.type === 'nvidia' && response.finishReason === 'stop') {
+        return '';
+      }
       throw new RocDomainError({
         code: 'provider_empty_response',
         message: 'Provider 返回了空回复。',

@@ -70,7 +70,7 @@ describe('LangChainModelFactory', () => {
         thinking: true
       }
     });
-    expect((result.model as { timeout?: number }).timeout).toBe(60_000);
+    expect((result.model as { timeout?: number }).timeout).toBe(120_000);
     expect((result.model as { clientConfig?: { maxRetries?: number } }).clientConfig?.maxRetries).toBe(0);
   });
 
@@ -103,7 +103,7 @@ describe('LangChainModelFactory', () => {
     const factory = new LangChainModelFactory(services.configService, services.secretService);
     const result = await factory.createDefaultChatModel({ streaming: true });
 
-    expect((result.model as { timeout?: number }).timeout).toBe(60_000);
+    expect((result.model as { timeout?: number }).timeout).toBe(120_000);
   });
 
   it('sends NVIDIA text-only content blocks as string chat content without streaming usage options', async () => {
@@ -308,7 +308,7 @@ describe('LangChainModelFactory', () => {
     expect(result.provider.id).toBe('anthropic-local');
     expect(result.modelId).toBe('claude-sonnet-4-5');
     expect((result.model as { clientOptions?: { timeout?: number; maxRetries?: number } }).clientOptions).toMatchObject({
-      timeout: 60_000,
+      timeout: 120_000,
       maxRetries: 0
     });
   });

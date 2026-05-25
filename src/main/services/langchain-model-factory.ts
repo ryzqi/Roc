@@ -667,6 +667,106 @@ export class LangChainModelFactory {
     ];
   }
 
+  /**
+   * NVIDIA NIM 探活：发起一次最小 chat/completions 流式请求，收到首个字节即视为连通。
+   * 不复用 ChatOpenAI / LangChain，避免 SDK 等待整段生成。30 秒客户端硬超时。
+   */
+  async probeNvidiaTtfb(
+    provider: ProviderConfig,
+    modelId: string,
+    prompt: string,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<{ latencyMs: number }> {
+    if (provider.type !== 'nvidia') {
+      throw new RocDomainError({
+        code: 'provider_type_unsupported',
+        message: 'NVIDIA TTFB 探活仅适用于 NVIDIA Provider。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请使用 NVIDIA Provider 调用本方法。'
+      });
+    }
+    const apiKey = this.resolveCredential(provider);
+    const baseUrl = resolveNvidiaBaseUrl(provider).replace(/\/+$/, '');
+    const url = `${baseUrl}/chat/completions`;
+    const startedAt = Date.now();
+    const internalAbort = new AbortController();
+    const timeoutMs = options.timeoutMs ?? 30_000;
+    const hardTimeout = setTimeout(() => internalAbort.abort(), timeoutMs);
+    const linkedSignal =
+      options.signal === undefined
+        ? internalAbort.signal
+        : anySignal([options.signal, internalAbort.signal]);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream'
+        },
+        body: JSON.stringify({
+          model: modelId,
+          stream: true,
+          max_tokens: 4,
+          temperature: 0,
+          messages: [{ role: 'user', content: prompt }]
+        }),
+        signal: linkedSignal
+      });
+      if (!response.ok) {
+        const text = (await response.text()).slice(0, 300);
+        throw new RocDomainError({
+          code: 'provider_http_error',
+          message: `Provider 请求失败：HTTP ${response.status}${text.length > 0 ? ` ${text}` : ''}`,
+          category: 'external',
+          retryable: response.status >= 500 || response.status === 429,
+          userAction: '请检查 Provider endpoint、凭据、模型名称和服务状态后重试。'
+        });
+      }
+      const body = response.body;
+      if (body === null) {
+        throw new RocDomainError({
+          code: 'provider_response_malformed',
+          message: 'Provider 流式响应缺少响应体。',
+          category: 'external',
+          retryable: true,
+          userAction: '请稍后重试。'
+        });
+      }
+      const reader = body.getReader();
+      try {
+        const firstChunk = await reader.read();
+        if (firstChunk.done === true && (firstChunk.value === undefined || firstChunk.value.length === 0)) {
+          throw new RocDomainError({
+            code: 'provider_response_malformed',
+            message: 'Provider 流式响应未发出任何字节即结束。',
+            category: 'external',
+            retryable: true,
+            userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 SSE。'
+          });
+        }
+        return { latencyMs: Date.now() - startedAt };
+      } finally {
+        // 收到首字节即可，无需继续读取——主动 cancel 让上游断开。
+        await reader.cancel().catch(() => {});
+      }
+    } catch (error) {
+      if (isAbortLikeError(error) && internalAbort.signal.aborted && options.signal?.aborted !== true) {
+        throw new RocDomainError({
+          code: 'provider_request_timeout',
+          message: `NVIDIA endpoint 未在 ${Math.round(timeoutMs / 1000)} 秒内返回首字节。`,
+          category: 'external',
+          retryable: true,
+          userAction: '请稍后重试，或确认 NVIDIA 公共 endpoint 当前负载是否过高。'
+        });
+      }
+      throw error;
+    } finally {
+      clearTimeout(hardTimeout);
+    }
+  }
+
   private resolveProviderById(providerId: string): ProviderConfig {
     const provider = this.configService.getProviders().providers.find((item) => item.id === providerId);
     if (provider === undefined) {
@@ -887,6 +987,33 @@ function rebuildResultWithReasoningContent(result: ChatResult): ChatResult {
       };
     })
   };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') {
+    return false;
+  }
+  const named = error as { name?: unknown; code?: unknown };
+  return named.name === 'AbortError' || named.code === 'ABORT_ERR' || named.code === 20;
+}
+
+function anySignal(signals: readonly AbortSignal[]): AbortSignal {
+  if (typeof (AbortSignal as unknown as { any?: (signals: readonly AbortSignal[]) => AbortSignal }).any === 'function') {
+    return (AbortSignal as unknown as { any: (signals: readonly AbortSignal[]) => AbortSignal }).any(signals);
+  }
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener(
+      'abort',
+      () => controller.abort(signal.reason),
+      { once: true }
+    );
+  }
+  return controller.signal;
 }
 
 function createFetchWithoutAuthorization(): typeof fetch {

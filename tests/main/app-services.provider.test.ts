@@ -1147,4 +1147,77 @@ describe('Roc foundation services providers', () => {
       }
     });
   });
+
+  it('probes NVIDIA provider via TTFB streaming path and reports latencyMs without retrying', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-nvidia-ttfb-'));
+    const liveServices = createAppServices(liveRoot);
+    // 用 SSE 风格响应回复一段最小 chunk，触发 TTFB 探活成功
+    const sseRawBody =
+      'data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}\n\n' +
+      'data: [DONE]\n\n';
+    const fakeProvider = await startFakeProvider({}, 200, {
+      contentType: 'text/event-stream',
+      rawBody: sseRawBody
+    });
+    let probeCallCount = 0;
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('nvidia', 'nvapi-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'nvidia',
+            name: 'NVIDIA',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1',
+            credentialRef: 'secret:nvidia',
+            enabled: true,
+            models: [
+              {
+                id: 'moonshotai/kimi-k2.6',
+                displayName: 'Kimi K2.6',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ],
+            options: {
+              endpointOverride: fakeProvider.endpoint
+            }
+          }
+        ]
+      });
+
+      // 关掉 deterministicTransport，强制走真实 TTFB 探活路径
+      Reflect.set(liveServices.providerRuntimeService as object, 'deterministicTransport', null);
+
+      const result = await liveServices.providerRuntimeService.testProvider('nvidia');
+      probeCallCount = fakeProvider.requests.length;
+
+      expect(result.status).toBe('ready');
+      expect(result.providerId).toBe('nvidia');
+      expect(result.modelId).toBe('moonshotai/kimi-k2.6');
+      expect(result.error).toBeNull();
+      expect(typeof result.latencyMs).toBe('number');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+      // TTFB 探活不应进重试：4 次重试会在 retry 框架下产生 4 个 fake 请求
+      expect(probeCallCount).toBe(1);
+      const firstRequest = fakeProvider.requests[0];
+      expect(firstRequest?.method).toBe('POST');
+      expect(firstRequest?.url).toBe('/v1/chat/completions');
+      expect(firstRequest?.authorization).toBe('Bearer nvapi-live-test-secret');
+      expect(firstRequest?.body).toMatchObject({
+        model: 'moonshotai/kimi-k2.6',
+        stream: true,
+        max_tokens: 4,
+        temperature: 0
+      });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
 });

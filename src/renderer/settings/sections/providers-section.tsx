@@ -129,30 +129,37 @@ export function ProvidersSection({
     if (providerTestStatus === null || providerTestStatus.providerId !== selectedProvider.id) {
       return null;
     }
+    const latencySuffix =
+      typeof providerTestStatus.latencyMs === 'number' && providerTestStatus.latencyMs >= 0
+        ? `（耗时 ${providerTestStatus.latencyMs} ms）`
+        : '';
     if (providerTestStatus.status === 'ready') {
+      const base =
+        providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+          ? '已测试可用。'
+          : `已测试 ${providerTestStatus.modelId} 可用。`;
       return {
         tone: 'ready' as const,
-        text:
-          providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
-            ? '已测试可用。'
-            : `已测试 ${providerTestStatus.modelId} 可用。`
+        text: `${base}${latencySuffix}`
       };
     }
     if (providerTestStatus.error === null) {
+      const base =
+        providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+          ? '测试失败。'
+          : `${providerTestStatus.modelId} 测试失败。`;
       return {
         tone: 'invalid' as const,
-        text:
-          providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
-            ? '测试失败。'
-            : `${providerTestStatus.modelId} 测试失败。`
+        text: `${base}${latencySuffix}`
       };
     }
+    const base =
+      providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
+        ? `测试失败：${providerTestStatus.error}`
+        : `${providerTestStatus.modelId} 测试失败：${providerTestStatus.error}`;
     return {
       tone: 'invalid' as const,
-      text:
-        providerTestStatus.modelId === null || providerTestStatus.modelId === undefined
-          ? `测试失败：${providerTestStatus.error}`
-          : `${providerTestStatus.modelId} 测试失败：${providerTestStatus.error}`
+      text: `${base}${latencySuffix}`
     };
   }, [providerTestStatus, selectedProvider]);
 
@@ -347,6 +354,11 @@ export function ProvidersSection({
           </label>
           {draft.type === 'nvidia' ? (
             <>
+              <p className="provider-nvidia-note" data-testid="provider-nvidia-endpoint-note">
+                NVIDIA 公共聚合 endpoint <code>integrate.api.nvidia.com</code> 为多租户共享，
+                高峰时段 TTFT 经常出现 15–70 秒抖动（实测 P95 ≈ 70 s），属于上游服务正常表现。
+                如需稳定低延时，请在下方「高级参数 → endpoint_override」配置自建 NIM 部署。
+              </p>
               <div className="form-grid">
                 <label className="field">
                   <span>Temperature</span>
