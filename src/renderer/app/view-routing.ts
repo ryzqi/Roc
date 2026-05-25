@@ -132,7 +132,7 @@ export function visibleWorkspaceCwd(state: LoadedState): string {
 
 export function buildTopMeta(view: MainViewId, state: LoadedState): string {
   if (view === 'chat') {
-    return `${state.taskSnapshot.recentEvents.filter((event) => event.type === 'message').length} 条消息 · ${visibleWorkspaceLabel(state)}`;
+    return visibleWorkspaceLabel(state);
   }
   if (view === 'tasks') {
     return `${state.taskSnapshot.counts.total} 个任务 · 运行中 ${state.taskSnapshot.counts.running}`;

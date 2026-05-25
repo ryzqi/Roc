@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import {
   createPackagingEnvironment,
   restoreBetterSqlite3ForNode,
-  runCommand
+  runCommand,
+  terminateRunningPackagedApp
 } from './lib/native-packaging.mjs';
 
 const projectRoot = resolve('.');
@@ -28,6 +29,10 @@ function run(command, args, options = { exitOnFailure: true }) {
 
 try {
   run('pnpm', ['build']);
+  const { terminatedPids } = terminateRunningPackagedApp();
+  if (terminatedPids.length > 0) {
+    console.log(`Terminated running packaged Roc.exe processes before packaging: ${terminatedPids.join(', ')}`);
+  }
   exitCode = run('pnpm', ['exec', 'electron-builder', '--dir', '--config', 'electron-builder.yml'], {
     exitOnFailure: false
   });

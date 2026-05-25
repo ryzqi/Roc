@@ -111,4 +111,43 @@ describe('native packaging contract', () => {
       { cwd: expect.any(String) }
     );
   });
+
+  it('terminates only the running Roc processes from the packaged output directory', async () => {
+    const listProcesses = vi.fn()
+      .mockReturnValueOnce([
+        {
+          pid: 101,
+          executablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe'
+        },
+        {
+          pid: 202,
+          executablePath: 'F:\\Other\\Roc\\release\\win-unpacked\\Roc.exe'
+        }
+      ])
+      .mockReturnValueOnce([]);
+    const stopProcess = vi.fn().mockReturnValue(0);
+    const { terminateRunningPackagedApp } = await loadNativePackagingModule();
+
+    const result = terminateRunningPackagedApp({
+      packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
+      listProcesses,
+      stopProcess,
+      waitTimeoutMs: 0
+    });
+
+    expect(result.terminatedPids).toEqual([101]);
+    expect(stopProcess).toHaveBeenCalledTimes(1);
+    expect(stopProcess).toHaveBeenCalledWith(101);
+  });
+
+  it('builds Windows shell command lines so child_process does not receive shell args', async () => {
+    const { buildWindowsShellCommand } = await loadNativePackagingModule();
+
+    expect(buildWindowsShellCommand('pnpm', ['exec', 'electron-builder', '--dir'])).toBe(
+      'pnpm exec electron-builder --dir'
+    );
+    expect(buildWindowsShellCommand('node', ['scripts/package dir.mjs', 'quoted"value'])).toBe(
+      'node "scripts/package dir.mjs" "quoted\\"value"'
+    );
+  });
 });

@@ -25,14 +25,122 @@ export function createPackagingEnvironment(baseEnvironment = process.env) {
   };
 }
 
+export function buildWindowsShellCommand(command, args) {
+  return [command, ...args].map((part) => {
+    if (/^[A-Za-z0-9_./:=@+-]+$/.test(part)) {
+      return part;
+    }
+    return `"${part.replaceAll('"', '\\"')}"`;
+  }).join(' ');
+}
+
 export function runCommand(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  const useWindowsShell = process.platform === 'win32';
+  const result = spawnSync(useWindowsShell ? buildWindowsShellCommand(command, args) : command, useWindowsShell ? [] : args, {
     cwd: options.cwd,
     env: options.env,
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: useWindowsShell
   });
   return result.status === null ? 1 : result.status;
+}
+
+export function listWindowsProcessesByName(processName) {
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `$ErrorActionPreference = 'Stop'; Get-CimInstance Win32_Process -Filter "name = '${processName}'" | ConvertTo-Json -Compress`
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr.trim() || `Failed to list ${processName} processes.`);
+  }
+  const output = result.stdout.trim();
+  if (output.length === 0) {
+    return [];
+  }
+
+  const parsed = JSON.parse(output);
+  const processes = Array.isArray(parsed) ? parsed : [parsed];
+  return processes.flatMap((process) => {
+    const pid = process.ProcessId;
+    const executablePath = process.ExecutablePath;
+    if (typeof pid !== 'number' || typeof executablePath !== 'string') {
+      return [];
+    }
+    return [{ pid, executablePath }];
+  });
+}
+
+export function terminateWindowsProcess(pid) {
+  const result = spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+    stdio: 'inherit',
+    windowsHide: true
+  });
+  return result.status === null ? 1 : result.status;
+}
+
+function normalizeWindowsPath(value) {
+  return value.replaceAll('/', '\\').toLowerCase();
+}
+
+function sleepSync(ms) {
+  if (ms <= 0) {
+    return;
+  }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function terminateRunningPackagedApp({
+  packagedExecutablePath = resolve(projectRoot, 'release', 'win-unpacked', 'Roc.exe'),
+  listProcesses = () => listWindowsProcessesByName('Roc.exe'),
+  stopProcess = terminateWindowsProcess,
+  waitTimeoutMs = 5000
+} = {}) {
+  if (process.platform !== 'win32') {
+    return { terminatedPids: [] };
+  }
+
+  const targetPath = normalizeWindowsPath(resolve(packagedExecutablePath));
+  const matchingProcesses = listProcesses().filter(
+    (process) => normalizeWindowsPath(resolve(process.executablePath)) === targetPath
+  );
+  if (matchingProcesses.length === 0) {
+    return { terminatedPids: [] };
+  }
+
+  const terminatedPids = [];
+  for (const matchingProcess of matchingProcesses) {
+    const status = stopProcess(matchingProcess.pid);
+    if (status !== 0) {
+      throw new Error(`Failed to terminate packaged Roc.exe process ${matchingProcess.pid}.`);
+    }
+    terminatedPids.push(matchingProcess.pid);
+  }
+
+  const startedAt = Date.now();
+  if (waitTimeoutMs <= 0) {
+    return { terminatedPids };
+  }
+
+  while (Date.now() - startedAt < waitTimeoutMs) {
+    const stillRunning = listProcesses().some(
+      (process) => normalizeWindowsPath(resolve(process.executablePath)) === targetPath
+    );
+    if (!stillRunning) {
+      return { terminatedPids };
+    }
+    sleepSync(100);
+  }
+
+  throw new Error(`Timed out waiting for packaged Roc.exe processes to exit: ${terminatedPids.join(', ')}.`);
 }
 
 export function prepareBetterSqlite3ForElectron({
