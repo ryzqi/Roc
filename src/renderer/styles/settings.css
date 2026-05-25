@@ -338,6 +338,98 @@
   color: var(--muted);
   margin-top: 4px;
 }
+
+/* === 模型供应商详情面板：字段控件 / 字段标题 / 跨列字段 / 折叠器视觉统一 === */
+/* 修复：.field label 选择器写错（实际 HTML 为 <label class="field"><span>...），
+   .field--full 未定义，.provider-detail 容器未被 .settings-form 包裹导致表单控件回退到浏览器原生外观，
+   <details class="provider-nvidia-advanced"> 折叠器无样式。 */
+
+.field > span {
+  color: var(--muted);
+  font-size: var(--font-meta-size);
+  font-weight: 500;
+}
+
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.provider-detail .field > input,
+.provider-detail .field > select,
+.provider-detail .field > textarea {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.provider-detail .field > textarea {
+  min-height: 94px;
+  padding: 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.provider-detail .field > input:focus-visible,
+.provider-detail .field > select:focus-visible,
+.provider-detail .field > textarea:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.provider-detail .field > input:disabled,
+.provider-detail .field > input[readonly],
+.provider-detail .field > select:disabled,
+.provider-detail .field > textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.provider-nvidia-advanced {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 248, 252, 0.5);
+}
+
+.provider-nvidia-advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+  font-size: var(--font-meta-size);
+  font-weight: 500;
+}
+
+.provider-nvidia-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-nvidia-advanced > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  color: var(--muted);
+  transition: transform var(--transition-fast);
+}
+
+.provider-nvidia-advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+.provider-nvidia-advanced[open] > summary::before {
+  transform: rotate(90deg);
+}
+
 .card-hint {
   font-size: 12px;
   color: var(--muted);
