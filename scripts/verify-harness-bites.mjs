@@ -1,16 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const repoRoot = resolve('.');
 const schemaPath = resolve(repoRoot, 'src/main/services/deep-agent/background-task-tools.ts');
 const baselineCommand = ['pnpm', ['vitest', 'run', 'tests/main/background-task-schema.test.ts']];
 const original = readFileSync(schemaPath, 'utf8');
-const tempDir = mkdtempSync(join(tmpdir(), 'roc-harness-bite-'));
-const backupPath = join(tempDir, 'background-task-tools.ts');
-
-copyFileSync(schemaPath, backupPath);
 
 let exitCode = 1;
 try {
@@ -42,7 +37,6 @@ try {
   }
 } finally {
   writeFileSync(schemaPath, original, 'utf8');
-  rmSync(tempDir, { recursive: true, force: true });
 }
 
 process.exit(exitCode);
