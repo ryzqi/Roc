@@ -12,32 +12,32 @@ import type { TaskSchedulerService } from '../task-scheduler-service';
 import type { TaskService } from '../task-service';
 import { parseCronExpression } from '../task/cron-parser';
 
-const manualTriggerSchema = z.strictObject({
+export const manualTriggerSchema = z.strictObject({
   type: z.literal('manual'),
   description: z.string().min(1)
 });
 
-const onceTriggerSchema = z.strictObject({
+export const onceTriggerSchema = z.strictObject({
   type: z.literal('once'),
   description: z.string().min(1),
   nextRunAt: z.string().datetime()
 });
 
-const cronTriggerSchema = z.strictObject({
+export const cronTriggerSchema = z.strictObject({
   type: z.literal('cron'),
   description: z.string().min(1),
   cronExpression: z.string().min(1),
   nextRunAt: z.string().datetime()
 });
 
-const triggerSchema = z.discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema]);
+export const triggerSchema = z.discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema]);
 
-const enabledCapabilitiesSchema = z.object({
+export const enabledCapabilitiesSchema = z.object({
   mcpServers: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([])
 });
 
-const proposeInputSchema = z.object({
+export const proposeInputSchema = z.object({
   goal: z.string().min(1).max(500),
   trigger: triggerSchema,
   workspacePath: z.string().min(1),

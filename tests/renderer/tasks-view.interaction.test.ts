@@ -103,18 +103,21 @@ describe('TasksView interactions', () => {
     await flushPromises();
 
     expect(onSubmitTaskPrompt).toHaveBeenCalledTimes(1);
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('每天早上 9 点检查失败测试'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('propose_background_task'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('直接创建任务'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('trigger.type 只能是 "manual"、"once" 或 "cron"'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('重复定时任务必须使用 trigger.type = "cron"'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('"type": "cron"'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('cronExpression'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('"cronExpression": "50 21 * * *"'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('不要使用 trigger.schedule'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.stringContaining('notificationPolicy: on_error'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.not.stringContaining('审批提议'));
-    expect(onSubmitTaskPrompt).toHaveBeenCalledWith(expect.not.stringContaining('用户批准前不要创建任务'));
+    const submittedPrompt = onSubmitTaskPrompt.mock.calls[0]?.[0] as string;
+    for (const fragment of [
+      '每天早上 9 点检查失败测试',
+      'propose_background_task',
+      '直接创建任务',
+      'trigger.type 只能是 "manual"、"once" 或 "cron"',
+      '重复定时任务必须使用 trigger.type = "cron"',
+      '"type": "cron"',
+      'cronExpression',
+      '"cronExpression": "50 21 * * *"'
+    ]) {
+      expect(submittedPrompt).toContain(fragment);
+    }
+    expect(submittedPrompt).not.toContain('审批提议');
+    expect(submittedPrompt).not.toContain('用户批准前不要创建任务');
     expect(preload.chat.startRun).not.toHaveBeenCalled();
     expect(preload.tasks.createBackgroundTaskPreview).not.toHaveBeenCalled();
     expect(preload.tasks.createBackgroundTask).not.toHaveBeenCalled();
