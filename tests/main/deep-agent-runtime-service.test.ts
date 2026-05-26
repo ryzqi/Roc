@@ -3414,6 +3414,51 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('retries empty provider responses before completing a chat run', async () => {
+    vi.useFakeTimers();
+    mocked.streamEventsMock
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable([''])
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      })
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(['Retry success'])
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+
+    await runtime.startRun({
+      input: '空回复后重试',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await vi.runAllTimersAsync();
+    const result = await completed;
+
+    expect(mocked.streamEventsMock).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: 'Retry success'
+    });
+  });
+
   it('records provider usage including prompt cache fields on completed task runs', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([

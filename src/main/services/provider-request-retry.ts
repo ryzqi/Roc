@@ -24,6 +24,9 @@ export type ProviderRequestFailureClassification =
       kind: 'timeout';
     }
   | {
+      kind: 'empty_response';
+    }
+  | {
       kind: 'other';
     };
 
@@ -58,6 +61,9 @@ export function isRetryableProviderRequestFailure(error: unknown): boolean {
   if (classification.kind === 'network') {
     return true;
   }
+  if (classification.kind === 'empty_response') {
+    return true;
+  }
   if (classification.kind === 'http') {
     return isRetryableProviderHttpStatus(classification.status);
   }
@@ -75,6 +81,9 @@ export function classifyProviderRequestFailure(error: unknown): ProviderRequestF
     }
     if (error.code === 'provider_network_error') {
       return { kind: 'network' };
+    }
+    if (error.code === 'provider_empty_response') {
+      return { kind: 'empty_response' };
     }
     if (error.code === 'provider_http_error') {
       const status = readProviderHttpStatus(error);

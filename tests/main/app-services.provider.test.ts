@@ -10,7 +10,14 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanupAppServicesTest, initializeAppServicesTest, normalizeLineEndings, startFakeProvider, type AppServicesTestContext } from './app-service-fixtures';
+import {
+  cleanupAppServicesTest,
+  initializeAppServicesTest,
+  normalizeLineEndings,
+  startFakeProvider,
+  startFakeProviderSequence,
+  type AppServicesTestContext
+} from './app-service-fixtures';
 
 
 describe('Roc foundation services providers', () => {
@@ -21,6 +28,7 @@ describe('Roc foundation services providers', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanupAppServicesTest(context);
   });
 
@@ -1150,7 +1158,7 @@ describe('Roc foundation services providers', () => {
     const liveServices = createAppServices(liveRoot);
     // 用 SSE 风格响应回复一段最小 chunk，触发 TTFB 探活成功
     const sseRawBody =
-      'data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}\n\n' +
+      'data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":"2"}}]}\n\n' +
       'data: [DONE]\n\n';
     const fakeProvider = await startFakeProvider({}, 200, {
       contentType: 'text/event-stream',
@@ -1211,6 +1219,139 @@ describe('Roc foundation services providers', () => {
         max_tokens: 4,
         temperature: 0
       });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('reports empty NVIDIA streaming probes as invalid provider test results', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-nvidia-empty-'));
+    const liveServices = createAppServices(liveRoot);
+    const sseRawBody =
+      'data: {"id":"chatcmpl-empty","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n' +
+      'data: {"id":"chatcmpl-empty","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n' +
+      'data: [DONE]\n\n';
+    const fakeProvider = await startFakeProvider({}, 200, {
+      contentType: 'text/event-stream',
+      rawBody: sseRawBody
+    });
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('nvidia', 'nvapi-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'nvidia',
+            name: 'NVIDIA',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1',
+            credentialRef: 'secret:nvidia',
+            enabled: true,
+            models: [
+              {
+                id: 'moonshotai/kimi-k2.6',
+                displayName: 'Kimi K2.6',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ],
+            options: {
+              endpointOverride: fakeProvider.endpoint
+            }
+          }
+        ]
+      });
+
+      Reflect.set(liveServices.providerRuntimeService as object, 'deterministicTransport', null);
+
+      const result = await liveServices.providerRuntimeService.testProvider('nvidia');
+
+      expect(result).toMatchObject({
+        providerId: 'nvidia',
+        status: 'invalid',
+        modelId: 'moonshotai/kimi-k2.6',
+        error: 'Provider 返回了空回复。'
+      });
+      expect(fakeProvider.requests).toHaveLength(4);
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('retries transient NVIDIA probe HTTP failures before reporting ready', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-nvidia-retry-'));
+    const liveServices = createAppServices(liveRoot);
+    const sseRawBody =
+      'data: {"id":"chatcmpl-retry","choices":[{"index":0,"delta":{"role":"assistant","content":"2"}}]}\n\n' +
+      'data: [DONE]\n\n';
+    const fakeProvider = await startFakeProviderSequence([
+      {
+        body: {
+          error: {
+            message: 'temporary upstream overload'
+          }
+        },
+        statusCode: 500
+      },
+      {
+        body: {},
+        statusCode: 200,
+        options: {
+          contentType: 'text/event-stream',
+          rawBody: sseRawBody
+        }
+      }
+    ]);
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('nvidia', 'nvapi-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'nvidia',
+            name: 'NVIDIA',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1',
+            credentialRef: 'secret:nvidia',
+            enabled: true,
+            models: [
+              {
+                id: 'moonshotai/kimi-k2.6',
+                displayName: 'Kimi K2.6',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ],
+            options: {
+              endpointOverride: fakeProvider.endpoint
+            }
+          }
+        ]
+      });
+
+      Reflect.set(liveServices.providerRuntimeService as object, 'deterministicTransport', null);
+
+      const result = await liveServices.providerRuntimeService.testProvider('nvidia');
+
+      expect(result).toMatchObject({
+        providerId: 'nvidia',
+        status: 'ready',
+        modelId: 'moonshotai/kimi-k2.6',
+        error: null
+      });
+      expect(fakeProvider.requests).toHaveLength(2);
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();

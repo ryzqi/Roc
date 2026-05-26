@@ -668,8 +668,8 @@ export class LangChainModelFactory {
   }
 
   /**
-   * NVIDIA NIM 探活：发起一次最小 chat/completions 流式请求，收到首个字节即视为连通。
-   * 不复用 ChatOpenAI / LangChain，避免 SDK 等待整段生成。30 秒客户端硬超时。
+   * NVIDIA NIM 探活：发起一次最小 chat/completions 流式请求，收到非空文本 delta 才视为连通。
+   * 不复用 ChatOpenAI / LangChain，避免 SDK 等待完整 LangChain 消息。30 秒客户端硬超时。
    */
   async probeNvidiaTtfb(
     provider: ProviderConfig,
@@ -736,19 +736,28 @@ export class LangChainModelFactory {
       }
       const reader = body.getReader();
       try {
-        const firstChunk = await reader.read();
-        if (firstChunk.done === true && (firstChunk.value === undefined || firstChunk.value.length === 0)) {
-          throw new RocDomainError({
-            code: 'provider_response_malformed',
-            message: 'Provider 流式响应未发出任何字节即结束。',
-            category: 'external',
-            retryable: true,
-            userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 SSE。'
-          });
+        const decoder = new TextDecoder();
+        let bufferedText = '';
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done === true) {
+            throw new RocDomainError({
+              code: 'provider_empty_response',
+              message: 'Provider 返回了空回复。',
+              category: 'external',
+              retryable: true,
+              userAction: '请稍后重试，或检查 Provider 模型配置。'
+            });
+          }
+          bufferedText = `${bufferedText}${decoder.decode(chunk.value, { stream: true })}`;
+          const parsed = readNvidiaProbeContent(bufferedText);
+          bufferedText = parsed.remaining;
+          if (parsed.hasContent) {
+            return { latencyMs: Date.now() - startedAt };
+          }
         }
-        return { latencyMs: Date.now() - startedAt };
       } finally {
-        // 收到首字节即可，无需继续读取——主动 cancel 让上游断开。
+        // 收到非空文本即可，无需继续读取——主动 cancel 让上游断开。
         await reader.cancel().catch(() => {});
       }
     } catch (error) {
@@ -872,6 +881,57 @@ export class LangChainModelFactory {
     }
     return value;
   }
+}
+
+function readNvidiaProbeContent(raw: string): { hasContent: boolean; remaining: string } {
+  const normalized = raw.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  const rawEndsWithLineBreak = normalized.endsWith('\n');
+  const completeLines = rawEndsWithLineBreak ? lines : lines.slice(0, -1);
+  for (const line of completeLines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) {
+      continue;
+    }
+    const payload = trimmed.slice('data:'.length).trim();
+    if (payload.length === 0 || payload === '[DONE]') {
+      continue;
+    }
+    try {
+      if (readNvidiaProbePayloadContent(JSON.parse(payload) as unknown).trim().length > 0) {
+        return {
+          hasContent: true,
+          remaining: rawEndsWithLineBreak ? '' : lines.at(-1)!
+        };
+      }
+    } catch {
+      throw new RocDomainError({
+        code: 'provider_response_malformed',
+        message: 'Provider 流式响应不符合 SSE chat completions 格式。',
+        category: 'external',
+        retryable: true,
+        userAction: '请稍后重试，或检查 Provider endpoint 是否兼容 SSE。'
+      });
+    }
+  }
+  return {
+    hasContent: false,
+    remaining: rawEndsWithLineBreak ? '' : lines.at(-1)!
+  };
+}
+
+function readNvidiaProbePayloadContent(payload: unknown): string {
+  if (!isRecord(payload) || !Array.isArray(payload.choices)) {
+    return '';
+  }
+  return payload.choices
+    .map((choice) => {
+      if (!isRecord(choice) || !isRecord(choice.delta) || typeof choice.delta.content !== 'string') {
+        return '';
+      }
+      return choice.delta.content;
+    })
+    .join('');
 }
 
 function buildNvidiaModelKwargs(

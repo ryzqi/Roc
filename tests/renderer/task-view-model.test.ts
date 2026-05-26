@@ -77,10 +77,39 @@ describe('task workbench view model', () => {
       ['scheduled', ['scheduled']],
       ['paused', ['paused']],
       ['failed', ['failed']],
-      ['recent_completed', ['recent-completed']]
+      ['recent_completed', ['recent-completed']],
+      ['terminal', ['old-completed']]
     ]);
     expect(model.groups.find((group) => group.id === 'pending_confirmation')?.defaultExpanded).toBe(true);
     expect(model.groups.find((group) => group.id === 'paused')?.defaultExpanded).toBe(false);
+  });
+
+  it('keeps cancelled terminal tasks visible so task counts cannot render an empty list', () => {
+    const state = createLoadedState({
+      activeTasks: [
+        task({ threadId: 'cancelled-1', title: '已取消任务一', status: 'cancelled' }),
+        task({ threadId: 'cancelled-2', title: '已取消任务二', status: 'cancelled' }),
+        task({ threadId: 'cancelled-3', title: '已取消任务三', status: 'cancelled' })
+      ],
+      taskSnapshot: {
+        generatedAt: '2026-05-21T00:00:00.000Z',
+        recentEvents: [],
+        counts: {
+          total: 3,
+          running: 0,
+          failed: 0,
+          pendingConfirmation: 0
+        },
+        threads: []
+      }
+    });
+
+    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
+
+    expect(model.allItems).toHaveLength(3);
+    expect(model.groups.map((group) => [group.id, group.items.map((item) => item.threadId)])).toEqual([
+      ['terminal', ['cancelled-1', 'cancelled-2', 'cancelled-3']]
+    ]);
   });
 
   it('keeps one item per background thread', () => {

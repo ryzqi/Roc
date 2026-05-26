@@ -92,6 +92,27 @@ describe('Provider request retry behavior', () => {
     expect(result.error).toBe('Provider 网络请求失败：fetch failed');
   });
 
+  it('retries empty provider responses up to three times before returning the final error', async () => {
+    vi.useFakeTimers();
+    const transport = vi.fn(() => {
+      throw new RocDomainError({
+        code: 'provider_empty_response',
+        message: 'Provider 返回了空回复。',
+        category: 'external',
+        retryable: true,
+        userAction: '请稍后重试，或检查 Provider 模型配置。'
+      });
+    });
+    Reflect.set(services.providerRuntimeService as object, 'deterministicTransport', transport);
+
+    const resultPromise = services.providerRuntimeService.testProvider('provider-local');
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(transport).toHaveBeenCalledTimes(4);
+    expect(result.error).toBe('Provider 返回了空回复。');
+  });
+
   it('retries HTTP 429 failures up to three times before returning the final error', async () => {
     vi.useFakeTimers();
     const transport = vi.fn(() => {

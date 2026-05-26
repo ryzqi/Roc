@@ -87,10 +87,12 @@ export class ProviderRuntimeService {
     const startedAt = Date.now();
     if (provider.type === 'nvidia' && this.deterministicTransport === null) {
       try {
-        const probe = await this.langChainModelFactory.probeNvidiaTtfb(
-          provider,
-          enabledModel.id,
-          providerTestPromptForProvider(provider)
+        const probe = await executeWithProviderRequestRetry(() =>
+          this.langChainModelFactory.probeNvidiaTtfb(
+            provider,
+            enabledModel.id,
+            providerTestPromptForProvider(provider)
+          )
         );
         return {
           providerId: provider.id,

@@ -66,6 +66,12 @@ type FakeProviderResponseOptions = {
   rawBody?: string;
 };
 
+type FakeProviderResponseStep = {
+  body: unknown;
+  statusCode: number;
+  options?: FakeProviderResponseOptions;
+};
+
 function readBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolveBody, rejectBody) => {
     const chunks: Buffer[] = [];
@@ -84,9 +90,25 @@ export async function startFakeProvider(
   statusCode: number,
   options: FakeProviderResponseOptions = {}
 ): Promise<FakeProvider> {
+  return await startFakeProviderSequence([
+    {
+      body: responseBody,
+      statusCode,
+      options
+    }
+  ]);
+}
+
+export async function startFakeProviderSequence(
+  responseSteps: readonly FakeProviderResponseStep[]
+): Promise<FakeProvider> {
+  if (responseSteps.length === 0) {
+    throw new Error('Fake provider response sequence must contain at least one step.');
+  }
   const requests: CapturedProviderRequest[] = [];
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
+      const responseStep = responseSteps[Math.min(requests.length, responseSteps.length - 1)]!;
       const rawBody = await readBody(request);
       const parsedBody = rawBody.length === 0 ? null : (JSON.parse(rawBody) as unknown);
       requests.push({
@@ -99,9 +121,9 @@ export async function startFakeProvider(
         rawBody,
         body: parsedBody
       });
-      response.statusCode = statusCode;
-      response.setHeader('content-type', options.contentType ?? 'application/json');
-      response.end(options.rawBody ?? JSON.stringify(responseBody));
+      response.statusCode = responseStep.statusCode;
+      response.setHeader('content-type', responseStep.options?.contentType ?? 'application/json');
+      response.end(responseStep.options?.rawBody ?? JSON.stringify(responseStep.body));
     })().catch((error: unknown) => {
       response.statusCode = 500;
       response.setHeader('content-type', 'application/json');
