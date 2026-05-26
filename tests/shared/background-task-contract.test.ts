@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BACKGROUND_TASK_PROPOSE_EXAMPLE,
+  FORBIDDEN_MODEL_TOP_LEVEL_KEYS,
   FORBIDDEN_TRIGGER_KEYS,
+  MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE,
   PROPOSE_OPTIONAL_KEYS,
   PROPOSE_REQUIRED_KEYS,
   PROPOSE_TOOL_DESCRIPTION,
@@ -12,6 +14,20 @@ import { proposeInputSchema } from '../../src/main/services/deep-agent/backgroun
 import { validProposeInput } from '../_factories/background-task';
 
 describe('background task shared tool contract', () => {
+  function readJsonShapeLines(prompt: string): string[] {
+    return prompt.split('\n').filter((line) => line.trim().startsWith('{ "goal"'));
+  }
+
+  it('minimal canonical example only exposes model-authored keys', () => {
+    expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE).sort()).toEqual(['goal', 'trigger', 'workspacePath']);
+    expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE.trigger).sort()).toEqual([
+      'cronExpression',
+      'description',
+      'nextRunAt',
+      'type'
+    ]);
+  });
+
   it('prompt example is accepted by the runtime schema', () => {
     expect(BACKGROUND_TASK_PROPOSE_EXAMPLE).toBeAcceptedByProposeSchema();
   });
@@ -59,9 +75,13 @@ describe('background task shared tool contract', () => {
       workspacePath: 'F:\\Code\\Roc'
     });
     expect(prompt).not.toReferenceForbiddenField();
-    expect(prompt).not.toContain('notificationPolicy');
-    expect(prompt).not.toContain('failurePolicy');
-    expect(prompt).not.toContain('enabledCapabilities');
+    expect(prompt).toContain('不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
+    for (const line of readJsonShapeLines(prompt)) {
+      for (const field of FORBIDDEN_MODEL_TOP_LEVEL_KEYS) {
+        expect(line).not.toContain(`"${field}"`);
+        expect(line).not.toContain(`${field}:`);
+      }
+    }
   });
 
   it('tool description uses canonical fields without forbidden aliases', () => {
@@ -69,8 +89,9 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('cronExpression');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('nextRunAt');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('只填写 goal、trigger、workspacePath');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();
-    expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('enabledCapabilities');
   });
 
   it('golden: example JSON key sets are stable', () => {

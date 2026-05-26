@@ -95,7 +95,7 @@ describe('TasksView interactions', () => {
       trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    setTextareaValue('task-create-description', '每天早上 9 点检查失败测试');
+    setTextareaValue('task-create-description', '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件');
 
     await act(async () => {
       queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -105,7 +105,7 @@ describe('TasksView interactions', () => {
     expect(onSubmitTaskPrompt).toHaveBeenCalledTimes(1);
     const submittedPrompt = onSubmitTaskPrompt.mock.calls[0]?.[0] as string;
     for (const fragment of [
-      '每天早上 9 点检查失败测试',
+      '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
       'propose_background_task',
       'trigger.type 只能是 manual、once 或 cron',
       'cronExpression',
@@ -114,10 +114,13 @@ describe('TasksView interactions', () => {
     ]) {
       expect(submittedPrompt).toContain(fragment);
     }
+    expect(submittedPrompt).toContain('每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件');
+    expect(submittedPrompt).toContain('不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
     expect(submittedPrompt).not.toReferenceForbiddenField();
-    expect(submittedPrompt).not.toContain('notificationPolicy');
-    expect(submittedPrompt).not.toContain('failurePolicy');
-    expect(submittedPrompt).not.toContain('enabledCapabilities');
+    expect(submittedPrompt).not.toContain('"notificationPolicy"');
+    expect(submittedPrompt).not.toContain('"allowedActions"');
+    expect(submittedPrompt).not.toContain('"forbiddenActions"');
+    expect(submittedPrompt).not.toContain('"enabledCapabilities"');
     expect(submittedPrompt).not.toContain('审批提议');
     expect(submittedPrompt).not.toContain('用户批准前不要创建任务');
     expect(preload.chat.startRun).not.toHaveBeenCalled();

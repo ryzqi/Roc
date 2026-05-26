@@ -20,10 +20,19 @@ export const TOOL_ERROR_FIXTURES = [
   {
     name: 'notificationPolicy on_error',
     schemaPath: 'notificationPolicy',
-    badKeys: [],
+    badKeys: ['notificationPolicy'],
     message:
       "Error invoking tool 'propose_background_task' with kwargs {'notificationPolicy': 'on_error'} with error:\n" +
       "Received tool input did not match expected schema: Invalid input: expected 'failures_and_confirmations' at notificationPolicy\n" +
+      'Please fix your mistakes.'
+  },
+  {
+    name: 'notificationPolicy default',
+    schemaPath: 'notificationPolicy',
+    badKeys: ['notificationPolicy'],
+    message:
+      "Error invoking tool 'propose_background_task' with kwargs {'notificationPolicy': 'default'} with error:\n" +
+      'Received tool input did not match expected schema: Unrecognized key: "notificationPolicy" at notificationPolicy\n' +
       'Please fix your mistakes.'
   },
   {

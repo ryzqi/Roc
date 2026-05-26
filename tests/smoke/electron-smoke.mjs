@@ -36,9 +36,9 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
-const naturalLanguageTaskGoal = '每天 21:50 抓取 AI 新闻并写入 docx';
-const naturalLanguageTaskCronExpression = '50 21 * * *';
-const naturalLanguageTaskNextRunAt = '2026-05-26T13:50:00.000Z';
+const naturalLanguageTaskGoal = '每天晚上 7:40 抓取 AI 新闻并写入 docx';
+const naturalLanguageTaskCronExpression = '40 19 * * *';
+const naturalLanguageTaskNextRunAt = '2026-05-26T11:40:00.000Z';
 
 let app;
 let smokeProvider;
@@ -188,7 +188,7 @@ try {
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { timeout: 5000 });
   await page.fill(
     '[data-testid="task-create-description"]',
-    `${naturalLanguageTaskGoal}，每天 21:50 运行，使用当前工作区。`
+    `${naturalLanguageTaskGoal}，每天晚上 7:40 运行，使用当前工作区。`
   );
   await page.click('[data-testid="task-create-submit"]');
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { state: 'detached', timeout: 5000 });

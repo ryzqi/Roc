@@ -4,6 +4,8 @@ type ProposeInput = Omit<BackgroundTaskPreviewRequest, 'failurePolicy'> & {
   enabledCapabilities?: BackgroundTaskPreviewRequest['enabledCapabilities'];
 };
 
+type MinimalProposeToolInput = Pick<BackgroundTaskPreviewRequest, 'goal' | 'trigger' | 'workspacePath'>;
+
 type DeepPartial<T> = T extends Array<infer Item>
   ? Array<DeepPartial<Item>>
   : T extends object
@@ -39,6 +41,22 @@ export function validProposeInput(overrides: DeepPartial<ProposeInput> = {}): Pr
       allowedActions: [],
       forbiddenActions: [],
       notificationPolicy: 'failures_and_confirmations'
+    },
+    overrides
+  );
+}
+
+export function minimalProposeToolInput(overrides: DeepPartial<MinimalProposeToolInput> = {}): MinimalProposeToolInput {
+  return mergeMinimalProposeToolInput(
+    {
+      goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
+      trigger: {
+        type: 'cron',
+        description: '每天晚上 7:40 触发',
+        cronExpression: '40 19 * * *',
+        nextRunAt: '2026-05-26T11:40:00.000Z'
+      },
+      workspacePath: 'F:\\Code\\Roc'
     },
     overrides
   );
@@ -131,4 +149,16 @@ function mergeProposeInput(base: ProposeInput, overrides: DeepPartial<ProposeInp
     allowedActions: overrides.allowedActions === undefined ? base.allowedActions : (overrides.allowedActions as string[]),
     forbiddenActions: overrides.forbiddenActions === undefined ? base.forbiddenActions : (overrides.forbiddenActions as string[])
   } as ProposeInput;
+}
+
+function mergeMinimalProposeToolInput(
+  base: MinimalProposeToolInput,
+  overrides: DeepPartial<MinimalProposeToolInput>
+): MinimalProposeToolInput {
+  const trigger = overrides.trigger === undefined ? base.trigger : (overrides.trigger as MinimalProposeToolInput['trigger']);
+  return {
+    ...base,
+    ...overrides,
+    trigger
+  } as MinimalProposeToolInput;
 }

@@ -123,7 +123,8 @@ async function createRunTools(input: {
   const deleteFileTool = tools.createDeleteFileTool(input.fileService);
   const backgroundTaskTools = createBackgroundTaskTools({
     taskService: input.taskService,
-    schedulerService: input.taskSchedulerService
+    schedulerService: input.taskSchedulerService,
+    enabledCapabilities: input.enabledCapabilities
   });
   const runTools: ClientTool[] = [webReadTool, deleteFileTool, ...backgroundTaskTools];
   const webSearchTool = await tools.createWebSearchTool({

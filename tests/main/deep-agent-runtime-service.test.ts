@@ -1423,15 +1423,7 @@ describe('DeepAgentRuntimeService', () => {
       'update_background_task',
       'cancel_background_task'
     ]);
-    expect(readToolSchemaKeys(proposeTool)).toEqual([
-      'allowedActions',
-      'enabledCapabilities',
-      'forbiddenActions',
-      'goal',
-      'notificationPolicy',
-      'trigger',
-      'workspacePath'
-    ]);
+    expect(readToolSchemaKeys(proposeTool)).toEqual(['goal', 'trigger', 'workspacePath']);
     expect(proposeTool?.description ?? '').toContain('goal');
     expect(proposeTool?.description ?? '').toContain('trigger.type');
     expect(proposeTool?.description ?? '').toContain('cronExpression');
@@ -1502,8 +1494,10 @@ describe('DeepAgentRuntimeService', () => {
     expect(schemaJson.properties?.goal?.description).toBe('后台任务目标，单句中文描述。');
     expect(schemaJson.properties?.trigger?.description).toBe('触发类型：manual / once / cron。');
     expect(schemaJson.properties?.workspacePath?.description).toBe('Windows 绝对工作区路径，由 runtime 注入。');
-    expect(schemaJson.properties?.allowedActions?.description).toBe('动作边界字符串数组，可为空。');
-    expect(schemaJson.properties?.forbiddenActions?.description).toBe('动作边界字符串数组，可为空。');
+    expect(schemaJson.properties).not.toHaveProperty('allowedActions');
+    expect(schemaJson.properties).not.toHaveProperty('forbiddenActions');
+    expect(schemaJson.properties).not.toHaveProperty('notificationPolicy');
+    expect(schemaJson.properties).not.toHaveProperty('enabledCapabilities');
     expect(cronProperties.type?.description).toBe('触发类型：manual / once / cron。');
     expect(cronProperties.description?.description).toBe('展示给用户的触发说明，单句中文。');
     expect(cronProperties.cronExpression?.description).toBe('五段 cron，按本机时区执行，例如 50 21 * * *。');

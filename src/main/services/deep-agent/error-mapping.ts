@@ -9,6 +9,10 @@ import { redact } from './redact';
 import type { RunFailure } from './types';
 
 const KNOWN_TRIGGER_KEYS = new Set(['type', 'description', 'cronExpression', 'nextRunAt']);
+const KNOWN_PROPOSE_TOP_LEVEL_KEYS = new Set(['goal', 'trigger', 'workspacePath']);
+const PROPOSE_TOOL_NAME = 'propose_background_task';
+const PROPOSE_SCHEMA_SUGGESTION =
+  'propose_background_task 只填写 goal、trigger、workspacePath；allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 由 runtime 设置。';
 
 function readHttpStatus(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -162,7 +166,7 @@ function readToolSchemaFailure(message: string): RunFailure | null {
   const toolName = readInvokedToolName(message);
   const schemaPath = readSchemaPath(message);
   const badKeys = readBadKeys(message);
-  return {
+  const failure: RunFailure = {
     code: 'tool_input_schema_invalid',
     diagnostic: {
       toolName,
@@ -172,6 +176,10 @@ function readToolSchemaFailure(message: string): RunFailure | null {
     message: `任务工具参数不符合 schema：${toolName} 的输入不符合工具契约。`,
     retryable: true
   };
+  if (toolName === PROPOSE_TOOL_NAME) {
+    failure.suggestion = PROPOSE_SCHEMA_SUGGESTION;
+  }
+  return failure;
 }
 
 function readInvokedToolName(message: string): string {
@@ -192,8 +200,11 @@ function readBadKeys(message: string): string[] {
   if (kwargsMatch === null) {
     return [];
   }
+  const topLevelKeys = readTopLevelObjectKeys(kwargsMatch[1]);
+  const badTopLevelKeys = topLevelKeys.filter((key) => !KNOWN_PROPOSE_TOP_LEVEL_KEYS.has(key));
   const triggerKeys = readTriggerKeys(kwargsMatch[1]);
-  const badKeys = triggerKeys.filter((key) => !KNOWN_TRIGGER_KEYS.has(key)).map((key) => `trigger.${key}`);
+  const badTriggerKeys = triggerKeys.filter((key) => !KNOWN_TRIGGER_KEYS.has(key)).map((key) => `trigger.${key}`);
+  const badKeys = [...badTopLevelKeys, ...badTriggerKeys];
   return [...new Set(badKeys)].slice(0, 5);
 }
 
@@ -202,7 +213,44 @@ function readTriggerKeys(kwargsText: string): string[] {
   if (triggerMatch === null) {
     return [];
   }
-  return [...triggerMatch[1].matchAll(/['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*:/gu)].map((match) => match[1]);
+  return readObjectKeys(triggerMatch[1]);
+}
+
+function readObjectKeys(objectText: string): string[] {
+  return [...objectText.matchAll(/['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*:/gu)].map((match) => match[1]);
+}
+
+function readTopLevelObjectKeys(objectText: string): string[] {
+  const keys: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < objectText.length; index += 1) {
+    const char = objectText[index];
+    const previous = index === 0 ? '' : objectText[index - 1];
+    if ((char === "'" || char === '"') && previous !== '\\') {
+      if (quote === null) {
+        quote = char;
+        const keyMatch = /^['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*:/u.exec(objectText.slice(index));
+        if (depth === 1 && keyMatch !== null) {
+          keys.push(keyMatch[1]);
+        }
+      } else if (quote === char) {
+        quote = null;
+      }
+      continue;
+    }
+    if (quote !== null) {
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth -= 1;
+    }
+  }
+  return keys;
 }
 
 export function toWebSearchFailure(error: unknown): RocDomainError {

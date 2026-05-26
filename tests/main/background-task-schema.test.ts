@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fc from 'fast-check';
+import { MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE } from '../../src/shared/background-task-tool-contract';
 import { invalidProposeInput, validProposeInput } from '../_factories/background-task';
 
 describe('background task propose schema', () => {
@@ -62,6 +63,20 @@ describe('background task propose schema', () => {
     it(`fails at ${path}`, () => {
       expect(input).toBeRejectedByProposeSchemaAtPath(path);
     });
+  });
+
+  it.each([
+    ['notificationPolicy default', { notificationPolicy: 'default' }],
+    ['notificationPolicy on_error', { notificationPolicy: 'on_error' }],
+    ['allowedActions', { allowedActions: [] }],
+    ['forbiddenActions', { forbiddenActions: [] }],
+    ['enabledCapabilities', { enabledCapabilities: { mcpServers: [], skills: [] } }]
+  ])('model-visible schema rejects %s', (_name, extra) => {
+    const key = Object.keys(extra)[0] as string;
+    expect({
+      ...MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE,
+      ...extra
+    }).toBeRejectedByProposeToolSchemaAtPath(key);
   });
 
   it('rejects arbitrary unknown trigger keys on cron payloads', () => {

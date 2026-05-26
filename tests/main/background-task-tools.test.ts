@@ -9,7 +9,7 @@ import {
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { RocDomainError } from '../../src/main/services/errors';
 import type { ChatResumeDecision } from '../../src/shared/types';
-import { invalidProposeInput, validProposeInput } from '../_factories/background-task';
+import { invalidProposeInput, minimalProposeToolInput, validProposeInput } from '../_factories/background-task';
 
 let root: string;
 let services: AppServices;
@@ -33,6 +33,38 @@ describe('background task deep-agent tools', () => {
     return new Date(Date.now() + 60_000).toISOString();
   }
 
+  it('creates a cron task from minimal model-authored input and injects runtime defaults', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    const result = JSON.parse(
+      await propose.invoke({
+        goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
+        trigger: {
+          type: 'cron',
+          description: '每天晚上 7:40 触发',
+          cronExpression: '40 19 * * *',
+          nextRunAt: '2026-05-26T11:40:00.000Z'
+        },
+        workspacePath: root
+      })
+    ) as { taskId: string };
+
+    expect(services.taskService.listBackgroundTasks()).toEqual([
+      expect.objectContaining({
+        id: result.taskId,
+        allowedActions: [],
+        forbiddenActions: [],
+        notificationPolicy: 'failures_and_confirmations',
+        enabledCapabilities: null,
+        cronExpression: '40 19 * * *',
+        nextRunAt: '2026-05-26T11:40:00.000Z'
+      })
+    ]);
+  });
+
   it('creates and registers a daily 21:50 cron task with the canonical trigger schema', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
@@ -47,13 +79,17 @@ describe('background task deep-agent tools', () => {
         cronExpression: '50 21 * * *',
         nextRunAt: futureOnceRunAt()
       },
-      workspacePath: root,
-      allowedActions: ['web_search', 'web_read', 'write_file', 'edit_file', 'read_file', 'ls'],
-      forbiddenActions: ['delete_file', 'execute']
+      workspacePath: root
     });
 
     const result = JSON.parse(
-      await propose.invoke(input)
+      await propose.invoke(
+        minimalProposeToolInput({
+          goal: input.goal,
+          trigger: input.trigger,
+          workspacePath: input.workspacePath
+        })
+      )
     ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
 
     expect(result).toMatchObject({
@@ -109,6 +145,29 @@ describe('background task deep-agent tools', () => {
     expect(services.taskService.listBackgroundTasks()).toEqual([]);
   });
 
+  it('rejects runtime-only top-level fields at the model-visible schema boundary', async () => {
+    const [propose] = createBackgroundTaskTools({
+      taskService: services.taskService,
+      schedulerService: services.taskSchedulerService
+    });
+
+    await expect(
+      propose.invoke({
+        goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
+        trigger: {
+          type: 'cron',
+          description: '每天晚上 7:40 触发',
+          cronExpression: '40 19 * * *',
+          nextRunAt: '2026-05-26T11:40:00.000Z'
+        },
+        workspacePath: root,
+        notificationPolicy: 'default'
+      })
+    ).rejects.toThrow(/notificationPolicy/i);
+
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+  });
+
   it('creates a manual background task immediately when propose_background_task is invoked', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
@@ -116,15 +175,13 @@ describe('background task deep-agent tools', () => {
     });
 
     const result = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '手动检查测试状态',
         trigger: {
           type: 'manual',
           description: '手动触发'
         },
-        workspacePath: root,
-        allowedActions: ['pnpm test'],
-        forbiddenActions: ['git push']
+        workspacePath: root
       }))
     ) as {
       ok: boolean;
@@ -169,9 +226,7 @@ describe('background task deep-agent tools', () => {
           cronExpression: '0 9 * * * *',
           nextRunAt: '2026-05-22T01:00:00.000Z'
         },
-        workspacePath: root,
-        allowedActions: ['pnpm test'],
-        forbiddenActions: []
+        workspacePath: root
       })
     ).rejects.toMatchObject({
       code: 'background_task_cron_invalid'
@@ -185,7 +240,7 @@ describe('background task deep-agent tools', () => {
     });
 
     const output = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '每天 9 点提醒',
         trigger: {
           type: 'cron',
@@ -205,14 +260,15 @@ describe('background task deep-agent tools', () => {
     ]);
   });
 
-  it('enabledCapabilities 显式传入 -> 创建的任务字段透传', async () => {
+  it('enabledCapabilities 通过 runtime 依赖注入 -> 创建的任务字段透传', async () => {
     const [propose] = createBackgroundTaskTools({
       taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
+      schedulerService: services.taskSchedulerService,
+      enabledCapabilities: { mcpServers: ['github'], skills: [] }
     });
 
     const output = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '每天 9 点提醒',
         trigger: {
           type: 'cron',
@@ -220,8 +276,7 @@ describe('background task deep-agent tools', () => {
           cronExpression: '0 9 * * *',
           nextRunAt: '2026-05-22T01:00:00.000Z'
         },
-        workspacePath: root,
-        enabledCapabilities: { mcpServers: ['github'], skills: [] }
+        workspacePath: root
       }))
     ) as { taskId: string };
 
@@ -241,16 +296,14 @@ describe('background task deep-agent tools', () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
     const result = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '1 分钟后检查测试',
         trigger: {
           type: 'once',
           description: '一分钟后',
           nextRunAt
         },
-        workspacePath: root,
-        allowedActions: ['pnpm test'],
-        forbiddenActions: []
+        workspacePath: root
       }))
     ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
@@ -276,7 +329,7 @@ describe('background task deep-agent tools', () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
     const result = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '每分钟检查测试',
         trigger: {
           type: 'cron',
@@ -284,9 +337,7 @@ describe('background task deep-agent tools', () => {
           cronExpression: '* * * * *',
           nextRunAt
         },
-        workspacePath: root,
-        allowedActions: ['pnpm test'],
-        forbiddenActions: []
+        workspacePath: root
       }))
     ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
@@ -314,7 +365,7 @@ describe('background task deep-agent tools', () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
     const result = JSON.parse(
-      await propose.invoke(validProposeInput({
+      await propose.invoke(minimalProposeToolInput({
         goal: '禁止发布但继续检查测试',
         trigger: {
           type: 'cron',
@@ -322,9 +373,7 @@ describe('background task deep-agent tools', () => {
           cronExpression: '* * * * *',
           nextRunAt
         },
-        workspacePath: root,
-        allowedActions: [],
-        forbiddenActions: ['git push']
+        workspacePath: root
       }))
     ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
 

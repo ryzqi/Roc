@@ -90,8 +90,8 @@ function readRequestBody(request) {
   });
 }
 
-const smokeTaskProposalGoal = '每天 21:50 抓取 AI 新闻并写入 docx';
-const smokeTaskProposalNextRunAt = '2026-05-26T13:50:00.000Z';
+const smokeTaskProposalGoal = '每天晚上 7:40 抓取 AI 新闻并写入 docx';
+const smokeTaskProposalNextRunAt = '2026-05-26T11:40:00.000Z';
 const smokeProviderText =
   'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
 const smokeTaskProposalFinalText = `Smoke Provider 已通过 propose_background_task 创建后台任务：${smokeTaskProposalGoal}。`;
@@ -159,14 +159,11 @@ function buildSmokeTaskProposal(workspacePath) {
     goal: smokeTaskProposalGoal,
     trigger: {
       type: 'cron',
-      description: '每天 21:50 触发',
-      cronExpression: '50 21 * * *',
+      description: '每天晚上 7:40 触发',
+      cronExpression: '40 19 * * *',
       nextRunAt: smokeTaskProposalNextRunAt
     },
-    workspacePath,
-    allowedActions: [],
-    forbiddenActions: [],
-    notificationPolicy: 'failures_and_confirmations'
+    workspacePath
   };
 }
 

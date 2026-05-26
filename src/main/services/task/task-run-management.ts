@@ -294,6 +294,7 @@ export function failRunWithProviderError(input: {
   };
   message: string;
   retryable: boolean;
+  suggestion?: string;
 }): void {
   const run = getRun({ database: input.database, id: input.runId });
   const now = new Date().toISOString();
@@ -310,7 +311,8 @@ export function failRunWithProviderError(input: {
         message: input.message,
         providerId: input.providerId,
         modelId: input.modelId,
-        retryable: input.retryable
+        retryable: input.retryable,
+        suggestion: input.suggestion
       }
     });
   });

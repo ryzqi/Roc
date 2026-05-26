@@ -204,6 +204,7 @@ export class TaskService {
     };
     message: string;
     retryable: boolean;
+    suggestion?: string;
   }): void {
     taskRunManagement.failRunWithProviderError({ database: this.database, ...input });
   }

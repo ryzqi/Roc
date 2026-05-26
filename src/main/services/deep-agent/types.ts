@@ -31,6 +31,7 @@ export type RunFailure = {
   };
   message: string;
   retryable: boolean;
+  suggestion?: string;
 };
 
 export type RuntimeSubagent = SubAgent;

@@ -12,7 +12,19 @@ const { buildTaskProposalPrompt, PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } =
   '../src/shared/background-task-tool-contract.ts',
   import.meta.url
 );
-const { proposeInputSchema } = await tsImport('../src/main/services/deep-agent/background-task-tools.ts', import.meta.url);
+const { proposeToolInputSchema } = await tsImport('../src/main/services/deep-agent/background-task-tools.ts', import.meta.url);
+const descriptions = [
+  '每天 21:50 抓取 AI 最新新闻并写入当前工作区的 docx 文件。',
+  '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件。',
+  '每天下午 3 点总结 LangChain 和 Deep Agents 最新消息，保存到当前目录 docx 文件。'
+];
+const forbiddenTopLevelKeys = [
+  'allowedActions',
+  'forbiddenActions',
+  'notificationPolicy',
+  'enabledCapabilities',
+  'failurePolicy'
+];
 
 if (endpoint === null || apiKey === null || model === null) {
   console.log(
@@ -34,7 +46,7 @@ if (endpoint === null || apiKey === null || model === null) {
 const proposeTool = tool(async (input) => JSON.stringify({ ok: true, input }), {
   name: PROPOSE_TOOL_NAME,
   description: PROPOSE_TOOL_DESCRIPTION,
-  schema: proposeInputSchema
+  schema: proposeToolInputSchema
 });
 
 const modelWithTools = new ChatOpenAI({
@@ -60,10 +72,22 @@ for (let index = 0; index < runs; index += 1) {
       failures.push({ index, schemaPath: 'tool_call', message: 'missing propose_background_task tool call' });
       continue;
     }
-    const parsed = proposeInputSchema.safeParse(call.args);
+    const badTopLevelKeys = forbiddenTopLevelKeys.filter((key) =>
+      Object.prototype.hasOwnProperty.call(call.args ?? {}, key)
+    );
+    if (badTopLevelKeys.length > 0) {
+      failures.push({
+        index,
+        schemaPath: badTopLevelKeys[0],
+        badKeys: badTopLevelKeys,
+        message: `model emitted runtime-only top-level keys: ${badTopLevelKeys.join(', ')}`
+      });
+      continue;
+    }
+    const parsed = proposeToolInputSchema.safeParse(call.args);
     if (!parsed.success) {
       const schemaPath = parsed.error.issues[0]?.path.map(String).join('.') || 'root';
-      failures.push({ index, schemaPath, message: parsed.error.message });
+      failures.push({ index, schemaPath, badKeys: [], message: parsed.error.message });
     }
   } catch (error) {
     failures.push({
@@ -116,7 +140,7 @@ function readEnv(name) {
 
 function buildPrompt(currentWorkspacePath, index) {
   return buildTaskProposalPrompt({
-    description: `第 ${index + 1} 次采样：每天 21:50 抓取 AI 最新新闻并写入当前工作区的 docx 文件。`,
+    description: `第 ${index + 1} 次采样：${descriptions[index % descriptions.length]}`,
     workspacePath: currentWorkspacePath
   });
 }

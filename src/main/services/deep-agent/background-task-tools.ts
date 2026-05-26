@@ -5,6 +5,7 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatResumeDecision,
+  EnabledCapabilities,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
 import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
@@ -40,10 +41,13 @@ export const enabledCapabilitiesSchema = z.object({
   skills: z.array(z.string()).default([])
 });
 
-export const proposeInputSchema = z.object({
+export const proposeToolInputSchema = z.strictObject({
   goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
   trigger: triggerSchema,
-  workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。'),
+  workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。')
+});
+
+export const proposeInputSchema = proposeToolInputSchema.extend({
   allowedActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
   forbiddenActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
   notificationPolicy: z.literal('failures_and_confirmations').default('failures_and_confirmations'),
@@ -64,6 +68,7 @@ const cancelInputSchema = z.object({
 type BackgroundTaskToolDependencies = {
   taskService: TaskService;
   schedulerService: TaskSchedulerService;
+  enabledCapabilities?: EnabledCapabilities;
 };
 
 export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): [
@@ -72,10 +77,15 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
   DynamicStructuredTool<any, any, any, string>
 ] {
   return [
-    new DynamicStructuredTool<typeof proposeInputSchema, z.infer<typeof proposeInputSchema>, z.infer<typeof proposeInputSchema>, string>({
+    new DynamicStructuredTool<
+      typeof proposeToolInputSchema,
+      z.infer<typeof proposeToolInputSchema>,
+      z.infer<typeof proposeToolInputSchema>,
+      string
+    >({
       name: PROPOSE_TOOL_NAME,
       description: PROPOSE_TOOL_DESCRIPTION,
-      schema: proposeInputSchema,
+      schema: proposeToolInputSchema,
       func: async (rawInput) => JSON.stringify(createBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
@@ -144,7 +154,7 @@ export function applyBackgroundTaskToolDecision(input: {
 
 function createBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
   const preview = {
-    ...normalizePreview(input.taskService, rawInput),
+    ...normalizePreview(input, rawInput),
     requiresConfirmation: false
   };
   const task = input.taskService.createBackgroundTask(preview);
@@ -168,19 +178,19 @@ function createUpdatePayload(taskService: TaskService, rawInput: unknown): Recor
   };
 }
 
-function normalizePreview(taskService: TaskService, rawInput: unknown): BackgroundTaskPreview {
-  const parsed = proposeInputSchema.parse(rawInput);
+function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unknown): BackgroundTaskPreview {
+  const parsed = proposeToolInputSchema.parse(rawInput);
   validateTrigger(parsed.trigger);
   validateWorkspacePath(parsed.workspacePath);
-  return taskService.createBackgroundTaskPreview({
+  return input.taskService.createBackgroundTaskPreview({
     goal: parsed.goal,
     trigger: parsed.trigger,
     workspacePath: parsed.workspacePath,
-    allowedActions: parsed.allowedActions,
-    forbiddenActions: parsed.forbiddenActions,
+    allowedActions: [],
+    forbiddenActions: [],
     failurePolicy: 'pause_and_report',
     notificationPolicy: 'failures_and_confirmations',
-    enabledCapabilities: parsed.enabledCapabilities ?? null
+    enabledCapabilities: input.enabledCapabilities === undefined ? null : input.enabledCapabilities
   });
 }
 

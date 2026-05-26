@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import { ZodError } from 'zod';
-import { proposeInputSchema } from '../../src/main/services/deep-agent/background-task-tools';
+import { proposeInputSchema, proposeToolInputSchema } from '../../src/main/services/deep-agent/background-task-tools';
 
 const FORBIDDEN_FIELD_PATTERNS = [
   /\btrigger\.schedule\b/u,
@@ -34,6 +34,13 @@ function formatIssues(input: unknown): string {
   return issues.map((issue) => `${formatPath(issue.path) || '<root>'}: ${issue.message}`).join('\n');
 }
 
+function readUnrecognizedKeys(issue: ZodError['issues'][number]): string[] {
+  if (issue.code !== 'unrecognized_keys') {
+    return [];
+  }
+  return issue.keys.map(String);
+}
+
 expect.extend({
   toBeAcceptedByProposeSchema(input: unknown) {
     const result = proposeInputSchema.safeParse(input);
@@ -47,6 +54,27 @@ expect.extend({
     return {
       pass,
       message: () => `expected input to be rejected at ${expectedPath}, got:\n${formatIssues(input)}`
+    };
+  },
+  toBeRejectedByProposeToolSchemaAtPath(input: unknown, expectedPath: string) {
+    const result = proposeToolInputSchema.safeParse(input);
+    const issues = result.success ? [] : result.error.issues;
+    const pass = issues.some((issue) => {
+      const actualPath = formatPath(issue.path);
+      return (
+        actualPath === expectedPath ||
+        actualPath.startsWith(`${expectedPath}.`) ||
+        readUnrecognizedKeys(issue).includes(expectedPath)
+      );
+    });
+    return {
+      pass,
+      message: () =>
+        `expected input to be rejected by model-visible propose schema at ${expectedPath}, got:\n${
+          issues.length === 0
+            ? 'no Zod issues'
+            : issues.map((issue) => `${formatPath(issue.path) || '<root>'}: ${issue.message}`).join('\n')
+        }`
     };
   },
   toContainCanonicalExample(text: string) {
@@ -73,6 +101,7 @@ declare module 'vitest' {
   interface Assertion<T = any> {
     toBeAcceptedByProposeSchema(): T;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): T;
+    toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): T;
     toContainCanonicalExample(): T;
     toReferenceForbiddenField(): T;
   }
@@ -80,6 +109,7 @@ declare module 'vitest' {
   interface AsymmetricMatchersContaining {
     toBeAcceptedByProposeSchema(): unknown;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): unknown;
+    toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): unknown;
     toContainCanonicalExample(): unknown;
     toReferenceForbiddenField(): unknown;
   }

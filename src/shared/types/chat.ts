@@ -106,6 +106,7 @@ export type ChatRunEvent =
       };
       message: string;
       retryable: boolean;
+      suggestion?: string;
     };
 
 export type ChatStartRunRequest = {

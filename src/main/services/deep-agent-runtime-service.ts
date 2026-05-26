@@ -788,7 +788,8 @@ export class DeepAgentRuntimeService {
         code: failure.code,
         diagnostic: failure.diagnostic,
         message: failure.message,
-        retryable: failure.retryable
+        retryable: failure.retryable,
+        suggestion: failure.suggestion
       });
     }
     this.emit({
@@ -798,7 +799,8 @@ export class DeepAgentRuntimeService {
       code: failure.code,
       diagnostic: failure.diagnostic,
       message: failure.message,
-      retryable: failure.retryable
+      retryable: failure.retryable,
+      suggestion: failure.suggestion
     });
   }
 
