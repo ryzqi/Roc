@@ -13,24 +13,26 @@ import type { TaskService } from '../task-service';
 import { parseCronExpression } from '../task/cron-parser';
 
 export const manualTriggerSchema = z.strictObject({
-  type: z.literal('manual'),
-  description: z.string().min(1)
+  type: z.literal('manual').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).describe('展示给用户的触发说明，单句中文。')
 });
 
 export const onceTriggerSchema = z.strictObject({
-  type: z.literal('once'),
-  description: z.string().min(1),
-  nextRunAt: z.string().datetime()
+  type: z.literal('once').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).describe('展示给用户的触发说明，单句中文。'),
+  nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
 export const cronTriggerSchema = z.strictObject({
-  type: z.literal('cron'),
-  description: z.string().min(1),
-  cronExpression: z.string().min(1),
-  nextRunAt: z.string().datetime()
+  type: z.literal('cron').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).describe('展示给用户的触发说明，单句中文。'),
+  cronExpression: z.string().min(1).describe('五段 cron，按本机时区执行，例如 50 21 * * *。'),
+  nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
-export const triggerSchema = z.discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema]);
+export const triggerSchema = z
+  .discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema])
+  .describe('触发类型：manual / once / cron。');
 
 export const enabledCapabilitiesSchema = z.object({
   mcpServers: z.array(z.string()).default([]),
@@ -38,11 +40,11 @@ export const enabledCapabilitiesSchema = z.object({
 });
 
 export const proposeInputSchema = z.object({
-  goal: z.string().min(1).max(500),
+  goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
   trigger: triggerSchema,
-  workspacePath: z.string().min(1),
-  allowedActions: z.array(z.string()).default([]),
-  forbiddenActions: z.array(z.string()).default([]),
+  workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。'),
+  allowedActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
+  forbiddenActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
   notificationPolicy: z.literal('failures_and_confirmations').default('failures_and_confirmations'),
   enabledCapabilities: enabledCapabilitiesSchema.nullable().optional()
 });

@@ -15,7 +15,7 @@ function readIssues(input: unknown): ZodError['issues'] {
   return result.success ? [] : result.error.issues;
 }
 
-function formatPath(path: readonly (string | number)[]): string {
+function formatPath(path: readonly PropertyKey[]): string {
   return path.map(String).join('.');
 }
 
