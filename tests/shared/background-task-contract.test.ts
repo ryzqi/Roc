@@ -4,6 +4,7 @@ import {
   FORBIDDEN_TRIGGER_KEYS,
   PROPOSE_OPTIONAL_KEYS,
   PROPOSE_REQUIRED_KEYS,
+  PROPOSE_TOOL_DESCRIPTION,
   PROPOSE_TOOL_NAME,
   buildTaskProposalPrompt
 } from '../../src/shared/background-task-tool-contract';
@@ -50,6 +51,26 @@ describe('background task shared tool contract', () => {
     expect(prompt).toContain('cronExpression');
     expect(prompt).toContain('nextRunAt');
     expect(prompt).toContain('workspacePath');
+  });
+
+  it('prompt does not reference forbidden or runtime-only fields', () => {
+    const prompt = buildTaskProposalPrompt({
+      description: '每天早上 9 点检查失败测试',
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    expect(prompt).not.toReferenceForbiddenField();
+    expect(prompt).not.toContain('notificationPolicy');
+    expect(prompt).not.toContain('failurePolicy');
+    expect(prompt).not.toContain('enabledCapabilities');
+  });
+
+  it('tool description uses canonical fields without forbidden aliases', () => {
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('goal');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('cronExpression');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('nextRunAt');
+    expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();
+    expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('enabledCapabilities');
   });
 
   it('golden: example JSON key sets are stable', () => {

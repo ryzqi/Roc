@@ -22,6 +22,14 @@ export const BACKGROUND_TASK_PROPOSE_EXAMPLE = {
   notificationPolicy: 'failures_and_confirmations'
 } as const satisfies Omit<BackgroundTaskPreviewRequest, 'failurePolicy' | 'enabledCapabilities'>;
 
+export const PROPOSE_TOOL_DESCRIPTION = [
+  '直接创建后台或定时任务。',
+  '只使用 goal、trigger、workspacePath、allowedActions、forbiddenActions。',
+  'trigger.type 只能是 manual、once 或 cron。',
+  'cron trigger 使用 cronExpression 和 UTC ISO nextRunAt。',
+  '无法确定触发方式时使用 manual。'
+].join('\n');
+
 export function buildTaskProposalPrompt(input: { description: string; workspacePath: string }): string {
   return [
     `必须调用 ${PROPOSE_TOOL_NAME}。`,

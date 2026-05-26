@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ActiveTaskItem } from '../../../shared/types';
+import { buildTaskProposalPrompt } from '../../../shared/background-task-tool-contract';
 import { EmptyState } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
@@ -173,39 +174,6 @@ export function TasksView({
       />
     </>
   );
-}
-
-function buildTaskProposalPrompt(input: { description: string; workspacePath: string }): string {
-  return [
-    '请根据下面的自然语言描述直接创建任务。',
-    '',
-    '你必须调用 propose_background_task 直接创建后台或定时任务。',
-    '从描述中提取 goal、trigger、workspacePath、allowedActions、forbiddenActions。',
-    'trigger.type 只能是 "manual"、"once" 或 "cron"。',
-    '不要使用 trigger.schedule、trigger.cron、trigger.expr、trigger.expression 或 notificationPolicy: on_error。',
-    '重复定时任务必须使用 trigger.type = "cron"，cronExpression = "50 21 * * *" 表示每天 21:50。',
-    '一次性未来任务使用 trigger.type = "once"，并填写 ISO nextRunAt。',
-    'canonical JSON shape 示例：',
-    '{',
-    '  "goal": "每天 21:50 抓取 AI 最新新闻并写入当前工作区的 docx 文件",',
-    '  "trigger": {',
-    '    "type": "cron",',
-    '    "description": "每天 21:50 触发",',
-    '    "cronExpression": "50 21 * * *",',
-    '    "nextRunAt": "2026-05-25T13:50:00.000Z"',
-    '  },',
-    `  "workspacePath": "${input.workspacePath}",`,
-    '  "allowedActions": [],',
-    '  "forbiddenActions": [],',
-    '  "notificationPolicy": "failures_and_confirmations"',
-    '}',
-    `默认 workspacePath 使用当前工作区：${input.workspacePath}`,
-    '缺失低风险字段时使用当前工作区和保守的空动作边界。',
-    '如果无法确定触发方式，使用 trigger.type = "manual"，description = "手动触发"。',
-    '',
-    '用户描述：',
-    input.description
-  ].join('\n');
 }
 
 function getCurrentWorkspacePath(state: LoadedState): string | null {

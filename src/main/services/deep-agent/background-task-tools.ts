@@ -7,6 +7,7 @@ import type {
   ChatResumeDecision,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
+import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
 import { RocDomainError } from '../errors';
 import type { TaskSchedulerService } from '../task-scheduler-service';
 import type { TaskService } from '../task-service';
@@ -72,8 +73,8 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
 ] {
   return [
     new DynamicStructuredTool<typeof proposeInputSchema, z.infer<typeof proposeInputSchema>, z.infer<typeof proposeInputSchema>, string>({
-      name: 'propose_background_task',
-      description: '直接创建后台或定时任务。可选字段 enabledCapabilities：仅当用户明确要求限定 MCP 或技能时填写，否则不传，运行时将自动跟随当前全局启用集合。',
+      name: PROPOSE_TOOL_NAME,
+      description: PROPOSE_TOOL_DESCRIPTION,
       schema: proposeInputSchema,
       func: async (rawInput) => JSON.stringify(createBackgroundTask(input, rawInput), null, 2)
     }),

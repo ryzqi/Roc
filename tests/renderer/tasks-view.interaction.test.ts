@@ -107,15 +107,17 @@ describe('TasksView interactions', () => {
     for (const fragment of [
       '每天早上 9 点检查失败测试',
       'propose_background_task',
-      '直接创建任务',
-      'trigger.type 只能是 "manual"、"once" 或 "cron"',
-      '重复定时任务必须使用 trigger.type = "cron"',
-      '"type": "cron"',
+      'trigger.type 只能是 manual、once 或 cron',
       'cronExpression',
-      '"cronExpression": "50 21 * * *"'
+      'nextRunAt',
+      'F:\\Code\\Roc'
     ]) {
       expect(submittedPrompt).toContain(fragment);
     }
+    expect(submittedPrompt).not.toReferenceForbiddenField();
+    expect(submittedPrompt).not.toContain('notificationPolicy');
+    expect(submittedPrompt).not.toContain('failurePolicy');
+    expect(submittedPrompt).not.toContain('enabledCapabilities');
     expect(submittedPrompt).not.toContain('审批提议');
     expect(submittedPrompt).not.toContain('用户批准前不要创建任务');
     expect(preload.chat.startRun).not.toHaveBeenCalled();
