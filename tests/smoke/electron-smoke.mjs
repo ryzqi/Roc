@@ -36,6 +36,10 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
+const naturalLanguageTaskGoal = '每天 21:50 抓取 AI 新闻并写入 docx';
+const naturalLanguageTaskCronExpression = '50 21 * * *';
+const naturalLanguageTaskNextRunAt = '2026-05-26T13:50:00.000Z';
+
 let app;
 let smokeProvider;
 try {
@@ -180,6 +184,71 @@ try {
       hasCreatedEvent: snapshot.data.recentEvents.some((item) => item.type === 'background_task_created')
     };
   });
+  await page.getByRole('button', { name: '新建任务' }).first().click();
+  await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { timeout: 5000 });
+  await page.fill(
+    '[data-testid="task-create-description"]',
+    `${naturalLanguageTaskGoal}，每天 21:50 运行，使用当前工作区。`
+  );
+  await page.click('[data-testid="task-create-submit"]');
+  await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { state: 'detached', timeout: 5000 });
+  await page.waitForFunction(
+    (expectedGoal) =>
+      Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]')).some((item) =>
+        (item.textContent ?? '').includes(expectedGoal)
+      ),
+    naturalLanguageTaskGoal,
+    { timeout: 10000 }
+  );
+  const taskProposalEvidence = await page.evaluate(
+    async ({ expectedGoal, expectedCronExpression, expectedNextRunAt }) => {
+      const snapshot = await window.roc.tasks.getSnapshot();
+      const activeTasks = await window.roc.tasks.getActiveTasks();
+      if (!snapshot.ok) {
+        throw new Error(snapshot.error.message);
+      }
+      if (!activeTasks.ok) {
+        throw new Error(activeTasks.error.message);
+      }
+      const task = activeTasks.data.find((item) => item.kind === 'background' && item.goal === expectedGoal);
+      const createdEvent = snapshot.data.recentEvents.find((item) => {
+        if (item.type !== 'background_task_created' || typeof item.payload !== 'object' || item.payload === null) {
+          return false;
+        }
+        return Reflect.get(item.payload, 'goal') === expectedGoal;
+      });
+      const schemaFailures = snapshot.data.recentEvents.filter((item) => {
+        if (item.type !== 'error' || typeof item.payload !== 'object' || item.payload === null) {
+          return false;
+        }
+        return Reflect.get(item.payload, 'code') === 'tool_input_schema_invalid';
+      });
+      const toolCalls = snapshot.data.recentEvents.filter((item) => {
+        if (item.type !== 'tool_call' || typeof item.payload !== 'object' || item.payload === null) {
+          return false;
+        }
+        return Reflect.get(item.payload, 'name') === 'propose_background_task';
+      });
+      return {
+        activeTaskGoal: task?.goal ?? null,
+        createdEventPayload: createdEvent?.payload ?? null,
+        cronExpression: task?.trigger.type === 'cron' ? task.trigger.cronExpression : null,
+        hasCreatedEvent: createdEvent !== undefined,
+        hasProposeToolCallStart: toolCalls.some((item) => Reflect.get(item.payload, 'status') === 'start'),
+        hasProposeToolCallEnd: toolCalls.some((item) => Reflect.get(item.payload, 'status') === 'end'),
+        nextRunAt: task?.nextRunAt ?? null,
+        schemaFailureCount: schemaFailures.length,
+        triggerType: task?.trigger.type ?? null,
+        expectedCronExpression,
+        expectedNextRunAt
+      };
+    },
+    {
+      expectedGoal: naturalLanguageTaskGoal,
+      expectedCronExpression: naturalLanguageTaskCronExpression,
+      expectedNextRunAt: naturalLanguageTaskNextRunAt
+    }
+  );
   const workspaceText = await readMainPageText(page, {
     label: 'workspace',
     pageId: 'workspace',
@@ -2163,6 +2232,15 @@ try {
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
       backgroundTaskApiEvidence.tray.nextRunAt === '2026-05-22T01:00:00.000Z' &&
       backgroundTaskApiEvidence.hasCreatedEvent,
+    naturalLanguageTaskCreated:
+      taskProposalEvidence.activeTaskGoal === naturalLanguageTaskGoal &&
+      taskProposalEvidence.triggerType === 'cron' &&
+      taskProposalEvidence.cronExpression === naturalLanguageTaskCronExpression &&
+      taskProposalEvidence.nextRunAt === naturalLanguageTaskNextRunAt &&
+      taskProposalEvidence.hasCreatedEvent &&
+      taskProposalEvidence.hasProposeToolCallStart &&
+      taskProposalEvidence.hasProposeToolCallEnd &&
+      taskProposalEvidence.schemaFailureCount === 0,
     traySummaryVisible:
       taskText.includes('活跃任务') &&
       taskText.includes('调度器') &&
@@ -2641,6 +2719,7 @@ try {
     mockTextAbsent: rendererBoundary.mockTextAbsent,
     historySidebarShowsRealThreads: rendererBoundary.historySidebarShowsRealThreads,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
+    naturalLanguageTaskCreated: rendererBoundary.naturalLanguageTaskCreated,
     traySummaryVisible: rendererBoundary.traySummaryVisible,
     diagnosticPackageVisible: rendererBoundary.diagnosticPackageVisible,
     performanceSampleVisible: rendererBoundary.performanceSampleVisible,
@@ -2758,6 +2837,7 @@ try {
       collapsedChatLayoutAfterClose,
       chatResultLayoutEvidence,
       skillLayoutEvidence,
+      taskProposalEvidence,
       providerSettingsEvidence,
       previewText
     },

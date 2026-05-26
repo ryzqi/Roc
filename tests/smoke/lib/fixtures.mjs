@@ -90,6 +90,163 @@ function readRequestBody(request) {
   });
 }
 
+const smokeTaskProposalGoal = '每天 21:50 抓取 AI 新闻并写入 docx';
+const smokeTaskProposalNextRunAt = '2026-05-26T13:50:00.000Z';
+const smokeProviderText =
+  'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
+const smokeTaskProposalFinalText = `Smoke Provider 已通过 propose_background_task 创建后台任务：${smokeTaskProposalGoal}。`;
+
+function readTextContent(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (!Array.isArray(value)) {
+    return '';
+  }
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (item !== null && typeof item === 'object' && typeof item.text === 'string') {
+        return item.text;
+      }
+      return '';
+    })
+    .join('\n');
+}
+
+function readMessageText(message) {
+  if (message === null || typeof message !== 'object') {
+    return '';
+  }
+  return readTextContent(message.content);
+}
+
+function readWorkspacePathFromMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+  for (const message of [...messages].reverse()) {
+    const match = /^当前工作区：(.+)$/mu.exec(readMessageText(message));
+    if (match !== null) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function hasProposeBackgroundTaskTool(tools) {
+  return Array.isArray(tools)
+    ? tools.some((tool) => tool?.function?.name === 'propose_background_task' || tool?.name === 'propose_background_task')
+    : false;
+}
+
+function hasToolResultMessage(messages) {
+  return Array.isArray(messages) ? messages.some((message) => message?.role === 'tool') : false;
+}
+
+function isTaskProposalRequest(parsedBody) {
+  const messages = parsedBody?.messages;
+  const hasTaskProposalPrompt = Array.isArray(messages)
+    ? messages.some((message) => readMessageText(message).includes('必须调用 propose_background_task'))
+    : false;
+  return hasProposeBackgroundTaskTool(parsedBody?.tools) && hasTaskProposalPrompt;
+}
+
+function buildSmokeTaskProposal(workspacePath) {
+  return {
+    goal: smokeTaskProposalGoal,
+    trigger: {
+      type: 'cron',
+      description: '每天 21:50 触发',
+      cronExpression: '50 21 * * *',
+      nextRunAt: smokeTaskProposalNextRunAt
+    },
+    workspacePath,
+    allowedActions: [],
+    forbiddenActions: [],
+    notificationPolicy: 'failures_and_confirmations'
+  };
+}
+
+function writeSseChunk(response, payload) {
+  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function writeStreamingTextResponse(response, content) {
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {
+          content
+        },
+        finish_reason: null
+      }
+    ]
+  });
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: 'stop'
+      }
+    ],
+    usage: {
+      prompt_tokens: 16,
+      completion_tokens: 9,
+      total_tokens: 25
+    }
+  });
+  response.end('data: [DONE]\n\n');
+}
+
+function writeStreamingToolCallResponse(response, parsedBody) {
+  const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
+  if (workspacePath === null || workspacePath.length === 0) {
+    throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
+  }
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_smoke_propose_background_task',
+              type: 'function',
+              function: {
+                name: 'propose_background_task',
+                arguments: JSON.stringify(buildSmokeTaskProposal(workspacePath))
+              }
+            }
+          ]
+        },
+        finish_reason: null
+      }
+    ]
+  });
+  writeSseChunk(response, {
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: 'tool_calls'
+      }
+    ],
+    usage: {
+      prompt_tokens: 42,
+      completion_tokens: 12,
+      total_tokens: 54
+    }
+  });
+  response.end('data: [DONE]\n\n');
+}
+
 export async function startSmokeProvider() {
   const requests = [];
   const server = createServer((request, response) => {
@@ -107,13 +264,14 @@ export async function startSmokeProvider() {
         response.setHeader('content-type', 'text/event-stream');
         response.setHeader('cache-control', 'no-cache');
         response.setHeader('connection', 'keep-alive');
-        response.write(
-          'data: {"choices":[{"index":0,"delta":{"content":"Smoke Provider 已生成首轮回复。\\n\\n短行一。\\n短行二。\\n短行三。\\n短行四。\\n短行五。\\n短行六。\\n短行七。\\n短行八。"},"finish_reason":null}]}\n\n'
+        if (isTaskProposalRequest(parsedBody) && !hasToolResultMessage(parsedBody?.messages)) {
+          writeStreamingToolCallResponse(response, parsedBody);
+          return;
+        }
+        writeStreamingTextResponse(
+          response,
+          isTaskProposalRequest(parsedBody) ? smokeTaskProposalFinalText : smokeProviderText
         );
-        response.write(
-          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":16,"completion_tokens":9,"total_tokens":25}}\n\n'
-        );
-        response.end('data: [DONE]\n\n');
         return;
       }
       response.statusCode = 200;
@@ -123,7 +281,7 @@ export async function startSmokeProvider() {
           choices: [
             {
               message: {
-                content: 'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。'
+                content: smokeProviderText
               },
               finish_reason: 'stop'
             }
