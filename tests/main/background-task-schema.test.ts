@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fc from 'fast-check';
 import { invalidProposeInput, validProposeInput } from '../_factories/background-task';
 
 describe('background task propose schema', () => {
@@ -61,5 +62,22 @@ describe('background task propose schema', () => {
     it(`fails at ${path}`, () => {
       expect(input).toBeRejectedByProposeSchemaAtPath(path);
     });
+  });
+
+  it('rejects arbitrary unknown trigger keys on cron payloads', () => {
+    fc.assert(
+      fc.property(
+        fc
+          .stringMatching(/^[A-Za-z_][A-Za-z0-9_]{0,20}$/u)
+          .filter((key) => !['type', 'description', 'cronExpression', 'nextRunAt'].includes(key)),
+        fc.string(),
+        (key, value) => {
+          const bad = validProposeInput();
+          (bad.trigger as Record<string, unknown>)[key] = value;
+          expect(bad).toBeRejectedByProposeSchemaAtPath('trigger');
+        }
+      ),
+      { numRuns: 200 }
+    );
   });
 });

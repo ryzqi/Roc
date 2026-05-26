@@ -10,6 +10,7 @@ import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runt
 import { RocDomainError } from '../../src/main/services/errors';
 import type { ChatRunEvent } from '../../src/shared/types';
 import { z } from 'zod';
+import { PROPOSE_TOOL_NAME } from '../../src/shared/background-task-tool-contract';
 
 const mocked = vi.hoisted(() => ({
   streamEventsMock: vi.fn(),
@@ -86,6 +87,45 @@ function waitForEvent(
       resolve(event);
     });
   });
+}
+
+type DeepAgentToolDescriptor = {
+  name: string;
+  description?: string;
+  schema?: unknown;
+};
+
+type DeepAgentCreateCall = {
+  tools?: DeepAgentToolDescriptor[];
+  interruptOn?: Record<string, unknown>;
+  checkpointer?: unknown;
+};
+
+function getLastCreateDeepAgentCall(): DeepAgentCreateCall {
+  return mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as DeepAgentCreateCall;
+}
+
+function readToolSchemaKeys(tool: DeepAgentToolDescriptor | undefined): string[] {
+  if (tool?.schema === undefined) {
+    return [];
+  }
+  return Object.keys(z.toJSONSchema(tool.schema as never).properties ?? {}).sort();
+}
+
+function readCronTriggerProperties(tool: DeepAgentToolDescriptor | undefined): Record<string, { description?: string }> {
+  if (tool?.schema === undefined) {
+    return {};
+  }
+  const schemaJson = z.toJSONSchema(tool.schema as never) as {
+    properties?: {
+      trigger?: {
+        oneOf?: Array<{
+          properties?: Record<string, { description?: string }>;
+        }>;
+      };
+    };
+  };
+  return schemaJson.properties?.trigger?.oneOf?.find((candidate) => candidate.properties?.cronExpression !== undefined)?.properties ?? {};
 }
 
 let root: string;
@@ -1350,6 +1390,124 @@ describe('DeepAgentRuntimeService', () => {
       })
     );
     expect(mocked.mcpClientCloseMock).toHaveBeenCalled();
+  });
+
+  it('registers stable background task tool descriptors for task runs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '创建一个后台任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const call = getLastCreateDeepAgentCall();
+    const toolNames = call.tools?.map((tool) => tool.name) ?? [];
+    const proposeTool = call.tools?.find((tool) => tool.name === PROPOSE_TOOL_NAME);
+
+    expect(toolNames).toEqual([
+      'web_read',
+      'delete_file',
+      'propose_background_task',
+      'update_background_task',
+      'cancel_background_task'
+    ]);
+    expect(readToolSchemaKeys(proposeTool)).toEqual([
+      'allowedActions',
+      'enabledCapabilities',
+      'forbiddenActions',
+      'goal',
+      'notificationPolicy',
+      'trigger',
+      'workspacePath'
+    ]);
+    expect(proposeTool?.description ?? '').toContain('goal');
+    expect(proposeTool?.description ?? '').toContain('trigger.type');
+    expect(proposeTool?.description ?? '').toContain('cronExpression');
+    expect(proposeTool?.description ?? '').toContain('nextRunAt');
+    expect(proposeTool?.description ?? '').not.toReferenceForbiddenField();
+  });
+
+  it('keeps propose_background_task out of task-mode interruptOn', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '创建一个后台任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const interruptOn = getLastCreateDeepAgentCall().interruptOn ?? {};
+    expect(Object.keys(interruptOn)).not.toContain(PROPOSE_TOOL_NAME);
+    expect(interruptOn).toEqual(
+      expect.objectContaining({
+        update_background_task: {
+          allowedDecisions: ['approve', 'edit', 'reject']
+        },
+        cancel_background_task: {
+          allowedDecisions: ['approve', 'reject']
+        }
+      })
+    );
+  });
+
+  it('exposes locked field-level descriptions on propose_background_task', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '创建一个后台任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const proposeTool = getLastCreateDeepAgentCall().tools?.find((tool) => tool.name === PROPOSE_TOOL_NAME);
+    const schemaJson = z.toJSONSchema(proposeTool?.schema as never) as {
+      properties?: Record<string, { description?: string }>;
+    };
+    const cronProperties = readCronTriggerProperties(proposeTool);
+
+    expect(schemaJson.properties?.goal?.description).toBe('后台任务目标，单句中文描述。');
+    expect(schemaJson.properties?.trigger?.description).toBe('触发类型：manual / once / cron。');
+    expect(schemaJson.properties?.workspacePath?.description).toBe('Windows 绝对工作区路径，由 runtime 注入。');
+    expect(schemaJson.properties?.allowedActions?.description).toBe('动作边界字符串数组，可为空。');
+    expect(schemaJson.properties?.forbiddenActions?.description).toBe('动作边界字符串数组，可为空。');
+    expect(cronProperties.type?.description).toBe('触发类型：manual / once / cron。');
+    expect(cronProperties.description?.description).toBe('展示给用户的触发说明，单句中文。');
+    expect(cronProperties.cronExpression?.description).toBe('五段 cron，按本机时区执行，例如 50 21 * * *。');
+    expect(cronProperties.nextRunAt?.description).toBe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。');
   });
 
   it('uses backend execute instead of mounting terminal_command for task runs', async () => {
