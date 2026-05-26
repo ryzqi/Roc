@@ -215,6 +215,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksDeleteBackgroundTask, (_event, id: string) =>
     wrapIpc(() => {
       const result = services.taskService.deleteBackgroundTask(id);
+      services.taskSchedulerService.unregisterTask(id);
       controls.broadcastTaskUpdated();
       return result;
     })

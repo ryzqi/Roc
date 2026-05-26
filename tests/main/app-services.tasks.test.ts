@@ -127,6 +127,39 @@ describe('Roc foundation services tasks', () => {
     });
   });
 
+  it('excludes archived background tasks from tray summary counts and next run', () => {
+    const preview = context.services.taskService.createBackgroundTaskPreview({
+      goal: '删除后不显示摘要',
+      trigger: {
+        type: 'cron',
+        description: '每天 09:00',
+        cronExpression: '0 9 * * *',
+        nextRunAt: '2026-04-29T01:00:00.000Z'
+      },
+      workspacePath: context.root,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const task = context.services.taskService.createBackgroundTask(preview);
+    context.services.taskService.cancelBackgroundTask(task.id);
+    context.services.taskService.deleteBackgroundTask(task.id);
+
+    const tray = context.services.lifecycleService.getTraySummary();
+
+    expect(tray).toMatchObject({
+      backgroundTasks: {
+        total: 0,
+        running: 0,
+        failed: 0,
+        pendingConfirmation: 0,
+        nextRunAt: null
+      },
+      nextRunAt: null
+    });
+  });
+
   it('stages background task edit context for the next chat turn and records a visible system message', () => {
     const preview = context.services.taskService.createBackgroundTaskPreview({
       goal: '修改每天检查项目测试状态',

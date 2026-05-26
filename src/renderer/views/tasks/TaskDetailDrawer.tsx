@@ -7,6 +7,7 @@ export function TaskDetailDrawer({
   item,
   scheduledRuns,
   onCancel,
+  onDelete,
   onOpenInChat,
   onOpenChat,
   onPause,
@@ -17,6 +18,7 @@ export function TaskDetailDrawer({
   item: ActiveTaskItem | null;
   scheduledRuns: ScheduledTaskRun[];
   onCancel: (item: ActiveTaskItem) => void;
+  onDelete: (item: ActiveTaskItem) => void;
   onOpenInChat: (item: ActiveTaskItem) => void;
   onOpenChat: (threadId: string) => void;
   onPause: (item: ActiveTaskItem) => void;
@@ -140,19 +142,28 @@ export function TaskDetailDrawer({
         </div>
       ) : null}
       <div className="action-strip">
-        <button type="button" onClick={() => onOpenInChat(detailItem)}>让 AI 修改</button>
-        <button type="button" onClick={() => onRunNow(detailItem)}>立即运行</button>
-        {detailItem.status === 'paused' ? (
-          <button type="button" onClick={() => onResume(detailItem)}>继续</button>
-        ) : (
-          <button type="button" onClick={() => onPause(detailItem)}>暂停</button>
-        )}
-        <button type="button" onClick={() => onCancel(detailItem)}>取消</button>
+        {!canDeleteTask(detailItem) ? (
+          <>
+            <button type="button" onClick={() => onOpenInChat(detailItem)}>让 AI 修改</button>
+            <button type="button" onClick={() => onRunNow(detailItem)}>立即运行</button>
+            {detailItem.status === 'paused' ? (
+              <button type="button" onClick={() => onResume(detailItem)}>继续</button>
+            ) : (
+              <button type="button" onClick={() => onPause(detailItem)}>暂停</button>
+            )}
+            <button type="button" onClick={() => onCancel(detailItem)}>取消</button>
+          </>
+        ) : null}
+        {canDeleteTask(detailItem) ? <button type="button" onClick={() => onDelete(detailItem)}>删除任务</button> : null}
         <button type="button" onClick={() => onOpenChat(detailItem.threadId)}>打开聊天</button>
         <button type="button" onClick={() => void copyTaskId()}>{copied ? '已复制' : '复制 ID'}</button>
       </div>
     </aside>
   );
+}
+
+function canDeleteTask(item: ActiveTaskItem): boolean {
+  return item.status === 'completed' || item.status === 'cancelled' || item.status === 'failed';
 }
 
 function formatTrigger(item: ActiveTaskItem): string {

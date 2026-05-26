@@ -5,6 +5,7 @@ import { loadTaskSurfaceData } from '../../app/data-loading';
 
 export type TaskActions = {
   cancelTask: (item: ActiveTaskItem) => void;
+  deleteTask: (item: ActiveTaskItem) => void;
   openInChat: (item: ActiveTaskItem) => void;
   pauseTask: (item: ActiveTaskItem) => void;
   resumeTask: (item: ActiveTaskItem) => void;
@@ -26,6 +27,13 @@ export function createTaskActions(input: {
         return;
       }
       void window.roc.tasks.cancelBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+    },
+    deleteTask: (item) => {
+      const taskId = requireTaskId(item);
+      if (taskId === null) {
+        return;
+      }
+      void window.roc.tasks.deleteBackgroundTask(taskId).then(async () => input.refreshTaskSurface(null));
     },
     openInChat: (item) => {
       const taskId = requireTaskId(item);

@@ -128,6 +128,71 @@ describe('TasksView interactions', () => {
     expect(preload.tasks.createBackgroundTask).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="task-create-dialog-panel"]')).toBeNull();
   });
+
+  it('deletes a cancelled background task from the detail drawer and reloads the task surface', async () => {
+    const preload = createMockPreloadApi();
+    window.roc = preload;
+    const updateLoadedState = vi.fn();
+
+    await act(async () => {
+      root.render(
+        React.createElement(TasksView, {
+          state: createLoadedState({
+            activeTasks: [
+              {
+                kind: 'background',
+                threadId: 'thread-cancelled',
+                taskId: 'background-cancelled',
+                title: '已取消的新闻任务',
+                goal: '已取消的新闻任务',
+                status: 'cancelled',
+                trigger: null,
+                nextRunAt: null,
+                lastRunAt: null,
+                riskLevel: 'low',
+                workspacePath: 'F:\\Code\\Roc',
+                createdAt: '2026-05-20T00:00:00.000Z',
+                updatedAt: '2026-05-20T00:00:00.000Z'
+              }
+            ],
+            taskSnapshot: {
+              generatedAt: '2026-05-20T00:00:00.000Z',
+              recentEvents: [],
+              counts: {
+                total: 1,
+                running: 0,
+                failed: 0,
+                pendingConfirmation: 0
+              },
+              threads: []
+            }
+          }),
+          updateLoadedState,
+          onNavigateToThread: () => {},
+          onSelectedTaskIdChange: () => {},
+          onSubmitTaskPrompt: async () => ({ ok: true as const })
+        })
+      );
+    });
+
+    expect(container.querySelector('[data-testid="task-row-background-cancelled"]')).not.toBeNull();
+    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '删除任务');
+    expect(deleteButton).not.toBeUndefined();
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(preload.tasks.deleteBackgroundTask).toHaveBeenCalledWith('background-cancelled');
+    expect(preload.tasks.getSnapshot).toHaveBeenCalled();
+    expect(preload.tasks.getActiveTasks).toHaveBeenCalled();
+    expect(updateLoadedState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeTasks: []
+      })
+    );
+  });
 });
 
 function createMockPreloadApi(): RocPreloadApi {
@@ -151,7 +216,14 @@ function createMockPreloadApi(): RocPreloadApi {
       openInChat: vi.fn(),
       pauseBackgroundTask: vi.fn(),
       resumeBackgroundTask: vi.fn(),
-      runBackgroundNow: vi.fn()
+      runBackgroundNow: vi.fn(),
+      deleteBackgroundTask: vi.fn().mockResolvedValue({
+        ok: true as const,
+        data: {
+          deleted: true as const,
+          taskId: 'background-cancelled'
+        }
+      })
     },
     chat: {
       startRun: vi.fn().mockResolvedValue({

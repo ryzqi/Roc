@@ -325,6 +325,7 @@ describe('workspace dialog IPC', () => {
     expect(listScheduledRunsSpy).toHaveBeenCalledWith({ taskId: 'task_1', limit: 5 });
     expect(runNowSpy).toHaveBeenCalledWith('task_1');
     expect(deleteBackgroundTaskSpy).toHaveBeenCalledWith('task_1');
+    expect(unregisterTaskSpy).toHaveBeenCalledWith('task_1');
     expect(updateBackgroundTaskSpy).toHaveBeenCalledWith({
       taskId: 'task_1',
       patch: {},

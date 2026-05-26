@@ -7,7 +7,8 @@ export type TaskGroupId =
   | 'scheduled'
   | 'paused'
   | 'failed'
-  | 'recent_completed';
+  | 'recent_completed'
+  | 'terminal';
 
 export type TaskViewGroup = {
   id: TaskGroupId;
@@ -34,6 +35,7 @@ const activeStatuses: ReadonlySet<TaskStatus> = new Set([
   'pending_confirmation'
 ]);
 const runningStatuses: ReadonlySet<TaskStatus> = new Set(['running', 'waiting_user', 'waiting_next_turn']);
+const terminalStatuses: ReadonlySet<TaskStatus> = new Set(['cancelled', 'completed']);
 const recentCompletedWindowMs = 7 * 24 * 60 * 60 * 1000;
 
 export function countTaskNavMeta(items: ActiveTaskItem[]): TaskViewModel['counts'] {
@@ -83,6 +85,16 @@ export function buildTaskViewModel(state: LoadedState, nowIso = new Date().toISO
       title: '最近完成',
       defaultExpanded: false,
       items: allItems.filter((item) => item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs)
+    },
+    {
+      id: 'terminal',
+      title: '已结束',
+      defaultExpanded: false,
+      items: allItems.filter(
+        (item) =>
+          terminalStatuses.has(item.status) &&
+          !(item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs)
+      )
     }
   ].filter((group) => group.items.length > 0) as TaskViewGroup[];
 

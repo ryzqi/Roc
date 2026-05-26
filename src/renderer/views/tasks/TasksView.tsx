@@ -118,6 +118,7 @@ export function TasksView({
                 detail={selectedBackgroundTaskId === state.taskDetail?.taskId ? state.taskDetail : null}
                 scheduledRuns={selectedScheduledRuns}
                 onCancel={actions.cancelTask}
+                onDelete={actions.deleteTask}
                 onOpenInChat={actions.openInChat}
                 onPause={actions.pauseTask}
                 onResume={actions.resumeTask}

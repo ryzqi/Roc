@@ -20,6 +20,7 @@ export function getBackgroundTaskSummary(input: { database: DatabaseService }): 
     .prepare(
       `SELECT status, next_run_at
        FROM background_tasks
+       WHERE status != 'archived'
        ORDER BY updated_at DESC`
     )
     .all() as Array<{ status: TaskThread['status']; next_run_at: string | null }>;
