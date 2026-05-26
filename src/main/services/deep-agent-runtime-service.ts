@@ -786,6 +786,7 @@ export class DeepAgentRuntimeService {
         providerId: context.modelHandle.provider.id,
         modelId: context.modelHandle.modelId,
         code: failure.code,
+        diagnostic: failure.diagnostic,
         message: failure.message,
         retryable: failure.retryable
       });
@@ -795,6 +796,7 @@ export class DeepAgentRuntimeService {
       runId: context.runId,
       threadId: context.threadId,
       code: failure.code,
+      diagnostic: failure.diagnostic,
       message: failure.message,
       retryable: failure.retryable
     });

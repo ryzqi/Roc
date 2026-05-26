@@ -8,6 +8,8 @@ import { isRecord } from './record-utils';
 import { redact } from './redact';
 import type { RunFailure } from './types';
 
+const KNOWN_TRIGGER_KEYS = new Set(['type', 'description', 'cronExpression', 'nextRunAt']);
+
 function readHttpStatus(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -158,8 +160,15 @@ function readToolSchemaFailure(message: string): RunFailure | null {
   }
 
   const toolName = readInvokedToolName(message);
+  const schemaPath = readSchemaPath(message);
+  const badKeys = readBadKeys(message);
   return {
     code: 'tool_input_schema_invalid',
+    diagnostic: {
+      toolName,
+      schemaPath,
+      badKeys
+    },
     message: `任务工具参数不符合 schema：${toolName} 的输入不符合工具契约。`,
     retryable: true
   };
@@ -171,6 +180,29 @@ function readInvokedToolName(message: string): string {
     return '工具';
   }
   return match[1];
+}
+
+function readSchemaPath(message: string): string | undefined {
+  const match = /\bat\s+([A-Za-z0-9_.]+)\b/u.exec(message);
+  return match?.[1];
+}
+
+function readBadKeys(message: string): string[] {
+  const kwargsMatch = /\bkwargs\s+(\{[\s\S]*?\})\s+with error:/u.exec(message);
+  if (kwargsMatch === null) {
+    return [];
+  }
+  const triggerKeys = readTriggerKeys(kwargsMatch[1]);
+  const badKeys = triggerKeys.filter((key) => !KNOWN_TRIGGER_KEYS.has(key)).map((key) => `trigger.${key}`);
+  return [...new Set(badKeys)].slice(0, 5);
+}
+
+function readTriggerKeys(kwargsText: string): string[] {
+  const triggerMatch = /['"]trigger['"]\s*:\s*\{([\s\S]*?)\}/u.exec(kwargsText);
+  if (triggerMatch === null) {
+    return [];
+  }
+  return [...triggerMatch[1].matchAll(/['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*:/gu)].map((match) => match[1]);
 }
 
 export function toWebSearchFailure(error: unknown): RocDomainError {

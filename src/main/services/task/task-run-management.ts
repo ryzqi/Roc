@@ -287,6 +287,11 @@ export function failRunWithProviderError(input: {
   providerId: string;
   modelId: string;
   code: string;
+  diagnostic?: {
+    badKeys?: string[];
+    schemaPath?: string;
+    toolName?: string;
+  };
   message: string;
   retryable: boolean;
 }): void {
@@ -301,6 +306,7 @@ export function failRunWithProviderError(input: {
       type: 'error',
       payload: {
         code: input.code,
+        diagnostic: input.diagnostic,
         message: input.message,
         providerId: input.providerId,
         modelId: input.modelId,

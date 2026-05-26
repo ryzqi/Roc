@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RocDomainError } from '../../src/main/services/errors';
 import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
+import { TOOL_ERROR_FIXTURES } from '../_fixtures/langchain-tool-errors';
 
 describe('deep agent error mapping', () => {
   it('maps LangChain tool schema failures before provider network classification', () => {
@@ -12,9 +13,30 @@ describe('deep agent error mapping', () => {
 
     expect(toRunFailure(error)).toEqual({
       code: 'tool_input_schema_invalid',
+      diagnostic: {
+        toolName: 'propose_background_task',
+        schemaPath: 'trigger.type',
+        badKeys: ['trigger.schedule']
+      },
       message: '任务工具参数不符合 schema：propose_background_task 的输入不符合工具契约。',
       retryable: true
     });
+  });
+
+  it.each(TOOL_ERROR_FIXTURES)(
+    'maps $name to tool_input_schema_invalid with structured diagnostic',
+    ({ message, schemaPath, badKeys }) => {
+      const failure = toRunFailure(new Error(message));
+      expect(failure.code).toBe('tool_input_schema_invalid');
+      expect(failure.diagnostic?.toolName).toBe('propose_background_task');
+      expect(failure.diagnostic?.schemaPath).toBe(schemaPath);
+      expect(failure.diagnostic?.badKeys ?? []).toEqual(badKeys);
+    }
+  );
+
+  it('keeps user-visible message stable in Chinese', () => {
+    const failure = toRunFailure(new Error(TOOL_ERROR_FIXTURES[0].message));
+    expect(failure.message).toBe('任务工具参数不符合 schema：propose_background_task 的输入不符合工具契约。');
   });
 
   it('keeps web_read domain failures instead of re-labeling them as provider network errors', () => {

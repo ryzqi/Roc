@@ -24,6 +24,11 @@ export type RunExecutionContext = ActiveRun & {
 
 export type RunFailure = {
   code: string;
+  diagnostic?: {
+    badKeys?: string[];
+    schemaPath?: string;
+    toolName?: string;
+  };
   message: string;
   retryable: boolean;
 };

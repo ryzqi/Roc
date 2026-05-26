@@ -3340,6 +3340,50 @@ describe('DeepAgentRuntimeService', () => {
     expect(JSON.stringify(errorEvent?.payload)).not.toContain('sk-secret-value');
   });
 
+  it('emits and persists tool schema failure diagnostics', async () => {
+    mocked.streamEventsMock.mockRejectedValue(
+      new Error(
+        "Error invoking tool 'propose_background_task' with kwargs {'trigger': {'schedule': '50 21 * * *'}} with error:\n" +
+          "Received tool input did not match expected schema: Invalid input: expected 'manual' | 'once' | 'cron' at trigger.type\n" +
+          'Please fix your mistakes.'
+      )
+    );
+
+    const runtime = createRuntime();
+    const failed = waitForEvent(runtime, (event) => event.type === 'run_failed');
+    const started = await runtime.startRun({
+      input: '触发工具 schema 失败',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const result = await failed;
+    const snapshot = services.taskService.getSnapshot();
+    const errorEvent = snapshot.recentEvents.find((event) => event.runId === started.runId && event.type === 'error');
+
+    expect(result).toMatchObject({
+      type: 'run_failed',
+      code: 'tool_input_schema_invalid',
+      diagnostic: {
+        toolName: 'propose_background_task',
+        schemaPath: 'trigger.type',
+        badKeys: ['trigger.schedule']
+      },
+      message: '任务工具参数不符合 schema：propose_background_task 的输入不符合工具契约。',
+      retryable: true
+    });
+    expect(errorEvent?.payload).toMatchObject({
+      code: 'tool_input_schema_invalid',
+      diagnostic: {
+        toolName: 'propose_background_task',
+        schemaPath: 'trigger.type',
+        badKeys: ['trigger.schedule']
+      }
+    });
+  });
+
   it('retries retryable provider request failures before completing a chat run', async () => {
     vi.useFakeTimers();
     mocked.streamEventsMock

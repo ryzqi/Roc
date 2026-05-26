@@ -197,6 +197,11 @@ export class TaskService {
     providerId: string;
     modelId: string;
     code: string;
+    diagnostic?: {
+      badKeys?: string[];
+      schemaPath?: string;
+      toolName?: string;
+    };
     message: string;
     retryable: boolean;
   }): void {

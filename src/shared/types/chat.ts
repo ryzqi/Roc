@@ -99,6 +99,11 @@ export type ChatRunEvent =
       runId: string;
       threadId: string | null;
       code: string;
+      diagnostic?: {
+        badKeys?: string[];
+        schemaPath?: string;
+        toolName?: string;
+      };
       message: string;
       retryable: boolean;
     };
