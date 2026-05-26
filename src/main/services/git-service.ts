@@ -16,16 +16,16 @@ import { RocDomainError } from './errors';
 import type { WorkspaceService } from './workspace-service';
 
 export class GitService {
+  private gitQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly workspaceService: WorkspaceService) {}
 
   async getStatusAsync(): Promise<GitStatusResult> {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const [branchOutput, porcelainOutput, changes] = await Promise.all([
-      this.runGitAsync(workspace.path, ['branch', '--show-current']),
-      this.runGitAsync(workspace.path, ['status', '--porcelain']),
-      this.getStatusChangesAsync(workspace.path)
-    ]);
+    const branchOutput = await this.runGitAsync(workspace.path, ['branch', '--show-current']);
+    const porcelainOutput = await this.runGitAsync(workspace.path, ['status', '--porcelain']);
+    const changes = await this.getStatusChangesAsync(workspace.path);
     const porcelain = porcelainOutput
       .split(/\r?\n/)
       .map((line) => line.trimEnd())
@@ -332,7 +332,7 @@ export class GitService {
   }
 
   private async runGitAsync(cwd: string, args: string[]): Promise<string> {
-    return await new Promise((resolve, reject) => {
+    return await this.enqueueGitCommand(() => new Promise((resolve, reject) => {
       execFile(
         'git',
         args,
@@ -350,7 +350,7 @@ export class GitService {
           resolve(stdout.toString());
         }
       );
-    });
+    }));
   }
 
   private runGitAllowingDiffExitCode(cwd: string, args: string[]): string {
@@ -370,7 +370,7 @@ export class GitService {
   }
 
   private async runGitAllowingDiffExitCodeAsync(cwd: string, args: string[]): Promise<string> {
-    return await new Promise((resolve, reject) => {
+    return await this.enqueueGitCommand(() => new Promise((resolve, reject) => {
       execFile(
         'git',
         args,
@@ -393,7 +393,21 @@ export class GitService {
           reject(this.toGitCommandError(args, failed));
         }
       );
+    }));
+  }
+
+  private async enqueueGitCommand<T>(command: () => Promise<T>): Promise<T> {
+    const previous = this.gitQueue;
+    let release!: () => void;
+    this.gitQueue = new Promise<void>((resolveQueue) => {
+      release = resolveQueue;
     });
+    await previous;
+    try {
+      return await command();
+    } finally {
+      release();
+    }
   }
 
   private isGitDiffExitCodeOne(error: unknown): error is { status: number; stdout: string } {
@@ -463,10 +477,8 @@ export class GitService {
   }
 
   private async readBranchListAsync(cwd: string): Promise<GitBranchListResult> {
-    const [currentBranchOutput, branchOutput] = await Promise.all([
-      this.runGitAsync(cwd, ['branch', '--show-current']),
-      this.runGitAsync(cwd, ['branch', '--format=%(refname:short)'])
-    ]);
+    const currentBranchOutput = await this.runGitAsync(cwd, ['branch', '--show-current']);
+    const branchOutput = await this.runGitAsync(cwd, ['branch', '--format=%(refname:short)']);
     const currentBranch = currentBranchOutput.trim();
     const branchLines = branchOutput
       .split(/\r?\n/)
