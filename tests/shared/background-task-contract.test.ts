@@ -69,6 +69,17 @@ describe('background task shared tool contract', () => {
     expect(prompt).toContain('workspacePath');
   });
 
+  it('prompt requires a direct tool call without approval prose', () => {
+    const prompt = buildTaskProposalPrompt({
+      description: '每天早上 9 点检查失败测试',
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    expect(prompt).toContain('只提交一次 tool call');
+    expect(prompt).toContain('不要输出普通文本');
+    expect(prompt).toContain('不要请求批准');
+    expect(prompt).toContain('创建任务不是预览任务');
+  });
+
   it('prompt does not reference forbidden or runtime-only fields', () => {
     const prompt = buildTaskProposalPrompt({
       description: '每天早上 9 点检查失败测试',

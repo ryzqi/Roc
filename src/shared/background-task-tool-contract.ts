@@ -52,6 +52,8 @@ export const PROPOSE_TOOL_DESCRIPTION = [
 export function buildTaskProposalPrompt(input: { description: string; workspacePath: string }): string {
   return [
     `必须调用 ${PROPOSE_TOOL_NAME}。`,
+    '只提交一次 tool call，不要输出普通文本。',
+    '创建任务不是预览任务，不要请求批准。',
     `当前工作区：${input.workspacePath}`,
     'trigger.type 只能是 manual、once 或 cron。',
     '仅使用以下三种 JSON 形状之一：',
