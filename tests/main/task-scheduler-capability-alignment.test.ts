@@ -32,6 +32,7 @@ function makeBackgroundTask(): BackgroundTask {
 
 function makeFakeTaskService(task: BackgroundTask) {
   return {
+    findBackgroundTask: (taskId: string) => (taskId === task.id ? task : null),
     listSchedulableBackgroundTasks: () => [task],
     countRecentSkippedScheduledRuns: () => 0,
     recordScheduledTaskRun: vi.fn().mockReturnValue({ id: 'sched_1' }),

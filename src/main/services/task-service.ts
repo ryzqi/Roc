@@ -66,6 +66,10 @@ export class TaskService {
     return backgroundTaskLifecycle.listBackgroundTasks({ database: this.database });
   }
 
+  findBackgroundTask(id: string): BackgroundTask | null {
+    return backgroundTaskLifecycle.findBackgroundTask({ database: this.database, id });
+  }
+
   getBackgroundTaskSummary(): BackgroundTaskSummary {
     return snapshotBuilders.getBackgroundTaskSummary({ database: this.database });
   }

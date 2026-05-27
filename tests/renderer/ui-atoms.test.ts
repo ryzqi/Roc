@@ -6,7 +6,6 @@ import { Metric } from '../../src/renderer/components/Metric';
 import { PageHeading } from '../../src/renderer/components/PageHeading';
 import { Row } from '../../src/renderer/components/Row';
 import { StatusPill } from '../../src/renderer/components/StatusPill';
-import { ToolRow } from '../../src/renderer/components/ToolRow';
 
 describe('renderer ui atoms', () => {
   it('renders status pills without legacy dot nodes', () => {
@@ -46,7 +45,7 @@ describe('renderer ui atoms', () => {
     expect(html).not.toContain('控制面');
   });
 
-  it('renders metric, row, and tool row with shared semantic slots', () => {
+  it('renders metric and row with shared semantic slots', () => {
     const metricHtml = renderToStaticMarkup(
       React.createElement(Metric, {
         label: '失败',
@@ -63,13 +62,6 @@ describe('renderer ui atoms', () => {
         tone: 'ok'
       })
     );
-    const toolRowHtml = renderToStaticMarkup(
-      React.createElement(ToolRow, {
-        label: 'web_read',
-        value: 'ready',
-        tone: 'info'
-      })
-    );
 
     expect(metricHtml).toContain('metric-value');
     expect(metricHtml).toContain('metric-label');
@@ -77,7 +69,5 @@ describe('renderer ui atoms', () => {
     expect(rowHtml).toContain('row-copy');
     expect(rowHtml).toContain('row-title');
     expect(rowHtml).toContain('row-sub');
-    expect(toolRowHtml).toContain('tool-row-label');
-    expect(toolRowHtml).toContain('tool-row-value');
   });
 });

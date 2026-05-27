@@ -42,6 +42,72 @@ describe('createTaskActions', () => {
     expect(refreshTaskSurface).not.toHaveBeenCalled();
   });
 
+  it('refreshes the task surface after runNow succeeds', async () => {
+    const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
+    const runBackgroundNow = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        taskId: 'task-2',
+        runId: 'run-2'
+      }
+    });
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          openInChat: vi.fn(),
+          cancelBackgroundTask: vi.fn(),
+          pauseBackgroundTask: vi.fn(),
+          resumeBackgroundTask: vi.fn(),
+          runBackgroundNow
+        }
+      }
+    });
+
+    const actions = createTaskActions({
+      navigateToChat: vi.fn(),
+      refreshTaskSurface
+    });
+
+    actions.runNow(createBackgroundItem({ taskId: 'task-2' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(runBackgroundNow).toHaveBeenCalledWith('task-2');
+    expect(refreshTaskSurface).toHaveBeenCalledWith('task-2');
+  });
+
+  it('does not refresh the task surface after runNow fails', async () => {
+    const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
+    const runBackgroundNow = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        message: '后台任务没有启动新的运行。'
+      }
+    });
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          openInChat: vi.fn(),
+          cancelBackgroundTask: vi.fn(),
+          pauseBackgroundTask: vi.fn(),
+          resumeBackgroundTask: vi.fn(),
+          runBackgroundNow
+        }
+      }
+    });
+
+    const actions = createTaskActions({
+      navigateToChat: vi.fn(),
+      refreshTaskSurface
+    });
+
+    actions.runNow(createBackgroundItem({ taskId: 'task-2' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(runBackgroundNow).toHaveBeenCalledWith('task-2');
+    expect(refreshTaskSurface).not.toHaveBeenCalled();
+  });
 });
 
 function createBackgroundItem(partial: Partial<ActiveTaskItem>): ActiveTaskItem {

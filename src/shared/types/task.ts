@@ -32,6 +32,7 @@ export type TaskEvent = {
   type:
     | 'message'
     | 'message_delta'
+    | 'reasoning_delta'
     | 'agent_update'
     | 'plan'
     | 'tool_call'
@@ -58,6 +59,7 @@ export type TaskEvent = {
     | 'summary';
   payload: unknown;
   createdAt: string;
+  sequence?: number;
 };
 
 export type TaskSnapshot = {

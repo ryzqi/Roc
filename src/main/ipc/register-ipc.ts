@@ -207,9 +207,17 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksRunBackgroundNow, async (_event, id: string) =>
     wrapIpc(async () => {
       const runId = await services.taskSchedulerService.fire(id);
-      const resolvedRunId = runId ?? id;
-      controls.broadcastTaskUpdated({ kind: 'task_run_fired', taskId: id, runId: resolvedRunId });
-      return { taskId: id, runId: resolvedRunId };
+      if (runId === null) {
+        throw new RocDomainError({
+          code: 'background_task_run_not_started',
+          message: '后台任务没有启动新的运行。',
+          category: 'conflict',
+          retryable: true,
+          userAction: '请刷新任务工作台，确认任务仍处于可运行状态后重试。'
+        });
+      }
+      controls.broadcastTaskUpdated({ kind: 'task_run_fired', taskId: id, runId });
+      return { taskId: id, runId };
     })
   );
   timedHandle(ipcChannels.tasksDeleteBackgroundTask, (_event, id: string) =>

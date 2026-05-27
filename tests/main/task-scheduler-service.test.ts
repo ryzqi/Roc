@@ -73,6 +73,23 @@ function createBackgroundTask(input: {
   return services.taskService.createBackgroundTask(preview);
 }
 
+function createManualBackgroundTask(input: { goal?: string; workspacePath?: string } = {}): BackgroundTask {
+  const preview = services.taskService.createBackgroundTaskPreview({
+    goal: input.goal ?? '手动运行后台任务',
+    trigger: {
+      type: 'manual',
+      description: '手动触发'
+    },
+    workspacePath: input.workspacePath ?? root,
+    allowedActions: ['pnpm test'],
+    forbiddenActions: [],
+    failurePolicy: 'pause_and_report',
+    notificationPolicy: 'failures_and_confirmations'
+  });
+
+  return services.taskService.createBackgroundTask(preview);
+}
+
 function scheduledRows(): Array<{ status: string; task_run_id: string | null; skip_reason: string | null }> {
   return services.databaseService.db
     .prepare('SELECT status, task_run_id, skip_reason FROM scheduled_task_runs ORDER BY scheduled_at ASC, rowid ASC')
@@ -131,6 +148,38 @@ describe('TaskSchedulerService', () => {
       })
     );
     expect(scheduler.getStatus().registeredTaskCount).toBe(0);
+  });
+
+  it('fires a manual background task through the runtime starter', async () => {
+    const task = createManualBackgroundTask({ goal: '立即检查工作区状态' });
+    const scheduler = createScheduler();
+
+    const runId = await scheduler.fire(task.id);
+
+    expect(runId).toBe('run-fired-1');
+    expect(runRequests).toEqual([
+      expect.objectContaining({
+        input: '立即检查工作区状态',
+        mode: 'task',
+        threadId: task.threadId,
+        createdRunId: 'run-fired-1'
+      })
+    ]);
+    expect(scheduledRows()).toEqual([
+      {
+        status: 'fired',
+        task_run_id: 'run-fired-1',
+        skip_reason: null
+      }
+    ]);
+    expect(services.taskService.listBackgroundTasks()[0]).toEqual(
+      expect.objectContaining({
+        id: task.id,
+        status: 'running',
+        lastRunStatus: 'success',
+        runCount: 1
+      })
+    );
   });
 
   it('suspends timers and resumes with next run based on current time', async () => {

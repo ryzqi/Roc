@@ -546,6 +546,49 @@ describe('DeepAgentRuntimeService', () => {
     expect(persistedDeltaText).toBe(tokens.join(''));
   });
 
+  it('persists bounded reasoning_delta rows for task runs', async () => {
+    const longReasoningDelta = 'x'.repeat(700);
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          reasoning: createAsyncIterable(['reasoning-a ', longReasoningDelta, 'reasoning-b'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const started = await runtime.startRun({
+      input: 'Reply with reasoning.',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const rows = services.databaseService.db
+      .prepare(
+        `SELECT payload_json
+         FROM task_events
+         WHERE run_id = ? AND type = 'reasoning_delta'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(started.runId) as Array<{ payload_json: string }>;
+    const persisted = rows
+      .map((row) => JSON.parse(row.payload_json) as { delta: string })
+      .map((payload) => payload.delta)
+      .join('');
+
+    expect(persisted).toBe(`reasoning-a ${longReasoningDelta}reasoning-b`);
+    expect(rows.every((row) => (JSON.parse(row.payload_json) as { delta: string }).delta.length <= 512)).toBe(true);
+  });
+
   it('emits reasoning deltas from reasoning_content when the standard reasoning stream is missing', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([

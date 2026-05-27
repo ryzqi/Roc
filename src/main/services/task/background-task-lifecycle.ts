@@ -165,6 +165,22 @@ export function listBackgroundTasks(input: { database: DatabaseService }): Backg
   return rows.map((row) => backgroundTaskFromRow(row));
 }
 
+export function findBackgroundTask(input: { database: DatabaseService; id: string }): BackgroundTask | null {
+  const row = input.database.db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at,
+              cron_expression, workspace_path,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE id = ?`
+    )
+    .get(input.id) as BackgroundTaskRow | undefined;
+
+  return row === undefined ? null : backgroundTaskFromRow(row);
+}
+
 export function listSchedulableBackgroundTasks(input: { database: DatabaseService }): BackgroundTask[] {
   const rows = input.database.db
     .prepare(

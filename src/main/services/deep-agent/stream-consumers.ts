@@ -22,7 +22,7 @@ type StreamConsumerCallbacks = {
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
   recordTaskEvent: (
-    type: 'message_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
+    type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
     payload: Record<string, unknown>
   ) => void;
 };
@@ -56,6 +56,7 @@ export async function consumeMessageStream(input: {
   callbacks: StreamConsumerCallbacks;
 }): Promise<void> {
   const assistantDeltaRecorder = createAssistantDeltaRecorder(input.context, input.callbacks);
+  const reasoningDeltaRecorder = createReasoningDeltaRecorder(input.context, input.callbacks);
   for await (const message of input.messages) {
     updateUsageAccumulator(input.usageAccumulator, message);
     const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
@@ -86,7 +87,8 @@ export async function consumeMessageStream(input: {
           source: reasoningSource,
           context: input.context,
           reasoningChunks: input.reasoningChunks,
-          callbacks: input.callbacks
+          callbacks: input.callbacks,
+          reasoningDeltaRecorder
         })
       );
     }
@@ -98,6 +100,7 @@ export async function consumeMessageStream(input: {
         await consumeVisibleTextStream(createStringAsyncIterable([trailingReasoning]), (delta) => {
           input.callbacks.markVisibleOutput?.();
           input.reasoningChunks.push(delta);
+          reasoningDeltaRecorder.record(delta);
           input.callbacks.emitRuntimeEvent({
             type: 'reasoning_delta',
             runId: input.context.runId,
@@ -108,26 +111,37 @@ export async function consumeMessageStream(input: {
     }
   }
   assistantDeltaRecorder.flush();
+  reasoningDeltaRecorder.flush();
 }
 
-function createAssistantDeltaRecorder(
+function createBoundedTaskDeltaRecorder(
   context: StreamConsumerContext,
-  callbacks: StreamConsumerCallbacks
+  callbacks: StreamConsumerCallbacks,
+  type: 'message_delta' | 'reasoning_delta',
+  buildPayload: (delta: string) => Record<string, unknown>
 ): {
   record: (delta: string) => void;
   flush: () => void;
 } {
   let pendingDelta = '';
 
+  function recordChunk(delta: string): void {
+    callbacks.recordTaskEvent(type, buildPayload(delta));
+  }
+
+  function flushCompleteChunks(): void {
+    while (pendingDelta.length >= maxPersistedAssistantDeltaChars) {
+      recordChunk(pendingDelta.slice(0, maxPersistedAssistantDeltaChars));
+      pendingDelta = pendingDelta.slice(maxPersistedAssistantDeltaChars);
+    }
+  }
+
   function flush(): void {
     if (context.taskRun === null || pendingDelta.length === 0) {
       pendingDelta = '';
       return;
     }
-    callbacks.recordTaskEvent('message_delta', {
-      role: 'assistant',
-      delta: pendingDelta
-    });
+    recordChunk(pendingDelta);
     pendingDelta = '';
   }
 
@@ -138,11 +152,36 @@ function createAssistantDeltaRecorder(
       }
       pendingDelta += delta;
       if (pendingDelta.length >= maxPersistedAssistantDeltaChars) {
-        flush();
+        flushCompleteChunks();
       }
     },
     flush
   };
+}
+
+function createAssistantDeltaRecorder(
+  context: StreamConsumerContext,
+  callbacks: StreamConsumerCallbacks
+): {
+  record: (delta: string) => void;
+  flush: () => void;
+} {
+  return createBoundedTaskDeltaRecorder(context, callbacks, 'message_delta', (delta) => ({
+    role: 'assistant',
+    delta
+  }));
+}
+
+function createReasoningDeltaRecorder(
+  context: StreamConsumerContext,
+  callbacks: StreamConsumerCallbacks
+): {
+  record: (delta: string) => void;
+  flush: () => void;
+} {
+  return createBoundedTaskDeltaRecorder(context, callbacks, 'reasoning_delta', (delta) => ({
+    delta
+  }));
 }
 
 export async function consumeToolCallStream(input: {
@@ -333,10 +372,14 @@ async function consumeReasoningSource(input: {
   context: StreamConsumerContext;
   reasoningChunks: string[];
   callbacks: StreamConsumerCallbacks;
+  reasoningDeltaRecorder: {
+    record: (delta: string) => void;
+  };
 }): Promise<void> {
   const onDelta = (delta: string) => {
     input.callbacks.markVisibleOutput?.();
     input.reasoningChunks.push(delta);
+    input.reasoningDeltaRecorder.record(delta);
     input.callbacks.emitRuntimeEvent({
       type: 'reasoning_delta',
       runId: input.context.runId,

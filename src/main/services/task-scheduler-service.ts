@@ -250,7 +250,14 @@ export class TaskSchedulerService {
   }
 
   private findTask(taskId: string): BackgroundTask | null {
-    return this.taskService.listSchedulableBackgroundTasks().find((task) => task.id === taskId) ?? null;
+    const task = this.taskService.findBackgroundTask(taskId);
+    if (task === null) {
+      return null;
+    }
+    if (task.status === 'archived' || task.status === 'cancelled' || task.status === 'completed' || task.status === 'failed') {
+      return null;
+    }
+    return task;
   }
 
   private countRecentSkippedRuns(): number {

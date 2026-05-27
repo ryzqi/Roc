@@ -15,6 +15,9 @@ import { requireActiveThread } from './thread-queries';
 import { triggerFromBackgroundTask } from './background-task-lifecycle';
 import { listBackgroundTasks } from './background-task-lifecycle';
 
+const taskDetailRunHistoryLimit = 20;
+const taskDetailRecentEventLimit = 20;
+
 export function getBackgroundTaskSummary(input: { database: DatabaseService }): BackgroundTaskSummary {
   const rows = input.database.db
     .prepare(
@@ -48,14 +51,18 @@ export function getActiveTasks(input: { database: DatabaseService }): ActiveTask
 export function getTaskDetail(input: { database: DatabaseService; taskId: string; schedulerRegistered: boolean }): TaskDetail {
   const task = requireBackgroundTask(input.database, input.taskId);
   const thread = requireActiveThread(input.database, task.threadId);
-  const runHistory = listRunsForThread(input.database, task.threadId, 20);
-  const recentEvents = listRecentEventsForThread(input.database, task.threadId, 20);
+  const runHistory = listRunsForThread(input.database, task.threadId, taskDetailRunHistoryLimit);
+  const lastRunId = runHistory[0]?.id ?? null;
+  const recentEvents = mergeTaskEvents([
+    listRecentEventsForThread(input.database, task.threadId, taskDetailRecentEventLimit),
+    lastRunId === null ? [] : listEventsForRun(input.database, task.threadId, lastRunId)
+  ]);
   return {
     threadId: task.threadId,
     taskId: task.id,
     thread,
     backgroundTask: task,
-    lastRunId: runHistory[0]?.id ?? null,
+    lastRunId,
     runHistory,
     recentEvents,
     schedulerRegistered: input.schedulerRegistered
@@ -83,13 +90,14 @@ export function getSnapshot(input: { database: DatabaseService }): TaskSnapshot 
 
   const recentEvents = input.database.db
     .prepare(
-      `SELECT id, thread_id, run_id, type, payload_json, created_at
+      `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
        FROM task_events
        WHERE thread_id IN (SELECT id FROM task_threads WHERE archived_at IS NULL)
        ORDER BY created_at DESC, rowid DESC
        LIMIT 50`
     )
     .all() as Array<{
+    rowid: number;
     id: string;
     thread_id: string;
     run_id: string;
@@ -123,7 +131,8 @@ export function getSnapshot(input: { database: DatabaseService }): TaskSnapshot 
       runId: event.run_id,
       type: event.type,
       payload: JSON.parse(event.payload_json) as unknown,
-      createdAt: event.created_at
+      createdAt: event.created_at,
+      sequence: event.rowid
     }))
   };
 }
@@ -182,13 +191,14 @@ function listRunsForThread(database: DatabaseService, threadId: string, limit: n
 function listRecentEventsForThread(database: DatabaseService, threadId: string, limit: number): TaskEvent[] {
   const rows = database.db
     .prepare(
-      `SELECT id, thread_id, run_id, type, payload_json, created_at
+      `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
        FROM task_events
        WHERE thread_id = ?
        ORDER BY created_at DESC, rowid DESC
        LIMIT ?`
     )
     .all(threadId, limit) as Array<{
+    rowid: number;
     id: string;
     thread_id: string;
     run_id: string;
@@ -202,6 +212,55 @@ function listRecentEventsForThread(database: DatabaseService, threadId: string, 
     runId: row.run_id,
     type: row.type,
     payload: JSON.parse(row.payload_json) as unknown,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    sequence: row.rowid
   }));
+}
+
+function listEventsForRun(database: DatabaseService, threadId: string, runId: string): TaskEvent[] {
+  const rows = database.db
+    .prepare(
+      `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+       FROM task_events
+       WHERE thread_id = ? AND run_id = ?
+       ORDER BY created_at DESC, rowid DESC`
+    )
+    .all(threadId, runId) as Array<{
+    rowid: number;
+    id: string;
+    thread_id: string;
+    run_id: string;
+    type: TaskEvent['type'];
+    payload_json: string;
+    created_at: string;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    threadId: row.thread_id,
+    runId: row.run_id,
+    type: row.type,
+    payload: JSON.parse(row.payload_json) as unknown,
+    createdAt: row.created_at,
+    sequence: row.rowid
+  }));
+}
+
+function mergeTaskEvents(eventGroups: readonly TaskEvent[][]): TaskEvent[] {
+  const eventsById = new Map<string, TaskEvent>();
+  for (const events of eventGroups) {
+    for (const event of events) {
+      if (!eventsById.has(event.id)) {
+        eventsById.set(event.id, event);
+      }
+    }
+  }
+  return [...eventsById.values()].sort(compareTaskEventsDescending);
+}
+
+function compareTaskEventsDescending(left: TaskEvent, right: TaskEvent): number {
+  const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder;
+  }
+  return (right.sequence ?? 0) - (left.sequence ?? 0);
 }

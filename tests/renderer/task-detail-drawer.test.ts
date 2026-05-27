@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
 import type { ActiveTaskItem, TaskDetail } from '../../src/shared/types';
 import { TaskDetailDrawer } from '../../src/renderer/views/tasks/TaskDetailDrawer';
 
@@ -68,7 +69,29 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
       enabledCapabilities: null
     },
     runHistory: [],
-    recentEvents: []
+    recentEvents: [
+      {
+        id: 'event-reasoning',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'reasoning_delta',
+        payload: {
+          delta: '先整理变更'
+        },
+        createdAt: '2026-05-16T07:04:30.000Z'
+      },
+      {
+        id: 'event-message',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'message',
+        payload: {
+          role: 'assistant',
+          content: '已经整理完成'
+        },
+        createdAt: '2026-05-16T07:05:00.000Z'
+      }
+    ]
   };
 }
 
@@ -85,11 +108,15 @@ describe('TaskDetailDrawer', () => {
         onOpenChat: () => {},
         onPause: () => {},
         onResume: () => {},
-        onRunNow: () => {}
+        onRunNow: () => {},
+        liveRun: null
       })
     );
 
     expect(html).toContain('任务详情');
+    expect(html).toContain('运行输出');
+    expect(html).toContain('已经整理完成');
+    expect(html).toContain('先整理变更');
     expect(html).toContain('复制 ID');
     expect(html).toContain('打开聊天');
     expect(html).toContain('每小时检查一次');
@@ -108,7 +135,16 @@ describe('TaskDetailDrawer', () => {
         onOpenChat: () => {},
         onPause: () => {},
         onResume: () => {},
-        onRunNow: () => {}
+        onRunNow: () => {},
+        liveRun: {
+          ...createEmptyChatRunState(),
+          runId: 'run-1',
+          mode: 'task',
+          threadId: 'thread-1',
+          status: 'running',
+          assistantMessage: '实时输出',
+          reasoning: '实时推理'
+        }
       })
     );
 

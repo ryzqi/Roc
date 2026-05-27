@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import type { ChatRunState } from '../chat-run-state';
 import { ChatView } from '../chat/chat-view';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
@@ -20,6 +21,7 @@ const DiagnosticsView = lazy(() =>
 export function ViewContent({
   activeView,
   chatSelectionVersion,
+  liveTaskRun,
   memoryLoadState,
   onNavigateToTaskThread,
   operationsLoadState,
@@ -36,6 +38,7 @@ export function ViewContent({
 }: {
   activeView: ViewId;
   chatSelectionVersion: number;
+  liveTaskRun: ChatRunState | null;
   memoryLoadState: LazyLoadState;
   onNavigateToTaskThread: (threadId: string) => void;
   operationsLoadState: LazyLoadState;
@@ -59,6 +62,7 @@ export function ViewContent({
       <TasksView
         state={state}
         updateLoadedState={updateLoadedState}
+        liveTaskRun={liveTaskRun}
         onNavigateToThread={onNavigateToTaskThread}
         onSelectedTaskIdChange={onTaskSurfaceSelectionChange}
         onSubmitTaskPrompt={onQueueTaskPrompt}

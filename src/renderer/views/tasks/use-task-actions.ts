@@ -67,7 +67,12 @@ export function createTaskActions(input: {
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.runBackgroundNow(taskId).then(() => input.refreshTaskSurface(taskId));
+      void window.roc.tasks.runBackgroundNow(taskId).then(async (result) => {
+        if (!result.ok) {
+          return;
+        }
+        await input.refreshTaskSurface(taskId);
+      });
     }
   };
 }

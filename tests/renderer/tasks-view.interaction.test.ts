@@ -43,6 +43,7 @@ describe('TasksView interactions', () => {
             activeTasks: []
           }),
           updateLoadedState: () => {},
+          liveTaskRun: null,
           onNavigateToThread: () => {},
           onSelectedTaskIdChange: () => {},
           onSubmitTaskPrompt: async () => ({ ok: true as const })
@@ -83,6 +84,7 @@ describe('TasksView interactions', () => {
             }
           }),
           updateLoadedState: () => {},
+          liveTaskRun: null,
           onNavigateToThread: () => {},
           onSelectedTaskIdChange: () => {},
           onSubmitTaskPrompt
@@ -168,6 +170,7 @@ describe('TasksView interactions', () => {
             }
           }),
           updateLoadedState,
+          liveTaskRun: null,
           onNavigateToThread: () => {},
           onSelectedTaskIdChange: () => {},
           onSubmitTaskPrompt: async () => ({ ok: true as const })

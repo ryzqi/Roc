@@ -158,9 +158,57 @@ describe('deep agent backend', () => {
       expect(agentEvent?.payload).toMatchObject({
         command: 'dir',
         cwd: workspaceRoot,
+        output: expect.stringContaining('backend-note.txt'),
+        outputTruncated: false,
         usedRtk: false,
         bypassReason: 'rtk_binary_missing'
       });
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts and truncates persisted agent execute output', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-execute-redacted-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      writeFileSync(
+        join(workspaceRoot, 'secret-output.txt'),
+        `Authorization: Bearer sk-secret-value\n${'x'.repeat(5000)}\n`,
+        'utf8'
+      );
+      const task = services.taskService.createTaskRun({
+        userInput: '读取含密钥的输出',
+        modelId: 'model-ready',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      services.taskService.markRunRunning(task.id);
+      const backend = createBackend({
+        workspaceService: services.workspaceService,
+        paths: services.paths,
+        shellExecutionService: createShellExecutionAdapter({
+          threadId: task.threadId,
+          runId: task.id
+        }),
+        store: new InMemoryStore()
+      }).backend;
+
+      await backend.execute('type secret-output.txt');
+      const snapshot = services.taskService.getSnapshot();
+      const agentEvent = snapshot.recentEvents.find((event) => event.runId === task.id && event.type === 'agent_execute');
+      if (agentEvent === undefined) {
+        throw new Error('Expected persisted agent_execute event.');
+      }
+      const payload = agentEvent.payload as { output?: unknown; outputTruncated?: unknown };
+
+      expect(payload.output).toBeTypeOf('string');
+      expect(payload.output).toContain('[REDACTED]');
+      expect(payload.output).not.toContain('sk-secret-value');
+      expect(String(payload.output).length).toBeLessThanOrEqual(4096);
+      expect(payload.outputTruncated).toBe(true);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

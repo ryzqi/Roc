@@ -218,7 +218,7 @@ describe('workspace dialog IPC', () => {
       recentSkippedCount: 0,
       lastError: null
     });
-    const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue(null);
+    const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue('run_1');
     const registerTaskSpy = vi.spyOn(services.taskSchedulerService, 'registerTask').mockImplementation(() => {});
     const unregisterTaskSpy = vi.spyOn(services.taskSchedulerService, 'unregisterTask').mockImplementation(() => {});
     const createdTask = {
@@ -333,6 +333,32 @@ describe('workspace dialog IPC', () => {
     });
     expect(openInChatSpy).toHaveBeenCalledWith('task_1');
     expect(schedulerStatusSpy).toHaveBeenCalled();
+  });
+
+  it('does not return fake run-now success when the scheduler starts no run', async () => {
+    const broadcastTaskUpdated = vi.fn();
+    registerIpc(services, {} as BrowserWindow, {
+      openMainPage: () => undefined,
+      openQuickEntry: async () => undefined,
+      openTrayEntry: async () => undefined,
+      broadcastTaskUpdated
+    });
+    const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue(null);
+
+    const result = await electronMock.handlers.get(ipcChannels.tasksRunBackgroundNow)?.({}, 'task_1');
+
+    expect(runNowSpy).toHaveBeenCalledWith('task_1');
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'background_task_run_not_started',
+        message: '后台任务没有启动新的运行。',
+        category: 'conflict',
+        retryable: true,
+        userAction: '请刷新任务工作台，确认任务仍处于可运行状态后重试。'
+      }
+    });
+    expect(broadcastTaskUpdated).not.toHaveBeenCalled();
   });
 
   it('records timing metadata for registered IPC handlers', async () => {

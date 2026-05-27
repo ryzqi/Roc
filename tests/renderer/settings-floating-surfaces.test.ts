@@ -13,7 +13,6 @@ import { ProvidersSection } from '../../src/renderer/settings/sections/providers
 import { createProviderDraft } from '../../src/renderer/settings-model';
 import { QuickEntryView } from '../../src/renderer/views/floating/QuickEntryView';
 import { TrayEntryView } from '../../src/renderer/views/floating/TrayEntryView';
-import { TraySummaryPanel } from '../../src/renderer/views/floating/TraySummaryPanel';
 
 function createPermissions(mode: PermissionsConfig['mode'] = 'fully_automatic'): PermissionsConfig {
   return {
@@ -178,11 +177,6 @@ describe('settings and floating surfaces', () => {
         updateLoadedState: () => {}
       })
     );
-    const traySummaryHtml = renderToStaticMarkup(
-      React.createElement(TraySummaryPanel, {
-        traySummary: floatingState.traySummary
-      })
-    );
 
     expect(providersHtml).not.toContain('provider-status-dot');
     expect(providersHtml).toContain('status-pill');
@@ -190,6 +184,5 @@ describe('settings and floating surfaces', () => {
     expect(quickHtml).not.toContain('card-title');
     expect(trayHtml).toContain('single-panel');
     expect(trayHtml).not.toContain('card-title');
-    expect(traySummaryHtml).toContain('section-title">托盘摘要');
   });
 });

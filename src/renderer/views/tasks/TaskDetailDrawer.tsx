@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import type { ActiveTaskItem, ScheduledTaskRun, TaskDetail, TaskRun } from '../../../shared/types';
+import type { ChatRunState } from '../../chat-run-state';
 import { Row } from '../../components/Row';
+import { TaskRunOutputPanel } from './TaskRunOutputPanel';
+import { buildTaskRunOutput } from './task-run-output';
 
 export function TaskDetailDrawer({
   detail,
   item,
+  liveRun,
   scheduledRuns,
   onCancel,
   onDelete,
@@ -16,6 +20,7 @@ export function TaskDetailDrawer({
 }: {
   detail: TaskDetail | null;
   item: ActiveTaskItem | null;
+  liveRun: ChatRunState | null;
   scheduledRuns: ScheduledTaskRun[];
   onCancel: (item: ActiveTaskItem) => void;
   onDelete: (item: ActiveTaskItem) => void;
@@ -25,8 +30,12 @@ export function TaskDetailDrawer({
   onResume: (item: ActiveTaskItem) => void;
   onRunNow: (item: ActiveTaskItem) => void;
 }): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<'overview' | 'runs' | 'events' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'output' | 'runs' | 'events' | 'settings'>('overview');
   const [copied, setCopied] = useState(false);
+  const runOutput = buildTaskRunOutput({
+    detail,
+    liveRun
+  });
 
   if (item === null) {
     return (
@@ -61,6 +70,7 @@ export function TaskDetailDrawer({
       </div>
       <div className="task-detail-tabs" role="tablist" aria-label="任务详情">
         <button type="button" aria-pressed={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>概览</button>
+        <button type="button" aria-pressed={activeTab === 'output'} onClick={() => setActiveTab('output')}>运行输出</button>
         <button type="button" aria-pressed={activeTab === 'runs'} onClick={() => setActiveTab('runs')}>运行历史</button>
         <button type="button" aria-pressed={activeTab === 'events'} onClick={() => setActiveTab('events')}>事件流</button>
         <button type="button" aria-pressed={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>设置</button>
@@ -84,6 +94,16 @@ export function TaskDetailDrawer({
           />
         </div>
       ) : null}
+      {activeTab === 'overview' && runOutput !== null ? <TaskRunOutputPanel output={runOutput} compact /> : null}
+      {activeTab === 'output'
+        ? runOutput === null
+          ? (
+            <div className="list-rows">
+              <Row title="运行输出" sub="当前没有最近运行输出。" tag="空" tone="warn" />
+            </div>
+            )
+          : <TaskRunOutputPanel output={runOutput} />
+        : null}
       {activeTab === 'runs' ? (
         <div className="list-rows">
           {detail === null || detail.runHistory.length === 0 ? (

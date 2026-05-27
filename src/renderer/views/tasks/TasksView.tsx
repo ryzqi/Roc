@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ActiveTaskItem } from '../../../shared/types';
 import { buildTaskProposalPrompt } from '../../../shared/background-task-tool-contract';
+import type { ChatRunState } from '../../chat-run-state';
 import { EmptyState } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
@@ -16,12 +17,14 @@ import { useTaskActions } from './use-task-actions';
 export function TasksView({
   state,
   updateLoadedState,
+  liveTaskRun,
   onNavigateToThread,
   onSelectedTaskIdChange,
   onSubmitTaskPrompt
 }: {
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
+  liveTaskRun: ChatRunState | null;
   onNavigateToThread: (threadId: string) => void;
   onSelectedTaskIdChange: (taskId: string | null | undefined) => void;
   onSubmitTaskPrompt: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -116,6 +119,7 @@ export function TasksView({
               <TaskDetailDrawer
                 item={selectedItem}
                 detail={selectedBackgroundTaskId === state.taskDetail?.taskId ? state.taskDetail : null}
+                liveRun={liveTaskRun?.threadId === selectedItem?.threadId ? liveTaskRun : null}
                 scheduledRuns={selectedScheduledRuns}
                 onCancel={actions.cancelTask}
                 onDelete={actions.deleteTask}

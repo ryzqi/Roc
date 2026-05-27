@@ -65,6 +65,7 @@ import { getStartupLoadIntent } from './startup-load-policy';
 import { sanitizeTestId } from './utils/sanitize-test-id';
 import { ViewContent } from './views/ViewContent';
 import { RailOverlay } from './workbench/RailOverlay';
+import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
 import '@xterm/xterm/css/xterm.css';
 import 'react-diff-view/style/index.css';
 
@@ -86,6 +87,7 @@ export function App(): React.JSX.Element {
   const [state, setState] = useState<LoadedState | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
+  const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -155,6 +157,24 @@ export function App(): React.JSX.Element {
       void refreshTaskState().catch((refreshError: unknown) => {
         setError(refreshError instanceof Error ? refreshError.message : 'Roc 任务状态刷新失败。');
       });
+    });
+  }, [refreshTaskState]);
+
+  useEffect(() => {
+    return window.roc.chat.onRunEvent((event) => {
+      if (event.type === 'run_started' && event.mode !== 'task') {
+        return;
+      }
+      setTaskLiveRunState((current) => applyChatRunEvent(current, event));
+      if (
+        event.type === 'run_completed' ||
+        event.type === 'run_failed' ||
+        event.type === 'run_interrupted'
+      ) {
+        void refreshTaskState().catch((refreshError: unknown) => {
+          setError(refreshError instanceof Error ? refreshError.message : 'Roc 任务状态刷新失败。');
+        });
+      }
     });
   }, [refreshTaskState]);
 
@@ -587,6 +607,7 @@ export function App(): React.JSX.Element {
         <ViewContent
           activeView={activeView}
           chatSelectionVersion={chatSelectionVersion}
+          liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
           memoryLoadState={memoryLoadState}
           onNavigateToTaskThread={navigateToTaskThread}
           operationsLoadState={operationsLoadState}
@@ -802,6 +823,7 @@ export function App(): React.JSX.Element {
                 <ViewContent
                   activeView={activeView}
                   chatSelectionVersion={chatSelectionVersion}
+                  liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
                   memoryLoadState={memoryLoadState}
                   onNavigateToTaskThread={navigateToTaskThread}
                   operationsLoadState={operationsLoadState}

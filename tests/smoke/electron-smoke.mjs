@@ -156,6 +156,72 @@ try {
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="background-task-summary"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid^="task-list-section-"]', { timeout: 5000 });
+  const manualRunNowEvidence = await page.evaluate(async (workspacePath) => {
+    async function unwrap(result, label) {
+      if (!result.ok) {
+        throw new Error(`${label} failed: ${result.error.message}`);
+      }
+      return result.data;
+    }
+
+    const preview = await unwrap(
+      await window.roc.tasks.createBackgroundTaskPreview({
+        goal: 'Smoke manual run-now diagnostic task',
+        trigger: {
+          type: 'manual',
+          description: 'manual smoke trigger'
+        },
+        workspacePath,
+        allowedActions: ['dir'],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      }),
+      'manual background task preview'
+    );
+    const task = await unwrap(await window.roc.tasks.createBackgroundTask(preview), 'manual background task create');
+    const runNow = await unwrap(await window.roc.tasks.runBackgroundNow(task.id), 'manual background task run now');
+    if (runNow.runId === task.id) {
+      throw new Error('manual run-now returned task id instead of real run id');
+    }
+    await new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('manual run-now output timeout')), 10000);
+      const poll = async () => {
+        try {
+          const detail = await unwrap(await window.roc.tasks.getTaskDetail({ taskId: task.id }), 'manual task detail');
+          const hasOutput = detail.recentEvents.some((event) =>
+            event.runId === runNow.runId &&
+            (event.type === 'message' || event.type === 'message_delta' || event.type === 'reasoning_delta')
+          );
+          if (hasOutput) {
+            window.clearTimeout(timeout);
+            resolve(undefined);
+            return;
+          }
+          window.setTimeout(poll, 250);
+        } catch (error) {
+          window.clearTimeout(timeout);
+          reject(error);
+        }
+      };
+      void poll();
+    });
+    const detail = await unwrap(await window.roc.tasks.getTaskDetail({ taskId: task.id }), 'manual task detail after run');
+    return {
+      taskId: task.id,
+      runId: runNow.runId,
+      returnedRealRunId: runNow.runId !== task.id,
+      outputEventTypes: detail.recentEvents.filter((event) => event.runId === runNow.runId).map((event) => event.type)
+    };
+  }, workspaceRoot);
+  await page.reload();
+  await waitForAppReady(page, 'after-manual-run-now', artifactDir);
+  await page.click('[data-testid="nav-tasks"]');
+  await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
+  await page.locator(`[data-testid="task-row-${manualRunNowEvidence.taskId}"]`).click();
+  await page.getByRole('button', { name: '运行输出' }).waitFor({ timeout: 10000 });
+  await page.getByTestId('task-run-output').waitFor({ timeout: 10000 });
+  const manualRunOutputText = await page.textContent('[data-testid="task-run-output"]');
   const taskText = await page.textContent('[data-testid="tasks-view"]');
   if (taskText === null) {
     throw new Error('Smoke could not read tasks view text.');
@@ -2241,6 +2307,12 @@ try {
       taskProposalEvidence.hasProposeToolCallStart &&
       taskProposalEvidence.hasProposeToolCallEnd &&
       taskProposalEvidence.schemaFailureCount === 0,
+    manualRunNowStartsRealRun:
+      manualRunNowEvidence.returnedRealRunId &&
+      manualRunNowEvidence.runId.startsWith('run_') &&
+      manualRunNowEvidence.outputEventTypes.some((type) => type === 'message' || type === 'message_delta') &&
+      typeof manualRunOutputText === 'string' &&
+      manualRunOutputText.includes('运行输出'),
     traySummaryVisible:
       taskText.includes('活跃任务') &&
       taskText.includes('调度器') &&
@@ -2720,6 +2792,7 @@ try {
     historySidebarShowsRealThreads: rendererBoundary.historySidebarShowsRealThreads,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,
     naturalLanguageTaskCreated: rendererBoundary.naturalLanguageTaskCreated,
+    manualRunNowStartsRealRun: rendererBoundary.manualRunNowStartsRealRun,
     traySummaryVisible: rendererBoundary.traySummaryVisible,
     diagnosticPackageVisible: rendererBoundary.diagnosticPackageVisible,
     performanceSampleVisible: rendererBoundary.performanceSampleVisible,
@@ -2837,6 +2910,8 @@ try {
       collapsedChatLayoutAfterClose,
       chatResultLayoutEvidence,
       skillLayoutEvidence,
+      manualRunNowEvidence,
+      manualRunOutputText,
       taskProposalEvidence,
       providerSettingsEvidence,
       previewText

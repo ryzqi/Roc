@@ -202,6 +202,82 @@ describe('Roc foundation services tasks', () => {
     expect(secondContext).toBeNull();
   });
 
+  it('loads complete latest run output events even when the thread has newer noise', () => {
+    const preview = context.services.taskService.createBackgroundTaskPreview({
+      goal: '重放长任务输出',
+      trigger: {
+        type: 'manual',
+        description: '手动触发'
+      },
+      workspacePath: context.root,
+      allowedActions: ['pnpm test'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const task = context.services.taskService.createBackgroundTask(preview);
+    const run = context.services.taskService.createTaskRun({
+      threadId: task.threadId,
+      userInput: '重放长任务输出',
+      modelId: 'model-ready',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    context.services.taskService.recordEvents([
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'reasoning_delta',
+        payload: { delta: 'early reasoning' }
+      },
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'tool_call',
+        payload: { name: 'web_search', status: 'end', output: 'early tool output' }
+      }
+    ]);
+    for (let index = 0; index < 25; index += 1) {
+      context.services.taskService.recordEvent({
+        threadId: run.threadId,
+        runId: `run_noise_${index}`,
+        type: 'diagnostic',
+        payload: {
+          index
+        }
+      });
+    }
+
+    const detail = context.services.taskService.getTaskDetail({
+      taskId: task.id,
+      schedulerRegistered: false
+    });
+
+    expect(detail.lastRunId).toBe(run.id);
+    expect(detail.recentEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: run.id,
+          type: 'reasoning_delta',
+          payload: {
+            delta: 'early reasoning'
+          }
+        }),
+        expect.objectContaining({
+          runId: run.id,
+          type: 'tool_call',
+          payload: {
+            name: 'web_search',
+            status: 'end',
+            output: 'early tool output'
+          }
+        })
+      ])
+    );
+  });
+
   it('generates redacted diagnostic packages with task, RTK and performance evidence', () => {
     for (let index = 0; index < 505; index += 1) {
       context.services.performanceObserverService.record({

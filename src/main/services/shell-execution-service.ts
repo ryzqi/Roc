@@ -5,6 +5,7 @@ import { RocDomainError } from './errors';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { TaskService } from './task-service';
 import type { WorkspaceService } from './workspace-service';
+import { redact } from './deep-agent/redact';
 
 const readOnlyCommands = new Set(['dir', 'ls', 'pwd', 'git status', 'git diff', 'rg', 'type', 'cat']);
 const highRiskCommandPrefixes = [
@@ -24,6 +25,7 @@ const highRiskCommandPrefixes = [
 ];
 const powershellUtf8Prefix =
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
+const maxPersistedAgentOutputChars = 4096;
 
 type ExecutedShellCommand = {
   stdout: string;
@@ -110,14 +112,16 @@ export class ShellExecutionService {
         threadId: request.threadId,
         runId: request.runId,
         type: 'agent_execute',
-        payload: {
+        payload: this.buildAgentExecutePayload({
           command: result.command,
           normalizedCommand: result.normalizedCommand,
           cwd: result.cwd,
           exitCode: result.exitCode,
+          durationMs: result.durationMs,
           usedRtk: result.usedRtk,
-          bypassReason: result.bypassReason
-        }
+          bypassReason: result.bypassReason,
+          output: this.combineOutput(result.stdout, result.stderr)
+        })
       });
     }
 
@@ -159,14 +163,16 @@ export class ShellExecutionService {
         threadId: request.threadId,
         runId: request.runId,
         type: 'agent_execute',
-        payload: {
+        payload: this.buildAgentExecutePayload({
           command: result.command,
           normalizedCommand: result.normalizedCommand,
           cwd: result.cwd,
           exitCode: result.exitCode,
+          durationMs: result.durationMs,
           usedRtk: result.usedRtk,
-          bypassReason: result.bypassReason
-        }
+          bypassReason: result.bypassReason,
+          output: this.combineOutput(result.stdout, result.stderr)
+        })
       });
     }
 
@@ -194,14 +200,15 @@ export class ShellExecutionService {
         threadId: input.threadId,
         runId: input.runId,
         type: 'agent_execute',
-        payload: {
+        payload: this.buildAgentExecutePayload({
           command: input.command,
           cwd,
           exitCode: execution.exitCode,
           durationMs: Date.now() - startedAt,
           usedRtk: execution.usedRtk,
-          bypassReason: execution.bypassReason
-        }
+          bypassReason: execution.bypassReason,
+          output
+        })
       });
     }
 
@@ -239,14 +246,15 @@ export class ShellExecutionService {
         threadId: input.threadId,
         runId: input.runId,
         type: 'agent_execute',
-        payload: {
+        payload: this.buildAgentExecutePayload({
           command: input.command,
           cwd,
           exitCode: execution.exitCode,
           durationMs: Date.now() - startedAt,
           usedRtk: execution.usedRtk,
-          bypassReason: execution.bypassReason
-        }
+          bypassReason: execution.bypassReason,
+          output
+        })
       });
     }
 
@@ -518,5 +526,41 @@ export class ShellExecutionService {
       return stdout;
     }
     return `${stdout}\n[stderr]\n${stderr}`;
+  }
+
+  private buildAgentExecutePayload(input: {
+    command: string;
+    normalizedCommand?: string;
+    cwd: string;
+    exitCode: number;
+    durationMs?: number;
+    usedRtk: boolean;
+    bypassReason?: ShellExecutionResult['bypassReason'];
+    output: string;
+  }): Record<string, unknown> {
+    return {
+      command: input.command,
+      normalizedCommand: input.normalizedCommand,
+      cwd: input.cwd,
+      exitCode: input.exitCode,
+      durationMs: input.durationMs,
+      usedRtk: input.usedRtk,
+      bypassReason: input.bypassReason,
+      ...this.preparePersistedAgentOutput(input.output)
+    };
+  }
+
+  private preparePersistedAgentOutput(output: string): { output: string; outputTruncated: boolean } {
+    const redacted = redact(output);
+    if (redacted.length <= maxPersistedAgentOutputChars) {
+      return {
+        output: redacted,
+        outputTruncated: false
+      };
+    }
+    return {
+      output: redacted.slice(0, maxPersistedAgentOutputChars),
+      outputTruncated: true
+    };
   }
 }

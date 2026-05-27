@@ -684,7 +684,7 @@ export class DeepAgentRuntimeService {
     const taskEvents: Array<{
       threadId: string;
       runId: string;
-      type: 'message_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed';
+      type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed';
       payload: Record<string, unknown>;
     }> = [];
     const callbacks = {
@@ -692,7 +692,7 @@ export class DeepAgentRuntimeService {
       emitTodoEvent: (candidate: unknown) => this.emitTodoEvent(context.runId, candidate),
       markVisibleOutput: onVisibleOutput,
       recordTaskEvent: (
-        type: 'message_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
+        type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
         payload: Record<string, unknown>
       ) => {
         if (context.taskRun === null) {
