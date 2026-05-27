@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildChatResumeRunRequest, ChatView } from '../../src/renderer/chat/chat-view';
-import { buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
+import { buildManualScrollBottomOptions, buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
 import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
 import { bubbleEnterTransition, resolveMotionTransition } from '../../src/renderer/animations';
@@ -97,6 +97,11 @@ describe('chat view', () => {
 
     expect(options).toEqual({ top: 1234 });
     expect('behavior' in options).toBe(false);
+  });
+
+  it('uses smooth scroll only for manual bottom jumps when motion is allowed', () => {
+    expect(buildManualScrollBottomOptions(1234, false)).toEqual({ top: 1234, behavior: 'smooth' });
+    expect(buildManualScrollBottomOptions(1234, true)).toEqual({ top: 1234 });
   });
 
   it('keeps chat reasoning animation off layout-affecting max-height', () => {

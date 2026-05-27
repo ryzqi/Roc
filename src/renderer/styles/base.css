@@ -15,9 +15,11 @@ body {
   line-height: 1.65;
   color: var(--text);
   background: var(--bg-gradient);
+  cursor: default;
   letter-spacing: 0;
   overflow: hidden;
   text-rendering: optimizeLegibility;
+  user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -35,6 +37,27 @@ kbd,
 samp {
   font-family: var(--font-mono);
   font-feature-settings: var(--font-feature-mono);
+}
+
+a[href] {
+  cursor: pointer;
+}
+
+input,
+textarea,
+[contenteditable='true'],
+.chat-message-row,
+.chat-bubble,
+.code-card,
+.code-preview,
+.git-diff-scroll,
+.terminal,
+.xterm,
+code,
+pre,
+kbd,
+samp {
+  user-select: text;
 }
 
 .boot,

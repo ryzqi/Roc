@@ -41,8 +41,21 @@ describe('renderer animation configuration', () => {
       allCss.match(/(^|\n)\s*\.titlebar-button\.danger:hover\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
     const ipcContract = readFileSync('src/shared/ipc.ts', 'utf8');
     const preloadContract = readFileSync('src/preload/index.ts', 'utf8');
+    const pointerBlocks = Array.from(
+      allCss.matchAll(/(?<selector>[^{}]+)\{(?<body>[^{}]*cursor\s*:\s*pointer\s*;[^{}]*)\}/gu)
+    ).map((match) => match.groups?.selector.trim().replace(/\s+/g, ' ') ?? '');
+    const baseBodyBlock = baseCss.match(/(^|\n)\s*body\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
 
     expect(baseCss).not.toMatch(/(^|\n)\s*button\s*\{[^}]*cursor\s*:\s*pointer\s*;/u);
+    expect(pointerBlocks).toEqual(['a[href]']);
+    expect(baseBodyBlock).toContain('cursor: default;');
+    expect(baseBodyBlock).toContain('user-select: none;');
+    expect(baseCss).toContain('input,');
+    expect(baseCss).toContain('.chat-message-row,');
+    expect(baseCss).toContain('.code-preview,');
+    expect(baseCss).toContain('.git-diff-scroll,');
+    expect(baseCss).toContain('.terminal,');
+    expect(baseCss).toContain('user-select: text;');
     expect(allCss).not.toMatch(/scroll-behavior\s*:\s*smooth\s*;/u);
     expect(appShellShadow).toBe('none');
     expect(titlebarBlock).toContain('width: 46px;');

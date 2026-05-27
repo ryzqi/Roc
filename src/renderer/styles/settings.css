@@ -55,7 +55,6 @@
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
@@ -286,7 +285,6 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   font-weight: 500;
-  cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -403,7 +401,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
   list-style: none;
   color: var(--ink);
   font-size: var(--font-meta-size);
@@ -507,7 +504,6 @@
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -569,7 +565,6 @@
   color: var(--muted);
   font-size: 22px;
   line-height: 1;
-  cursor: pointer;
 }
 
 .settings-modal-close:hover {
@@ -630,7 +625,6 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   font-weight: 500;
-  cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -691,7 +685,6 @@
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -816,7 +809,6 @@
   border-radius: 50%;
   background: var(--surface-strong);
   color: var(--accent);
-  cursor: pointer;
 }
 
 .provider-detail-test:hover {
@@ -827,7 +819,6 @@
 .provider-detail-toggle {
   display: inline-flex;
   align-items: center;
-  cursor: pointer;
 }
 
 .provider-detail-toggle--inline {
@@ -893,7 +884,6 @@
   color: var(--muted);
   font-size: 12.5px;
   font-weight: 500;
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -947,7 +937,6 @@
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
   overflow: hidden;
 }
 
@@ -980,7 +969,6 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   font-weight: 500;
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -1012,7 +1000,6 @@
   color: var(--text);
   font-size: var(--font-ui-size);
   font-weight: 500;
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 

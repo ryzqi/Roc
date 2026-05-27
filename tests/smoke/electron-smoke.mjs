@@ -1825,7 +1825,10 @@ try {
         assistantBubbleUnframed: false,
         assistantContentAnchoredLeft: false,
         assistantBubbleFitsContent: false,
-        assistantBubbleNarrowerThanRow: false
+        assistantBubbleNarrowerThanRow: false,
+        userMessageUserSelect: null,
+        assistantMessageUserSelect: null,
+        inputUserSelect: null
       };
     }
     const inputRect = input.getBoundingClientRect();
@@ -1857,7 +1860,10 @@ try {
       assistantBubbleNarrowerThanRow:
         assistantBubbleRect !== null && assistantBubbleRect.width <= assistantRect.width - 24,
       assistantGapToComposer:
-        composerRect !== null ? Math.round(composerRect.top - assistantRect.bottom) : null
+        composerRect !== null ? Math.round(composerRect.top - assistantRect.bottom) : null,
+      userMessageUserSelect: window.getComputedStyle(latestUser).userSelect,
+      assistantMessageUserSelect: window.getComputedStyle(latestAssistant).userSelect,
+      inputUserSelect: window.getComputedStyle(input).userSelect
     };
   });
   const taskCapabilityEvidence = await page.evaluate(async (expectedInput) => {
@@ -1989,18 +1995,18 @@ try {
   const trayBrowserWindow = await app.browserWindow(trayWindow);
   const quickBounds = await quickBrowserWindow.evaluate((window) => window.getBounds());
   const trayBounds = await trayBrowserWindow.evaluate((window) => window.getBounds());
-  const currentDisplayWorkArea = await app.evaluate(({ screen }) => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
+  const displayWorkAreas = await app.evaluate(({ screen }) => screen.getAllDisplays().map((display) => display.workArea));
   const materialEvidence = {
     main: mainMaterialEvidence,
     quick: await probeWindowMaterial(quickBrowserWindow, 'acrylic'),
     tray: await probeWindowMaterial(trayBrowserWindow, 'acrylic')
   };
   const floatingWindowBoundsEvidence = {
-    currentDisplayWorkArea,
+    displayWorkAreas,
     quick: quickBounds,
     tray: trayBounds,
-    quickInsideCurrentDisplay: boundsInsideWorkArea(quickBounds, currentDisplayWorkArea),
-    trayInsideCurrentDisplay: boundsInsideWorkArea(trayBounds, currentDisplayWorkArea)
+    quickInsideDisplay: displayWorkAreas.some((workArea) => boundsInsideWorkArea(quickBounds, workArea)),
+    trayInsideDisplay: displayWorkAreas.some((workArea) => boundsInsideWorkArea(trayBounds, workArea))
   };
   const entryButtonEvidence = {
     quickOpenTasks: false,
@@ -2412,6 +2418,50 @@ try {
       shellClassName: shell.className,
       railGapToShellRight: Math.round(shellRect.right - railRect.right),
       composerWidthRatio: Number((composerRect.width / shellRect.width).toFixed(3))
+    };
+  });
+  const phase3WebViewEvidence = await page.evaluate(() => {
+    function readStyle(selector) {
+      const element = document.querySelector(selector);
+      if (!(element instanceof HTMLElement)) {
+        return {
+          exists: element !== null,
+          cursor: null,
+          userSelect: null
+        };
+      }
+      const style = getComputedStyle(element);
+      return {
+        exists: true,
+        cursor: style.cursor,
+        userSelect: style.userSelect
+      };
+    }
+
+    const pointerCursorNonLinks = Array.from(document.querySelectorAll('*'))
+      .filter((element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false;
+        }
+        if (element instanceof HTMLAnchorElement && element.hasAttribute('href')) {
+          return false;
+        }
+        return getComputedStyle(element).cursor === 'pointer';
+      })
+      .slice(0, 8)
+      .map((element) => ({
+        tagName: element.tagName.toLowerCase(),
+        className: element.className,
+        testId: element.getAttribute('data-testid')
+      }));
+
+    return {
+      body: readStyle('body'),
+      navChat: readStyle('[data-testid="nav-chat"]'),
+      chatHistorySearchToggle: readStyle('[data-testid="chat-history-search-toggle"]'),
+      chatNewConversation: readStyle('[data-testid="chat-new-conversation"]'),
+      chatInput: readStyle('[data-testid="chat-input"]'),
+      pointerCursorNonLinks
     };
   });
 
@@ -2964,12 +3014,22 @@ try {
       windowPlacementEvidence.snapshot?.maximized === false &&
       typeof windowPlacementEvidence.snapshot?.updatedAt === 'string',
     floatingWindowBoundsResolved:
-      floatingWindowBoundsEvidence.quickInsideCurrentDisplay &&
-      floatingWindowBoundsEvidence.trayInsideCurrentDisplay &&
+      floatingWindowBoundsEvidence.quickInsideDisplay &&
+      floatingWindowBoundsEvidence.trayInsideDisplay &&
       typeof floatingWindowBoundsEvidence.quick.x === 'number' &&
       typeof floatingWindowBoundsEvidence.quick.y === 'number' &&
       typeof floatingWindowBoundsEvidence.tray.x === 'number' &&
       typeof floatingWindowBoundsEvidence.tray.y === 'number',
+    phase3WebViewBehavior:
+      phase3WebViewEvidence.body.cursor === 'default' &&
+      phase3WebViewEvidence.body.userSelect === 'none' &&
+      phase3WebViewEvidence.chatHistorySearchToggle.cursor === 'default' &&
+      phase3WebViewEvidence.chatNewConversation.cursor === 'default' &&
+      chatResultLayoutEvidence.userMessageUserSelect !== 'none' &&
+      chatResultLayoutEvidence.assistantMessageUserSelect !== 'none' &&
+      chatResultLayoutEvidence.inputUserSelect !== 'none' &&
+      phase3WebViewEvidence.chatInput.userSelect !== 'none' &&
+      phase3WebViewEvidence.pointerCursorNonLinks.length === 0,
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
@@ -2984,6 +3044,7 @@ try {
     materialEvidenceRecorded: rendererBoundary.materialEvidenceRecorded,
     windowPlacementPersisted: rendererBoundary.windowPlacementPersisted,
     floatingWindowBoundsResolved: rendererBoundary.floatingWindowBoundsResolved,
+    phase3WebViewBehavior: rendererBoundary.phase3WebViewBehavior,
     windowDragWorks: rendererBoundary.windowDragWorks,
     windowSetBoundsRemoved: rendererBoundary.windowSetBoundsRemoved,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
@@ -3120,6 +3181,7 @@ try {
       materialEvidence,
       windowPlacementEvidence,
       floatingWindowBoundsEvidence,
+      phase3WebViewEvidence,
       previewText
     },
     failedChecks,

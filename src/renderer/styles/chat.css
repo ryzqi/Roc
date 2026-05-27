@@ -195,7 +195,6 @@
 
 .chat-bubble-reasoning > summary {
   list-style: none;
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -402,7 +401,6 @@
   font-size: var(--font-ui-size);
   font-weight: 500;
   letter-spacing: 0;
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -487,7 +485,6 @@
   color: var(--muted);
   font-size: var(--font-meta-size);
   font-weight: 500;
-  cursor: pointer;
   transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
 }
 

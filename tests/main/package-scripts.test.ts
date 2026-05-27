@@ -31,5 +31,6 @@ describe('package scripts', () => {
     expect(electronSmokeScript).toContain('browserWindowCount');
     expect(electronSmokeScript).toContain('materialEvidence');
     expect(electronSmokeScript).toContain('windowPlacementEvidence');
+    expect(electronSmokeScript).toContain('phase3WebViewEvidence');
   });
 });

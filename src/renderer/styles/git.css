@@ -72,7 +72,6 @@
 .git-commit-button--ready {
   background: var(--ink);
   color: #ffffff;
-  cursor: pointer;
   border-color: var(--ink);
 }
 
@@ -103,7 +102,6 @@
   border: 0;
   background: transparent;
   color: var(--accent);
-  cursor: pointer;
 }
 
 .git-branch-status {

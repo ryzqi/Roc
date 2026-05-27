@@ -141,7 +141,6 @@
   border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
@@ -226,10 +225,6 @@
     border-color var(--transition-base),
     background var(--transition-base),
     color var(--transition-base);
-}
-
-button.model-pill {
-  cursor: pointer;
 }
 
 .composer-popover {
