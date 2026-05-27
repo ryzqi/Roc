@@ -129,12 +129,6 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   );
   timedHandle(ipcChannels.windowGetState, () => wrapIpc(() => getWindowState(mainWindow)));
   timedHandle(ipcChannels.windowGetBounds, () => wrapIpc(() => getWindowBounds(mainWindow)));
-  timedHandle(ipcChannels.windowSetBounds, (_event, bounds) =>
-    wrapIpc(() => {
-      mainWindow.setBounds(bounds);
-      return getWindowBounds(mainWindow);
-    })
-  );
   timedHandle(ipcChannels.windowMinimize, () =>
     wrapIpc(() => {
       mainWindow.minimize();

@@ -106,7 +106,6 @@ export const ipcChannels = {
   appOpenTrayEntry: 'roc:app:open-tray-entry',
   windowGetState: 'roc:window:get-state',
   windowGetBounds: 'roc:window:get-bounds',
-  windowSetBounds: 'roc:window:set-bounds',
   windowMinimize: 'roc:window:minimize',
   windowToggleMaximize: 'roc:window:toggle-maximize',
   windowClose: 'roc:window:close',
@@ -210,7 +209,6 @@ export type RocPreloadApi = {
   window: {
     getState: () => Promise<IpcResult<WindowStateSnapshot>>;
     getBounds: () => Promise<IpcResult<WindowBoundsSnapshot>>;
-    setBounds: (bounds: WindowBoundsSnapshot) => Promise<IpcResult<WindowBoundsSnapshot>>;
     minimize: () => Promise<IpcResult<WindowStateSnapshot>>;
     toggleMaximize: () => Promise<IpcResult<WindowStateSnapshot>>;
     close: () => Promise<IpcResult<{ closed: true }>>;

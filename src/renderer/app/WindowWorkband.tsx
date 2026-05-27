@@ -1,4 +1,4 @@
-import { PanelLeft, PanelLeftClose, Search, SquarePen } from 'lucide-react';
+import { Copy, Minus, PanelLeft, PanelLeftClose, Search, Square, SquarePen, X } from 'lucide-react';
 import type React from 'react';
 import type { WindowStateSnapshot } from '../../shared/types';
 import { PreviewIcon } from '../components/PreviewIcon';
@@ -10,9 +10,6 @@ export function WindowWorkband({
   onNewConversation,
   onSidebarToggle,
   onWindowClose,
-  onWindowDragMove,
-  onWindowDragStart,
-  onWindowDragStop,
   onWindowMaximizeToggle,
   onWindowMinimize,
   showHistorySearch,
@@ -25,9 +22,6 @@ export function WindowWorkband({
   onNewConversation: () => void;
   onSidebarToggle: () => void;
   onWindowClose: () => void;
-  onWindowDragMove: (event: React.PointerEvent<HTMLElement>) => void;
-  onWindowDragStart: (event: React.PointerEvent<HTMLElement>) => void;
-  onWindowDragStop: (event: React.PointerEvent<HTMLElement>) => void;
   onWindowMaximizeToggle: () => void;
   onWindowMinimize: () => void;
   showHistorySearch: boolean;
@@ -35,19 +29,7 @@ export function WindowWorkband({
   windowState: WindowStateSnapshot;
 }): React.JSX.Element {
   return (
-    <header
-      className="window-workband"
-      data-testid="window-workband"
-      onPointerDown={onWindowDragStart}
-      onPointerMove={onWindowDragMove}
-      onPointerUp={onWindowDragStop}
-      onPointerCancel={onWindowDragStop}
-      onPointerLeave={(event) => {
-        if ((event.buttons & 1) === 0) {
-          onWindowDragStop(event);
-        }
-      }}
-    >
+    <header className="window-workband" data-testid="window-workband">
       <div className="workband-drag-region">
         <div className="workband-primary">
           <div className="brand">
@@ -108,7 +90,7 @@ export function WindowWorkband({
           type="button"
           onClick={onWindowMinimize}
         >
-          <span className="titlebar-glyph" aria-hidden="true">−</span>
+          <Minus aria-hidden="true" className="titlebar-icon" size={12} strokeWidth={1.6} />
         </button>
         <button
           className="icon-button titlebar-button"
@@ -117,7 +99,11 @@ export function WindowWorkband({
           type="button"
           onClick={onWindowMaximizeToggle}
         >
-          <span className="titlebar-glyph" aria-hidden="true">{windowState.maximized ? '↙' : '↗'}</span>
+          {windowState.maximized ? (
+            <Copy aria-hidden="true" className="titlebar-icon titlebar-icon--restore" size={12} strokeWidth={1.6} />
+          ) : (
+            <Square aria-hidden="true" className="titlebar-icon" size={11} strokeWidth={1.7} />
+          )}
         </button>
         <button
           className="icon-button titlebar-button danger"
@@ -126,7 +112,7 @@ export function WindowWorkband({
           type="button"
           onClick={onWindowClose}
         >
-          <span className="titlebar-glyph" aria-hidden="true">×</span>
+          <X aria-hidden="true" className="titlebar-icon" size={13} strokeWidth={1.7} />
         </button>
       </div>
     </header>

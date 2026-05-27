@@ -36,9 +36,21 @@ describe('renderer animation configuration', () => {
       .join('\n');
     const appShellBlock = allCss.match(/(^|\n)\s*\.app-shell\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
     const appShellShadow = appShellBlock.match(/box-shadow\s*:\s*([^;]+);/u)?.[1]?.trim();
+    const titlebarBlock = allCss.match(/(^|\n)\s*\.titlebar-button\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
+    const closeHoverBlock =
+      allCss.match(/(^|\n)\s*\.titlebar-button\.danger:hover\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
+    const ipcContract = readFileSync('src/shared/ipc.ts', 'utf8');
+    const preloadContract = readFileSync('src/preload/index.ts', 'utf8');
 
     expect(baseCss).not.toMatch(/(^|\n)\s*button\s*\{[^}]*cursor\s*:\s*pointer\s*;/u);
     expect(allCss).not.toMatch(/scroll-behavior\s*:\s*smooth\s*;/u);
     expect(appShellShadow).toBe('none');
+    expect(titlebarBlock).toContain('width: 46px;');
+    expect(titlebarBlock).toContain('height: 32px;');
+    expect(titlebarBlock).toContain('border-radius: 0;');
+    expect(closeHoverBlock).toContain('background: #c42b1c;');
+    expect(closeHoverBlock).toContain('color: #ffffff;');
+    expect(ipcContract).not.toContain("windowSetBounds: 'roc:window:set-bounds'");
+    expect(preloadContract).not.toContain('setBounds: (bounds)');
   });
 });

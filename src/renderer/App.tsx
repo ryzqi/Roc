@@ -54,7 +54,6 @@ import {
 } from './app/data-loading';
 import { createWorkspaceRefreshSubscription } from './app/workspace-refresh';
 import { useLazyStartupResource } from './app/use-lazy-startup-resource';
-import { useWindowDrag } from './app/use-window-drag';
 import { PreviewIcon } from './components/PreviewIcon';
 import { filterHistoryItems } from './history-sidebar';
 import type { LoadedState } from './loaded-state';
@@ -279,7 +278,6 @@ export function App(): React.JSX.Element {
   const currentAgentExecution = state?.agent.execution ?? null;
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
-  const { continueWindowDrag, finishWindowDrag, startWindowDrag } = useWindowDrag(windowState);
 
   useEffect(() => {
     const nextSnapshot = {
@@ -649,13 +647,6 @@ export function App(): React.JSX.Element {
         onSidebarToggle={toggleChatSidebar}
         onWindowClose={() => {
           void window.roc.window.close();
-        }}
-        onWindowDragMove={(event) => {
-          continueWindowDrag(event.screenX, event.screenY);
-        }}
-        onWindowDragStart={startWindowDrag}
-        onWindowDragStop={(event) => {
-          finishWindowDrag(event.pointerId);
         }}
         onWindowMaximizeToggle={() => {
           void window.roc.window.toggleMaximize().then((result) => {

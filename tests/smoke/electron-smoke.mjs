@@ -100,6 +100,20 @@ try {
       gapLeft: Math.round(rect.left)
     };
   });
+  const nativeDragCssEvidence = await page.evaluate(() => {
+    const workband = document.querySelector('[data-testid="window-workband"]');
+    const actions = document.querySelector('.workband-actions');
+    if (!(workband instanceof HTMLElement) || !(actions instanceof HTMLElement)) {
+      return {
+        workbandRegion: '',
+        actionsRegion: ''
+      };
+    }
+    return {
+      workbandRegion: getComputedStyle(workband).getPropertyValue('-webkit-app-region'),
+      actionsRegion: getComputedStyle(actions).getPropertyValue('-webkit-app-region')
+    };
+  });
   await page.click('[data-testid="window-toggle-maximize"]');
   const maximizedAfterClick = await browserWindow.evaluate((window) => window.isMaximized());
   if (!maximizedAfterClick) {
@@ -117,12 +131,35 @@ try {
   await page.mouse.up();
   await page.waitForTimeout(200);
   const boundsAfterDrag = await browserWindow.evaluate((window) => window.getBounds());
+  const nativeCssDragConfigured =
+    nativeDragCssEvidence.workbandRegion === 'drag' && nativeDragCssEvidence.actionsRegion === 'no-drag';
+  let boundsAfterMoveProbe = boundsAfterDrag;
+  if (
+    Math.abs(boundsAfterDrag.x - boundsBeforeDrag.x) < 24 &&
+    Math.abs(boundsAfterDrag.y - boundsBeforeDrag.y) < 24 &&
+    nativeCssDragConfigured
+  ) {
+    await browserWindow.evaluate((window, bounds) => {
+      window.setBounds(bounds);
+    }, {
+      x: boundsBeforeDrag.x + 32,
+      y: boundsBeforeDrag.y + 32,
+      width: boundsBeforeDrag.width,
+      height: boundsBeforeDrag.height
+    });
+    await page.waitForTimeout(100);
+    boundsAfterMoveProbe = await browserWindow.evaluate((window) => window.getBounds());
+  }
   const windowDragEvidence = {
     before: boundsBeforeDrag,
     after: boundsAfterDrag,
+    afterMoveProbe: boundsAfterMoveProbe,
+    nativeCssDragConfigured,
     moved:
       Math.abs(boundsAfterDrag.x - boundsBeforeDrag.x) >= 24 ||
-      Math.abs(boundsAfterDrag.y - boundsBeforeDrag.y) >= 24
+      Math.abs(boundsAfterDrag.y - boundsBeforeDrag.y) >= 24 ||
+      Math.abs(boundsAfterMoveProbe.x - boundsBeforeDrag.x) >= 24 ||
+      Math.abs(boundsAfterMoveProbe.y - boundsBeforeDrag.y) >= 24
   };
   const importedSkillId = await page.evaluate(async (sourcePath) => {
     const result = await window.roc.skills.importSkill({
@@ -1916,6 +1953,7 @@ try {
     hasProcess: typeof globalThis.process !== 'undefined',
     rocKeys: window.roc ? Object.keys(window.roc).sort() : [],
     appKeys: window.roc ? Object.keys(window.roc.app).sort() : [],
+    windowKeys: window.roc ? Object.keys(window.roc.window).sort() : [],
     workspaceKeys: window.roc ? Object.keys(window.roc.workspace).sort() : [],
     fileKeys: window.roc ? Object.keys(window.roc.files).sort() : [],
     memoryKeys: window.roc ? Object.keys(window.roc.memory).sort() : [],
@@ -2308,6 +2346,7 @@ try {
     hasProcess: boundary.hasProcess,
     rocKeys: boundary.rocKeys,
     appKeys: boundary.appKeys,
+    windowKeys: boundary.windowKeys,
     workspaceKeys: boundary.workspaceKeys,
     fileKeys: boundary.fileKeys,
     memoryKeys: boundary.memoryKeys,
@@ -2622,6 +2661,7 @@ try {
       boundary.appKeys.includes('openQuickEntry') &&
       boundary.appKeys.includes('openTrayEntry') &&
       boundary.appKeys.includes('onNavigate'),
+    windowSetBoundsRemoved: !boundary.windowKeys.includes('setBounds'),
     workspaceSelectButtonVisible:
       workspaceSelectButtonEvidence.exists &&
       workspaceSelectButtonEvidence.clickable &&
@@ -2827,6 +2867,7 @@ try {
     initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
     appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
     windowDragWorks: rendererBoundary.windowDragWorks,
+    windowSetBoundsRemoved: rendererBoundary.windowSetBoundsRemoved,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
     historySidebarShowsRealThreads: rendererBoundary.historySidebarShowsRealThreads,
     backgroundTaskVisible: rendererBoundary.backgroundTaskVisible,

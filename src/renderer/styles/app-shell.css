@@ -23,7 +23,7 @@
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  padding: 0 16px 0 18px;
+  padding: 0 0 0 18px;
   border-bottom: 1px solid var(--workband-border);
   background: transparent;
   -webkit-app-region: drag;
@@ -170,8 +170,9 @@
 .workband-actions {
   display: flex;
   align-items: center;
+  align-self: stretch;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 0;
   -webkit-app-region: no-drag;
 }
 
@@ -199,22 +200,39 @@
 }
 
 .titlebar-button {
-  width: 26px;
-  height: 26px;
+  width: 46px;
+  height: 32px;
+  border-radius: 0;
+  color: var(--muted);
 }
 
-.titlebar-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1ch;
-  font-size: 14px;
-  line-height: 1;
+.titlebar-button:hover {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--ink);
+}
+
+.titlebar-button:active {
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.titlebar-icon {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+}
+
+.titlebar-icon--restore {
+  transform: translate(1px, -1px);
 }
 
 .titlebar-button.danger:hover {
-  color: var(--st-bad);
-  background: rgba(156, 58, 58, 0.08);
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.titlebar-button.danger:active {
+  background: #a8291d;
+  color: #ffffff;
 }
 
 .status-pill,

@@ -17,7 +17,6 @@ const rocApi: RocPreloadApi = {
   window: {
     getState: () => ipcRenderer.invoke(ipcChannels.windowGetState),
     getBounds: () => ipcRenderer.invoke(ipcChannels.windowGetBounds),
-    setBounds: (bounds) => ipcRenderer.invoke(ipcChannels.windowSetBounds, bounds),
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize),
     toggleMaximize: () => ipcRenderer.invoke(ipcChannels.windowToggleMaximize),
     close: () => ipcRenderer.invoke(ipcChannels.windowClose)
