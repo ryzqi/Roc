@@ -29,5 +29,7 @@ describe('package scripts', () => {
     expect(electronSmokeScript).toContain('nativeModuleProbe');
     expect(electronSmokeScript).toContain('processMetricsSummary');
     expect(electronSmokeScript).toContain('browserWindowCount');
+    expect(electronSmokeScript).toContain('materialEvidence');
+    expect(electronSmokeScript).toContain('windowPlacementEvidence');
   });
 });

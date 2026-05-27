@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { _electron as electron } from '@playwright/test';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { prepareArtifactDir, writeSmokeResult } from './lib/artifacts.mjs';
@@ -41,6 +41,80 @@ const naturalLanguageTaskGoal = '每天晚上 7:40 抓取 AI 新闻并写入 doc
 const naturalLanguageTaskCronExpression = '40 19 * * *';
 const naturalLanguageTaskNextRunAt = '2026-05-26T11:40:00.000Z';
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function readWindowPlacementEvidence(filePath, expectedBounds) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < 2000) {
+    if (existsSync(filePath)) {
+      lastSnapshot = JSON.parse(readFileSync(filePath, 'utf8'));
+      if (
+        lastSnapshot.bounds?.x === expectedBounds.x &&
+        lastSnapshot.bounds?.y === expectedBounds.y &&
+        lastSnapshot.bounds?.width === expectedBounds.width &&
+        lastSnapshot.bounds?.height === expectedBounds.height
+      ) {
+        return {
+          filePath,
+          persisted: true,
+          expectedBounds,
+          snapshot: lastSnapshot
+        };
+      }
+    }
+    await delay(50);
+  }
+  return {
+    filePath,
+    persisted: false,
+    expectedBounds,
+    snapshot: lastSnapshot
+  };
+}
+
+async function probeWindowMaterial(browserWindow, requestedMaterial) {
+  return browserWindow.evaluate((window, material) => {
+    if (typeof window.setBackgroundMaterial !== 'function') {
+      return {
+        requestedMaterial: material,
+        apiAvailable: false,
+        accepted: false,
+        errorMessage: 'setBackgroundMaterial is unavailable'
+      };
+    }
+    try {
+      window.setBackgroundMaterial(material);
+      return {
+        requestedMaterial: material,
+        apiAvailable: true,
+        accepted: true,
+        errorMessage: null
+      };
+    } catch (error) {
+      return {
+        requestedMaterial: material,
+        apiAvailable: true,
+        accepted: false,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }, requestedMaterial);
+}
+
+function boundsInsideWorkArea(bounds, workArea) {
+  return (
+    bounds.x >= workArea.x &&
+    bounds.y >= workArea.y &&
+    bounds.x + bounds.width <= workArea.x + workArea.width &&
+    bounds.y + bounds.height <= workArea.y + workArea.height
+  );
+}
+
 let app;
 let smokeProvider;
 try {
@@ -73,6 +147,7 @@ try {
     menuBarVisible: await browserWindow.evaluate((window) => window.isMenuBarVisible()),
     maximized: await browserWindow.evaluate((window) => window.isMaximized())
   };
+  const mainMaterialEvidence = await probeWindowMaterial(browserWindow, 'mica');
   const workbandBox = await page.locator('[data-testid="window-workband"]').boundingBox();
   if (workbandBox === null) {
     throw new Error('Smoke could not measure immersive workband.');
@@ -161,6 +236,10 @@ try {
       Math.abs(boundsAfterMoveProbe.x - boundsBeforeDrag.x) >= 24 ||
       Math.abs(boundsAfterMoveProbe.y - boundsBeforeDrag.y) >= 24
   };
+  const windowPlacementEvidence = await readWindowPlacementEvidence(
+    join(dataRoot, 'config', 'window-state.json'),
+    boundsAfterMoveProbe
+  );
   const importedSkillId = await page.evaluate(async (sourcePath) => {
     const result = await window.roc.skills.importSkill({
       sourcePath
@@ -1906,6 +1985,23 @@ try {
   const trayWindow = await waitForWindowWithSelector(app, '[data-testid="tray-entry-view"]');
   await quickWindow.waitForSelector('[data-testid="floating-quick"]', { timeout: 5000 });
   await trayWindow.waitForSelector('[data-testid="floating-tray"]', { timeout: 5000 });
+  const quickBrowserWindow = await app.browserWindow(quickWindow);
+  const trayBrowserWindow = await app.browserWindow(trayWindow);
+  const quickBounds = await quickBrowserWindow.evaluate((window) => window.getBounds());
+  const trayBounds = await trayBrowserWindow.evaluate((window) => window.getBounds());
+  const currentDisplayWorkArea = await app.evaluate(({ screen }) => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
+  const materialEvidence = {
+    main: mainMaterialEvidence,
+    quick: await probeWindowMaterial(quickBrowserWindow, 'acrylic'),
+    tray: await probeWindowMaterial(trayBrowserWindow, 'acrylic')
+  };
+  const floatingWindowBoundsEvidence = {
+    currentDisplayWorkArea,
+    quick: quickBounds,
+    tray: trayBounds,
+    quickInsideCurrentDisplay: boundsInsideWorkArea(quickBounds, currentDisplayWorkArea),
+    trayInsideCurrentDisplay: boundsInsideWorkArea(trayBounds, currentDisplayWorkArea)
+  };
   const entryButtonEvidence = {
     quickOpenTasks: false,
     quickOpenChat: false,
@@ -2855,6 +2951,25 @@ try {
       appShellFrameEvidence.gapRight <= 1 &&
       appShellFrameEvidence.gapBottom <= 1 &&
       appShellFrameEvidence.gapLeft <= 1,
+    materialEvidenceRecorded:
+      materialEvidence.main.requestedMaterial === 'mica' &&
+      materialEvidence.quick.requestedMaterial === 'acrylic' &&
+      materialEvidence.tray.requestedMaterial === 'acrylic' &&
+      materialEvidence.main.apiAvailable &&
+      materialEvidence.quick.apiAvailable &&
+      materialEvidence.tray.apiAvailable &&
+      Object.values(materialEvidence).every((item) => item.accepted || typeof item.errorMessage === 'string'),
+    windowPlacementPersisted:
+      windowPlacementEvidence.persisted &&
+      windowPlacementEvidence.snapshot?.maximized === false &&
+      typeof windowPlacementEvidence.snapshot?.updatedAt === 'string',
+    floatingWindowBoundsResolved:
+      floatingWindowBoundsEvidence.quickInsideCurrentDisplay &&
+      floatingWindowBoundsEvidence.trayInsideCurrentDisplay &&
+      typeof floatingWindowBoundsEvidence.quick.x === 'number' &&
+      typeof floatingWindowBoundsEvidence.quick.y === 'number' &&
+      typeof floatingWindowBoundsEvidence.tray.x === 'number' &&
+      typeof floatingWindowBoundsEvidence.tray.y === 'number',
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
@@ -2866,6 +2981,9 @@ try {
     systemMenuHidden: rendererBoundary.systemMenuHidden,
     initialWindowNotMaximized: rendererBoundary.initialWindowNotMaximized,
     appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
+    materialEvidenceRecorded: rendererBoundary.materialEvidenceRecorded,
+    windowPlacementPersisted: rendererBoundary.windowPlacementPersisted,
+    floatingWindowBoundsResolved: rendererBoundary.floatingWindowBoundsResolved,
     windowDragWorks: rendererBoundary.windowDragWorks,
     windowSetBoundsRemoved: rendererBoundary.windowSetBoundsRemoved,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
@@ -2999,6 +3117,9 @@ try {
       manualRunOutputText,
       taskProposalEvidence,
       providerSettingsEvidence,
+      materialEvidence,
+      windowPlacementEvidence,
+      floatingWindowBoundsEvidence,
       previewText
     },
     failedChecks,

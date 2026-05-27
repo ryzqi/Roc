@@ -9,7 +9,7 @@ export const nativeFeelScorecard = Object.freeze({
     { id: 'single_instance', status: 'guarded', evidence: 'WindowsHostService second-instance tests' },
     { id: 'native_window_drag', status: 'guarded', evidence: 'smoke windowDragWorks without renderer setBounds IPC' },
     { id: 'caption_buttons', status: 'guarded', evidence: 'renderer native-feel CSS test' },
-    { id: 'mica_acrylic_fallback', status: 'planned', evidence: 'Phase 2' },
+    { id: 'mica_acrylic_fallback', status: 'guarded', evidence: 'smoke materialEvidence and window-material fallback tests' },
     { id: 'cursor_selection_scroll', status: 'guarded', evidence: 'renderer native-feel CSS test' },
     { id: 'native_context_menu_dialog', status: 'planned', evidence: 'Phase 3' },
     { id: 'keyboard_ime', status: 'manual-required', evidence: 'Phase 3/6 manual record' },

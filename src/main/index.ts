@@ -9,6 +9,7 @@ import {
   powerMonitor,
   protocol,
   safeStorage,
+  screen,
   shell,
   type ProcessMetric
 } from 'electron';
@@ -18,7 +19,19 @@ import { registerIpc } from './ipc/register-ipc';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';
-import { buildFloatingWindowOptions, buildMainWindowOptions } from './window-shell';
+import {
+  buildFloatingWindowOptions,
+  buildMainWindowOptions,
+  getWindowBounds,
+  resolveFloatingWindowBounds,
+  resolveMainWindowBounds
+} from './window-shell';
+import {
+  readWindowPlacementSnapshot,
+  writeWindowPlacementSnapshot,
+  type WindowPlacementSnapshot
+} from './window-state-store';
+import { applyWindowMaterial } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 
 const isDevelopment = !app.isPackaged;
@@ -45,6 +58,7 @@ let quickEntryWindow: BrowserWindow | null = null;
 let trayEntryWindow: BrowserWindow | null = null;
 let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
+let screenBoundsBound = false;
 let appShutdownApplied = false;
 
 const hostService = new WindowsHostService({
@@ -182,6 +196,9 @@ function showMainPage(page: string): void {
 }
 
 async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
+  if (activeServices === null) {
+    throw new Error('App services are not ready for floating entry windows.');
+  }
   const existingWindow = kind === 'quick' ? quickEntryWindow : trayEntryWindow;
   if (existingWindow !== null && !existingWindow.isDestroyed()) {
     existingWindow.show();
@@ -189,9 +206,15 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
     return;
   }
 
+  const currentDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const entryWindow = new BrowserWindow(
-    buildFloatingWindowOptions(preloadPath, kind === 'quick' ? 'Roc Quick Entry' : 'Roc Tray Status')
+    buildFloatingWindowOptions(
+      preloadPath,
+      kind === 'quick' ? 'Roc Quick Entry' : 'Roc Tray Status',
+      resolveFloatingWindowBounds(kind, { workArea: currentDisplay.workArea })
+    )
   );
+  applyWindowMaterial(entryWindow, 'acrylic', activeServices.logService);
   entryWindow.setMenuBarVisibility(false);
   entryWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -244,6 +267,12 @@ async function createWindow(): Promise<void> {
   services.performanceObserverService.measure('services_critical_initialized', 'appService.initializeCritical', () => {
     services.appService.initializeCritical();
   });
+  const windowStateFilePath = join(services.paths.configDir, 'window-state.json');
+  const restoredPlacement = readWindowPlacementSnapshot(windowStateFilePath);
+  const restoredBounds = resolveMainWindowBounds(
+    restoredPlacement === null ? null : restoredPlacement.bounds,
+    getDisplayWorkAreas()
+  );
   let deferredInitialized = false;
   function initializeDeferredServices(): void {
     if (deferredInitialized) {
@@ -268,8 +297,14 @@ async function createWindow(): Promise<void> {
   }
 
   mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
-    new BrowserWindow(buildMainWindowOptions(preloadPath))
+    new BrowserWindow(buildMainWindowOptions(preloadPath, restoredBounds))
   );
+  applyWindowMaterial(mainWindow, 'mica', services.logService);
+  if (restoredPlacement !== null && restoredPlacement.maximized) {
+    mainWindow.maximize();
+  }
+  bindWindowPlacementPersistence(mainWindow, windowStateFilePath);
+  bindDisplayBoundsCorrection();
   hostService.bindMainWindow(mainWindow);
   hostService.syncSettings(services.configService.getSettings());
   Menu.setApplicationMenu(null);
@@ -361,6 +396,71 @@ async function createWindow(): Promise<void> {
   });
 
   await services.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+}
+
+function bindWindowPlacementPersistence(window: BrowserWindow, filePath: string): void {
+  function persistWindowPlacement(): void {
+    if (window.isDestroyed()) {
+      return;
+    }
+    const normalBounds = window.getNormalBounds();
+    const snapshot: WindowPlacementSnapshot = {
+      bounds: {
+        x: normalBounds.x,
+        y: normalBounds.y,
+        width: normalBounds.width,
+        height: normalBounds.height
+      },
+      maximized: window.isMaximized(),
+      updatedAt: new Date().toISOString()
+    };
+    writeWindowPlacementSnapshot(filePath, snapshot);
+  }
+
+  window.on('move', persistWindowPlacement);
+  window.on('moved', persistWindowPlacement);
+  window.on('resize', persistWindowPlacement);
+  window.on('resized', persistWindowPlacement);
+  window.on('maximize', persistWindowPlacement);
+  window.on('unmaximize', persistWindowPlacement);
+  window.on('close', persistWindowPlacement);
+}
+
+function bindDisplayBoundsCorrection(): void {
+  if (screenBoundsBound) {
+    return;
+  }
+  screenBoundsBound = true;
+  const correctBounds = (): void => {
+    if (mainWindow === null || mainWindow.isDestroyed() || mainWindow.isMaximized()) {
+      return;
+    }
+    const currentBounds = getWindowBounds(mainWindow);
+    const nextBounds = resolveMainWindowBounds(currentBounds, getDisplayWorkAreas());
+    if (
+      nextBounds.x === currentBounds.x &&
+      nextBounds.y === currentBounds.y &&
+      nextBounds.width === currentBounds.width &&
+      nextBounds.height === currentBounds.height
+    ) {
+      return;
+    }
+    mainWindow.setBounds(nextBounds);
+  };
+  screen.on('display-added', correctBounds);
+  screen.on('display-removed', correctBounds);
+  screen.on('display-metrics-changed', correctBounds);
+}
+
+function getDisplayWorkAreas(): Array<{ workArea: { x: number; y: number; width: number; height: number } }> {
+  return screen.getAllDisplays().map((display) => ({
+    workArea: {
+      x: display.workArea.x,
+      y: display.workArea.y,
+      width: display.workArea.width,
+      height: display.workArea.height
+    }
+  }));
 }
 
 if (!ownsSingleInstanceLock) {
