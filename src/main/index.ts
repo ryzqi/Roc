@@ -6,11 +6,13 @@ import {
   app,
   globalShortcut,
   nativeImage,
+  nativeTheme,
   powerMonitor,
   protocol,
   safeStorage,
   screen,
   shell,
+  systemPreferences,
   type ProcessMetric
 } from 'electron';
 import { join } from 'node:path';
@@ -34,6 +36,7 @@ import {
 import { applyWindowMaterial } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { bindNativeContextMenu } from './native-context-menu';
+import { buildSystemAppearanceSnapshot } from './system-appearance';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
@@ -60,6 +63,7 @@ let trayEntryWindow: BrowserWindow | null = null;
 let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
 let screenBoundsBound = false;
+let systemAppearanceBound = false;
 let appShutdownApplied = false;
 
 const hostService = new WindowsHostService({
@@ -250,7 +254,8 @@ async function createWindow(): Promise<void> {
     process.env.ROC_DATA_ROOT,
     {
       version: app.getVersion(),
-      isPackaged: app.isPackaged
+      isPackaged: app.isPackaged,
+      getAppearance: getSystemAppearanceSnapshot
     },
     createElectronSafeStorageBackend(),
     createElectronRuntimeMetricsProvider()
@@ -307,6 +312,7 @@ async function createWindow(): Promise<void> {
   }
   bindWindowPlacementPersistence(mainWindow, windowStateFilePath);
   bindDisplayBoundsCorrection();
+  bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
   hostService.syncSettings(services.configService.getSettings());
   Menu.setApplicationMenu(null);
@@ -453,6 +459,25 @@ function bindDisplayBoundsCorrection(): void {
   screen.on('display-added', correctBounds);
   screen.on('display-removed', correctBounds);
   screen.on('display-metrics-changed', correctBounds);
+}
+
+function bindSystemAppearanceBroadcast(): void {
+  if (systemAppearanceBound) {
+    return;
+  }
+  systemAppearanceBound = true;
+  const broadcastSystemAppearance = (): void => {
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:appearance:updated', getSystemAppearanceSnapshot());
+  };
+  nativeTheme.on('updated', broadcastSystemAppearance);
+  systemPreferences.on('color-changed', broadcastSystemAppearance);
+}
+
+function getSystemAppearanceSnapshot() {
+  return buildSystemAppearanceSnapshot({
+    nativeTheme,
+    systemPreferences
+  });
 }
 
 function getDisplayWorkAreas(): Array<{ workArea: { x: number; y: number; width: number; height: number } }> {

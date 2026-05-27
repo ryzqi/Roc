@@ -6,6 +6,7 @@ export type AppStatus = {
   version: string;
   mode: RocRunMode;
   startedAt: string;
+  appearance: SystemAppearanceSnapshot;
   workspace: {
     selectedPath: string | null;
     label: string;
@@ -66,6 +67,16 @@ export type PerformanceProcessMetric = {
     privateBytesMb: number | null;
     sharedBytesMb: number | null;
   };
+};
+
+export type SystemAppearanceSnapshot = {
+  accentColor: string;
+  inForcedColorsMode: boolean;
+  prefersReducedTransparency: boolean;
+  resolvedTheme: 'light' | 'dark';
+  shouldUseHighContrastColors: boolean;
+  shouldUseInvertedColorScheme: boolean;
+  themeSource: 'system' | 'light' | 'dark';
 };
 
 export type PerformanceSampleRequest = {

@@ -14,7 +14,7 @@ body {
   font-size: var(--font-body-size);
   line-height: 1.65;
   color: var(--text);
-  background: var(--bg-gradient);
+  background: var(--bg);
   cursor: default;
   letter-spacing: 0;
   overflow: hidden;

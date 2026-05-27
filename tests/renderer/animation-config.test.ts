@@ -66,4 +66,23 @@ describe('renderer animation configuration', () => {
     expect(ipcContract).not.toContain("windowSetBounds: 'roc:window:set-bounds'");
     expect(preloadContract).not.toContain('setBounds: (bounds)');
   });
+
+  it('uses Windows system theme and accent tokens as the renderer source of truth', () => {
+    const tokensCss = readFileSync('src/renderer/styles/tokens.css', 'utf8');
+    const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');
+
+    expect(tokensCss).toContain('--system-accent: #2d477a;');
+    expect(tokensCss).toContain('--accent: var(--system-accent);');
+    expect(tokensCss).toContain('color-scheme: light;');
+    expect(tokensCss).toContain(":root[data-theme='dark']");
+    expect(tokensCss).toContain('color-scheme: dark;');
+    expect(tokensCss).toContain(":root[data-forced-colors='true']");
+    expect(tokensCss).toContain('--accent: Highlight;');
+    expect(tokensCss).toContain("--font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI'");
+    expect(tokensCss).toContain("--font-display: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI'");
+    expect(tokensCss).not.toContain("--font-sans: 'Inter'");
+    expect(tokensCss).not.toContain('--bg-gradient: linear-gradient');
+    expect(baseCss).toContain('background: var(--bg);');
+    expect(baseCss).not.toContain('background: var(--bg-gradient);');
+  });
 });

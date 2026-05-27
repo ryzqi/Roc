@@ -6,6 +6,7 @@ import { emptyMemoryData, emptyOperationsData, emptyTaskSurfaceData, emptyWorksp
 import { parseViewId } from './app/view-routing';
 import { unwrap, type LoadedState } from './loaded-state';
 import { loadSettingsState } from './app/data-loading';
+import { applySystemAppearance } from './system-appearance';
 import { QuickEntryView } from './views/floating/QuickEntryView';
 import { TrayEntryView } from './views/floating/TrayEntryView';
 import './styles/index.css';
@@ -45,6 +46,10 @@ function FloatingEntryApp(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    return window.roc.app.onAppearanceUpdated(applySystemAppearance);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function load(): Promise<void> {
@@ -62,9 +67,12 @@ function FloatingEntryApp(): React.JSX.Element {
         return;
       }
 
+      const loadedAppStatus = unwrap<AppStatus>('app status', appStatus);
+      applySystemAppearance(loadedAppStatus.appearance);
+
       setState(
         buildFloatingLoadedState({
-          appStatus: unwrap<AppStatus>('app status', appStatus),
+          appStatus: loadedAppStatus,
           taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
           agent: unwrap<AgentRuntimeStatus>('agent', agent),
           rtkStatus: unwrap<RtkStatus>('rtk status', rtkStatus),

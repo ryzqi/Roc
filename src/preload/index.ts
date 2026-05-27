@@ -8,6 +8,11 @@ const rocApi: RocPreloadApi = {
     openMainPage: (page) => ipcRenderer.invoke(ipcChannels.appOpenMainPage, page),
     openQuickEntry: () => ipcRenderer.invoke(ipcChannels.appOpenQuickEntry),
     openTrayEntry: () => ipcRenderer.invoke(ipcChannels.appOpenTrayEntry),
+    onAppearanceUpdated: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, appearance: Parameters<typeof callback>[0]) => callback(appearance);
+      ipcRenderer.on('roc:appearance:updated', listener);
+      return () => ipcRenderer.off('roc:appearance:updated', listener);
+    },
     onNavigate: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, page: string) => callback(page);
       ipcRenderer.on('roc:navigate', listener);

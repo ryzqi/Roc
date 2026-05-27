@@ -1,4 +1,4 @@
-import type { AppStatus, RocRunMode } from '../../shared/types';
+import type { AppStatus, RocRunMode, SystemAppearanceSnapshot } from '../../shared/types';
 import { AgentService } from './agent-service';
 import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
@@ -56,11 +56,21 @@ export type AppServices = {
 export type RuntimeEnvironment = {
   version: string;
   isPackaged: boolean;
+  getAppearance: () => SystemAppearanceSnapshot;
 };
 
 const defaultRuntimeEnvironment: RuntimeEnvironment = {
   version: '0.1.0',
-  isPackaged: false
+  isPackaged: false,
+  getAppearance: () => ({
+    accentColor: '#2d477a',
+    inForcedColorsMode: false,
+    prefersReducedTransparency: false,
+    resolvedTheme: 'light',
+    shouldUseHighContrastColors: false,
+    shouldUseInvertedColorScheme: false,
+    themeSource: 'system'
+  })
 };
 
 export class AppService {
@@ -127,6 +137,7 @@ export class AppService {
       version: this.runtimeEnvironment.version,
       mode: this.detectMode(),
       startedAt: this.startedAt,
+      appearance: this.runtimeEnvironment.getAppearance(),
       workspace: {
         selectedPath: settings.defaultWorkspace,
         label: settings.defaultWorkspace === null ? '未选择工作区' : settings.defaultWorkspace

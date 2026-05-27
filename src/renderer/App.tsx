@@ -61,6 +61,7 @@ import { unwrap } from './loaded-state';
 import { SettingsView } from './settings';
 import { SettingsModal } from './settings/settings-modal';
 import { getStartupLoadIntent } from './startup-load-policy';
+import { applySystemAppearance } from './system-appearance';
 import { sanitizeTestId } from './utils/sanitize-test-id';
 import { ViewContent } from './views/ViewContent';
 import { RailOverlay } from './workbench/RailOverlay';
@@ -135,6 +136,10 @@ export function App(): React.JSX.Element {
           }
     );
   }, [selectedTaskSurfaceTaskId]);
+
+  useEffect(() => {
+    return window.roc.app.onAppearanceUpdated(applySystemAppearance);
+  }, []);
 
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
@@ -215,6 +220,7 @@ export function App(): React.JSX.Element {
         loadedAppStatus.mode === 'smoke'
           ? unwrap<AppStatus>('refreshed app status', await window.roc.app.getStatus())
           : loadedAppStatus;
+      applySystemAppearance(refreshedAppStatus.appearance);
       const loadedAgent =
         loadedAppStatus.mode === 'smoke'
           ? unwrap<AgentRuntimeStatus>('refreshed agent', await window.roc.agent.getStatus())
@@ -570,6 +576,8 @@ export function App(): React.JSX.Element {
       window.roc.app.getStatus(),
       loadWorkspaceData(selected.data)
     ]);
+    const selectedAppStatus = unwrap<AppStatus>('app status', appStatus);
+    applySystemAppearance(selectedAppStatus.appearance);
     setWorkspaceLoadState({
       status: 'ready',
       error: null,
@@ -580,7 +588,7 @@ export function App(): React.JSX.Element {
         ? current
         : {
             ...current,
-            appStatus: unwrap<AppStatus>('app status', appStatus),
+            appStatus: selectedAppStatus,
             workspace: selected.data,
             ...workspaceData
           }

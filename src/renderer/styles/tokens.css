@@ -20,16 +20,17 @@
   --line-strong: rgba(120, 144, 184, 0.34);
 
   /* 主调 */
-  --accent: #2d477a;
-  --accent-deep: #1f3461;
+  --system-accent: #2d477a;
+  --accent: var(--system-accent);
+  --accent-deep: color-mix(in srgb, var(--accent) 78%, #000000);
   --accent-hover: var(--accent-deep);
-  --accent-soft: rgba(45, 71, 122, 0.08);
-  --accent-soft-strong: rgba(45, 71, 122, 0.16);
-  --accent-stripe: linear-gradient(180deg, #2d477a 0%, #49649a 100%);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-stripe: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, #ffffff) 100%);
 
   /* 状态 */
   --st-ok: #166c4a;
-  --st-info: #2d477a;
+  --st-info: var(--accent);
   --st-warn: #8a5a17;
   --st-bad: #9c3a3a;
 
@@ -72,7 +73,7 @@
 
   /* 语义别名（不引入新色，仅命名） */
   --composer-border: var(--line);
-  --composer-border-focus: rgba(45, 71, 122, 0.42);
+  --composer-border-focus: color-mix(in srgb, var(--accent) 42%, transparent);
   --workband-border: var(--line-soft);
 
   /* 动效 */
@@ -86,8 +87,8 @@
   --transition-fast: var(--duration-fast) var(--easing-standard);
 
   /* 排版 */
-  --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  --font-display: 'Inter Tight', 'Inter', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Inter', sans-serif;
+  --font-display: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Inter Tight', 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
   --font-body-size: 13.5px;
   --font-ui-size: 13px;
@@ -101,7 +102,7 @@
   --font-feature-mono: 'tnum' 1, 'cv11' 1;
 
   /* 页面 / 气泡 */
-  --bg-gradient: linear-gradient(180deg, #fcfcfd 0%, #f6f7f9 100%);
+  --bg-gradient: var(--bg);
   --chat-bubble-radius: 14px;
   --chat-bubble-radius-tight: 14px;
   --chat-gap: 28px;
@@ -127,7 +128,60 @@
   color: var(--text);
   background: var(--bg);
   font-family: var(--font-sans);
+  color-scheme: light;
 }
 
 :root[data-theme='dark'] {
+  --ink: #f4f7fb;
+  --text: #e7edf5;
+  --muted: #b5c0ce;
+  --subtle: #8f9bad;
+  --bg: #111827;
+  --bg-soft: #172033;
+  --surface: #151f30;
+  --surface-strong: #1a2638;
+  --surface-card: #172235;
+  --surface-card-hover: #1d2a3e;
+  --surface-translucent: rgba(21, 31, 48, 0.92);
+  --line-soft: rgba(190, 205, 228, 0.12);
+  --line: rgba(190, 205, 228, 0.2);
+  --line-strong: rgba(190, 205, 228, 0.32);
+  --st-ok: #79d2a6;
+  --st-warn: #e5bd6c;
+  --st-bad: #ee9292;
+  --st-ok-line: rgba(121, 210, 166, 0.38);
+  --st-info-line: color-mix(in srgb, var(--accent) 48%, transparent);
+  --st-warn-line: rgba(229, 189, 108, 0.36);
+  --st-bad-line: rgba(238, 146, 146, 0.36);
+  --shadow-modal: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
+  --shadow-input: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --code-surface: #111827;
+  --code-surface-soft: rgba(231, 237, 245, 0.06);
+  --code-text: #e7edf5;
+  --code-header-bg: #172033;
+  --code-header-text: #b5c0ce;
+  color-scheme: dark;
+}
+
+:root[data-forced-colors='true'] {
+  --accent: Highlight;
+  --accent-deep: Highlight;
+  --accent-hover: Highlight;
+  --accent-soft: Canvas;
+  --accent-soft-strong: Canvas;
+  --accent-stripe: Highlight;
+  --ink: CanvasText;
+  --text: CanvasText;
+  --muted: CanvasText;
+  --subtle: GrayText;
+  --bg: Canvas;
+  --bg-soft: Canvas;
+  --surface: Canvas;
+  --surface-strong: Canvas;
+  --surface-card: Canvas;
+  --surface-card-hover: Canvas;
+  --line-soft: GrayText;
+  --line: GrayText;
+  --line-strong: CanvasText;
 }

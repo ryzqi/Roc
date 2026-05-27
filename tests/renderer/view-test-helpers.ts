@@ -7,6 +7,15 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       version: '0.1.0',
       mode: 'test',
       startedAt: '2026-05-13T00:00:00.000Z',
+      appearance: {
+        accentColor: '#2d477a',
+        inForcedColorsMode: false,
+        prefersReducedTransparency: false,
+        resolvedTheme: 'light',
+        shouldUseHighContrastColors: false,
+        shouldUseInvertedColorScheme: false,
+        themeSource: 'system'
+      },
       workspace: {
         selectedPath: 'F:\\Code\\Roc',
         label: 'Roc'

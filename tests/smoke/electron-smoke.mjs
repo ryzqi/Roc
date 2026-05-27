@@ -2471,6 +2471,32 @@ try {
       pointerCursorNonLinks
     };
   });
+  const phase4VisualEvidence = await page.evaluate(async () => {
+    const appStatus = await window.roc.app.getStatus();
+    if (!appStatus.ok) {
+      throw new Error(appStatus.error.message);
+    }
+    const root = document.documentElement;
+    const rootStyle = getComputedStyle(root);
+    const bodyStyle = getComputedStyle(document.body);
+    const appShell = document.querySelector('[data-testid="roc-app"]');
+    const appShellStyle = appShell instanceof HTMLElement ? getComputedStyle(appShell) : null;
+    return {
+      appAppearance: appStatus.data.appearance,
+      colorScheme: rootStyle.colorScheme,
+      datasetTheme: root.dataset.theme ?? null,
+      datasetThemeSource: root.dataset.themeSource ?? null,
+      forcedColorsDataset: root.dataset.forcedColors ?? null,
+      highContrastDataset: root.dataset.highContrast ?? null,
+      reducedTransparencyDataset: root.dataset.reducedTransparency ?? null,
+      systemAccentVariable: root.style.getPropertyValue('--system-accent'),
+      computedAccent: rootStyle.getPropertyValue('--accent').trim(),
+      bodyBackgroundImage: bodyStyle.backgroundImage,
+      appShellBackgroundImage: appShellStyle?.backgroundImage ?? null,
+      bodyFontFamily: bodyStyle.fontFamily,
+      forcedColorsMedia: window.matchMedia('(forced-colors: active)').media
+    };
+  });
 
   const pageText = await page.textContent('body');
   if (pageText === null) {
@@ -3039,6 +3065,19 @@ try {
       chatResultLayoutEvidence.inputUserSelect !== 'none' &&
       phase3WebViewEvidence.chatInput.userSelect !== 'none' &&
       phase3WebViewEvidence.pointerCursorNonLinks.length === 0,
+    phase4VisualTheme:
+      /^#[0-9a-fA-F]{6}$/.test(phase4VisualEvidence.appAppearance.accentColor) &&
+      phase4VisualEvidence.datasetTheme === phase4VisualEvidence.appAppearance.resolvedTheme &&
+      phase4VisualEvidence.datasetThemeSource === phase4VisualEvidence.appAppearance.themeSource &&
+      phase4VisualEvidence.forcedColorsDataset === String(phase4VisualEvidence.appAppearance.inForcedColorsMode) &&
+      phase4VisualEvidence.highContrastDataset === String(phase4VisualEvidence.appAppearance.shouldUseHighContrastColors) &&
+      phase4VisualEvidence.reducedTransparencyDataset === String(phase4VisualEvidence.appAppearance.prefersReducedTransparency) &&
+      phase4VisualEvidence.systemAccentVariable === phase4VisualEvidence.appAppearance.accentColor &&
+      phase4VisualEvidence.colorScheme.includes(phase4VisualEvidence.appAppearance.resolvedTheme) &&
+      phase4VisualEvidence.bodyFontFamily.includes('Segoe UI') &&
+      phase4VisualEvidence.bodyBackgroundImage === 'none' &&
+      phase4VisualEvidence.appShellBackgroundImage === 'none' &&
+      phase4VisualEvidence.forcedColorsMedia === '(forced-colors: active)',
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
@@ -3054,6 +3093,7 @@ try {
     windowPlacementPersisted: rendererBoundary.windowPlacementPersisted,
     floatingWindowBoundsResolved: rendererBoundary.floatingWindowBoundsResolved,
     phase3WebViewBehavior: rendererBoundary.phase3WebViewBehavior,
+    phase4VisualTheme: rendererBoundary.phase4VisualTheme,
     windowDragWorks: rendererBoundary.windowDragWorks,
     windowSetBoundsRemoved: rendererBoundary.windowSetBoundsRemoved,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
@@ -3192,6 +3232,7 @@ try {
       windowPlacementEvidence,
       floatingWindowBoundsEvidence,
       phase3WebViewEvidence,
+      phase4VisualEvidence,
       nativeConfirmationEvidence: {
         confirmMessages,
         nativeConfirmIpcSamples

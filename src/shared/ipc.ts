@@ -92,6 +92,7 @@ import type {
   TaskThread,
   TaskUpdateEvent,
   TraySummary,
+  SystemAppearanceSnapshot,
   UpdateBackgroundTaskRequest,
   Workspace,
   FileDialogSelection,
@@ -207,6 +208,7 @@ export type RocPreloadApi = {
     openMainPage: (page: string) => Promise<IpcResult<{ opened: true; page: string }>>;
     openQuickEntry: () => Promise<IpcResult<{ opened: true }>>;
     openTrayEntry: () => Promise<IpcResult<{ opened: true }>>;
+    onAppearanceUpdated: (callback: (appearance: SystemAppearanceSnapshot) => void) => () => void;
     onNavigate: (callback: (page: string) => void) => () => void;
   };
   window: {
