@@ -11,6 +11,15 @@ type WindowDragSession = {
   height: number;
 };
 
+type PendingWindowDragSession = {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  latestClientX: number;
+  latestClientY: number;
+  released: boolean;
+};
+
 export function canStartWindowDrag({
   button,
   fullscreen,
@@ -51,14 +60,23 @@ export function useWindowDrag(windowState: WindowStateSnapshot): {
   startWindowDrag: (event: React.PointerEvent<HTMLElement>) => void;
 } {
   const windowDragRef = useRef<WindowDragSession | null>(null);
+  const pendingWindowDragRef = useRef<PendingWindowDragSession | null>(null);
 
   useEffect(() => {
     return () => {
       windowDragRef.current = null;
+      pendingWindowDragRef.current = null;
     };
   }, []);
 
   function finishWindowDrag(pointerId?: number): void {
+    const pendingDragSession = pendingWindowDragRef.current;
+    if (pendingDragSession !== null) {
+      if (pointerId !== undefined && pendingDragSession.pointerId !== pointerId) {
+        return;
+      }
+      pendingDragSession.released = true;
+    }
     const dragSession = windowDragRef.current;
     if (dragSession === null) {
       return;
@@ -71,7 +89,15 @@ export function useWindowDrag(windowState: WindowStateSnapshot): {
 
   function continueWindowDrag(clientX: number, clientY: number): void {
     const dragSession = windowDragRef.current;
-    if (dragSession === null || windowState.maximized || windowState.fullscreen) {
+    if (windowState.maximized || windowState.fullscreen) {
+      return;
+    }
+    if (dragSession === null) {
+      const pendingDragSession = pendingWindowDragRef.current;
+      if (pendingDragSession !== null) {
+        pendingDragSession.latestClientX = clientX;
+        pendingDragSession.latestClientY = clientY;
+      }
       return;
     }
     void window.roc.window.setBounds(
@@ -97,15 +123,44 @@ export function useWindowDrag(windowState: WindowStateSnapshot): {
       return;
     }
     event.preventDefault();
+    const pointerId = event.pointerId;
+    pendingWindowDragRef.current = {
+      pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      latestClientX: event.clientX,
+      latestClientY: event.clientY,
+      released: false
+    };
     void window.roc.window.getBounds().then((result) => {
       const bounds = unwrap<WindowBoundsSnapshot>('window bounds', result);
-      windowDragRef.current = {
-        pointerId: event.pointerId,
-        offsetX: event.clientX - bounds.x,
-        offsetY: event.clientY - bounds.y,
+      const pendingDragSession = pendingWindowDragRef.current;
+      if (pendingDragSession === null || pendingDragSession.pointerId !== pointerId) {
+        return;
+      }
+      pendingWindowDragRef.current = null;
+      const dragSession = {
+        pointerId,
+        offsetX: pendingDragSession.startClientX - bounds.x,
+        offsetY: pendingDragSession.startClientY - bounds.y,
         width: bounds.width,
         height: bounds.height
       };
+      if (
+        pendingDragSession.latestClientX !== pendingDragSession.startClientX ||
+        pendingDragSession.latestClientY !== pendingDragSession.startClientY
+      ) {
+        void window.roc.window.setBounds(
+          buildDraggedWindowBounds({
+            clientX: pendingDragSession.latestClientX,
+            clientY: pendingDragSession.latestClientY,
+            session: dragSession
+          })
+        );
+      }
+      if (!pendingDragSession.released) {
+        windowDragRef.current = dragSession;
+      }
     });
   }
 

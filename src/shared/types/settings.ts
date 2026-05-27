@@ -164,6 +164,19 @@ export type ProviderSecretStatus = {
   stored: boolean;
 };
 
+export type HostIntegrationStatus = {
+  startup: {
+    configuredOpenAtLogin: boolean;
+    effectiveOpenAtLogin: boolean;
+    syncError: string | null;
+  };
+  globalHotkey: {
+    accelerator: string | null;
+    registered: boolean;
+    registrationError: string | null;
+  };
+};
+
 export type SettingsSnapshot = {
   settings: AppSettings;
   providers: ProviderConfig[];
@@ -172,6 +185,7 @@ export type SettingsSnapshot = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hostIntegration: HostIntegrationStatus;
 };
 
 export type SettingsSaveRequest = {

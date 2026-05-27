@@ -1,12 +1,40 @@
 import type React from 'react';
-import type { AppSettings } from '../../../shared/types';
+import type { AppSettings, HostIntegrationStatus } from '../../../shared/types';
 import { FieldRow } from '../atoms';
+
+function formatOpenAtLoginHint(hostIntegration: HostIntegrationStatus): string {
+  if (hostIntegration.startup.syncError !== null) {
+    return `系统实际状态：同步失败，${hostIntegration.startup.syncError}`;
+  }
+  if (hostIntegration.startup.configuredOpenAtLogin === hostIntegration.startup.effectiveOpenAtLogin) {
+    return hostIntegration.startup.effectiveOpenAtLogin
+      ? '系统实际状态：已同步，开机启动已写入。'
+      : '系统实际状态：已同步，未写入开机启动。';
+  }
+  return hostIntegration.startup.effectiveOpenAtLogin
+    ? '系统实际状态：不一致，系统已写入开机启动。'
+    : '系统实际状态：不一致，系统未写入开机启动。';
+}
+
+function formatGlobalHotkeyHint(hostIntegration: HostIntegrationStatus): string {
+  if (hostIntegration.globalHotkey.accelerator === null) {
+    return '系统实际状态：未配置全局快捷键。';
+  }
+  if (hostIntegration.globalHotkey.registrationError !== null) {
+    return `系统实际状态：注册失败，${hostIntegration.globalHotkey.registrationError}`;
+  }
+  return hostIntegration.globalHotkey.registered
+    ? `系统实际状态：已同步，已注册 ${hostIntegration.globalHotkey.accelerator}。`
+    : `系统实际状态：不一致，未注册 ${hostIntegration.globalHotkey.accelerator}。`;
+}
 
 export function AppBasicsSection({
   draft,
+  hostIntegration,
   onChange
 }: {
   draft: AppSettings;
+  hostIntegration: HostIntegrationStatus;
   onChange: (next: AppSettings) => void;
 }): React.JSX.Element {
   return (
@@ -46,6 +74,7 @@ export function AppBasicsSection({
               }
               type="checkbox"
             />
+            <small className="field-hint">{formatOpenAtLoginHint(hostIntegration)}</small>
           </label>
           <label className="field checkbox-field">
             <span>最小化到托盘</span>
@@ -82,7 +111,7 @@ export function AppBasicsSection({
           </label>
         </div>
         <FieldRow
-          hint="本版本仅保存键位字符串，不会自动注册系统级快捷键；后续会接入 globalShortcut。"
+          hint={formatGlobalHotkeyHint(hostIntegration)}
           label="全局快捷入口"
         >
           <input

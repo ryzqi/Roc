@@ -114,6 +114,7 @@ export class AppService {
   }
 
   shutdown(): void {
+    this.terminalSessionService.shutdown();
     this.taskSchedulerService.stop();
     this.databaseService.close();
   }

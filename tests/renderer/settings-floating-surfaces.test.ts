@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { PermissionsConfig, ProviderConfig } from '../../src/shared/types';
+import type { HostIntegrationStatus, PermissionsConfig, ProviderConfig } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 import { AppBasicsSection } from '../../src/renderer/settings/sections/app-basics-section';
 import { AuthSecuritySection } from '../../src/renderer/settings/sections/auth-security-section';
@@ -19,6 +19,22 @@ function createPermissions(mode: PermissionsConfig['mode'] = 'fully_automatic'):
     schemaVersion: 3,
     mode,
     grants: []
+  };
+}
+
+function createHostStatus(partial?: Partial<HostIntegrationStatus>): HostIntegrationStatus {
+  return {
+    startup: {
+      configuredOpenAtLogin: false,
+      effectiveOpenAtLogin: false,
+      syncError: null
+    },
+    globalHotkey: {
+      accelerator: null,
+      registered: false,
+      registrationError: null
+    },
+    ...partial
   };
 }
 
@@ -47,6 +63,18 @@ describe('settings and floating surfaces', () => {
       renderToStaticMarkup(
         React.createElement(AppBasicsSection, {
           draft: settings,
+          hostIntegration: createHostStatus({
+            startup: {
+              configuredOpenAtLogin: true,
+              effectiveOpenAtLogin: true,
+              syncError: null
+            },
+            globalHotkey: {
+              accelerator: 'Ctrl+Alt+R',
+              registered: false,
+              registrationError: '全局快捷键注册失败，请检查是否与系统或其他应用冲突。'
+            }
+          }),
           onChange: vi.fn()
         })
       ),
@@ -100,6 +128,9 @@ describe('settings and floating surfaces', () => {
 
     expect(sectionHtml).toContain('section-title');
     expect(sectionHtml).not.toContain('card-title');
+    expect(sectionHtml).toContain('系统实际状态');
+    expect(sectionHtml).toContain('已同步');
+    expect(sectionHtml).toContain('注册失败');
   });
 
   it('renders provider rows and floating views without status dots or card title chrome', () => {

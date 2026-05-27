@@ -1,0 +1,315 @@
+import type { AppSettings, HostIntegrationStatus } from '../shared/types';
+import type { LifecycleService } from './services/lifecycle-service';
+import type { LogService } from './services/log-service';
+
+type MainWindowLike = {
+  on: (event: 'close', handler: (event: { preventDefault: () => void }) => void) => void;
+  isMinimized: () => boolean;
+  restore: () => void;
+  show: () => void;
+  focus: () => void;
+  hide: () => void;
+};
+
+type AppLike = {
+  requestSingleInstanceLock: () => boolean;
+  setAppUserModelId: (id: string) => void;
+  on: (event: 'before-quit' | 'second-instance', listener: (...args: unknown[]) => void) => void;
+  quit: () => void;
+  setLoginItemSettings: (settings: {
+    openAtLogin: boolean;
+    enabled: boolean;
+    path: string;
+    args: string[];
+    name: string;
+  }) => void;
+  getLoginItemSettings: (settings: { path: string; args: string[] }) => {
+    openAtLogin: boolean;
+    executableWillLaunchAtLogin?: boolean;
+  };
+};
+
+type GlobalShortcutLike = {
+  register: (accelerator: string, callback: () => void) => boolean;
+  unregister: (accelerator: string) => void;
+  unregisterAll: () => void;
+};
+
+type TrayLike = {
+  setToolTip: (tooltip: string) => void;
+  setContextMenu: (menu: unknown) => void;
+  on: (event: 'click', handler: () => void | Promise<void>) => void;
+  destroy: () => void;
+};
+
+type MenuLike = {
+  buildFromTemplate: (template: TrayMenuItem[]) => unknown;
+};
+
+type TrayMenuItem = {
+  label?: string;
+  type?: 'separator';
+  click?: () => void;
+};
+
+export const windowsAppUserModelId = 'com.roc.desktop';
+
+function createDefaultHostIntegrationStatus(): HostIntegrationStatus {
+  return {
+    startup: {
+      configuredOpenAtLogin: false,
+      effectiveOpenAtLogin: false,
+      syncError: null
+    },
+    globalHotkey: {
+      accelerator: null,
+      registered: false,
+      registrationError: null
+    }
+  };
+}
+
+export class WindowsHostService {
+  private readonly hostIntegration = createDefaultHostIntegrationStatus();
+  private readonly trayIconDataUrl =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">' +
+        '<rect width="16" height="16" rx="4" fill="#1f6feb"/>' +
+        '<path d="M4.5 12V4h3.7c2.1 0 3.3 1.1 3.3 2.8 0 1.2-.7 2.1-1.8 2.5L12 12H9.9L7.9 9.7H6.3V12H4.5zm1.8-3.8h1.7c1 0 1.7-.5 1.7-1.4s-.7-1.4-1.7-1.4H6.3v2.8z" fill="#ffffff"/>' +
+      '</svg>'
+    );
+  private mainWindow: MainWindowLike | null = null;
+  private tray: TrayLike | null = null;
+  private explicitQuit = false;
+  private currentHotkey: string | null = null;
+  private minimizeToTray = true;
+  private shutdownApplied = false;
+
+  constructor(
+    private readonly input: {
+      app: AppLike;
+      globalShortcut: GlobalShortcutLike;
+      lifecycleService: Pick<LifecycleService, 'getTraySummary' | 'pauseBackgroundExecution' | 'resumeBackgroundExecution'>;
+      logService: Pick<LogService, 'append'>;
+      menu: MenuLike;
+      createTray: (iconDataUrl: string) => TrayLike;
+      openMainPage: (page: string) => void;
+      openQuickEntry: () => Promise<void>;
+      openTrayEntry: () => Promise<void>;
+      broadcastTaskUpdated: () => void;
+    }
+  ) {}
+
+  initializeProcessIdentity(): boolean {
+    this.input.app.setAppUserModelId(windowsAppUserModelId);
+    const acquiredLock = this.input.app.requestSingleInstanceLock();
+    if (!acquiredLock) {
+      return false;
+    }
+    this.input.app.on('before-quit', () => {
+      this.explicitQuit = true;
+      this.shutdown();
+    });
+    this.input.app.on('second-instance', (_event, commandLine) => {
+      this.focusMainWindow();
+      const args = Array.isArray(commandLine) ? commandLine.slice(1) : [];
+      if (args.length > 0) {
+        this.input.logService.append({
+          level: 'info',
+          message: 'Roc received second-instance launch arguments.',
+          data: {
+            argv: args
+          }
+        });
+      }
+    });
+    return true;
+  }
+
+  bindMainWindow(window: MainWindowLike): void {
+    this.mainWindow = window;
+    window.on('close', (event) => {
+      if (this.explicitQuit || !this.minimizeToTray) {
+        return;
+      }
+      event.preventDefault();
+      window.hide();
+    });
+  }
+
+  syncSettings(settings: AppSettings): void {
+    this.minimizeToTray = settings.startup.minimizeToTray;
+    this.hostIntegration.startup.configuredOpenAtLogin = settings.startup.openAtLogin;
+    this.hostIntegration.startup.syncError = null;
+    try {
+      const loginItemSettings = this.buildLoginItemSettings(settings.startup.openAtLogin);
+      this.input.app.setLoginItemSettings(loginItemSettings);
+      const actualLoginItem = this.input.app.getLoginItemSettings({
+        path: loginItemSettings.path,
+        args: loginItemSettings.args
+      });
+      this.hostIntegration.startup.effectiveOpenAtLogin = actualLoginItem.openAtLogin;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.hostIntegration.startup.syncError = message;
+      this.hostIntegration.startup.effectiveOpenAtLogin = false;
+      this.input.logService.append({
+        level: 'error',
+        message: 'Roc open-at-login sync failed.',
+        data: {
+          error: message
+        }
+      });
+    }
+
+    if (this.currentHotkey !== null) {
+      this.input.globalShortcut.unregister(this.currentHotkey);
+      this.currentHotkey = null;
+    }
+    this.hostIntegration.globalHotkey = {
+      accelerator: settings.globalHotkey,
+      registered: false,
+      registrationError: null
+    };
+    if (settings.globalHotkey !== null) {
+      try {
+        const registered = this.input.globalShortcut.register(settings.globalHotkey, () => {
+          void this.input.openQuickEntry();
+        });
+        this.hostIntegration.globalHotkey.registered = registered;
+        if (registered) {
+          this.currentHotkey = settings.globalHotkey;
+        } else {
+          this.hostIntegration.globalHotkey.registrationError = 'globalShortcut.register returned false.';
+          this.input.logService.append({
+            level: 'warn',
+            message: 'Roc global hotkey registration failed.',
+            data: {
+              accelerator: settings.globalHotkey
+            }
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.hostIntegration.globalHotkey.registrationError = message;
+        this.input.logService.append({
+          level: 'warn',
+          message: 'Roc global hotkey registration failed.',
+          data: {
+            accelerator: settings.globalHotkey,
+            error: message
+          }
+        });
+      }
+    }
+
+    this.refreshTray();
+  }
+
+  refreshTray(): void {
+    const summary = this.input.lifecycleService.getTraySummary();
+    const tray = this.ensureTray();
+    tray.setToolTip(summary.backgroundPaused ? 'Roc 已暂停后台执行' : 'Roc 正在后台运行');
+    tray.setContextMenu(
+      this.input.menu.buildFromTemplate([
+        {
+          label: '打开 Roc',
+          click: () => {
+            this.input.openMainPage('chat');
+          }
+        },
+        {
+          label: '快速入口',
+          click: () => {
+            void this.input.openQuickEntry();
+          }
+        },
+        {
+          label: summary.backgroundPaused ? '恢复后台执行' : '暂停后台执行',
+          click: () => {
+            if (summary.backgroundPaused) {
+              this.input.lifecycleService.resumeBackgroundExecution();
+            } else {
+              this.input.lifecycleService.pauseBackgroundExecution();
+            }
+            this.input.broadcastTaskUpdated();
+            this.refreshTray();
+          }
+        },
+        {
+          label: '打开任务',
+          click: () => {
+            this.input.openMainPage('tasks');
+          }
+        },
+        {
+          type: 'separator'
+        },
+        {
+          label: '退出',
+          click: () => {
+            this.requestQuit();
+          }
+        }
+      ])
+    );
+  }
+
+  getIntegrationStatus(): HostIntegrationStatus {
+    return {
+      startup: { ...this.hostIntegration.startup },
+      globalHotkey: { ...this.hostIntegration.globalHotkey }
+    };
+  }
+
+  requestQuit(): void {
+    this.explicitQuit = true;
+    this.input.app.quit();
+  }
+
+  shutdown(): void {
+    if (this.shutdownApplied) {
+      return;
+    }
+    this.shutdownApplied = true;
+    this.input.globalShortcut.unregisterAll();
+    this.tray?.destroy();
+  }
+
+  private buildLoginItemSettings(openAtLogin: boolean): {
+    openAtLogin: boolean;
+    enabled: boolean;
+    path: string;
+    args: string[];
+    name: string;
+  } {
+    return {
+      openAtLogin,
+      enabled: openAtLogin,
+      path: process.execPath,
+      args: [],
+      name: windowsAppUserModelId
+    };
+  }
+
+  private ensureTray(): TrayLike {
+    if (this.tray !== null) {
+      return this.tray;
+    }
+    this.tray = this.input.createTray(this.trayIconDataUrl);
+    this.tray.on('click', () => this.input.openTrayEntry());
+    return this.tray;
+  }
+
+  private focusMainWindow(): void {
+    if (this.mainWindow === null) {
+      return;
+    }
+    if (this.mainWindow.isMinimized()) {
+      this.mainWindow.restore();
+    }
+    this.mainWindow.show();
+    this.mainWindow.focus();
+  }
+}

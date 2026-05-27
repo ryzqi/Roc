@@ -151,7 +151,7 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
     'globalHotkey',
     base.settings.globalHotkey,
     draft.settings.globalHotkey,
-    '会影响全局快捷入口；本版本仅保存键位字符串，未注册系统级快捷键。',
+    '会影响全局快捷入口；保存后会同步注册系统级快捷键。',
     'info',
     (value) => (value === null || value.length === 0 ? '未设置' : value)
   );

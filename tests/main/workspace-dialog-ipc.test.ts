@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerIpc } from '../../src/main/ipc/register-ipc';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { ipcChannels } from '../../src/shared/ipc';
-import type { Workspace } from '../../src/shared/types';
+import type { HostIntegrationStatus, Workspace } from '../../src/shared/types';
 
 const electronMock = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -55,7 +55,21 @@ function registerWorkspaceHandlers(): void {
     openMainPage: () => undefined,
     openQuickEntry: async () => undefined,
     openTrayEntry: async () => undefined,
-    broadcastTaskUpdated: () => undefined
+    closeMainWindow: () => undefined,
+    broadcastTaskUpdated: () => undefined,
+    getHostIntegrationStatus: (): HostIntegrationStatus => ({
+      startup: {
+        configuredOpenAtLogin: false,
+        effectiveOpenAtLogin: false,
+        syncError: null
+      },
+      globalHotkey: {
+        accelerator: null,
+        registered: false,
+        registrationError: null
+      }
+    }),
+    syncHostSettings: () => undefined
   });
 }
 
@@ -341,7 +355,21 @@ describe('workspace dialog IPC', () => {
       openMainPage: () => undefined,
       openQuickEntry: async () => undefined,
       openTrayEntry: async () => undefined,
-      broadcastTaskUpdated
+      closeMainWindow: () => undefined,
+      broadcastTaskUpdated,
+      getHostIntegrationStatus: (): HostIntegrationStatus => ({
+        startup: {
+          configuredOpenAtLogin: false,
+          effectiveOpenAtLogin: false,
+          syncError: null
+        },
+        globalHotkey: {
+          accelerator: null,
+          registered: false,
+          registrationError: null
+        }
+      }),
+      syncHostSettings: () => undefined
     });
     const runNowSpy = vi.spyOn(services.taskSchedulerService, 'fire').mockResolvedValue(null);
 
@@ -425,5 +453,66 @@ describe('workspace dialog IPC', () => {
       } satisfies Partial<Workspace>
     });
     expect(services.workspaceService.getCurrentWorkspace()?.path).toBe(workspaceRoot);
+  });
+
+  it('syncs host settings side effects and returns host status on settings save', async () => {
+    const syncHostSettings = vi.fn();
+    const getHostIntegrationStatus = vi.fn((): HostIntegrationStatus => ({
+      startup: {
+        configuredOpenAtLogin: true,
+        effectiveOpenAtLogin: false,
+        syncError: 'Windows 登录项同步失败。'
+      },
+      globalHotkey: {
+        accelerator: 'Ctrl+Alt+R',
+        registered: false,
+        registrationError: '全局快捷键注册失败，请检查是否与系统或其他应用冲突。'
+      }
+    }));
+    registerIpc(services, {} as BrowserWindow, {
+      openMainPage: () => undefined,
+      openQuickEntry: async () => undefined,
+      openTrayEntry: async () => undefined,
+      closeMainWindow: () => undefined,
+      broadcastTaskUpdated: () => undefined,
+      getHostIntegrationStatus,
+      syncHostSettings
+    });
+
+    const handler = electronMock.handlers.get(ipcChannels.settingsSave);
+    if (handler === undefined) {
+      throw new Error('settingsSave handler was not registered.');
+    }
+
+    const currentSettings = services.configService.getSettings();
+    const nextSettings = {
+      ...currentSettings,
+      startup: {
+        ...currentSettings.startup,
+        openAtLogin: true
+      },
+      globalHotkey: 'Ctrl+Alt+R'
+    };
+    const result = await handler({}, {
+      settings: nextSettings,
+      providers: services.configService.getProviders().providers,
+      defaultModelId: services.configService.getProviders().defaultModelId,
+      permissions: services.configService.getPermissions()
+    });
+
+    expect(syncHostSettings).toHaveBeenCalledWith(nextSettings);
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        settings: expect.objectContaining({
+          startup: {
+            openAtLogin: true,
+            minimizeToTray: true
+          },
+          globalHotkey: 'Ctrl+Alt+R'
+        }),
+        hostIntegration: getHostIntegrationStatus()
+      })
+    });
   });
 });

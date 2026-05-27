@@ -1081,7 +1081,9 @@ try {
     openaiReady: false,
     defaultModelSelectable: false,
     providerTestFeedbackVisible: false,
-    saveAllDirect: false
+    saveAllDirect: false,
+    hostIntegrationReturned: false,
+    hostIntegrationStatusVisible: false
   };
   await clickSmokeControl(page, '[data-testid="settings-gear"]');
   await page.waitForSelector('[data-testid="settings-modal"]', { timeout: 5000 });
@@ -1493,14 +1495,24 @@ try {
   await clickSmokeControl(page, '[data-testid="settings-save-all"]');
   await page.waitForSelector('[data-testid="impact-preview-modal"]', { state: 'detached', timeout: 5000 });
   await waitForTextContent(page, '[data-testid="settings-dirty-count"]', '无未保存变更');
-  const openAtLoginAfterSaveAll = await page.evaluate(async () => {
+  const hostIntegrationAfterSaveAll = await page.evaluate(async () => {
     const result = await window.roc.settings.get();
     if (!result.ok) {
       throw new Error(result.error.message);
     }
-    return result.data.settings.startup.openAtLogin;
+    return {
+      openAtLogin: result.data.settings.startup.openAtLogin,
+      hostIntegration: result.data.hostIntegration
+    };
   });
-  providerSettingsEvidence.saveAllDirect = openAtLoginAfterSaveAll === !openAtLoginBeforeSaveAll;
+  providerSettingsEvidence.saveAllDirect = hostIntegrationAfterSaveAll.openAtLogin === !openAtLoginBeforeSaveAll;
+  providerSettingsEvidence.hostIntegrationReturned =
+    hostIntegrationAfterSaveAll.hostIntegration?.startup?.configuredOpenAtLogin === hostIntegrationAfterSaveAll.openAtLogin &&
+    typeof hostIntegrationAfterSaveAll.hostIntegration?.startup?.effectiveOpenAtLogin === 'boolean' &&
+    typeof hostIntegrationAfterSaveAll.hostIntegration?.globalHotkey?.registered === 'boolean';
+  const appBasicsText = await page.textContent('[data-testid="settings-panel-app-basics"]');
+  providerSettingsEvidence.hostIntegrationStatusVisible =
+    appBasicsText !== null && appBasicsText.includes('系统实际状态');
   await clickSmokeControl(page, '[data-testid="settings-section-providers"]');
   await waitForTextContent(page, '[data-testid="provider-detail-status"]', 'Active');
   const settingsText = await page.textContent('[data-testid="settings-view"]');
@@ -2551,7 +2563,9 @@ try {
       providerSettingsEvidence.openaiReady &&
       providerSettingsEvidence.defaultModelSelectable &&
       providerSettingsEvidence.providerTestFeedbackVisible &&
-      providerSettingsEvidence.saveAllDirect,
+      providerSettingsEvidence.saveAllDirect &&
+      providerSettingsEvidence.hostIntegrationReturned &&
+      providerSettingsEvidence.hostIntegrationStatusVisible,
     mcpManagedVisible:
       mcpText.includes('Smoke MCP') &&
       mcpText.includes('smoke-mcp:ready') &&

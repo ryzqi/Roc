@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AppSettings,
+  HostIntegrationStatus,
   McpServerSnapshot,
   PermissionsConfig,
   ProviderConfig,
@@ -63,6 +64,21 @@ function defaultPermissions(): PermissionsConfig {
     schemaVersion: 3,
     mode: 'fully_automatic',
     grants: []
+  };
+}
+
+function defaultHostIntegration(): HostIntegrationStatus {
+  return {
+    startup: {
+      configuredOpenAtLogin: false,
+      effectiveOpenAtLogin: false,
+      syncError: null
+    },
+    globalHotkey: {
+      accelerator: null,
+      registered: false,
+      registrationError: null
+    }
   };
 }
 
@@ -772,7 +788,8 @@ describe('settings model helpers', () => {
         providerSecretStatus,
         permissions,
         mcpServers,
-        skills
+        skills,
+        hostIntegration: defaultHostIntegration()
       })
     ).toEqual({
       settings,
@@ -782,6 +799,7 @@ describe('settings model helpers', () => {
       permissions,
       mcpServers,
       skills,
+      hostIntegration: defaultHostIntegration(),
       providerTestStatus: null,
       mcpTestStatus: null
     });

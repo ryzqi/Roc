@@ -1,6 +1,13 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import type { IpcResult, ProviderSecretSetRequest, SettingsSnapshot, TaskUpdateEvent } from '../../shared/types';
+import type {
+  AppSettings,
+  HostIntegrationStatus,
+  IpcResult,
+  ProviderSecretSetRequest,
+  SettingsSnapshot,
+  TaskUpdateEvent
+} from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { AppServices } from '../services/app-service';
 import { getWindowBounds, getWindowState } from '../window-shell';
@@ -9,6 +16,9 @@ export type AppWindowControls = {
   openMainPage: (page: string) => void;
   openQuickEntry: () => Promise<void>;
   openTrayEntry: () => Promise<void>;
+  closeMainWindow: () => void;
+  syncHostSettings: (settings: AppSettings) => void;
+  getHostIntegrationStatus: () => HostIntegrationStatus;
   broadcastTaskUpdated: (event?: TaskUpdateEvent) => void;
 };
 
@@ -17,7 +27,7 @@ type IpcMainHandler = (...args: any[]) => Promise<IpcResult<unknown>> | IpcResul
 
 const slowIpcThresholdMs = 50;
 
-function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
+function buildSettingsSnapshot(services: AppServices, controls: AppWindowControls): SettingsSnapshot {
   const providersConfig = services.configService.getProviders();
   const providerSecretStatus = services.secretService.listSecretStatuses(
     providersConfig.providers.map((provider) => provider.id)
@@ -29,7 +39,8 @@ function buildSettingsSnapshot(services: AppServices): SettingsSnapshot {
     providerSecretStatus,
     permissions: services.configService.getPermissions(),
     mcpServers: services.mcpService.listServers(),
-    skills: services.skillService.list()
+    skills: services.skillService.list(),
+    hostIntegration: controls.getHostIntegrationStatus()
   };
 }
 
@@ -142,7 +153,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   );
   timedHandle(ipcChannels.windowClose, () =>
     wrapIpc(() => {
-      mainWindow.close();
+      controls.closeMainWindow();
       return { closed: true as const };
     })
   );
@@ -242,10 +253,18 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.tasksGetSchedulerStatus, () => wrapIpc(() => services.taskSchedulerService.getStatus()));
   timedHandle(ipcChannels.lifecycleGetTraySummary, () => wrapIpc(() => services.lifecycleService.getTraySummary()));
   timedHandle(ipcChannels.lifecyclePauseBackground, () =>
-    wrapIpc(() => services.lifecycleService.pauseBackgroundExecution())
+    wrapIpc(() => {
+      const summary = services.lifecycleService.pauseBackgroundExecution();
+      controls.broadcastTaskUpdated();
+      return summary;
+    })
   );
   timedHandle(ipcChannels.lifecycleResumeBackground, () =>
-    wrapIpc(() => services.lifecycleService.resumeBackgroundExecution())
+    wrapIpc(() => {
+      const summary = services.lifecycleService.resumeBackgroundExecution();
+      controls.broadcastTaskUpdated();
+      return summary;
+    })
   );
   timedHandle(ipcChannels.diagnosticsSamplePerformance, (_event, request) =>
     wrapIpc(() => services.diagnosticsService.samplePerformance(request))
@@ -280,11 +299,12 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   timedHandle(ipcChannels.memoryRestore, (_event, id: string) =>
     wrapIpc(() => services.memoryService.restoreMemory(id))
   );
-  timedHandle(ipcChannels.settingsGet, () => wrapIpc(() => buildSettingsSnapshot(services)));
+  timedHandle(ipcChannels.settingsGet, () => wrapIpc(() => buildSettingsSnapshot(services, controls)));
   timedHandle(ipcChannels.settingsSave, (_event, settings) =>
     wrapIpc(() => {
       services.configService.saveSettingsSnapshot(settings);
-      return buildSettingsSnapshot(services);
+      controls.syncHostSettings(settings.settings);
+      return buildSettingsSnapshot(services, controls);
     })
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>

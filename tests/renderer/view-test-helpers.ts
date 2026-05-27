@@ -104,6 +104,18 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       mode: 'fully_automatic',
       grants: []
     },
+    hostIntegration: {
+      startup: {
+        configuredOpenAtLogin: false,
+        effectiveOpenAtLogin: false,
+        syncError: null
+      },
+      globalHotkey: {
+        accelerator: null,
+        registered: false,
+        registrationError: null
+      }
+    },
     providerTestStatus: null,
     mcpServers: [],
     mcpTestStatus: null,

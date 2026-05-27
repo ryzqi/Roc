@@ -119,6 +119,13 @@ export class TerminalSessionService {
     return { closed: true };
   }
 
+  shutdown(): void {
+    for (const [sessionId, record] of this.sessions.entries()) {
+      record.pty.kill();
+      this.sessions.delete(sessionId);
+    }
+  }
+
   onOutput(listener: (event: TerminalSessionOutputEvent) => void): () => void {
     this.events.on('output', listener);
     return () => this.events.off('output', listener);

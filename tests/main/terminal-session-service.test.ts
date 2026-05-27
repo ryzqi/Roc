@@ -58,6 +58,25 @@ describe('terminal session service', () => {
     return expect(exitEvent).resolves.not.toBeUndefined();
   });
 
+  it('kills all active sessions during shutdown', async () => {
+    const exitEvent = new Promise<number | null>((resolve) => {
+      const dispose = service.onExit((event) => {
+        dispose();
+        resolve(event.exitCode);
+      });
+    });
+    const snapshot = service.createSession({
+      cwd: workspaceRoot,
+      cols: 100,
+      rows: 30
+    });
+
+    service.shutdown();
+
+    await expect(exitEvent).resolves.not.toBeUndefined();
+    expect(() => service.closeSession({ sessionId: snapshot.id })).toThrow(RocDomainError);
+  });
+
   it('rejects terminal sessions outside the current workspace', () => {
     expect(() =>
       service.createSession({

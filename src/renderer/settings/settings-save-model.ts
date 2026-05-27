@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  HostIntegrationStatus,
   McpServerSnapshot,
   PermissionsConfig,
   ProviderConfig,
@@ -18,6 +19,7 @@ export type LoadedSettingsState = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
 };
@@ -31,6 +33,7 @@ export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSetting
     permissions: snapshot.permissions,
     mcpServers: snapshot.mcpServers,
     skills: snapshot.skills,
+    hostIntegration: snapshot.hostIntegration,
     providerTestStatus: null,
     mcpTestStatus: null
   };

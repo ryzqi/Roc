@@ -1,10 +1,23 @@
 import './proxy-runtime';
-import { BrowserWindow, Menu, app, powerMonitor, protocol, safeStorage, shell, type ProcessMetric } from 'electron';
+import {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  globalShortcut,
+  nativeImage,
+  powerMonitor,
+  protocol,
+  safeStorage,
+  shell,
+  type ProcessMetric
+} from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './services/secret-service';
+import { WindowsHostService } from './windows-host-service';
 import { buildFloatingWindowOptions, buildMainWindowOptions } from './window-shell';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 
@@ -30,6 +43,111 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null;
 let quickEntryWindow: BrowserWindow | null = null;
 let trayEntryWindow: BrowserWindow | null = null;
+let activeServices: ReturnType<typeof createAppServices> | null = null;
+let powerResumeBound = false;
+let appShutdownApplied = false;
+
+const hostService = new WindowsHostService({
+  app: {
+    requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
+    setAppUserModelId: (id) => {
+      app.setAppUserModelId(id);
+    },
+    on: (event, listener) => {
+      if (event === 'before-quit') {
+        app.on('before-quit', listener);
+        return;
+      }
+      app.on('second-instance', listener);
+    },
+    quit: () => {
+      app.quit();
+    },
+    setLoginItemSettings: (settings) => {
+      app.setLoginItemSettings(settings);
+    },
+    getLoginItemSettings: () => app.getLoginItemSettings()
+  },
+  globalShortcut,
+  lifecycleService: {
+    getTraySummary: () => {
+      if (activeServices !== null) {
+        return activeServices.lifecycleService.getTraySummary();
+      }
+      return {
+        residentEnabled: true,
+        backgroundPaused: false,
+        backgroundTasks: {
+          total: 0,
+          running: 0,
+          failed: 0,
+          pendingConfirmation: 0,
+          nextRunAt: null
+        },
+        nextRunAt: null,
+        updatedAt: new Date().toISOString()
+      };
+    },
+    pauseBackgroundExecution: () => {
+      if (activeServices === null) {
+        throw new Error('Lifecycle service is not ready.');
+      }
+      return activeServices.lifecycleService.pauseBackgroundExecution();
+    },
+    resumeBackgroundExecution: () => {
+      if (activeServices === null) {
+        throw new Error('Lifecycle service is not ready.');
+      }
+      return activeServices.lifecycleService.resumeBackgroundExecution();
+    }
+  },
+  logService: {
+    append: (event) => {
+      if (activeServices === null) {
+        console.log(JSON.stringify(event));
+        return;
+      }
+      activeServices.logService.append(event);
+    }
+  },
+  menu: Menu,
+  createTray: (iconDataUrl) => {
+    const tray = new Tray(nativeImage.createFromDataURL(iconDataUrl).resize({ width: 16, height: 16 }));
+    return {
+      setToolTip: (tooltip) => {
+        tray.setToolTip(tooltip);
+      },
+      setContextMenu: (menu) => {
+        tray.setContextMenu(menu as Menu | null);
+      },
+      on: (event, handler) => {
+        tray.on(event, () => {
+          void handler();
+        });
+      },
+      destroy: () => {
+        tray.destroy();
+      }
+    };
+  },
+  openMainPage: showMainPage,
+  openQuickEntry: () => openFloatingEntry('quick'),
+  openTrayEntry: () => openFloatingEntry('tray'),
+  broadcastTaskUpdated: () => {
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+  }
+});
+
+const ownsSingleInstanceLock = hostService.initializeProcessIdentity();
+
+app.on('before-quit', () => {
+  if (appShutdownApplied) {
+    return;
+  }
+  appShutdownApplied = true;
+  activeServices?.appService.shutdown();
+  activeServices = null;
+});
 
 async function loadMainRenderer(window: BrowserWindow): Promise<void> {
   if (isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined) {
@@ -100,6 +218,9 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
 }
 
 async function createWindow(): Promise<void> {
+  if (!ownsSingleInstanceLock) {
+    return;
+  }
   const services = createAppServices(
     process.env.ROC_DATA_ROOT,
     {
@@ -109,6 +230,7 @@ async function createWindow(): Promise<void> {
     createElectronSafeStorageBackend(),
     createElectronRuntimeMetricsProvider()
   );
+  activeServices = services;
   pdfPreviewServices = services;
   services.performanceObserverService.record({
     phase: 'main_ready',
@@ -148,6 +270,8 @@ async function createWindow(): Promise<void> {
   mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
     new BrowserWindow(buildMainWindowOptions(preloadPath))
   );
+  hostService.bindMainWindow(mainWindow);
+  hostService.syncSettings(services.configService.getSettings());
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on('closed', () => {
@@ -158,7 +282,15 @@ async function createWindow(): Promise<void> {
     openMainPage: showMainPage,
     openQuickEntry: () => openFloatingEntry('quick'),
     openTrayEntry: () => openFloatingEntry('tray'),
+    closeMainWindow: () => {
+      mainWindow?.close();
+    },
+    syncHostSettings: (settings) => {
+      hostService.syncSettings(settings);
+    },
+    getHostIntegrationStatus: () => hostService.getIntegrationStatus(),
     broadcastTaskUpdated: (event) => {
+      hostService.refreshTray();
       broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', event ?? null);
     }
   });
@@ -190,9 +322,12 @@ async function createWindow(): Promise<void> {
       broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
     }
   });
-  powerMonitor.on('resume', () => {
-    services.taskSchedulerService.handlePowerResume();
-  });
+  if (!powerResumeBound) {
+    powerResumeBound = true;
+    powerMonitor.on('resume', () => {
+      activeServices?.taskSchedulerService.handlePowerResume();
+    });
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -228,10 +363,14 @@ async function createWindow(): Promise<void> {
   await services.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
 }
 
-app.whenReady().then(createWindow).catch((error: unknown) => {
-  console.error(error);
-  app.exit(1);
-});
+if (!ownsSingleInstanceLock) {
+  app.exit(0);
+} else {
+  app.whenReady().then(createWindow).catch((error: unknown) => {
+    console.error(error);
+    app.exit(1);
+  });
+}
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {

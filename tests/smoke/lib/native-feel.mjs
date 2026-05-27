@@ -4,9 +4,9 @@ export const nativeFeelScorecard = Object.freeze({
   checks: [
     { id: 'cold_launch_ready_to_show', status: 'measured', evidence: 'timing.ready_to_show' },
     { id: 'packaged_exe_startup', status: 'measured', evidence: 'smokeTarget' },
-    { id: 'close_minimize_tray', status: 'planned', evidence: 'Phase 1' },
-    { id: 'global_hotkey', status: 'planned', evidence: 'Phase 1' },
-    { id: 'single_instance', status: 'planned', evidence: 'Phase 1' },
+    { id: 'close_minimize_tray', status: 'guarded', evidence: 'WindowsHostService close policy tests' },
+    { id: 'global_hotkey', status: 'guarded', evidence: 'WindowsHostService globalShortcut tests' },
+    { id: 'single_instance', status: 'guarded', evidence: 'WindowsHostService second-instance tests' },
     { id: 'mica_acrylic_fallback', status: 'planned', evidence: 'Phase 2' },
     { id: 'cursor_selection_scroll', status: 'guarded', evidence: 'renderer native-feel CSS test' },
     { id: 'native_context_menu_dialog', status: 'planned', evidence: 'Phase 3' },

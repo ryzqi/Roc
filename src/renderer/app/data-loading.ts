@@ -3,6 +3,7 @@ import type {
   AppStatus,
   ActiveTaskItem,
   BackgroundTask,
+  HostIntegrationStatus,
   FilePreviewRequest,
   DiagnosticPackage,
   FilesWorkbenchPdfPreviewResult,
@@ -215,6 +216,7 @@ export async function loadSettingsState(): Promise<{
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
 }> {

@@ -25,6 +25,7 @@ import type {
   PerformanceSample,
   PermissionsConfig,
   ProviderConfig,
+  HostIntegrationStatus,
   ProviderSecretStatus,
   ProviderTestResult,
   RtkStatus,
@@ -53,6 +54,7 @@ export type LoadedState = {
   defaultModelId: string | null;
   providerSecretStatus: ProviderSecretStatus[];
   permissions: PermissionsConfig;
+  hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
   mcpServers: McpServerSnapshot[];
   mcpTestStatus: McpServerTestResult | null;

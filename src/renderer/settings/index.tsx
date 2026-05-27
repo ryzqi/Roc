@@ -43,6 +43,7 @@ export type SettingsViewState = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hostIntegration: LoadedSettingsState['hostIntegration'];
   providerTestStatus: ProviderTestResult | null;
 };
 
@@ -375,7 +376,11 @@ export function SettingsView({
               />
             ) : null}
             {activeSection === 'app-basics' ? (
-              <AppBasicsSection draft={draft.settings} onChange={draft.setSettings} />
+              <AppBasicsSection
+                draft={draft.settings}
+                hostIntegration={state.hostIntegration}
+                onChange={draft.setSettings}
+              />
             ) : null}
             {activeSection === 'auth-security' ? (
               <AuthSecuritySection draft={draft.permissions} onChange={draft.setPermissions} />
