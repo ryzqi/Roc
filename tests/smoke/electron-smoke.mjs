@@ -7,6 +7,7 @@ import { prepareArtifactDir, writeSmokeResult } from './lib/artifacts.mjs';
 import { assertNoRuntimeMockText, waitForAppReady, waitForCapabilitySelection, waitForTerminalSessionReady, waitForTextContent, waitForWindowWithSelector } from './lib/assertions.mjs';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from './lib/fixtures.mjs';
 import { readMainPageText, seedSmokeRuntimeData } from './lib/ipc.mjs';
+import { buildNativeFeelSummary, nativeFeelScorecard, summarizeProcessMetrics } from './lib/native-feel.mjs';
 import { clickComposerPopoverChoice, clickSmokeControl, hoverComposerPopoverContent, openChatView } from './lib/ui-actions.mjs';
 
 const artifactDir = prepareArtifactDir();
@@ -315,7 +316,7 @@ try {
       expectedNextRunAt: naturalLanguageTaskNextRunAt
     }
   );
-  const workspaceText = await readMainPageText(page, {
+  let workspaceText = await readMainPageText(page, {
     label: 'workspace',
     pageId: 'workspace',
     viewSelector: '[data-testid="workspace-view"]'
@@ -370,6 +371,10 @@ try {
   }
   await page.waitForSelector('[data-testid="file-tree"]', { timeout: 15000 });
   await page.waitForSelector('[data-testid="rtk-panel"]', { timeout: 15000 });
+  workspaceText = await page.textContent('[data-testid="workspace-view"]');
+  if (workspaceText === null) {
+    throw new Error('Smoke could not read workspace view text after lazy load.');
+  }
   const rtkPanelText = await page.textContent('[data-testid="rtk-panel"]');
   if (rtkPanelText === null) {
     throw new Error('Smoke could not read RTK panel text.');
@@ -1817,6 +1822,25 @@ try {
       tray: tray.data
     };
   });
+  const nativeModuleProbe = {
+    betterSqlite3: {
+      status: 'loaded',
+      evidence: 'database-backed diagnostics sample completed',
+      sampleId: phase6ApiEvidence.sample.id
+    }
+  };
+  const processMetricsSummary = summarizeProcessMetrics(phase6ApiEvidence.sample);
+  const nativeFeel = buildNativeFeelSummary({
+    sample: phase6ApiEvidence.sample,
+    smokeTarget: {
+      kind: smokeTarget.kind,
+      path: smokeTarget.path,
+      packagedExeExists: existsSync(packagedExe)
+    },
+    rendererReadyMs: null,
+    mainInputReadyMs: null,
+    nativeModuleProbe
+  });
 
   const entryWindowEvidence = await page.evaluate(async () => {
     const quick = await window.roc.app.openQuickEntry();
@@ -2292,6 +2316,7 @@ try {
     smokeTargetKind: smokeTarget.kind,
     smokeTargetPath: smokeTarget.path,
     packagedExeExists: existsSync(packagedExe),
+    browserWindowCount: processMetricsSummary.browserWindowCount,
     backgroundTaskVisible:
       taskText.includes('Phase 6 smoke background diagnostic task') &&
       backgroundTaskApiEvidence.activeTasks.some((item) => item.goal === 'Phase 6 smoke background diagnostic task') &&
@@ -2886,6 +2911,11 @@ try {
       packagedExeExists: existsSync(packagedExe)
     },
     performanceSample: phase6ApiEvidence.sample,
+    nativeFeelScorecard,
+    nativeFeel,
+    nativeModuleProbe,
+    processMetricsSummary,
+    browserWindowCount: processMetricsSummary.browserWindowCount,
     evidence: {
       chatInputEvidence,
       workspaceSelectButtonEvidence,

@@ -4,15 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import type { RuntimeMetricsProvider } from '../../src/main/services/diagnostics-service';
 
 export type AppServicesTestContext = {
   root: string;
   services: AppServices;
 };
 
-export function initializeAppServicesTest(options: { skipInitialize?: boolean } = {}): AppServicesTestContext {
+export function initializeAppServicesTest(
+  options: { skipInitialize?: boolean; runtimeMetrics?: RuntimeMetricsProvider } = {}
+): AppServicesTestContext {
   const root = mkdtempSync(join(tmpdir(), 'roc-test-'));
-  const services = createAppServices(root);
+  const services = createAppServices(root, undefined, undefined, options.runtimeMetrics);
   if (options.skipInitialize !== true) {
     services.appService.initialize();
   }

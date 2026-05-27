@@ -5,6 +5,8 @@ import type {
   DiagnosticCheck,
   DiagnosticPackage,
   DiagnosticPackageRequest,
+  PerformanceElectronMetrics,
+  PerformanceProcessMetric,
   PerformanceSample,
   PerformanceSampleRequest,
   SchedulerStatus
@@ -18,13 +20,40 @@ import type { TaskService } from './task-service';
 import { parseCronExpression } from './task/cron-parser';
 import { requireText } from './validation';
 
+export type RuntimeProcessMetric = {
+  pid: number;
+  type: string;
+  name?: string;
+  serviceName?: string;
+  cpuPercent: number;
+  sandboxed?: boolean;
+  integrityLevel?: string;
+  memory: {
+    workingSetSizeKb: number;
+    peakWorkingSetSizeKb: number;
+    privateBytesKb?: number;
+    sharedBytesKb?: number;
+  };
+};
+
+export type RuntimeMetricsProvider = {
+  getBrowserWindowCount: () => number;
+  getProcessMetrics: () => RuntimeProcessMetric[];
+};
+
+const emptyRuntimeMetricsProvider: RuntimeMetricsProvider = {
+  getBrowserWindowCount: () => 0,
+  getProcessMetrics: () => []
+};
+
 export class DiagnosticsService {
   constructor(
     private readonly paths: RocPaths,
     private readonly database: DatabaseService,
     private readonly taskService: TaskService,
     private readonly rtkService: RtkService,
-    private readonly performanceObserverService: PerformanceObserverService
+    private readonly performanceObserverService: PerformanceObserverService,
+    private readonly runtimeMetricsProvider: RuntimeMetricsProvider = emptyRuntimeMetricsProvider
   ) {}
 
   samplePerformance(request: PerformanceSampleRequest): PerformanceSample {
@@ -49,7 +78,8 @@ export class DiagnosticsService {
       heapTotalMb: this.bytesToMb(memoryUsage.heapTotal),
       memoryBudgetMb: request.memoryBudgetMb,
       exceedsBudget: this.bytesToMb(memoryUsage.rss) > request.memoryBudgetMb,
-      timing: this.performanceObserverService.getSnapshot()
+      timing: this.performanceObserverService.getSnapshot(),
+      electron: this.readElectronMetrics()
     };
 
     this.database.db
@@ -109,7 +139,8 @@ export class DiagnosticsService {
       heapTotalMb: row.heap_total_mb,
       memoryBudgetMb: row.memory_budget_mb,
       exceedsBudget: row.exceeds_budget === 1,
-      timing: this.performanceObserverService.getSnapshot()
+      timing: this.performanceObserverService.getSnapshot(),
+      electron: this.readElectronMetrics()
     };
   }
 
@@ -228,6 +259,40 @@ export class DiagnosticsService {
 
   private bytesToMb(value: number): number {
     return Math.round((value / 1024 / 1024) * 10) / 10;
+  }
+
+  private kbToMb(value: number): number {
+    return Math.round((value / 1024) * 10) / 10;
+  }
+
+  private readElectronMetrics(): PerformanceElectronMetrics {
+    const processMetrics = this.runtimeMetricsProvider.getProcessMetrics().map((metric) =>
+      this.toPerformanceProcessMetric(metric)
+    );
+    return {
+      browserWindowCount: this.runtimeMetricsProvider.getBrowserWindowCount(),
+      processCount: processMetrics.length,
+      processMetrics
+    };
+  }
+
+  private toPerformanceProcessMetric(metric: RuntimeProcessMetric): PerformanceProcessMetric {
+    return {
+      pid: metric.pid,
+      type: metric.type,
+      name: metric.name ?? null,
+      serviceName: metric.serviceName ?? null,
+      cpuPercent: metric.cpuPercent,
+      sandboxed: metric.sandboxed ?? null,
+      integrityLevel: metric.integrityLevel ?? null,
+      memory: {
+        workingSetSizeMb: this.kbToMb(metric.memory.workingSetSizeKb),
+        peakWorkingSetSizeMb: this.kbToMb(metric.memory.peakWorkingSetSizeKb),
+        privateBytesMb:
+          metric.memory.privateBytesKb === undefined ? null : this.kbToMb(metric.memory.privateBytesKb),
+        sharedBytesMb: metric.memory.sharedBytesKb === undefined ? null : this.kbToMb(metric.memory.sharedBytesKb)
+      }
+    };
   }
 
   private countScheduledRunningTasks(): number {

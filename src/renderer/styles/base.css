@@ -37,10 +37,6 @@ samp {
   font-feature-settings: var(--font-feature-mono);
 }
 
-button {
-  cursor: pointer;
-}
-
 .boot,
 .fatal {
   display: grid;

@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { prepareArtifactDir } from './lib/artifacts.mjs';
 import { waitForAppReady, waitForWindowWithSelector } from './lib/assertions.mjs';
+import { buildNativeFeelSoftWarnings, buildNativeFeelSummary, nativeFeelScorecard } from './lib/native-feel.mjs';
 
 const artifactDir = prepareArtifactDir();
 const artifactPath = join(artifactDir, 'performance-smoke.json');
@@ -50,9 +51,15 @@ function assertPerformanceSample(sample) {
   if (!Array.isArray(sample.timing?.samples)) {
     throw new Error('Performance smoke sample is missing timing.samples.');
   }
+  if (typeof sample.electron?.browserWindowCount !== 'number') {
+    throw new Error('Performance smoke sample is missing electron.browserWindowCount.');
+  }
+  if (!Array.isArray(sample.electron?.processMetrics)) {
+    throw new Error('Performance smoke sample is missing electron.processMetrics.');
+  }
 }
 
-function buildSoftWarnings({ initialSample, finalSample, quickOpenMs, trayOpenMs }) {
+function buildSoftWarnings({ initialSample, finalSample, quickOpenMs, warmQuickReopenMs, trayOpenMs }) {
   const warnings = [];
   if (initialSample.exceedsBudget) {
     warnings.push(`initial RSS ${initialSample.rssMb} MB exceeds soft budget ${initialSample.memoryBudgetMb} MB`);
@@ -60,16 +67,31 @@ function buildSoftWarnings({ initialSample, finalSample, quickOpenMs, trayOpenMs
   if (finalSample.exceedsBudget) {
     warnings.push(`final RSS ${finalSample.rssMb} MB exceeds soft budget ${finalSample.memoryBudgetMb} MB`);
   }
-  if (quickOpenMs > 1000) {
-    warnings.push(`quick entry opened in ${quickOpenMs} ms`);
-  }
-  if (trayOpenMs > 1000) {
-    warnings.push(`tray entry opened in ${trayOpenMs} ms`);
-  }
+  warnings.push(
+    ...buildNativeFeelSoftWarnings({
+      initialSample,
+      finalSample,
+      quickOpenMs,
+      warmQuickReopenMs,
+      trayOpenMs
+    })
+  );
   return warnings;
 }
 
+async function waitForBrowserWindowVisible(browserWindow) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (await browserWindow.evaluate((window) => window.isVisible())) {
+      return;
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+  }
+  throw new Error('Timed out waiting for Electron BrowserWindow to become visible.');
+}
+
 try {
+  const launchStartedAt = Date.now();
   app = await electron.launch({
     executablePath: smokeTarget.executablePath,
     args: smokeTarget.launchArgs,
@@ -82,7 +104,10 @@ try {
 
   const page = await app.firstWindow();
   await waitForAppReady(page, 'performance-initial', artifactDir);
-  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
+  const rendererReadyMs = Date.now() - launchStartedAt;
+  const mainInputStartedAt = Date.now();
+  await page.waitForSelector('[data-testid="chat-input"]', { timeout: 500 });
+  const mainInputReadyMs = Date.now() - mainInputStartedAt;
 
   const initialSample = await page.evaluate(async () => {
     const sample = await window.roc.diagnostics.samplePerformance({
@@ -106,6 +131,17 @@ try {
   const quickWindow = await waitForWindowWithSelector(app, '[data-testid="floating-quick"]');
   await quickWindow.waitForSelector('[data-testid="quick-entry-view"]', { timeout: 5000 });
   const quickOpenMs = Date.now() - quickStartedAt;
+  const quickBrowserWindow = await app.browserWindow(quickWindow);
+  await quickBrowserWindow.evaluate((window) => window.hide());
+  const warmQuickStartedAt = Date.now();
+  await page.evaluate(async () => {
+    const result = await window.roc.app.openQuickEntry();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+  });
+  await waitForBrowserWindowVisible(quickBrowserWindow);
+  const warmQuickReopenMs = Date.now() - warmQuickStartedAt;
 
   const trayStartedAt = Date.now();
   await page.evaluate(async () => {
@@ -129,6 +165,16 @@ try {
     return sample.data;
   });
   assertPerformanceSample(finalSample);
+  const nativeFeel = buildNativeFeelSummary({
+    sample: finalSample,
+    smokeTarget: {
+      kind: smokeTarget.kind,
+      path: smokeTarget.path,
+      packagedExeExists: existsSync(packagedExe)
+    },
+    rendererReadyMs,
+    mainInputReadyMs
+  });
 
   const result = {
     passed: true,
@@ -141,16 +187,21 @@ try {
     },
     windows: {
       quickOpenMs,
+      warmQuickReopenMs,
       trayOpenMs
     },
     samples: {
       initial: initialSample,
       final: finalSample
     },
+    nativeFeelScorecard,
+    nativeFeel,
+    processMetricsSummary: nativeFeel.processMetricsSummary,
     softWarnings: buildSoftWarnings({
       initialSample,
       finalSample,
       quickOpenMs,
+      warmQuickReopenMs,
       trayOpenMs
     })
   };

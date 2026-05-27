@@ -123,6 +123,67 @@ describe('Roc foundation services', () => {
     expect(existsSync(resolve('scripts/package-dir.mjs'))).toBe(true);
   });
 
+  it('includes Electron window and process metrics in performance samples', () => {
+    cleanupAppServicesTest(context);
+    context = initializeAppServicesTest({
+      runtimeMetrics: {
+        getBrowserWindowCount: () => 3,
+        getProcessMetrics: () => [
+          {
+            pid: 4100,
+            type: 'Browser',
+            name: 'Roc',
+            cpuPercent: 1.25,
+            memory: {
+              workingSetSizeKb: 204800,
+              peakWorkingSetSizeKb: 240000,
+              privateBytesKb: 120000,
+              sharedBytesKb: 80000
+            }
+          },
+          {
+            pid: 4101,
+            type: 'GPU',
+            name: 'GPU Process',
+            cpuPercent: 0.5,
+            memory: {
+              workingSetSizeKb: 64000,
+              peakWorkingSetSizeKb: 70000,
+              privateBytesKb: 32000,
+              sharedBytesKb: 31000
+            }
+          }
+        ]
+      }
+    });
+
+    const sample = context.services.diagnosticsService.samplePerformance({
+      mode: 'test',
+      memoryBudgetMb: 300
+    });
+
+    expect(sample.electron.browserWindowCount).toBe(3);
+    expect(sample.electron.processCount).toBe(2);
+    expect(sample.electron.processMetrics).toEqual([
+      expect.objectContaining({
+        pid: 4100,
+        type: 'Browser',
+        cpuPercent: 1.25,
+        memory: expect.objectContaining({
+          workingSetSizeMb: 200,
+          privateBytesMb: 117.2
+        })
+      }),
+      expect.objectContaining({
+        pid: 4101,
+        type: 'GPU',
+        memory: expect.objectContaining({
+          workingSetSizeMb: 62.5
+        })
+      })
+    ]);
+  });
+
   it('keeps diagnostics timing snapshots bounded to the newest performance samples', () => {
     const { services } = context;
 

@@ -17,4 +17,17 @@ describe('package scripts', () => {
     expect(smokeScript).toContain('performance-smoke.json');
     expect(smokeScript).toContain('window.roc.diagnostics.samplePerformance');
   });
+
+  it('records Windows native-feel fields in smoke artifacts', () => {
+    const performanceSmokeScript = readFileSync(new URL('../smoke/performance-smoke.mjs', import.meta.url), 'utf8');
+    const electronSmokeScript = readFileSync(new URL('../smoke/electron-smoke.mjs', import.meta.url), 'utf8');
+
+    expect(performanceSmokeScript).toContain('nativeFeelScorecard');
+    expect(performanceSmokeScript).toContain('rendererReadyMs');
+    expect(performanceSmokeScript).toContain('warmQuickReopenMs');
+    expect(performanceSmokeScript).toContain('processMetricsSummary');
+    expect(electronSmokeScript).toContain('nativeModuleProbe');
+    expect(electronSmokeScript).toContain('processMetricsSummary');
+    expect(electronSmokeScript).toContain('browserWindowCount');
+  });
 });

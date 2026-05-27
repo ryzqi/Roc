@@ -16,4 +16,29 @@ describe('renderer animation configuration', () => {
     expect(css).toContain('animation-duration: 0.01ms !important;');
     expect(css).toContain('scroll-behavior: auto !important;');
   });
+
+  it('keeps Windows native-feel CSS rules from regressing into web defaults', () => {
+    const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');
+    const allCss = [
+      'base.css',
+      'app-shell.css',
+      'animations.css',
+      'chat.css',
+      'composer.css',
+      'floating.css',
+      'git.css',
+      'settings.css',
+      'shared.css',
+      'skills.css',
+      'workbench.css'
+    ]
+      .map((fileName) => readFileSync(`src/renderer/styles/${fileName}`, 'utf8'))
+      .join('\n');
+    const appShellBlock = allCss.match(/(^|\n)\s*\.app-shell\s*\{(?<body>[^}]*)\}/u)?.groups?.body ?? '';
+    const appShellShadow = appShellBlock.match(/box-shadow\s*:\s*([^;]+);/u)?.[1]?.trim();
+
+    expect(baseCss).not.toMatch(/(^|\n)\s*button\s*\{[^}]*cursor\s*:\s*pointer\s*;/u);
+    expect(allCss).not.toMatch(/scroll-behavior\s*:\s*smooth\s*;/u);
+    expect(appShellShadow).toBe('none');
+  });
 });

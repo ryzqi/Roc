@@ -257,6 +257,11 @@ describe('workspace and diagnostics surfaces', () => {
         timing: {
           generatedAt: '2026-05-16T08:00:00.000Z',
           samples: []
+        },
+        electron: {
+          browserWindowCount: 0,
+          processCount: 0,
+          processMetrics: []
         }
       },
       diagnosticChecks: [
@@ -354,6 +359,11 @@ describe('workspace and diagnostics surfaces', () => {
               }
             }
           ]
+        },
+        electron: {
+          browserWindowCount: 0,
+          processCount: 0,
+          processMetrics: []
         }
       }
     })

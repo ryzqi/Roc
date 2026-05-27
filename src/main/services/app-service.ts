@@ -3,7 +3,7 @@ import { AgentService } from './agent-service';
 import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
 import { DeepAgentRuntimeService } from './deep-agent-runtime-service';
-import { DiagnosticsService } from './diagnostics-service';
+import { DiagnosticsService, type RuntimeMetricsProvider } from './diagnostics-service';
 import { FileService } from './file-service';
 import { GitService } from './git-service';
 import { LifecycleService } from './lifecycle-service';
@@ -200,7 +200,8 @@ export class AppService {
 export function createAppServices(
   root?: string,
   runtimeEnvironment = defaultRuntimeEnvironment,
-  safeStorageBackend: SafeStorageBackend = createInMemorySafeStorageBackend()
+  safeStorageBackend: SafeStorageBackend = createInMemorySafeStorageBackend(),
+  runtimeMetricsProvider?: RuntimeMetricsProvider
 ): AppServices {
   const paths = new RocPaths(root);
   const configService = new ConfigService(paths);
@@ -214,7 +215,14 @@ export function createAppServices(
   const memoryService = new MemoryService(paths, databaseService, workspaceService);
   const rtkService = new RtkService(paths);
   const performanceObserverService = new PerformanceObserverService();
-  const diagnosticsService = new DiagnosticsService(paths, databaseService, taskService, rtkService, performanceObserverService);
+  const diagnosticsService = new DiagnosticsService(
+    paths,
+    databaseService,
+    taskService,
+    rtkService,
+    performanceObserverService,
+    runtimeMetricsProvider
+  );
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);

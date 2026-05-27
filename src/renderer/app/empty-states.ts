@@ -69,6 +69,11 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
       timing: {
         generatedAt: '',
         samples: []
+      },
+      electron: {
+        browserWindowCount: 0,
+        processCount: 0,
+        processMetrics: []
       }
     }
   };

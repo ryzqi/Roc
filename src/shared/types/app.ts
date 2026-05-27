@@ -43,6 +43,29 @@ export type PerformanceSample = {
   memoryBudgetMb: number;
   exceedsBudget: boolean;
   timing: PerformanceSnapshot;
+  electron: PerformanceElectronMetrics;
+};
+
+export type PerformanceElectronMetrics = {
+  browserWindowCount: number;
+  processCount: number;
+  processMetrics: PerformanceProcessMetric[];
+};
+
+export type PerformanceProcessMetric = {
+  pid: number;
+  type: string;
+  name: string | null;
+  serviceName: string | null;
+  cpuPercent: number;
+  sandboxed: boolean | null;
+  integrityLevel: string | null;
+  memory: {
+    workingSetSizeMb: number;
+    peakWorkingSetSizeMb: number;
+    privateBytesMb: number | null;
+    sharedBytesMb: number | null;
+  };
 };
 
 export type PerformanceSampleRequest = {

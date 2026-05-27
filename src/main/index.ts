@@ -1,8 +1,9 @@
 import './proxy-runtime';
-import { BrowserWindow, Menu, app, powerMonitor, protocol, safeStorage, shell } from 'electron';
+import { BrowserWindow, Menu, app, powerMonitor, protocol, safeStorage, shell, type ProcessMetric } from 'electron';
 import { join } from 'node:path';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
+import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './services/secret-service';
 import { buildFloatingWindowOptions, buildMainWindowOptions } from './window-shell';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
@@ -105,7 +106,8 @@ async function createWindow(): Promise<void> {
       version: app.getVersion(),
       isPackaged: app.isPackaged
     },
-    createElectronSafeStorageBackend()
+    createElectronSafeStorageBackend(),
+    createElectronRuntimeMetricsProvider()
   );
   pdfPreviewServices = services;
   services.performanceObserverService.record({
@@ -197,10 +199,15 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
 
-  mainWindow.once('ready-to-show', () => {
+  let mainWindowShown = false;
+  function showMainWindowOnce(label: string): void {
+    if (mainWindowShown) {
+      return;
+    }
+    mainWindowShown = true;
     services.performanceObserverService.record({
       phase: 'ready_to_show',
-      label: 'mainWindow.ready-to-show',
+      label,
       startedAtMs: mainReadyStartedAtMs,
       durationMs: performance.now() - mainReadyStartedAtMs,
       metadata: {
@@ -209,6 +216,13 @@ async function createWindow(): Promise<void> {
     });
     mainWindow?.show();
     initializeDeferredServices();
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    showMainWindowOnce('mainWindow.ready-to-show');
+  });
+  mainWindow.webContents.once('did-finish-load', () => {
+    showMainWindowOnce('mainWindow.did-finish-load');
   });
 
   await services.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
@@ -236,5 +250,29 @@ function createElectronSafeStorageBackend(): SafeStorageBackend {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     encryptString: (plaintext) => safeStorage.encryptString(plaintext),
     decryptString: (encrypted) => safeStorage.decryptString(encrypted)
+  };
+}
+
+function createElectronRuntimeMetricsProvider(): RuntimeMetricsProvider {
+  return {
+    getBrowserWindowCount: () => BrowserWindow.getAllWindows().length,
+    getProcessMetrics: () => app.getAppMetrics().map(toRuntimeProcessMetric)
+  };
+}
+
+function toRuntimeProcessMetric(metric: ProcessMetric): RuntimeProcessMetric {
+  return {
+    pid: metric.pid,
+    type: metric.type,
+    name: metric.name,
+    serviceName: metric.serviceName,
+    cpuPercent: metric.cpu.percentCPUUsage,
+    sandboxed: metric.sandboxed,
+    integrityLevel: metric.integrityLevel,
+    memory: {
+      workingSetSizeKb: metric.memory.workingSetSize,
+      peakWorkingSetSizeKb: metric.memory.peakWorkingSetSize,
+      privateBytesKb: metric.memory.privateBytes
+    }
   };
 }
