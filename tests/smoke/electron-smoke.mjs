@@ -1964,6 +1964,13 @@ try {
     }
   };
   const processMetricsSummary = summarizeProcessMetrics(phase6ApiEvidence.sample);
+  const nativeConfirmIpcSamples = phase6ApiEvidence.sample.timing.samples.filter(
+    (sample) =>
+      sample.phase === 'ipc_call' &&
+      sample.label === 'roc:shell:confirm' &&
+      sample.metadata?.channel === 'roc:shell:confirm' &&
+      sample.metadata?.ok === true
+  );
   const nativeFeel = buildNativeFeelSummary({
     sample: phase6ApiEvidence.sample,
     smokeTarget: {
@@ -2678,9 +2685,8 @@ try {
       initialGitBranch !== null &&
       gitCurrentBranchAfterCheckout?.includes(initialGitBranch.trim()) === true &&
       Array.isArray(confirmMessages) &&
-      confirmMessages.some((message) => String(message).includes('feature/smoke-branch')) &&
-      initialGitBranch !== null &&
-      confirmMessages.some((message) => String(message).includes(initialGitBranch.trim())) &&
+      confirmMessages.length === 0 &&
+      nativeConfirmIpcSamples.length >= 2 &&
       gitLastCommitText?.includes('最近提交：smoke commit') === true &&
       gitCommitResetState !== null &&
       gitCommitResetState.disabled === true &&
@@ -2988,6 +2994,9 @@ try {
       boundary.diagnosticsKeys.includes('samplePerformance') &&
       boundary.diagnosticsKeys.includes('createDiagnosticPackage') &&
       boundary.diagnosticsKeys.includes('runChecks'),
+    shellApiExpanded:
+      boundary.shellKeys.includes('execute') &&
+      boundary.shellKeys.includes('confirm'),
     toolPopoverHoverSticky: buttonInteractionEvidence.toolPopoverHoverSticky,
     skillPopoverHoverSticky: buttonInteractionEvidence.skillPopoverHoverSticky,
     modelPopoverHoverSticky: buttonInteractionEvidence.modelPopoverHoverSticky,
@@ -3121,6 +3130,7 @@ try {
     taskApiExpanded: rendererBoundary.taskApiExpanded,
     lifecycleApiExpanded: rendererBoundary.lifecycleApiExpanded,
     diagnosticsApiExpanded: rendererBoundary.diagnosticsApiExpanded,
+    shellApiExpanded: rendererBoundary.shellApiExpanded,
     toolPopoverHoverSticky: rendererBoundary.toolPopoverHoverSticky,
     skillPopoverHoverSticky: rendererBoundary.skillPopoverHoverSticky,
     modelPopoverHoverSticky: rendererBoundary.modelPopoverHoverSticky,
@@ -3182,6 +3192,10 @@ try {
       windowPlacementEvidence,
       floatingWindowBoundsEvidence,
       phase3WebViewEvidence,
+      nativeConfirmationEvidence: {
+        confirmMessages,
+        nativeConfirmIpcSamples
+      },
       previewText
     },
     failedChecks,

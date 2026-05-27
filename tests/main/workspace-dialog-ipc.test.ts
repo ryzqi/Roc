@@ -17,6 +17,7 @@ const electronMock = vi.hoisted(() => {
         handlers.set(channel, handler);
       })
     },
+    showMessageBox: vi.fn(),
     showOpenDialog: vi.fn()
   };
 });
@@ -24,6 +25,7 @@ const electronMock = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: class {},
   dialog: {
+    showMessageBox: electronMock.showMessageBox,
     showOpenDialog: electronMock.showOpenDialog
   },
   ipcMain: electronMock.ipcMain
@@ -36,6 +38,7 @@ let services: AppServices;
 beforeEach(() => {
   electronMock.handlers.clear();
   electronMock.ipcMain.handle.mockClear();
+  electronMock.showMessageBox.mockReset();
   electronMock.showOpenDialog.mockReset();
   root = mkdtempSync(join(tmpdir(), 'roc-ipc-test-'));
   workspaceRoot = join(root, 'workspace');
@@ -514,5 +517,93 @@ describe('workspace dialog IPC', () => {
         hostIntegration: getHostIntegrationStatus()
       })
     });
+  });
+
+  it('uses a native message box for shell confirmation IPC', async () => {
+    const mainWindow = {} as BrowserWindow;
+    registerIpc(services, mainWindow, {
+      openMainPage: () => undefined,
+      openQuickEntry: async () => undefined,
+      openTrayEntry: async () => undefined,
+      closeMainWindow: () => undefined,
+      broadcastTaskUpdated: () => undefined,
+      getHostIntegrationStatus: (): HostIntegrationStatus => ({
+        startup: {
+          configuredOpenAtLogin: false,
+          effectiveOpenAtLogin: false,
+          syncError: null
+        },
+        globalHotkey: {
+          accelerator: null,
+          registered: false,
+          registrationError: null
+        }
+      }),
+      syncHostSettings: () => undefined
+    });
+    electronMock.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false });
+
+    const handler = electronMock.handlers.get(ipcChannels.shellConfirm);
+    if (handler === undefined) {
+      throw new Error('shellConfirm handler was not registered.');
+    }
+
+    const result = await handler({}, {
+      title: 'Git 分支确认',
+      message: '确认在工作区 F:\\Code\\Roc 创建分支 feature/native-confirm 吗？',
+      confirmLabel: '确认',
+      cancelLabel: '取消'
+    });
+
+    expect(electronMock.showMessageBox).toHaveBeenCalledWith(mainWindow, {
+      type: 'warning',
+      title: 'Git 分支确认',
+      message: '确认在工作区 F:\\Code\\Roc 创建分支 feature/native-confirm 吗？',
+      buttons: ['确认', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        confirmed: true,
+        response: 0
+      }
+    });
+  });
+
+  it('auto-confirms shell confirmation during smoke without opening a blocking dialog', async () => {
+    const originalSmoke = process.env.ROC_SMOKE;
+    process.env.ROC_SMOKE = '1';
+    try {
+      registerWorkspaceHandlers();
+      const handler = electronMock.handlers.get(ipcChannels.shellConfirm);
+      if (handler === undefined) {
+        throw new Error('shellConfirm handler was not registered.');
+      }
+
+      const result = await handler({}, {
+        title: 'Smoke',
+        message: 'Smoke confirmation',
+        confirmLabel: '确认',
+        cancelLabel: '取消'
+      });
+
+      expect(electronMock.showMessageBox).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: true,
+        data: {
+          confirmed: true,
+          response: 0
+        }
+      });
+    } finally {
+      if (originalSmoke === undefined) {
+        delete process.env.ROC_SMOKE;
+      } else {
+        process.env.ROC_SMOKE = originalSmoke;
+      }
+    }
   });
 });

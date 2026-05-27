@@ -1,4 +1,4 @@
-import type { GitBranchListResult, GitStatusChange } from '../shared/types';
+import type { GitBranchListResult, ShellConfirmationRequest } from '../shared/types';
 
 export const GIT_SPLIT_MIN_WIDTH = 320;
 export const GIT_SPLIT_MAX_WIDTH = 720;
@@ -44,6 +44,40 @@ export function buildGitCommitButtonState({
 } {
   return {
     enabled: !actionBusy && changedFiles > 0 && commitMessage.trim().length > 0
+  };
+}
+
+export function buildGitCreateBranchConfirmationRequest({
+  workspacePath,
+  branchName,
+  checkoutAfterCreate
+}: {
+  workspacePath: string;
+  branchName: string;
+  checkoutAfterCreate: boolean;
+}): ShellConfirmationRequest {
+  return {
+    title: 'Git 分支确认',
+    message: checkoutAfterCreate
+      ? `确认在工作区 ${workspacePath} 创建并切换到分支 ${branchName} 吗？`
+      : `确认在工作区 ${workspacePath} 创建分支 ${branchName} 吗？`,
+    confirmLabel: '确认',
+    cancelLabel: '取消'
+  };
+}
+
+export function buildGitCheckoutBranchConfirmationRequest({
+  workspacePath,
+  targetBranch
+}: {
+  workspacePath: string;
+  targetBranch: string;
+}): ShellConfirmationRequest {
+  return {
+    title: 'Git 分支确认',
+    message: `确认在工作区 ${workspacePath} 切换到分支 ${targetBranch} 吗？`,
+    confirmLabel: '确认',
+    cancelLabel: '取消'
   };
 }
 

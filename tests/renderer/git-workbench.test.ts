@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGitBranchSwitcherModel,
+  buildGitCreateBranchConfirmationRequest,
   buildGitCommitButtonState,
   buildGitDiffPreviewRequest,
+  buildGitCheckoutBranchConfirmationRequest,
   buildGitSelectionModel,
   clampGitSplitWidth,
   selectAllGitChanges
@@ -89,6 +91,35 @@ describe('git workbench helpers', () => {
         commitMessage: 'feat: update notes'
       }).enabled
     ).toBe(false);
+  });
+
+  it('builds a native confirmation request for creating a branch', () => {
+    expect(
+      buildGitCreateBranchConfirmationRequest({
+        workspacePath: 'F:\\Code\\Roc',
+        branchName: 'feature/native-confirm',
+        checkoutAfterCreate: true
+      })
+    ).toEqual({
+      title: 'Git 分支确认',
+      message: '确认在工作区 F:\\Code\\Roc 创建并切换到分支 feature/native-confirm 吗？',
+      confirmLabel: '确认',
+      cancelLabel: '取消'
+    });
+  });
+
+  it('builds a native confirmation request for checking out a branch', () => {
+    expect(
+      buildGitCheckoutBranchConfirmationRequest({
+        workspacePath: 'F:\\Code\\Roc',
+        targetBranch: 'main'
+      })
+    ).toEqual({
+      title: 'Git 分支确认',
+      message: '确认在工作区 F:\\Code\\Roc 切换到分支 main 吗？',
+      confirmLabel: '确认',
+      cancelLabel: '取消'
+    });
   });
 
   it('requests the selected file diff when the first selected path has no preview yet', () => {

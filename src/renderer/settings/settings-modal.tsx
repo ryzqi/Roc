@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type React from 'react';
 import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../animations';
+import { focusDialogInitialElement, trapDialogTabFocus } from '../dialog-focus';
 
 export function SettingsModal({
   children,
@@ -10,8 +11,20 @@ export function SettingsModal({
   children: React.ReactNode;
   onClose: () => void;
 }): React.JSX.Element {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (panelRef.current === null) {
+      return;
+    }
+    focusDialogInitialElement(panelRef.current, null);
+  }, []);
+
   useEffect(() => {
     function handleKey(event: KeyboardEvent): void {
+      if (panelRef.current !== null && trapDialogTabFocus(panelRef.current, event)) {
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
@@ -43,7 +56,9 @@ export function SettingsModal({
           exit="exit"
           initial="initial"
           onClick={(event) => event.stopPropagation()}
+          ref={panelRef}
           role="dialog"
+          tabIndex={-1}
           transition={resolveMotionTransition(modalPopTransition)}
           variants={modalPop}
         >

@@ -154,7 +154,8 @@ const rocApi: RocPreloadApi = {
     status: () => ipcRenderer.invoke(ipcChannels.rtkStatus)
   },
   shell: {
-    execute: (request) => ipcRenderer.invoke(ipcChannels.shellExecute, request)
+    execute: (request) => ipcRenderer.invoke(ipcChannels.shellExecute, request),
+    confirm: (request) => ipcRenderer.invoke(ipcChannels.shellConfirm, request)
   }
 };
 

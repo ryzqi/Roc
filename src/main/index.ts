@@ -33,6 +33,7 @@ import {
 } from './window-state-store';
 import { applyWindowMaterial } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
+import { bindNativeContextMenu } from './native-context-menu';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
@@ -220,6 +221,7 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  bindNativeContextMenu(entryWindow.webContents);
   entryWindow.once('ready-to-show', () => {
     entryWindow.show();
   });
@@ -368,6 +370,7 @@ async function createWindow(): Promise<void> {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  bindNativeContextMenu(mainWindow.webContents);
 
   let mainWindowShown = false;
   function showMainWindowOnce(label: string): void {

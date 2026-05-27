@@ -4,7 +4,9 @@ import type { GitBranchMutationResult, GitStatusResult } from '../../shared/type
 import { EmptyState } from '../components/EmptyState';
 import {
   buildGitBranchSwitcherModel,
+  buildGitCheckoutBranchConfirmationRequest,
   buildGitCommitButtonState,
+  buildGitCreateBranchConfirmationRequest,
   buildGitSelectionModel,
   clampGitSplitWidth,
   GIT_SPLIT_DEFAULT_WIDTH,
@@ -223,13 +225,18 @@ export function GitWorkbench({
     }
     const branchName = branchDraft.trim();
     const workspacePath = gitStatus.workspacePath;
-    if (
-      !window.confirm(
+    const confirmation = await window.roc.shell.confirm(
+      buildGitCreateBranchConfirmationRequest({
+        workspacePath,
+        branchName,
         checkoutAfterCreate
-          ? `确认在工作区 ${workspacePath} 创建并切换到分支 ${branchName} 吗？`
-          : `确认在工作区 ${workspacePath} 创建分支 ${branchName} 吗？`
-      )
-    ) {
+      })
+    );
+    if (!confirmation.ok) {
+      setActionError(confirmation.error.message);
+      return;
+    }
+    if (!confirmation.data.confirmed) {
       return;
     }
     setPendingAction('branch-create');
@@ -259,7 +266,17 @@ export function GitWorkbench({
       return;
     }
     const workspacePath = gitStatus.workspacePath;
-    if (!window.confirm(`确认在工作区 ${workspacePath} 切换到分支 ${targetBranch} 吗？`)) {
+    const confirmation = await window.roc.shell.confirm(
+      buildGitCheckoutBranchConfirmationRequest({
+        workspacePath,
+        targetBranch
+      })
+    );
+    if (!confirmation.ok) {
+      setActionError(confirmation.error.message);
+      return;
+    }
+    if (!confirmation.data.confirmed) {
       return;
     }
     setPendingAction('branch-checkout');

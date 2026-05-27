@@ -61,6 +61,8 @@ import type {
   SessionRecallWriteRequest,
   SessionSearchRequest,
   SessionSearchResult,
+  ShellConfirmationRequest,
+  ShellConfirmationResult,
   ShellExecutionRequest,
   ShellExecutionResult,
   SettingsSaveRequest,
@@ -194,7 +196,8 @@ export const ipcChannels = {
   terminalResize: 'roc:terminal:resize',
   terminalCloseSession: 'roc:terminal:close-session',
   rtkStatus: 'roc:rtk:status',
-  shellExecute: 'roc:shell:execute'
+  shellExecute: 'roc:shell:execute',
+  shellConfirm: 'roc:shell:confirm'
 } as const;
 
 export type RocPreloadApi = {
@@ -333,5 +336,6 @@ export type RocPreloadApi = {
   };
   shell: {
     execute: (request: ShellExecutionRequest) => Promise<IpcResult<ShellExecutionResult>>;
+    confirm: (request: ShellConfirmationRequest) => Promise<IpcResult<ShellConfirmationResult>>;
   };
 };

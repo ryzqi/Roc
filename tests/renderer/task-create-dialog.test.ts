@@ -60,6 +60,56 @@ describe('TaskCreateDialog', () => {
     expect(html).not.toContain('data-testid="task-create-forbidden-actions"');
   });
 
+  it('marks the panel as a modal dialog for assistive technology', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(TaskCreateDialog, {
+        open: true,
+        onClose: () => {},
+        onSubmitDescription: async () => ({ ok: true as const })
+      })
+    );
+
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('aria-label="新建任务"');
+  });
+
+  it('moves initial focus to the description field', async () => {
+    await renderDialog();
+
+    expect(document.activeElement).toBe(queryTextarea('task-create-description'));
+  });
+
+  it('keeps Tab focus inside the dialog panel', async () => {
+    await renderDialog();
+
+    const headerClose = queryButton('task-create-dialog-close');
+    const footerClose = queryFooterCloseButton();
+
+    footerClose.focus();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+    expect(document.activeElement).toBe(headerClose);
+
+    headerClose.focus();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, shiftKey: true }));
+    });
+    expect(document.activeElement).toBe(footerClose);
+  });
+
+  it('closes when Escape is pressed', async () => {
+    const onClose = vi.fn();
+    await renderDialog({ onClose });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('does not submit an empty description', async () => {
     const onSubmitDescription = vi.fn().mockResolvedValue({ ok: true as const });
 
@@ -131,6 +181,19 @@ describe('TaskCreateDialog', () => {
     const button = container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`);
     expect(button).not.toBeNull();
     return button as HTMLButtonElement;
+  }
+
+  function queryTextarea(testId: string): HTMLTextAreaElement {
+    const textarea = container.querySelector<HTMLTextAreaElement>(`[data-testid="${testId}"]`);
+    expect(textarea).not.toBeNull();
+    return textarea as HTMLTextAreaElement;
+  }
+
+  function queryFooterCloseButton(): HTMLButtonElement {
+    const footerClose = Array.from(container.querySelectorAll<HTMLButtonElement>('.task-create-dialog-actions button'))
+      .find((button) => button.textContent === '关闭');
+    expect(footerClose).not.toBeUndefined();
+    return footerClose as HTMLButtonElement;
   }
 
   function setTextareaValue(testId: string, value: string): void {

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../../animations';
+import { focusDialogInitialElement, trapDialogTabFocus } from '../../dialog-focus';
 
 export function TaskCreateDialog({
   open,
@@ -14,6 +15,8 @@ export function TaskCreateDialog({
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -24,10 +27,20 @@ export function TaskCreateDialog({
   }, [open]);
 
   useEffect(() => {
+    if (!open || panelRef.current === null) {
+      return;
+    }
+    focusDialogInitialElement(panelRef.current, descriptionRef.current);
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
       return;
     }
     function handleKey(event: KeyboardEvent): void {
+      if (panelRef.current !== null && trapDialogTabFocus(panelRef.current, event)) {
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
@@ -82,7 +95,9 @@ export function TaskCreateDialog({
             exit="exit"
             initial="initial"
             onClick={(event) => event.stopPropagation()}
+            ref={panelRef}
             role="dialog"
+            tabIndex={-1}
             transition={resolveMotionTransition(modalPopTransition)}
             variants={modalPop}
           >
@@ -115,6 +130,7 @@ export function TaskCreateDialog({
                         <span>自然语言描述</span>
                         <textarea
                           data-testid="task-create-description"
+                          ref={descriptionRef}
                           rows={8}
                           value={description}
                           onChange={(event) => {

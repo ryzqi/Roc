@@ -13,3 +13,4 @@ export * from './chat';
 export * from './task';
 export * from './diagnostics';
 export * from './performance';
+export * from './shell';
