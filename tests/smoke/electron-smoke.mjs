@@ -16,12 +16,14 @@ const packagedExe = resolve('release/win-unpacked/Roc.exe');
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
 const electronBuilderConfig = readFileSync(resolve('electron-builder.yml'), 'utf8');
 const releaseReadiness = buildReleaseReadinessSnapshot({
-  appId: 'com.roc.desktop',
-  productName: 'Roc',
-  executableName: 'Roc',
-  version: packageJson.version,
   builderConfigText: electronBuilderConfig,
-  packageJson
+  packageJson,
+  sourceTexts: {
+    main: readFileSync(resolve('src/main/index.ts'), 'utf8'),
+    windowsHost: readFileSync(resolve('src/main/windows-host-service.ts'), 'utf8'),
+    nativeContextMenu: readFileSync(resolve('src/main/native-context-menu.ts'), 'utf8'),
+    renderer: readFileSync(resolve('src/renderer/App.tsx'), 'utf8')
+  }
 });
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');

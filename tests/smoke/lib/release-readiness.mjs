@@ -1,24 +1,37 @@
+export function readReleaseIdentity(input) {
+  return {
+    appId: readTopLevelScalar(input.builderConfigText, 'appId'),
+    productName: readTopLevelScalar(input.builderConfigText, 'productName'),
+    executableName: readNestedScalar(input.builderConfigText, 'win', 'executableName'),
+    version: input.packageJson.version
+  };
+}
+
 export function buildReleaseReadinessSnapshot(input) {
   const dependencies = {
     ...(input.packageJson.dependencies ?? {}),
     ...(input.packageJson.devDependencies ?? {})
   };
+  const sourceText = Object.values(input.sourceTexts ?? {}).join('\n');
   const hasUpdater = Object.prototype.hasOwnProperty.call(dependencies, 'electron-updater');
   const hasFileAssociations = /\bfileAssociations\s*:/u.test(input.builderConfigText);
   const isDirOnlyTarget = /\btarget\s*:\s*\r?\n\s*-\s*dir\b/u.test(input.builderConfigText);
   const signingDisabled = /\bsignAndEditExecutable\s*:\s*false\b/u.test(input.builderConfigText);
+  const hasAppProtocol = /\bsetAsDefaultProtocolClient\s*\(/u.test(sourceText);
+  const hasWindowsToast = /\bnew\s+Notification\s*\(|\bNotification\s*\./u.test(sourceText);
+  const hasTaskbarIntegration = /\bsetJumpList\s*\(|\bsetUserTasks\s*\(|\bsetProgressBar\s*\(/u.test(sourceText);
+  const hasCrashReporter = /\bcrashReporter\s*\.\s*start\s*\(/u.test(sourceText);
+  const hasNativeClipboard = /\b(?:clipboard|clipboardApi)\s*\.\s*write/u.test(sourceText);
+  const hasFileDrop = /\baddEventListener\s*\(\s*['"]drop['"]|\bonDrop\s*=|\bondrop\s*=/u.test(sourceText);
 
   return {
-    identity: {
-      appId: input.appId,
-      productName: input.productName,
-      executableName: input.executableName,
-      version: input.version
-    },
+    identity: readReleaseIdentity(input),
     integrations: {
       appProtocol: {
-        status: 'absent',
-        evidence: 'No system app protocol is registered; roc-preview remains an internal protocol only.'
+        status: hasAppProtocol ? 'present' : 'absent',
+        evidence: hasAppProtocol
+          ? 'Main process registers a system app protocol.'
+          : 'No system app protocol is registered; roc-preview remains an internal protocol only.'
       },
       fileAssociation: {
         status: hasFileAssociations ? 'present' : 'absent',
@@ -27,12 +40,14 @@ export function buildReleaseReadinessSnapshot(input) {
           : 'electron-builder.yml has no fileAssociations block.'
       },
       windowsToast: {
-        status: 'absent',
-        evidence: 'No main-process Notification or toast click handler is registered.'
+        status: hasWindowsToast ? 'present' : 'absent',
+        evidence: hasWindowsToast
+          ? 'Main process uses Electron Notification APIs.'
+          : 'No main-process Notification or toast click handler is registered.'
       },
       taskbarJumpList: {
-        status: 'absent',
-        evidence: 'No Jump List or taskbar progress API is wired.'
+        status: hasTaskbarIntegration ? 'present' : 'absent',
+        evidence: hasTaskbarIntegration ? 'Windows taskbar integration API is wired.' : 'No Jump List or taskbar progress API is wired.'
       },
       installerSigningUpdater: {
         status: isDirOnlyTarget && signingDisabled && !hasUpdater ? 'absent' : 'partial',
@@ -42,20 +57,24 @@ export function buildReleaseReadinessSnapshot(input) {
             : 'Release packaging is partially configured; installer, signing, or updater evidence needs review.'
       },
       crashReporter: {
-        status: 'absent',
-        evidence: 'Electron crashReporter is not started; diagnostic package/logs remain the local fallback.'
+        status: hasCrashReporter ? 'present' : 'absent',
+        evidence: hasCrashReporter
+          ? 'Electron crashReporter.start is wired.'
+          : 'Electron crashReporter is not started; diagnostic package/logs remain the local fallback.'
       },
       nativeClipboard: {
-        status: 'partial',
-        evidence: 'Native context menu writes selected text through main-process clipboard; renderer copy paths remain plain text.'
+        status: hasNativeClipboard ? 'partial' : 'absent',
+        evidence: hasNativeClipboard
+          ? 'Native context menu writes selected text through main-process clipboard; renderer copy paths remain plain text.'
+          : 'No main-process clipboard API usage was found.'
       },
       nativeFileDialogs: {
         status: 'partial',
         evidence: 'Open dialogs are native; no save/export dialog is exposed yet.'
       },
       fileDragDrop: {
-        status: 'absent',
-        evidence: 'No renderer drop zone accepts file path payloads.'
+        status: hasFileDrop ? 'partial' : 'absent',
+        evidence: hasFileDrop ? 'Renderer drop handling exists; payload validation needs review.' : 'No renderer drop zone accepts file path payloads.'
       },
       accessibility: {
         status: 'manual-required',
@@ -63,4 +82,32 @@ export function buildReleaseReadinessSnapshot(input) {
       }
     }
   };
+}
+
+function readTopLevelScalar(text, key) {
+  const match = new RegExp(`^${escapeRegExp(key)}\\s*:\\s*([^\\r\\n#]+)`, 'mu').exec(text);
+  return match?.[1]?.trim() ?? null;
+}
+
+function readNestedScalar(text, section, key) {
+  const lines = text.split(/\r?\n/u);
+  let inSection = false;
+  for (const line of lines) {
+    if (/^\S/u.test(line)) {
+      inSection = line.trim() === `${section}:`;
+      continue;
+    }
+    if (!inSection) {
+      continue;
+    }
+    const match = new RegExp(`^\\s+${escapeRegExp(key)}\\s*:\\s*([^\\r\\n#]+)`, 'u').exec(line);
+    if (match !== null) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
