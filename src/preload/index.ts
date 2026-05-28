@@ -63,7 +63,8 @@ const rocApi: RocPreloadApi = {
   memory: {
     status: () => ipcRenderer.invoke(ipcChannels.memoryStatus),
     readFile: (input) => ipcRenderer.invoke(ipcChannels.memoryReadFile, input),
-    writeFile: (request) => ipcRenderer.invoke(ipcChannels.memoryWriteFile, request)
+    writeFile: (request) => ipcRenderer.invoke(ipcChannels.memoryWriteFile, request),
+    snapshotPreview: () => ipcRenderer.invoke(ipcChannels.memorySnapshotPreview)
   },
   mcp: {
     listServers: () => ipcRenderer.invoke(ipcChannels.mcpListServers),

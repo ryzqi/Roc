@@ -4,6 +4,7 @@ import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
 import type { LoadedState } from '../../loaded-state';
 import { FilesTab } from './files-tab';
+import { SnapshotTab } from './snapshot-tab';
 
 type MemoryTab = 'files' | 'sessions' | 'snapshot';
 
@@ -62,16 +63,17 @@ export function MemoryView({
             会话回顾（P4）
           </button>
           <button
-            aria-disabled="true"
-            className="tab disabled"
+            aria-pressed={tab === 'snapshot'}
+            className={tab === 'snapshot' ? 'tab active' : 'tab'}
             data-testid="memory-tab-snapshot"
-            disabled
+            onClick={() => setTab('snapshot')}
             type="button"
           >
-            系统快照（P3）
+            系统快照
           </button>
         </div>
         {tab === 'files' ? <FilesTab initialStatus={state.memoryStatus} /> : null}
+        {tab === 'snapshot' ? <SnapshotTab /> : null}
       </section>
     </>
   );

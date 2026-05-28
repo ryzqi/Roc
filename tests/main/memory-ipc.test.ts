@@ -10,17 +10,51 @@ describe('memory IPC', () => {
     const service = {
       status: vi.fn(() => ({ root: 'F:\\Code\\Roc\\.roc\\memory' })),
       readFile: vi.fn(() => '# user prefers PowerShell'),
-      writeFile: vi.fn(() => ({ ok: true, meta: { scope: 'global', kind: 'user' } }))
+      writeFile: vi.fn(() => ({ ok: true, meta: { scope: 'global', kind: 'user' } })),
+      buildSnapshotForCurrentWorkspace: vi.fn(() => ({
+        user: {
+          kind: 'user',
+          filename: 'USER.md',
+          content: '# user prefers PowerShell',
+          charCount: 25,
+          charLimit: 1375,
+          source: 'global',
+          enabled: true
+        },
+        agents: {
+          kind: 'agents',
+          filename: 'AGENTS.md',
+          content: '',
+          charCount: 0,
+          charLimit: 800,
+          source: 'global',
+          enabled: true
+        },
+        memory: {
+          kind: 'memory',
+          filename: 'MEMORY.md',
+          content: '',
+          charCount: 0,
+          charLimit: 2200,
+          source: 'global',
+          enabled: true
+        },
+        totalChars: 25,
+        totalLimit: 4375,
+        globallyEnabled: true
+      }))
     } as unknown as MemoryService;
 
     registerMemoryIpc((channel, handler) => handlers.set(channel, handler), service);
 
     expect(Array.from(handlers.keys()).sort()).toEqual([
       ipcChannels.memoryReadFile,
+      ipcChannels.memorySnapshotPreview,
       ipcChannels.memoryStatus,
       ipcChannels.memoryWriteFile
     ].sort());
 
+    const snapshot = await handlers.get(ipcChannels.memorySnapshotPreview)?.(null);
     await handlers.get(ipcChannels.memoryReadFile)?.(null, { scope: 'global', kind: 'user' });
     await handlers.get(ipcChannels.memoryWriteFile)?.(null, {
       scope: 'global',
@@ -28,6 +62,11 @@ describe('memory IPC', () => {
       content: '# user prefers PowerShell'
     });
 
+    expect(snapshot).toMatchObject({
+      ok: true,
+      data: { text: expect.stringContaining('<FROZEN_SNAPSHOT>') }
+    });
+    expect(service.buildSnapshotForCurrentWorkspace).toHaveBeenCalled();
     expect(service.readFile).toHaveBeenCalledWith({ scope: 'global', kind: 'user' });
     expect(service.writeFile).toHaveBeenCalledWith({
       scope: 'global',

@@ -2758,7 +2758,7 @@ try {
     memoryFileEditorVisible:
       memoryText.includes('USER.md') &&
       memoryText.includes('会话回顾（P4）') &&
-      memoryText.includes('系统快照（P3）') &&
+      memoryText.includes('系统快照') &&
       memoryStatusApiEvidence.fullTextIndex.status === 'ready',
     providerConfiguredVisible:
       providerSettingsEvidence.nvidiaListed &&
@@ -2988,10 +2988,11 @@ try {
       !historySidebarEvidence.hasMemoryRecordLabel &&
       !historySidebarEvidence.hasTaskRecordLabel,
     memoryApiFileEditor:
-      boundary.memoryKeys.length === 3 &&
+      boundary.memoryKeys.length === 4 &&
       boundary.memoryKeys.includes('status') &&
       boundary.memoryKeys.includes('readFile') &&
-      boundary.memoryKeys.includes('writeFile'),
+      boundary.memoryKeys.includes('writeFile') &&
+      boundary.memoryKeys.includes('snapshotPreview'),
     settingsApiExpanded:
       boundary.settingsKeys.includes('get') &&
       boundary.settingsKeys.includes('save') &&

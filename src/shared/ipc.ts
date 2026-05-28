@@ -132,6 +132,7 @@ export const ipcChannels = {
   memoryStatus: 'roc:memory:status',
   memoryReadFile: 'roc:memory:read-file',
   memoryWriteFile: 'roc:memory:write-file',
+  memorySnapshotPreview: 'roc:memory:snapshot-preview',
   settingsGet: 'roc:settings:get',
   settingsSave: 'roc:settings:save',
   settingsTestProvider: 'roc:settings:test-provider',
@@ -237,6 +238,7 @@ export type RocPreloadApi = {
     status: () => Promise<IpcResult<MemoryStatus>>;
     readFile: (input: { scope: MemoryScope; kind: MemoryKind }) => Promise<IpcResult<string | null>>;
     writeFile: (request: MemoryFileWriteRequest) => Promise<IpcResult<MemoryFileWriteOutcome>>;
+    snapshotPreview: () => Promise<IpcResult<{ text: string }>>;
   };
   mcp: {
     listServers: () => Promise<IpcResult<McpServerSnapshot[]>>;
