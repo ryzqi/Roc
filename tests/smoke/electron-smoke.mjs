@@ -524,8 +524,9 @@ try {
   });
   await page.click('[data-testid="nav-memory"]');
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="memory-phase-1-placeholder"]', { timeout: 5000 });
-  await waitForTextContent(page, '[data-testid="memory-view"]', '记忆系统正在重构中');
+  await page.waitForSelector('[data-testid="memory-tab-files"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="memory-view"]', 'USER.md');
+  await waitForTextContent(page, '[data-testid="memory-view"]', '会话回顾（P4）');
   const memoryText = await page.textContent('[data-testid="memory-view"]');
   if (memoryText === null) {
     throw new Error('Smoke could not read memory view text.');
@@ -2982,9 +2983,11 @@ try {
       !historySidebarEvidence.hasTrayEntryLabel &&
       !historySidebarEvidence.hasMemoryRecordLabel &&
       !historySidebarEvidence.hasTaskRecordLabel,
-    memoryApiReduced:
-      boundary.memoryKeys.length === 1 &&
-      boundary.memoryKeys.includes('status'),
+    memoryApiFileEditor:
+      boundary.memoryKeys.length === 3 &&
+      boundary.memoryKeys.includes('status') &&
+      boundary.memoryKeys.includes('readFile') &&
+      boundary.memoryKeys.includes('writeFile'),
     settingsApiExpanded:
       boundary.settingsKeys.includes('get') &&
       boundary.settingsKeys.includes('save') &&

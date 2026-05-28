@@ -208,3 +208,155 @@
   background: rgba(255, 244, 244, 0.98);
 }
 
+.memory-center-stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.memory-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.memory-tabs .tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.memory-tabs .tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.memory-tabs .tab.disabled {
+  opacity: 0.52;
+}
+
+.memory-files-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.memory-files-list,
+.memory-file-editor-shell {
+  min-width: 0;
+  min-height: 0;
+}
+
+.memory-files-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+}
+
+.memory-file-row {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+}
+
+.memory-file-row:hover,
+.memory-file-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.memory-file-row-main,
+.memory-file-row-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memory-file-row-main strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-file-row-main span,
+.memory-file-row-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-file-editor-shell {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.memory-file-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.memory-file-textarea {
+  width: 100%;
+  min-height: 46vh;
+  resize: vertical;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  outline: none;
+}
+
+.memory-file-textarea:focus {
+  border-color: var(--accent);
+}
+
+.memory-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.memory-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.memory-count--bad {
+  color: var(--st-bad);
+}
+
+.memory-error-banner {
+  padding: 12px 14px;
+  border: 1px solid rgba(238, 194, 194, 0.92);
+  border-radius: var(--r-md);
+  background: rgba(255, 244, 244, 0.98);
+  color: var(--st-bad);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+

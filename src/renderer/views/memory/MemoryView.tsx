@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { EmptyState } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
 import type { LoadedState } from '../../loaded-state';
+import { FilesTab } from './files-tab';
+
+type MemoryTab = 'files' | 'sessions' | 'snapshot';
 
 export function MemoryView({
   loadState,
@@ -10,6 +14,8 @@ export function MemoryView({
   loadState: LazyLoadState;
   state: LoadedState;
 }): React.JSX.Element {
+  const [tab, setTab] = useState<MemoryTab>('files');
+
   if (loadState.status === 'loading') {
     return (
       <>
@@ -34,21 +40,38 @@ export function MemoryView({
 
   return (
     <>
-      <PageHeading title="记忆中心" meta="Phase 1 占位" />
-      <section className="canvas-stage stage-grid" data-testid="memory-view">
-        <div className="notice" data-testid="memory-phase-1-placeholder">
-          记忆系统正在重构中。旧候选审核、冲突裁决和会话回忆视图已删除；新版文件编辑、会话回顾与系统快照视图将在后续阶段接入。
+      <PageHeading title="记忆中心" meta={state.memoryStatus.workspaceLabel ?? '全局记忆'} />
+      <section className="canvas-stage memory-center-stage" data-testid="memory-view">
+        <div className="memory-tabs" role="tablist" aria-label="记忆中心">
+          <button
+            aria-pressed={tab === 'files'}
+            className={tab === 'files' ? 'tab active' : 'tab'}
+            data-testid="memory-tab-files"
+            onClick={() => setTab('files')}
+            type="button"
+          >
+            文件
+          </button>
+          <button
+            aria-disabled="true"
+            className="tab disabled"
+            data-testid="memory-tab-sessions"
+            disabled
+            type="button"
+          >
+            会话回顾（P4）
+          </button>
+          <button
+            aria-disabled="true"
+            className="tab disabled"
+            data-testid="memory-tab-snapshot"
+            disabled
+            type="button"
+          >
+            系统快照（P3）
+          </button>
         </div>
-        <section className="section">
-          <div className="section-head">
-            <h2 className="section-title">当前状态</h2>
-          </div>
-          <div className="list-rows">
-            <p className="muted">根目录：{state.memoryStatus.root}</p>
-            <p className="muted">当前工作区：{state.memoryStatus.workspaceLabel ?? '未选择'}</p>
-            <p className="muted">全文索引：{state.memoryStatus.fullTextIndex.status}</p>
-          </div>
-        </section>
+        {tab === 'files' ? <FilesTab initialStatus={state.memoryStatus} /> : null}
       </section>
     </>
   );

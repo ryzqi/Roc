@@ -43,6 +43,10 @@ import type {
   McpServerConfig,
   McpServerSnapshot,
   McpServerTestResult,
+  MemoryFileWriteOutcome,
+  MemoryFileWriteRequest,
+  MemoryKind,
+  MemoryScope,
   MemoryStatus,
   PerformanceSample,
   PerformanceSampleRequest,
@@ -126,6 +130,8 @@ export const ipcChannels = {
   diagnosticsCreatePackage: 'roc:diagnostics:create-package',
   diagnosticsRunChecks: 'roc:diagnostics:run-checks',
   memoryStatus: 'roc:memory:status',
+  memoryReadFile: 'roc:memory:read-file',
+  memoryWriteFile: 'roc:memory:write-file',
   settingsGet: 'roc:settings:get',
   settingsSave: 'roc:settings:save',
   settingsTestProvider: 'roc:settings:test-provider',
@@ -229,6 +235,8 @@ export type RocPreloadApi = {
   };
   memory: {
     status: () => Promise<IpcResult<MemoryStatus>>;
+    readFile: (input: { scope: MemoryScope; kind: MemoryKind }) => Promise<IpcResult<string | null>>;
+    writeFile: (request: MemoryFileWriteRequest) => Promise<IpcResult<MemoryFileWriteOutcome>>;
   };
   mcp: {
     listServers: () => Promise<IpcResult<McpServerSnapshot[]>>;
