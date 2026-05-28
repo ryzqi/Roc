@@ -533,6 +533,10 @@ export class LangChainModelFactory {
     return await this.createModelForProvider(matches[0]!, modelId, options);
   }
 
+  resolveCheapModelHandle(activeHandle: LangChainChatModelHandle): LangChainChatModelHandle {
+    return activeHandle;
+  }
+
   async createModelForProvider(
     provider: ProviderConfig,
     modelId: string,

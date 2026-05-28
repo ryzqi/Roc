@@ -106,6 +106,38 @@ describe('LangChainModelFactory', () => {
     expect((result.model as { timeout?: number }).timeout).toBe(120_000);
   });
 
+  it('resolves cheap model handle to the active handle when no explicit cheap model is configured', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const active = await factory.createDefaultChatModel({ streaming: false });
+
+    expect(factory.resolveCheapModelHandle(active)).toBe(active);
+  });
+
   it('sends NVIDIA text-only content blocks as string chat content without streaming usage options', async () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
