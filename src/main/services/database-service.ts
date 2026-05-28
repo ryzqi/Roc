@@ -82,6 +82,41 @@ export class DatabaseService {
         FOREIGN KEY(thread_id) REFERENCES task_threads(id)
       );
 
+      CREATE TABLE IF NOT EXISTS session_messages (
+        id          TEXT PRIMARY KEY,
+        thread_id   TEXT NOT NULL,
+        role        TEXT NOT NULL CHECK(role IN ('user','assistant','tool','system')),
+        content     TEXT NOT NULL,
+        token_count INTEGER,
+        phase       TEXT NOT NULL DEFAULT 'visible' CHECK(phase IN ('visible','pre_compaction_flush')),
+        created_at  TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS session_messages_thread_idx
+      ON session_messages(thread_id, created_at);
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+        content,
+        content='session_messages',
+        content_rowid='rowid',
+        tokenize='unicode61 remove_diacritics 2'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+        INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+        INSERT INTO session_messages_fts(session_messages_fts, rowid, content)
+          VALUES('delete', old.rowid, old.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS session_messages_au AFTER UPDATE ON session_messages BEGIN
+        INSERT INTO session_messages_fts(session_messages_fts, rowid, content)
+          VALUES('delete', old.rowid, old.content);
+        INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      END;
+
       CREATE TABLE IF NOT EXISTS background_tasks (
         id TEXT PRIMARY KEY,
         thread_id TEXT NOT NULL,
