@@ -75,8 +75,11 @@ const defaultRuntimeEnvironment: RuntimeEnvironment = {
   })
 };
 
+const memoryRetentionSweepIntervalMs = 24 * 60 * 60 * 1000;
+
 export class AppService {
   readonly startedAt = new Date().toISOString();
+  private memoryRetentionSweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly paths: RocPaths,
@@ -122,12 +125,15 @@ export class AppService {
 
   initializeDeferred(): void {
     this.memoryService.initialize();
+    this.runMemoryRetentionSweep();
+    this.startMemoryRetentionSweepTimer();
     this.taskSchedulerService.start();
     this.logService.append({ level: 'info', message: 'Roc deferred services initialized.' });
   }
 
   shutdown(): void {
     this.terminalSessionService.shutdown();
+    this.stopMemoryRetentionSweepTimer();
     this.taskSchedulerService.stop();
     this.databaseService.close();
   }
@@ -216,6 +222,29 @@ export class AppService {
       return 'packaged';
     }
     return 'development';
+  }
+
+  private runMemoryRetentionSweep(): void {
+    const retentionDays = this.configService.getSettings().memory.sessionRetentionDays;
+    this.sessionArchiveService.sweepRetention(retentionDays);
+  }
+
+  private startMemoryRetentionSweepTimer(): void {
+    if (this.memoryRetentionSweepTimer !== null) {
+      return;
+    }
+    this.memoryRetentionSweepTimer = setInterval(() => {
+      this.runMemoryRetentionSweep();
+    }, memoryRetentionSweepIntervalMs);
+    this.memoryRetentionSweepTimer.unref();
+  }
+
+  private stopMemoryRetentionSweepTimer(): void {
+    if (this.memoryRetentionSweepTimer === null) {
+      return;
+    }
+    clearInterval(this.memoryRetentionSweepTimer);
+    this.memoryRetentionSweepTimer = null;
   }
 }
 

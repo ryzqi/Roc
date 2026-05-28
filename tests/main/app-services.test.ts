@@ -12,6 +12,7 @@ describe('Roc foundation services', () => {
 
   afterEach(() => {
     cleanupAppServicesTest(context);
+    vi.useRealTimers();
   });
 
   it('creates the .roc directory tree and config files', () => {
@@ -63,6 +64,51 @@ describe('Roc foundation services', () => {
     services.appService.initializeDeferred();
     expect(services.memoryService.status().root).toBe(join(root, 'memory'));
     expect(existsSync(join(root, 'memory', 'global'))).toBe(true);
+  });
+
+  it('sweeps expired session messages during deferred startup', () => {
+    cleanupAppServicesTest(context);
+    context = initializeAppServicesTest({ skipInitialize: true });
+    const { services } = context;
+
+    services.appService.initializeCritical();
+    services.databaseService.db
+      .prepare(
+        `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
+         VALUES ('t1', 'chat', 'retention', '', 'active', datetime('now'), datetime('now'))`
+      )
+      .run();
+    services.databaseService.db
+      .prepare(
+        `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, created_at)
+         VALUES ('old1', 't1', 'user', 'old message', NULL, 'visible', datetime('now', '-120 days'))`
+      )
+      .run();
+    services.sessionArchiveService.recordUserInput('t1', 'recent message');
+
+    services.appService.initializeDeferred();
+
+    const rows = services.databaseService.db
+      .prepare('SELECT content FROM session_messages ORDER BY created_at')
+      .all() as Array<{ content: string }>;
+    expect(rows).toEqual([{ content: 'recent message' }]);
+  });
+
+  it('schedules a daily session retention sweep', async () => {
+    cleanupAppServicesTest(context);
+    context = initializeAppServicesTest({ skipInitialize: true });
+    vi.useFakeTimers();
+    const { services } = context;
+
+    services.appService.initializeCritical();
+    const sweep = vi.spyOn(services.sessionArchiveService, 'sweepRetention');
+
+    services.appService.initializeDeferred();
+    expect(sweep).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(sweep).toHaveBeenCalledTimes(2);
+    expect(sweep).toHaveBeenLastCalledWith(90);
   });
 
   it('returns a real empty task snapshot from SQLite', () => {
