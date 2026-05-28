@@ -21,6 +21,7 @@ import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
 import type { ConsolidatorService } from './memory/consolidator';
+import type { PrecompactionService } from './memory/precompaction';
 import type { MemoryService } from './memory-service';
 import type { SessionArchiveService } from './memory/session-archive';
 import type { McpService } from './mcp-service';
@@ -42,6 +43,7 @@ import {
   RUN_EVENT_NAME,
   streamConsumers,
   type ActiveRun,
+  type DeepAgentSession,
   type RunExecutionContext
 } from './deep-agent';
 
@@ -73,6 +75,7 @@ export class DeepAgentRuntimeService {
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
     private readonly consolidatorService: ConsolidatorService,
+    private readonly precompactionService: PrecompactionService,
     private readonly sessionArchiveService: SessionArchiveService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
@@ -402,6 +405,7 @@ export class DeepAgentRuntimeService {
 
           await Promise.resolve(run.output);
           this.completeRun(context, session.usageAccumulator, session.assistantChunks, false, providerStartedAtMs, retryCount);
+          await this.maybeRunPrecompactionFlush(context, session, context.input);
         } finally {
           await Promise.allSettled(session.closers.map(async (close) => close()));
         }
@@ -465,6 +469,7 @@ export class DeepAgentRuntimeService {
 
       await Promise.resolve(run.output);
       this.completeRun(context, session.usageAccumulator, session.assistantChunks, true, providerStartedAtMs, 0);
+      await this.maybeRunPrecompactionFlush(context, session, context.input);
     } catch (error) {
       this.failRun(context, error);
     } finally {
@@ -491,6 +496,93 @@ export class DeepAgentRuntimeService {
       throw new Error('TaskSchedulerService has not been attached.');
     }
     return this.taskSchedulerService;
+  }
+
+  private async maybeRunPrecompactionFlush(
+    context: RunExecutionContext,
+    session: DeepAgentSession,
+    previousUserInput: string
+  ): Promise<void> {
+    const usage = session.usageAccumulator;
+    let usedTokens = 0;
+    if (usage.totalTokens !== null) {
+      usedTokens = usage.totalTokens;
+    } else if (usage.promptTokens !== null) {
+      usedTokens = usage.promptTokens;
+    }
+    const contextWindow = this.precompactionService.contextWindowTokens();
+    const ratio = contextWindow > 0 ? usedTokens / contextWindow : 0;
+    if (!this.precompactionService.shouldTrigger(context.threadId, ratio, usedTokens)) {
+      return;
+    }
+
+    try {
+      const flushPrompt = this.precompactionService.buildFlushPrompt({ ratio, tokensUsed: usedTokens, contextWindow });
+      const flushInput = `${flushPrompt}\n\nPrevious user input:\n${previousUserInput}`;
+      this.sessionArchiveService.recordUserInput(context.threadId, flushInput, 'pre_compaction_flush');
+      const flushSession = await createDeepAgentSession({
+        agentService: this.agentService,
+        context,
+        fileService: this.fileService,
+        getCheckpointer: () => this.getOrCreateCheckpointer(),
+        getMemorySettings: this.getMemorySettings,
+        consolidatorService: this.consolidatorService,
+        memoryService: this.memoryService,
+        sessionArchiveService: this.sessionArchiveService,
+        mcpService: this.mcpService,
+        paths: this.paths,
+        shellExecutionService: this.taskBoundShellExecutionService(context),
+        store: this.store,
+        taskSchedulerService: this.requireTaskSchedulerService(),
+        taskService: this.taskService,
+        webReadService: this.webReadService,
+        workspaceService: this.workspaceService
+      });
+
+      try {
+        const run = await flushSession.agent.streamEvents(
+          {
+            messages: [new HumanMessage(flushInput)]
+          },
+          {
+            version: 'v3',
+            configurable: flushSession.configurable,
+            signal: context.abortController.signal,
+            recursionLimit: 8
+          }
+        );
+
+        await this.consumeSessionStreams(run, context, flushSession, undefined, {
+          visible: false,
+          phase: 'pre_compaction_flush'
+        });
+        if (run.interrupted) {
+          return;
+        }
+        await Promise.resolve(run.output);
+        const assistantMessage = prompt.resolveAssistantMessage([...flushSession.assistantChunks]);
+        if (assistantMessage.length > 0) {
+          this.sessionArchiveService.recordAssistantMessage(
+            context.threadId,
+            assistantMessage,
+            flushSession.usageAccumulator.completionTokens,
+            'pre_compaction_flush'
+          );
+        }
+        this.precompactionService.markFlushed(context.threadId, ratio, usedTokens);
+      } finally {
+        await Promise.allSettled(flushSession.closers.map(async (close) => close()));
+      }
+    } catch (error) {
+      this.logService.append({
+        level: 'warn',
+        message: 'Pre-compaction flush failed; continuing user run.',
+        data: {
+          threadId: context.threadId,
+          error: String(error)
+        }
+      });
+    }
   }
 
   private emitTodoEvent(runId: string, candidate: unknown): void {
@@ -696,7 +788,8 @@ export class DeepAgentRuntimeService {
       reasoningChunks: string[];
       usageAccumulator: streamConsumers.ProviderUsageAccumulator;
     },
-    onVisibleOutput?: () => void
+    onVisibleOutput?: () => void,
+    options: { visible: boolean; phase: 'visible' | 'pre_compaction_flush' } = { visible: true, phase: 'visible' }
   ): Promise<void> {
     const taskEvents: Array<{
       threadId: string;
@@ -705,17 +798,29 @@ export class DeepAgentRuntimeService {
       payload: Record<string, unknown>;
     }> = [];
     const callbacks = {
-      emitRuntimeEvent: (event: ChatRunEvent) => this.emit(event),
-      emitTodoEvent: (candidate: unknown) => this.emitTodoEvent(context.runId, candidate),
-      markVisibleOutput: onVisibleOutput,
+      emitRuntimeEvent: (event: ChatRunEvent) => {
+        if (options.visible) {
+          this.emit(event);
+        }
+      },
+      emitTodoEvent: (candidate: unknown) => {
+        if (options.visible) {
+          this.emitTodoEvent(context.runId, candidate);
+        }
+      },
+      markVisibleOutput: () => {
+        if (options.visible) {
+          onVisibleOutput?.();
+        }
+      },
       recordSessionToolCall: (name: string, input: unknown, output: unknown) => {
-        this.sessionArchiveService.recordToolCall(context.threadId, name, input, output);
+        this.sessionArchiveService.recordToolCall(context.threadId, name, input, output, options.phase);
       },
       recordTaskEvent: (
         type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
         payload: Record<string, unknown>
       ) => {
-        if (context.taskRun === null) {
+        if (!options.visible || context.taskRun === null) {
           return;
         }
         taskEvents.push({

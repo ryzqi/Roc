@@ -59,6 +59,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.databaseService,
       services.memoryService,
       services.consolidatorService,
+      services.precompactionService,
       services.sessionArchiveService,
       services.agentService,
       services.workspaceService,
@@ -91,6 +92,16 @@ function waitForEvent(
       resolve(event);
     });
   });
+}
+
+async function waitForCondition(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for condition.');
 }
 
 type DeepAgentToolDescriptor = {
@@ -3603,6 +3614,80 @@ describe('DeepAgentRuntimeService', () => {
         cacheCreationTokens: 120
       }
     });
+  });
+
+  it('runs pre-compaction flush as an invisible turn and archives it with pre_compaction_flush phase', async () => {
+    mocked.streamEventsMock
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(['Visible answer']),
+            usage_metadata: {
+              input_tokens: 179000,
+              output_tokens: 1000,
+              total_tokens: 180000
+            }
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      })
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(['FLUSH_DONE'])
+          }
+        ]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: 'Trigger precompaction.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+    await waitForCondition(() => mocked.streamEventsMock.mock.calls.length === 2);
+
+    const visibleDeltas = events.filter(
+      (event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta'
+    );
+    expect(visibleDeltas.map((event) => event.delta)).toEqual(['Visible answer']);
+    expect(events.some((event) => event.type === 'message_delta' && event.delta === 'FLUSH_DONE')).toBe(false);
+
+    const flushInput = mocked.streamEventsMock.mock.calls[1]?.[0] as { messages?: Array<{ content?: unknown }> };
+    expect(flushInput.messages?.[0]?.content).toContain('<PRE_COMPACTION_FLUSH>');
+    expect(flushInput.messages?.[0]?.content).toContain('Previous user input:');
+    expect(flushInput.messages?.[0]?.content).toContain('Trigger precompaction.');
+
+    const rows = services.databaseService.db
+      .prepare('SELECT role, content, phase FROM session_messages WHERE thread_id = ? ORDER BY created_at, id')
+      .all(started.threadId) as Array<{ role: string; content: string; phase: string }>;
+    expect(rows).toEqual([
+      { role: 'user', content: 'Trigger precompaction.', phase: 'visible' },
+      { role: 'assistant', content: 'Visible answer', phase: 'visible' },
+      expect.objectContaining({ role: 'user', phase: 'pre_compaction_flush' }),
+      { role: 'assistant', content: 'FLUSH_DONE', phase: 'pre_compaction_flush' }
+    ]);
+    expect(rows[2].content).toContain('<PRE_COMPACTION_FLUSH>');
+
+    const mark = services.databaseService.db
+      .prepare('SELECT ratio, tokens_used FROM memory_flush_marks WHERE thread_id = ?')
+      .get(started.threadId) as { ratio: number; tokens_used: number };
+    expect(mark.tokens_used).toBe(180000);
+    expect(mark.ratio).toBe(0.9);
   });
 
   it('emits the final retryable failure after exhausting provider request retries', async () => {

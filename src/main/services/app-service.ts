@@ -13,6 +13,7 @@ import { LangChainModelFactory } from './langchain-model-factory';
 import { McpService } from './mcp-service';
 import { MemoryService } from './memory-service';
 import { ConsolidatorService } from './memory/consolidator';
+import { PrecompactionService } from './memory/precompaction';
 import { SessionArchiveService } from './memory/session-archive';
 import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
@@ -35,6 +36,7 @@ export type AppServices = {
   databaseService: DatabaseService;
   memoryService: MemoryService;
   consolidatorService: ConsolidatorService;
+  precompactionService: PrecompactionService;
   sessionArchiveService: SessionArchiveService;
   taskService: TaskService;
   taskSchedulerService: TaskSchedulerService;
@@ -90,6 +92,7 @@ export class AppService {
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
     private readonly consolidatorService: ConsolidatorService,
+    private readonly precompactionService: PrecompactionService,
     private readonly sessionArchiveService: SessionArchiveService,
     private readonly taskService: TaskService,
     private readonly taskSchedulerService: TaskSchedulerService,
@@ -194,6 +197,7 @@ export class AppService {
     return {
       memoryService: this.memoryService,
       consolidatorService: this.consolidatorService,
+      precompactionService: this.precompactionService,
       sessionArchiveService: this.sessionArchiveService,
       taskService: this.taskService,
       taskSchedulerService: this.taskSchedulerService,
@@ -296,6 +300,7 @@ export function createAppServices(
     },
     getSettings: () => configService.getSettings().memory
   });
+  const precompactionService = new PrecompactionService(databaseService, () => configService.getSettings().memory);
   const memoryService = new MemoryService(
     paths,
     databaseService,
@@ -312,6 +317,7 @@ export function createAppServices(
     databaseService,
     memoryService,
     consolidatorService,
+    precompactionService,
     sessionArchiveService,
     agentService,
     workspaceService,
@@ -338,6 +344,7 @@ export function createAppServices(
     databaseService,
     memoryService,
     consolidatorService,
+    precompactionService,
     sessionArchiveService,
     taskService,
     taskSchedulerService,
@@ -368,6 +375,7 @@ export function createAppServices(
     databaseService,
     memoryService,
     consolidatorService,
+    precompactionService,
     sessionArchiveService,
     taskService,
     taskSchedulerService,
