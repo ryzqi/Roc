@@ -4,6 +4,7 @@ import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
 import type { LoadedState } from '../../loaded-state';
 import { FilesTab } from './files-tab';
+import { SessionsTab } from './sessions-tab';
 import { SnapshotTab } from './snapshot-tab';
 
 type MemoryTab = 'files' | 'sessions' | 'snapshot';
@@ -54,13 +55,13 @@ export function MemoryView({
             文件
           </button>
           <button
-            aria-disabled="true"
-            className="tab disabled"
+            aria-pressed={tab === 'sessions'}
+            className={tab === 'sessions' ? 'tab active' : 'tab'}
             data-testid="memory-tab-sessions"
-            disabled
+            onClick={() => setTab('sessions')}
             type="button"
           >
-            会话回顾（P4）
+            会话回顾
           </button>
           <button
             aria-pressed={tab === 'snapshot'}
@@ -73,6 +74,7 @@ export function MemoryView({
           </button>
         </div>
         {tab === 'files' ? <FilesTab initialStatus={state.memoryStatus} /> : null}
+        {tab === 'sessions' ? <SessionsTab /> : null}
         {tab === 'snapshot' ? <SnapshotTab /> : null}
       </section>
     </>

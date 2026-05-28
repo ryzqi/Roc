@@ -66,6 +66,10 @@ const rocApi: RocPreloadApi = {
     writeFile: (request) => ipcRenderer.invoke(ipcChannels.memoryWriteFile, request),
     snapshotPreview: () => ipcRenderer.invoke(ipcChannels.memorySnapshotPreview)
   },
+  sessions: {
+    list: (input) => ipcRenderer.invoke(ipcChannels.sessionMessagesList, input),
+    search: (request) => ipcRenderer.invoke(ipcChannels.sessionMessagesSearch, request)
+  },
   mcp: {
     listServers: () => ipcRenderer.invoke(ipcChannels.mcpListServers),
     ensureExaPreset: () => ipcRenderer.invoke(ipcChannels.mcpEnsureExaPreset),

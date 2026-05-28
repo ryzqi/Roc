@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ipcChannels } from '../../src/shared/ipc';
 import { registerMemoryIpc } from '../../src/main/ipc/memory-ipc';
+import type { SessionArchiveService } from '../../src/main/services/memory/session-archive';
 import type { MemoryService } from '../../src/main/services/memory-service';
 import type { IpcMainHandler } from '../../src/main/ipc/ipc-common';
 
@@ -44,14 +45,20 @@ describe('memory IPC', () => {
         globallyEnabled: true
       }))
     } as unknown as MemoryService;
+    const archive = {
+      list: vi.fn(() => []),
+      search: vi.fn(() => ({ query: 'electron', total: 0, items: [] }))
+    } as unknown as SessionArchiveService;
 
-    registerMemoryIpc((channel, handler) => handlers.set(channel, handler), service);
+    registerMemoryIpc((channel, handler) => handlers.set(channel, handler), service, archive);
 
     expect(Array.from(handlers.keys()).sort()).toEqual([
       ipcChannels.memoryReadFile,
       ipcChannels.memorySnapshotPreview,
       ipcChannels.memoryStatus,
-      ipcChannels.memoryWriteFile
+      ipcChannels.memoryWriteFile,
+      ipcChannels.sessionMessagesList,
+      ipcChannels.sessionMessagesSearch
     ].sort());
 
     const snapshot = await handlers.get(ipcChannels.memorySnapshotPreview)?.(null);
@@ -60,6 +67,12 @@ describe('memory IPC', () => {
       scope: 'global',
       kind: 'user',
       content: '# user prefers PowerShell'
+    });
+    await handlers.get(ipcChannels.sessionMessagesList)?.(null, { threadId: 't1', limit: 20 });
+    await handlers.get(ipcChannels.sessionMessagesSearch)?.(null, {
+      query: 'electron',
+      workspaceScope: 'all',
+      limit: 10
     });
 
     expect(snapshot).toMatchObject({
@@ -72,6 +85,12 @@ describe('memory IPC', () => {
       scope: 'global',
       kind: 'user',
       content: '# user prefers PowerShell'
+    });
+    expect(archive.list).toHaveBeenCalledWith('t1', 20);
+    expect(archive.search).toHaveBeenCalledWith({
+      query: 'electron',
+      workspaceScope: 'all',
+      limit: 10
     });
   });
 });

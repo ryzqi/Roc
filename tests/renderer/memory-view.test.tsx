@@ -41,7 +41,7 @@ describe('MemoryView file editor', () => {
     await flushPromises();
 
     expect(queryByText('文件')).not.toBeNull();
-    expect(queryByText('会话回顾（P4）')).not.toBeNull();
+    expect(queryByText('会话回顾')).not.toBeNull();
     expect(queryByText('系统快照')).not.toBeNull();
 
     await act(async () => {
@@ -90,6 +90,42 @@ describe('MemoryView file editor', () => {
     expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('<FROZEN_SNAPSHOT>');
     expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# user prefers PowerShell');
   });
+
+  it('searches archived session messages from Tab 2', async () => {
+    const memoryStatus = createMemoryStatus();
+    const preload = createMockPreloadApi(memoryStatus);
+    window.roc = preload as unknown as RocPreloadApi;
+
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryView, {
+          loadState: { status: 'ready', error: null, key: null },
+          state: createLoadedState({ memoryStatus })
+        })
+      );
+    });
+    await flushPromises();
+
+    await act(async () => {
+      queryButton('memory-tab-sessions').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    setInputValue('memory-session-query', 'electron');
+    await act(async () => {
+      queryButton('memory-session-search').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(preload.sessions.search).toHaveBeenCalledWith({
+      query: 'electron',
+      workspaceScope: 'current',
+      sinceDays: 30,
+      limit: 50
+    });
+    expect(container.querySelector('[data-testid="memory-session-results"]')?.textContent).toContain('过去对话');
+    expect(container.querySelector('[data-testid="memory-session-results"]')?.textContent).toContain('**electron**');
+  });
 });
 
 function createMemoryStatus(): MemoryStatus {
@@ -132,6 +168,10 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
     writeFile: ReturnType<typeof vi.fn>;
     snapshotPreview: ReturnType<typeof vi.fn>;
   };
+  sessions: {
+    list: ReturnType<typeof vi.fn>;
+    search: ReturnType<typeof vi.fn>;
+  };
 } {
   return {
     memory: {
@@ -157,6 +197,29 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
           ].join('\n')
         }
       })
+    },
+    sessions: {
+      list: vi.fn().mockResolvedValue({ ok: true as const, data: [] }),
+      search: vi.fn().mockResolvedValue({
+        ok: true as const,
+        data: {
+          query: 'electron',
+          total: 1,
+          items: [
+            {
+              id: 'm1',
+              threadId: 't1',
+              threadTitle: '过去对话',
+              role: 'user',
+              content: '上次我说 electron 启动崩溃了',
+              phase: 'visible',
+              tokenCount: null,
+              createdAt: '2026-05-28T00:00:00.000Z',
+              snippet: '上次我说 **electron** 启动崩溃了'
+            }
+          ]
+        }
+      })
     }
   };
 }
@@ -173,6 +236,12 @@ function queryTextarea(testId: string): HTMLTextAreaElement {
   return textarea as HTMLTextAreaElement;
 }
 
+function queryInput(testId: string): HTMLInputElement {
+  const input = containerOrDocument().querySelector<HTMLInputElement>(`[data-testid="${testId}"]`);
+  expect(input).not.toBeNull();
+  return input as HTMLInputElement;
+}
+
 function queryByText(text: string): Element | null {
   return Array.from(containerOrDocument().querySelectorAll('*')).find((node) => node.textContent?.trim() === text) ?? null;
 }
@@ -183,6 +252,14 @@ function setTextareaValue(testId: string, value: string): void {
   expect(setter).not.toBeUndefined();
   setter?.call(textarea, value);
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setInputValue(testId: string, value: string): void {
+  const input = queryInput(testId);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  expect(setter).not.toBeUndefined();
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function containerOrDocument(): ParentNode {

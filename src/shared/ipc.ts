@@ -48,6 +48,9 @@ import type {
   MemoryKind,
   MemoryScope,
   MemoryStatus,
+  SessionMessageEntry,
+  SessionMessageSearchRequest,
+  SessionMessageSearchResult,
   PerformanceSample,
   PerformanceSampleRequest,
   ProviderSecretClearResult,
@@ -133,6 +136,8 @@ export const ipcChannels = {
   memoryReadFile: 'roc:memory:read-file',
   memoryWriteFile: 'roc:memory:write-file',
   memorySnapshotPreview: 'roc:memory:snapshot-preview',
+  sessionMessagesList: 'roc:session:messages-list',
+  sessionMessagesSearch: 'roc:session:messages-search',
   settingsGet: 'roc:settings:get',
   settingsSave: 'roc:settings:save',
   settingsTestProvider: 'roc:settings:test-provider',
@@ -239,6 +244,10 @@ export type RocPreloadApi = {
     readFile: (input: { scope: MemoryScope; kind: MemoryKind }) => Promise<IpcResult<string | null>>;
     writeFile: (request: MemoryFileWriteRequest) => Promise<IpcResult<MemoryFileWriteOutcome>>;
     snapshotPreview: () => Promise<IpcResult<{ text: string }>>;
+  };
+  sessions: {
+    list: (input: { threadId: string; limit?: number }) => Promise<IpcResult<SessionMessageEntry[]>>;
+    search: (request: SessionMessageSearchRequest) => Promise<IpcResult<SessionMessageSearchResult>>;
   };
   mcp: {
     listServers: () => Promise<IpcResult<McpServerSnapshot[]>>;
