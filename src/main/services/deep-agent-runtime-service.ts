@@ -20,6 +20,7 @@ import { RocDomainError } from './errors';
 import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
+import type { ConsolidatorService } from './memory/consolidator';
 import type { MemoryService } from './memory-service';
 import type { SessionArchiveService } from './memory/session-archive';
 import type { McpService } from './mcp-service';
@@ -71,6 +72,7 @@ export class DeepAgentRuntimeService {
     private readonly taskService: TaskService,
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
+    private readonly consolidatorService: ConsolidatorService,
     private readonly sessionArchiveService: SessionArchiveService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
@@ -360,6 +362,7 @@ export class DeepAgentRuntimeService {
           fileService: this.fileService,
           getCheckpointer: () => this.getOrCreateCheckpointer(),
           getMemorySettings: this.getMemorySettings,
+          consolidatorService: this.consolidatorService,
           memoryService: this.memoryService,
           sessionArchiveService: this.sessionArchiveService,
           mcpService: this.mcpService,
@@ -426,6 +429,7 @@ export class DeepAgentRuntimeService {
       fileService: this.fileService,
       getCheckpointer: () => this.getOrCreateCheckpointer(),
       getMemorySettings: this.getMemorySettings,
+      consolidatorService: this.consolidatorService,
       memoryService: this.memoryService,
       sessionArchiveService: this.sessionArchiveService,
       mcpService: this.mcpService,

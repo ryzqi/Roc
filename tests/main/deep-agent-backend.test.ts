@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend, type RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
+import type { LangChainChatModelHandle } from '../../src/main/services/langchain-model-factory';
+import type { ConsolidatorService } from '../../src/main/services/memory/consolidator';
 import { CapacityService } from '../../src/main/services/memory/capacity';
 import { SecurityScanService } from '../../src/main/services/memory/security-scan';
 
@@ -23,12 +25,32 @@ function createShellExecutionAdapter(overrides?: { threadId?: string; runId?: st
   } as const;
 }
 
-function createTestBackend(input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity'>) {
+const activeModelHandle = {
+  model: { invoke: vi.fn() },
+  modelId: 'active-model',
+  provider: { id: 'test-provider', type: 'openai_compatible' },
+  runtime: { providerType: 'openai_compatible', baseUrl: 'http://localhost', streaming: false, modelKwargs: {} }
+} as unknown as LangChainChatModelHandle;
+
+function createNoopConsolidator(): ConsolidatorService {
+  return {
+    scheduleForFile: vi.fn()
+  } as unknown as ConsolidatorService;
+}
+
+function createTestBackend(
+  input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity' | 'consolidatorService' | 'activeModelHandle'> & {
+    consolidatorService?: ConsolidatorService;
+    activeModelHandle?: LangChainChatModelHandle;
+  }
+) {
   const memorySettings = services.configService.getSettings().memory;
   return createBackend({
     ...input,
     securityScan: new SecurityScanService(memorySettings.securityScan),
-    capacity: new CapacityService(memorySettings.charLimits)
+    capacity: new CapacityService(memorySettings.charLimits),
+    consolidatorService: input.consolidatorService === undefined ? createNoopConsolidator() : input.consolidatorService,
+    activeModelHandle: input.activeModelHandle === undefined ? activeModelHandle : input.activeModelHandle
   });
 }
 
@@ -284,6 +306,28 @@ describe('deep agent backend', () => {
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
+  });
+
+  it('schedules consolidator with the active model handle when a memory write exceeds capacity', async () => {
+    const scheduleForFile = vi.fn();
+    const backend: RocCompositeBackend = createTestBackend({
+      workspaceService: services.workspaceService,
+      paths: services.paths,
+      shellExecutionService: createShellExecutionAdapter(),
+      consolidatorService: {
+        scheduleForFile
+      } as unknown as ConsolidatorService,
+      activeModelHandle
+    }).backend;
+
+    const writeResult = await backend.write('/memory/global/MEMORY.md', 'x'.repeat(2300));
+
+    expect(writeResult.error).toContain('capacity exceeded');
+    expect(scheduleForFile).toHaveBeenCalledWith(
+      join(services.paths.memoryDir, 'global', 'MEMORY.md'),
+      'memory',
+      activeModelHandle
+    );
   });
 
   it('rejects writes outside the mounted routes instead of reporting a false success', async () => {

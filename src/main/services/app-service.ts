@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import type { AppStatus, RocRunMode, SystemAppearanceSnapshot } from '../../shared/types';
 import { AgentService } from './agent-service';
 import { ConfigService } from './config-service';
@@ -11,6 +12,7 @@ import { LogService } from './log-service';
 import { LangChainModelFactory } from './langchain-model-factory';
 import { McpService } from './mcp-service';
 import { MemoryService } from './memory-service';
+import { ConsolidatorService } from './memory/consolidator';
 import { SessionArchiveService } from './memory/session-archive';
 import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
@@ -32,6 +34,7 @@ export type AppServices = {
   configService: ConfigService;
   databaseService: DatabaseService;
   memoryService: MemoryService;
+  consolidatorService: ConsolidatorService;
   sessionArchiveService: SessionArchiveService;
   taskService: TaskService;
   taskSchedulerService: TaskSchedulerService;
@@ -86,6 +89,7 @@ export class AppService {
     private readonly configService: ConfigService,
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
+    private readonly consolidatorService: ConsolidatorService,
     private readonly sessionArchiveService: SessionArchiveService,
     private readonly taskService: TaskService,
     private readonly taskSchedulerService: TaskSchedulerService,
@@ -189,6 +193,7 @@ export class AppService {
   > {
     return {
       memoryService: this.memoryService,
+      consolidatorService: this.consolidatorService,
       sessionArchiveService: this.sessionArchiveService,
       taskService: this.taskService,
       taskSchedulerService: this.taskSchedulerService,
@@ -263,7 +268,6 @@ export function createAppServices(
   const mcpService = new McpService(configService);
   const skillService = new SkillService(paths);
   const workspaceService = new WorkspaceService(configService);
-  const memoryService = new MemoryService(paths, databaseService, workspaceService, () => configService.getSettings().memory);
   const sessionArchiveService = new SessionArchiveService(databaseService);
   const rtkService = new RtkService(paths);
   const performanceObserverService = new PerformanceObserverService();
@@ -278,6 +282,21 @@ export function createAppServices(
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
   const langChainModelFactory = new LangChainModelFactory(configService, secretService);
+  const consolidatorService = new ConsolidatorService({
+    memoryDir: paths.memoryDir,
+    backupDir: join(paths.memoryDir, '.consolidator-backup'),
+    resolveCheapModelHandle: (activeHandle) => langChainModelFactory.resolveCheapModelHandle(activeHandle),
+    resolveDefaultModelHandle: async () => await langChainModelFactory.createDefaultChatModel({ streaming: false }),
+    callLLM: async ({ systemPrompt, content, activeHandle }) => {
+      const result = await activeHandle.model.invoke([
+        ['system', systemPrompt],
+        ['human', content]
+      ]);
+      return readModelTextContent(result.content);
+    },
+    getSettings: () => configService.getSettings().memory
+  });
+  const memoryService = new MemoryService(paths, databaseService, workspaceService, () => configService.getSettings().memory);
   const webReadService = new WebReadService();
   const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
   const fileService = new FileService(paths, databaseService, workspaceService);
@@ -286,6 +305,7 @@ export function createAppServices(
     taskService,
     databaseService,
     memoryService,
+    consolidatorService,
     sessionArchiveService,
     agentService,
     workspaceService,
@@ -311,6 +331,7 @@ export function createAppServices(
     configService,
     databaseService,
     memoryService,
+    consolidatorService,
     sessionArchiveService,
     taskService,
     taskSchedulerService,
@@ -340,6 +361,7 @@ export function createAppServices(
     configService,
     databaseService,
     memoryService,
+    consolidatorService,
     sessionArchiveService,
     taskService,
     taskSchedulerService,
@@ -362,6 +384,32 @@ export function createAppServices(
     shellExecutionService,
     secretService
   };
+}
+
+function readModelTextContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    const textParts: string[] = [];
+    for (const block of content) {
+      if (typeof block === 'string') {
+        textParts.push(block);
+        continue;
+      }
+      if (typeof block === 'object' && block !== null && Reflect.get(block, 'type') === 'text') {
+        const text = Reflect.get(block, 'text');
+        if (typeof text !== 'string') {
+          throw new Error('Consolidator model returned a text block without string text.');
+        }
+        textParts.push(text);
+        continue;
+      }
+      throw new Error('Consolidator model returned non-text content.');
+    }
+    return textParts.join('\n');
+  }
+  throw new Error('Consolidator model returned unsupported content.');
 }
 
 function createInMemorySafeStorageBackend(): SafeStorageBackend {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFilesystemMiddleware, createSkillsMiddleware } from 'deepagents';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend } from '../../src/main/services/deep-agent/backend';
+import type { LangChainChatModelHandle } from '../../src/main/services/langchain-model-factory';
 import { CapacityService } from '../../src/main/services/memory/capacity';
 import { SecurityScanService } from '../../src/main/services/memory/security-scan';
 
@@ -24,12 +25,21 @@ function createShellExecutionAdapter(overrides?: { threadId?: string; runId?: st
   } as const;
 }
 
-function createTestBackend(input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity'>) {
+const activeModelHandle = {
+  model: {},
+  modelId: 'active-model',
+  provider: { id: 'test-provider', type: 'openai_compatible' },
+  runtime: { providerType: 'openai_compatible', baseUrl: 'http://localhost', streaming: false, modelKwargs: {} }
+} as unknown as LangChainChatModelHandle;
+
+function createTestBackend(input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity' | 'consolidatorService' | 'activeModelHandle'>) {
   const memorySettings = services.configService.getSettings().memory;
   return createBackend({
     ...input,
     securityScan: new SecurityScanService(memorySettings.securityScan),
-    capacity: new CapacityService(memorySettings.charLimits)
+    capacity: new CapacityService(memorySettings.charLimits),
+    consolidatorService: services.consolidatorService,
+    activeModelHandle
   });
 }
 

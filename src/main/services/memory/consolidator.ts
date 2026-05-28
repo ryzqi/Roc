@@ -28,14 +28,13 @@ Output ONLY the new markdown content. No explanation, no fences, no preface.`;
 export type ConsolidatorDeps = {
   memoryDir: string;
   backupDir: string;
-  securityScan: SecurityScanService;
-  capacity: CapacityService;
   resolveCheapModelHandle: (activeHandle: LangChainChatModelHandle) => LangChainChatModelHandle;
   resolveDefaultModelHandle: () => Promise<LangChainChatModelHandle>;
   callLLM: (input: { systemPrompt: string; content: string; activeHandle: LangChainChatModelHandle }) => Promise<string>;
-  settings: Pick<
+  getSettings: () => Pick<
     AppSettings['memory'],
     | 'charLimits'
+    | 'securityScan'
     | 'consolidatorEnabled'
     | 'consolidatorDebounceMinutes'
     | 'consolidatorTargetRatio'
@@ -53,10 +52,11 @@ export class ConsolidatorService {
   constructor(private readonly deps: ConsolidatorDeps) {}
 
   scheduleForFile(absolutePath: string, kind: MemoryKind, activeHandle?: LangChainChatModelHandle): void {
-    if (!this.deps.settings.consolidatorEnabled) {
+    const settings = this.deps.getSettings();
+    if (!settings.consolidatorEnabled) {
       return;
     }
-    if (this.isWithinDebounceWindow(absolutePath)) {
+    if (this.isWithinDebounceWindow(absolutePath, settings.consolidatorDebounceMinutes)) {
       return;
     }
     if (this.scheduled.has(absolutePath)) {
@@ -72,13 +72,14 @@ export class ConsolidatorService {
   }
 
   async runForFile(absolutePath: string, kind: MemoryKind, activeHandle?: LangChainChatModelHandle): Promise<void> {
-    if (!this.deps.settings.consolidatorEnabled) {
+    const settings = this.deps.getSettings();
+    if (!settings.consolidatorEnabled) {
       return;
     }
     if (this.inflight.has(absolutePath)) {
       return;
     }
-    if (!this.claimDailyQuota()) {
+    if (!this.claimDailyQuota(settings.consolidatorDailyQuota)) {
       return;
     }
 
@@ -88,6 +89,8 @@ export class ConsolidatorService {
       if (!existsSync(absolutePath)) {
         return;
       }
+      const capacity = new CapacityService(settings.charLimits);
+      const securityScan = new SecurityScanService(settings.securityScan);
       const content = readFileSync(absolutePath, 'utf8');
       mkdirSync(this.deps.backupDir, { recursive: true });
       this.sweepExpiredBackups();
@@ -95,8 +98,8 @@ export class ConsolidatorService {
       const backupPath = join(this.deps.backupDir, `${basename(absolutePath)}.${ts}.md`);
       copyFileSync(absolutePath, backupPath);
 
-      const limit = this.deps.capacity.check(kind, '').limit;
-      const target = Math.floor(limit * this.deps.settings.consolidatorTargetRatio);
+      const limit = capacity.check(kind, '').limit;
+      const target = Math.floor(limit * settings.consolidatorTargetRatio);
       const baseHandle = activeHandle === undefined ? await this.deps.resolveDefaultModelHandle() : activeHandle;
       const cheapHandle = this.deps.resolveCheapModelHandle(baseHandle);
       const compressed = await this.deps.callLLM({
@@ -110,12 +113,12 @@ export class ConsolidatorService {
         return;
       }
 
-      const scanIssues = this.deps.securityScan.scan(compressed);
+      const scanIssues = securityScan.scan(compressed);
       if (scanIssues.length > 0) {
         console.warn(`[consolidator] LLM output failed security scan for ${absolutePath}; keeping original.`);
         return;
       }
-      const cap = this.deps.capacity.check(kind, compressed);
+      const cap = capacity.check(kind, compressed);
       if (!cap.ok) {
         console.warn(`[consolidator] LLM output still over limit for ${absolutePath} (${cap.chars}/${cap.limit}); keeping original.`);
         return;
@@ -145,25 +148,25 @@ export class ConsolidatorService {
     }
   }
 
-  private claimDailyQuota(): boolean {
+  private claimDailyQuota(dailyQuota: number): boolean {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== this.dailyDate) {
       this.dailyDate = today;
       this.dailyCount = 0;
     }
-    if (this.dailyCount >= this.deps.settings.consolidatorDailyQuota) {
+    if (this.dailyCount >= dailyQuota) {
       return false;
     }
     this.dailyCount += 1;
     return true;
   }
 
-  private isWithinDebounceWindow(absolutePath: string): boolean {
+  private isWithinDebounceWindow(absolutePath: string, debounceMinutes: number): boolean {
     const lastRun = this.lastRunAtMs.get(absolutePath);
     if (lastRun === undefined) {
       return false;
     }
-    const debounceMs = this.deps.settings.consolidatorDebounceMinutes * 60 * 1000;
+    const debounceMs = debounceMinutes * 60 * 1000;
     return Date.now() - lastRun < debounceMs;
   }
 

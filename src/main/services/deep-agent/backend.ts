@@ -13,8 +13,11 @@ import {
   type ReadResult,
   type SandboxBackendProtocolV2
 } from 'deepagents';
+import { join } from 'node:path';
 import type { MemoryKind } from '../../../shared/types';
+import type { LangChainChatModelHandle } from '../langchain-model-factory';
 import { CapacityService } from '../memory/capacity';
+import type { ConsolidatorService } from '../memory/consolidator';
 import { SecurityScanService } from '../memory/security-scan';
 import { buildWorkspaceHash, type RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
@@ -282,7 +285,8 @@ function createRouteBackends(input: {
   shellExecutionService: AgentExecuteAdapter;
   securityScan: SecurityScanService;
   capacity: CapacityService;
-  onCapacityOverflow?: (resolved: string, kind: MemoryKind) => void;
+  consolidatorService: ConsolidatorService;
+  activeModelHandle: LangChainChatModelHandle;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;
@@ -316,7 +320,11 @@ function createRouteBackends(input: {
       workspaceHash,
       input.securityScan,
       input.capacity,
-      input.onCapacityOverflow
+      (resolved, kind) => input.consolidatorService.scheduleForFile(
+        join(input.paths.memoryDir, resolved),
+        kind,
+        input.activeModelHandle
+      )
     )
   };
 
@@ -341,7 +349,8 @@ export function createBackend(input: {
   shellExecutionService: AgentExecuteAdapter;
   securityScan: SecurityScanService;
   capacity: CapacityService;
-  onCapacityOverflow?: (resolved: string, kind: MemoryKind) => void;
+  consolidatorService: ConsolidatorService;
+  activeModelHandle: LangChainChatModelHandle;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;

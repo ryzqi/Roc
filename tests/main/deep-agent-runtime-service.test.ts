@@ -58,6 +58,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.taskService,
       services.databaseService,
       services.memoryService,
+      services.consolidatorService,
       services.sessionArchiveService,
       services.agentService,
       services.workspaceService,

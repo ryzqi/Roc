@@ -4,6 +4,7 @@ import type { AppSettings } from '../../../shared/types';
 import type { AgentService } from '../agent-service';
 import type { FileService } from '../file-service';
 import { CapacityService } from '../memory/capacity';
+import type { ConsolidatorService } from '../memory/consolidator';
 import { SecurityScanService } from '../memory/security-scan';
 import type { SessionArchiveService } from '../memory/session-archive';
 import type { MemoryService } from '../memory-service';
@@ -42,6 +43,7 @@ export async function createDeepAgentSession(input: {
   fileService: FileService;
   getCheckpointer: () => BaseCheckpointSaver;
   getMemorySettings: () => AppSettings['memory'];
+  consolidatorService: ConsolidatorService;
   memoryService: MemoryService;
   sessionArchiveService: SessionArchiveService;
   mcpService: McpService;
@@ -78,6 +80,8 @@ export async function createDeepAgentSession(input: {
     shellExecutionService: input.shellExecutionService,
     securityScan: new SecurityScanService(memorySettings.securityScan),
     capacity: new CapacityService(memorySettings.charLimits),
+    consolidatorService: input.consolidatorService,
+    activeModelHandle: input.context.modelHandle,
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();

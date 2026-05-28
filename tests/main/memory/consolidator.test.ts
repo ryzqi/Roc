@@ -3,8 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsolidatorService } from '../../../src/main/services/memory/consolidator';
-import { SecurityScanService } from '../../../src/main/services/memory/security-scan';
-import { CapacityService } from '../../../src/main/services/memory/capacity';
 import type { LangChainChatModelHandle } from '../../../src/main/services/langchain-model-factory';
 
 const limits = { user: 1375, agents: 800, memory: 2200 };
@@ -44,19 +42,18 @@ function makeService(
   return new ConsolidatorService({
     memoryDir,
     backupDir,
-    securityScan: new SecurityScanService(allOn),
-    capacity: new CapacityService(limits),
     resolveCheapModelHandle: (handle) => handle,
     resolveDefaultModelHandle: async () => activeHandle,
     callLLM: mockLLM,
-    settings: {
+    getSettings: () => ({
       charLimits: limits,
+      securityScan: allOn,
       consolidatorEnabled: true,
       consolidatorDebounceMinutes: 10,
       consolidatorTargetRatio: 0.85,
       consolidatorDailyQuota: 50,
       ...settings
-    }
+    })
   });
 }
 
