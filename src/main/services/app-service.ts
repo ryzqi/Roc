@@ -258,6 +258,7 @@ export function createAppServices(
     webReadService,
     shellExecutionService,
     paths,
+    () => configService.getSettings().memory,
     performanceObserverService,
     logService
   );

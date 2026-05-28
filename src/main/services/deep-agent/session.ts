@@ -1,7 +1,10 @@
 import type { ClientTool } from '@langchain/core/tools';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
+import type { AppSettings } from '../../../shared/types';
 import type { AgentService } from '../agent-service';
 import type { FileService } from '../file-service';
+import { CapacityService } from '../memory/capacity';
+import { SecurityScanService } from '../memory/security-scan';
 import type { McpService } from '../mcp-service';
 import type { RocPaths } from '../paths';
 import type { TaskSchedulerService } from '../task-scheduler-service';
@@ -36,6 +39,7 @@ export async function createDeepAgentSession(input: {
   context: RunExecutionContext;
   fileService: FileService;
   getCheckpointer: () => BaseCheckpointSaver;
+  getMemorySettings: () => AppSettings['memory'];
   mcpService: McpService;
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
@@ -62,10 +66,13 @@ export async function createDeepAgentSession(input: {
     taskService: input.taskService,
     webReadService: input.webReadService
   });
+  const memorySettings = input.getMemorySettings();
   const runtimeBackend = createBackend({
     workspaceService: input.workspaceService,
     paths: input.paths,
     shellExecutionService: input.shellExecutionService,
+    securityScan: new SecurityScanService(memorySettings.securityScan),
+    capacity: new CapacityService(memorySettings.charLimits),
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();

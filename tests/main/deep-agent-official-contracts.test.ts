@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFilesystemMiddleware, createSkillsMiddleware } from 'deepagents';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend } from '../../src/main/services/deep-agent/backend';
+import { CapacityService } from '../../src/main/services/memory/capacity';
+import { SecurityScanService } from '../../src/main/services/memory/security-scan';
 
 let root: string;
 let userHome: string;
@@ -20,6 +22,15 @@ function createShellExecutionAdapter(overrides?: { threadId?: string; runId?: st
         runId: overrides?.runId
       })
   } as const;
+}
+
+function createTestBackend(input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity'>) {
+  const memorySettings = services.configService.getSettings().memory;
+  return createBackend({
+    ...input,
+    securityScan: new SecurityScanService(memorySettings.securityScan),
+    capacity: new CapacityService(memorySettings.charLimits)
+  });
 }
 
 function getBeforeAgentHook(
@@ -62,7 +73,7 @@ afterEach(() => {
 
 describe('deep agent official contracts', () => {
   it('exposes execute only when the runtime backend satisfies the official sandbox backend protocol', async () => {
-    const backend = createBackend({
+    const backend = createTestBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter()
@@ -110,7 +121,7 @@ describe('deep agent official contracts', () => {
       'utf8'
     );
 
-    const backend = createBackend({
+    const backend = createTestBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),

@@ -64,6 +64,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.webReadService,
       services.shellExecutionService,
       services.paths,
+      () => services.configService.getSettings().memory,
       services.performanceObserverService,
       {
         append: vi.fn()

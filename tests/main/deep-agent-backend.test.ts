@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend, type RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
+import { CapacityService } from '../../src/main/services/memory/capacity';
+import { SecurityScanService } from '../../src/main/services/memory/security-scan';
 
 let root: string;
 let userHome: string;
@@ -19,6 +21,15 @@ function createShellExecutionAdapter(overrides?: { threadId?: string; runId?: st
         runId: overrides?.runId
       })
   } as const;
+}
+
+function createTestBackend(input: Omit<Parameters<typeof createBackend>[0], 'securityScan' | 'capacity'>) {
+  const memorySettings = services.configService.getSettings().memory;
+  return createBackend({
+    ...input,
+    securityScan: new SecurityScanService(memorySettings.securityScan),
+    capacity: new CapacityService(memorySettings.charLimits)
+  });
 }
 
 beforeEach(() => {
@@ -51,7 +62,7 @@ describe('deep agent backend', () => {
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# skill\n', 'utf8');
       writeFileSync(join(services.paths.memoryDir, 'accepted.md'), '# accepted\n', 'utf8');
 
-      const runtimeBackend = createBackend({
+      const runtimeBackend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
@@ -86,7 +97,7 @@ describe('deep agent backend', () => {
     writeFileSync(join(services.paths.skillsDir, 'alpha-review', 'SKILL.md'), '# alpha review\n', 'utf8');
     writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# project review\n', 'utf8');
 
-    const backend = createBackend({
+    const backend = createTestBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
@@ -126,7 +137,7 @@ describe('deep agent backend', () => {
         }
       });
       services.taskService.markRunRunning(task.id);
-      const backend = createBackend({
+      const backend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter({
@@ -175,7 +186,7 @@ describe('deep agent backend', () => {
         }
       });
       services.taskService.markRunRunning(task.id);
-      const backend = createBackend({
+      const backend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter({
@@ -206,7 +217,7 @@ describe('deep agent backend', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-write-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
-      const backend: RocCompositeBackend = createBackend({
+      const backend: RocCompositeBackend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter()
@@ -232,7 +243,7 @@ describe('deep agent backend', () => {
       '---\nname: project-review\ndescription: project review\n---\n',
       'utf8'
     );
-    const backend: RocCompositeBackend = createBackend({
+    const backend: RocCompositeBackend = createTestBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
@@ -249,25 +260,27 @@ describe('deep agent backend', () => {
     );
   });
 
-  it('keeps /memory/ mounted read-only as a curated projection during agent runs', async () => {
-    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-memory-readonly-'));
+  it('mounts /memory/ as writable for whitelisted memory files during agent runs', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-memory-writable-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
-      writeFileSync(join(services.paths.memoryDir, 'accepted.md'), '# accepted\n', 'utf8');
-      const backend: RocCompositeBackend = createBackend({
+      const backend: RocCompositeBackend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
         selectedSkillIds: ['project-review']
       }).backend;
 
-      const writeResult = await backend.write('/memory/accepted.md', 'mutate\n');
-      const editResult = await backend.edit('/memory/accepted.md', '# accepted\n', 'mutated');
-      const memoryFile = await backend.read('/memory/accepted.md');
+      const writeResult = await backend.write('/memory/global/MEMORY.md', '# accepted\n');
+      const editResult = await backend.edit('/memory/global/MEMORY.md', '# accepted', '# updated');
+      const invalidWrite = await backend.write('/memory/accepted.md', 'mutate\n');
+      const memoryFile = await backend.read('/memory/global/MEMORY.md');
 
-      expect(writeResult.error).toBeTruthy();
-      expect(editResult.error).toBeTruthy();
-      expect(memoryFile.content).toBe('# accepted\n');
+      expect(writeResult.error).toBeUndefined();
+      expect(editResult.error).toBeUndefined();
+      expect(invalidWrite.error).toContain('whitelist');
+      expect(memoryFile.content).toContain('# updated');
+      expect(readFileSync(join(services.paths.memoryDir, 'global', 'MEMORY.md'), 'utf8')).toContain('# updated');
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
@@ -277,7 +290,7 @@ describe('deep agent backend', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-invalid-route-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
-      const backend = createBackend({
+      const backend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
@@ -306,7 +319,7 @@ describe('deep agent backend', () => {
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# hello skill\n', 'utf8');
       writeFileSync(join(services.paths.memoryDir, 'accepted.md'), 'hello memory\n', 'utf8');
 
-      const backend = createBackend({
+      const backend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter()
@@ -332,7 +345,7 @@ describe('deep agent backend', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-upload-invalid-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
-      const backend = createBackend({
+      const backend = createTestBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter()

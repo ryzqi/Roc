@@ -13,9 +13,13 @@ import {
   type ReadResult,
   type SandboxBackendProtocolV2
 } from 'deepagents';
-import type { RocPaths } from '../paths';
+import type { MemoryKind } from '../../../shared/types';
+import { CapacityService } from '../memory/capacity';
+import { SecurityScanService } from '../memory/security-scan';
+import { buildWorkspaceHash, type RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
 import type { AgentExecuteAdapter } from './types';
+import { WritableMemoryFilesystemBackend } from './writable-memory-backend';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
@@ -23,7 +27,6 @@ const MEMORY_ROUTE = '/memory/';
 const AGENTS_ROUTE = '/agents/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
 const READ_ONLY_AGENTS_ERROR = 'Roc 已将 /agents/ 挂载为只读项目规则目录。';
-const READ_ONLY_MEMORY_ERROR = 'Roc 已将 /memory/ 挂载为只读策展记忆视图。';
 const SKILL_ACCESS_DENIED_ERROR = 'Roc 当前回合未启用这个 skill。';
 const UNKNOWN_ROUTE_ERROR = 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。';
 
@@ -277,6 +280,9 @@ function createRouteBackends(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
+  securityScan: SecurityScanService;
+  capacity: CapacityService;
+  onCapacityOverflow?: (resolved: string, kind: MemoryKind) => void;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;
@@ -284,6 +290,7 @@ function createRouteBackends(input: {
 } {
   const hostShellBackend = new RocHostShellBackend(input.shellExecutionService);
   const workspace = input.workspaceService.getCurrentWorkspace();
+  const workspaceHash = buildWorkspaceHash(workspace === null ? null : workspace.path);
   const skillsBackendBase = new FilesystemBackend({
     rootDir: input.paths.skillsDir,
     virtualMode: true
@@ -304,7 +311,13 @@ function createRouteBackends(input: {
   const routes: Record<string, AnyBackendProtocol> = {
     [SKILLS_ROUTE]: skillsBackend,
     [AGENTS_ROUTE]: new ReadOnlyFilesystemBackend(agentsBackendBase, READ_ONLY_AGENTS_ERROR),
-    [MEMORY_ROUTE]: new ReadOnlyFilesystemBackend(memoryBackendBase, READ_ONLY_MEMORY_ERROR)
+    [MEMORY_ROUTE]: new WritableMemoryFilesystemBackend(
+      memoryBackendBase,
+      workspaceHash,
+      input.securityScan,
+      input.capacity,
+      input.onCapacityOverflow
+    )
   };
 
   if (workspace !== null) {
@@ -326,6 +339,9 @@ export function createBackend(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
+  securityScan: SecurityScanService;
+  capacity: CapacityService;
+  onCapacityOverflow?: (resolved: string, kind: MemoryKind) => void;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;

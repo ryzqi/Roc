@@ -11,6 +11,7 @@ import type {
   ChatRunEvent,
   ChatStartRunRequest,
   ChatStartRunResult,
+  AppSettings,
   TaskRun
 } from '../../shared/types';
 import type { AgentService } from './agent-service';
@@ -74,6 +75,7 @@ export class DeepAgentRuntimeService {
     private readonly webReadService: WebReadService,
     private readonly shellExecutionService: ShellExecutionService,
     private readonly paths: RocPaths,
+    private readonly getMemorySettings: () => AppSettings['memory'],
     private readonly performanceObserverService: PerformanceObserverService,
     private readonly logService: LogService
   ) {
@@ -352,6 +354,7 @@ export class DeepAgentRuntimeService {
           context,
           fileService: this.fileService,
           getCheckpointer: () => this.getOrCreateCheckpointer(),
+          getMemorySettings: this.getMemorySettings,
           mcpService: this.mcpService,
           paths: this.paths,
           shellExecutionService: this.taskBoundShellExecutionService(context),
@@ -415,6 +418,7 @@ export class DeepAgentRuntimeService {
       context,
       fileService: this.fileService,
       getCheckpointer: () => this.getOrCreateCheckpointer(),
+      getMemorySettings: this.getMemorySettings,
       mcpService: this.mcpService,
       paths: this.paths,
       shellExecutionService: this.taskBoundShellExecutionService(context),
