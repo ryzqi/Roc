@@ -19,6 +19,7 @@ describe('immersive window shell', () => {
     expect(options.webPreferences?.preload).toBe('C:/roc/dist/preload/index.mjs');
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
+    expect(options.webPreferences?.sandbox).toBe(false);
   });
 
   it('applies restored main-window bounds after display-safe normalization', () => {

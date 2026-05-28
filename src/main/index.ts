@@ -37,6 +37,7 @@ import { applyWindowMaterial } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { bindNativeContextMenu } from './native-context-menu';
 import { buildSystemAppearanceSnapshot } from './system-appearance';
+import { handleExternalWindowOpen } from './external-link-policy';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
@@ -204,6 +205,7 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
   if (activeServices === null) {
     throw new Error('App services are not ready for floating entry windows.');
   }
+  const services = activeServices;
   const existingWindow = kind === 'quick' ? quickEntryWindow : trayEntryWindow;
   if (existingWindow !== null && !existingWindow.isDestroyed()) {
     existingWindow.show();
@@ -219,11 +221,13 @@ async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
       resolveFloatingWindowBounds(kind, { workArea: currentDisplay.workArea })
     )
   );
-  applyWindowMaterial(entryWindow, 'acrylic', activeServices.logService);
+  applyWindowMaterial(entryWindow, 'acrylic', services.logService);
   entryWindow.setMenuBarVisibility(false);
   entryWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
+    return handleExternalWindowOpen(url, {
+      shell,
+      logService: services.logService
+    });
   });
   bindNativeContextMenu(entryWindow.webContents);
   entryWindow.once('ready-to-show', () => {
@@ -354,13 +358,19 @@ async function createWindow(): Promise<void> {
   }
 
   services.terminalSessionService.onOutput((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:output', event);
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:output', event, {
+      include: (_window, index) => index === 0
+    });
   });
   services.terminalSessionService.onExit((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:exit', event);
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:exit', event, {
+      include: (_window, index) => index === 0
+    });
   });
   services.deepAgentRuntimeService.onRunEvent((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:chat:run-event', event);
+    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:chat:run-event', event, {
+      include: (_window, index) => index === 0
+    });
     if (event.runId.startsWith('run_')) {
       broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
     }
@@ -373,8 +383,10 @@ async function createWindow(): Promise<void> {
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
+    return handleExternalWindowOpen(url, {
+      shell,
+      logService: services.logService
+    });
   });
   bindNativeContextMenu(mainWindow.webContents);
 

@@ -56,4 +56,23 @@ describe('window messaging', () => {
     expect(destroyedWindow.send).not.toHaveBeenCalled();
     expect(destroyedContentsWindow.send).not.toHaveBeenCalled();
   });
+
+  it('can filter broadcasts to subscribed windows', () => {
+    const mainWindow = createWindow();
+    const quickWindow = createWindow();
+    const trayWindow = createWindow();
+
+    broadcastToWindows(
+      [mainWindow, quickWindow, trayWindow],
+      'roc:chat:run-event',
+      { runId: 'chat_1', type: 'message' },
+      {
+        include: (_window, index) => index === 0
+      }
+    );
+
+    expect(mainWindow.send).toHaveBeenCalledWith('roc:chat:run-event', { runId: 'chat_1', type: 'message' });
+    expect(quickWindow.send).not.toHaveBeenCalled();
+    expect(trayWindow.send).not.toHaveBeenCalled();
+  });
 });

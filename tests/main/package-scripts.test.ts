@@ -26,8 +26,10 @@ describe('package scripts', () => {
     expect(performanceSmokeScript).toContain('rendererReadyMs');
     expect(performanceSmokeScript).toContain('warmQuickReopenMs');
     expect(performanceSmokeScript).toContain('processMetricsSummary');
+    expect(performanceSmokeScript).toContain('ipcSummary');
     expect(electronSmokeScript).toContain('nativeModuleProbe');
     expect(electronSmokeScript).toContain('processMetricsSummary');
+    expect(electronSmokeScript).toContain('ipcTopNRecorded');
     expect(electronSmokeScript).toContain('browserWindowCount');
     expect(electronSmokeScript).toContain('materialEvidence');
     expect(electronSmokeScript).toContain('windowPlacementEvidence');

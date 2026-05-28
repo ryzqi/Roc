@@ -49,4 +49,73 @@ describe('PerformanceObserverService', () => {
       label: 'nvidia:model'
     });
   });
+
+  it('summarizes IPC calls by slowest and most frequent channels', () => {
+    const service = new PerformanceObserverService();
+
+    service.record({
+      phase: 'ipc_call',
+      label: 'roc:git:status',
+      startedAtMs: 1,
+      durationMs: 24,
+      metadata: {
+        channel: 'roc:git:status',
+        ok: true
+      }
+    });
+    service.record({
+      phase: 'ipc_call',
+      label: 'roc:window:get-bounds',
+      startedAtMs: 2,
+      durationMs: 2,
+      metadata: {
+        channel: 'roc:window:get-bounds',
+        ok: true
+      }
+    });
+    service.record({
+      phase: 'ipc_call',
+      label: 'roc:git:status',
+      startedAtMs: 3,
+      durationMs: 8,
+      metadata: {
+        channel: 'roc:git:status',
+        ok: false
+      }
+    });
+    service.record({
+      phase: 'ipc_call',
+      label: 'roc:window:set-bounds',
+      startedAtMs: 4,
+      durationMs: 1,
+      metadata: {
+        channel: 'roc:window:set-bounds',
+        ok: true
+      }
+    });
+
+    const summary = service.getIpcSummary(2);
+
+    expect(summary.totalCalls).toBe(4);
+    expect(summary.windowSetBoundsCalls).toBe(1);
+    expect(summary.topSlowCalls).toEqual([
+      {
+        channel: 'roc:git:status',
+        count: 2,
+        averageDurationMs: 16,
+        maxDurationMs: 24,
+        lastOk: false,
+        totalDurationMs: 32
+      },
+      {
+        channel: 'roc:window:get-bounds',
+        count: 1,
+        averageDurationMs: 2,
+        maxDurationMs: 2,
+        lastOk: true,
+        totalDurationMs: 2
+      }
+    ]);
+    expect(summary.topFrequentCalls.map((item) => item.channel)).toEqual(['roc:git:status', 'roc:window:get-bounds']);
+  });
 });

@@ -66,6 +66,7 @@ export function buildNativeFeelSummary({
       mainInputReadyMs
     },
     processMetricsSummary: summarizeProcessMetrics(sample),
+    ipcSummary: sample.ipc,
     nativeModuleProbe
   };
 }

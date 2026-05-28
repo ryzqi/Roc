@@ -1,5 +1,5 @@
 import type { RocPathsSnapshot, RocRunMode, ServiceStatus } from './common';
-import type { PerformanceSnapshot } from './performance';
+import type { PerformanceIpcSummary, PerformanceSnapshot } from './performance';
 
 export type AppStatus = {
   appName: string;
@@ -17,6 +17,12 @@ export type AppStatus = {
   rendererBoundary: {
     contextIsolation: boolean;
     nodeIntegration: boolean;
+    sandbox: {
+      enabled: boolean;
+      evaluated: boolean;
+      reason: string | null;
+      compensatingControls: string[];
+    };
   };
 };
 
@@ -44,6 +50,7 @@ export type PerformanceSample = {
   memoryBudgetMb: number;
   exceedsBudget: boolean;
   timing: PerformanceSnapshot;
+  ipc: PerformanceIpcSummary;
   electron: PerformanceElectronMetrics;
 };
 

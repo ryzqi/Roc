@@ -51,6 +51,9 @@ function assertPerformanceSample(sample) {
   if (!Array.isArray(sample.timing?.samples)) {
     throw new Error('Performance smoke sample is missing timing.samples.');
   }
+  if (typeof sample.ipc?.totalCalls !== 'number' || !Array.isArray(sample.ipc?.topSlowCalls)) {
+    throw new Error('Performance smoke sample is missing ipc summary.');
+  }
   if (typeof sample.electron?.browserWindowCount !== 'number') {
     throw new Error('Performance smoke sample is missing electron.browserWindowCount.');
   }
@@ -196,6 +199,7 @@ try {
     },
     nativeFeelScorecard,
     nativeFeel,
+    ipcSummary: finalSample.ipc,
     processMetricsSummary: nativeFeel.processMetricsSummary,
     softWarnings: buildSoftWarnings({
       initialSample,

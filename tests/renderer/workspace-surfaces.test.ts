@@ -258,6 +258,14 @@ describe('workspace and diagnostics surfaces', () => {
           generatedAt: '2026-05-16T08:00:00.000Z',
           samples: []
         },
+        ipc: {
+          generatedFromSamples: 0,
+          totalCalls: 0,
+          topLimit: 5,
+          topSlowCalls: [],
+          topFrequentCalls: [],
+          windowSetBoundsCalls: 0
+        },
         electron: {
           browserWindowCount: 0,
           processCount: 0,
@@ -359,6 +367,14 @@ describe('workspace and diagnostics surfaces', () => {
               }
             }
           ]
+        },
+        ipc: {
+          generatedFromSamples: 1,
+          totalCalls: 0,
+          topLimit: 5,
+          topSlowCalls: [],
+          topFrequentCalls: [],
+          windowSetBoundsCalls: 0
         },
         electron: {
           browserWindowCount: 0,

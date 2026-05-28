@@ -163,7 +163,13 @@ export class AppService {
       defaultModelConfigured: this.configService.hasDefaultModel(),
       rendererBoundary: {
         contextIsolation: true,
-        nodeIntegration: false
+        nodeIntegration: false,
+        sandbox: {
+          enabled: false,
+          evaluated: true,
+          reason: 'Electron sandbox blocks the current bundled ESM preload; smoke timed out before renderer root appeared.',
+          compensatingControls: ['contextIsolation', 'nodeIntegration=false', 'typed preload API', 'external URL scheme allowlist']
+        }
       }
     };
   }

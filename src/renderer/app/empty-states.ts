@@ -70,6 +70,14 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
         generatedAt: '',
         samples: []
       },
+      ipc: {
+        generatedFromSamples: 0,
+        totalCalls: 0,
+        topLimit: 5,
+        topSlowCalls: [],
+        topFrequentCalls: [],
+        windowSetBoundsCalls: 0
+      },
       electron: {
         browserWindowCount: 0,
         processCount: 0,

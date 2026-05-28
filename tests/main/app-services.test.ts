@@ -85,6 +85,16 @@ describe('Roc foundation services', () => {
       label: '未选择工作区'
     });
     expect(status.paths.root).toBe(root);
+    expect(status.rendererBoundary).toEqual({
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: {
+        enabled: false,
+        evaluated: true,
+        reason: 'Electron sandbox blocks the current bundled ESM preload; smoke timed out before renderer root appeared.',
+        compensatingControls: ['contextIsolation', 'nodeIntegration=false', 'typed preload API', 'external URL scheme allowlist']
+      }
+    });
   });
 
   it('records performance samples and exposes the package directory script target', () => {
@@ -194,6 +204,8 @@ describe('Roc foundation services', () => {
         startedAtMs: index,
         durationMs: index + 1,
         metadata: {
+          channel: `channel-${index}`,
+          ok: true,
           index
         }
       });

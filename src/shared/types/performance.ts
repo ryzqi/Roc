@@ -29,3 +29,21 @@ export type PerformanceSnapshot = {
   generatedAt: string;
   samples: PerformanceTimingSample[];
 };
+
+export type PerformanceIpcChannelSummary = {
+  channel: string;
+  count: number;
+  totalDurationMs: number;
+  averageDurationMs: number;
+  maxDurationMs: number;
+  lastOk: boolean | null;
+};
+
+export type PerformanceIpcSummary = {
+  generatedFromSamples: number;
+  totalCalls: number;
+  topLimit: number;
+  topSlowCalls: PerformanceIpcChannelSummary[];
+  topFrequentCalls: PerformanceIpcChannelSummary[];
+  windowSetBoundsCalls: number;
+};

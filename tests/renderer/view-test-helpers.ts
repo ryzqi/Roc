@@ -34,7 +34,13 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       defaultModelConfigured: true,
       rendererBoundary: {
         contextIsolation: true,
-        nodeIntegration: false
+        nodeIntegration: false,
+        sandbox: {
+          enabled: false,
+          evaluated: true,
+          reason: 'test fixture',
+          compensatingControls: ['contextIsolation', 'nodeIntegration=false']
+        }
       }
     },
     taskSnapshot: {
@@ -169,6 +175,14 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       timing: {
         generatedAt: '2026-05-13T00:00:00.000Z',
         samples: []
+      },
+      ipc: {
+        generatedFromSamples: 0,
+        totalCalls: 0,
+        topLimit: 5,
+        topSlowCalls: [],
+        topFrequentCalls: [],
+        windowSetBoundsCalls: 0
       },
       electron: {
         browserWindowCount: 0,

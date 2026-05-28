@@ -1964,6 +1964,7 @@ try {
     }
   };
   const processMetricsSummary = summarizeProcessMetrics(phase6ApiEvidence.sample);
+  const ipcSummary = phase6ApiEvidence.sample.ipc;
   const nativeConfirmIpcSamples = phase6ApiEvidence.sample.timing.samples.filter(
     (sample) =>
       sample.phase === 'ipc_call' &&
@@ -2483,6 +2484,7 @@ try {
     const appShellStyle = appShell instanceof HTMLElement ? getComputedStyle(appShell) : null;
     return {
       appAppearance: appStatus.data.appearance,
+      rendererBoundary: appStatus.data.rendererBoundary,
       colorScheme: rootStyle.colorScheme,
       datasetTheme: root.dataset.theme ?? null,
       datasetThemeSource: root.dataset.themeSource ?? null,
@@ -2584,6 +2586,11 @@ try {
       phase6ApiEvidence.sample.rssMb > 0 &&
       phase6ApiEvidence.sample.heapUsedMb > 0 &&
       typeof phase6ApiEvidence.sample.exceedsBudget === 'boolean',
+    ipcTopNRecorded:
+      ipcSummary.totalCalls > 0 &&
+      ipcSummary.topSlowCalls.length > 0 &&
+      ipcSummary.topFrequentCalls.length > 0 &&
+      ipcSummary.windowSetBoundsCalls === 0,
     workspaceFileVisible: workspaceText.includes('phase-three-notes.txt'),
     workspaceSearchVisible:
       workspaceApiEvidence.search.matches.some(
@@ -3078,6 +3085,10 @@ try {
       phase4VisualEvidence.bodyBackgroundImage === 'none' &&
       phase4VisualEvidence.appShellBackgroundImage === 'none' &&
       phase4VisualEvidence.forcedColorsMedia === '(forced-colors: active)',
+    sandboxEvaluated:
+      phase4VisualEvidence.rendererBoundary.sandbox.evaluated === true &&
+      phase4VisualEvidence.rendererBoundary.sandbox.enabled === false &&
+      phase4VisualEvidence.rendererBoundary.sandbox.compensatingControls.includes('external URL scheme allowlist'),
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
@@ -3094,6 +3105,7 @@ try {
     floatingWindowBoundsResolved: rendererBoundary.floatingWindowBoundsResolved,
     phase3WebViewBehavior: rendererBoundary.phase3WebViewBehavior,
     phase4VisualTheme: rendererBoundary.phase4VisualTheme,
+    sandboxEvaluated: rendererBoundary.sandboxEvaluated,
     windowDragWorks: rendererBoundary.windowDragWorks,
     windowSetBoundsRemoved: rendererBoundary.windowSetBoundsRemoved,
     mockTextAbsent: rendererBoundary.mockTextAbsent,
@@ -3104,6 +3116,7 @@ try {
     traySummaryVisible: rendererBoundary.traySummaryVisible,
     diagnosticPackageVisible: rendererBoundary.diagnosticPackageVisible,
     performanceSampleVisible: rendererBoundary.performanceSampleVisible,
+    ipcTopNRecorded: rendererBoundary.ipcTopNRecorded,
     workspaceFileVisible: rendererBoundary.workspaceFileVisible,
     workspaceSearchVisible: rendererBoundary.workspaceSearchVisible,
     gitChangesVisible: rendererBoundary.gitChangesVisible,
@@ -3195,6 +3208,7 @@ try {
       packagedExeExists: existsSync(packagedExe)
     },
     performanceSample: phase6ApiEvidence.sample,
+    ipcSummary,
     nativeFeelScorecard,
     nativeFeel,
     nativeModuleProbe,

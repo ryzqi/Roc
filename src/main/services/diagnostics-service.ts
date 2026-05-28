@@ -79,6 +79,7 @@ export class DiagnosticsService {
       memoryBudgetMb: request.memoryBudgetMb,
       exceedsBudget: this.bytesToMb(memoryUsage.rss) > request.memoryBudgetMb,
       timing: this.performanceObserverService.getSnapshot(),
+      ipc: this.performanceObserverService.getIpcSummary(5),
       electron: this.readElectronMetrics()
     };
 
@@ -140,6 +141,7 @@ export class DiagnosticsService {
       memoryBudgetMb: row.memory_budget_mb,
       exceedsBudget: row.exceeds_budget === 1,
       timing: this.performanceObserverService.getSnapshot(),
+      ipc: this.performanceObserverService.getIpcSummary(5),
       electron: this.readElectronMetrics()
     };
   }

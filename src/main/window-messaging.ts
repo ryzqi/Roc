@@ -8,6 +8,10 @@ type SendableWindow = {
   webContents: SendableWebContents;
 };
 
+type BroadcastOptions = {
+  include: (window: SendableWindow, index: number) => boolean;
+};
+
 export function sendToWindow(window: SendableWindow | null, channel: string, payload: unknown): boolean {
   if (window === null || window.isDestroyed()) {
     return false;
@@ -23,9 +27,14 @@ export function sendToWindow(window: SendableWindow | null, channel: string, pay
 export function broadcastToWindows(
   windows: readonly (SendableWindow | null)[],
   channel: string,
-  payload: unknown
+  payload: unknown,
+  options?: BroadcastOptions
 ): void {
-  for (const window of windows) {
+  for (let index = 0; index < windows.length; index += 1) {
+    const window = windows[index];
+    if (window !== null && options !== undefined && !options.include(window, index)) {
+      continue;
+    }
     sendToWindow(window, channel, payload);
   }
 }
