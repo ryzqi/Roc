@@ -108,6 +108,7 @@ export function AppBasicsSection({
               }
               type="checkbox"
             />
+            <small className="field-hint">仅调整 Roc 内部任务提醒频率；尚未启用 Windows toast。</small>
           </label>
         </div>
         <FieldRow

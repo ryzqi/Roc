@@ -8,10 +8,21 @@ import { assertNoRuntimeMockText, waitForAppReady, waitForCapabilitySelection, w
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from './lib/fixtures.mjs';
 import { readMainPageText, seedSmokeRuntimeData } from './lib/ipc.mjs';
 import { buildNativeFeelSummary, nativeFeelScorecard, summarizeProcessMetrics } from './lib/native-feel.mjs';
+import { buildReleaseReadinessSnapshot } from './lib/release-readiness.mjs';
 import { clickComposerPopoverChoice, clickSmokeControl, hoverComposerPopoverContent, openChatView } from './lib/ui-actions.mjs';
 
 const artifactDir = prepareArtifactDir();
 const packagedExe = resolve('release/win-unpacked/Roc.exe');
+const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
+const electronBuilderConfig = readFileSync(resolve('electron-builder.yml'), 'utf8');
+const releaseReadiness = buildReleaseReadinessSnapshot({
+  appId: 'com.roc.desktop',
+  productName: 'Roc',
+  executableName: 'Roc',
+  version: packageJson.version,
+  builderConfigText: electronBuilderConfig,
+  packageJson
+});
 const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
 const smokeTarget =
@@ -3092,6 +3103,13 @@ try {
     windowDragWorks: windowDragEvidence.moved,
     clickableButtonsHandled: Object.values(buttonInteractionEvidence).every(Boolean)
   };
+  const releaseReadinessHonest =
+    releaseReadiness.integrations.appProtocol.status === 'absent' &&
+    releaseReadiness.integrations.fileAssociation.status === 'absent' &&
+    releaseReadiness.integrations.windowsToast.status === 'absent' &&
+    releaseReadiness.integrations.taskbarJumpList.status === 'absent' &&
+    releaseReadiness.integrations.installerSigningUpdater.status === 'absent' &&
+    releaseReadiness.integrations.crashReporter.status === 'absent';
 
   const failedChecks = Object.entries({
     hasRequire: !rendererBoundary.hasRequire,
@@ -3194,6 +3212,7 @@ try {
       rendererBoundary.terminalKeys.includes('closeSession') &&
       rendererBoundary.terminalKeys.includes('onOutput') &&
       rendererBoundary.terminalKeys.includes('onExit'),
+    releaseReadinessHonest,
     clickableButtonsHandled: rendererBoundary.clickableButtonsHandled
   })
     .filter(([, ok]) => !ok)
@@ -3212,6 +3231,7 @@ try {
     nativeFeelScorecard,
     nativeFeel,
     nativeModuleProbe,
+    releaseReadiness,
     processMetricsSummary,
     browserWindowCount: processMetricsSummary.browserWindowCount,
     evidence: {
