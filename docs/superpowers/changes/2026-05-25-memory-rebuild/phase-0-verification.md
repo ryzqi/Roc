@@ -9,3 +9,12 @@
 | S4 model factory scan | `Select-String ...` / `rg ...` | Verified passing | `LangChainModelFactory` has default/provider/modelId creation only; provider defaults expose empty model lists and no cheap-model mapping. |
 | Official Deep Agents docs | Context7 `/langchain-ai/deepagentsjs` query | Verified passing | Docs show `createDeepAgent`, filesystem middleware/backend customization, and HITL permissions. No before-compaction callback found in returned official snippets. |
 | Official LangGraph JS docs | Context7 `/websites/langchain_oss_javascript_langgraph` query | Verified passing | Docs show `streamEvents(..., { version: 'v3' })`, `stream.messages`, `stream.output`, `InMemoryStore`, `MemorySaver`, and `trimMessages`. No before-compaction callback found in returned official snippets. |
+
+## Summary
+
+Phase 0 is Verified passing.
+
+- S1 confirms current `deepagents@1.10.2` `FilesystemBackend` behavior and wrapper requirements.
+- S2 confirms there is no public before-compaction callback; Deep Agents does have built-in `SummarizationMiddleware`, so Roc's flush must be an explicit proactive follow-up run.
+- S3 confirms thread deletion is soft archive today; `session_messages` should use retention/orphan cleanup rather than FK cascade.
+- S4 confirms no cheap model resolver exists; consolidator must reuse the active model unless a tested provider-local cheap model is added later.
