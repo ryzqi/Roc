@@ -11,6 +11,7 @@ import { LogService } from './log-service';
 import { LangChainModelFactory } from './langchain-model-factory';
 import { McpService } from './mcp-service';
 import { MemoryService } from './memory-service';
+import { SessionArchiveService } from './memory/session-archive';
 import { RocPaths } from './paths';
 import { ProviderRuntimeService } from './provider-runtime-service';
 import { PerformanceObserverService } from './performance-observer-service';
@@ -31,6 +32,7 @@ export type AppServices = {
   configService: ConfigService;
   databaseService: DatabaseService;
   memoryService: MemoryService;
+  sessionArchiveService: SessionArchiveService;
   taskService: TaskService;
   taskSchedulerService: TaskSchedulerService;
   lifecycleService: LifecycleService;
@@ -81,6 +83,7 @@ export class AppService {
     private readonly configService: ConfigService,
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
+    private readonly sessionArchiveService: SessionArchiveService,
     private readonly taskService: TaskService,
     private readonly taskSchedulerService: TaskSchedulerService,
     private readonly lifecycleService: LifecycleService,
@@ -180,6 +183,7 @@ export class AppService {
   > {
     return {
       memoryService: this.memoryService,
+      sessionArchiveService: this.sessionArchiveService,
       taskService: this.taskService,
       taskSchedulerService: this.taskSchedulerService,
       lifecycleService: this.lifecycleService,
@@ -231,6 +235,7 @@ export function createAppServices(
   const skillService = new SkillService(paths);
   const workspaceService = new WorkspaceService(configService);
   const memoryService = new MemoryService(paths, databaseService, workspaceService, () => configService.getSettings().memory);
+  const sessionArchiveService = new SessionArchiveService(databaseService);
   const rtkService = new RtkService(paths);
   const performanceObserverService = new PerformanceObserverService();
   const diagnosticsService = new DiagnosticsService(
@@ -252,6 +257,7 @@ export function createAppServices(
     taskService,
     databaseService,
     memoryService,
+    sessionArchiveService,
     agentService,
     workspaceService,
     fileService,
@@ -276,6 +282,7 @@ export function createAppServices(
     configService,
     databaseService,
     memoryService,
+    sessionArchiveService,
     taskService,
     taskSchedulerService,
     lifecycleService,
@@ -304,6 +311,7 @@ export function createAppServices(
     configService,
     databaseService,
     memoryService,
+    sessionArchiveService,
     taskService,
     taskSchedulerService,
     lifecycleService,

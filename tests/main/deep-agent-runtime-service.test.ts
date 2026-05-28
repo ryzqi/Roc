@@ -58,6 +58,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.taskService,
       services.databaseService,
       services.memoryService,
+      services.sessionArchiveService,
       services.agentService,
       services.workspaceService,
       services.fileService,
@@ -307,6 +308,50 @@ describe('DeepAgentRuntimeService', () => {
       providerId: 'nvidia',
       modelId: 'moonshotai/kimi-k2.6'
     });
+  });
+
+  it('archives visible user, tool, and assistant messages for a chat run', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Archived ', 'answer']),
+          usage_metadata: {
+            output_tokens: 2
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'read_file',
+          input: { path: '/workspace/a.md' },
+          output: Promise.resolve({ content: 'file body' })
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const started = await runtime.startRun({
+      input: 'Archive this turn.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const rows = services.databaseService.db
+      .prepare('SELECT role, content, token_count FROM session_messages WHERE thread_id = ? ORDER BY created_at, id')
+      .all(started.threadId) as Array<{ role: string; content: string; token_count: number | null }>;
+
+    expect(rows.map((row) => row.role)).toEqual(['user', 'tool', 'assistant']);
+    expect(rows[0]).toMatchObject({ role: 'user', content: 'Archive this turn.', token_count: null });
+    expect(rows[1].content).toContain('"tool":"read_file"');
+    expect(rows[1].content).toContain('"path":"/workspace/a.md"');
+    expect(rows[2]).toMatchObject({ role: 'assistant', content: 'Archived answer', token_count: 2 });
   });
 
   it('records provider first-token and completion timing without prompt content', async () => {

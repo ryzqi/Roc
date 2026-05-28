@@ -21,6 +21,7 @@ type StreamConsumerCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
+  recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
   recordTaskEvent: (
     type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
     payload: Record<string, unknown>
@@ -227,6 +228,7 @@ export async function consumeToolCallStream(input: {
           output
         });
       }
+      input.callbacks.recordSessionToolCall?.(name, callInput, output);
       input.callbacks.emitTodoEvent(output);
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : 'Tool 执行失败。');
@@ -245,6 +247,7 @@ export async function consumeToolCallStream(input: {
           error: message
         });
       }
+      input.callbacks.recordSessionToolCall?.(name, callInput, { error: message });
     }
   }
 }

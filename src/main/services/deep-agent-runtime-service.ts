@@ -21,6 +21,7 @@ import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
 import type { MemoryService } from './memory-service';
+import type { SessionArchiveService } from './memory/session-archive';
 import type { McpService } from './mcp-service';
 import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
@@ -70,6 +71,7 @@ export class DeepAgentRuntimeService {
     private readonly taskService: TaskService,
     private readonly databaseService: DatabaseService,
     private readonly memoryService: MemoryService,
+    private readonly sessionArchiveService: SessionArchiveService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
@@ -344,6 +346,7 @@ export class DeepAgentRuntimeService {
   }
 
   private async executeRun(context: RunExecutionContext): Promise<void> {
+    this.sessionArchiveService.recordUserInput(context.threadId, context.input);
     try {
       let attemptProducedVisibleOutput = false;
       let retryCount = 0;
@@ -699,6 +702,9 @@ export class DeepAgentRuntimeService {
       emitRuntimeEvent: (event: ChatRunEvent) => this.emit(event),
       emitTodoEvent: (candidate: unknown) => this.emitTodoEvent(context.runId, candidate),
       markVisibleOutput: onVisibleOutput,
+      recordSessionToolCall: (name: string, input: unknown, output: unknown) => {
+        this.sessionArchiveService.recordToolCall(context.threadId, name, input, output);
+      },
       recordTaskEvent: (
         type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
         payload: Record<string, unknown>
@@ -752,6 +758,9 @@ export class DeepAgentRuntimeService {
     retryCount = 0
   ): void {
     const assistantMessage = prompt.resolveAssistantMessage([...assistantChunks]);
+    if (assistantMessage.length > 0) {
+      this.sessionArchiveService.recordAssistantMessage(context.threadId, assistantMessage, usage.completionTokens);
+    }
     const result = prompt.buildProviderExecutionResult({
       modelHandle: context.modelHandle,
       createdAt: context.createdAt,
