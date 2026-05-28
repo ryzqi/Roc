@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { ChatStartRunRequest, ProviderExecutionResult } from '../../../shared/types';
 import { RocDomainError } from '../errors';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
+import type { FrozenSnapshot } from '../memory/snapshot';
+import { renderFrozenSnapshot } from '../memory/snapshot';
 
 const ROC_STATIC_SYSTEM_PROMPT = [
   'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
@@ -21,12 +23,20 @@ const ROC_STATIC_SYSTEM_PROMPT = [
 export function buildSystemPrompt(input: {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
+  frozenSnapshot?: FrozenSnapshot;
 }): string {
-  return [
+  const sections = [
     ROC_STATIC_SYSTEM_PROMPT,
     ...createWorkspaceBoundary(input.workspacePath),
     `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`
-  ].join('\n');
+  ];
+  if (input.frozenSnapshot !== undefined) {
+    const snapshotBlock = renderFrozenSnapshot(input.frozenSnapshot);
+    if (snapshotBlock.length > 0) {
+      sections.push('', snapshotBlock);
+    }
+  }
+  return sections.join('\n');
 }
 
 function createWorkspaceBoundary(workspacePath: string | null): string[] {
