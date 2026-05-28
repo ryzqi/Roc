@@ -23,7 +23,8 @@ describe('Roc foundation services', () => {
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"schemaVersion": 3');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"providers"');
     expect(normalizeLineEndings(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toContain('"mcp"');
-    expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
+    expect(existsSync(join(root, 'memory', 'global'))).toBe(true);
+    expect(existsSync(join(root, 'memory', 'workspaces'))).toBe(true);
     expect(services.paths.skillsDir).toBe(join(root, 'skills'));
     expect(existsSync(join(root, 'skills'))).toBe(true);
     expect(existsSync(join(root, 'tasks', 'recovery'))).toBe(true);
@@ -42,10 +43,10 @@ describe('Roc foundation services', () => {
 
     expect(tableNames).toContain('task_threads');
     expect(tableNames).toContain('task_events');
-    expect(tableNames).toContain('memory_entries_index');
-    expect(tableNames).toContain('memory_candidates');
-    expect(tableNames).toContain('memory_conflicts');
-    expect(tableNames).toContain('memory_operations');
+    expect(tableNames).not.toContain('memory_entries_index');
+    expect(tableNames).not.toContain('memory_candidates');
+    expect(tableNames).not.toContain('memory_conflicts');
+    expect(tableNames).not.toContain('memory_operations');
     expect(tableNames).toContain('mcp_servers');
     expect(tableNames).toContain('skills');
   });
@@ -57,11 +58,11 @@ describe('Roc foundation services', () => {
 
     services.appService.initializeCritical();
     expect(() => services.databaseService.db).not.toThrow();
-    expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(false);
+    expect(existsSync(join(root, 'memory', 'global'))).toBe(false);
 
     services.appService.initializeDeferred();
     expect(services.memoryService.status().root).toBe(join(root, 'memory'));
-    expect(existsSync(join(root, 'memory', 'hot', 'hot_memory.md'))).toBe(true);
+    expect(existsSync(join(root, 'memory', 'global'))).toBe(true);
   });
 
   it('returns a real empty task snapshot from SQLite', () => {

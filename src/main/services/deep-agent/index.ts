@@ -3,7 +3,6 @@ export * as prompt from './prompt';
 export * as recordUtils from './record-utils';
 export * as streamConsumers from './stream-consumers';
 export { buildDeepAgent, type DeepAgentBuildInput } from './agent-builder';
-export { SqliteLangGraphStore } from './sqlite-store';
 export * as tools from './tools';
 export { createBackend } from './backend';
 export { createDeepAgentSession, type DeepAgentSession } from './session';

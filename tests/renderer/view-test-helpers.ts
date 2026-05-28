@@ -56,30 +56,13 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     },
     memoryStatus: {
       root: 'F:\\Code\\Roc\\.memory',
-      truthSource: 'markdown',
-      indexSource: 'sqlite',
-      vectorIndex: {
-        enabled: false,
-        healthy: false,
-        status: 'not_configured'
-      },
-      fullTextIndex: {
-        enabled: false,
-        healthy: false,
-        status: 'degraded'
-      },
-      layers: {
-        hot: { entries: 0, characters: 0, path: 'hot' },
-        warm: { entries: 0, characters: 0, path: 'warm' },
-        cold: { entries: 0, characters: 0, path: 'cold' },
-        session: { entries: 0, characters: 0, path: 'session' },
-        candidate: { entries: 0, characters: 0, path: 'candidate' }
-      }
+      workspaceHash: null,
+      workspaceLabel: null,
+      files: [],
+      snapshot: { enabled: false, totalChars: 0, totalLimit: 0 },
+      sessionMessages: { totalRows: 0, retentionDays: 90, oldestAt: null },
+      fullTextIndex: { healthy: true, status: 'ready' }
     },
-    memoryCandidates: [],
-    memoryConflicts: [],
-    memorySearch: null,
-    sessionSearch: null,
     memoryRecovery: null,
     settings: {
       schemaVersion: 2,

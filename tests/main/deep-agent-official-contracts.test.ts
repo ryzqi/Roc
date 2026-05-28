@@ -2,7 +2,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { InMemoryStore } from '@langchain/langgraph';
 import { createFilesystemMiddleware, createSkillsMiddleware } from 'deepagents';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend } from '../../src/main/services/deep-agent/backend';
@@ -66,8 +65,7 @@ describe('deep agent official contracts', () => {
     const backend = createBackend({
       workspaceService: services.workspaceService,
       paths: services.paths,
-      shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore()
+      shellExecutionService: createShellExecutionAdapter()
     }).backend;
     const middleware = createFilesystemMiddleware({
       backend
@@ -116,7 +114,6 @@ describe('deep agent official contracts', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore(),
       selectedSkillIds: ['project-review']
     }).backend;
     const middleware = createSkillsMiddleware({

@@ -14,15 +14,10 @@ import type {
   GitFileDiffResult,
   GitPushResult,
   GitStatusResult,
-  MemoryCandidate,
-  MemoryConflict,
-  MemoryDeleteResult,
-  MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
   SchedulerStatus,
   ScheduledTaskRun,
-  SessionSearchResult,
   TaskDetail,
   TaskSnapshot,
   TerminalSessionSnapshot,
@@ -102,11 +97,7 @@ export type WorkspaceData = {
 
 export type MemoryData = {
   memoryStatus: MemoryStatus;
-  memoryCandidates: MemoryCandidate[];
-  memoryConflicts: MemoryConflict[];
-  memorySearch: MemorySearchResult | null;
-  sessionSearch: SessionSearchResult | null;
-  memoryRecovery: MemoryDeleteResult | null;
+  memoryRecovery: null;
 };
 
 export type TaskSurfaceData = {
@@ -127,24 +118,6 @@ export type LazyLoadState = {
   status: 'idle' | 'loading' | 'ready' | 'error';
   error: string | null;
   key: string | null;
-};
-
-export type MemoryRecordViewModel = {
-  id: string;
-  layer: string;
-  scope: string;
-  type: string;
-  confidence: string | number;
-  sourceTag: string;
-  status: string;
-  priority: string;
-  sourceRef: string;
-  summary: string;
-  detail: string;
-  tone: string;
-  lastAccessed?: string;
-  accessCount?: string;
-  note?: string;
 };
 
 // Re-export so consumers can import everything from one place

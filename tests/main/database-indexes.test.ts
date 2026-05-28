@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe('database indexes', () => {
-  it('creates indexes for startup snapshots, task history, memory lookup, and store namespaces', () => {
+  it('creates indexes for startup snapshots and task history', () => {
     const indexes = services.databaseService.db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name")
       .all() as Array<{ name: string }>;
@@ -28,10 +28,6 @@ describe('database indexes', () => {
     expect(indexes.map((row) => row.name)).toEqual(
       expect.arrayContaining([
         'idx_background_tasks_updated',
-        'idx_langgraph_store_namespace',
-        'idx_memory_entries_scope_status_updated',
-        'idx_memory_entries_status_layer_updated',
-        'idx_session_recall_scope_created',
         'idx_scheduled_task_runs_task_status',
         'idx_task_events_recent_active_threads',
         'idx_task_events_thread_type_created',

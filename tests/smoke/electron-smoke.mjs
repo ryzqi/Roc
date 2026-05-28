@@ -524,32 +524,18 @@ try {
   });
   await page.click('[data-testid="nav-memory"]');
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="memory-candidates"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="memory-conflicts"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="memory-search-results"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="session-recall-results"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="memory-recovery"]', { timeout: 5000 });
-  await waitForTextContent(page, '[data-testid="memory-view"]', 'phase four smoke active memory validates candidate acceptance and recall');
+  await page.waitForSelector('[data-testid="memory-phase-1-placeholder"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="memory-view"]', '记忆系统正在重构中');
   const memoryText = await page.textContent('[data-testid="memory-view"]');
-  const memoryRecoveryText = await page.textContent('[data-testid="memory-recovery"]');
   if (memoryText === null) {
     throw new Error('Smoke could not read memory view text.');
   }
-  if (memoryRecoveryText === null) {
-    throw new Error('Smoke could not read memory recovery text.');
-  }
-  const memoryRecoveryApiEvidence = await page.evaluate(async () => {
-    const search = await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' });
-    if (!search.ok) {
-      throw new Error(search.error.message);
+  const memoryStatusApiEvidence = await page.evaluate(async () => {
+    const status = await window.roc.memory.status();
+    if (!status.ok) {
+      throw new Error(status.error.message);
     }
-    const restored = search.data.items.find((item) =>
-      item.summary.includes('phase four smoke active memory validates candidate acceptance and recall')
-    );
-    if (restored === undefined) {
-      throw new Error('No restored smoke memory found after delete/restore seed.');
-    }
-    return { id: restored.id, status: 'active' };
+    return status.data;
   });
   const gitText = await readMainPageText(page, {
     label: 'git',
@@ -2353,7 +2339,10 @@ try {
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
   buttonInteractionEvidence.memoryEditorHasNoDisabledButtons = (await page.locator('.memory-editor-actions button').count()) === 0;
   const memoryRecordCount = await page.locator('.memory-record').count();
-  if (memoryRecordCount === 1) {
+  if (memoryRecordCount === 0) {
+    buttonInteractionEvidence.memoryRecordSelectable =
+      (await page.locator('[data-testid="memory-phase-1-placeholder"]').count()) === 1;
+  } else if (memoryRecordCount === 1) {
     buttonInteractionEvidence.memoryRecordSelectable =
       (await page.locator('.memory-record').first().getAttribute('aria-pressed')) === 'true';
   } else if (memoryRecordCount > 1) {
@@ -2522,7 +2511,6 @@ try {
     { name: 'tasks', text: taskText },
     { name: 'workspace', text: workspaceText },
     { name: 'memory', text: memoryText },
-    { name: 'memory-recovery', text: memoryRecoveryText },
     { name: 'git', text: gitText },
     { name: 'terminal', text: terminalText },
     { name: 'preview', text: previewText },
@@ -2763,15 +2751,10 @@ try {
       rtkPanelText !== null &&
       rtkPanelText.includes('资源状态') &&
       rtkPanelText.includes(workspaceApiEvidence.rtk.resourceState === 'ready' ? 'ready' : '缺失降级'),
-    memoryCandidateVisible: memoryText.includes('conflict_detected'),
-    memoryConflictVisible: memoryText.includes('same_type_scope_contradiction_or_duplicate'),
-    memoryRecallVisible: memoryText.includes('phase four smoke active memory validates candidate acceptance and recall'),
-    sessionRecallVisible: memoryText.includes('phase four smoke session recall validates searchable archived conversation'),
-    memoryRecoveryVisible:
-      memoryRecoveryText.includes('删除恢复') &&
-      memoryRecoveryText.includes('最近操作') &&
-      memoryRecoveryText.includes(memoryRecoveryApiEvidence.id) &&
-      memoryRecoveryText.includes(memoryRecoveryApiEvidence.status),
+    memoryPhase1PlaceholderVisible:
+      memoryText.includes('记忆系统正在重构中') &&
+      memoryText.includes('新版文件编辑') &&
+      memoryStatusApiEvidence.fullTextIndex.status === 'ready',
     providerConfiguredVisible:
       providerSettingsEvidence.nvidiaListed &&
       providerSettingsEvidence.nvidiaFixedDetail &&
@@ -2999,12 +2982,9 @@ try {
       !historySidebarEvidence.hasTrayEntryLabel &&
       !historySidebarEvidence.hasMemoryRecordLabel &&
       !historySidebarEvidence.hasTaskRecordLabel,
-    memoryApiExpanded:
-      boundary.memoryKeys.includes('listCandidates') &&
-      boundary.memoryKeys.includes('listConflicts') &&
-      boundary.memoryKeys.includes('sessionSearch') &&
-      boundary.memoryKeys.includes('delete') &&
-      boundary.memoryKeys.includes('restore'),
+    memoryApiReduced:
+      boundary.memoryKeys.length === 1 &&
+      boundary.memoryKeys.includes('status'),
     settingsApiExpanded:
       boundary.settingsKeys.includes('get') &&
       boundary.settingsKeys.includes('save') &&
@@ -3165,11 +3145,7 @@ try {
     terminalWorkbenchStyled: rendererBoundary.terminalWorkbenchStyled,
     terminalWorkbenchHierarchy: rendererBoundary.terminalWorkbenchHierarchy,
     rtkMissingVisible: rendererBoundary.rtkMissingVisible,
-    memoryCandidateVisible: rendererBoundary.memoryCandidateVisible,
-    memoryConflictVisible: rendererBoundary.memoryConflictVisible,
-    memoryRecallVisible: rendererBoundary.memoryRecallVisible,
-    sessionRecallVisible: rendererBoundary.sessionRecallVisible,
-    memoryRecoveryVisible: rendererBoundary.memoryRecoveryVisible,
+    memoryPhase1PlaceholderVisible: rendererBoundary.memoryPhase1PlaceholderVisible,
     providerConfiguredVisible: rendererBoundary.providerConfiguredVisible,
     mcpManagedVisible: rendererBoundary.mcpManagedVisible,
     skillManagedVisible: rendererBoundary.skillManagedVisible,
@@ -3195,7 +3171,7 @@ try {
     taskProviderUpdateStored: rendererBoundary.taskProviderUpdateStored,
     taskManifestStored: rendererBoundary.taskManifestStored,
     skillLoadedEventStored: rendererBoundary.skillLoadedEventStored,
-    memoryApiExpanded: rendererBoundary.memoryApiExpanded,
+    memoryApiReduced: rendererBoundary.memoryApiReduced,
     settingsApiExpanded: rendererBoundary.settingsApiExpanded,
     mcpApiExpanded: rendererBoundary.mcpApiExpanded,
     skillsApiExpanded: rendererBoundary.skillsApiExpanded,
@@ -3242,8 +3218,7 @@ try {
       buttonInteractionEvidence,
       entryButtonEvidence,
       historySidebarEvidence,
-      memoryRecoveryText,
-      memoryRecoveryApiEvidence,
+      memoryStatusApiEvidence,
       terminalText,
       terminalLiveOutput,
       terminalWorkbenchStyleEvidence,

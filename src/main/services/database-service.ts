@@ -31,6 +31,17 @@ export class DatabaseService {
 
   private migrate(db: DatabaseConnection): void {
     db.exec(`
+      DROP TABLE IF EXISTS memory_entries_fts;
+      DROP TABLE IF EXISTS session_recall_fts;
+      DROP TABLE IF EXISTS memory_entries_index;
+      DROP TABLE IF EXISTS memory_candidates;
+      DROP TABLE IF EXISTS memory_conflicts;
+      DROP TABLE IF EXISTS memory_operations;
+      DROP TABLE IF EXISTS session_recall_index;
+      DROP TABLE IF EXISTS langgraph_store_items;
+    `);
+
+    db.exec(`
       CREATE TABLE IF NOT EXISTS app_config_versions (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         schema_version INTEGER NOT NULL,
@@ -119,61 +130,6 @@ export class DatabaseService {
         restored INTEGER NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS memory_entries_index (
-        id TEXT PRIMARY KEY,
-        layer TEXT NOT NULL,
-        type TEXT NOT NULL,
-        scope TEXT NOT NULL,
-        status TEXT NOT NULL,
-        confidence REAL NOT NULL,
-        priority TEXT NOT NULL,
-        source TEXT NOT NULL,
-        source_ref TEXT NOT NULL,
-        markdown_path TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        access_count INTEGER NOT NULL DEFAULT 0
-      );
-
-      CREATE TABLE IF NOT EXISTS memory_candidates (
-        id TEXT PRIMARY KEY,
-        memory_id TEXT NOT NULL,
-        state TEXT NOT NULL,
-        suggested_action TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        decided_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS memory_conflicts (
-        id TEXT PRIMARY KEY,
-        candidate_id TEXT NOT NULL,
-        active_memory_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        scope TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        status TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS memory_operations (
-        id TEXT PRIMARY KEY,
-        memory_id TEXT,
-        operation_type TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS session_recall_index (
-        id TEXT PRIMARY KEY,
-        scope TEXT NOT NULL,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        source_ref TEXT NOT NULL,
-        markdown_path TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-
       CREATE TABLE IF NOT EXISTS mcp_servers (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -215,16 +171,6 @@ export class DatabaseService {
         redacted INTEGER NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS langgraph_store_items (
-        namespace_key TEXT NOT NULL,
-        namespace_json TEXT NOT NULL,
-        item_key TEXT NOT NULL,
-        value_json TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(namespace_key, item_key)
-      );
-
      `);
 
     this.ensureColumn(db, 'task_threads', 'kind', "TEXT NOT NULL DEFAULT 'chat'");
@@ -233,7 +179,6 @@ export class DatabaseService {
     this.ensureColumn(db, 'background_tasks', 'last_run_status', 'TEXT');
     this.ensureColumn(db, 'background_tasks', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn(db, 'background_tasks', 'enabled_capabilities_json', 'TEXT');
-    this.ensureColumn(db, 'session_recall_index', 'source_ref', "TEXT NOT NULL DEFAULT ''");
 
     db.prepare(
       `UPDATE task_threads
@@ -260,18 +205,6 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_task_threads_kind_status
       ON task_threads(kind, status, updated_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_memory_entries_status_layer_updated
-      ON memory_entries_index(status, layer, updated_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_memory_entries_scope_status_updated
-      ON memory_entries_index(scope, status, updated_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_session_recall_scope_created
-      ON session_recall_index(scope, created_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_langgraph_store_namespace
-      ON langgraph_store_items(namespace_key);
      `);
 
     db.prepare(
@@ -290,29 +223,6 @@ export class DatabaseService {
   }
 
   private tryCreateFtsTables(db: DatabaseConnection): void {
-    try {
-      db.exec(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS memory_entries_fts USING fts5(
-          memory_id UNINDEXED,
-          content,
-          summary,
-          scope UNINDEXED,
-          layer UNINDEXED
-        );
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS session_recall_fts USING fts5(
-          session_id UNINDEXED,
-          title,
-          summary,
-          content,
-          scope UNINDEXED
-        );
-      `);
-    } catch (error) {
-      if (error instanceof Error && error.message.toLowerCase().includes('fts5')) {
-        return;
-      }
-      throw error;
-    }
+    void db;
   }
 }

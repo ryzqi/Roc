@@ -10,16 +10,12 @@ import type {
   FilePreviewResult,
   FileTreeResult,
   McpServerSnapshot,
-  MemoryCandidate,
-  MemoryConflict,
-  MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
   PermissionsConfig,
   ProviderConfig,
   ProviderSecretStatus,
   ProviderTestResult,
-  SessionSearchResult,
   SettingsSnapshot,
   SkillSnapshot,
   TraySummary,
@@ -190,20 +186,9 @@ export async function loadOperationsData(mode: AppStatus['mode']): Promise<Opera
 }
 
 export async function loadMemoryData(_mode: AppStatus['mode']): Promise<MemoryData> {
-  const [memoryStatus, candidates, conflicts, memorySearch, sessionSearch] = await Promise.all([
-    window.roc.memory.status(),
-    window.roc.memory.listCandidates(),
-    window.roc.memory.listConflicts(),
-    window.roc.memory.search({ query: 'project', source: 'all' }),
-    window.roc.memory.sessionSearch({ query: 'project' })
-  ]);
-
+  const memoryStatus = await window.roc.memory.status();
   return {
     memoryStatus: unwrap<MemoryStatus>('memory status', memoryStatus),
-    memoryCandidates: unwrap<MemoryCandidate[]>('memory candidates', candidates),
-    memoryConflicts: unwrap<MemoryConflict[]>('memory conflicts', conflicts),
-    memorySearch: unwrap<MemorySearchResult>('memory search', memorySearch),
-    sessionSearch: unwrap<SessionSearchResult>('session search', sessionSearch),
     memoryRecovery: null
   };
 }

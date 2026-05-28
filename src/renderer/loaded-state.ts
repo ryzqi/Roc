@@ -17,10 +17,6 @@ import type {
   GitStatusResult,
   McpServerSnapshot,
   McpServerTestResult,
-  MemoryCandidate,
-  MemoryConflict,
-  MemoryDeleteResult,
-  MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
   PermissionsConfig,
@@ -31,7 +27,6 @@ import type {
   RtkStatus,
   SchedulerStatus,
   ScheduledTaskRun,
-  SessionSearchResult,
   SkillSnapshot,
   TaskDetail,
   TaskSnapshot,
@@ -44,11 +39,7 @@ export type LoadedState = {
   appStatus: AppStatus;
   taskSnapshot: TaskSnapshot;
   memoryStatus: MemoryStatus;
-  memoryCandidates: MemoryCandidate[];
-  memoryConflicts: MemoryConflict[];
-  memorySearch: MemorySearchResult | null;
-  sessionSearch: SessionSearchResult | null;
-  memoryRecovery: MemoryDeleteResult | null;
+  memoryRecovery: null;
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;

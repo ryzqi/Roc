@@ -40,13 +40,6 @@ export class RocPaths {
     const dirs = [
       this.root,
       this.configDir,
-      join(this.memoryDir, 'hot'),
-      join(this.memoryDir, 'warm'),
-      join(this.memoryDir, 'cold'),
-      join(this.memoryDir, 'cold', 'archive'),
-      join(this.memoryDir, 'staging'),
-      join(this.memoryDir, 'sessions'),
-      join(this.memoryDir, 'skills'),
       this.skillsDir,
       join(this.indexesDir, 'fts'),
       join(this.indexesDir, 'vector_store'),

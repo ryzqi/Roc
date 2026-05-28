@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { HumanMessage } from '@langchain/core/messages';
-import { Command, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
+import { Command, InMemoryStore, MemorySaver, type BaseStore, type InterruptPayload } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import type { HITLRequest, HITLResponse } from 'langchain';
 import type {
@@ -36,7 +36,6 @@ import {
   recordUtils,
   redact,
   RUN_EVENT_NAME,
-  SqliteLangGraphStore,
   streamConsumers,
   type ActiveRun,
   type RunExecutionContext
@@ -78,7 +77,8 @@ export class DeepAgentRuntimeService {
     private readonly performanceObserverService: PerformanceObserverService,
     private readonly logService: LogService
   ) {
-    this.store = new SqliteLangGraphStore(databaseService);
+    void databaseService;
+    this.store = new InMemoryStore();
   }
 
   attachScheduler(taskSchedulerService: TaskSchedulerService): void {

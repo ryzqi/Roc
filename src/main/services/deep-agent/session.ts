@@ -66,7 +66,6 @@ export async function createDeepAgentSession(input: {
     workspaceService: input.workspaceService,
     paths: input.paths,
     shellExecutionService: input.shellExecutionService,
-    store: input.store,
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();

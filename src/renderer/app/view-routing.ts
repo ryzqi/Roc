@@ -141,7 +141,7 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
     return visibleWorkspaceLabel(state);
   }
   if (view === 'memory') {
-    return `${state.memorySearch?.items.length ?? 0} 条召回 · ${state.memoryCandidates.length} 个候选`;
+    return 'Phase 1 占位';
   }
   if (view === 'mcp') {
     return `${state.mcpServers.filter((server) => server.enabled).length} 个已启用服务`;

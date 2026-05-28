@@ -48,7 +48,7 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
     {
       id: 'memory',
       label: '记忆中心',
-      meta: `${state.memorySearch?.items.length ?? 0} 召回 · ${state.memoryCandidates.length} 候选`,
+      meta: 'Phase 1 占位',
       icon: 'globe'
     },
     {

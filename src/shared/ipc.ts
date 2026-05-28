@@ -43,12 +43,6 @@ import type {
   McpServerConfig,
   McpServerSnapshot,
   McpServerTestResult,
-  MemoryCandidate,
-  MemoryConflict,
-  MemoryDeleteResult,
-  MemoryEntry,
-  MemorySearchRequest,
-  MemorySearchResult,
   MemoryStatus,
   PerformanceSample,
   PerformanceSampleRequest,
@@ -57,10 +51,6 @@ import type {
   ProviderSecretSetResult,
   ProviderTestResult,
   RtkStatus,
-  SessionRecallEntry,
-  SessionRecallWriteRequest,
-  SessionSearchRequest,
-  SessionSearchResult,
   ShellConfirmationRequest,
   ShellConfirmationResult,
   ShellExecutionRequest,
@@ -136,17 +126,6 @@ export const ipcChannels = {
   diagnosticsCreatePackage: 'roc:diagnostics:create-package',
   diagnosticsRunChecks: 'roc:diagnostics:run-checks',
   memoryStatus: 'roc:memory:status',
-  memorySearch: 'roc:memory:search',
-  memoryGet: 'roc:memory:get',
-  memoryListCandidates: 'roc:memory:list-candidates',
-  memoryListConflicts: 'roc:memory:list-conflicts',
-  memoryAcceptCandidate: 'roc:memory:accept-candidate',
-  memoryRejectCandidate: 'roc:memory:reject-candidate',
-  memoryWriteCandidate: 'roc:memory:write-candidate',
-  memoryWriteSessionRecall: 'roc:memory:write-session-recall',
-  memorySessionSearch: 'roc:memory:session-search',
-  memoryDelete: 'roc:memory:delete',
-  memoryRestore: 'roc:memory:restore',
   settingsGet: 'roc:settings:get',
   settingsSave: 'roc:settings:save',
   settingsTestProvider: 'roc:settings:test-provider',
@@ -250,19 +229,6 @@ export type RocPreloadApi = {
   };
   memory: {
     status: () => Promise<IpcResult<MemoryStatus>>;
-    search: (request: MemorySearchRequest) => Promise<IpcResult<MemorySearchResult>>;
-    get: (id: string) => Promise<IpcResult<string>>;
-    listCandidates: () => Promise<IpcResult<MemoryCandidate[]>>;
-    listConflicts: () => Promise<IpcResult<MemoryConflict[]>>;
-    acceptCandidate: (id: string) => Promise<IpcResult<MemoryEntry>>;
-    rejectCandidate: (id: string) => Promise<IpcResult<MemoryCandidate>>;
-    writeCandidate: (
-      entry: Omit<MemoryEntry, 'id' | 'layer' | 'status' | 'createdAt' | 'updatedAt'>
-    ) => Promise<IpcResult<MemoryEntry>>;
-    writeSessionRecall: (request: SessionRecallWriteRequest) => Promise<IpcResult<SessionRecallEntry>>;
-    sessionSearch: (request: SessionSearchRequest) => Promise<IpcResult<SessionSearchResult>>;
-    delete: (id: string) => Promise<IpcResult<MemoryDeleteResult>>;
-    restore: (id: string) => Promise<IpcResult<MemoryDeleteResult>>;
   };
   mcp: {
     listServers: () => Promise<IpcResult<McpServerSnapshot[]>>;

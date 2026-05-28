@@ -2,10 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { InMemoryStore } from '@langchain/langgraph';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend, type RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
-import { buildDeepAgentMemoryNamespace } from '../../src/main/services/deep-agent/sqlite-store';
 
 let root: string;
 let userHome: string;
@@ -51,19 +49,12 @@ describe('deep agent backend', () => {
       mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
       writeFileSync(join(workspaceRoot, 'notes.txt'), 'hello backend\n', 'utf8');
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# skill\n', 'utf8');
-      const store = new InMemoryStore();
-      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
-        content: '# accepted\n',
-        created_at: '2026-05-15T00:00:00.000Z',
-        modified_at: '2026-05-15T00:00:00.000Z',
-        mimeType: 'text/markdown'
-      });
+      writeFileSync(join(services.paths.memoryDir, 'accepted.md'), '# accepted\n', 'utf8');
 
       const runtimeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store,
         selectedSkillIds: ['project-review']
       });
       const backend = runtimeBackend.backend;
@@ -99,7 +90,6 @@ describe('deep agent backend', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore(),
       selectedSkillIds: ['project-review']
     }).backend;
 
@@ -142,8 +132,7 @@ describe('deep agent backend', () => {
         shellExecutionService: createShellExecutionAdapter({
           threadId: task.threadId,
           runId: task.id
-        }),
-        store: new InMemoryStore()
+        })
       }).backend;
 
       const result = await backend.execute('dir');
@@ -192,8 +181,7 @@ describe('deep agent backend', () => {
         shellExecutionService: createShellExecutionAdapter({
           threadId: task.threadId,
           runId: task.id
-        }),
-        store: new InMemoryStore()
+        })
       }).backend;
 
       await backend.execute('type secret-output.txt');
@@ -221,8 +209,7 @@ describe('deep agent backend', () => {
       const backend: RocCompositeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: createShellExecutionAdapter(),
-        store: new InMemoryStore()
+        shellExecutionService: createShellExecutionAdapter()
       }).backend;
 
       const writeResult = await backend.write('/workspace/notes.md', 'alpha\n');
@@ -249,7 +236,6 @@ describe('deep agent backend', () => {
       workspaceService: services.workspaceService,
       paths: services.paths,
       shellExecutionService: createShellExecutionAdapter(),
-      store: new InMemoryStore(),
       selectedSkillIds: ['project-review']
     }).backend;
 
@@ -267,18 +253,11 @@ describe('deep agent backend', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-memory-readonly-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
-      const store = new InMemoryStore();
-      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
-        content: '# accepted\n',
-        created_at: '2026-05-15T00:00:00.000Z',
-        modified_at: '2026-05-15T00:00:00.000Z',
-        mimeType: 'text/markdown'
-      });
+      writeFileSync(join(services.paths.memoryDir, 'accepted.md'), '# accepted\n', 'utf8');
       const backend: RocCompositeBackend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store,
         selectedSkillIds: ['project-review']
       }).backend;
 
@@ -302,7 +281,6 @@ describe('deep agent backend', () => {
         workspaceService: services.workspaceService,
         paths: services.paths,
         shellExecutionService: createShellExecutionAdapter(),
-        store: new InMemoryStore(),
         selectedSkillIds: ['project-review']
       }).backend;
 
@@ -326,19 +304,12 @@ describe('deep agent backend', () => {
       mkdirSync(join(services.paths.skillsDir, 'project-review'), { recursive: true });
       writeFileSync(join(workspaceRoot, 'notes.txt'), 'hello backend\n', 'utf8');
       writeFileSync(join(services.paths.skillsDir, 'project-review', 'SKILL.md'), '# hello skill\n', 'utf8');
-      const store = new InMemoryStore();
-      await store.put([...buildDeepAgentMemoryNamespace(workspaceRoot)], '/accepted.md', {
-        content: 'hello memory\n',
-        created_at: '2026-05-15T00:00:00.000Z',
-        modified_at: '2026-05-15T00:00:00.000Z',
-        mimeType: 'text/markdown'
-      });
+      writeFileSync(join(services.paths.memoryDir, 'accepted.md'), 'hello memory\n', 'utf8');
 
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: createShellExecutionAdapter(),
-        store
+        shellExecutionService: createShellExecutionAdapter()
       }).backend;
 
       const grepResult = await backend.grep('hello', '/');
@@ -364,8 +335,7 @@ describe('deep agent backend', () => {
       const backend = createBackend({
         workspaceService: services.workspaceService,
         paths: services.paths,
-        shellExecutionService: createShellExecutionAdapter(),
-        store: new InMemoryStore()
+        shellExecutionService: createShellExecutionAdapter()
       }).backend;
 
       const responses = await backend.uploadFiles([

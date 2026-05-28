@@ -23,31 +23,13 @@ export function emptyMemoryData(): MemoryData {
   return {
     memoryStatus: {
       root: '',
-      truthSource: 'markdown',
-      indexSource: 'sqlite',
-      vectorIndex: {
-        enabled: false,
-        healthy: false,
-        status: 'not_configured'
-      },
-      fullTextIndex: {
-        enabled: false,
-        healthy: false,
-        status: 'degraded'
-      },
-      layers: {
-        hot: { entries: 0, characters: 0, path: '' },
-        warm: { entries: 0, characters: 0, path: '' },
-        cold: { entries: 0, characters: 0, path: '' },
-        session: { entries: 0, characters: 0, path: '' },
-        candidate: { entries: 0, characters: 0, path: '' }
-      },
-      degradedReason: '记忆页面尚未加载。'
+      workspaceHash: null,
+      workspaceLabel: null,
+      files: [],
+      snapshot: { enabled: false, totalChars: 0, totalLimit: 0 },
+      sessionMessages: { totalRows: 0, retentionDays: 90, oldestAt: null },
+      fullTextIndex: { healthy: true, status: 'ready' }
     },
-    memoryCandidates: [],
-    memoryConflicts: [],
-    memorySearch: null,
-    sessionSearch: null,
     memoryRecovery: null
   };
 }

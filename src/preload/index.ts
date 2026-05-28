@@ -61,18 +61,7 @@ const rocApi: RocPreloadApi = {
     runChecks: () => ipcRenderer.invoke(ipcChannels.diagnosticsRunChecks)
   },
   memory: {
-    status: () => ipcRenderer.invoke(ipcChannels.memoryStatus),
-    search: (request) => ipcRenderer.invoke(ipcChannels.memorySearch, request),
-    get: (id) => ipcRenderer.invoke(ipcChannels.memoryGet, id),
-    listCandidates: () => ipcRenderer.invoke(ipcChannels.memoryListCandidates),
-    listConflicts: () => ipcRenderer.invoke(ipcChannels.memoryListConflicts),
-    acceptCandidate: (id) => ipcRenderer.invoke(ipcChannels.memoryAcceptCandidate, id),
-    rejectCandidate: (id) => ipcRenderer.invoke(ipcChannels.memoryRejectCandidate, id),
-    writeCandidate: (entry) => ipcRenderer.invoke(ipcChannels.memoryWriteCandidate, entry),
-    writeSessionRecall: (request) => ipcRenderer.invoke(ipcChannels.memoryWriteSessionRecall, request),
-    sessionSearch: (request) => ipcRenderer.invoke(ipcChannels.memorySessionSearch, request),
-    delete: (id) => ipcRenderer.invoke(ipcChannels.memoryDelete, id),
-    restore: (id) => ipcRenderer.invoke(ipcChannels.memoryRestore, id)
+    status: () => ipcRenderer.invoke(ipcChannels.memoryStatus)
   },
   mcp: {
     listServers: () => ipcRenderer.invoke(ipcChannels.mcpListServers),

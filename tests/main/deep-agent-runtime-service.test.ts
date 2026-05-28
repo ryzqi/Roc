@@ -1328,16 +1328,12 @@ describe('DeepAgentRuntimeService', () => {
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-runtime-workspace-'));
     services.workspaceService.selectWorkspace(workspaceRoot);
-    const candidate = services.memoryService.writeCandidate({
-      type: 'knowledge_note',
-      scope: 'project:roc',
-      content: 'Deep Agents runtime should expose official memory store routes.',
-      confidence: 0.9,
-      priority: 'high',
-      source: 'test',
-      sourceRef: 'tests/deep-agent-runtime-service'
-    });
-    const acceptedMemory = services.memoryService.acceptCandidate(candidate.id);
+    const memoryFileName = 'runtime-memory.md';
+    writeFileSync(
+      join(services.paths.memoryDir, memoryFileName),
+      'Deep Agents runtime should expose official memory filesystem routes.',
+      'utf8'
+    );
     writeFileSync(join(workspaceRoot, 'runtime-note.txt'), 'runtime note\n', 'utf8');
     const fetchMock = vi.fn().mockResolvedValue(
       new Response('Fetched via Jina Reader', {
@@ -1411,8 +1407,8 @@ describe('DeepAgentRuntimeService', () => {
       truncated: false,
       output: expect.stringContaining('runtime-note.txt')
     });
-    await expect(backend?.read?.(`/memory/${acceptedMemory.id}.md`)).resolves.toMatchObject({
-      content: expect.stringContaining('Deep Agents runtime should expose official memory store routes.')
+    await expect(backend?.read?.(`/memory/${memoryFileName}`)).resolves.toMatchObject({
+      content: expect.stringContaining('Deep Agents runtime should expose official memory filesystem routes.')
     });
     await expect(
       webReadTool?.invoke({

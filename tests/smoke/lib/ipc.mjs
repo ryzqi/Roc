@@ -97,56 +97,7 @@ export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePa
       );
       await unwrap(await window.roc.tasks.createBackgroundTask(backgroundPreview), 'background task create');
 
-      const existing = await unwrap(
-        await window.roc.memory.search({ query: 'phase four smoke active', source: 'all' }),
-        'memory search'
-      );
-      const existingActiveMemory = existing.items.find((item) =>
-        item.summary.includes('phase four smoke active memory validates candidate acceptance and recall.')
-      );
-      if (existingActiveMemory === undefined) {
-        const candidate = await unwrap(
-          await window.roc.memory.writeCandidate({
-            type: 'project_context',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke active memory validates candidate acceptance and recall.',
-            confidence: 0.9,
-            priority: 'medium',
-            source: 'user_explicit',
-            sourceRef: 'smoke:memory'
-          }),
-          'memory candidate'
-        );
-        const accepted = await unwrap(await window.roc.memory.acceptCandidate(candidate.id), 'memory accept');
-        const deleted = await unwrap(await window.roc.memory.delete(accepted.id), 'memory delete');
-        if (!deleted.recoverable) {
-          throw new Error('memory delete did not create a recoverable state.');
-        }
-        await unwrap(await window.roc.memory.restore(accepted.id), 'memory restore');
-        await unwrap(
-          await window.roc.memory.writeCandidate({
-            type: 'project_context',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke active memory does not validate candidate acceptance and recall.',
-            confidence: 0.7,
-            priority: 'medium',
-            source: 'agent_extract:smoke',
-            sourceRef: 'smoke:conflict'
-          }),
-          'memory conflict candidate'
-        );
-        await unwrap(
-          await window.roc.memory.writeSessionRecall({
-            sessionId: 'smoke-session-phase4',
-            title: 'phase four smoke session',
-            summary: 'phase four smoke session recall validates searchable archived conversation.',
-            scope: 'project:roc-smoke',
-            content: 'phase four smoke session stores raw recall without promoting it into curated memory.',
-            sourceRef: 'smoke:session'
-          }),
-          'memory session recall'
-        );
-      }
+      await unwrap(await window.roc.memory.status(), 'memory status');
     },
     { providerEndpoint, workspacePath }
   );
