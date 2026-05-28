@@ -526,7 +526,7 @@ try {
   await page.waitForSelector('[data-testid="memory-view"]', { timeout: 5000 });
   await page.waitForSelector('[data-testid="memory-tab-files"]', { timeout: 5000 });
   await waitForTextContent(page, '[data-testid="memory-view"]', 'USER.md');
-  await waitForTextContent(page, '[data-testid="memory-view"]', '会话回顾（P4）');
+  await waitForTextContent(page, '[data-testid="memory-view"]', '会话回顾');
   const memoryText = await page.textContent('[data-testid="memory-view"]');
   if (memoryText === null) {
     throw new Error('Smoke could not read memory view text.');
@@ -2767,7 +2767,7 @@ try {
       rtkPanelText.includes(workspaceApiEvidence.rtk.resourceState === 'ready' ? 'ready' : '缺失降级'),
     memoryFileEditorVisible:
       memoryText.includes('USER.md') &&
-      memoryText.includes('会话回顾（P4）') &&
+      memoryText.includes('会话回顾') &&
       memoryText.includes('系统快照') &&
       memoryStatusApiEvidence.fullTextIndex.status === 'ready',
     providerConfiguredVisible:

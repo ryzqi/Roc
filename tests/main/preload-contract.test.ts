@@ -36,6 +36,7 @@ describe('preload contract', () => {
       'mcp',
       'memory',
       'rtk',
+      'sessions',
       'settings',
       'shell',
       'skills',
@@ -48,5 +49,6 @@ describe('preload contract', () => {
     expect(Object.keys(api.shell).sort()).toEqual(['confirm', 'execute']);
     expect(Object.keys(api.diagnostics).sort()).toEqual(['createDiagnosticPackage', 'runChecks', 'samplePerformance']);
     expect(Object.keys(api.memory).sort()).toEqual(['readFile', 'snapshotPreview', 'status', 'writeFile']);
+    expect(Object.keys(api.sessions).sort()).toEqual(['list', 'search']);
   });
 });
