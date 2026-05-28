@@ -5,6 +5,7 @@ import type { AgentService } from '../agent-service';
 import type { FileService } from '../file-service';
 import { CapacityService } from '../memory/capacity';
 import { SecurityScanService } from '../memory/security-scan';
+import type { MemoryService } from '../memory-service';
 import type { McpService } from '../mcp-service';
 import type { RocPaths } from '../paths';
 import type { TaskSchedulerService } from '../task-scheduler-service';
@@ -40,6 +41,7 @@ export async function createDeepAgentSession(input: {
   fileService: FileService;
   getCheckpointer: () => BaseCheckpointSaver;
   getMemorySettings: () => AppSettings['memory'];
+  memoryService: MemoryService;
   mcpService: McpService;
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
@@ -76,6 +78,7 @@ export async function createDeepAgentSession(input: {
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();
+  const frozenSnapshot = input.memoryService.buildSnapshotForCurrentWorkspace();
   const skillSources = input.context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
   const subagents = tools.createRunSubagents({
     webReadTool: runTools.webReadTool
@@ -84,11 +87,12 @@ export async function createDeepAgentSession(input: {
     model: input.context.modelHandle.model,
     systemPrompt: prompt.buildSystemPrompt({
       enabledCapabilities: input.context.enabledCapabilities,
-      workspacePath: workspace?.path ?? null
+      workspacePath: workspace?.path ?? null,
+      frozenSnapshot
     }),
     backend: runtimeBackend.backend,
     store: input.store,
-    memorySources: ['/agents/AGENTS.md'],
+    memorySources: [],
     skillSources,
     subagents,
     tools: runTools.tools,

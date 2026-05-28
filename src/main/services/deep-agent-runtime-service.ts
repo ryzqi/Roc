@@ -20,6 +20,7 @@ import { RocDomainError } from './errors';
 import type { FileService } from './file-service';
 import type { LangChainModelFactory } from './langchain-model-factory';
 import type { LogService } from './log-service';
+import type { MemoryService } from './memory-service';
 import type { McpService } from './mcp-service';
 import type { PerformanceObserverService } from './performance-observer-service';
 import type { RocPaths } from './paths';
@@ -68,6 +69,7 @@ export class DeepAgentRuntimeService {
     private readonly langChainModelFactory: LangChainModelFactory,
     private readonly taskService: TaskService,
     private readonly databaseService: DatabaseService,
+    private readonly memoryService: MemoryService,
     private readonly agentService: AgentService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
@@ -355,6 +357,7 @@ export class DeepAgentRuntimeService {
           fileService: this.fileService,
           getCheckpointer: () => this.getOrCreateCheckpointer(),
           getMemorySettings: this.getMemorySettings,
+          memoryService: this.memoryService,
           mcpService: this.mcpService,
           paths: this.paths,
           shellExecutionService: this.taskBoundShellExecutionService(context),
@@ -419,6 +422,7 @@ export class DeepAgentRuntimeService {
       fileService: this.fileService,
       getCheckpointer: () => this.getOrCreateCheckpointer(),
       getMemorySettings: this.getMemorySettings,
+      memoryService: this.memoryService,
       mcpService: this.mcpService,
       paths: this.paths,
       shellExecutionService: this.taskBoundShellExecutionService(context),

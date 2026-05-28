@@ -57,6 +57,7 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.langChainModelFactory,
       services.taskService,
       services.databaseService,
+      services.memoryService,
       services.agentService,
       services.workspaceService,
       services.fileService,
@@ -1030,7 +1031,13 @@ describe('DeepAgentRuntimeService', () => {
     expect(call?.backend?.routePrefixes).toEqual(expect.arrayContaining(['/skills/', '/memory/', '/agents/']));
   });
 
-  it('passes the project memory sources to deepagents so AGENTS.md is loaded', async () => {
+  it('injects frozen snapshot content into the system prompt without Deep Agents memorySources', async () => {
+    const write = services.memoryService.writeFile({
+      scope: 'global',
+      kind: 'agents',
+      content: '# Runtime rules\n- Prefer frozen snapshot.'
+    });
+    expect(write.ok).toBe(true);
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
@@ -1055,8 +1062,10 @@ describe('DeepAgentRuntimeService', () => {
     });
     await completed;
 
-    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { memory?: string[] } | undefined;
-    expect(call?.memory).toEqual(['/agents/AGENTS.md']);
+    const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { memory?: string[]; systemPrompt?: string } | undefined;
+    expect(call?.memory).toEqual([]);
+    expect(call?.systemPrompt).toContain('<FROZEN_SNAPSHOT>');
+    expect(call?.systemPrompt).toContain('# Runtime rules');
   });
 
   it('passes the selected workspace root into the deep agent system prompt', async () => {

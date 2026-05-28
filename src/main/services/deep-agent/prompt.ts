@@ -23,18 +23,16 @@ const ROC_STATIC_SYSTEM_PROMPT = [
 export function buildSystemPrompt(input: {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
-  frozenSnapshot?: FrozenSnapshot;
+  frozenSnapshot: FrozenSnapshot;
 }): string {
   const sections = [
     ROC_STATIC_SYSTEM_PROMPT,
     ...createWorkspaceBoundary(input.workspacePath),
     `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`
   ];
-  if (input.frozenSnapshot !== undefined) {
-    const snapshotBlock = renderFrozenSnapshot(input.frozenSnapshot);
-    if (snapshotBlock.length > 0) {
-      sections.push('', snapshotBlock);
-    }
+  const snapshotBlock = renderFrozenSnapshot(input.frozenSnapshot);
+  if (snapshotBlock.length > 0) {
+    sections.push('', snapshotBlock);
   }
   return sections.join('\n');
 }

@@ -251,6 +251,7 @@ export function createAppServices(
     langChainModelFactory,
     taskService,
     databaseService,
+    memoryService,
     agentService,
     workspaceService,
     fileService,

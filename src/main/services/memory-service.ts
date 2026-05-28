@@ -14,6 +14,7 @@ import type {
 } from '../../shared/types';
 import { CapacityService } from './memory/capacity';
 import { SecurityScanService } from './memory/security-scan';
+import { buildFrozenSnapshot, type FrozenSnapshot } from './memory/snapshot';
 
 const GLOBAL_MEMORY_FILES: Array<{ scope: 'global'; kind: MemoryKind }> = [
   { scope: 'global', kind: 'user' },
@@ -94,6 +95,15 @@ export class MemoryService {
       return null;
     }
     return readFileSync(resolved, 'utf8');
+  }
+
+  buildSnapshotForCurrentWorkspace(): FrozenSnapshot {
+    const workspace = this.workspaceService.getCurrentWorkspace();
+    return buildFrozenSnapshot({
+      memoryDir: this.paths.memoryDir,
+      workspaceHash: buildWorkspaceHash(workspace?.path ?? null),
+      settings: this.getMemorySettings()
+    });
   }
 
   status(): MemoryStatus {
