@@ -129,7 +129,7 @@ export class SecurityScanService {
         issues.push({
           category: rule.category,
           pattern: rule.label,
-          matchExcerpt: this.makeExcerpt(content, match.index, match[0].length)
+          matchExcerpt: this.makeExcerpt(content, match.index, match[0].length, rule.category === 'credential')
         });
       }
     }
@@ -141,15 +141,18 @@ export class SecurityScanService {
       issues.push({
         category: 'invisible_unicode',
         pattern: 'invisible_or_bidi_codepoint',
-        matchExcerpt: this.makeExcerpt(content, match.index, match[0].length)
+        matchExcerpt: this.makeExcerpt(content, match.index, match[0].length, false)
       });
     }
   }
 
-  private makeExcerpt(content: string, index: number, length: number): string {
+  private makeExcerpt(content: string, index: number, length: number, redactMatch: boolean): string {
     const start = Math.max(0, index - 16);
     const end = Math.min(content.length, index + length + 16);
-    let excerpt = content.slice(start, end).replace(/\s+/g, ' ');
+    const rawExcerpt = redactMatch
+      ? `${content.slice(start, index)}[redacted credential]${content.slice(index + length, end)}`
+      : content.slice(start, end);
+    let excerpt = rawExcerpt.replace(/\s+/g, ' ');
     excerpt = excerpt.replace(INVISIBLE_UNICODE_RE_GLOBAL, '?');
     if (excerpt.length > 60) {
       excerpt = `${excerpt.slice(0, 57)}...`;

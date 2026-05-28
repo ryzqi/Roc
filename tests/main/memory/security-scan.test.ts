@@ -99,6 +99,16 @@ describe('SecurityScanService', () => {
     expect(issue.matchExcerpt.length).toBeLessThanOrEqual(60);
   });
 
+  it('does not expose the full matched credential in excerpts', () => {
+    const svc = new SecurityScanService(allOn);
+    const text = 'aws key: AKIAIOSFODNN7EXAMPLE';
+    const [issue] = svc.scan(text);
+    const out = svc.formatIssues([issue]);
+
+    expect(issue.matchExcerpt).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    expect(out).not.toContain('AKIAIOSFODNN7EXAMPLE');
+  });
+
   it('honors per-category disable switches', () => {
     const svc = new SecurityScanService({
       promptInjection: false,
