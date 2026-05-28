@@ -117,6 +117,13 @@ export class DatabaseService {
         INSERT INTO session_messages_fts(rowid, content) VALUES (new.rowid, new.content);
       END;
 
+      CREATE TABLE IF NOT EXISTS memory_flush_marks (
+        thread_id   TEXT PRIMARY KEY,
+        flushed_at  TEXT NOT NULL,
+        ratio       REAL NOT NULL,
+        tokens_used INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS background_tasks (
         id TEXT PRIMARY KEY,
         thread_id TEXT NOT NULL,
