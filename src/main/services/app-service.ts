@@ -296,7 +296,13 @@ export function createAppServices(
     },
     getSettings: () => configService.getSettings().memory
   });
-  const memoryService = new MemoryService(paths, databaseService, workspaceService, () => configService.getSettings().memory);
+  const memoryService = new MemoryService(
+    paths,
+    databaseService,
+    workspaceService,
+    consolidatorService,
+    () => configService.getSettings().memory
+  );
   const webReadService = new WebReadService();
   const shellExecutionService = new ShellExecutionService(workspaceService, rtkService, taskService);
   const fileService = new FileService(paths, databaseService, workspaceService);

@@ -13,6 +13,7 @@ import type {
   MemoryStatus
 } from '../../shared/types';
 import { CapacityService } from './memory/capacity';
+import type { ConsolidatorService } from './memory/consolidator';
 import { SecurityScanService } from './memory/security-scan';
 import { buildFrozenSnapshot, type FrozenSnapshot } from './memory/snapshot';
 
@@ -32,6 +33,7 @@ export class MemoryService {
     private readonly paths: RocPaths,
     private readonly database: DatabaseService,
     private readonly workspaceService: WorkspaceService,
+    private readonly consolidatorService: ConsolidatorService,
     private readonly getMemorySettings: () => AppSettings['memory']
   ) {}
 
@@ -74,6 +76,9 @@ export class MemoryService {
     const capacity = new CapacityService(this.getMemorySettings().charLimits);
     const check = capacity.check(request.kind, request.content);
     if (!check.ok) {
+      if (existsSync(resolved)) {
+        this.consolidatorService.scheduleForFile(resolved, request.kind);
+      }
       return {
         ok: false,
         reason: 'capacity_exceeded',
