@@ -134,4 +134,16 @@ Decision:
 
 ## S4: cheap model resolver strategy
 
-Status: pending
+Status: complete
+
+Observed:
+- Current default model resolution: `src/main/services/deep-agent-runtime-service.ts:122` calls `LangChainModelFactory.createDefaultChatModel({ streaming: true })` for new runs; `src/main/services/deep-agent-runtime-service.ts:300` calls `createChatModelByModelId(taskRun.modelId, { streaming: true })` for resumed task runs.
+- `src/main/services/langchain-model-factory.ts:484-491` resolves the configured default model through `configService.getDefaultModelState()`, `resolveProviderById(defaultModelState.providerId)`, then `createModelForProvider(provider, defaultModelState.modelId, options)`.
+- `src/main/services/langchain-model-factory.ts:494-506` can create the first enabled model for a provider, but this is not a cheap-model selector.
+- `src/main/services/langchain-model-factory.ts:509-533` resolves a specific model id by scanning providers and rejects missing or ambiguous mappings.
+- Provider-specific cheap model availability: none in current defaults. `src/shared/provider-defaults.ts:25-33` creates fixed NVIDIA provider with `models: []`; `src/shared/provider-defaults.ts:58-66` creates fixed llama.cpp provider with `models: []`. Local search found no `cheap`, `haiku`, or cheap-model mapping in production code.
+
+Decision:
+- Phase 5 `resolveCheapModelHandle` returns the active model unless this section is later updated with an exact tested cheap model id for the same provider.
+- Consolidator must not invent a provider/model id.
+- If a provider later exposes an explicit cheap model, implement selection as a tested, provider-local mapping or setting; do not infer from model name substrings.
