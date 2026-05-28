@@ -17,7 +17,8 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   '',
   'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
   '',
-  'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
+  'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
+  'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
 ].join('\n');
 
 export function buildSystemPrompt(input: {

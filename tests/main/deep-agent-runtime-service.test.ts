@@ -1442,6 +1442,7 @@ describe('DeepAgentRuntimeService', () => {
       'propose_background_task',
       'update_background_task',
       'cancel_background_task',
+      'session_search',
       'web_search'
     ]);
     expect(toolNames).not.toContain('terminal_command');
@@ -1515,7 +1516,8 @@ describe('DeepAgentRuntimeService', () => {
       'delete_file',
       'propose_background_task',
       'update_background_task',
-      'cancel_background_task'
+      'cancel_background_task',
+      'session_search'
     ]);
     expect(readToolSchemaKeys(proposeTool)).toEqual(['goal', 'trigger', 'workspacePath']);
     expect(proposeTool?.description ?? '').toContain('goal');

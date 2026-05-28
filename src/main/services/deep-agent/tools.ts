@@ -10,6 +10,8 @@ import { WebReadService, type WebReadRequest } from '../web-read-service';
 import { toWebSearchFailure } from './error-mapping';
 import type { RuntimeSubagent } from './types';
 
+export { createSessionSearchTool } from './tools/session-search-tool';
+
 export function createWebReadTool(webReadService: WebReadService): DynamicStructuredTool<any, any, any, string> {
   const schema = z.object({
     url: z.string().url(),

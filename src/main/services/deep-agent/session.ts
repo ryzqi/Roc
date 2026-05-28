@@ -5,6 +5,7 @@ import type { AgentService } from '../agent-service';
 import type { FileService } from '../file-service';
 import { CapacityService } from '../memory/capacity';
 import { SecurityScanService } from '../memory/security-scan';
+import type { SessionArchiveService } from '../memory/session-archive';
 import type { MemoryService } from '../memory-service';
 import type { McpService } from '../mcp-service';
 import type { RocPaths } from '../paths';
@@ -42,6 +43,7 @@ export async function createDeepAgentSession(input: {
   getCheckpointer: () => BaseCheckpointSaver;
   getMemorySettings: () => AppSettings['memory'];
   memoryService: MemoryService;
+  sessionArchiveService: SessionArchiveService;
   mcpService: McpService;
   paths: RocPaths;
   shellExecutionService: AgentExecuteAdapter;
@@ -64,6 +66,7 @@ export async function createDeepAgentSession(input: {
     enabledCapabilities: input.context.enabledCapabilities,
     fileService: input.fileService,
     mcpService: input.mcpService,
+    sessionArchiveService: input.sessionArchiveService,
     taskSchedulerService: input.taskSchedulerService,
     taskService: input.taskService,
     webReadService: input.webReadService
@@ -122,6 +125,7 @@ async function createRunTools(input: {
   enabledCapabilities: RunExecutionContext['enabledCapabilities'];
   fileService: FileService;
   mcpService: McpService;
+  sessionArchiveService: SessionArchiveService;
   taskSchedulerService: TaskSchedulerService;
   taskService: TaskService;
   webReadService: WebReadService;
@@ -136,7 +140,8 @@ async function createRunTools(input: {
     schedulerService: input.taskSchedulerService,
     enabledCapabilities: input.enabledCapabilities
   });
-  const runTools: ClientTool[] = [webReadTool, deleteFileTool, ...backgroundTaskTools];
+  const sessionSearchTool = tools.createSessionSearchTool(input.sessionArchiveService);
+  const runTools: ClientTool[] = [webReadTool, deleteFileTool, ...backgroundTaskTools, sessionSearchTool];
   const webSearchTool = await tools.createWebSearchTool({
     mcpService: input.mcpService,
     enabledCapabilities: input.enabledCapabilities,

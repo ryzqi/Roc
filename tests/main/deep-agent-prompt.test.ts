@@ -34,7 +34,9 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('/memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)');
     expect(prompt).toContain('Use Edit/Write on those paths.');
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
-    expect(prompt).not.toContain('session_search');
+    expect(prompt).toContain(
+      'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
+    );
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain('Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.');
     expect(prompt).toContain(
@@ -65,6 +67,7 @@ describe('deep agent prompt', () => {
       'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
+      'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).',
       'Workspace: F:\\Code\\Roc',
       'Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.',
       'Run file and shell ops inside workspace unless user explicitly names another allowed path.',
