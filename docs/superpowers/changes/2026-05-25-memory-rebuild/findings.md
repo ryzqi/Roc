@@ -117,7 +117,20 @@ Decision:
 
 ## S3: task_threads and session_messages cleanup strategy
 
-Status: pending
+Status: complete
+
+Observed:
+- `task_threads` delete locations: no hard `DELETE FROM task_threads` exists in current `src/main/services`, `src/main/ipc`, or `tests/main` scan.
+- Chat thread deletion is soft archive. `src/main/services/task-service.ts:155` calls `taskRunManagement.archiveThread(...)`; `src/main/services/task/task-run-management.ts:94` defines `archiveThread`, and `src/main/services/task/task-run-management.ts:105` runs `UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?`.
+- Background task deletion is also soft archive. `src/main/services/task/background-task-lifecycle.ts:55-58` updates `background_tasks` to `archived` and updates the related `task_threads` row with `status='archived'` and `archived_at`.
+- `task_threads` has no metadata column in current schema. `src/main/services/database-service.ts:40-49` defines only `id`, `kind`, `title`, `goal`, `status`, `created_at`, `updated_at`, and `archived_at`.
+- Existing FK references to `task_threads` in `task_runs`, `task_events`, and `background_tasks` do not specify `ON DELETE CASCADE`.
+
+Decision:
+- Do not add FK from `session_messages` to `task_threads` in Phase 4; use retention sweep plus orphan cleanup.
+- Use independent `memory_flush_marks(thread_id PRIMARY KEY, flushed_at, ratio, tokens_used)` for Pre-Compaction idempotency.
+- On task thread archive, do not immediately delete `session_messages`; archived threads remain searchable unless retention sweep removes them.
+- If future code introduces hard deletion, explicitly delete related `session_messages` and `memory_flush_marks` in the same service method or document intentional orphan retention.
 
 ## S4: cheap model resolver strategy
 
