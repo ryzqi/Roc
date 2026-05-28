@@ -19,6 +19,34 @@ export function MemorySection({
     });
   }
 
+  function patchCharLimit(kind: keyof AppSettings['memory']['charLimits'], value: number): void {
+    patchMemory({
+      charLimits: {
+        ...draft.memory.charLimits,
+        [kind]: value
+      }
+    });
+  }
+
+  function patchSecurityScan(kind: keyof AppSettings['memory']['securityScan'], enabled: boolean): void {
+    patchMemory({
+      securityScan: {
+        ...draft.memory.securityScan,
+        [kind]: enabled
+      }
+    });
+  }
+
+  function parsePositiveInteger(raw: string): number | null {
+    const value = Number(raw);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  function parseRatio(raw: string): number | null {
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+  }
+
   return (
     <section className="single-panel settings-section-panel" data-testid="settings-panel-memory">
       <div className="section-head">
@@ -26,92 +54,221 @@ export function MemorySection({
       </div>
       <div className="settings-form">
         <p className="card-hint">
-          这里只管理记忆策略；具体记忆条目仍在记忆中心审阅、编辑或删除。
+          这里只管理新记忆边界；具体文件在记忆中心编辑，写入时会执行容量和安全扫描。
         </p>
         <div className="form-grid">
-          <FieldRow hint="候选记忆是否需要人工审阅才能进入有效记忆。" label="候选记忆审阅">
-            <select
-              data-testid="settings-memory-candidate-review-mode"
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                if (value === 'manual' || value === 'auto_after_approval') {
-                  patchMemory({ candidateReviewMode: value });
-                }
-              }}
-              value={draft.memory.candidateReviewMode}
-            >
-              <option value="manual">人工审阅</option>
-              <option value="auto_after_approval">已确认后自动准入</option>
-            </select>
-          </FieldRow>
           <label className="field checkbox-field">
-            <span>暖记忆按需召回</span>
+            <span>冻结快照</span>
             <input
-              checked={draft.memory.warmRecallEnabled}
-              data-testid="settings-memory-warm-recall-enabled"
-              onChange={(event) => patchMemory({ warmRecallEnabled: event.currentTarget.checked })}
+              checked={draft.memory.frozenSnapshotEnabled}
+              data-testid="settings-memory-frozen-snapshot-enabled"
+              onChange={(event) => patchMemory({ frozenSnapshotEnabled: event.currentTarget.checked })}
+              type="checkbox"
+            />
+            <small className="field-hint">新会话启动时将 USER、AGENTS、MEMORY 汇总进系统上下文。</small>
+          </label>
+          <label className="field checkbox-field">
+            <span>用户画像</span>
+            <input
+              checked={draft.memory.userProfileEnabled}
+              data-testid="settings-memory-user-profile-enabled"
+              onChange={(event) => patchMemory({ userProfileEnabled: event.currentTarget.checked })}
+              type="checkbox"
+            />
+          </label>
+          <label className="field checkbox-field">
+            <span>规则文件</span>
+            <input
+              checked={draft.memory.agentsRulesEnabled}
+              data-testid="settings-memory-agents-rules-enabled"
+              onChange={(event) => patchMemory({ agentsRulesEnabled: event.currentTarget.checked })}
               type="checkbox"
             />
           </label>
           <FieldRow hint="会话回忆超过保留期会被自动清理；策展记忆不受影响。" label="会话回忆保留">
-            <select
+            <input
               data-testid="settings-memory-session-retention-days"
               onChange={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (value === 30 || value === 90 || value === 180) {
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
                   patchMemory({ sessionRetentionDays: value });
                 }
               }}
+              min={1}
+              type="number"
               value={draft.memory.sessionRetentionDays}
-            >
-              <option value="30">30 天</option>
-              <option value="90">90 天</option>
-              <option value="180">180 天</option>
-            </select>
+            />
           </FieldRow>
-          <FieldRow
-            hint="跨项目、跨任务召回是否需要显式扩大范围；扩大并标注会在结果中标记来源范围。"
-            label="跨域召回策略"
-          >
-            <select
-              data-testid="settings-memory-cross-scope-recall"
+          <FieldRow hint="USER.md 最大字符数。" label="USER 容量">
+            <input
+              data-testid="settings-memory-char-limit-user"
               onChange={(event) => {
-                const value = event.currentTarget.value;
-                if (value === 'explicit_only' || value === 'expanded_with_label') {
-                  patchMemory({ crossScopeRecall: value });
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchCharLimit('user', value);
                 }
               }}
-              value={draft.memory.crossScopeRecall}
-            >
-              <option value="explicit_only">仅显式扩大范围</option>
-              <option value="expanded_with_label">默认扩大并标注来源</option>
-            </select>
+              min={1}
+              type="number"
+              value={draft.memory.charLimits.user}
+            />
           </FieldRow>
-          <FieldRow
-            hint="设为 0 / 关闭则冷记忆永不自动遗忘；用户保护项不受此设置影响。"
-            label="冷记忆自动遗忘"
-          >
-            <select
-              data-testid="settings-memory-cold-auto-forget-days"
+          <FieldRow hint="AGENTS.md 最大字符数。" label="AGENTS 容量">
+            <input
+              data-testid="settings-memory-char-limit-agents"
               onChange={(event) => {
-                const value = event.currentTarget.value;
-                if (value === 'never') {
-                  patchMemory({ coldAutoForgetDays: null });
-                  return;
-                }
-                const days = Number(value);
-                if (days === 90 || days === 180 || days === 365) {
-                  patchMemory({ coldAutoForgetDays: days });
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchCharLimit('agents', value);
                 }
               }}
-              value={draft.memory.coldAutoForgetDays === null ? 'never' : String(draft.memory.coldAutoForgetDays)}
-            >
-              <option value="90">90 天</option>
-              <option value="180">180 天</option>
-              <option value="365">365 天</option>
-              <option value="never">不自动遗忘</option>
-            </select>
+              min={1}
+              type="number"
+              value={draft.memory.charLimits.agents}
+            />
           </FieldRow>
+          <FieldRow hint="MEMORY.md 最大字符数。" label="MEMORY 容量">
+            <input
+              data-testid="settings-memory-char-limit-memory"
+              onChange={(event) => {
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchCharLimit('memory', value);
+                }
+              }}
+              min={1}
+              type="number"
+              value={draft.memory.charLimits.memory}
+            />
+          </FieldRow>
+          <label className="field checkbox-field">
+            <span>自动压缩</span>
+            <input
+              checked={draft.memory.consolidatorEnabled}
+              data-testid="settings-memory-consolidator-enabled"
+              onChange={(event) => patchMemory({ consolidatorEnabled: event.currentTarget.checked })}
+              type="checkbox"
+            />
+          </label>
+          <FieldRow hint="记忆写入溢出后延迟合并的分钟数。" label="压缩延迟">
+            <input
+              data-testid="settings-memory-consolidator-debounce-minutes"
+              onChange={(event) => {
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchMemory({ consolidatorDebounceMinutes: value });
+                }
+              }}
+              min={1}
+              type="number"
+              value={draft.memory.consolidatorDebounceMinutes}
+            />
+          </FieldRow>
+          <FieldRow hint="压缩后目标容量占比，范围 0 到 1。" label="压缩目标">
+            <input
+              data-testid="settings-memory-consolidator-target-ratio"
+              onChange={(event) => {
+                const value = parseRatio(event.currentTarget.value);
+                if (value !== null) {
+                  patchMemory({ consolidatorTargetRatio: value });
+                }
+              }}
+              max={1}
+              min={0}
+              step="0.01"
+              type="number"
+              value={draft.memory.consolidatorTargetRatio}
+            />
+          </FieldRow>
+          <FieldRow hint="每天最多自动压缩次数。" label="压缩配额">
+            <input
+              data-testid="settings-memory-consolidator-daily-quota"
+              onChange={(event) => {
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchMemory({ consolidatorDailyQuota: value });
+                }
+              }}
+              min={1}
+              type="number"
+              value={draft.memory.consolidatorDailyQuota}
+            />
+          </FieldRow>
+          <label className="field checkbox-field">
+            <span>预压缩刷新</span>
+            <input
+              checked={draft.memory.preCompactionFlushEnabled}
+              data-testid="settings-memory-precompaction-flush-enabled"
+              onChange={(event) => patchMemory({ preCompactionFlushEnabled: event.currentTarget.checked })}
+              type="checkbox"
+            />
+          </label>
+          <FieldRow hint="到达上下文窗口占比后触发静默刷新。" label="刷新阈值">
+            <input
+              data-testid="settings-memory-precompaction-token-threshold"
+              onChange={(event) => {
+                const value = parseRatio(event.currentTarget.value);
+                if (value !== null) {
+                  patchMemory({ preCompactionTokenThreshold: value });
+                }
+              }}
+              max={1}
+              min={0}
+              step="0.01"
+              type="number"
+              value={draft.memory.preCompactionTokenThreshold}
+            />
+          </FieldRow>
+          <FieldRow hint="估算上下文窗口 token 数。" label="上下文窗口">
+            <input
+              data-testid="settings-memory-precompaction-context-window-tokens"
+              onChange={(event) => {
+                const value = parsePositiveInteger(event.currentTarget.value);
+                if (value !== null) {
+                  patchMemory({ preCompactionContextWindowTokens: value });
+                }
+              }}
+              min={1}
+              type="number"
+              value={draft.memory.preCompactionContextWindowTokens}
+            />
+          </FieldRow>
+          <label className="field checkbox-field">
+            <span>Prompt injection 扫描</span>
+            <input
+              checked={draft.memory.securityScan.promptInjection}
+              data-testid="settings-memory-security-prompt-injection"
+              onChange={(event) => patchSecurityScan('promptInjection', event.currentTarget.checked)}
+              type="checkbox"
+            />
+          </label>
+          <label className="field checkbox-field">
+            <span>凭据扫描</span>
+            <input
+              checked={draft.memory.securityScan.credential}
+              data-testid="settings-memory-security-credential"
+              onChange={(event) => patchSecurityScan('credential', event.currentTarget.checked)}
+              type="checkbox"
+            />
+          </label>
+          <label className="field checkbox-field">
+            <span>SSH 后门扫描</span>
+            <input
+              checked={draft.memory.securityScan.sshBackdoor}
+              data-testid="settings-memory-security-ssh-backdoor"
+              onChange={(event) => patchSecurityScan('sshBackdoor', event.currentTarget.checked)}
+              type="checkbox"
+            />
+          </label>
+          <label className="field checkbox-field">
+            <span>不可见字符扫描</span>
+            <input
+              checked={draft.memory.securityScan.invisibleUnicode}
+              data-testid="settings-memory-security-invisible-unicode"
+              onChange={(event) => patchSecurityScan('invisibleUnicode', event.currentTarget.checked)}
+              type="checkbox"
+            />
+          </label>
         </div>
       </div>
     </section>

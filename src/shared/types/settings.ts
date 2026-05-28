@@ -1,11 +1,18 @@
-import type {
-  MemoryCandidateReviewMode,
-  MemoryColdAutoForgetDays,
-  MemoryCrossScopeRecall,
-  MemorySessionRetentionDays
-} from './memory';
 import type { McpServerConfig, McpServerSnapshot } from './mcp';
 import type { SkillSnapshot } from './skill';
+
+export type MemoryCharLimits = {
+  user: number;
+  agents: number;
+  memory: number;
+};
+
+export type MemorySecurityScanSettings = {
+  promptInjection: boolean;
+  credential: boolean;
+  sshBackdoor: boolean;
+  invisibleUnicode: boolean;
+};
 
 export type AppSettings = {
   schemaVersion: 2;
@@ -19,11 +26,19 @@ export type AppSettings = {
   };
   globalHotkey: string | null;
   memory: {
-    candidateReviewMode: MemoryCandidateReviewMode;
-    warmRecallEnabled: boolean;
-    sessionRetentionDays: MemorySessionRetentionDays;
-    crossScopeRecall: MemoryCrossScopeRecall;
-    coldAutoForgetDays: MemoryColdAutoForgetDays;
+    frozenSnapshotEnabled: boolean;
+    userProfileEnabled: boolean;
+    agentsRulesEnabled: boolean;
+    charLimits: MemoryCharLimits;
+    sessionRetentionDays: number;
+    consolidatorEnabled: boolean;
+    consolidatorDebounceMinutes: number;
+    consolidatorTargetRatio: number;
+    consolidatorDailyQuota: number;
+    preCompactionFlushEnabled: boolean;
+    preCompactionTokenThreshold: number;
+    preCompactionContextWindowTokens: number;
+    securityScan: MemorySecurityScanSettings;
   };
   tasks: {
     longRunningThresholds: {

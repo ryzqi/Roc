@@ -26,16 +26,6 @@ export function isLegacyUnifiedSettingsDocument(value: unknown): boolean {
   return (record.schemaVersion === 2 || record.schemaVersion === 3) && 'settings' in record && 'providers' in record;
 }
 
-export function upgradeColdAutoForget(value: unknown): AppSettings['memory']['coldAutoForgetDays'] {
-  if (value === null) {
-    return null;
-  }
-  if (value === 90 || value === 180 || value === 365) {
-    return value;
-  }
-  return 90;
-}
-
 function upgradeTaskSettings(raw: unknown): AppSettings['tasks'] {
   if (raw === null || typeof raw !== 'object') {
     return defaultSettings.tasks;
@@ -87,6 +77,80 @@ function upgradeTaskSettings(raw: unknown): AppSettings['tasks'] {
   };
 }
 
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function readPositiveInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function readRatio(value: unknown, fallback: number): number {
+  return typeof value === 'number' && value >= 0 && value <= 1 ? value : fallback;
+}
+
+function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
+  if (raw === null || typeof raw !== 'object') {
+    return defaultSettings.memory;
+  }
+
+  const value = raw as Record<string, unknown>;
+  const charLimits =
+    value.charLimits !== null && typeof value.charLimits === 'object'
+      ? (value.charLimits as Record<string, unknown>)
+      : {};
+  const securityScan =
+    value.securityScan !== null && typeof value.securityScan === 'object'
+      ? (value.securityScan as Record<string, unknown>)
+      : {};
+
+  return {
+    frozenSnapshotEnabled: readBoolean(
+      value.frozenSnapshotEnabled,
+      defaultSettings.memory.frozenSnapshotEnabled
+    ),
+    userProfileEnabled: readBoolean(value.userProfileEnabled, defaultSettings.memory.userProfileEnabled),
+    agentsRulesEnabled: readBoolean(value.agentsRulesEnabled, defaultSettings.memory.agentsRulesEnabled),
+    charLimits: {
+      user: readPositiveInteger(charLimits.user, defaultSettings.memory.charLimits.user),
+      agents: readPositiveInteger(charLimits.agents, defaultSettings.memory.charLimits.agents),
+      memory: readPositiveInteger(charLimits.memory, defaultSettings.memory.charLimits.memory)
+    },
+    sessionRetentionDays: readPositiveInteger(value.sessionRetentionDays, defaultSettings.memory.sessionRetentionDays),
+    consolidatorEnabled: readBoolean(value.consolidatorEnabled, defaultSettings.memory.consolidatorEnabled),
+    consolidatorDebounceMinutes: readPositiveInteger(
+      value.consolidatorDebounceMinutes,
+      defaultSettings.memory.consolidatorDebounceMinutes
+    ),
+    consolidatorTargetRatio: readRatio(
+      value.consolidatorTargetRatio,
+      defaultSettings.memory.consolidatorTargetRatio
+    ),
+    consolidatorDailyQuota: readPositiveInteger(
+      value.consolidatorDailyQuota,
+      defaultSettings.memory.consolidatorDailyQuota
+    ),
+    preCompactionFlushEnabled: readBoolean(
+      value.preCompactionFlushEnabled,
+      defaultSettings.memory.preCompactionFlushEnabled
+    ),
+    preCompactionTokenThreshold: readRatio(
+      value.preCompactionTokenThreshold,
+      defaultSettings.memory.preCompactionTokenThreshold
+    ),
+    preCompactionContextWindowTokens: readPositiveInteger(
+      value.preCompactionContextWindowTokens,
+      defaultSettings.memory.preCompactionContextWindowTokens
+    ),
+    securityScan: {
+      promptInjection: readBoolean(securityScan.promptInjection, defaultSettings.memory.securityScan.promptInjection),
+      credential: readBoolean(securityScan.credential, defaultSettings.memory.securityScan.credential),
+      sshBackdoor: readBoolean(securityScan.sshBackdoor, defaultSettings.memory.securityScan.sshBackdoor),
+      invisibleUnicode: readBoolean(securityScan.invisibleUnicode, defaultSettings.memory.securityScan.invisibleUnicode)
+    }
+  };
+}
+
 export function upgradeLegacySettings(raw: unknown): AppSettings {
   if (raw === null || typeof raw !== 'object') {
     return defaultSettings;
@@ -94,7 +158,6 @@ export function upgradeLegacySettings(raw: unknown): AppSettings {
   const value = raw as Record<string, unknown>;
   const startup = (value.startup ?? {}) as Record<string, unknown>;
   const notifications = (value.notifications ?? {}) as Record<string, unknown>;
-  const memory = (value.memory ?? {}) as Record<string, unknown>;
 
   return SettingsSchema.parse({
     schemaVersion: 2,
@@ -107,17 +170,7 @@ export function upgradeLegacySettings(raw: unknown): AppSettings {
       lowDistraction: typeof notifications.lowDistraction === 'boolean' ? notifications.lowDistraction : true
     },
     globalHotkey: typeof value.globalHotkey === 'string' && value.globalHotkey.length > 0 ? value.globalHotkey : null,
-    memory: {
-      candidateReviewMode: memory.candidateReviewMode === 'auto_after_approval' ? 'auto_after_approval' : 'manual',
-      warmRecallEnabled: typeof memory.warmRecallEnabled === 'boolean' ? memory.warmRecallEnabled : true,
-      sessionRetentionDays:
-        memory.sessionRetentionDays === 30 || memory.sessionRetentionDays === 180
-          ? (memory.sessionRetentionDays as 30 | 180)
-          : 90,
-      crossScopeRecall:
-        memory.crossScopeRecall === 'expanded_with_label' ? 'expanded_with_label' : 'explicit_only',
-      coldAutoForgetDays: upgradeColdAutoForget(memory.coldAutoForgetDays)
-    },
+    memory: upgradeMemorySettings(value.memory),
     tasks: upgradeTaskSettings(value.tasks)
   });
 }

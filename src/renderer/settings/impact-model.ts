@@ -18,12 +18,25 @@ export type ImpactSourceState = {
   defaultModelId: string | null;
 };
 
-const memoryFieldImpactCopy: Record<keyof AppSettings['memory'], string> = {
-  candidateReviewMode: '会影响候选记忆是否需要人工确认才能进入有效记忆。',
-  warmRecallEnabled: '会影响暖记忆是否在任务中按需召回。',
+const memoryFieldImpactCopy: Record<string, string> = {
+  frozenSnapshotEnabled: '会影响新会话是否加载冻结记忆快照。',
+  userProfileEnabled: '会影响 USER.md 是否进入冻结快照。',
+  agentsRulesEnabled: '会影响 AGENTS.md 是否进入冻结快照。',
+  'charLimits.user': '会影响 USER.md 的写入容量上限。',
+  'charLimits.agents': '会影响 AGENTS.md 的写入容量上限。',
+  'charLimits.memory': '会影响 MEMORY.md 的写入容量上限。',
   sessionRetentionDays: '会影响会话回忆的保留期，过期后会被自动清理。',
-  crossScopeRecall: '会影响跨项目、跨任务的记忆召回是否需要显式扩大范围。',
-  coldAutoForgetDays: '会影响冷记忆的自动遗忘策略。'
+  consolidatorEnabled: '会影响容量溢出后的自动压缩是否运行。',
+  consolidatorDebounceMinutes: '会影响容量溢出后自动压缩的延迟。',
+  consolidatorTargetRatio: '会影响自动压缩后的目标容量比例。',
+  consolidatorDailyQuota: '会影响每天自动压缩的最大次数。',
+  preCompactionFlushEnabled: '会影响上下文接近窗口上限时是否触发静默刷新。',
+  preCompactionTokenThreshold: '会影响预压缩刷新的触发阈值。',
+  preCompactionContextWindowTokens: '会影响预压缩刷新使用的上下文窗口估算。',
+  'securityScan.promptInjection': '会影响 prompt injection 内容是否阻断写入。',
+  'securityScan.credential': '会影响凭据内容是否阻断写入。',
+  'securityScan.sshBackdoor': '会影响 SSH 后门内容是否阻断写入。',
+  'securityScan.invisibleUnicode': '会影响不可见 Unicode 字符是否阻断写入。'
 };
 
 const approvalModeCopy: Record<ApprovalMode, string> = {
@@ -31,35 +44,15 @@ const approvalModeCopy: Record<ApprovalMode, string> = {
   default: '默认(MCP 与删除文件需审批)'
 };
 
-const candidateModeCopy: Record<AppSettings['memory']['candidateReviewMode'], string> = {
-  manual: '人工审阅',
-  auto_after_approval: '已确认后自动准入'
-};
-
-const crossScopeCopy: Record<AppSettings['memory']['crossScopeRecall'], string> = {
-  explicit_only: '仅显式扩大范围',
-  expanded_with_label: '默认扩大并标注来源'
-};
-
-function describeMemoryValue<K extends keyof AppSettings['memory']>(
-  field: K,
-  value: AppSettings['memory'][K]
-): string {
-  if (field === 'candidateReviewMode') {
-    return candidateModeCopy[value as AppSettings['memory']['candidateReviewMode']];
-  }
-  if (field === 'crossScopeRecall') {
-    return crossScopeCopy[value as AppSettings['memory']['crossScopeRecall']];
-  }
-  if (field === 'coldAutoForgetDays') {
-    const days = value as AppSettings['memory']['coldAutoForgetDays'];
-    return days === null ? '不自动遗忘' : `${days} 天`;
-  }
-  if (field === 'sessionRetentionDays') {
-    return `${value as number} 天`;
-  }
-  if (field === 'warmRecallEnabled') {
+function describeMemoryValue(field: string, value: boolean | number): string {
+  if (typeof value === 'boolean') {
     return value === true ? '已启用' : '已关闭';
+  }
+  if (field === 'sessionRetentionDays' || field === 'consolidatorDebounceMinutes') {
+    return field === 'sessionRetentionDays' ? `${value} 天` : `${value} 分钟`;
+  }
+  if (field === 'consolidatorTargetRatio' || field === 'preCompactionTokenThreshold') {
+    return `${Math.round(value * 100)}%`;
   }
   return String(value);
 }
@@ -156,11 +149,9 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
     (value) => (value === null || value.length === 0 ? '未设置' : value)
   );
 
-  for (const field of Object.keys(base.settings.memory) as Array<keyof AppSettings['memory']>) {
-    const before = base.settings.memory[field];
-    const after = draft.settings.memory[field];
+  const pushMemoryChange = (field: string, before: boolean | number, after: boolean | number): void => {
     if (before === after) {
-      continue;
+      return;
     }
     rows.push({
       sectionId: 'memory',
@@ -170,7 +161,62 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
       impact: memoryFieldImpactCopy[field],
       severity: 'high'
     });
-  }
+  };
+
+  pushMemoryChange('frozenSnapshotEnabled', base.settings.memory.frozenSnapshotEnabled, draft.settings.memory.frozenSnapshotEnabled);
+  pushMemoryChange('userProfileEnabled', base.settings.memory.userProfileEnabled, draft.settings.memory.userProfileEnabled);
+  pushMemoryChange('agentsRulesEnabled', base.settings.memory.agentsRulesEnabled, draft.settings.memory.agentsRulesEnabled);
+  pushMemoryChange('charLimits.user', base.settings.memory.charLimits.user, draft.settings.memory.charLimits.user);
+  pushMemoryChange('charLimits.agents', base.settings.memory.charLimits.agents, draft.settings.memory.charLimits.agents);
+  pushMemoryChange('charLimits.memory', base.settings.memory.charLimits.memory, draft.settings.memory.charLimits.memory);
+  pushMemoryChange('sessionRetentionDays', base.settings.memory.sessionRetentionDays, draft.settings.memory.sessionRetentionDays);
+  pushMemoryChange('consolidatorEnabled', base.settings.memory.consolidatorEnabled, draft.settings.memory.consolidatorEnabled);
+  pushMemoryChange(
+    'consolidatorDebounceMinutes',
+    base.settings.memory.consolidatorDebounceMinutes,
+    draft.settings.memory.consolidatorDebounceMinutes
+  );
+  pushMemoryChange(
+    'consolidatorTargetRatio',
+    base.settings.memory.consolidatorTargetRatio,
+    draft.settings.memory.consolidatorTargetRatio
+  );
+  pushMemoryChange('consolidatorDailyQuota', base.settings.memory.consolidatorDailyQuota, draft.settings.memory.consolidatorDailyQuota);
+  pushMemoryChange(
+    'preCompactionFlushEnabled',
+    base.settings.memory.preCompactionFlushEnabled,
+    draft.settings.memory.preCompactionFlushEnabled
+  );
+  pushMemoryChange(
+    'preCompactionTokenThreshold',
+    base.settings.memory.preCompactionTokenThreshold,
+    draft.settings.memory.preCompactionTokenThreshold
+  );
+  pushMemoryChange(
+    'preCompactionContextWindowTokens',
+    base.settings.memory.preCompactionContextWindowTokens,
+    draft.settings.memory.preCompactionContextWindowTokens
+  );
+  pushMemoryChange(
+    'securityScan.promptInjection',
+    base.settings.memory.securityScan.promptInjection,
+    draft.settings.memory.securityScan.promptInjection
+  );
+  pushMemoryChange(
+    'securityScan.credential',
+    base.settings.memory.securityScan.credential,
+    draft.settings.memory.securityScan.credential
+  );
+  pushMemoryChange(
+    'securityScan.sshBackdoor',
+    base.settings.memory.securityScan.sshBackdoor,
+    draft.settings.memory.securityScan.sshBackdoor
+  );
+  pushMemoryChange(
+    'securityScan.invisibleUnicode',
+    base.settings.memory.securityScan.invisibleUnicode,
+    draft.settings.memory.securityScan.invisibleUnicode
+  );
 
   pushIfChanged(
     rows,

@@ -126,13 +126,7 @@ describe('ConfigService unified settings document', () => {
       startup: { openAtLogin: true, minimizeToTray: false },
       notifications: { lowDistraction: false },
       globalHotkey: null,
-      memory: {
-        candidateReviewMode: 'manual',
-        warmRecallEnabled: false,
-        sessionRetentionDays: 90,
-        crossScopeRecall: 'explicit_only',
-        coldAutoForgetDays: 90
-      }
+      memory: defaultSettings.memory
     });
     expect(document.providers).toMatchObject({
       schemaVersion: 1,
@@ -254,7 +248,7 @@ describe('ConfigService unified settings document', () => {
       ])
     );
     expect(configService.getPermissions()).toEqual(expectedPermissions());
-    expect(configService.getSettings().memory.sessionRetentionDays).toBe(90);
+    expect(configService.getSettings().memory).toEqual(defaultSettings.memory);
   });
 
   it('persists providers and mcp servers into the unified settings document on fresh roots', () => {
@@ -356,11 +350,10 @@ describe('ConfigService unified settings document', () => {
       notifications: { lowDistraction: false },
       globalHotkey: 'Ctrl+Alt+R',
       memory: {
-        candidateReviewMode: 'auto_after_approval',
-        warmRecallEnabled: false,
+        ...defaultSettings.memory,
+        frozenSnapshotEnabled: false,
         sessionRetentionDays: 30,
-        crossScopeRecall: 'expanded_with_label',
-        coldAutoForgetDays: 365
+        consolidatorTargetRatio: 0.75
       },
       tasks: {
         longRunningThresholds: {

@@ -39,11 +39,24 @@ function defaultSettings(): AppSettings {
     notifications: { lowDistraction: true },
     globalHotkey: null,
     memory: {
-      candidateReviewMode: 'manual',
-      warmRecallEnabled: true,
+      frozenSnapshotEnabled: true,
+      userProfileEnabled: true,
+      agentsRulesEnabled: true,
+      charLimits: { user: 1375, agents: 800, memory: 2200 },
       sessionRetentionDays: 90,
-      crossScopeRecall: 'explicit_only',
-      coldAutoForgetDays: 90
+      consolidatorEnabled: true,
+      consolidatorDebounceMinutes: 10,
+      consolidatorTargetRatio: 0.85,
+      consolidatorDailyQuota: 50,
+      preCompactionFlushEnabled: true,
+      preCompactionTokenThreshold: 0.85,
+      preCompactionContextWindowTokens: 200000,
+      securityScan: {
+        promptInjection: true,
+        credential: true,
+        sshBackdoor: true,
+        invisibleUnicode: true
+      }
     },
     tasks: {
       longRunningThresholds: {
@@ -812,7 +825,7 @@ describe('settings model helpers', () => {
       defaultWorkspace: 'F:\\Code\\Roc',
       memory: {
         ...baseSettings.memory,
-        warmRecallEnabled: false,
+        frozenSnapshotEnabled: false,
         sessionRetentionDays: 30
       }
     };
@@ -830,13 +843,13 @@ describe('settings model helpers', () => {
     expect(rows.map((row) => row.field)).toEqual([
       'defaultModelId',
       'defaultWorkspace',
-      'memory.warmRecallEnabled',
+      'memory.frozenSnapshotEnabled',
       'memory.sessionRetentionDays',
       'permissions.mode'
     ]);
     expect(rows.find((row) => row.field === 'defaultModelId')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'defaultWorkspace')?.severity).toBe('info');
-    expect(rows.find((row) => row.field === 'memory.warmRecallEnabled')?.after).toBe('已关闭');
+    expect(rows.find((row) => row.field === 'memory.frozenSnapshotEnabled')?.after).toBe('已关闭');
     expect(rows.find((row) => row.field === 'permissions.mode')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'permissions.mode')?.after).toBe('默认(MCP 与删除文件需审批)');
   });
