@@ -2212,7 +2212,8 @@ try {
     memoryEditorHasNoDisabledButtons: false,
     memoryFileRowSelectable: false,
     memoryCapacityErrorVisible: false,
-    memorySecurityErrorVisible: false
+    memorySecurityErrorVisible: false,
+    memorySnapshotPreviewShowsSavedContent: false
   };
   await page.waitForSelector('[data-testid="settings-modal"]', { state: 'detached', timeout: 5000 });
   await openChatView(page);
@@ -2358,6 +2359,15 @@ try {
   await waitForTextContent(page, '[data-testid="memory-write-error"]', 'security scan');
   buttonInteractionEvidence.memorySecurityErrorVisible =
     ((await page.textContent('[data-testid="memory-write-error"]')) ?? '').includes('security scan');
+  const snapshotSmokeUserFact = '# smoke user\n- phase 3 snapshot';
+  await page.fill('[data-testid="memory-file-editor"]', snapshotSmokeUserFact);
+  await page.click('[data-testid="memory-file-save"]');
+  await page.waitForSelector('[data-testid="memory-write-error"]', { state: 'detached', timeout: 5000 });
+  await page.click('[data-testid="memory-tab-snapshot"]');
+  await waitForTextContent(page, '[data-testid="memory-snapshot-preview"]', '<FROZEN_SNAPSHOT>');
+  await waitForTextContent(page, '[data-testid="memory-snapshot-preview"]', 'phase 3 snapshot');
+  buttonInteractionEvidence.memorySnapshotPreviewShowsSavedContent =
+    ((await page.textContent('[data-testid="memory-snapshot-preview"]')) ?? '').includes('phase 3 snapshot');
   await page.evaluate(async () => {
     const result = await window.roc.app.openMainPage('chat');
     if (!result.ok) {
