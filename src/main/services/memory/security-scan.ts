@@ -1,16 +1,10 @@
-import type { MemorySecurityScanSettings } from '../../../shared/types';
+import type { MemorySecurityScanSettings, SecurityScanIssue } from '../../../shared/types';
 
 export type SecurityScanCategory =
   | 'prompt_injection'
   | 'credential'
   | 'ssh_backdoor'
   | 'invisible_unicode';
-
-export type SecurityScanIssue = {
-  category: SecurityScanCategory;
-  pattern: string;
-  matchExcerpt: string;
-};
 
 type Rule = {
   category: SecurityScanCategory;

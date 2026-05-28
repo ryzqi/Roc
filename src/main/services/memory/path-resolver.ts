@@ -1,4 +1,4 @@
-import type { MemoryKind } from './capacity';
+import type { MemoryKind } from '../../../shared/types';
 
 export type PathResolveResult =
   | { ok: true; resolved: string; kind: MemoryKind }

@@ -1,6 +1,4 @@
-import type { MemoryCharLimits } from '../../../shared/types';
-
-export type MemoryKind = 'user' | 'agents' | 'memory';
+import type { MemoryCharLimits, MemoryKind } from '../../../shared/types';
 
 export type CapacityCheckResult = {
   ok: boolean;

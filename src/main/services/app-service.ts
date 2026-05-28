@@ -230,7 +230,7 @@ export function createAppServices(
   const mcpService = new McpService(configService);
   const skillService = new SkillService(paths);
   const workspaceService = new WorkspaceService(configService);
-  const memoryService = new MemoryService(paths, databaseService, workspaceService);
+  const memoryService = new MemoryService(paths, databaseService, workspaceService, () => configService.getSettings().memory);
   const rtkService = new RtkService(paths);
   const performanceObserverService = new PerformanceObserverService();
   const diagnosticsService = new DiagnosticsService(
