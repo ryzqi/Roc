@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { RocPathsSnapshot } from '../../shared/types';
 
 export class RocPaths {
@@ -75,4 +76,12 @@ export class RocPaths {
       artifactsDir: this.artifactsDir
     };
   }
+}
+
+export function buildWorkspaceHash(workspacePath: string | null): string | null {
+  if (workspacePath === null) {
+    return null;
+  }
+  const normalized = resolve(workspacePath).toLowerCase();
+  return createHash('sha1').update(normalized).digest('hex').slice(0, 16);
 }
