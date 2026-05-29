@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command, MemorySaver } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
+import { AIMessage } from '@langchain/core/messages';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
@@ -110,8 +111,14 @@ type DeepAgentToolDescriptor = {
   schema?: unknown;
 };
 
+type DeepAgentMiddlewareDescriptor = {
+  name: string;
+  afterModel?: (state: { messages: unknown[] }, runtime: unknown) => unknown | Promise<unknown>;
+};
+
 type DeepAgentCreateCall = {
   tools?: DeepAgentToolDescriptor[];
+  middleware?: DeepAgentMiddlewareDescriptor[];
   interruptOn?: Record<string, unknown>;
   checkpointer?: unknown;
 };
@@ -249,7 +256,8 @@ describe('DeepAgentRuntimeService', () => {
       tools: [],
       filesystemPermissions: undefined,
       interruptOn: undefined,
-      checkpointer: undefined
+      checkpointer: undefined,
+      providerType: 'llama_cpp'
     });
 
     expect(mocked.createDeepAgentMock).toHaveBeenCalledWith({
@@ -263,7 +271,33 @@ describe('DeepAgentRuntimeService', () => {
       tools: [],
       permissions: undefined,
       interruptOn: undefined,
-      checkpointer: undefined
+      checkpointer: undefined,
+      middleware: [
+        expect.objectContaining({ name: 'ForgeRespondToolInjection' }),
+        expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' })
+      ]
+    });
+    const rescueMiddleware = getLastCreateDeepAgentCall().middleware?.find(
+      (middleware) => middleware.name === 'ForgeRescueParsingMiddleware'
+    );
+    if (typeof rescueMiddleware?.afterModel !== 'function') {
+      throw new Error('Expected buildDeepAgent to wire ForgeRescueParsingMiddleware.');
+    }
+    const rescueUpdate = (await rescueMiddleware.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-built-in',
+            content: '[TOOL_CALLS]read_file{"path":"notes.md"}'
+          })
+        ]
+      },
+      {}
+    )) as { messages?: AIMessage[] } | undefined;
+    const rebuilt = rescueUpdate?.messages?.[1];
+    expect(rebuilt?.tool_calls?.[0]).toMatchObject({
+      name: 'read_file',
+      args: { path: 'notes.md' }
     });
     expect(builtAgent).toEqual({
       streamEvents: mocked.streamEventsMock,

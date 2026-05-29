@@ -113,7 +113,8 @@ export async function createDeepAgentSession(input: {
     tools: runTools.tools,
     filesystemPermissions: undefined,
     interruptOn,
-    checkpointer: input.context.taskRun === null ? undefined : input.getCheckpointer()
+    checkpointer: input.context.taskRun === null ? undefined : input.getCheckpointer(),
+    providerType: input.context.modelHandle.runtime.providerType
   });
 
   return {
