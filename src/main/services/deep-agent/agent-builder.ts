@@ -4,7 +4,13 @@ import type { ClientTool } from '@langchain/core/tools';
 import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import type { ProviderType } from '../../../shared/types';
-import { createRescueParsingMiddleware, createRespondToolInjectionMiddleware } from '../forge-guardrails';
+import {
+  createErrorBudgetMiddleware,
+  createRescueParsingMiddleware,
+  createRespondToolInjectionMiddleware,
+  createResponseValidationMiddleware,
+  createToolResolutionMiddleware
+} from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import type { RuntimeSubagent } from './types';
 
@@ -45,8 +51,11 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     return names;
   };
   const guardrails = [
+    createErrorBudgetMiddleware(),
     createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
-    createRescueParsingMiddleware({ availableTools: knownToolNames })
+    createRescueParsingMiddleware({ availableTools: knownToolNames }),
+    createResponseValidationMiddleware({ knownToolNames }),
+    createToolResolutionMiddleware()
   ];
 
   return createDeepAgent({

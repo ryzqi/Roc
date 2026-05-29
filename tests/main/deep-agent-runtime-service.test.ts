@@ -273,8 +273,11 @@ describe('DeepAgentRuntimeService', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       middleware: [
+        expect.objectContaining({ name: 'ForgeErrorBudgetMiddleware' }),
         expect.objectContaining({ name: 'ForgeRespondToolInjection' }),
-        expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' })
+        expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' }),
+        expect.objectContaining({ name: 'ForgeResponseValidation' }),
+        expect.objectContaining({ name: 'ForgeToolResolutionMiddleware' })
       ]
     });
     const rescueMiddleware = getLastCreateDeepAgentCall().middleware?.find(

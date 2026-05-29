@@ -1,0 +1,103 @@
+import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { describe, expect, it } from 'vitest';
+import {
+  readForgeMessageTag,
+  tagForgeMessage
+} from '../../../../../src/main/services/forge-guardrails';
+import { createResponseValidationMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/response-validation';
+
+function getAfterModelHook() {
+  const middleware = createResponseValidationMiddleware({ knownToolNames: () => ['get_weather'] });
+  const afterModel = middleware.afterModel;
+  if (typeof afterModel !== 'object' || afterModel === null || typeof afterModel.hook !== 'function') {
+    throw new Error('Expected response validation middleware to expose object-form afterModel hook.');
+  }
+  return afterModel;
+}
+
+async function runAfterModel(messages: unknown[]) {
+  const update = await getAfterModelHook().hook({ messages } as never, {} as never);
+  return update as { messages?: unknown[]; jumpTo?: 'model' | 'tools' | 'end' } | undefined;
+}
+
+describe('ForgeResponseValidation', () => {
+  it('uses object-form afterModel with canJumpTo model', () => {
+    expect(getAfterModelHook().canJumpTo).toEqual(['model']);
+  });
+
+  it('turns bare assistant text into a retry nudge and jumps back to the model', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-bare',
+        content: 'I can answer directly.'
+      })
+    ]);
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.messages).toHaveLength(1);
+    const nudge = update?.messages?.[0] as HumanMessage;
+    expect(nudge).toBeInstanceOf(HumanMessage);
+    expect(String(nudge.content)).toContain('不是合法的工具调用');
+    expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
+  });
+
+  it('turns unknown tool calls into tagged ToolMessages and jumps back to the model', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-unknown',
+        content: '',
+        tool_calls: [
+          {
+            name: 'missing_tool',
+            args: { city: 'Paris' },
+            id: 'call-missing',
+            type: 'tool_call'
+          }
+        ]
+      })
+    ]);
+
+    expect(update?.jumpTo).toBe('model');
+    const nudge = update?.messages?.[0] as ToolMessage;
+    expect(nudge).toBeInstanceOf(ToolMessage);
+    expect(nudge.tool_call_id).toBe('call-missing');
+    expect(nudge.name).toBe('missing_tool');
+    expect(nudge.status).toBe('error');
+    expect(String(nudge.content)).toContain('[UnknownTool]');
+    expect(String(nudge.content)).toContain('get_weather');
+    expect(readForgeMessageTag(nudge)).toBe('forge:unknown_tool_nudge');
+  });
+
+  it('leaves valid tool calls unchanged', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-valid',
+        content: '',
+        tool_calls: [
+          {
+            name: 'get_weather',
+            args: { city: 'Paris' },
+            id: 'call-weather',
+            type: 'tool_call'
+          }
+        ]
+      })
+    ]);
+
+    expect(update).toBeUndefined();
+  });
+
+  it('leaves synthetic respond messages unchanged', async () => {
+    const message = tagForgeMessage(
+      new AIMessage({
+        id: 'ai-respond',
+        content: '完成'
+      }),
+      'forge:respond_synthetic'
+    );
+
+    const update = await runAfterModel([message]);
+
+    expect(update).toBeUndefined();
+  });
+});
