@@ -1,0 +1,61 @@
+import type { BaseMessage } from '@langchain/core/messages';
+
+export type ForgeMessageType =
+  | 'forge:retry_nudge'
+  | 'forge:unknown_tool_nudge'
+  | 'forge:step_nudge'
+  | 'forge:prerequisite_nudge'
+  | 'forge:tool_resolution'
+  | 'forge:reasoning'
+  | 'forge:context_warning'
+  | 'forge:respond_synthetic';
+
+const TAG_KEY = 'forge_message_type';
+
+export function tagForgeMessage<M extends BaseMessage>(message: M, type: ForgeMessageType): M {
+  const kwargs = (message.additional_kwargs ??= {});
+  kwargs[TAG_KEY] = type;
+  return message;
+}
+
+export function readForgeMessageTag(message: BaseMessage): ForgeMessageType | null {
+  const value = message.additional_kwargs?.[TAG_KEY];
+  return isForgeMessageType(value) ? value : null;
+}
+
+function isForgeMessageType(value: unknown): value is ForgeMessageType {
+  return (
+    value === 'forge:retry_nudge' ||
+    value === 'forge:unknown_tool_nudge' ||
+    value === 'forge:step_nudge' ||
+    value === 'forge:prerequisite_nudge' ||
+    value === 'forge:tool_resolution' ||
+    value === 'forge:reasoning' ||
+    value === 'forge:context_warning' ||
+    value === 'forge:respond_synthetic'
+  );
+}
+
+export const FORGE_TRANSIENT_TYPES: ReadonlySet<ForgeMessageType> = new Set([
+  'forge:retry_nudge',
+  'forge:unknown_tool_nudge',
+  'forge:step_nudge',
+  'forge:prerequisite_nudge',
+  'forge:context_warning'
+]);
+
+export function isForgeTransientMessage(message: BaseMessage): boolean {
+  const tag = readForgeMessageTag(message);
+  return tag !== null && FORGE_TRANSIENT_TYPES.has(tag);
+}
+
+export const FORGE_COMPACTION_PRIORITY: Record<ForgeMessageType, number> = {
+  'forge:retry_nudge': 1,
+  'forge:unknown_tool_nudge': 1,
+  'forge:step_nudge': 1,
+  'forge:prerequisite_nudge': 1,
+  'forge:context_warning': 1,
+  'forge:tool_resolution': 2,
+  'forge:respond_synthetic': 3,
+  'forge:reasoning': 4
+};
