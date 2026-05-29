@@ -41,14 +41,19 @@ export const BACKGROUND_TASK_PROPOSE_EXAMPLE = {
 } as const satisfies Omit<BackgroundTaskPreviewRequest, 'failurePolicy' | 'enabledCapabilities'>;
 
 export const PROPOSE_TOOL_DESCRIPTION = [
-  '直接创建后台或定时任务。',
+  '为后台或定时任务生成 preview（草稿），但不实际创建。',
   '只填写 goal、trigger、workspacePath。',
   '不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy。',
   'trigger.type 只能是 manual、once 或 cron。',
   'cron trigger 使用五段 cronExpression 和 UTC ISO nextRunAt。',
-  '无法确定触发方式时使用 manual。'
+  '无法确定触发方式时使用 manual。',
+  '本工具返回 previewId 与 preview 内容；要实际创建任务，必须随后调用 schedule_background_task(previewId)。'
 ].join('\n');
 
+/**
+ * @deprecated 自 2026-05-28 forge guardrails Phase 3 起，新代码路径应直接传用户描述作为 input，
+ * 并在 ChatStartRunRequest 中设置 workflowHint='propose_background_task'。本函数保留兼容期。
+ */
 export function buildTaskProposalPrompt(input: { description: string; workspacePath: string }): string {
   return [
     `必须调用 ${PROPOSE_TOOL_NAME}。`,

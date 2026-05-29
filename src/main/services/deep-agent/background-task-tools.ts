@@ -10,6 +10,7 @@ import type {
 } from '../../../shared/types';
 import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
 import { RocDomainError } from '../errors';
+import { PreviewStore, RocToolResolutionError } from '../forge-guardrails';
 import type { TaskSchedulerService } from '../task-scheduler-service';
 import type { TaskService } from '../task-service';
 import { parseCronExpression } from '../task/cron-parser';
@@ -65,17 +66,24 @@ const cancelInputSchema = z.object({
   reason: z.string().min(1)
 });
 
+const scheduleInputSchema = z.strictObject({
+  previewId: z.string().min(1).describe('propose_background_task 返回的 previewId。')
+});
+
+export const SCHEDULE_TOOL_DESCRIPTION = [
+  '把 propose_background_task 返回的 preview 实际落地为后台任务并加入调度。',
+  '必须先调用过 propose_background_task 拿到 previewId。',
+  '本工具会创建任务、注册调度器，并返回真实 taskId。'
+].join('\n');
+
 type BackgroundTaskToolDependencies = {
   taskService: TaskService;
   schedulerService: TaskSchedulerService;
   enabledCapabilities?: EnabledCapabilities;
+  previewStore: PreviewStore;
 };
 
-export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): [
-  DynamicStructuredTool<any, any, any, string>,
-  DynamicStructuredTool<any, any, any, string>,
-  DynamicStructuredTool<any, any, any, string>
-] {
+export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): Array<DynamicStructuredTool<any, any, any, string>> {
   return [
     new DynamicStructuredTool<
       typeof proposeToolInputSchema,
@@ -86,7 +94,18 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
       name: PROPOSE_TOOL_NAME,
       description: PROPOSE_TOOL_DESCRIPTION,
       schema: proposeToolInputSchema,
-      func: async (rawInput) => JSON.stringify(createBackgroundTask(input, rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(createBackgroundTaskPreview(input, rawInput), null, 2)
+    }),
+    new DynamicStructuredTool<
+      typeof scheduleInputSchema,
+      z.infer<typeof scheduleInputSchema>,
+      z.infer<typeof scheduleInputSchema>,
+      string
+    >({
+      name: 'schedule_background_task',
+      description: SCHEDULE_TOOL_DESCRIPTION,
+      schema: scheduleInputSchema,
+      func: async (rawInput) => JSON.stringify(scheduleBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
       name: 'update_background_task',
@@ -152,11 +171,27 @@ export function applyBackgroundTaskToolDecision(input: {
   };
 }
 
-function createBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
+function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
   const preview = {
     ...normalizePreview(input, rawInput),
     requiresConfirmation: false
   };
+  const previewId = input.previewStore.generatePreviewId();
+  input.previewStore.put(previewId, preview);
+  return {
+    previewId,
+    preview
+  };
+}
+
+function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
+  const { previewId } = scheduleInputSchema.parse(rawInput);
+  const preview = input.previewStore.take(previewId);
+  if (preview === null) {
+    throw new RocToolResolutionError(`Unknown previewId ${previewId}. 请先调用 propose_background_task 生成新的 preview。`, {
+      toolName: 'schedule_background_task'
+    });
+  }
   const task = input.taskService.createBackgroundTask(preview);
   input.schedulerService.registerTask(task);
   return {

@@ -130,9 +130,22 @@ export class AgentService {
       executeCard,
       webReadCard,
       deleteFileCard,
-      this.createBackgroundTaskCard('propose_background_task', '直接创建后台或定时任务。', false),
-      this.createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', true),
-      this.createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', true),
+      this.createBackgroundTaskCard('read_background_task', '读取已有后台任务定义。', false, ['background_task_read']),
+      this.createBackgroundTaskCard('confirm_with_user', '总结后台任务创建结果并结束本轮。', false, [
+        'user_confirmation_message'
+      ]),
+      this.createBackgroundTaskCard('propose_background_task', '生成后台任务 preview，不实际创建。', false, [
+        'background_task_preview'
+      ]),
+      this.createBackgroundTaskCard('schedule_background_task', '把后台任务 preview 实际创建并加入调度。', false, [
+        'background_task_create'
+      ]),
+      this.createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', true, [
+        'background_task_change_request'
+      ]),
+      this.createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', true, [
+        'background_task_change_request'
+      ]),
       ...selectedMcpCards
     ];
 
@@ -283,7 +296,12 @@ export class AgentService {
     };
   }
 
-  private createBackgroundTaskCard(name: string, description: string, requiresApproval: boolean): AgentCapabilityCard {
+  private createBackgroundTaskCard(
+    name: string,
+    description: string,
+    requiresApproval: boolean,
+    sideEffects: string[]
+  ): AgentCapabilityCard {
     return {
       id: `builtin:${name}`,
       name,
@@ -292,10 +310,10 @@ export class AgentService {
       requiredInput: 'background task structured request',
       scope: 'app',
       dependencies: ['TaskService', 'TaskSchedulerService'],
-      sideEffects: name === 'propose_background_task' ? ['background_task_create'] : ['background_task_change_request'],
+      sideEffects,
       requiresApproval,
       supportsLongTermGrant: false,
-      revokeGrantHint: requiresApproval ? '后台任务修改和取消始终需要本次审批。' : '后台任务创建由工具调用直接完成，不创建长期授权。',
+      revokeGrantHint: requiresApproval ? '后台任务修改和取消始终需要本次审批。' : '后台任务工具由 Roc 内置提供，不创建长期授权。',
       riskLevel: 'high',
       auditCategory: 'background_task',
       untrustedContext: false

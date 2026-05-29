@@ -4,6 +4,7 @@ import type {
   ShellExecutionResult,
   TaskRun
 } from '../../../shared/types';
+import type { PreviewStore } from '../forge-guardrails';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
 
 export type ActiveRun = {
@@ -19,6 +20,7 @@ export type ActiveRun = {
 
 export type RunExecutionContext = ActiveRun & {
   input: string;
+  previewStore?: PreviewStore;
   startedAtMs: number;
 };
 

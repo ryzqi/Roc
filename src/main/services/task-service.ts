@@ -92,19 +92,13 @@ export class TaskService {
 
   openBackgroundTaskInChat(taskId: string): { threadId: string } {
     const task = requireBackgroundTask(this.database, taskId);
-    const contextMessage = [
-      `[系统] 用户正在请求修改后台任务 ${task.id}。当前定义：`,
-      JSON.stringify(task, null, 2),
-      '你可以调用 update_background_task 工具完成修改。'
-    ].join('\n');
-    this.pendingThreadContexts.enqueue(task.threadId, contextMessage);
     this.recordEvent({
       threadId: task.threadId,
       runId: task.runId,
       type: 'message',
       payload: {
-        role: 'assistant',
-        content: contextMessage
+        role: 'system',
+        content: `[系统] 用户准备修改后台任务 ${task.id}。`
       }
     });
     return {

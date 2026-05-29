@@ -160,7 +160,7 @@ describe('Roc foundation services tasks', () => {
     });
   });
 
-  it('stages background task edit context for the next chat turn and records a visible system message', () => {
+  it('opens background task chat without pre-injecting task JSON', () => {
     const preview = context.services.taskService.createBackgroundTaskPreview({
       goal: '修改每天检查项目测试状态',
       trigger: {
@@ -180,7 +180,6 @@ describe('Roc foundation services tasks', () => {
     const opened = context.services.taskService.openBackgroundTaskInChat(task.id);
     const messages = context.services.taskService.listThreadMessages(task.threadId);
     const firstContext = context.services.taskService.takePendingThreadContext(task.threadId);
-    const secondContext = context.services.taskService.takePendingThreadContext(task.threadId);
 
     expect(opened).toEqual({
       threadId: task.threadId
@@ -189,17 +188,15 @@ describe('Roc foundation services tasks', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'message',
-          payload: expect.objectContaining({
-            role: 'assistant',
-            content: expect.stringContaining(task.id)
-          })
+          payload: {
+            role: 'system',
+            content: `[系统] 用户准备修改后台任务 ${task.id}。`
+          }
         })
       ])
     );
-    expect(firstContext).toContain(task.id);
-    expect(firstContext).toContain('"goal": "修改每天检查项目测试状态"');
-    expect(firstContext).toContain('update_background_task');
-    expect(secondContext).toBeNull();
+    expect(firstContext).toBeNull();
+    expect(JSON.stringify(messages)).not.toContain('"goal": "修改每天检查项目测试状态"');
   });
 
   it('loads complete latest run output events even when the thread has newer noise', () => {

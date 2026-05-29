@@ -14,6 +14,7 @@ import type { TaskSchedulerService } from '../task-scheduler-service';
 import type { TaskService } from '../task-service';
 import type { WebReadService } from '../web-read-service';
 import type { WorkspaceService } from '../workspace-service';
+import { PreviewStore } from '../forge-guardrails';
 import { createBackgroundTaskTools } from './background-task-tools';
 import { createUsageAccumulator, type ProviderUsageAccumulator } from './stream-consumers';
 import { buildDeepAgent } from './agent-builder';
@@ -32,6 +33,7 @@ export type DeepAgentSession = {
   };
   reasoningChunks: string[];
   runtimeBackend: RocCompositeBackend;
+  previewStore: PreviewStore;
   runTools: ClientTool[];
   subagents: RuntimeSubagent[];
   usageAccumulator: ProviderUsageAccumulator;
@@ -59,6 +61,11 @@ export async function createDeepAgentSession(input: {
   const assistantChunks: string[] = [];
   const reasoningChunks: string[] = [];
   const usageAccumulator = createUsageAccumulator();
+  const previewStore = new PreviewStore();
+  input.context.previewStore = previewStore;
+  closers.push(async () => {
+    previewStore.clear();
+  });
   const interruptOn =
     input.context.taskRun === null
       ? undefined
@@ -71,6 +78,7 @@ export async function createDeepAgentSession(input: {
     sessionArchiveService: input.sessionArchiveService,
     taskSchedulerService: input.taskSchedulerService,
     taskService: input.taskService,
+    previewStore,
     webReadService: input.webReadService
   });
   const memorySettings = input.getMemorySettings();
@@ -118,6 +126,7 @@ export async function createDeepAgentSession(input: {
     },
     reasoningChunks,
     runtimeBackend: runtimeBackend.backend,
+    previewStore,
     runTools: runTools.tools,
     subagents,
     usageAccumulator
@@ -132,6 +141,7 @@ async function createRunTools(input: {
   sessionArchiveService: SessionArchiveService;
   taskSchedulerService: TaskSchedulerService;
   taskService: TaskService;
+  previewStore: PreviewStore;
   webReadService: WebReadService;
 }): Promise<{
   tools: ClientTool[];
@@ -139,13 +149,23 @@ async function createRunTools(input: {
 }> {
   const webReadTool = tools.createWebReadTool(input.webReadService);
   const deleteFileTool = tools.createDeleteFileTool(input.fileService);
+  const readBackgroundTaskTool = tools.createReadBackgroundTaskTool(input.taskService);
+  const confirmWithUserTool = tools.createConfirmWithUserTool();
   const backgroundTaskTools = createBackgroundTaskTools({
     taskService: input.taskService,
     schedulerService: input.taskSchedulerService,
-    enabledCapabilities: input.enabledCapabilities
+    enabledCapabilities: input.enabledCapabilities,
+    previewStore: input.previewStore
   });
   const sessionSearchTool = tools.createSessionSearchTool(input.sessionArchiveService);
-  const runTools: ClientTool[] = [webReadTool, deleteFileTool, ...backgroundTaskTools, sessionSearchTool];
+  const runTools: ClientTool[] = [
+    webReadTool,
+    deleteFileTool,
+    readBackgroundTaskTool,
+    confirmWithUserTool,
+    ...backgroundTaskTools,
+    sessionSearchTool
+  ];
   const webSearchTool = await tools.createWebSearchTool({
     mcpService: input.mcpService,
     enabledCapabilities: input.enabledCapabilities,

@@ -998,8 +998,32 @@ describe('Roc foundation services providers', () => {
       expect.objectContaining({
         id: 'builtin:propose_background_task',
         name: 'propose_background_task',
-        description: '直接创建后台或定时任务。',
+        description: '生成后台任务 preview，不实际创建。',
+        sideEffects: ['background_task_preview'],
+        requiresApproval: false
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:schedule_background_task',
+        name: 'schedule_background_task',
         sideEffects: ['background_task_create'],
+        requiresApproval: false
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:read_background_task',
+        name: 'read_background_task',
+        sideEffects: ['background_task_read'],
+        requiresApproval: false
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:confirm_with_user',
+        name: 'confirm_with_user',
+        sideEffects: ['user_confirmation_message'],
         requiresApproval: false
       })
     );

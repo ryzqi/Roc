@@ -434,7 +434,7 @@ describe('DeepAgentRuntimeService', () => {
     expect(JSON.stringify(samples)).not.toContain('不要把这段 prompt 写入性能指标');
   });
 
-  it('prepends pending thread context to the next task turn input once', async () => {
+  it('does not prepend task JSON after opening a background task chat', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
         {
@@ -476,9 +476,9 @@ describe('DeepAgentRuntimeService', () => {
 
     const startedInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0]?.messages?.[0]?.content;
     expect(typeof startedInput).toBe('string');
-    expect(String(startedInput)).toContain(task.id);
-    expect(String(startedInput)).toContain('"goal": "更新后台任务配置"');
-    expect(String(startedInput)).toContain('把它改成每天 10 点运行');
+    expect(String(startedInput)).toBe('把它改成每天 10 点运行');
+    expect(String(startedInput)).not.toContain(task.id);
+    expect(String(startedInput)).not.toContain('"goal": "更新后台任务配置"');
 
     mocked.streamEventsMock.mockClear();
     const completedAgain = waitForEvent(runtime, (event) => event.type === 'run_completed');
@@ -1452,7 +1452,10 @@ describe('DeepAgentRuntimeService', () => {
     expect(toolNames).toEqual([
       'web_read',
       'delete_file',
+      'read_background_task',
+      'confirm_with_user',
       'propose_background_task',
+      'schedule_background_task',
       'update_background_task',
       'cancel_background_task',
       'session_search',
@@ -1527,7 +1530,10 @@ describe('DeepAgentRuntimeService', () => {
     expect(toolNames).toEqual([
       'web_read',
       'delete_file',
+      'read_background_task',
+      'confirm_with_user',
       'propose_background_task',
+      'schedule_background_task',
       'update_background_task',
       'cancel_background_task',
       'session_search'
@@ -1562,6 +1568,9 @@ describe('DeepAgentRuntimeService', () => {
 
     const interruptOn = getLastCreateDeepAgentCall().interruptOn ?? {};
     expect(Object.keys(interruptOn)).not.toContain(PROPOSE_TOOL_NAME);
+    expect(Object.keys(interruptOn)).not.toContain('schedule_background_task');
+    expect(Object.keys(interruptOn)).not.toContain('read_background_task');
+    expect(Object.keys(interruptOn)).not.toContain('confirm_with_user');
     expect(interruptOn).toEqual(
       expect.objectContaining({
         update_background_task: {

@@ -8,6 +8,7 @@ import {
 } from '../../src/main/services/deep-agent/background-task-tools';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { RocDomainError } from '../../src/main/services/errors';
+import { PreviewStore } from '../../src/main/services/forge-guardrails';
 import type { ChatResumeDecision } from '../../src/shared/types';
 import { invalidProposeInput, minimalProposeToolInput, validProposeInput } from '../_factories/background-task';
 
@@ -33,24 +34,45 @@ describe('background task deep-agent tools', () => {
     return new Date(Date.now() + 60_000).toISOString();
   }
 
-  it('creates a cron task from minimal model-authored input and injects runtime defaults', async () => {
-    const [propose] = createBackgroundTaskTools({
+  function createTools(input: { enabledCapabilities?: { mcpServers: string[]; skills: string[] } } = {}) {
+    const previewStore = new PreviewStore();
+    const tools = createBackgroundTaskTools({
       taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
+      schedulerService: services.taskSchedulerService,
+      enabledCapabilities: input.enabledCapabilities,
+      previewStore
     });
+    const propose = tools.find((tool) => tool.name === 'propose_background_task');
+    const schedule = tools.find((tool) => tool.name === 'schedule_background_task');
+    expect(propose).toBeDefined();
+    expect(schedule).toBeDefined();
+    return {
+      previewStore,
+      propose: propose!,
+      schedule: schedule!
+    };
+  }
 
-    const result = JSON.parse(
-      await propose.invoke({
-        goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
-        trigger: {
-          type: 'cron',
-          description: '每天晚上 7:40 触发',
-          cronExpression: '40 19 * * *',
-          nextRunAt: '2026-05-26T11:40:00.000Z'
-        },
-        workspacePath: root
-      })
-    ) as { taskId: string };
+  async function proposeAndSchedule(
+    input: unknown,
+    options: { enabledCapabilities?: { mcpServers: string[]; skills: string[] } } = {}
+  ): Promise<Record<string, unknown>> {
+    const { propose, schedule } = createTools(options);
+    const proposed = JSON.parse(await propose.invoke(input)) as { previewId: string };
+    return JSON.parse(await schedule.invoke({ previewId: proposed.previewId })) as Record<string, unknown>;
+  }
+
+  it('creates a cron task from minimal model-authored input and injects runtime defaults', async () => {
+    const result = await proposeAndSchedule({
+      goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
+      trigger: {
+        type: 'cron',
+        description: '每天晚上 7:40 触发',
+        cronExpression: '40 19 * * *',
+        nextRunAt: '2026-05-26T11:40:00.000Z'
+      },
+      workspacePath: root
+    }) as { taskId: string };
 
     expect(services.taskService.listBackgroundTasks()).toEqual([
       expect.objectContaining({
@@ -66,10 +88,6 @@ describe('background task deep-agent tools', () => {
   });
 
   it('creates and registers a daily 21:50 cron task with the canonical trigger schema', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
     services.taskSchedulerService.start();
     const input = validProposeInput({
       goal: '每天晚上9点抓取AI的最新新闻，然后写到当前目录下的docx文件记录',
@@ -82,14 +100,12 @@ describe('background task deep-agent tools', () => {
       workspacePath: root
     });
 
-    const result = JSON.parse(
-      await propose.invoke(
-        minimalProposeToolInput({
-          goal: input.goal,
-          trigger: input.trigger,
-          workspacePath: input.workspacePath
-        })
-      )
+    const result = await proposeAndSchedule(
+      minimalProposeToolInput({
+        goal: input.goal,
+        trigger: input.trigger,
+        workspacePath: input.workspacePath
+      })
     ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
 
     expect(result).toMatchObject({
@@ -110,10 +126,7 @@ describe('background task deep-agent tools', () => {
   });
 
   it('rejects trigger.schedule payloads at the tool schema boundary without creating a task', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+    const { propose } = createTools();
 
     expect(invalidProposeInput('trigger.schedule')).toBeRejectedByProposeSchemaAtPath('trigger');
     await expect(propose.invoke(invalidProposeInput('trigger.schedule'))).rejects.toThrow(/trigger/i);
@@ -122,10 +135,7 @@ describe('background task deep-agent tools', () => {
   });
 
   it('rejects cron expr aliases without normalizing them into cronExpression', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+    const { propose } = createTools();
 
     expect(invalidProposeInput('trigger.expr')).toBeRejectedByProposeSchemaAtPath('trigger');
     await expect(propose.invoke(invalidProposeInput('trigger.expr'))).rejects.toThrow(/trigger/i);
@@ -134,10 +144,7 @@ describe('background task deep-agent tools', () => {
   });
 
   it('rejects notificationPolicy on_error without creating a task', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+    const { propose } = createTools();
 
     expect(invalidProposeInput('notification-on-error')).toBeRejectedByProposeSchemaAtPath('notificationPolicy');
     await expect(propose.invoke(invalidProposeInput('notification-on-error'))).rejects.toThrow(/notificationPolicy/i);
@@ -146,10 +153,7 @@ describe('background task deep-agent tools', () => {
   });
 
   it('rejects runtime-only top-level fields at the model-visible schema boundary', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+    const { propose } = createTools();
 
     await expect(
       propose.invoke({
@@ -168,21 +172,16 @@ describe('background task deep-agent tools', () => {
     expect(services.taskService.listBackgroundTasks()).toEqual([]);
   });
 
-  it('creates a manual background task immediately when propose_background_task is invoked', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
-
-    const result = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+  it('creates a manual background task only after schedule_background_task is invoked', async () => {
+    const result = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '手动检查测试状态',
         trigger: {
           type: 'manual',
           description: '手动触发'
         },
         workspacePath: root
-      }))
+      })
     ) as {
       ok: boolean;
       taskId: string;
@@ -212,10 +211,7 @@ describe('background task deep-agent tools', () => {
   });
 
   it('rejects invalid cron expressions before approval', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+    const { propose } = createTools();
 
     await expect(
       propose.invoke({
@@ -234,13 +230,8 @@ describe('background task deep-agent tools', () => {
   });
 
   it('enabledCapabilities 未传 -> 创建的任务字段为 null', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
-
-    const output = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+    const output = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '每天 9 点提醒',
         trigger: {
           type: 'cron',
@@ -249,7 +240,7 @@ describe('background task deep-agent tools', () => {
           nextRunAt: '2026-05-22T01:00:00.000Z'
         },
         workspacePath: root
-      }))
+      })
     ) as { taskId: string };
 
     expect(services.taskService.listBackgroundTasks()).toEqual([
@@ -261,14 +252,8 @@ describe('background task deep-agent tools', () => {
   });
 
   it('enabledCapabilities 通过 runtime 依赖注入 -> 创建的任务字段透传', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService,
-      enabledCapabilities: { mcpServers: ['github'], skills: [] }
-    });
-
-    const output = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+    const output = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '每天 9 点提醒',
         trigger: {
           type: 'cron',
@@ -277,7 +262,8 @@ describe('background task deep-agent tools', () => {
           nextRunAt: '2026-05-22T01:00:00.000Z'
         },
         workspacePath: root
-      }))
+      }),
+      { enabledCapabilities: { mcpServers: ['github'], skills: [] } }
     ) as { taskId: string };
 
     expect(services.taskService.listBackgroundTasks()).toEqual([
@@ -288,15 +274,11 @@ describe('background task deep-agent tools', () => {
     ]);
   });
 
-  it('creates and registers a once scheduled task immediately', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+  it('creates and registers a once scheduled task after schedule_background_task is invoked', async () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
-    const result = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+    const result = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '1 分钟后检查测试',
         trigger: {
           type: 'once',
@@ -304,7 +286,7 @@ describe('background task deep-agent tools', () => {
           nextRunAt
         },
         workspacePath: root
-      }))
+      })
     ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
     expect(result).toMatchObject({
@@ -321,15 +303,11 @@ describe('background task deep-agent tools', () => {
     expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
   });
 
-  it('creates and registers a cron scheduled task immediately', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+  it('creates and registers a cron scheduled task after schedule_background_task is invoked', async () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
-    const result = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+    const result = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '每分钟检查测试',
         trigger: {
           type: 'cron',
@@ -338,7 +316,7 @@ describe('background task deep-agent tools', () => {
           nextRunAt
         },
         workspacePath: root
-      }))
+      })
     ) as { ok: boolean; taskId: string; threadId: string; scheduledNextRunAt: string | null };
 
     expect(result).toMatchObject({
@@ -357,15 +335,11 @@ describe('background task deep-agent tools', () => {
     expect(services.taskSchedulerService.getStatus().registeredTaskCount).toBe(1);
   });
 
-  it('does not leave direct-created scheduled tasks pending confirmation when only forbidden actions are provided', async () => {
-    const [propose] = createBackgroundTaskTools({
-      taskService: services.taskService,
-      schedulerService: services.taskSchedulerService
-    });
+  it('does not leave scheduled tasks pending confirmation when only model-visible fields are provided', async () => {
     services.taskSchedulerService.start();
     const nextRunAt = futureOnceRunAt();
-    const result = JSON.parse(
-      await propose.invoke(minimalProposeToolInput({
+    const result = await proposeAndSchedule(
+      minimalProposeToolInput({
         goal: '禁止发布但继续检查测试',
         trigger: {
           type: 'cron',
@@ -374,7 +348,7 @@ describe('background task deep-agent tools', () => {
           nextRunAt
         },
         workspacePath: root
-      }))
+      })
     ) as { ok: boolean; taskId: string; scheduledNextRunAt: string | null };
 
     expect(result).toMatchObject({

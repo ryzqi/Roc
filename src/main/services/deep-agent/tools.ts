@@ -4,8 +4,10 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { z } from 'zod';
 import type { ChatStartRunRequest } from '../../../shared/types';
 import { RocDomainError } from '../errors';
+import { RocToolResolutionError } from '../forge-guardrails';
 import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
+import type { TaskService } from '../task-service';
 import { WebReadService, type WebReadRequest } from '../web-read-service';
 import { toWebSearchFailure } from './error-mapping';
 import type { RuntimeSubagent } from './types';
@@ -40,6 +42,48 @@ export function createDeleteFileTool(fileService: FileService): DynamicStructure
     func: async (input: { relativePath: string }) => {
       return JSON.stringify(fileService.deleteFile(input.relativePath), null, 2);
     }
+  });
+}
+
+export function createReadBackgroundTaskTool(taskService: TaskService): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.strictObject({
+    taskId: z.string().min(1).describe('要读取的后台任务 ID。')
+  });
+  return new DynamicStructuredTool<typeof schema, { taskId: string }, { taskId: string }, string>({
+    name: 'read_background_task',
+    description: [
+      '读取一个后台任务的完整定义（goal、trigger、workspacePath、status、capabilities 等）。',
+      '在 update_background_task / cancel_background_task 之前必须先调用本工具读取目标任务。'
+    ].join('\n'),
+    schema,
+    func: async ({ taskId }) => {
+      const task = taskService.findBackgroundTask(taskId);
+      if (task === null) {
+        throw new RocToolResolutionError(`Background task with id ${taskId} does not exist.`, {
+          toolName: 'read_background_task'
+        });
+      }
+      return JSON.stringify(task, null, 2);
+    }
+  });
+}
+
+export function createConfirmWithUserTool(): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.strictObject({
+    summary: z
+      .string()
+      .min(1)
+      .max(1000)
+      .describe('用面向用户的语气总结刚才做了什么、任务的关键参数与下一步预期。')
+  });
+  return new DynamicStructuredTool<typeof schema, { summary: string }, { summary: string }, string>({
+    name: 'confirm_with_user',
+    description: [
+      '在创建后台任务的最后一步调用，把刚才完成的工作总结成一句话给用户。',
+      '这是工作流的终止信号；调用之后本轮 agent run 结束。'
+    ].join('\n'),
+    schema,
+    func: async ({ summary }) => JSON.stringify({ ok: true, summary }, null, 2)
   });
 }
 
