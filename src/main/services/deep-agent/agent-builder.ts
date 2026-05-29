@@ -3,8 +3,10 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ClientTool } from '@langchain/core/tools';
 import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
+import { toolRetryMiddleware } from 'langchain';
 import type { ProviderType, WorkflowHint } from '../../../shared/types';
 import {
+  createForgeTieredCompactionMiddleware,
   createErrorBudgetMiddleware,
   createRescueParsingMiddleware,
   createRespondToolInjectionMiddleware,
@@ -30,7 +32,15 @@ export type DeepAgentBuildInput = {
   checkpointer: BaseCheckpointSaver | undefined;
   providerType: ProviderType;
   workflowHint: WorkflowHint;
+  contextBudgetTokens: number | undefined;
 };
+
+const NETWORK_SENSITIVE_TOOLS = [
+  'web_read',
+  'schedule_background_task',
+  'update_background_task',
+  'cancel_background_task'
+] as const;
 
 const DEEPAGENTS_BUILT_IN_TOOL_NAMES = [
   'ls',
@@ -54,10 +64,18 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     return names;
   };
   const guardrails = [
+    toolRetryMiddleware({
+      maxRetries: 2,
+      tools: [...NETWORK_SENSITIVE_TOOLS],
+      backoffFactor: 1.5
+    }),
     createErrorBudgetMiddleware(),
     createStepEnforcementMiddleware({
       resolveWorkflowFromContext: () => input.workflowHint,
       prerequisitesConfig: ROC_PREREQUISITES
+    }),
+    createForgeTieredCompactionMiddleware({
+      budgetTokens: input.contextBudgetTokens
     }),
     createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createRescueParsingMiddleware({ availableTools: knownToolNames }),

@@ -258,7 +258,8 @@ describe('DeepAgentRuntimeService', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       providerType: 'llama_cpp',
-      workflowHint: 'propose_background_task'
+      workflowHint: 'propose_background_task',
+      contextBudgetTokens: 4096
     });
 
     expect(mocked.createDeepAgentMock).toHaveBeenCalledWith({
@@ -274,8 +275,10 @@ describe('DeepAgentRuntimeService', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       middleware: [
+        expect.objectContaining({ name: 'toolRetryMiddleware' }),
         expect.objectContaining({ name: 'ForgeErrorBudgetMiddleware' }),
         expect.objectContaining({ name: 'ForgeStepEnforcement' }),
+        expect.objectContaining({ name: 'ContextEditingMiddleware' }),
         expect.objectContaining({ name: 'ForgeRespondToolInjection' }),
         expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' }),
         expect.objectContaining({ name: 'ForgeResponseValidation' }),

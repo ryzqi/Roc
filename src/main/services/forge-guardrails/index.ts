@@ -14,3 +14,4 @@ export * from './middleware/response-validation';
 export * from './middleware/tool-resolution';
 export * from './middleware/error-budget';
 export * from './middleware/step-enforcement';
+export * from './middleware/forge-tiered-compaction';
