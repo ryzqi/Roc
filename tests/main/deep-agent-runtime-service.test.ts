@@ -4,11 +4,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command, MemorySaver } from '@langchain/langgraph';
 import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, RemoveMessage } from '@langchain/core/messages';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import { DeepAgentRuntimeService } from '../../src/main/services/deep-agent-runtime-service';
 import { RocDomainError } from '../../src/main/services/errors';
+import { tagForgeMessage } from '../../src/main/services/forge-guardrails';
 import type { ChatRunEvent } from '../../src/shared/types';
 import { z } from 'zod';
 import { PROPOSE_TOOL_NAME } from '../../src/shared/background-task-tool-contract';
@@ -114,6 +115,7 @@ type DeepAgentToolDescriptor = {
 type DeepAgentMiddlewareDescriptor = {
   name: string;
   afterModel?: (state: { messages: unknown[] }, runtime: unknown) => unknown | Promise<unknown>;
+  afterAgent?: (state: { messages: unknown[] }, runtime: unknown) => unknown | Promise<unknown>;
 };
 
 type DeepAgentCreateCall = {
@@ -282,7 +284,8 @@ describe('DeepAgentRuntimeService', () => {
         expect.objectContaining({ name: 'ForgeRespondToolInjection' }),
         expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' }),
         expect.objectContaining({ name: 'ForgeResponseValidation' }),
-        expect.objectContaining({ name: 'ForgeToolResolutionMiddleware' })
+        expect.objectContaining({ name: 'ForgeToolResolutionMiddleware' }),
+        expect.objectContaining({ name: 'ForgeCleanupMiddleware' })
       ]
     });
     const rescueMiddleware = getLastCreateDeepAgentCall().middleware?.find(
@@ -311,6 +314,111 @@ describe('DeepAgentRuntimeService', () => {
       streamEvents: mocked.streamEventsMock,
       invoke: mocked.invokeMock
     });
+  });
+
+  it('records forge transient messages as guardrail_nudge events without assistant deltas', async () => {
+    const nudge = tagForgeMessage(
+      new HumanMessage({
+        id: 'retry-nudge',
+        content: '请重新生成一条合法的工具调用。'
+      }),
+      'forge:retry_nudge'
+    );
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        nudge,
+        {
+          text: createAsyncIterable(['正常完成'])
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: '触发 guardrail nudge',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const guardrailEvents = services.taskService
+      .getSnapshot()
+      .recentEvents.filter((event) => event.runId === started.runId && event.type === 'guardrail_nudge');
+    const messageDeltas = services.taskService
+      .getSnapshot()
+      .recentEvents.filter((event) => event.runId === started.runId && event.type === 'message_delta');
+
+    expect(guardrailEvents).toHaveLength(1);
+    expect(guardrailEvents[0]?.payload).toMatchObject({
+      nudgeKind: 'retry',
+      content: '请重新生成一条合法的工具调用。'
+    });
+    expect(messageDeltas).toHaveLength(1);
+    expect(messageDeltas[0]?.payload).toMatchObject({
+      role: 'assistant',
+      delta: '正常完成'
+    });
+    expect(JSON.stringify(messageDeltas)).not.toContain('请重新生成一条合法的工具调用');
+    expect(
+      events.some((event) => event.type === 'message_delta' && event.delta.includes('请重新生成一条合法的工具调用'))
+    ).toBe(false);
+  });
+
+  it('wires cleanup afterAgent last to remove transient guardrail messages', async () => {
+    mocked.createDeepAgentMock.mockClear();
+
+    const { buildDeepAgent } = await import('../../src/main/services/deep-agent/agent-builder');
+    buildDeepAgent({
+      model: 'model-ready' as never,
+      systemPrompt: 'system prompt',
+      backend: { routePrefixes: ['/memory/'] } as RocCompositeBackend,
+      store: {} as never,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'llama_cpp',
+      workflowHint: null,
+      contextBudgetTokens: 4096
+    });
+
+    const middleware = getLastCreateDeepAgentCall().middleware ?? [];
+    const cleanup = middleware.at(-1);
+    expect(cleanup?.name).toBe('ForgeCleanupMiddleware');
+    if (typeof cleanup?.afterAgent !== 'function') {
+      throw new Error('Expected ForgeCleanupMiddleware to expose afterAgent.');
+    }
+
+    const keep = new HumanMessage({
+      id: 'normal-message',
+      content: 'keep'
+    });
+    const remove = tagForgeMessage(
+      new HumanMessage({
+        id: 'retry-nudge',
+        content: 'retry'
+      }),
+      'forge:retry_nudge'
+    );
+    const update = cleanup.afterAgent({ messages: [keep, remove] } as never, {} as never) as { messages?: unknown[] };
+
+    expect(update.messages).toHaveLength(1);
+    expect(update.messages?.[0]).toBeInstanceOf(RemoveMessage);
+    expect((update.messages?.[0] as RemoveMessage).id).toBe('retry-nudge');
   });
 
   it('emits message, reasoning, and completion events for a chat run', async () => {

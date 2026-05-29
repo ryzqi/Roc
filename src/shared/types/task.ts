@@ -53,6 +53,7 @@ export type TaskEvent = {
     | 'background_task_resumed'
     | 'background_task_cancelled'
     | 'long_running_promoted'
+    | 'guardrail_nudge'
     | 'diagnostic'
     | 'verification'
     | 'error'
@@ -60,6 +61,14 @@ export type TaskEvent = {
   payload: unknown;
   createdAt: string;
   sequence?: number;
+};
+
+export type GuardrailNudgePayload = {
+  nudgeKind: 'retry' | 'unknown_tool' | 'step' | 'prerequisite' | 'tool_resolution' | 'context_warning';
+  tier?: number;
+  content: string;
+  toolCallId?: string;
+  toolName?: string;
 };
 
 export type TaskSnapshot = {

@@ -7,6 +7,7 @@ import { toolRetryMiddleware } from 'langchain';
 import type { ProviderType, WorkflowHint } from '../../../shared/types';
 import {
   createForgeTieredCompactionMiddleware,
+  createForgeCleanupMiddleware,
   createErrorBudgetMiddleware,
   createRescueParsingMiddleware,
   createRespondToolInjectionMiddleware,
@@ -80,7 +81,8 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createRescueParsingMiddleware({ availableTools: knownToolNames }),
     createResponseValidationMiddleware({ knownToolNames }),
-    createToolResolutionMiddleware()
+    createToolResolutionMiddleware(),
+    createForgeCleanupMiddleware()
   ];
 
   return createDeepAgent({

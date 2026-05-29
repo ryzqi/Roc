@@ -1,4 +1,10 @@
-import type { ChatRunEvent, TaskRun } from '../../../shared/types';
+import { BaseMessage, ToolMessage } from '@langchain/core/messages';
+import type { ChatRunEvent, GuardrailNudgePayload, TaskRun } from '../../../shared/types';
+import {
+  FORGE_TRANSIENT_TYPES,
+  readForgeMessageTag,
+  type ForgeMessageType
+} from '../forge-guardrails';
 import * as recordUtils from './record-utils';
 import { redact } from './redact';
 
@@ -23,7 +29,7 @@ type StreamConsumerCallbacks = {
   markVisibleOutput?: () => void;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
   recordTaskEvent: (
-    type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
+    type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
     payload: Record<string, unknown>
   ) => void;
 };
@@ -60,6 +66,12 @@ export async function consumeMessageStream(input: {
   const reasoningDeltaRecorder = createReasoningDeltaRecorder(input.context, input.callbacks);
   for await (const message of input.messages) {
     updateUsageAccumulator(input.usageAccumulator, message);
+    const guardrailNudge = readGuardrailNudgePayload(message);
+    if (guardrailNudge !== null) {
+      input.callbacks.recordTaskEvent('guardrail_nudge', guardrailNudge);
+      continue;
+    }
+
     const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
     const reasoningSource = readReasoningSource(message);
     const canStreamAssistantText =
@@ -456,6 +468,64 @@ async function* createStringAsyncIterable(values: readonly string[]): AsyncGener
 
 function readNonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function readGuardrailNudgePayload(message: unknown): GuardrailNudgePayload | null {
+  if (!BaseMessage.isInstance(message)) {
+    return null;
+  }
+
+  const tag = readForgeMessageTag(message);
+  if (tag === null || !isGuardrailNudgeTag(tag)) {
+    return null;
+  }
+
+  const payload: GuardrailNudgePayload = {
+    nudgeKind: forgeTagToNudgeKind(tag),
+    content: typeof message.content === 'string' ? redact(message.content) : ''
+  };
+  const tier = readNudgeTier(message);
+  if (tier !== null) {
+    payload.tier = tier;
+  }
+  if (ToolMessage.isInstance(message)) {
+    payload.toolCallId = message.tool_call_id;
+    if (message.name !== undefined) {
+      payload.toolName = message.name;
+    }
+  }
+  return payload;
+}
+
+function isGuardrailNudgeTag(tag: ForgeMessageType): boolean {
+  return FORGE_TRANSIENT_TYPES.has(tag) || tag === 'forge:tool_resolution';
+}
+
+function forgeTagToNudgeKind(tag: ForgeMessageType): GuardrailNudgePayload['nudgeKind'] {
+  if (tag === 'forge:retry_nudge') {
+    return 'retry';
+  }
+  if (tag === 'forge:unknown_tool_nudge') {
+    return 'unknown_tool';
+  }
+  if (tag === 'forge:step_nudge') {
+    return 'step';
+  }
+  if (tag === 'forge:prerequisite_nudge') {
+    return 'prerequisite';
+  }
+  if (tag === 'forge:tool_resolution') {
+    return 'tool_resolution';
+  }
+  if (tag === 'forge:context_warning') {
+    return 'context_warning';
+  }
+  throw new Error(`Unsupported guardrail nudge tag: ${tag}`);
+}
+
+function readNudgeTier(message: BaseMessage): number | null {
+  const value = message.additional_kwargs.forge_nudge_tier;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function redactUnknown(value: unknown): unknown {

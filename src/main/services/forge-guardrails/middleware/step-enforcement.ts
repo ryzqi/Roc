@@ -247,7 +247,7 @@ function createStepNudgeMessage(
   pendingSteps: readonly string[],
   tier: 1 | 2 | 3
 ): ToolMessage {
-  return tagForgeMessage(
+  const message = tagForgeMessage(
     new ToolMessage({
       tool_call_id: toolCallId,
       name: toolName,
@@ -256,6 +256,8 @@ function createStepNudgeMessage(
     }),
     'forge:step_nudge'
   );
+  message.additional_kwargs.forge_nudge_tier = tier;
+  return message;
 }
 
 function createPrerequisiteNudgeMessage(toolName: string, toolCallId: string, missing: readonly string[]): ToolMessage {

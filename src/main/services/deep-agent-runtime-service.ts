@@ -813,7 +813,7 @@ export class DeepAgentRuntimeService {
     const taskEvents: Array<{
       threadId: string;
       runId: string;
-      type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed';
+      type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed' | 'guardrail_nudge';
       payload: Record<string, unknown>;
     }> = [];
     const callbacks = {
@@ -836,7 +836,7 @@ export class DeepAgentRuntimeService {
         this.sessionArchiveService.recordToolCall(context.threadId, name, input, output, options.phase);
       },
       recordTaskEvent: (
-        type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed',
+        type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
         payload: Record<string, unknown>
       ) => {
         if (!options.visible || context.taskRun === null) {
