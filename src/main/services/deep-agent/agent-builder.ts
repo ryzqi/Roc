@@ -3,13 +3,15 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ClientTool } from '@langchain/core/tools';
 import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import type { ProviderType } from '../../../shared/types';
+import type { ProviderType, WorkflowHint } from '../../../shared/types';
 import {
   createErrorBudgetMiddleware,
   createRescueParsingMiddleware,
   createRespondToolInjectionMiddleware,
   createResponseValidationMiddleware,
-  createToolResolutionMiddleware
+  createStepEnforcementMiddleware,
+  createToolResolutionMiddleware,
+  ROC_PREREQUISITES
 } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import type { RuntimeSubagent } from './types';
@@ -27,6 +29,7 @@ export type DeepAgentBuildInput = {
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   checkpointer: BaseCheckpointSaver | undefined;
   providerType: ProviderType;
+  workflowHint: WorkflowHint;
 };
 
 const DEEPAGENTS_BUILT_IN_TOOL_NAMES = [
@@ -52,6 +55,10 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   };
   const guardrails = [
     createErrorBudgetMiddleware(),
+    createStepEnforcementMiddleware({
+      resolveWorkflowFromContext: () => input.workflowHint,
+      prerequisitesConfig: ROC_PREREQUISITES
+    }),
     createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createRescueParsingMiddleware({ availableTools: knownToolNames }),
     createResponseValidationMiddleware({ knownToolNames }),

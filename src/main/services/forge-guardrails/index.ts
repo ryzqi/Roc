@@ -13,3 +13,4 @@ export * from './middleware/respond-tool-injection';
 export * from './middleware/response-validation';
 export * from './middleware/tool-resolution';
 export * from './middleware/error-budget';
+export * from './middleware/step-enforcement';

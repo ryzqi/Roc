@@ -114,7 +114,8 @@ export async function createDeepAgentSession(input: {
     filesystemPermissions: undefined,
     interruptOn,
     checkpointer: input.context.taskRun === null ? undefined : input.getCheckpointer(),
-    providerType: input.context.modelHandle.runtime.providerType
+    providerType: input.context.modelHandle.runtime.providerType,
+    workflowHint: input.context.workflowHint
   });
 
   return {
