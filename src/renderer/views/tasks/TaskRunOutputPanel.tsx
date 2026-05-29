@@ -60,6 +60,22 @@ export function TaskRunOutputPanel({
           ))}
         </div>
       )}
+      {output.guardrails.length === 0 ? null : (
+        <div className="list-rows">
+          {output.guardrails.map((guardrail, index) => (
+            <div className="row run-event--guardrail" key={`${guardrail.nudgeKind}-${guardrail.toolCallId ?? index}`}>
+              <div className="row-copy">
+                <div className="row-title">[护栏: {guardrail.nudgeKind}]</div>
+                <div className="row-sub">
+                  {guardrail.content}
+                  {guardrail.toolName === null ? '' : ` · ${guardrail.toolName}`}
+                </div>
+              </div>
+              <span className="pill info">{guardrail.tier === null ? 'audit' : `tier ${guardrail.tier}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {output.subagents.length === 0 ? null : (
         <div className="list-rows">
           {output.subagents.map((subagent, index) => (

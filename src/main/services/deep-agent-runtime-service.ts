@@ -32,6 +32,7 @@ import type { TaskSchedulerService } from './task-scheduler-service';
 import type { TaskService } from './task-service';
 import type { WebReadService } from './web-read-service';
 import type { WorkspaceService } from './workspace-service';
+import { defaultErrorTracker, defaultStepTracker } from './forge-guardrails';
 import { executeWithProviderRequestRetry, isRetryableProviderRequestFailure } from './provider-request-retry';
 import { applyBackgroundTaskToolDecision } from './deep-agent/background-task-tools';
 import {
@@ -400,7 +401,8 @@ export class DeepAgentRuntimeService {
         try {
           const run = await session.agent.streamEvents(
             {
-              messages: [new HumanMessage(context.input)]
+              messages: [new HumanMessage(context.input)],
+              ...createInitialForgeGuardrailsState()
             },
             {
               version: 'v3',
@@ -561,7 +563,8 @@ export class DeepAgentRuntimeService {
       try {
         const run = await flushSession.agent.streamEvents(
           {
-            messages: [new HumanMessage(flushInput)]
+            messages: [new HumanMessage(flushInput)],
+            ...createInitialForgeGuardrailsState()
           },
           {
             version: 'v3',
@@ -972,4 +975,14 @@ export class DeepAgentRuntimeService {
       payload: approval
     });
   }
+}
+
+function createInitialForgeGuardrailsState(): {
+  forge_error_tracker: ReturnType<typeof defaultErrorTracker>;
+  forge_step_tracker: ReturnType<typeof defaultStepTracker>;
+} {
+  return {
+    forge_error_tracker: defaultErrorTracker(),
+    forge_step_tracker: defaultStepTracker()
+  };
 }

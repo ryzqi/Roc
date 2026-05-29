@@ -316,6 +316,46 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('passes default forge guardrail state into initial agent invocations', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '检查 forge state',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const streamInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0] as
+      | {
+          forge_error_tracker?: unknown;
+          forge_step_tracker?: unknown;
+        }
+      | undefined;
+    expect(streamInput?.forge_step_tracker).toMatchObject({
+      executedTools: {},
+      requiredSteps: [],
+      terminalTools: [],
+      iterationIndex: 0
+    });
+    expect(streamInput?.forge_error_tracker).toMatchObject({
+      consecutiveRetries: 0,
+      consecutiveToolErrors: 0,
+      maxRetries: 3,
+      maxToolErrors: 2
+    });
+  });
+
   it('records forge transient messages as guardrail_nudge events without assistant deltas', async () => {
     const nudge = tagForgeMessage(
       new HumanMessage({

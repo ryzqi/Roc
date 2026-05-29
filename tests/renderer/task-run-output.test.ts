@@ -104,6 +104,20 @@ function createDetail(): TaskDetail {
         createdAt: '2026-05-16T07:04:30.000Z'
       },
       {
+        id: 'event-guardrail',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'guardrail_nudge',
+        payload: {
+          nudgeKind: 'step',
+          tier: 2,
+          content: '必须调用 schedule_background_task 后再结束。',
+          toolName: 'confirm_with_user',
+          toolCallId: 'call-confirm'
+        },
+        createdAt: '2026-05-16T07:04:32.000Z'
+      },
+      {
         id: 'event-agent-execute',
         threadId: 'thread-1',
         runId: 'run-1',
@@ -210,6 +224,15 @@ describe('buildTaskRunOutput', () => {
         name: 'pnpm test',
         status: 'exit 0',
         data: '测试已通过'
+      }
+    ]);
+    expect(output.guardrails).toEqual([
+      {
+        nudgeKind: 'step',
+        tier: 2,
+        content: '必须调用 schedule_background_task 后再结束。',
+        toolName: 'confirm_with_user',
+        toolCallId: 'call-confirm'
       }
     ]);
     expect(output.subagents).toEqual([

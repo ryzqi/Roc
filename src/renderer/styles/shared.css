@@ -339,6 +339,12 @@
   line-height: 1.5;
 }
 
+.row.run-event--guardrail .row-title,
+.row.run-event--guardrail .row-sub {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

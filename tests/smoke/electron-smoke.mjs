@@ -60,6 +60,16 @@ function delay(ms) {
   });
 }
 
+function redactSmokeProviderRequest(request) {
+  if (request === null) {
+    return null;
+  }
+  return {
+    ...request,
+    authorization: typeof request.authorization === 'string' ? '<redacted>' : request.authorization
+  };
+}
+
 async function readWindowPlacementEvidence(filePath, expectedBounds) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -380,12 +390,12 @@ try {
   await page.click('[data-testid="task-create-submit"]');
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { state: 'detached', timeout: 5000 });
   await page.waitForFunction(
-    (expectedGoal) =>
-      Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]')).some((item) =>
-        (item.textContent ?? '').includes(expectedGoal)
-      ),
+    async (expectedGoal) => {
+      const activeTasks = await window.roc.tasks.getActiveTasks();
+      return activeTasks.ok && activeTasks.data.some((item) => item.kind === 'background' && item.goal === expectedGoal);
+    },
     naturalLanguageTaskGoal,
-    { timeout: 10000 }
+    { timeout: 15000 }
   );
   const taskProposalEvidence = await page.evaluate(
     async ({ expectedGoal, expectedCronExpression, expectedNextRunAt }) => {
@@ -414,15 +424,25 @@ try {
         if (item.type !== 'tool_call' || typeof item.payload !== 'object' || item.payload === null) {
           return false;
         }
-        return Reflect.get(item.payload, 'name') === 'propose_background_task';
+        return (
+          Reflect.get(item.payload, 'name') === 'propose_background_task' ||
+          Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
+          Reflect.get(item.payload, 'name') === 'confirm_with_user'
+        );
       });
+      const hasToolCall = (name, status) =>
+        toolCalls.some((item) => Reflect.get(item.payload, 'name') === name && Reflect.get(item.payload, 'status') === status);
       return {
         activeTaskGoal: task?.goal ?? null,
         createdEventPayload: createdEvent?.payload ?? null,
         cronExpression: task?.trigger.type === 'cron' ? task.trigger.cronExpression : null,
         hasCreatedEvent: createdEvent !== undefined,
-        hasProposeToolCallStart: toolCalls.some((item) => Reflect.get(item.payload, 'status') === 'start'),
-        hasProposeToolCallEnd: toolCalls.some((item) => Reflect.get(item.payload, 'status') === 'end'),
+        hasProposeToolCallStart: hasToolCall('propose_background_task', 'start'),
+        hasProposeToolCallEnd: hasToolCall('propose_background_task', 'end'),
+        hasScheduleToolCallStart: hasToolCall('schedule_background_task', 'start'),
+        hasScheduleToolCallEnd: hasToolCall('schedule_background_task', 'end'),
+        hasConfirmToolCallStart: hasToolCall('confirm_with_user', 'start'),
+        hasConfirmToolCallEnd: hasToolCall('confirm_with_user', 'end'),
         nextRunAt: task?.nextRunAt ?? null,
         schemaFailureCount: schemaFailures.length,
         triggerType: task?.trigger.type ?? null,
@@ -1787,14 +1807,47 @@ try {
     };
   });
   await page.keyboard.press('Enter');
-  await page.waitForFunction(
-    () => {
-      const assistantMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]'));
-      const latestAssistant = assistantMessages.at(-1);
-      return (latestAssistant?.textContent ?? '').includes('Smoke Provider 已生成首轮回复。');
-    },
-    { timeout: 5000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const assistantMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]'));
+        const latestAssistant = assistantMessages.at(-1);
+        return (latestAssistant?.textContent ?? '').includes('Smoke Provider 已生成首轮回复。');
+      },
+      { timeout: 5000 }
+    );
+  } catch (error) {
+    const chatTimeoutDebug = await page.evaluate(async () => {
+      const snapshot = await window.roc.tasks.getSnapshot();
+      const settings = await window.roc.settings.get();
+      return {
+        chatText: document.querySelector('[data-testid="chat-transcript"]')?.textContent ?? null,
+        inputValue: document.querySelector('[data-testid="chat-input"]')?.value ?? null,
+        settingsOk: settings.ok,
+        defaultModelId: settings.ok ? settings.data.defaultModelId : null,
+        snapshotOk: snapshot.ok,
+        recentEvents: snapshot.ok
+          ? snapshot.data.recentEvents.slice(-12).map((event) => ({
+              type: event.type,
+              payload: event.payload
+            }))
+          : []
+      };
+    });
+    console.error(
+      JSON.stringify(
+        {
+          chatResponseTimeout: true,
+          chatTimeoutDebug,
+          smokeProviderRequestCount: smokeProvider.requests.length,
+          lastSmokeProviderRequest: redactSmokeProviderRequest(smokeProvider.requests.at(-1) ?? null)
+        },
+        null,
+        2
+      )
+    );
+    throw error;
+  }
   const chatResultText = await page.textContent('[data-testid="chat-transcript"]');
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
@@ -2495,6 +2548,10 @@ try {
       taskProposalEvidence.hasCreatedEvent &&
       taskProposalEvidence.hasProposeToolCallStart &&
       taskProposalEvidence.hasProposeToolCallEnd &&
+      taskProposalEvidence.hasScheduleToolCallStart &&
+      taskProposalEvidence.hasScheduleToolCallEnd &&
+      taskProposalEvidence.hasConfirmToolCallStart &&
+      taskProposalEvidence.hasConfirmToolCallEnd &&
       taskProposalEvidence.schemaFailureCount === 0,
     manualRunNowStartsRealRun:
       manualRunNowEvidence.returnedRealRunId &&

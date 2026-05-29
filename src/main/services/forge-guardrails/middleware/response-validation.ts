@@ -43,6 +43,9 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
 
         const content = typeof last.content === 'string' ? last.content : '';
         if (toolCalls.length === 0 && content.trim().length > 0) {
+          if (isFinalTextAfterConfirmTool(messages)) {
+            return undefined;
+          }
           const sourceId = last.id === undefined ? `content-${hashText(content)}` : last.id;
           const nudge = new HumanMessage({
             id: createForgeMessageId('retry-nudge', sourceId),
@@ -59,6 +62,14 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
       }
     }
   });
+}
+
+function isFinalTextAfterConfirmTool(messages: readonly unknown[]): boolean {
+  if (messages.length < 2) {
+    return false;
+  }
+  const previous = messages[messages.length - 2];
+  return ToolMessage.isInstance(previous) && previous.name === 'confirm_with_user' && previous.status !== 'error';
 }
 
 function hashText(value: string): string {

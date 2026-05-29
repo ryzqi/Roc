@@ -94,7 +94,7 @@ const smokeTaskProposalGoal = '每天晚上 7:40 抓取 AI 新闻并写入 docx'
 const smokeTaskProposalNextRunAt = '2026-05-26T11:40:00.000Z';
 const smokeProviderText =
   'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
-const smokeTaskProposalFinalText = `Smoke Provider 已通过 propose_background_task 创建后台任务：${smokeTaskProposalGoal}。`;
+const smokeTaskProposalFinalText = `Smoke Provider 已通过 propose / schedule / confirm 完成后台任务创建：${smokeTaskProposalGoal}。`;
 
 function readTextContent(value) {
   if (typeof value === 'string') {
@@ -128,9 +128,14 @@ function readWorkspacePathFromMessages(messages) {
     return null;
   }
   for (const message of [...messages].reverse()) {
-    const match = /^当前工作区：(.+)$/mu.exec(readMessageText(message));
-    if (match !== null) {
-      return match[1].trim();
+    const text = readMessageText(message);
+    const legacyMatch = /^当前工作区：(.+)$/mu.exec(text);
+    if (legacyMatch !== null) {
+      return legacyMatch[1].trim();
+    }
+    const systemPromptMatch = /^Workspace: (.+)$/mu.exec(text);
+    if (systemPromptMatch !== null && systemPromptMatch[1].trim() !== 'not selected.') {
+      return systemPromptMatch[1].trim();
     }
   }
   return null;
@@ -146,10 +151,29 @@ function hasToolResultMessage(messages) {
   return Array.isArray(messages) ? messages.some((message) => message?.role === 'tool') : false;
 }
 
+function readToolResultJson(messages, toolCallId) {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+  const message = [...messages].reverse().find((item) => item?.role === 'tool' && item?.tool_call_id === toolCallId);
+  if (message === undefined) {
+    return null;
+  }
+  const content = readTextContent(message.content);
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
 function isTaskProposalRequest(parsedBody) {
   const messages = parsedBody?.messages;
   const hasTaskProposalPrompt = Array.isArray(messages)
-    ? messages.some((message) => readMessageText(message).includes('必须调用 propose_background_task'))
+    ? messages.some((message) => {
+        const text = readMessageText(message);
+        return text.includes('本轮工作流：创建后台任务。') || text.includes('必须调用 propose_background_task');
+      })
     : false;
   return hasProposeBackgroundTaskTool(parsedBody?.tools) && hasTaskProposalPrompt;
 }
@@ -200,11 +224,7 @@ function writeStreamingTextResponse(response, content) {
   response.end('data: [DONE]\n\n');
 }
 
-function writeStreamingToolCallResponse(response, parsedBody) {
-  const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
-  if (workspacePath === null || workspacePath.length === 0) {
-    throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
-  }
+function writeStreamingToolCallResponse(response, toolCall) {
   writeSseChunk(response, {
     choices: [
       {
@@ -214,11 +234,11 @@ function writeStreamingToolCallResponse(response, parsedBody) {
           tool_calls: [
             {
               index: 0,
-              id: 'call_smoke_propose_background_task',
+              id: toolCall.id,
               type: 'function',
               function: {
-                name: 'propose_background_task',
-                arguments: JSON.stringify(buildSmokeTaskProposal(workspacePath))
+                name: toolCall.name,
+                arguments: JSON.stringify(toolCall.args)
               }
             }
           ]
@@ -244,6 +264,42 @@ function writeStreamingToolCallResponse(response, parsedBody) {
   response.end('data: [DONE]\n\n');
 }
 
+function writeTaskProposalToolCallResponse(response, parsedBody) {
+  const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
+  if (workspacePath === null || workspacePath.length === 0) {
+    throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
+  }
+  writeStreamingToolCallResponse(response, {
+    id: 'call_smoke_propose_background_task',
+    name: 'propose_background_task',
+    args: buildSmokeTaskProposal(workspacePath)
+  });
+}
+
+function writeTaskScheduleToolCallResponse(response, parsedBody) {
+  const proposeResult = readToolResultJson(parsedBody?.messages, 'call_smoke_propose_background_task');
+  if (typeof proposeResult?.previewId !== 'string') {
+    throw new Error('Smoke provider could not resolve previewId from propose_background_task result.');
+  }
+  writeStreamingToolCallResponse(response, {
+    id: 'call_smoke_schedule_background_task',
+    name: 'schedule_background_task',
+    args: {
+      previewId: proposeResult.previewId
+    }
+  });
+}
+
+function writeTaskConfirmToolCallResponse(response) {
+  writeStreamingToolCallResponse(response, {
+    id: 'call_smoke_confirm_with_user',
+    name: 'confirm_with_user',
+    args: {
+      summary: `已创建后台任务：${smokeTaskProposalGoal}。`
+    }
+  });
+}
+
 export async function startSmokeProvider() {
   const requests = [];
   const server = createServer((request, response) => {
@@ -262,7 +318,23 @@ export async function startSmokeProvider() {
         response.setHeader('cache-control', 'no-cache');
         response.setHeader('connection', 'keep-alive');
         if (isTaskProposalRequest(parsedBody) && !hasToolResultMessage(parsedBody?.messages)) {
-          writeStreamingToolCallResponse(response, parsedBody);
+          writeTaskProposalToolCallResponse(response, parsedBody);
+          return;
+        }
+        if (
+          isTaskProposalRequest(parsedBody) &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_propose_background_task') !== null &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_schedule_background_task') === null
+        ) {
+          writeTaskScheduleToolCallResponse(response, parsedBody);
+          return;
+        }
+        if (
+          isTaskProposalRequest(parsedBody) &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_schedule_background_task') !== null &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_confirm_with_user') === null
+        ) {
+          writeTaskConfirmToolCallResponse(response);
           return;
         }
         writeStreamingTextResponse(

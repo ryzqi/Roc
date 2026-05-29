@@ -11,6 +11,13 @@ export type TaskRunOutput = {
   reasoning: string;
   tools: Array<{ name: string; status: string; data: unknown }>;
   subagents: Array<{ name: string; status: string; summary: string | null }>;
+  guardrails: Array<{
+    nudgeKind: string;
+    tier: number | null;
+    content: string;
+    toolName: string | null;
+    toolCallId: string | null;
+  }>;
   error: string | null;
 };
 
@@ -75,6 +82,7 @@ function buildPersistedOutput(
   let error: string | null = null;
   const tools: TaskRunOutput['tools'] = [];
   const subagents: TaskRunOutput['subagents'] = [];
+  const guardrails: TaskRunOutput['guardrails'] = [];
 
   for (const event of events) {
     if (event.type === 'message_delta') {
@@ -119,6 +127,13 @@ function buildPersistedOutput(
       }
       continue;
     }
+    if (event.type === 'guardrail_nudge') {
+      const guardrail = readGuardrailNudge(event.payload);
+      if (guardrail !== null) {
+        guardrails.push(guardrail);
+      }
+      continue;
+    }
     if (event.type === 'error') {
       const message = readErrorMessage(event.payload);
       if (message !== null) {
@@ -135,6 +150,7 @@ function buildPersistedOutput(
     reasoning,
     tools,
     subagents,
+    guardrails,
     error
   };
 }
@@ -245,6 +261,19 @@ function readErrorMessage(payload: unknown): string | null {
     return null;
   }
   return typeof payload.message === 'string' ? payload.message : null;
+}
+
+function readGuardrailNudge(payload: unknown): TaskRunOutput['guardrails'][number] | null {
+  if (!isRecord(payload) || typeof payload.nudgeKind !== 'string' || typeof payload.content !== 'string') {
+    return null;
+  }
+  return {
+    nudgeKind: payload.nudgeKind,
+    tier: typeof payload.tier === 'number' ? payload.tier : null,
+    content: payload.content,
+    toolName: typeof payload.toolName === 'string' ? payload.toolName : null,
+    toolCallId: typeof payload.toolCallId === 'string' ? payload.toolCallId : null
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

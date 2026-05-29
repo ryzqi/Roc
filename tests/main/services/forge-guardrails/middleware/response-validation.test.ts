@@ -41,6 +41,24 @@ describe('ForgeResponseValidation', () => {
     expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
   });
 
+  it('allows final assistant text after confirm_with_user has returned', async () => {
+    const update = await runAfterModel([
+      new ToolMessage({
+        id: 'tool-confirm',
+        tool_call_id: 'call-confirm',
+        name: 'confirm_with_user',
+        content: '{"ok":true}',
+        status: 'success'
+      }),
+      new AIMessage({
+        id: 'ai-final',
+        content: '已创建后台任务。'
+      })
+    ]);
+
+    expect(update).toBeUndefined();
+  });
+
   it('turns unknown tool calls into tagged ToolMessages and jumps back to the model', async () => {
     const update = await runAfterModel([
       new AIMessage({

@@ -81,6 +81,19 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
         createdAt: '2026-05-16T07:04:30.000Z'
       },
       {
+        id: 'event-guardrail',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'guardrail_nudge',
+        payload: {
+          nudgeKind: 'step',
+          tier: 1,
+          content: '请先完成 schedule_background_task。',
+          toolName: 'confirm_with_user'
+        },
+        createdAt: '2026-05-16T07:04:40.000Z'
+      },
+      {
         id: 'event-message',
         threadId: 'thread-1',
         runId: 'run-1',
