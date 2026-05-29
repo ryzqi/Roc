@@ -227,10 +227,6 @@
   line-height: 1.5;
 }
 
-.mini-window .field-box {
-  min-height: 48px;
-}
-
 .inline-warning {
   width: fit-content;
   color: var(--st-warn);

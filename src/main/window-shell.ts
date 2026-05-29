@@ -17,16 +17,6 @@ const minMainWindowSize = {
   height: 640
 };
 
-const quickEntrySize = {
-  width: 760,
-  height: 470
-};
-
-const trayEntrySize = {
-  width: 360,
-  height: 450
-};
-
 export function buildMainWindowOptions(
   preloadPath: string,
   restoredBounds: WindowBoundsSnapshot | null = null
@@ -54,45 +44,6 @@ export function buildMainWindowOptions(
   };
 }
 
-export function buildFloatingWindowOptions(
-  preloadPath: string,
-  title: string,
-  resolvedBounds: WindowBoundsSnapshot | null = null
-): BrowserWindowConstructorOptions {
-  const isQuick = title === 'Roc Quick Entry';
-  const fallbackSize = isQuick ? quickEntrySize : trayEntrySize;
-  const bounds =
-    resolvedBounds === null
-      ? {
-          x: 0,
-          y: 0,
-          width: fallbackSize.width,
-          height: fallbackSize.height
-        }
-      : resolvedBounds;
-  return {
-    x: resolvedBounds === null ? undefined : bounds.x,
-    y: resolvedBounds === null ? undefined : bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    minWidth: 420,
-    minHeight: 300,
-    show: false,
-    frame: false,
-    autoHideMenuBar: true,
-    resizable: false,
-    backgroundColor: '#f7f8f5',
-    backgroundMaterial: 'acrylic',
-    title,
-    webPreferences: {
-      preload: preloadPath,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
-    }
-  };
-}
-
 export function resolveMainWindowBounds(
   savedBounds: WindowBoundsSnapshot | null,
   displays: DisplayLike[]
@@ -107,20 +58,6 @@ export function resolveMainWindowBounds(
     return centerBounds(constrainBoundsSize(bounds, workArea), workArea);
   }
   return clampBoundsToWorkArea(constrainBoundsSize(savedBounds, workArea), workArea);
-}
-
-export function resolveFloatingWindowBounds(kind: 'quick' | 'tray', display: DisplayLike): WindowBoundsSnapshot {
-  const size = kind === 'quick' ? quickEntrySize : trayEntrySize;
-  const bounds = constrainFloatingBoundsSize({ x: 0, y: 0, width: size.width, height: size.height }, display.workArea);
-  if (kind === 'quick') {
-    return centerBounds(bounds, display.workArea);
-  }
-  return {
-    x: Math.max(display.workArea.x, display.workArea.x + display.workArea.width - bounds.width - 24),
-    y: Math.max(display.workArea.y, display.workArea.y + display.workArea.height - bounds.height - 24),
-    width: bounds.width,
-    height: bounds.height
-  };
 }
 
 export function getWindowState(window: Pick<BrowserWindow, 'isMaximized' | 'isMinimized' | 'isFullScreen'>): WindowStateSnapshot {
@@ -179,15 +116,6 @@ function constrainBoundsSize(bounds: WindowBoundsSnapshot, workArea: WindowBound
     y: bounds.y,
     width: Math.min(Math.max(bounds.width, minMainWindowSize.width), workArea.width),
     height: Math.min(Math.max(bounds.height, minMainWindowSize.height), workArea.height)
-  };
-}
-
-function constrainFloatingBoundsSize(bounds: WindowBoundsSnapshot, workArea: WindowBoundsSnapshot): WindowBoundsSnapshot {
-  return {
-    x: bounds.x,
-    y: bounds.y,
-    width: Math.min(bounds.width, workArea.width),
-    height: Math.min(bounds.height, workArea.height)
   };
 }
 

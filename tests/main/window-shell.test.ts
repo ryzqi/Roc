@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildFloatingWindowOptions,
   buildMainWindowOptions,
   getWindowBounds,
   getWindowState,
-  resolveFloatingWindowBounds,
   resolveMainWindowBounds
 } from '../../src/main/window-shell';
 
@@ -82,49 +80,6 @@ describe('immersive window shell', () => {
       y: 20,
       width: 1320,
       height: 860
-    });
-  });
-
-  it('positions floating entries inside the current display work area', () => {
-    const currentDisplay = {
-      workArea: {
-        x: 1920,
-        y: 0,
-        width: 1280,
-        height: 720
-      }
-    };
-
-    expect(resolveFloatingWindowBounds('quick', currentDisplay)).toEqual({
-      x: 2180,
-      y: 125,
-      width: 760,
-      height: 470
-    });
-    expect(resolveFloatingWindowBounds('tray', currentDisplay)).toEqual({
-      x: 2816,
-      y: 246,
-      width: 360,
-      height: 450
-    });
-    expect(buildFloatingWindowOptions('C:/roc/dist/preload/index.mjs', 'Roc Quick Entry').backgroundMaterial).toBe('acrylic');
-  });
-
-  it('keeps tray entry inside small display work areas', () => {
-    const bounds = resolveFloatingWindowBounds('tray', {
-      workArea: {
-        x: 0,
-        y: 0,
-        width: 300,
-        height: 320
-      }
-    });
-
-    expect(bounds).toEqual({
-      x: 0,
-      y: 0,
-      width: 300,
-      height: 320
     });
   });
 

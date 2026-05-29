@@ -3,8 +3,6 @@ import type { ChatRunState } from '../chat-run-state';
 import { ChatView } from '../chat/chat-view';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
-import { QuickEntryView } from './floating/QuickEntryView';
-import { TrayEntryView } from './floating/TrayEntryView';
 
 const TasksView = lazy(() => import('./tasks/TasksView').then((module) => ({ default: module.TasksView })));
 const WorkspaceView = lazy(() => import('./workspace/WorkspaceView').then((module) => ({ default: module.WorkspaceView })));
@@ -92,12 +90,6 @@ export function ViewContent({
   }
   if (activeView === 'diagnostics') {
     return renderLazyView(<DiagnosticsView loadState={operationsLoadState} state={state} />);
-  }
-  if (activeView === 'quick') {
-    return <QuickEntryView onSubmitChatTask={onSubmitChatTask} state={state} />;
-  }
-  if (activeView === 'tray') {
-    return <TrayEntryView state={state} updateLoadedState={updateLoadedState} />;
   }
   return (
     <ChatView

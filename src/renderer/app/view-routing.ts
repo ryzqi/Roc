@@ -15,8 +15,6 @@ export const MAIN_VIEW_IDS = new Set<ViewId>([
   'diagnostics'
 ]);
 
-export const FLOATING_VIEW_IDS = new Set<ViewId>(['quick', 'tray']);
-
 export const WORKBENCH_VIEWS = new Set<ViewId>(['chat', 'workspace', 'git', 'terminal', 'preview']);
 
 export const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: PreviewIconName }> = [
@@ -84,7 +82,7 @@ export const PAGE_META: Record<MainViewId, PageMeta> = {
 };
 
 export function parseViewId(value: string | null): ViewId {
-  if (value !== null && (MAIN_VIEW_IDS.has(value as ViewId) || FLOATING_VIEW_IDS.has(value as ViewId))) {
+  if (value !== null && MAIN_VIEW_IDS.has(value as ViewId)) {
     return value as ViewId;
   }
   return 'chat';
@@ -105,10 +103,6 @@ export function parseWorkbenchTool(value: string | null, view: ViewId): Workbenc
     return value;
   }
   return defaultWorkbenchTool(view);
-}
-
-export function isFloatingView(view: ViewId): boolean {
-  return FLOATING_VIEW_IDS.has(view);
 }
 
 export function syncRendererUrl(view: ViewId, tool: WorkbenchTool, workbenchVisible: boolean): void {

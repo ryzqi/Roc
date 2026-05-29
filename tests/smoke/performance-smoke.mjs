@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { prepareArtifactDir } from './lib/artifacts.mjs';
-import { waitForAppReady, waitForWindowWithSelector } from './lib/assertions.mjs';
+import { waitForAppReady } from './lib/assertions.mjs';
 import { buildNativeFeelSoftWarnings, buildNativeFeelSummary, nativeFeelScorecard } from './lib/native-feel.mjs';
 
 const artifactDir = prepareArtifactDir();
@@ -62,7 +62,7 @@ function assertPerformanceSample(sample) {
   }
 }
 
-function buildSoftWarnings({ initialSample, finalSample, quickOpenMs, warmQuickReopenMs, trayOpenMs }) {
+function buildSoftWarnings({ initialSample, finalSample }) {
   const warnings = [];
   if (initialSample.exceedsBudget) {
     warnings.push(`initial RSS ${initialSample.rssMb} MB exceeds soft budget ${initialSample.memoryBudgetMb} MB`);
@@ -73,24 +73,10 @@ function buildSoftWarnings({ initialSample, finalSample, quickOpenMs, warmQuickR
   warnings.push(
     ...buildNativeFeelSoftWarnings({
       initialSample,
-      finalSample,
-      quickOpenMs,
-      warmQuickReopenMs,
-      trayOpenMs
+      finalSample
     })
   );
   return warnings;
-}
-
-async function waitForBrowserWindowVisible(browserWindow) {
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    if (await browserWindow.evaluate((window) => window.isVisible())) {
-      return;
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
-  }
-  throw new Error('Timed out waiting for Electron BrowserWindow to become visible.');
 }
 
 try {
@@ -124,39 +110,6 @@ try {
   });
   assertPerformanceSample(initialSample);
 
-  const quickStartedAt = Date.now();
-  await page.evaluate(async () => {
-    const result = await window.roc.app.openQuickEntry();
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-  });
-  const quickWindow = await waitForWindowWithSelector(app, '[data-testid="floating-quick"]');
-  await quickWindow.waitForSelector('[data-testid="quick-entry-view"]', { timeout: 5000 });
-  const quickOpenMs = Date.now() - quickStartedAt;
-  const quickBrowserWindow = await app.browserWindow(quickWindow);
-  await quickBrowserWindow.evaluate((window) => window.hide());
-  const warmQuickStartedAt = Date.now();
-  await page.evaluate(async () => {
-    const result = await window.roc.app.openQuickEntry();
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-  });
-  await waitForBrowserWindowVisible(quickBrowserWindow);
-  const warmQuickReopenMs = Date.now() - warmQuickStartedAt;
-
-  const trayStartedAt = Date.now();
-  await page.evaluate(async () => {
-    const result = await window.roc.app.openTrayEntry();
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-  });
-  const trayWindow = await waitForWindowWithSelector(app, '[data-testid="floating-tray"]');
-  await trayWindow.waitForSelector('[data-testid="tray-entry-view"]', { timeout: 5000 });
-  const trayOpenMs = Date.now() - trayStartedAt;
-
   const finalSample = await page.evaluate(async () => {
     const sample = await window.roc.diagnostics.samplePerformance({
       mode: 'smoke',
@@ -188,11 +141,6 @@ try {
       path: smokeTarget.path,
       packagedExeExists: existsSync(packagedExe)
     },
-    windows: {
-      quickOpenMs,
-      warmQuickReopenMs,
-      trayOpenMs
-    },
     samples: {
       initial: initialSample,
       final: finalSample
@@ -203,10 +151,7 @@ try {
     processMetricsSummary: nativeFeel.processMetricsSummary,
     softWarnings: buildSoftWarnings({
       initialSample,
-      finalSample,
-      quickOpenMs,
-      warmQuickReopenMs,
-      trayOpenMs
+      finalSample
     })
   };
   writePerformanceSmokeResult(result);

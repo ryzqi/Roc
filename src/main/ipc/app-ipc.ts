@@ -18,16 +18,4 @@ export function registerAppIpc(timedHandle: TimedHandle, appService: AppService,
       return { opened: true as const, page };
     })
   );
-  timedHandle(ipcChannels.appOpenQuickEntry, () =>
-    wrapIpc(async () => {
-      await controls.openQuickEntry();
-      return { opened: true as const };
-    })
-  );
-  timedHandle(ipcChannels.appOpenTrayEntry, () =>
-    wrapIpc(async () => {
-      await controls.openTrayEntry();
-      return { opened: true as const };
-    })
-  );
 }

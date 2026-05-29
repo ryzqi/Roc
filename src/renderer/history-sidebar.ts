@@ -10,8 +10,6 @@ export type HistorySidebarItem = {
 
 const SYSTEM_HISTORY_THREAD_TITLES = new Set([
   '当前主会话',
-  '快捷入口创建任务',
-  '托盘接管记录',
   '记忆整理裁决',
   '任务工作台记录'
 ]);

@@ -39,7 +39,6 @@ import {
   WORKBENCH_VIEWS,
   buildTopMeta,
   defaultWorkbenchTool,
-  isFloatingView,
   parseViewId,
   parseWorkbenchTool,
   syncRendererUrl,
@@ -144,9 +143,6 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     return window.roc.app.onNavigate((page) => {
       const view = parseViewId(page);
-      if (isFloatingView(view)) {
-        return;
-      }
       if (view === 'settings') {
         setSettingsOpen(true);
         return;
@@ -605,33 +601,6 @@ export function App(): React.JSX.Element {
 
   if (state === null) {
     return <div className="boot">Roc 正在加载本地工作台</div>;
-  }
-
-  if (isFloatingView(activeView)) {
-    return (
-      <main className="floating-stage" data-testid={`floating-${activeView}`}>
-        <ViewContent
-          activeView={activeView}
-          chatSelectionVersion={chatSelectionVersion}
-          liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
-          memoryLoadState={memoryLoadState}
-          onNavigateToTaskThread={navigateToTaskThread}
-          operationsLoadState={operationsLoadState}
-          onQueueTaskPrompt={queueTaskPrompt}
-          queuedTaskPrompt={queuedTaskPrompt}
-          onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
-          onSelectWorkspace={selectWorkspaceFromDialog}
-          onSubmitChatTask={startTaskRun}
-          onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
-          selectedThreadId={selectedThreadId}
-          state={state}
-          updateLoadedState={(partial) =>
-            setState((current) => (current === null ? current : { ...current, ...partial }))
-          }
-          workspaceLoadState={workspaceLoadState}
-        />
-      </main>
-    );
   }
 
   const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);

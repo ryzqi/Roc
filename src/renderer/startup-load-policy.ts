@@ -9,9 +9,7 @@ export type StartupLoadViewId =
   | 'skills'
   | 'memory'
   | 'settings'
-  | 'diagnostics'
-  | 'quick'
-  | 'tray';
+  | 'diagnostics';
 
 export type StartupWorkbenchTool = 'files' | 'git' | 'terminal';
 
@@ -51,7 +49,7 @@ export function getStartupLoadIntent(input: StartupLoadPolicyInput): StartupLoad
     targets.add('memory');
   }
 
-  if (input.activeView === 'tasks' || input.activeView === 'tray') {
+  if (input.activeView === 'tasks') {
     targets.add('taskSurface');
   }
 

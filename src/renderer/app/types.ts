@@ -35,9 +35,7 @@ export type ViewId =
   | 'skills'
   | 'memory'
   | 'settings'
-  | 'diagnostics'
-  | 'quick'
-  | 'tray';
+  | 'diagnostics';
 
 export type PreviewIconName =
   | 'bot'
@@ -77,7 +75,7 @@ export type HistoryContextMenuState = {
 };
 
 export type WorkbenchTool = 'files' | 'git' | 'terminal';
-export type MainViewId = Exclude<ViewId, 'quick' | 'tray'>;
+export type MainViewId = ViewId;
 
 export type WorkspaceData = {
   fileTree: FileTreeResult | null;

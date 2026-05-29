@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyTaskSurfaceData } from '../../src/renderer/app/empty-states';
 
 describe('renderer empty startup states', () => {
-  it('keeps task surface data empty until the tasks or tray view requests it', () => {
+  it('keeps task surface data empty until the tasks view requests it', () => {
     expect(emptyTaskSurfaceData()).toEqual({
       activeTasks: [],
       taskDetail: null,

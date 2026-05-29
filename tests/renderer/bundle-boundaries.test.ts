@@ -2,20 +2,32 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('renderer bundle boundaries', () => {
-  it('declares dedicated renderer entries for quick and tray floating windows', () => {
+  it('does not declare quick or tray floating renderer entries', () => {
     const viteConfig = readFileSync('electron.vite.config.ts', 'utf8');
 
-    expect(viteConfig).toContain("quick: resolve(__dirname, 'quick-entry.html')");
-    expect(viteConfig).toContain("tray: resolve(__dirname, 'tray-entry.html')");
-    expect(existsSync('quick-entry.html')).toBe(true);
-    expect(existsSync('tray-entry.html')).toBe(true);
+    expect(viteConfig).not.toContain('quick-entry.html');
+    expect(viteConfig).not.toContain('tray-entry.html');
+    expect(existsSync('quick-entry.html')).toBe(false);
+    expect(existsSync('tray-entry.html')).toBe(false);
   });
 
-  it('loads floating windows without reusing the main page query entry', () => {
+  it('does not keep a main-process floating window loader', () => {
     const mainIndex = readFileSync('src/main/index.ts', 'utf8');
 
-    expect(mainIndex).not.toContain("loadRenderer(entryWindow, new URLSearchParams({ page: kind }))");
-    expect(mainIndex).toContain("await loadFloatingRenderer(entryWindow, kind);");
+    expect(mainIndex).not.toContain('loadFloatingRenderer');
+    expect(mainIndex).not.toContain('openFloatingEntry');
+    expect(mainIndex).not.toContain('quickEntryWindow');
+    expect(mainIndex).not.toContain('trayEntryWindow');
+  });
+
+  it('does not expose quick or tray floating entry IPC on the preload app API', () => {
+    const ipcContract = readFileSync('src/shared/ipc.ts', 'utf8');
+    const preloadContract = readFileSync('src/preload/index.ts', 'utf8');
+
+    expect(ipcContract).not.toContain('appOpenQuickEntry');
+    expect(ipcContract).not.toContain('appOpenTrayEntry');
+    expect(preloadContract).not.toContain('openQuickEntry');
+    expect(preloadContract).not.toContain('openTrayEntry');
   });
 
   it('keeps non-chat views behind lazy renderer boundaries', () => {

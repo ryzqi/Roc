@@ -153,8 +153,6 @@ describe('WindowsHostService', () => {
       },
       createTray: vi.fn(() => tray),
       openMainPage: vi.fn(),
-      openQuickEntry: vi.fn().mockResolvedValue(undefined),
-      openTrayEntry: vi.fn().mockResolvedValue(undefined),
       broadcastTaskUpdated: vi.fn()
     });
 
@@ -214,8 +212,6 @@ describe('WindowsHostService', () => {
       },
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
-      openQuickEntry: vi.fn().mockResolvedValue(undefined),
-      openTrayEntry: vi.fn().mockResolvedValue(undefined),
       broadcastTaskUpdated: vi.fn()
     });
 
@@ -274,8 +270,6 @@ describe('WindowsHostService', () => {
       },
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
-      openQuickEntry: vi.fn().mockResolvedValue(undefined),
-      openTrayEntry: vi.fn().mockResolvedValue(undefined),
       broadcastTaskUpdated: vi.fn()
     });
 
@@ -321,7 +315,8 @@ describe('WindowsHostService', () => {
       nextRunAt: '2026-05-28T00:00:00.000Z',
       updatedAt: '2026-05-27T00:00:00.000Z'
     }));
-    const openTrayEntry = vi.fn().mockResolvedValue(undefined);
+    const openMainPage = vi.fn();
+    const registerHotkey = vi.fn<(accelerator: string, callback: () => void) => boolean>(() => true);
     const tray = createTrayMock();
     const menu = {
       buildFromTemplate: vi.fn((template) => template)
@@ -330,7 +325,7 @@ describe('WindowsHostService', () => {
     const host = new WindowsHostService({
       app,
       globalShortcut: {
-        register: vi.fn(() => true),
+        register: registerHotkey,
         unregister: vi.fn(),
         unregisterAll: vi.fn()
       },
@@ -354,9 +349,7 @@ describe('WindowsHostService', () => {
       logService: { append: vi.fn() },
       menu,
       createTray: vi.fn(() => tray),
-      openMainPage: vi.fn(),
-      openQuickEntry: vi.fn().mockResolvedValue(undefined),
-      openTrayEntry,
+      openMainPage,
       broadcastTaskUpdated
     });
 
@@ -384,6 +377,7 @@ describe('WindowsHostService', () => {
     });
 
     const template = menu.buildFromTemplate.mock.calls.at(-1)?.[0] as Array<{ label?: string; click?: () => void }>;
+    expect(template.map((item) => item.label).filter(Boolean)).not.toContain('快速入口');
     const pauseItem = template.find((item) => item.label === '暂停后台执行');
     if (pauseItem?.click === undefined) {
       throw new Error('pause tray item was not built.');
@@ -399,7 +393,14 @@ describe('WindowsHostService', () => {
     }
 
     await trayClickHandler();
-    expect(openTrayEntry).toHaveBeenCalledTimes(1);
+    expect(openMainPage).toHaveBeenCalledWith('chat');
+
+    const hotkeyCallback = registerHotkey.mock.calls.at(-1)?.[1];
+    if (hotkeyCallback === undefined) {
+      throw new Error('global hotkey callback was not registered.');
+    }
+    hotkeyCallback();
+    expect(openMainPage).toHaveBeenCalledWith('chat');
   });
 
   it('surfaces global hotkey registration failures instead of silently accepting them', () => {
@@ -435,8 +436,6 @@ describe('WindowsHostService', () => {
       },
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
-      openQuickEntry: vi.fn().mockResolvedValue(undefined),
-      openTrayEntry: vi.fn().mockResolvedValue(undefined),
       broadcastTaskUpdated: vi.fn()
     });
 

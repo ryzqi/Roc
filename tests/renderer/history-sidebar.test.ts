@@ -20,9 +20,7 @@ describe('history sidebar helpers', () => {
   it('keeps only user conversation threads in the history list', () => {
     const items = buildHistoryItems([
       createThread('user-thread', '用户真实任务'),
-      createThread('quick-thread', '快捷入口创建任务'),
       createThread('current-thread', '当前主会话'),
-      createThread('tray-thread', '托盘接管记录'),
       createThread('memory-thread', '记忆整理裁决'),
       createThread('task-thread', '任务工作台记录'),
       createThread('background-thread', '后台定时任务')

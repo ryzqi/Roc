@@ -73,25 +73,13 @@ export function buildNativeFeelSummary({
 
 export function buildNativeFeelSoftWarnings({
   initialSample,
-  finalSample,
-  quickOpenMs,
-  warmQuickReopenMs,
-  trayOpenMs
+  finalSample
 }) {
   const warnings = [];
   const readyToShowMs =
     latestTimingDurationMs(finalSample, 'ready_to_show') ?? latestTimingDurationMs(initialSample, 'ready_to_show');
   if (typeof readyToShowMs === 'number' && readyToShowMs > 800) {
     warnings.push(`main ready-to-show took ${readyToShowMs} ms`);
-  }
-  if (quickOpenMs > 500) {
-    warnings.push(`quick entry opened in ${quickOpenMs} ms`);
-  }
-  if (warmQuickReopenMs > 200) {
-    warnings.push(`warm quick entry reopened in ${warmQuickReopenMs} ms`);
-  }
-  if (trayOpenMs > 1000) {
-    warnings.push(`tray entry opened in ${trayOpenMs} ms`);
   }
   return warnings;
 }

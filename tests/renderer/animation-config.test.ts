@@ -25,7 +25,6 @@ describe('renderer animation configuration', () => {
       'animations.css',
       'chat.css',
       'composer.css',
-      'floating.css',
       'git.css',
       'settings.css',
       'shared.css',

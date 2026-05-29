@@ -56,8 +56,6 @@ afterEach(() => {
 function registerWorkspaceHandlers(): void {
   registerIpc(services, {} as BrowserWindow, {
     openMainPage: () => undefined,
-    openQuickEntry: async () => undefined,
-    openTrayEntry: async () => undefined,
     closeMainWindow: () => undefined,
     broadcastTaskUpdated: () => undefined,
     getHostIntegrationStatus: (): HostIntegrationStatus => ({
@@ -356,8 +354,6 @@ describe('workspace dialog IPC', () => {
     const broadcastTaskUpdated = vi.fn();
     registerIpc(services, {} as BrowserWindow, {
       openMainPage: () => undefined,
-      openQuickEntry: async () => undefined,
-      openTrayEntry: async () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated,
       getHostIntegrationStatus: (): HostIntegrationStatus => ({
@@ -474,8 +470,6 @@ describe('workspace dialog IPC', () => {
     }));
     registerIpc(services, {} as BrowserWindow, {
       openMainPage: () => undefined,
-      openQuickEntry: async () => undefined,
-      openTrayEntry: async () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated: () => undefined,
       getHostIntegrationStatus,
@@ -523,8 +517,6 @@ describe('workspace dialog IPC', () => {
     const mainWindow = {} as BrowserWindow;
     registerIpc(services, mainWindow, {
       openMainPage: () => undefined,
-      openQuickEntry: async () => undefined,
-      openTrayEntry: async () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated: () => undefined,
       getHostIntegrationStatus: (): HostIntegrationStatus => ({

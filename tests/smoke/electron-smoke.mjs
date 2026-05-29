@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { prepareArtifactDir, writeSmokeResult } from './lib/artifacts.mjs';
-import { assertNoRuntimeMockText, waitForAppReady, waitForCapabilitySelection, waitForTerminalSessionReady, waitForTextContent, waitForWindowWithSelector } from './lib/assertions.mjs';
+import { assertNoRuntimeMockText, waitForAppReady, waitForCapabilitySelection, waitForTerminalSessionReady, waitForTextContent } from './lib/assertions.mjs';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from './lib/fixtures.mjs';
 import { readMainPageText, seedSmokeRuntimeData } from './lib/ipc.mjs';
 import { buildNativeFeelSummary, nativeFeelScorecard, summarizeProcessMetrics } from './lib/native-feel.mjs';
@@ -117,15 +117,6 @@ async function probeWindowMaterial(browserWindow, requestedMaterial) {
       };
     }
   }, requestedMaterial);
-}
-
-function boundsInsideWorkArea(bounds, workArea) {
-  return (
-    bounds.x >= workArea.x &&
-    bounds.y >= workArea.y &&
-    bounds.x + bounds.width <= workArea.x + workArea.width &&
-    bounds.y + bounds.height <= workArea.y + workArea.height
-  );
 }
 
 let app;
@@ -1924,8 +1915,6 @@ try {
       text,
       hasExpectedThreadTitle: text.includes(expectedTitle),
       hasCurrentSessionLabel: text.includes('当前主会话'),
-      hasQuickEntryLabel: text.includes('快捷入口'),
-      hasTrayEntryLabel: text.includes('托盘接管记录'),
       hasMemoryRecordLabel: text.includes('记忆整理裁决'),
       hasTaskRecordLabel: text.includes('任务工作台记录')
     };
@@ -1984,79 +1973,9 @@ try {
     nativeModuleProbe
   });
 
-  const entryWindowEvidence = await page.evaluate(async () => {
-    const quick = await window.roc.app.openQuickEntry();
-    const tray = await window.roc.app.openTrayEntry();
-    if (!quick.ok) {
-      throw new Error(quick.error.message);
-    }
-    if (!tray.ok) {
-      throw new Error(tray.error.message);
-    }
-    return { quick: quick.data.opened, tray: tray.data.opened };
-  });
-  const quickWindow = await waitForWindowWithSelector(app, '[data-testid="quick-entry-view"]');
-  const trayWindow = await waitForWindowWithSelector(app, '[data-testid="tray-entry-view"]');
-  await quickWindow.waitForSelector('[data-testid="floating-quick"]', { timeout: 5000 });
-  await trayWindow.waitForSelector('[data-testid="floating-tray"]', { timeout: 5000 });
-  const quickBrowserWindow = await app.browserWindow(quickWindow);
-  const trayBrowserWindow = await app.browserWindow(trayWindow);
-  const quickBounds = await quickBrowserWindow.evaluate((window) => window.getBounds());
-  const trayBounds = await trayBrowserWindow.evaluate((window) => window.getBounds());
-  const displayWorkAreas = await app.evaluate(({ screen }) => screen.getAllDisplays().map((display) => display.workArea));
   const materialEvidence = {
-    main: mainMaterialEvidence,
-    quick: await probeWindowMaterial(quickBrowserWindow, 'acrylic'),
-    tray: await probeWindowMaterial(trayBrowserWindow, 'acrylic')
+    main: mainMaterialEvidence
   };
-  const floatingWindowBoundsEvidence = {
-    displayWorkAreas,
-    quick: quickBounds,
-    tray: trayBounds,
-    quickInsideDisplay: displayWorkAreas.some((workArea) => boundsInsideWorkArea(quickBounds, workArea)),
-    trayInsideDisplay: displayWorkAreas.some((workArea) => boundsInsideWorkArea(trayBounds, workArea))
-  };
-  const entryButtonEvidence = {
-    quickOpenTasks: false,
-    quickOpenChat: false,
-    quickSubmitTask: false,
-    trayOpenTasks: false,
-    trayToggleBackground: false
-  };
-  await quickWindow.click('[data-testid="quick-open-tasks"]');
-  await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
-  entryButtonEvidence.quickOpenTasks = true;
-  await quickWindow.click('[data-testid="quick-open-chat"]');
-  await page.waitForSelector('[data-testid="chat-view"]', { timeout: 5000 });
-  entryButtonEvidence.quickOpenChat = true;
-  await quickWindow.click('[data-testid="quick-submit-task"]');
-  await quickWindow.waitForSelector('[data-testid="quick-entry-error"], [data-testid="quick-entry-view"]', { timeout: 5000 });
-  entryButtonEvidence.quickSubmitTask = true;
-  await trayWindow.click('[data-testid="tray-open-tasks"]');
-  await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
-  entryButtonEvidence.trayOpenTasks = true;
-  await trayWindow.click('[data-testid="tray-toggle-background"]');
-  await trayWindow.waitForFunction(() => document.body.textContent?.includes('恢复后台执行') === true, undefined, {
-    timeout: 5000
-  });
-  entryButtonEvidence.trayToggleBackground = true;
-  const quickEntryText = await quickWindow.textContent('[data-testid="quick-entry-view"]');
-  const trayEntryText = await trayWindow.textContent('[data-testid="tray-entry-view"]');
-  if (quickEntryText === null || trayEntryText === null) {
-    throw new Error('Smoke could not read quick/tray entry text.');
-  }
-  const quickEntryBoundary = await quickWindow.evaluate(() => ({
-    hasRequire: typeof globalThis.require !== 'undefined',
-    hasProcess: typeof globalThis.process !== 'undefined',
-    floatingVisible: document.querySelector('[data-testid="floating-quick"]') !== null,
-    composerVisible: document.querySelector('.composer') !== null
-  }));
-  const trayEntryBoundary = await trayWindow.evaluate(() => ({
-    hasRequire: typeof globalThis.require !== 'undefined',
-    hasProcess: typeof globalThis.process !== 'undefined',
-    floatingVisible: document.querySelector('[data-testid="floating-tray"]') !== null,
-    composerVisible: document.querySelector('.composer') !== null
-  }));
 
   const boundary = await page.evaluate(() => ({
     hasRequire: typeof globalThis.require !== 'undefined',
@@ -2532,9 +2451,7 @@ try {
     { name: 'skills', text: skillText },
     { name: 'settings', text: settingsText },
     { name: 'chat', text: chatResultText },
-    { name: 'diagnostics', text: diagnosticsText },
-    { name: 'quick-entry', text: quickEntryText },
-    { name: 'tray-entry', text: trayEntryText }
+    { name: 'diagnostics', text: diagnosticsText }
   ]);
 
   const rendererBoundary = {
@@ -2822,40 +2739,10 @@ try {
       mcpText.includes('测试') &&
       mcpText.includes('禁用') &&
       mcpText.includes('删除'),
-    quickEntryVisible:
-      entryWindowEvidence.quick &&
-      quickEntryText.includes('Roc 快捷入口') &&
-      quickEntryText.includes('同步主窗口') &&
-      quickEntryBoundary.floatingVisible &&
-      !quickEntryBoundary.composerVisible &&
-      !quickEntryBoundary.hasRequire &&
-      !quickEntryBoundary.hasProcess,
-    quickEntryButtonsClickable:
-      quickEntryBoundary.floatingVisible &&
-      entryButtonEvidence.quickOpenTasks &&
-      entryButtonEvidence.quickOpenChat &&
-      entryButtonEvidence.quickSubmitTask &&
-      quickEntryText.includes('追加到当前任务') &&
-      quickEntryText.includes('创建新任务') &&
-      quickEntryText.includes('快速提问'),
-    trayEntryVisible:
-      entryWindowEvidence.tray &&
-      trayEntryText.includes('Roc 常驻状态') &&
-      trayEntryText.includes('后台执行') &&
-      trayEntryBoundary.floatingVisible &&
-      !trayEntryBoundary.composerVisible &&
-      !trayEntryBoundary.hasRequire &&
-      !trayEntryBoundary.hasProcess,
-    trayEntryButtonsClickable:
-      trayEntryBoundary.floatingVisible &&
-      entryButtonEvidence.trayOpenTasks &&
-      entryButtonEvidence.trayToggleBackground &&
-      trayEntryText.includes('后台执行') &&
-      trayEntryText.includes('恢复后台执行'),
-    appEntryApiExpanded:
+    floatingEntryApiRemoved:
       boundary.appKeys.includes('openMainPage') &&
-      boundary.appKeys.includes('openQuickEntry') &&
-      boundary.appKeys.includes('openTrayEntry') &&
+      !boundary.appKeys.includes('openQuickEntry') &&
+      !boundary.appKeys.includes('openTrayEntry') &&
       boundary.appKeys.includes('onNavigate'),
     windowSetBoundsRemoved: !boundary.windowKeys.includes('setBounds'),
     workspaceSelectButtonVisible:
@@ -2993,8 +2880,6 @@ try {
       historySidebarEvidence.exists &&
       historySidebarEvidence.hasExpectedThreadTitle &&
       !historySidebarEvidence.hasCurrentSessionLabel &&
-      !historySidebarEvidence.hasQuickEntryLabel &&
-      !historySidebarEvidence.hasTrayEntryLabel &&
       !historySidebarEvidence.hasMemoryRecordLabel &&
       !historySidebarEvidence.hasTaskRecordLabel,
     memoryApiFileEditor:
@@ -3056,23 +2941,12 @@ try {
       appShellFrameEvidence.gapLeft <= 1,
     materialEvidenceRecorded:
       materialEvidence.main.requestedMaterial === 'mica' &&
-      materialEvidence.quick.requestedMaterial === 'acrylic' &&
-      materialEvidence.tray.requestedMaterial === 'acrylic' &&
       materialEvidence.main.apiAvailable &&
-      materialEvidence.quick.apiAvailable &&
-      materialEvidence.tray.apiAvailable &&
       Object.values(materialEvidence).every((item) => item.accepted || typeof item.errorMessage === 'string'),
     windowPlacementPersisted:
       windowPlacementEvidence.persisted &&
       windowPlacementEvidence.snapshot?.maximized === false &&
       typeof windowPlacementEvidence.snapshot?.updatedAt === 'string',
-    floatingWindowBoundsResolved:
-      floatingWindowBoundsEvidence.quickInsideDisplay &&
-      floatingWindowBoundsEvidence.trayInsideDisplay &&
-      typeof floatingWindowBoundsEvidence.quick.x === 'number' &&
-      typeof floatingWindowBoundsEvidence.quick.y === 'number' &&
-      typeof floatingWindowBoundsEvidence.tray.x === 'number' &&
-      typeof floatingWindowBoundsEvidence.tray.y === 'number',
     phase3WebViewBehavior:
       phase3WebViewEvidence.body.cursor === 'default' &&
       phase3WebViewEvidence.body.userSelect === 'none' &&
@@ -3120,7 +2994,6 @@ try {
     appShellFlushToWindow: rendererBoundary.appShellFlushToWindow,
     materialEvidenceRecorded: rendererBoundary.materialEvidenceRecorded,
     windowPlacementPersisted: rendererBoundary.windowPlacementPersisted,
-    floatingWindowBoundsResolved: rendererBoundary.floatingWindowBoundsResolved,
     phase3WebViewBehavior: rendererBoundary.phase3WebViewBehavior,
     phase4VisualTheme: rendererBoundary.phase4VisualTheme,
     sandboxEvaluated: rendererBoundary.sandboxEvaluated,
@@ -3170,11 +3043,7 @@ try {
     skillLayoutCompact: rendererBoundary.skillLayoutCompact,
     providerActionsVisible: rendererBoundary.providerActionsVisible,
     capabilityActionsVisible: rendererBoundary.capabilityActionsVisible,
-    quickEntryVisible: rendererBoundary.quickEntryVisible,
-    quickEntryButtonsClickable: rendererBoundary.quickEntryButtonsClickable,
-    trayEntryVisible: rendererBoundary.trayEntryVisible,
-    trayEntryButtonsClickable: rendererBoundary.trayEntryButtonsClickable,
-    appEntryApiExpanded: rendererBoundary.appEntryApiExpanded,
+    floatingEntryApiRemoved: rendererBoundary.floatingEntryApiRemoved,
     workspaceSelectButtonVisible: rendererBoundary.workspaceSelectButtonVisible,
     sidebarScrollableToSettings: rendererBoundary.sidebarScrollableToSettings,
     workspaceDialogApiExposed: rendererBoundary.workspaceDialogApiExposed,
@@ -3234,7 +3103,6 @@ try {
       chatInputEvidence,
       workspaceSelectButtonEvidence,
       buttonInteractionEvidence,
-      entryButtonEvidence,
       historySidebarEvidence,
       memoryStatusApiEvidence,
       terminalText,
@@ -3259,7 +3127,6 @@ try {
       providerSettingsEvidence,
       materialEvidence,
       windowPlacementEvidence,
-      floatingWindowBoundsEvidence,
       phase3WebViewEvidence,
       phase4VisualEvidence,
       nativeConfirmationEvidence: {

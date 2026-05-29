@@ -113,7 +113,7 @@ export function AppBasicsSection({
         </div>
         <FieldRow
           hint={formatGlobalHotkeyHint(hostIntegration)}
-          label="全局快捷入口"
+          label="全局快捷键"
         >
           <input
             data-testid="settings-global-hotkey"

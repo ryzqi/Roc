@@ -99,9 +99,4 @@
     justify-content: flex-start;
   }
 
-  .app-shell .mini-window,
-  .app-shell .tray-pop {
-    width: 100%;
-    margin: 24px 0 0;
-  }
 }

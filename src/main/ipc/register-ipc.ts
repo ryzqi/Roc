@@ -22,8 +22,6 @@ import type { IpcHandler, IpcMainHandler } from './ipc-common';
 
 export type AppWindowControls = {
   openMainPage: (page: string) => void;
-  openQuickEntry: () => Promise<void>;
-  openTrayEntry: () => Promise<void>;
   closeMainWindow: () => void;
   syncHostSettings: (settings: AppSettings) => void;
   getHostIntegrationStatus: () => HostIntegrationStatus;

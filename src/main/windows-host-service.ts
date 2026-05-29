@@ -95,8 +95,6 @@ export class WindowsHostService {
       menu: MenuLike;
       createTray: (iconDataUrl: string) => TrayLike;
       openMainPage: (page: string) => void;
-      openQuickEntry: () => Promise<void>;
-      openTrayEntry: () => Promise<void>;
       broadcastTaskUpdated: () => void;
     }
   ) {}
@@ -175,7 +173,7 @@ export class WindowsHostService {
     if (settings.globalHotkey !== null) {
       try {
         const registered = this.input.globalShortcut.register(settings.globalHotkey, () => {
-          void this.input.openQuickEntry();
+          this.input.openMainPage('chat');
         });
         this.hostIntegration.globalHotkey.registered = registered;
         if (registered) {
@@ -217,12 +215,6 @@ export class WindowsHostService {
           label: '打开 Roc',
           click: () => {
             this.input.openMainPage('chat');
-          }
-        },
-        {
-          label: '快速入口',
-          click: () => {
-            void this.input.openQuickEntry();
           }
         },
         {
@@ -298,7 +290,7 @@ export class WindowsHostService {
       return this.tray;
     }
     this.tray = this.input.createTray(this.trayIconDataUrl);
-    this.tray.on('click', () => this.input.openTrayEntry());
+    this.tray.on('click', () => this.input.openMainPage('chat'));
     return this.tray;
   }
 

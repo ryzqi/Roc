@@ -22,10 +22,8 @@ import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/di
 import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';
 import {
-  buildFloatingWindowOptions,
   buildMainWindowOptions,
   getWindowBounds,
-  resolveFloatingWindowBounds,
   resolveMainWindowBounds
 } from './window-shell';
 import {
@@ -59,8 +57,6 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
-let quickEntryWindow: BrowserWindow | null = null;
-let trayEntryWindow: BrowserWindow | null = null;
 let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
 let screenBoundsBound = false;
@@ -151,10 +147,8 @@ const hostService = new WindowsHostService({
     };
   },
   openMainPage: showMainPage,
-  openQuickEntry: () => openFloatingEntry('quick'),
-  openTrayEntry: () => openFloatingEntry('tray'),
   broadcastTaskUpdated: () => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+    broadcastToWindows([mainWindow], 'roc:tasks:updated', null);
   }
 });
 
@@ -177,18 +171,6 @@ async function loadMainRenderer(window: BrowserWindow): Promise<void> {
   await window.loadFile(join(__dirname, '../renderer/index.html'));
 }
 
-async function loadFloatingRenderer(window: BrowserWindow, kind: 'quick' | 'tray'): Promise<void> {
-  const pagePath = kind === 'quick' ? 'quick-entry.html' : 'tray-entry.html';
-  if (isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined) {
-    const url = new URL(process.env.ELECTRON_RENDERER_URL);
-    url.pathname = `/${pagePath}`;
-    url.searchParams.set('page', kind);
-    await window.loadURL(url.toString());
-    return;
-  }
-  await window.loadFile(join(__dirname, `../renderer/${pagePath}`), { query: { page: kind } });
-}
-
 function showMainPage(page: string): void {
   if (mainWindow === null || mainWindow.isDestroyed()) {
     return;
@@ -199,55 +181,6 @@ function showMainPage(page: string): void {
   mainWindow.show();
   mainWindow.focus();
   sendToWindow(mainWindow, 'roc:navigate', page);
-}
-
-async function openFloatingEntry(kind: 'quick' | 'tray'): Promise<void> {
-  if (activeServices === null) {
-    throw new Error('App services are not ready for floating entry windows.');
-  }
-  const services = activeServices;
-  const existingWindow = kind === 'quick' ? quickEntryWindow : trayEntryWindow;
-  if (existingWindow !== null && !existingWindow.isDestroyed()) {
-    existingWindow.show();
-    existingWindow.focus();
-    return;
-  }
-
-  const currentDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const entryWindow = new BrowserWindow(
-    buildFloatingWindowOptions(
-      preloadPath,
-      kind === 'quick' ? 'Roc Quick Entry' : 'Roc Tray Status',
-      resolveFloatingWindowBounds(kind, { workArea: currentDisplay.workArea })
-    )
-  );
-  applyWindowMaterial(entryWindow, 'acrylic', services.logService);
-  entryWindow.setMenuBarVisibility(false);
-  entryWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return handleExternalWindowOpen(url, {
-      shell,
-      logService: services.logService
-    });
-  });
-  bindNativeContextMenu(entryWindow.webContents);
-  entryWindow.once('ready-to-show', () => {
-    entryWindow.show();
-  });
-  entryWindow.on('closed', () => {
-    if (kind === 'quick') {
-      quickEntryWindow = null;
-    } else {
-      trayEntryWindow = null;
-    }
-  });
-
-  if (kind === 'quick') {
-    quickEntryWindow = entryWindow;
-  } else {
-    trayEntryWindow = entryWindow;
-  }
-
-  await loadFloatingRenderer(entryWindow, kind);
 }
 
 async function createWindow(): Promise<void> {
@@ -327,8 +260,6 @@ async function createWindow(): Promise<void> {
 
   registerIpc(services, mainWindow, {
     openMainPage: showMainPage,
-    openQuickEntry: () => openFloatingEntry('quick'),
-    openTrayEntry: () => openFloatingEntry('tray'),
     closeMainWindow: () => {
       mainWindow?.close();
     },
@@ -338,7 +269,7 @@ async function createWindow(): Promise<void> {
     getHostIntegrationStatus: () => hostService.getIntegrationStatus(),
     broadcastTaskUpdated: (event) => {
       hostService.refreshTray();
-      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', event ?? null);
+      broadcastToWindows([mainWindow], 'roc:tasks:updated', event ?? null);
     }
   });
   if (!pdfPreviewProtocolRegistered) {
@@ -358,21 +289,21 @@ async function createWindow(): Promise<void> {
   }
 
   services.terminalSessionService.onOutput((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:output', event, {
+    broadcastToWindows([mainWindow], 'roc:terminal:output', event, {
       include: (_window, index) => index === 0
     });
   });
   services.terminalSessionService.onExit((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:terminal:exit', event, {
+    broadcastToWindows([mainWindow], 'roc:terminal:exit', event, {
       include: (_window, index) => index === 0
     });
   });
   services.deepAgentRuntimeService.onRunEvent((event) => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:chat:run-event', event, {
+    broadcastToWindows([mainWindow], 'roc:chat:run-event', event, {
       include: (_window, index) => index === 0
     });
     if (event.runId.startsWith('run_')) {
-      broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:tasks:updated', null);
+      broadcastToWindows([mainWindow], 'roc:tasks:updated', null);
     }
   });
   if (!powerResumeBound) {
@@ -479,7 +410,7 @@ function bindSystemAppearanceBroadcast(): void {
   }
   systemAppearanceBound = true;
   const broadcastSystemAppearance = (): void => {
-    broadcastToWindows([mainWindow, quickEntryWindow, trayEntryWindow], 'roc:appearance:updated', getSystemAppearanceSnapshot());
+    broadcastToWindows([mainWindow], 'roc:appearance:updated', getSystemAppearanceSnapshot());
   };
   nativeTheme.on('updated', broadcastSystemAppearance);
   systemPreferences.on('color-changed', broadcastSystemAppearance);

@@ -98,26 +98,9 @@ describe('startup load policy', () => {
     }
   });
 
-  it('keeps quick view on the base startup surface', () => {
-    for (const activeView of ['quick'] as const) {
-      const intent = getStartupLoadIntent({
-        activeView,
-        activeWorkbenchTool: 'files',
-        workbenchVisible: false
-      });
-
-      expectTargets(intent, []);
-    }
-  });
-
-  it('loads task surface only when the current view presents task or tray data', () => {
+  it('loads task surface only when the current view presents task data', () => {
     const tasksIntent = getStartupLoadIntent({
       activeView: 'tasks',
-      activeWorkbenchTool: 'files',
-      workbenchVisible: false
-    });
-    const trayIntent = getStartupLoadIntent({
-      activeView: 'tray',
       activeWorkbenchTool: 'files',
       workbenchVisible: false
     });
@@ -128,7 +111,6 @@ describe('startup load policy', () => {
     });
 
     expectTargets(tasksIntent, ['taskSurface']);
-    expectTargets(trayIntent, ['taskSurface']);
     expect(chatIntent.targets.has('taskSurface')).toBe(false);
   });
 

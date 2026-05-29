@@ -102,8 +102,6 @@ export const ipcChannels = {
   appGetStatus: 'roc:app:get-status',
   appOpenSettings: 'roc:app:open-settings',
   appOpenMainPage: 'roc:app:open-main-page',
-  appOpenQuickEntry: 'roc:app:open-quick-entry',
-  appOpenTrayEntry: 'roc:app:open-tray-entry',
   windowGetState: 'roc:window:get-state',
   windowGetBounds: 'roc:window:get-bounds',
   windowMinimize: 'roc:window:minimize',
@@ -197,8 +195,6 @@ export type RocPreloadApi = {
     getStatus: () => Promise<IpcResult<AppStatus>>;
     openSettings: () => Promise<IpcResult<{ opened: true }>>;
     openMainPage: (page: string) => Promise<IpcResult<{ opened: true; page: string }>>;
-    openQuickEntry: () => Promise<IpcResult<{ opened: true }>>;
-    openTrayEntry: () => Promise<IpcResult<{ opened: true }>>;
     onAppearanceUpdated: (callback: (appearance: SystemAppearanceSnapshot) => void) => () => void;
     onNavigate: (callback: (page: string) => void) => () => void;
   };

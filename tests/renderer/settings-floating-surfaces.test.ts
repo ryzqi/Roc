@@ -11,8 +11,6 @@ import { DefaultModelSection } from '../../src/renderer/settings/sections/defaul
 import { MemorySection } from '../../src/renderer/settings/sections/memory-section';
 import { ProvidersSection } from '../../src/renderer/settings/sections/providers-section';
 import { createProviderDraft } from '../../src/renderer/settings-model';
-import { QuickEntryView } from '../../src/renderer/views/floating/QuickEntryView';
-import { TrayEntryView } from '../../src/renderer/views/floating/TrayEntryView';
 
 function createPermissions(mode: PermissionsConfig['mode'] = 'fully_automatic'): PermissionsConfig {
   return {
@@ -38,7 +36,7 @@ function createHostStatus(partial?: Partial<HostIntegrationStatus>): HostIntegra
   };
 }
 
-describe('settings and floating surfaces', () => {
+describe('settings surfaces', () => {
   it('renders settings sections with section headings instead of legacy card titles', () => {
     const settings = createLoadedState({}).settings;
     const provider: ProviderConfig = {
@@ -133,7 +131,7 @@ describe('settings and floating surfaces', () => {
     expect(sectionHtml).toContain('注册失败');
   });
 
-  it('renders provider rows and floating views without status dots or card title chrome', () => {
+  it('renders provider rows without status dots or card title chrome', () => {
     const provider: ProviderConfig = {
       id: 'provider-openai',
       name: 'Provider OpenAI',
@@ -170,50 +168,9 @@ describe('settings and floating surfaces', () => {
       })
     );
 
-    const floatingState = createLoadedState({
-      taskSnapshot: {
-        generatedAt: '2026-05-16T08:00:00.000Z',
-        counts: {
-          total: 3,
-          running: 1,
-          failed: 1,
-          pendingConfirmation: 1
-        },
-        threads: [],
-        recentEvents: []
-      },
-      traySummary: {
-        residentEnabled: true,
-        backgroundPaused: false,
-        nextRunAt: null,
-        updatedAt: '2026-05-16T08:00:00.000Z',
-        backgroundTasks: {
-          total: 3,
-          running: 1,
-          failed: 1,
-          pendingConfirmation: 1,
-          nextRunAt: null
-        }
-      }
-    });
-    const quickHtml = renderToStaticMarkup(
-      React.createElement(QuickEntryView, {
-        onSubmitChatTask: async () => ({ ok: true as const }),
-        state: floatingState
-      })
-    );
-    const trayHtml = renderToStaticMarkup(
-      React.createElement(TrayEntryView, {
-        state: floatingState,
-        updateLoadedState: () => {}
-      })
-    );
-
     expect(providersHtml).not.toContain('provider-status-dot');
     expect(providersHtml).toContain('status-pill');
-    expect(quickHtml).toContain('single-panel');
-    expect(quickHtml).not.toContain('card-title');
-    expect(trayHtml).toContain('single-panel');
-    expect(trayHtml).not.toContain('card-title');
+    expect(providersHtml).toContain('single-panel');
+    expect(providersHtml).not.toContain('card-title');
   });
 });
