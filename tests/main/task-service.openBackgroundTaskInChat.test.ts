@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('TaskService.openBackgroundTaskInChat', () => {
-  it('不再向 pendingThreadContexts 预注入 task JSON', () => {
+  it('只记录系统提示消息，不预注入后台任务 JSON', () => {
     const preview = services.taskService.createBackgroundTaskPreview({
       goal: '修改每天检查项目测试状态',
       trigger: {
@@ -40,7 +40,6 @@ describe('TaskService.openBackgroundTaskInChat', () => {
     expect(opened).toEqual({
       threadId: task.threadId
     });
-    expect(services.taskService.takePendingThreadContext(task.threadId)).toBeNull();
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

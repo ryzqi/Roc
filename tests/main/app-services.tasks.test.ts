@@ -160,7 +160,7 @@ describe('Roc foundation services tasks', () => {
     });
   });
 
-  it('opens background task chat without pre-injecting task JSON', () => {
+  it('opens background task chat with only the system hint event', () => {
     const preview = context.services.taskService.createBackgroundTaskPreview({
       goal: '修改每天检查项目测试状态',
       trigger: {
@@ -179,7 +179,6 @@ describe('Roc foundation services tasks', () => {
 
     const opened = context.services.taskService.openBackgroundTaskInChat(task.id);
     const messages = context.services.taskService.listThreadMessages(task.threadId);
-    const firstContext = context.services.taskService.takePendingThreadContext(task.threadId);
 
     expect(opened).toEqual({
       threadId: task.threadId
@@ -195,7 +194,6 @@ describe('Roc foundation services tasks', () => {
         })
       ])
     );
-    expect(firstContext).toBeNull();
     expect(JSON.stringify(messages)).not.toContain('"goal": "修改每天检查项目测试状态"');
   });
 

@@ -21,6 +21,7 @@ export type ActiveRun = {
 };
 
 export type RunExecutionContext = ActiveRun & {
+  agentInput: string;
   input: string;
   previewStore?: PreviewStore;
   startedAtMs: number;

@@ -599,7 +599,7 @@ describe('DeepAgentRuntimeService', () => {
 
     const runtime = createRuntime();
     const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
-    await runtime.startRun({
+    const started = await runtime.startRun({
       input: '把它改成每天 10 点运行',
       mode: 'task',
       threadId: task.threadId,
@@ -616,6 +616,25 @@ describe('DeepAgentRuntimeService', () => {
     expect(String(startedInput)).toContain('read_background_task');
     expect(String(startedInput)).toContain('把它改成每天 10 点运行');
     expect(String(startedInput)).not.toContain('"goal": "更新后台任务配置"');
+    expect(services.taskService.getRun(started.runId).userInput).toBe('把它改成每天 10 点运行');
+    const persistedUserMessages = services.taskService
+      .listThreadMessages(task.threadId)
+      .filter(
+        (event) =>
+          event.runId === started.runId &&
+          event.type === 'message' &&
+          typeof event.payload === 'object' &&
+          event.payload !== null &&
+          Reflect.get(event.payload, 'role') === 'user'
+      );
+    expect(persistedUserMessages).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          role: 'user',
+          content: '把它改成每天 10 点运行'
+        })
+      })
+    ]);
   });
 
   it('archives visible user, tool, and assistant messages for a chat run', async () => {

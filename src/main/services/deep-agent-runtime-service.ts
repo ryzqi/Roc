@@ -135,11 +135,8 @@ export class DeepAgentRuntimeService {
       streaming: true
     });
     const createdAt = new Date().toISOString();
-    const inputWithPendingContext = request.mode === 'task' && typeof request.threadId === 'string'
-      ? this.prependPendingThreadContext(request.threadId, input)
-      : input;
-    const preparedInput = this.prependWorkflowHintContext(request, inputWithPendingContext);
-    const taskRun = this.createTaskRunIfNeeded(request, preparedInput, modelHandle.modelId);
+    const agentInput = this.prependWorkflowHintContext(request, input);
+    const taskRun = this.createTaskRunIfNeeded(request, input, modelHandle.modelId);
     const threadId = request.mode === 'task' && taskRun !== null ? taskRun.threadId : prompt.resolveThreadId(request.threadId);
     const runId = request.mode === 'task' && taskRun !== null ? taskRun.id : `chat_${randomUUID()}`;
     const abortController = new AbortController();
@@ -168,7 +165,8 @@ export class DeepAgentRuntimeService {
 
     const context: RunExecutionContext = {
       ...activeRun,
-      input: preparedInput,
+      agentInput,
+      input,
       startedAtMs: Date.now()
     };
     void this.executeRun(context);
@@ -265,6 +263,7 @@ export class DeepAgentRuntimeService {
 
     const context: RunExecutionContext = {
       ...activeRun,
+      agentInput: resumeContext.taskRun.userInput,
       input: resumeContext.taskRun.userInput,
       startedAtMs: Date.now()
     };
@@ -346,14 +345,6 @@ export class DeepAgentRuntimeService {
     return run;
   }
 
-  private prependPendingThreadContext(threadId: string, input: string): string {
-    const pendingContext = this.taskService.takePendingThreadContext(threadId);
-    if (pendingContext === null) {
-      return input;
-    }
-    return `${pendingContext}\n\n[用户最新请求]\n${input}`;
-  }
-
   private prependWorkflowHintContext(request: ChatStartRunRequest, input: string): string {
     if (request.workflowHint !== 'background_task_change' || request.mode !== 'task' || typeof request.threadId !== 'string') {
       return input;
@@ -401,7 +392,7 @@ export class DeepAgentRuntimeService {
         try {
           const run = await session.agent.streamEvents(
             {
-              messages: [new HumanMessage(context.input)],
+              messages: [new HumanMessage(context.agentInput)],
               ...createInitialForgeGuardrailsState()
             },
             {
@@ -898,7 +889,7 @@ export class DeepAgentRuntimeService {
       modelHandle: context.modelHandle,
       createdAt: context.createdAt,
       startedAtMs: context.startedAtMs,
-      inputLength: context.input.length,
+      inputLength: context.agentInput.length,
       assistantMessage,
       usage
     });

@@ -23,11 +23,8 @@ import * as taskRunManagement from './task/task-run-management';
 import * as scheduledRunStore from './task/scheduled-run-store';
 import * as taskEventRecorder from './task/task-event-recorder';
 import * as snapshotBuilders from './task/snapshot-builders';
-import { PendingThreadContextStore } from './task/pending-thread-context';
 
 export class TaskService {
-  private readonly pendingThreadContexts = new PendingThreadContextStore();
-
   constructor(private readonly database: DatabaseService) {}
 
   createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview {
@@ -104,10 +101,6 @@ export class TaskService {
     return {
       threadId: task.threadId
     };
-  }
-
-  takePendingThreadContext(threadId: string): string | null {
-    return this.pendingThreadContexts.take(threadId);
   }
 
   recordScheduledTaskRun(input: {

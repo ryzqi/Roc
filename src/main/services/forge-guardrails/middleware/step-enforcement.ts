@@ -3,7 +3,7 @@ import { Command } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 import { RocDomainError } from '../../errors';
 import { FORGE_EXHAUSTED_CODES } from '../errors';
-import { createForgeMessageId, tagForgeMessage } from '../message-tags';
+import { createForgeMessageId, readForgeMessageTag, tagForgeMessage } from '../message-tags';
 import { prerequisiteNudge, stepNudge } from '../nudge-templates';
 import type { PrerequisitesConfig } from '../prerequisites-config';
 import {
@@ -145,7 +145,7 @@ export function createStepEnforcementMiddleware(opts: {
       if (!ToolMessage.isInstance(result)) {
         return result;
       }
-      if (result.status === 'error') {
+      if (result.status === 'error' || readForgeMessageTag(result) === 'forge:tool_resolution') {
         return result;
       }
 

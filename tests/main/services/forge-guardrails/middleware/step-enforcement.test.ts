@@ -10,6 +10,7 @@ import {
   ROC_PREREQUISITES
 } from '../../../../../src/main/services/forge-guardrails';
 import { createStepEnforcementMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/step-enforcement';
+import { tagForgeMessage } from '../../../../../src/main/services/forge-guardrails/message-tags';
 
 function getStepEnforcementMiddleware(input?: { workflowHint?: 'propose_background_task' | 'background_task_change' | null }) {
   const workflowHint = input?.workflowHint === undefined ? 'propose_background_task' : input.workflowHint;
@@ -371,6 +372,36 @@ describe('ForgeStepEnforcementMiddleware', () => {
           name: 'propose_background_task',
           args: { goal: 'X' },
           id: 'call-propose'
+        },
+        state: baseState()
+      } as never,
+      (async () => toolMessage) as never
+    );
+
+    expect(result).toBe(toolMessage);
+  });
+
+  it('does not record tool-resolution soft errors as completed steps', async () => {
+    const middleware = getStepEnforcementMiddleware();
+    if (typeof middleware.wrapToolCall !== 'function') {
+      throw new Error('Expected step enforcement middleware to expose wrapToolCall.');
+    }
+    const toolMessage = tagForgeMessage(
+      new ToolMessage({
+        tool_call_id: 'call-read-task',
+        name: 'read_background_task',
+        content: '[ToolResolutionError] Background task not found.',
+        status: 'success'
+      }),
+      'forge:tool_resolution'
+    );
+
+    const result = await middleware.wrapToolCall(
+      {
+        toolCall: {
+          name: 'read_background_task',
+          args: { taskId: 'missing-task' },
+          id: 'call-read-task'
         },
         state: baseState()
       } as never,
