@@ -75,10 +75,10 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       resolveWorkflowFromContext: () => input.workflowHint,
       prerequisitesConfig: ROC_PREREQUISITES
     }),
+    createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens
     }),
-    createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createRescueParsingMiddleware({ availableTools: knownToolNames }),
     createResponseValidationMiddleware({ knownToolNames }),
     createToolResolutionMiddleware(),

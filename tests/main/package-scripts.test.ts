@@ -25,7 +25,7 @@ describe('package scripts', () => {
 
     expect(performanceSmokeScript).toContain('nativeFeelScorecard');
     expect(performanceSmokeScript).toContain('rendererReadyMs');
-    expect(performanceSmokeScript).toContain('warmQuickReopenMs');
+    expect(performanceSmokeScript).not.toContain('warmQuickReopenMs');
     expect(performanceSmokeScript).toContain('processMetricsSummary');
     expect(performanceSmokeScript).toContain('ipcSummary');
     expect(electronSmokeScript).toContain('nativeModuleProbe');

@@ -955,6 +955,17 @@ describe('Roc foundation services providers', () => {
         skills: ['project-review']
       }
     });
+    expect(preview.toolCards.slice(0, 9).map((card) => card.name)).toEqual([
+      'execute',
+      'web_read',
+      'delete_file',
+      'propose_background_task',
+      'schedule_background_task',
+      'confirm_with_user',
+      'read_background_task',
+      'update_background_task',
+      'cancel_background_task'
+    ]);
     expect(preview.toolCards).toContainEqual(
       expect.objectContaining({
         id: 'mcp:docs-http:search_docs',

@@ -103,7 +103,8 @@ export async function createDeepAgentSession(input: {
     systemPrompt: prompt.buildSystemPrompt({
       enabledCapabilities: input.context.enabledCapabilities,
       workspacePath: workspace?.path ?? null,
-      frozenSnapshot
+      frozenSnapshot,
+      workflowHint: input.context.workflowHint
     }),
     backend: runtimeBackend.backend,
     store: input.store,

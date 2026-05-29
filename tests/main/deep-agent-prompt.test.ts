@@ -10,7 +10,8 @@ describe('deep agent prompt', () => {
         skills: ['project-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot()
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: null
     });
 
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
@@ -23,7 +24,8 @@ describe('deep agent prompt', () => {
         skills: ['project-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot()
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: null
     });
 
     expect(prompt).toContain(
@@ -51,7 +53,8 @@ describe('deep agent prompt', () => {
         skills: ['zeta-review', 'alpha-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot()
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: null
     });
 
     expect(prompt.split('\n')).toEqual([
@@ -82,7 +85,8 @@ describe('deep agent prompt', () => {
         skills: []
       },
       workspacePath: null,
-      frozenSnapshot: disabledSnapshot()
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: null
     });
 
     expect(prompt).toContain('Workspace: not selected.');
@@ -133,7 +137,8 @@ describe('deep agent prompt', () => {
         totalChars: 6,
         totalLimit: 4375,
         globallyEnabled: true
-      }
+      },
+      workflowHint: null
     });
 
     expect(prompt).toContain('<FROZEN_SNAPSHOT>');
@@ -145,10 +150,41 @@ describe('deep agent prompt', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: null,
-      frozenSnapshot: disabledSnapshot()
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: null
     });
 
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
+  });
+
+  it('adds a propose-background-task workflow overview without hard step ordering', () => {
+    const prompt = buildSystemPrompt({
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: 'propose_background_task'
+    });
+
+    expect(prompt).toContain('本轮工作流：创建后台任务。');
+    expect(prompt).toContain('可用工具：propose_background_task / schedule_background_task / confirm_with_user。');
+    expect(prompt).toContain('propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成。');
+    expect(prompt).not.toContain('先 propose');
+    expect(prompt).not.toContain('先调用 propose_background_task');
+  });
+
+  it('adds a background-task-change workflow overview without hard prerequisite ordering', () => {
+    const prompt = buildSystemPrompt({
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      frozenSnapshot: disabledSnapshot(),
+      workflowHint: 'background_task_change'
+    });
+
+    expect(prompt).toContain('本轮工作流：修改已有后台任务。');
+    expect(prompt).toContain('可用工具：read_background_task / update_background_task / cancel_background_task。');
+    expect(prompt).toContain('update / cancel 会触发用户审批；read 用于先看清楚再改。');
+    expect(prompt).not.toContain('必须先 read_background_task');
+    expect(prompt).not.toContain('先调用 read_background_task');
   });
 
   it('sorts MCP server and skill identifiers in the capability summary', () => {

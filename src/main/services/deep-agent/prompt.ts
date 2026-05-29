@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ChatStartRunRequest, ProviderExecutionResult } from '../../../shared/types';
+import type { ChatStartRunRequest, ProviderExecutionResult, WorkflowHint } from '../../../shared/types';
 import { RocDomainError } from '../errors';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
 import type { FrozenSnapshot } from '../memory/snapshot';
@@ -25,17 +25,41 @@ export function buildSystemPrompt(input: {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
   frozenSnapshot: FrozenSnapshot;
+  workflowHint: WorkflowHint;
 }): string {
   const sections = [
     ROC_STATIC_SYSTEM_PROMPT,
     ...createWorkspaceBoundary(input.workspacePath),
     `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`
   ];
+  sections.push(...createWorkflowOverview(input.workflowHint));
   const snapshotBlock = renderFrozenSnapshot(input.frozenSnapshot);
   if (snapshotBlock.length > 0) {
     sections.push('', snapshotBlock);
   }
   return sections.join('\n');
+}
+
+function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
+  if (workflowHint === 'propose_background_task') {
+    return [
+      '',
+      '本轮工作流：创建后台任务。',
+      '可用工具：propose_background_task / schedule_background_task / confirm_with_user。',
+      'propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成。'
+    ];
+  }
+
+  if (workflowHint === 'background_task_change') {
+    return [
+      '',
+      '本轮工作流：修改已有后台任务。',
+      '可用工具：read_background_task / update_background_task / cancel_background_task。',
+      'update / cancel 会触发用户审批；read 用于先看清楚再改。'
+    ];
+  }
+
+  return [];
 }
 
 function createWorkspaceBoundary(workspacePath: string | null): string[] {
