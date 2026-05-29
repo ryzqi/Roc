@@ -5,6 +5,7 @@ import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
 import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
+import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from './task-run-payload';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -50,12 +51,12 @@ function ChatWaitingIndicator({
 
 type ChatViewProps = {
   chatSelectionVersion: number;
-  queuedTaskPrompt: string | null;
+  queuedTaskPrompt: QueuedTaskPrompt | null;
   onQueuedTaskPromptHandled: () => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
-  onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 export function buildChatResumeRunRequest(input: {
@@ -196,16 +197,20 @@ export function ChatView({
     if (state.agent.execution !== 'ready') {
       return;
     }
-    if (queuedTaskPromptInFlightRef.current === queuedTaskPrompt) {
+    const queuedTaskPromptKey = buildQueuedTaskPromptKey(queuedTaskPrompt);
+    if (queuedTaskPromptInFlightRef.current === queuedTaskPromptKey) {
       return;
     }
 
-    queuedTaskPromptInFlightRef.current = queuedTaskPrompt;
+    queuedTaskPromptInFlightRef.current = queuedTaskPromptKey;
     setSubmitting(true);
-    void onSubmitChatTask(queuedTaskPrompt)
+    void onSubmitChatTask({
+      input: queuedTaskPrompt.input,
+      workflowHint: queuedTaskPrompt.workflowHint
+    })
       .then((result) => {
         if (result.ok) {
-          setPendingUserInput(queuedTaskPrompt);
+          setPendingUserInput(queuedTaskPrompt.input);
           queuedTaskPromptInFlightRef.current = null;
           onQueuedTaskPromptHandled();
         } else {
@@ -227,7 +232,7 @@ export function ChatView({
     }
     setSubmitting(true);
     try {
-      const result = await onSubmitChatTask(trimmedInput);
+      const result = await onSubmitChatTask({ input: trimmedInput });
       if (result.ok) {
         setPendingUserInput(trimmedInput);
         setChatInput('');
@@ -312,4 +317,8 @@ export function ChatView({
       </div>
     </section>
   );
+}
+
+function buildQueuedTaskPromptKey(prompt: QueuedTaskPrompt): string {
+  return `${prompt.workflowHint ?? 'none'}\0${prompt.input}`;
 }

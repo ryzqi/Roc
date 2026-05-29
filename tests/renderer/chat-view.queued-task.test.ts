@@ -49,7 +49,10 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
-          queuedTaskPrompt: '请调用 propose_background_task 创建任务',
+          queuedTaskPrompt: {
+            input: '请调用 propose_background_task 创建任务',
+            workflowHint: 'propose_background_task'
+          },
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
           state: createLoadedState({}),
@@ -60,7 +63,10 @@ describe('ChatView queued task prompt', () => {
     });
     await flushPromises();
 
-    expect(onSubmitChatTask).toHaveBeenCalledWith('请调用 propose_background_task 创建任务');
+    expect(onSubmitChatTask).toHaveBeenCalledWith({
+      input: '请调用 propose_background_task 创建任务',
+      workflowHint: 'propose_background_task'
+    });
     expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
   });
 
@@ -73,7 +79,10 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
-          queuedTaskPrompt: '重复任务提议',
+          queuedTaskPrompt: {
+            input: '重复任务提议',
+            workflowHint: 'propose_background_task'
+          },
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
           state,
@@ -102,7 +111,10 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 2,
-          queuedTaskPrompt: '重复任务提议',
+          queuedTaskPrompt: {
+            input: '重复任务提议',
+            workflowHint: 'propose_background_task'
+          },
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
           state,
@@ -125,7 +137,10 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
-          queuedTaskPrompt: '失败的任务提议',
+          queuedTaskPrompt: {
+            input: '失败的任务提议',
+            workflowHint: 'propose_background_task'
+          },
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
           state: createLoadedState({}),

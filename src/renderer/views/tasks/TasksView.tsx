@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ActiveTaskItem } from '../../../shared/types';
-import { buildTaskProposalPrompt } from '../../../shared/background-task-tool-contract';
+import type { ActiveTaskItem, WorkflowHint } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
 import { EmptyState } from '../../components/EmptyState';
 import { Metric } from '../../components/Metric';
@@ -14,6 +13,12 @@ import { TaskListSection } from './TaskListSection';
 import { buildTaskViewModel } from './task-view-model';
 import { useTaskActions } from './use-task-actions';
 
+export type TaskPromptSubmission = {
+  input: string;
+  workflowHint: WorkflowHint;
+  workspacePath: string;
+};
+
 export function TasksView({
   state,
   updateLoadedState,
@@ -25,9 +30,9 @@ export function TasksView({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   liveTaskRun: ChatRunState | null;
-  onNavigateToThread: (threadId: string) => void;
+  onNavigateToThread: (threadId: string, workflowHint?: WorkflowHint) => void;
   onSelectedTaskIdChange: (taskId: string | null | undefined) => void;
-  onSubmitTaskPrompt: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitTaskPrompt: (payload: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
 }): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(state.activeTasks[0]?.taskId ?? state.activeTasks[0]?.threadId ?? null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -65,12 +70,11 @@ export function TasksView({
       return { ok: false, error: '当前没有可用于任务的工作区路径。' };
     }
 
-    return await onSubmitTaskPrompt(
-      buildTaskProposalPrompt({
-        description,
-        workspacePath
-      })
-    );
+    return await onSubmitTaskPrompt({
+      input: description,
+      workflowHint: 'propose_background_task',
+      workspacePath
+    });
   }
 
   return (

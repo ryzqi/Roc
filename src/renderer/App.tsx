@@ -6,6 +6,7 @@ import type {
   AppStatus,
   RtkStatus,
   TaskSnapshot,
+  WorkflowHint,
   WindowBoundsSnapshot,
   WindowStateSnapshot,
   Workspace
@@ -63,6 +64,8 @@ import { getStartupLoadIntent } from './startup-load-policy';
 import { applySystemAppearance } from './system-appearance';
 import { sanitizeTestId } from './utils/sanitize-test-id';
 import { ViewContent } from './views/ViewContent';
+import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from './chat/task-run-payload';
+import type { TaskPromptSubmission } from './views/tasks/TasksView';
 import { RailOverlay } from './workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
 import '@xterm/xterm/css/xterm.css';
@@ -88,7 +91,8 @@ export function App(): React.JSX.Element {
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
   const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
-  const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<string | null>(null);
+  const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<QueuedTaskPrompt | null>(null);
+  const [pendingWorkflowHint, setPendingWorkflowHint] = useState<WorkflowHint>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
@@ -295,6 +299,7 @@ export function App(): React.JSX.Element {
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
     setSelectedThreadId(null);
+    setPendingWorkflowHint(null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
@@ -302,13 +307,15 @@ export function App(): React.JSX.Element {
   const selectHistoryThread = useCallback((threadId: string): void => {
     setActiveView('chat');
     setSelectedThreadId(threadId);
+    setPendingWorkflowHint(null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
-  const navigateToTaskThread = useCallback((threadId: string): void => {
+  const navigateToTaskThread = useCallback((threadId: string, workflowHint?: WorkflowHint): void => {
     setActiveView('chat');
     setSelectedThreadId(threadId);
+    setPendingWorkflowHint(workflowHint ?? null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
@@ -342,16 +349,19 @@ export function App(): React.JSX.Element {
   }, [chatSidebarCollapsed]);
 
   const startTaskRun = useCallback(
-    async (input: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
       const result = await window.roc.chat.startRun({
-        input,
+        input: payload.input,
         mode: 'task',
         threadId: selectedThreadId,
         enabledCapabilities: {
           mcpServers: currentSelectedMcpServers,
           skills: currentSelectedSkills
-        }
+        },
+        workflowHint: workflowHint ?? null
       });
+      setPendingWorkflowHint(null);
       if (!result.ok) {
         return { ok: false, error: result.error.message };
       }
@@ -362,12 +372,13 @@ export function App(): React.JSX.Element {
       setHistoryContextMenu(null);
       return { ok: true };
     },
-    [currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
+    [currentSelectedMcpServers, currentSelectedSkills, pendingWorkflowHint, selectedThreadId]
   );
 
-  const queueTaskPrompt = useCallback(async (input: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+  const queueTaskPrompt = useCallback(async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
     setSelectedThreadId(null);
-    setQueuedTaskPrompt(input);
+    setPendingWorkflowHint(null);
+    setQueuedTaskPrompt(payload);
     setActiveView('chat');
     setWorkbenchVisible(false);
     setHistoryContextMenu(null);

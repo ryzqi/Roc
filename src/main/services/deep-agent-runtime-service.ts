@@ -134,9 +134,10 @@ export class DeepAgentRuntimeService {
       streaming: true
     });
     const createdAt = new Date().toISOString();
-    const preparedInput = request.mode === 'task' && typeof request.threadId === 'string'
+    const inputWithPendingContext = request.mode === 'task' && typeof request.threadId === 'string'
       ? this.prependPendingThreadContext(request.threadId, input)
       : input;
+    const preparedInput = this.prependWorkflowHintContext(request, inputWithPendingContext);
     const taskRun = this.createTaskRunIfNeeded(request, preparedInput, modelHandle.modelId);
     const threadId = request.mode === 'task' && taskRun !== null ? taskRun.threadId : prompt.resolveThreadId(request.threadId);
     const runId = request.mode === 'task' && taskRun !== null ? taskRun.id : `chat_${randomUUID()}`;
@@ -149,7 +150,8 @@ export class DeepAgentRuntimeService {
       mode: request.mode,
       runId,
       taskRun,
-      threadId
+      threadId,
+      workflowHint: request.workflowHint ?? null
     };
 
     this.activeRuns.set(runId, activeRun);
@@ -235,7 +237,8 @@ export class DeepAgentRuntimeService {
       mode: 'task',
       runId: resumeContext.runId,
       taskRun: resumeContext.taskRun,
-      threadId: resumeContext.threadId
+      threadId: resumeContext.threadId,
+      workflowHint: null
     };
     this.activeRuns.set(request.runId, activeRun);
 
@@ -348,6 +351,22 @@ export class DeepAgentRuntimeService {
       return input;
     }
     return `${pendingContext}\n\n[用户最新请求]\n${input}`;
+  }
+
+  private prependWorkflowHintContext(request: ChatStartRunRequest, input: string): string {
+    if (request.workflowHint !== 'background_task_change' || request.mode !== 'task' || typeof request.threadId !== 'string') {
+      return input;
+    }
+    const task = this.taskService.listBackgroundTasks().find((candidate) => candidate.threadId === request.threadId);
+    if (task === undefined) {
+      return input;
+    }
+    return [
+      `[系统] 当前后台任务 ID：${task.id}。请先调用 read_background_task 读取完整定义，再根据用户请求调用 update_background_task 或 cancel_background_task。`,
+      '',
+      '[用户最新请求]',
+      input
+    ].join('\n');
   }
 
   private async executeRun(context: RunExecutionContext): Promise<void> {

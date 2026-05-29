@@ -3,6 +3,8 @@ import type { HITLRequest, HITLResponse } from 'langchain';
 
 export type ChatRunMode = 'chat' | 'task';
 
+export type WorkflowHint = 'propose_background_task' | 'background_task_change' | null;
+
 export type ChatTodoItem = {
   content: string;
   status: 'pending' | 'in_progress' | 'completed';
@@ -114,6 +116,7 @@ export type ChatStartRunRequest = {
   mode: ChatRunMode;
   enabledCapabilities: EnabledCapabilities;
   threadId?: string | null;
+  workflowHint?: WorkflowHint;
 };
 
 export type ChatStartRunResult = {

@@ -105,26 +105,11 @@ describe('TasksView interactions', () => {
     await flushPromises();
 
     expect(onSubmitTaskPrompt).toHaveBeenCalledTimes(1);
-    const submittedPrompt = onSubmitTaskPrompt.mock.calls[0]?.[0] as string;
-    for (const fragment of [
-      '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
-      'propose_background_task',
-      'trigger.type 只能是 manual、once 或 cron',
-      'cronExpression',
-      'nextRunAt',
-      'F:\\Code\\Roc'
-    ]) {
-      expect(submittedPrompt).toContain(fragment);
-    }
-    expect(submittedPrompt).toContain('每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件');
-    expect(submittedPrompt).toContain('不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
-    expect(submittedPrompt).not.toReferenceForbiddenField();
-    expect(submittedPrompt).not.toContain('"notificationPolicy"');
-    expect(submittedPrompt).not.toContain('"allowedActions"');
-    expect(submittedPrompt).not.toContain('"forbiddenActions"');
-    expect(submittedPrompt).not.toContain('"enabledCapabilities"');
-    expect(submittedPrompt).not.toContain('审批提议');
-    expect(submittedPrompt).not.toContain('用户批准前不要创建任务');
+    expect(onSubmitTaskPrompt).toHaveBeenCalledWith({
+      input: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
+      workflowHint: 'propose_background_task',
+      workspacePath: 'F:\\Code\\Roc'
+    });
     expect(preload.chat.startRun).not.toHaveBeenCalled();
     expect(preload.tasks.createBackgroundTaskPreview).not.toHaveBeenCalled();
     expect(preload.tasks.createBackgroundTask).not.toHaveBeenCalled();

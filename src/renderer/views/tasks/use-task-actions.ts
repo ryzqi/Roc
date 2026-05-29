@@ -1,4 +1,4 @@
-import type { ActiveTaskItem, TaskSnapshot } from '../../../shared/types';
+import type { ActiveTaskItem, TaskSnapshot, WorkflowHint } from '../../../shared/types';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
 import { loadTaskSurfaceData } from '../../app/data-loading';
@@ -14,7 +14,7 @@ export type TaskActions = {
 
 export function createTaskActions(input: {
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
-  navigateToChat: (threadId: string) => void;
+  navigateToChat: (threadId: string, workflowHint?: WorkflowHint) => void;
 }): TaskActions {
   function requireTaskId(item: ActiveTaskItem): string | null {
     return item.taskId;
@@ -45,7 +45,7 @@ export function createTaskActions(input: {
         if (!result.ok) {
           return;
         }
-        input.navigateToChat(result.data.threadId);
+        input.navigateToChat(result.data.threadId, 'background_task_change');
       });
     },
     pauseTask: (item) => {
@@ -80,7 +80,7 @@ export function createTaskActions(input: {
 export function useTaskActions(
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   input?: {
-    navigateToChat?: (threadId: string) => void;
+    navigateToChat?: (threadId: string, workflowHint?: WorkflowHint) => void;
     selectedTaskId?: string | null;
   }
 ): TaskActions {
@@ -95,8 +95,8 @@ export function useTaskActions(
         ...taskSurfaceData
       });
     },
-    navigateToChat: (threadId) => {
-      input?.navigateToChat?.(threadId);
+    navigateToChat: (threadId, workflowHint) => {
+      input?.navigateToChat?.(threadId, workflowHint);
     }
   });
 }

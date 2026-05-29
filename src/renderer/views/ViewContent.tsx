@@ -1,8 +1,11 @@
 import { Suspense, lazy } from 'react';
 import type { ChatRunState } from '../chat-run-state';
 import { ChatView } from '../chat/chat-view';
+import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
+import type { TaskPromptSubmission } from './tasks/TasksView';
+import type { WorkflowHint } from '../../shared/types';
 
 const TasksView = lazy(() => import('./tasks/TasksView').then((module) => ({ default: module.TasksView })));
 const WorkspaceView = lazy(() => import('./workspace/WorkspaceView').then((module) => ({ default: module.WorkspaceView })));
@@ -38,13 +41,13 @@ export function ViewContent({
   chatSelectionVersion: number;
   liveTaskRun: ChatRunState | null;
   memoryLoadState: LazyLoadState;
-  onNavigateToTaskThread: (threadId: string) => void;
+  onNavigateToTaskThread: (threadId: string, workflowHint?: WorkflowHint) => void;
   operationsLoadState: LazyLoadState;
-  onQueueTaskPrompt: (prompt: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-  queuedTaskPrompt: string | null;
+  onQueueTaskPrompt: (prompt: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
+  queuedTaskPrompt: QueuedTaskPrompt | null;
   onQueuedTaskPromptHandled: () => void;
   onSelectWorkspace: () => Promise<void>;
-  onSubmitChatTask: (input: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
   onTaskSurfaceSelectionChange: (taskId: string | null | undefined) => void;
   selectedThreadId: string | null;
   state: LoadedState;

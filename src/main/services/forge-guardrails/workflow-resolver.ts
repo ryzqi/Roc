@@ -1,6 +1,7 @@
 import { ROC_WORKFLOWS, type WorkflowSpec } from './prerequisites-config';
+import type { WorkflowHint } from '../../../shared/types';
 
-export type WorkflowHint = 'propose_background_task' | 'background_task_change' | null;
+export type { WorkflowHint };
 
 export function resolveWorkflow(hint: WorkflowHint): WorkflowSpec | null {
   if (hint === 'propose_background_task') {

@@ -323,6 +323,111 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('stores workflowHint on active task runs when provided', async () => {
+    let resolveRun: (value: Awaited<ReturnType<typeof mocked.streamEventsMock>>) => void = () => {};
+    mocked.streamEventsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRun = resolve;
+      })
+    );
+
+    const runtime = createRuntime();
+    const started = await runtime.startRun({
+      input: '创建后台任务',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      workflowHint: 'propose_background_task'
+    });
+    const activeRuns = Reflect.get(runtime as object, 'activeRuns') as Map<string, { workflowHint?: unknown }>;
+
+    expect(activeRuns.get(started.runId)?.workflowHint).toBe('propose_background_task');
+
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed' && event.runId === started.runId);
+    resolveRun({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    await completed;
+  });
+
+  it('stores null workflowHint when the request omits it', async () => {
+    let resolveRun: (value: Awaited<ReturnType<typeof mocked.streamEventsMock>>) => void = () => {};
+    mocked.streamEventsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRun = resolve;
+      })
+    );
+
+    const runtime = createRuntime();
+    const started = await runtime.startRun({
+      input: '普通聊天',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const activeRuns = Reflect.get(runtime as object, 'activeRuns') as Map<string, { workflowHint?: unknown }>;
+
+    expect(activeRuns.get(started.runId)?.workflowHint).toBeNull();
+
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed' && event.runId === started.runId);
+    resolveRun({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    await completed;
+  });
+
+  it('uses background_task_change hint to provide the task id without preloading task JSON', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    const preview = services.taskService.createBackgroundTaskPreview({
+      goal: '更新后台任务配置',
+      trigger: {
+        type: 'manual',
+        description: '手动触发'
+      },
+      workspacePath: root,
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    const task = services.taskService.createBackgroundTask(preview);
+
+    const runtime = createRuntime();
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    await runtime.startRun({
+      input: '把它改成每天 10 点运行',
+      mode: 'task',
+      threadId: task.threadId,
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      workflowHint: 'background_task_change'
+    });
+    await completed;
+
+    const startedInput = mocked.streamEventsMock.mock.calls.at(-1)?.[0]?.messages?.[0]?.content;
+    expect(String(startedInput)).toContain(task.id);
+    expect(String(startedInput)).toContain('read_background_task');
+    expect(String(startedInput)).toContain('把它改成每天 10 点运行');
+    expect(String(startedInput)).not.toContain('"goal": "更新后台任务配置"');
+  });
+
   it('archives visible user, tool, and assistant messages for a chat run', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([

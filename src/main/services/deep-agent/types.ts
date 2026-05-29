@@ -2,7 +2,8 @@ import type { ExecuteResponse, SubAgent } from 'deepagents';
 import type {
   ChatStartRunRequest,
   ShellExecutionResult,
-  TaskRun
+  TaskRun,
+  WorkflowHint
 } from '../../../shared/types';
 import type { PreviewStore } from '../forge-guardrails';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
@@ -16,6 +17,7 @@ export type ActiveRun = {
   runId: string;
   taskRun: TaskRun | null;
   threadId: string;
+  workflowHint: WorkflowHint;
 };
 
 export type RunExecutionContext = ActiveRun & {
