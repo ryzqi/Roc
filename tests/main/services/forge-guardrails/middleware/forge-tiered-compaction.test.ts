@@ -25,6 +25,15 @@ function headers(): BaseMessage[] {
   ];
 }
 
+function runtimeHeaders(): BaseMessage[] {
+  return [
+    new HumanMessage({
+      id: 'user',
+      content: 'initial user input'
+    })
+  ];
+}
+
 function mark<M extends BaseMessage>(message: M, iterationIndex: number): M {
   return markIterationOnMessage(message, iterationIndex) as M;
 }
@@ -214,6 +223,19 @@ describe('ForgeTieredCompaction', () => {
     await applyTieredCompaction(messages, 980);
 
     expect(ids(messages).slice(0, 2)).toEqual(['system', 'user']);
+  });
+
+  it('compacts old messages when runtime messages only include the initial user input as header', async () => {
+    const messages = [
+      ...runtimeHeaders(),
+      retryNudge('old-nudge', 1),
+      toolResult('old-tool', 1),
+      toolCallAi('recent-anchor', 5)
+    ];
+
+    await applyTieredCompaction(messages, 980);
+
+    expect(ids(messages)).toEqual(['user', 'recent-anchor']);
   });
 
   it('keeps tool-resolution soft errors when dropping normal tool results', async () => {

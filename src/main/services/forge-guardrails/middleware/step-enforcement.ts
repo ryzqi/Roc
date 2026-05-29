@@ -3,7 +3,7 @@ import { Command } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 import { RocDomainError } from '../../errors';
 import { FORGE_EXHAUSTED_CODES } from '../errors';
-import { tagForgeMessage } from '../message-tags';
+import { createForgeMessageId, tagForgeMessage } from '../message-tags';
 import { prerequisiteNudge, stepNudge } from '../nudge-templates';
 import type { PrerequisitesConfig } from '../prerequisites-config';
 import {
@@ -249,6 +249,7 @@ function createStepNudgeMessage(
 ): ToolMessage {
   const message = tagForgeMessage(
     new ToolMessage({
+      id: createForgeMessageId('step-nudge', toolCallId),
       tool_call_id: toolCallId,
       name: toolName,
       content: `[StepEnforcementError] ${stepNudge(toolName, pendingSteps, tier)}`,
@@ -263,6 +264,7 @@ function createStepNudgeMessage(
 function createPrerequisiteNudgeMessage(toolName: string, toolCallId: string, missing: readonly string[]): ToolMessage {
   return tagForgeMessage(
     new ToolMessage({
+      id: createForgeMessageId('prerequisite-nudge', toolCallId),
       tool_call_id: toolCallId,
       name: toolName,
       content: `[PrerequisiteError] ${prerequisiteNudge(toolName, missing)}`,

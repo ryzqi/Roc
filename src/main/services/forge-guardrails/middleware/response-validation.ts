@@ -1,7 +1,7 @@
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { retryNudge, unknownToolNudge } from '../nudge-templates';
-import { readForgeMessageTag, tagForgeMessage } from '../message-tags';
+import { createForgeMessageId, readForgeMessageTag, tagForgeMessage } from '../message-tags';
 
 export function createResponseValidationMiddleware(opts: { knownToolNames: () => string[] }) {
   return createMiddleware({
@@ -29,6 +29,7 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
             messages: unknownToolCalls.map((toolCall) => {
               const toolCallId = toolCall.id === undefined ? `unknown_${toolCall.name}` : toolCall.id;
               const message = new ToolMessage({
+                id: createForgeMessageId('unknown-tool-nudge', toolCallId),
                 tool_call_id: toolCallId,
                 name: toolCall.name,
                 content: `[UnknownTool] ${unknownToolNudge(toolCall.name, knownToolNames)}`,
@@ -42,7 +43,11 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
 
         const content = typeof last.content === 'string' ? last.content : '';
         if (toolCalls.length === 0 && content.trim().length > 0) {
-          const nudge = new HumanMessage(retryNudge(content));
+          const sourceId = last.id === undefined ? `content-${hashText(content)}` : last.id;
+          const nudge = new HumanMessage({
+            id: createForgeMessageId('retry-nudge', sourceId),
+            content: retryNudge(content)
+          });
           tagForgeMessage(nudge, 'forge:retry_nudge');
           return {
             messages: [nudge],
@@ -54,4 +59,12 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
       }
     }
   });
+}
+
+function hashText(value: string): string {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash, 33) ^ value.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(36);
 }

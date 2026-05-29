@@ -3,7 +3,7 @@ import { contextEditingMiddleware, type ContextEdit } from 'langchain';
 import { isForgeTransientMessage, readForgeMessageTag } from '../message-tags';
 import { readIterationFromMessage } from '../state-schema';
 
-const PROTECTED_HEADER_COUNT = 2;
+const PROTECTED_HEADER_COUNT = 1;
 const DEFAULT_BUDGET_TOKENS = 7168;
 const DEFAULT_KEEP_RECENT = 2;
 const DEFAULT_PHASE_THRESHOLDS: readonly [number, number, number] = [0.6, 0.75, 0.9];
