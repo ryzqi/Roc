@@ -74,6 +74,15 @@ export type NvidiaToolChoice =
   | 'none'
   | { type: 'function'; function: { name: string } };
 
+export type ProviderSamplingProfileOverrides = {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  minP?: number;
+  presencePenalty?: number;
+  repeatPenalty?: number;
+};
+
 export type ProviderOptions = {
   temperature?: number;
   maxTokens?: number;
@@ -95,6 +104,8 @@ export type ProviderOptions = {
   guidedChoice?: string[];
   guidedGrammar?: string;
   endpointOverride?: string;
+  contextBudgetTokens?: number;
+  samplingProfileOverrides?: ProviderSamplingProfileOverrides;
 };
 
 export type ProviderModel = {

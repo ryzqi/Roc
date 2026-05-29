@@ -89,6 +89,15 @@ const NvidiaToolChoiceSchema = z.union([
   })
 ]);
 
+const SamplingProfileOverridesSchema = z.object({
+  temperature: z.number().finite().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  topK: z.number().int().min(-1).optional(),
+  minP: z.number().min(0).max(1).optional(),
+  presencePenalty: z.number().min(-2).max(2).optional(),
+  repeatPenalty: z.number().min(0).max(2).optional()
+});
+
 export const ProviderOptionsSchema = z
   .object({
     temperature: z.number().finite().optional(),
@@ -110,7 +119,9 @@ export const ProviderOptionsSchema = z
     guidedRegex: z.string().min(1).optional(),
     guidedChoice: z.array(z.string().min(1)).min(1).optional(),
     guidedGrammar: z.string().min(1).optional(),
-    endpointOverride: z.string().url().optional()
+    endpointOverride: z.string().url().optional(),
+    contextBudgetTokens: z.number().int().positive().optional(),
+    samplingProfileOverrides: SamplingProfileOverridesSchema.optional()
   })
   .optional();
 

@@ -1,0 +1,171 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAppServices, type AppServices } from '../../../src/main/services/app-service';
+import { LangChainModelFactory } from '../../../src/main/services/langchain-model-factory';
+import type { ProviderConfig } from '../../../src/shared/types';
+
+let root: string;
+let services: AppServices;
+
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'roc-langchain-model-factory-sampling-'));
+  services = createAppServices(root);
+  services.appService.initialize();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  services.databaseService.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+describe('LangChainModelFactory llama.cpp sampling defaults', () => {
+  it('applies Qwen3 family sampling defaults to llama.cpp models', async () => {
+    saveProviders([
+      llamaCppProvider({
+        modelId: 'Qwen3-8B-Instruct.Q8_0.gguf',
+        options: { contextBudgetTokens: 4096 }
+      })
+    ]);
+
+    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+
+    expect(readSamplingFields(result.model)).toMatchObject({
+      temperature: 0.6,
+      topP: 0.95,
+      modelKwargs: {
+        cache_prompt: true,
+        top_k: 20
+      }
+    });
+    expect(result.runtime.contextBudgetTokens).toBe(4096);
+  });
+
+  it('lets samplingProfileOverrides replace family defaults field by field', async () => {
+    saveProviders([
+      llamaCppProvider({
+        modelId: 'Qwen3-8B-Instruct.Q8_0.gguf',
+        options: {
+          samplingProfileOverrides: { temperature: 0.8 }
+        }
+      })
+    ]);
+
+    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+
+    expect(readSamplingFields(result.model)).toMatchObject({
+      temperature: 0.8,
+      topP: 0.95,
+      modelKwargs: {
+        cache_prompt: true,
+        top_k: 20
+      }
+    });
+  });
+
+  it('treats zero-valued samplingProfileOverrides as explicit values', async () => {
+    saveProviders([
+      llamaCppProvider({
+        modelId: 'Qwen3-8B-Instruct.Q8_0.gguf',
+        options: {
+          samplingProfileOverrides: { temperature: 0 }
+        }
+      })
+    ]);
+
+    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+
+    expect(readSamplingFields(result.model).temperature).toBe(0);
+  });
+
+  it('logs unknown local model families without forcing sampling defaults', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    saveProviders([llamaCppProvider({ modelId: 'llama-3.1' })]);
+
+    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+
+    expect(infoSpy).toHaveBeenCalledWith('provider_local_family_unknown', {
+      providerId: 'llama_cpp',
+      modelId: 'llama-3.1'
+    });
+    expect(readSamplingFields(result.model)).toMatchObject({
+      temperature: undefined,
+      topP: undefined,
+      modelKwargs: {
+        cache_prompt: true
+      }
+    });
+  });
+
+  it('does not run local family logging for cloud providers', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    services.secretService.setProviderSecret('openai-cloud', 'sk-test');
+    saveProviders([
+      {
+        id: 'openai-cloud',
+        name: 'OpenAI Cloud',
+        type: 'openai_compatible',
+        endpoint: 'https://api.openai.com/v1',
+        credentialRef: 'secret:openai-cloud',
+        enabled: true,
+        models: [
+          {
+            id: 'llama-3.1',
+            displayName: 'Cloud model',
+            enabled: true,
+            supportsStreaming: true,
+            supportsToolCalls: true
+          }
+        ]
+      }
+    ]);
+
+    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+
+    expect(infoSpy).not.toHaveBeenCalled();
+    expect(result.runtime.modelKwargs).toEqual({});
+  });
+});
+
+function saveProviders(providers: ProviderConfig[]): void {
+  services.configService.saveProviders({
+    schemaVersion: 1,
+    defaultModelId: providers[0]!.models[0]!.id,
+    providers
+  });
+}
+
+function llamaCppProvider(input: { modelId: string; options?: ProviderConfig['options'] }): ProviderConfig {
+  return {
+    id: 'llama_cpp',
+    name: 'llama.cpp',
+    type: 'llama_cpp',
+    endpoint: 'http://127.0.0.1:9090/v1',
+    credentialRef: null,
+    enabled: true,
+    models: [
+      {
+        id: input.modelId,
+        displayName: input.modelId,
+        enabled: true,
+        supportsStreaming: true,
+        supportsToolCalls: true
+      }
+    ],
+    options: input.options
+  };
+}
+
+function readSamplingFields(model: unknown): {
+  temperature?: number;
+  topP?: number;
+  modelKwargs?: Record<string, unknown>;
+} {
+  return model as {
+    temperature?: number;
+    topP?: number;
+    modelKwargs?: Record<string, unknown>;
+  };
+}

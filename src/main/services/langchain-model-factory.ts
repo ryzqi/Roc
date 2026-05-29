@@ -26,6 +26,11 @@ import type { ProviderConfig, ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
+  applyProviderOverride,
+  resolveSamplingProfile,
+  type SamplingProfile
+} from './forge-guardrails/sampling-defaults';
+import {
   nvidiaSupportsThinkingViaSystemPrompt,
   nvidiaThinkingParameterName,
   resolveNvidiaModelFamily
@@ -38,6 +43,7 @@ export type LangChainModelRuntime = {
   baseUrl: string | null;
   streaming: boolean;
   modelKwargs: Record<string, unknown>;
+  contextBudgetTokens: number;
 };
 
 export type LangChainChatModelHandle = {
@@ -564,11 +570,17 @@ export class LangChainModelFactory {
     }
 
     const apiKey = this.resolveCredential(provider);
-    const temperature = provider.options?.temperature;
+    const llamaCppSamplingProfile =
+      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId) : null;
+    const temperature =
+      provider.type === 'llama_cpp'
+        ? provider.options?.temperature ?? llamaCppSamplingProfile?.temperature
+        : provider.options?.temperature;
     const maxTokens = provider.options?.maxTokens;
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
+    const contextBudgetTokens = provider.options?.contextBudgetTokens ?? 8192;
 
     if (provider.type === 'anthropic_compatible') {
       const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
@@ -593,7 +605,8 @@ export class LangChainModelFactory {
           providerType: provider.type,
           baseUrl,
           streaming,
-          modelKwargs: {}
+          modelKwargs: {},
+          contextBudgetTokens
         },
         model
       };
@@ -615,6 +628,7 @@ export class LangChainModelFactory {
     }
     if (provider.type === 'llama_cpp') {
       modelKwargs.cache_prompt = true;
+      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(provider.options ?? {}, llamaCppSamplingProfile));
     }
 
     const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
@@ -639,6 +653,11 @@ export class LangChainModelFactory {
       streamUsage: resolveStreamUsage(provider, streaming),
       maxRetries: 0,
       temperature,
+      topP: provider.type === 'llama_cpp' ? provider.options?.topP ?? llamaCppSamplingProfile?.topP : undefined,
+      presencePenalty:
+        provider.type === 'llama_cpp'
+          ? provider.options?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
+          : undefined,
       maxTokens,
       timeout: requestTimeoutMs,
       configuration: openAiConfiguration,
@@ -658,7 +677,8 @@ export class LangChainModelFactory {
         providerType: provider.type,
         baseUrl,
         streaming,
-        modelKwargs
+        modelKwargs,
+        contextBudgetTokens
       },
       model: chatModel
     };
@@ -885,6 +905,42 @@ export class LangChainModelFactory {
     }
     return value;
   }
+}
+
+function resolveLlamaCppSamplingProfile(provider: ProviderConfig, modelId: string): SamplingProfile | null {
+  const familyProfile = resolveSamplingProfile(modelId);
+  const overrides = provider.options?.samplingProfileOverrides ?? {};
+  if (familyProfile === null) {
+    if (Object.keys(overrides).length === 0) {
+      console.info('provider_local_family_unknown', {
+        providerId: provider.id,
+        modelId
+      });
+      return null;
+    }
+    return { ...overrides };
+  }
+  return applyProviderOverride(familyProfile, overrides);
+}
+
+function buildLlamaCppSamplingModelKwargs(
+  options: NonNullable<ProviderConfig['options']>,
+  profile: SamplingProfile | null
+): Record<string, unknown> {
+  const kwargs: Record<string, unknown> = {};
+  const topK = options.topK ?? profile?.topK;
+  if (typeof topK === 'number') {
+    kwargs.top_k = topK;
+  }
+  const minP = options.minP ?? profile?.minP;
+  if (typeof minP === 'number') {
+    kwargs.min_p = minP;
+  }
+  const repeatPenalty = options.repetitionPenalty ?? profile?.repeatPenalty;
+  if (typeof repeatPenalty === 'number') {
+    kwargs.repeat_penalty = repeatPenalty;
+  }
+  return kwargs;
 }
 
 function readNvidiaProbeContent(raw: string): { hasContent: boolean; remaining: string } {

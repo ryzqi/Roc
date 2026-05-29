@@ -194,7 +194,8 @@ beforeEach(() => {
         chat_template_kwargs: {
           thinking: true
         }
-      }
+      },
+      contextBudgetTokens: 8192
     }
   });
   mocked.streamEventsMock.mockReset();
