@@ -5,6 +5,7 @@ import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { toolRetryMiddleware } from 'langchain';
 import type { ProviderType, WorkflowHint } from '../../../shared/types';
+import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import {
   createForgeTieredCompactionMiddleware,
   createForgeCleanupMiddleware,
@@ -57,6 +58,7 @@ const DEEPAGENTS_BUILT_IN_TOOL_NAMES = [
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   const isLocalProvider = input.providerType === 'llama_cpp';
+  const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolNames = (): string[] => {
     const names = [...input.tools.map((tool) => tool.name), ...DEEPAGENTS_BUILT_IN_TOOL_NAMES];
     if (isLocalProvider) {
@@ -65,6 +67,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     return names;
   };
   const guardrails = [
+    rtkMiddleware,
     toolRetryMiddleware({
       maxRetries: 2,
       tools: [...NETWORK_SENSITIVE_TOOLS],

@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
 import type { ShellExecutionDecision, ShellExecutionRequest, ShellExecutionResult } from '../../shared/types';
+import { parseRtkArgs } from '../../rtk-integration';
 import { RocDomainError } from './errors';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { TaskService } from './task-service';
@@ -498,6 +499,11 @@ export class ShellExecutionService {
   }
 
   private resolveRtkArgs(command: string): string[] | null {
+    const middlewareRewrittenArgs = parseRtkArgs(command.trim());
+    if (middlewareRewrittenArgs !== null) {
+      return middlewareRewrittenArgs;
+    }
+
     const normalized = this.normalizeCommand(command);
     if (normalized === 'ls' || normalized.startsWith('ls ')) {
       return ['ls', ...command.trim().split(/\s+/).slice(1)];

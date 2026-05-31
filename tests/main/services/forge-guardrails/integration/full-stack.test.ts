@@ -87,6 +87,7 @@ describe('forge guardrails full stack', () => {
   it('跨护栏 rescue 后的工具调用会进入 step tracker 累加', async () => {
     const middleware = await buildMiddleware();
     expect(middlewareNames(middleware)).toEqual([
+      'RTKMiddleware',
       'toolRetryMiddleware',
       'ForgeErrorBudgetMiddleware',
       'ForgeStepEnforcement',
@@ -242,6 +243,7 @@ describe('forge guardrails full stack', () => {
   it('网络瞬时错误不消耗 forge error budget', async () => {
     const middleware = await buildMiddleware();
     const names = middlewareNames(middleware);
+    expect(names.indexOf('RTKMiddleware')).toBeLessThan(names.indexOf('toolRetryMiddleware'));
     expect(names.indexOf('toolRetryMiddleware')).toBeLessThan(names.indexOf('ForgeErrorBudgetMiddleware'));
 
     const errorBudget = byName(middleware, 'ForgeErrorBudgetMiddleware');

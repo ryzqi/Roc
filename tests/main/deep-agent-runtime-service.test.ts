@@ -277,6 +277,7 @@ describe('DeepAgentRuntimeService', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       middleware: [
+        expect.objectContaining({ name: 'RTKMiddleware' }),
         expect.objectContaining({ name: 'toolRetryMiddleware' }),
         expect.objectContaining({ name: 'ForgeErrorBudgetMiddleware' }),
         expect.objectContaining({ name: 'ForgeStepEnforcement' }),

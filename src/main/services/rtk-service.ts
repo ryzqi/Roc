@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RtkBypassReason, RtkStatus } from '../../shared/types';
+import { RTKBinaryManager } from '../../rtk-integration';
 import type { RocPaths } from './paths';
 
 export type RtkExecutionMetadata = {
@@ -14,7 +15,10 @@ export type RtkExecutionMetadata = {
 };
 
 export class RtkService {
-  constructor(private readonly paths: RocPaths) {}
+  constructor(
+    private readonly paths: RocPaths,
+    private readonly binaryManager = new RTKBinaryManager()
+  ) {}
 
   getStatus(): RtkStatus {
     const metadata = this.getExecutionMetadata();
@@ -29,8 +33,10 @@ export class RtkService {
   }
 
   getExecutionMetadata(): RtkExecutionMetadata {
-    const binaryPath = join(this.paths.toolsDir, 'roc-rtk.exe');
-    const binaryExists = existsSync(binaryPath);
+    const bundledBinaryPath = this.binaryManager.getRTKBinaryPath();
+    const binaryPath = bundledBinaryPath === null ? join(this.paths.toolsDir, 'roc-rtk.exe') : bundledBinaryPath;
+    const binaryExists =
+      bundledBinaryPath === null ? existsSync(binaryPath) : this.binaryManager.isRTKAvailable();
     return {
       binaryPath,
       runtimeRoot: this.paths.root,

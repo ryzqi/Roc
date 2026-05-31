@@ -772,7 +772,7 @@ describe('Roc foundation services git', () => {
         exitCode: 0,
         truncated: false,
         usedRtk: false,
-        bypassReason: 'rtk_binary_missing'
+        bypassReason: 'command_not_supported'
       });
       expect(commandResult.output).toContain('notes.txt');
       expect(blockedResult).toEqual({
@@ -788,10 +788,9 @@ describe('Roc foundation services git', () => {
     }
   });
 
-  it('uses rtk for allowed agent commands when roc-rtk.exe is available', () => {
+  it('uses bundled rtk for allowed agent commands', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
     try {
-      writeFileSync(join(context.services.paths.toolsDir, 'roc-rtk.exe'), '', 'utf8');
       context.services.workspaceService.selectWorkspace(workspaceRoot);
       writeFileSync(join(workspaceRoot, '.git'), '', 'utf8');
       const task = context.services.taskService.createTaskRun({
@@ -815,7 +814,7 @@ describe('Roc foundation services git', () => {
           extraEnv?: Record<string, string>
         ) => { stdout: string; stderr: string; exitCode: number };
       }).execFile = (file, args, execCwd, extraEnv = {}) => {
-        if (String(file).endsWith('roc-rtk.exe')) {
+        if (String(file).endsWith('rtk.exe')) {
           expect(args).toEqual(['git', 'status']);
           expect(execCwd).toBe(workspaceRoot);
           expect(extraEnv.RTK_DB_PATH).toBe(join(context.root, 'rtk', 'history.db'));
@@ -834,6 +833,48 @@ describe('Roc foundation services git', () => {
         cwd: workspaceRoot,
         threadId: task.threadId,
         runId: task.id
+      });
+
+      expect(result.usedRtk).toBe(true);
+      expect(result.bypassReason).toBeUndefined();
+      expect(result.output).toBe('On branch main');
+      shellExecutionServiceForTest.execFile = originalExecFile;
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uses bundled rtk for commands already rewritten by middleware', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
+    try {
+      context.services.workspaceService.selectWorkspace(workspaceRoot);
+      const shellExecutionServiceForTest = context.services.shellExecutionService as unknown as {
+        execFile: unknown;
+      };
+      const originalExecFile = shellExecutionServiceForTest.execFile;
+      (context.services.shellExecutionService as unknown as {
+        execFile: (
+          file: string,
+          args: string[],
+          cwd: string,
+          extraEnv?: Record<string, string>
+        ) => { stdout: string; stderr: string; exitCode: number };
+      }).execFile = (file, args, execCwd) => {
+        if (String(file).endsWith('rtk.exe')) {
+          expect(args).toEqual(['git', 'status']);
+          expect(execCwd).toBe(workspaceRoot);
+          return {
+            stdout: 'On branch main',
+            stderr: '',
+            exitCode: 0
+          };
+        }
+        throw new Error(`unexpected command: ${String(file)}`);
+      };
+
+      const result = context.services.shellExecutionService.executeAgentCommand({
+        command: 'rtk git status',
+        cwd: workspaceRoot
       });
 
       expect(result.usedRtk).toBe(true);
@@ -926,7 +967,7 @@ describe('Roc foundation services git', () => {
         exitCode: 0,
         truncated: false,
         usedRtk: false,
-        bypassReason: 'rtk_binary_missing'
+        bypassReason: 'command_not_supported'
       });
       expect(commandResult.output).toContain('notes.txt');
       expect(snapshot.recentEvents.some((event) => event.type === 'agent_execute')).toBe(true);
@@ -1018,17 +1059,17 @@ describe('Roc foundation services git', () => {
     }
   });
 
-  it('reports RTK resources as degraded when the bundled binary is missing', () => {
+  it('reports RTK resources as ready when the bundled binary is present', () => {
     const status = context.services.rtkService.getStatus();
 
-    expect(status).toEqual({
+    expect(status).toMatchObject({
       enabledForAgentCommands: true,
-      binaryPath: join(context.root, 'tools', 'roc-rtk.exe'),
+      binaryPath: expect.stringContaining(join('resources', 'rtk-binaries')),
       configPath: join(context.root, 'rtk', 'config.toml'),
       teeDir: join(context.root, 'rtk', 'tee'),
-      resourceState: 'missing',
-      bypassReason: 'rtk_binary_missing'
+      resourceState: 'ready'
     });
+    expect(status.bypassReason).toBeUndefined();
   });
 
   it('keeps unexpected IPC errors sanitized while preserving domain errors', async () => {
