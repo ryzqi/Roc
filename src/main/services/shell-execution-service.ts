@@ -273,6 +273,7 @@ export class ShellExecutionService {
   private runAgentCommand(command: string, cwd: string): ExecutedShellCommand {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
+      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -283,6 +284,7 @@ export class ShellExecutionService {
 
     const rtkArgs = this.resolveRtkArgs(command);
     if (rtkArgs === null) {
+      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -301,6 +303,7 @@ export class ShellExecutionService {
   private async runAgentCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
+      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
         ...fallback,
@@ -311,6 +314,7 @@ export class ShellExecutionService {
 
     const rtkArgs = this.resolveRtkArgs(command);
     if (rtkArgs === null) {
+      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
         ...fallback,
@@ -333,6 +337,24 @@ export class ShellExecutionService {
       usedRtk: false,
       bypassReason: 'user_terminal_raw_output'
     };
+  }
+
+  private assertRawAgentFallbackAllowed(command: string, cwd: string): void {
+    const decision = this.evaluate({
+      command,
+      cwd,
+      source: 'agent'
+    });
+    if (decision.status === 'allowed') {
+      return;
+    }
+    throw new RocDomainError({
+      code: 'command_requires_confirmation',
+      message: '命令需要确认，未执行。',
+      category: 'permission',
+      retryable: false,
+      userAction: '请在任务确认卡片中查看命令、作用目录和风险原因后再决定是否执行。'
+    });
   }
 
   private async executeTerminalCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {

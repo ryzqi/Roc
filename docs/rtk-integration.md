@@ -7,7 +7,7 @@ Roc 集成 RTK v0.42.0，用于压缩 Deep Agents `execute` 工具的 shell 输�
 1. `RTKMiddleware` 通过 LangChain `createMiddleware({ wrapToolCall })` 拦截 shell 工具调用。
 2. `CommandRewriter` 调用 bundled RTK binary 的 `rewrite` 子命令，把支持的命令改成 `rtk ...` 形式。
 3. `ShellExecutionService` 识别 `rtk ...` 命令，转交 bundled RTK binary 执行。
-4. RTK 不可用、命令不支持、或改写失败时，执行链静默回退到原命令。
+4. RTK 不可用、命令不支持、或改写失败时，仅对 Roc shell 风险策略允许的命令回退到原命令。
 
 ## 资源位置
 
@@ -64,10 +64,10 @@ pnpm smoke:electron
 
 ## 降级行为
 
-- `RTKBinaryManager` 找不到当前平台 binary：middleware 不改写，命令按原路径执行。
-- `rtk rewrite` 返回 unsupported：命令按原路径执行，并记录 `command_not_supported`。
+- `RTKBinaryManager` 找不到当前平台 binary：middleware 不改写；agent `execute` 仅在 Roc shell 风险策略允许时按原路径执行。
+- `rtk rewrite` 返回 unsupported：agent `execute` 仅在 Roc shell 风险策略允许时按原路径执行，并记录 `command_not_supported`。
 - RTK deny：middleware 返回错误 `ToolMessage`，不执行原命令。
-- 改写后命令执行失败：默认回退原命令。
+- 改写后命令执行失败：默认回退原命令；实际执行仍受 `ShellExecutionService` 的 RTK 与 shell 风险策略约束。
 
 ## 版本与来源
 

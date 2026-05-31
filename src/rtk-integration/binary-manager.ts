@@ -16,6 +16,7 @@ type PlatformBinary = {
 };
 
 type ElectronProcess = NodeJS.Process & {
+  defaultApp?: boolean;
   resourcesPath?: string;
 };
 
@@ -80,8 +81,9 @@ export class RTKBinaryManager {
       return this.options.resourcesPath;
     }
 
-    const resourcesPath = (process as ElectronProcess).resourcesPath;
-    if (resourcesPath !== undefined) {
+    const electronProcess = process as ElectronProcess;
+    const resourcesPath = electronProcess.resourcesPath;
+    if (resourcesPath !== undefined && electronProcess.defaultApp !== true) {
       return resourcesPath;
     }
 

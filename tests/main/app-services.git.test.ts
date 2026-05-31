@@ -886,6 +886,24 @@ describe('Roc foundation services git', () => {
     }
   });
 
+  it('blocks unsupported high-risk agent commands instead of falling back to raw shell execution', () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
+    try {
+      writeFileSync(join(workspaceRoot, 'notes.txt'), 'do not delete\n', 'utf8');
+      context.services.workspaceService.selectWorkspace(workspaceRoot);
+
+      expect(() =>
+        context.services.shellExecutionService.executeAgentCommand({
+          command: 'Remove-Item notes.txt',
+          cwd: workspaceRoot
+        })
+      ).toThrow(RocDomainError);
+      expect(readFileSync(join(workspaceRoot, 'notes.txt'), 'utf8')).toBe('do not delete\n');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('returns UTF-8 shell output for Chinese workspace filenames', () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-'));
     try {

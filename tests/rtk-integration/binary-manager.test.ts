@@ -50,8 +50,9 @@ describe('RTKBinaryManager', () => {
   });
 
   it('uses Electron resourcesPath when present', () => {
-    const processWithResources = process as NodeJS.Process & { resourcesPath?: string };
+    const processWithResources = process as NodeJS.Process & { defaultApp?: boolean; resourcesPath?: string };
     const original = processWithResources.resourcesPath;
+    const originalDefaultApp = processWithResources.defaultApp;
     processWithResources.resourcesPath = 'C:\\Electron\\resources';
     try {
       const manager = new RTKBinaryManager({
@@ -65,6 +66,39 @@ describe('RTKBinaryManager', () => {
         Reflect.deleteProperty(processWithResources, 'resourcesPath');
       } else {
         processWithResources.resourcesPath = original;
+      }
+      if (originalDefaultApp === undefined) {
+        Reflect.deleteProperty(processWithResources, 'defaultApp');
+      } else {
+        processWithResources.defaultApp = originalDefaultApp;
+      }
+    }
+  });
+
+  it('ignores Electron default app resourcesPath in development', () => {
+    const processWithResources = process as NodeJS.Process & { defaultApp?: boolean; resourcesPath?: string };
+    const original = processWithResources.resourcesPath;
+    const originalDefaultApp = processWithResources.defaultApp;
+    processWithResources.resourcesPath = 'C:\\Electron\\dist\\resources';
+    processWithResources.defaultApp = true;
+    try {
+      const manager = new RTKBinaryManager({
+        platform: 'win32',
+        arch: 'x64',
+        resourceRoot: 'F:\\Code\\Roc'
+      });
+
+      expect(manager.getRTKBinaryPath()).toBe('F:\\Code\\Roc\\resources\\rtk-binaries\\win32-x64\\rtk.exe');
+    } finally {
+      if (original === undefined) {
+        Reflect.deleteProperty(processWithResources, 'resourcesPath');
+      } else {
+        processWithResources.resourcesPath = original;
+      }
+      if (originalDefaultApp === undefined) {
+        Reflect.deleteProperty(processWithResources, 'defaultApp');
+      } else {
+        processWithResources.defaultApp = originalDefaultApp;
       }
     }
   });
