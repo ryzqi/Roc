@@ -397,6 +397,36 @@ try {
     naturalLanguageTaskGoal,
     { timeout: 15000 }
   );
+  await page.waitForFunction(
+    async () => {
+      const snapshot = await window.roc.tasks.getSnapshot();
+      if (!snapshot.ok) {
+        return false;
+      }
+      const toolCalls = snapshot.data.recentEvents.filter((item) => {
+        if (item.type !== 'tool_call' || typeof item.payload !== 'object' || item.payload === null) {
+          return false;
+        }
+        return (
+          Reflect.get(item.payload, 'name') === 'propose_background_task' ||
+          Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
+          Reflect.get(item.payload, 'name') === 'confirm_with_user'
+        );
+      });
+      const hasToolCall = (name, status) =>
+        toolCalls.some((item) => Reflect.get(item.payload, 'name') === name && Reflect.get(item.payload, 'status') === status);
+      return (
+        hasToolCall('propose_background_task', 'start') &&
+        hasToolCall('propose_background_task', 'end') &&
+        hasToolCall('schedule_background_task', 'start') &&
+        hasToolCall('schedule_background_task', 'end') &&
+        hasToolCall('confirm_with_user', 'start') &&
+        hasToolCall('confirm_with_user', 'end')
+      );
+    },
+    null,
+    { timeout: 15000 }
+  );
   const taskProposalEvidence = await page.evaluate(
     async ({ expectedGoal, expectedCronExpression, expectedNextRunAt }) => {
       const snapshot = await window.roc.tasks.getSnapshot();
