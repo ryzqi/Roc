@@ -27,6 +27,12 @@ describe('native packaging contract', () => {
     );
   });
 
+  it('packages bundled RTK binaries as external resources', () => {
+    expect(electronBuilderConfig).toContain('extraResources:');
+    expect(electronBuilderConfig).toContain('from: resources/rtk-binaries');
+    expect(electronBuilderConfig).toContain('to: rtk-binaries');
+  });
+
   it('uses electron-rebuild first and skips prebuild-install when rebuild succeeds', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
     const { prepareBetterSqlite3ForElectron } = await loadNativePackagingModule();

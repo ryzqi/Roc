@@ -6,6 +6,11 @@ directories:
 files:
   - dist/**
   - package.json
+extraResources:
+  - from: resources/rtk-binaries
+    to: rtk-binaries
+    filter:
+      - "**/*"
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
