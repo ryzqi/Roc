@@ -145,7 +145,7 @@ describe('deep agent backend', () => {
     expect(directAlphaRead.error).toBeTruthy();
   });
 
-  it('runs agent execute in the selected workspace and records bypass metadata when rtk is missing', async () => {
+  it('runs agent execute in the selected workspace and records unsupported RTK bypass metadata', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-execute-'));
     try {
       services.workspaceService.selectWorkspace(workspaceRoot);
@@ -183,7 +183,7 @@ describe('deep agent backend', () => {
         output: expect.stringContaining('backend-note.txt'),
         outputTruncated: false,
         usedRtk: false,
-        bypassReason: 'rtk_binary_missing'
+        bypassReason: 'command_not_supported'
       });
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
