@@ -30,4 +30,42 @@ describe('RTKBinaryManager', () => {
     expect(manager.getRTKBinaryPath()).toContain('win32-x64');
     expect(manager.isRTKAvailable()).toBe(true);
   });
+
+  it('resolves every supported bundled platform directory', () => {
+    const cases = [
+      { platform: 'darwin', arch: 'x64', expected: 'darwin-x64\\rtk' },
+      { platform: 'darwin', arch: 'arm64', expected: 'darwin-arm64\\rtk' },
+      { platform: 'linux', arch: 'x64', expected: 'linux-x64\\rtk' }
+    ] as const;
+
+    for (const platformCase of cases) {
+      const manager = new RTKBinaryManager({
+        platform: platformCase.platform,
+        arch: platformCase.arch,
+        resourcesPath: 'C:\\Packaged\\resources'
+      });
+
+      expect(manager.getRTKBinaryPath()).toBe(`C:\\Packaged\\resources\\rtk-binaries\\${platformCase.expected}`);
+    }
+  });
+
+  it('uses Electron resourcesPath when present', () => {
+    const processWithResources = process as NodeJS.Process & { resourcesPath?: string };
+    const original = processWithResources.resourcesPath;
+    processWithResources.resourcesPath = 'C:\\Electron\\resources';
+    try {
+      const manager = new RTKBinaryManager({
+        platform: 'win32',
+        arch: 'x64'
+      });
+
+      expect(manager.getRTKBinaryPath()).toBe('C:\\Electron\\resources\\rtk-binaries\\win32-x64\\rtk.exe');
+    } finally {
+      if (original === undefined) {
+        Reflect.deleteProperty(processWithResources, 'resourcesPath');
+      } else {
+        processWithResources.resourcesPath = original;
+      }
+    }
+  });
 });
