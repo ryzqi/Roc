@@ -2,6 +2,7 @@ import { buildHistoryItems as buildHistorySidebarItems } from '../history-sideba
 import type { LoadedState } from '../loaded-state';
 import { countTaskNavMeta } from '../views/tasks/task-view-model';
 import type { HistorySidebarItem, NavItem, ViewId } from './types';
+import { visibleMemoryLabel } from './view-routing';
 
 export function buildHistoryNavItems(selectedThreadId: string | null, activeView: ViewId): NavItem[] {
   if (activeView === 'chat') {
@@ -48,7 +49,7 @@ export function buildControlNavItems(state: LoadedState): NavItem[] {
     {
       id: 'memory',
       label: '记忆中心',
-      meta: 'Phase 1 占位',
+      meta: visibleMemoryLabel(state),
       icon: 'globe'
     },
     {

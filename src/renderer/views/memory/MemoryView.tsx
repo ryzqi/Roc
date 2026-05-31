@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { EmptyState } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
+import { visibleMemoryLabel } from '../../app/view-routing';
 import type { LoadedState } from '../../loaded-state';
 import { FilesTab } from './files-tab';
 import { SessionsTab } from './sessions-tab';
@@ -42,7 +43,7 @@ export function MemoryView({
 
   return (
     <>
-      <PageHeading title="记忆中心" meta={state.memoryStatus.workspaceLabel ?? '全局记忆'} />
+      <PageHeading title="记忆中心" meta={visibleMemoryLabel(state)} />
       <section className="canvas-stage memory-center-stage" data-testid="memory-view">
         <div className="memory-tabs" role="tablist" aria-label="记忆中心">
           <button

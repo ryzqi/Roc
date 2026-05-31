@@ -120,6 +120,13 @@ export function visibleWorkspaceLabel(state: LoadedState): string {
   return state.appStatus.workspace.label;
 }
 
+export function visibleMemoryLabel(state: LoadedState): string {
+  if (state.memoryStatus.workspaceLabel !== null) {
+    return state.memoryStatus.workspaceLabel;
+  }
+  return '全局记忆';
+}
+
 export function visibleWorkspaceCwd(state: LoadedState): string {
   return state.workspace === null ? '未选择' : state.workspace.path;
 }
@@ -135,7 +142,7 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
     return visibleWorkspaceLabel(state);
   }
   if (view === 'memory') {
-    return 'Phase 1 占位';
+    return visibleMemoryLabel(state);
   }
   if (view === 'mcp') {
     return `${state.mcpServers.filter((server) => server.enabled).length} 个已启用服务`;
