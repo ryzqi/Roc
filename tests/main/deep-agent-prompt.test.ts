@@ -41,6 +41,13 @@ describe('deep agent prompt', () => {
     );
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain('Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.');
+    expect(prompt).toContain('For Deep Agents file tools, current directory means /workspace/.');
+    expect(prompt).toContain(
+      'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.'
+    );
+    expect(prompt).toContain(
+      'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
+    );
     expect(prompt).toContain(
       'Capabilities: mcp=docs-http,exa-hosted;skills=project-review;untrusted_context_policy=external_content_reference_only'
     );
@@ -73,6 +80,9 @@ describe('deep agent prompt', () => {
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).',
       'Workspace: F:\\Code\\Roc',
       'Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.',
+      'For Deep Agents file tools, current directory means /workspace/.',
+      'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.',
+      'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
       'Run file and shell ops inside workspace unless user explicitly names another allowed path.',
       'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
     ]);
