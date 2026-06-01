@@ -1,6 +1,7 @@
 import {
   createFixedLlamaCppProviderConfig,
-  createFixedNvidiaProviderConfig
+  createFixedNvidiaProviderConfig,
+  createFixedOpenRouterProviderConfig
 } from '../../../shared/provider-defaults';
 import type {
   AppSettings,
@@ -57,7 +58,7 @@ export const defaultSettings: AppSettings = {
 export const defaultProviders: ProvidersConfig = {
   schemaVersion: 1,
   defaultModelId: null,
-  providers: [createFixedNvidiaProviderConfig(), createFixedLlamaCppProviderConfig()]
+  providers: [createFixedNvidiaProviderConfig(), createFixedOpenRouterProviderConfig(), createFixedLlamaCppProviderConfig()]
 };
 
 export const defaultMcpConfig: McpServersConfig = {

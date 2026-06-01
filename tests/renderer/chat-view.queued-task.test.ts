@@ -4,15 +4,18 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatView } from '../../src/renderer/chat/chat-view';
 import type { RocPreloadApi } from '../../src/shared/ipc';
+import type { ChatRunEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('ChatView queued task prompt', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+  let runEventHandler: ((event: ChatRunEvent) => void) | null;
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
+    runEventHandler = null;
     window.matchMedia = vi.fn().mockReturnValue({
       matches: false,
       media: '(prefers-reduced-motion: reduce)',
@@ -29,7 +32,14 @@ describe('ChatView queued task prompt', () => {
     });
     vi.stubGlobal('cancelAnimationFrame', () => {});
     Element.prototype.scrollTo = vi.fn();
-    window.roc = createMockPreloadApi();
+    window.roc = createMockPreloadApi((handler) => {
+      runEventHandler = handler;
+      return () => {
+        if (runEventHandler === handler) {
+          runEventHandler = null;
+        }
+      };
+    });
     root = createRoot(container);
   });
 
@@ -155,12 +165,67 @@ describe('ChatView queued task prompt', () => {
     expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
     expect(container.querySelector('[data-testid="chat-error"]')?.textContent).toBe('默认模型未配置。');
   });
+
+  it('shows only the thinking spinner immediately while awaiting the first response byte', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(ChatView, {
+          chatSelectionVersion: 1,
+          queuedTaskPrompt: null,
+          onQueuedTaskPromptHandled: () => {},
+          selectedThreadId: null,
+          state: createLoadedState({}),
+          updateLoadedState: () => {},
+          onSubmitChatTask: async () => ({ ok: true as const })
+        })
+      );
+    });
+
+    await act(async () => {
+      emitRunEvent({
+        type: 'run_started',
+        runId: 'run_waiting_first_byte',
+        mode: 'chat',
+        threadId: null,
+        providerId: 'nvidia',
+        modelId: 'nvidia-model',
+        createdAt: new Date().toISOString()
+      });
+    });
+
+    const indicator = container.querySelector('[data-testid="chat-wait-indicator"]');
+    expect(indicator?.textContent).toBe('正在思考');
+    expect(indicator?.querySelector('.chat-wait-indicator-spinner')).not.toBeNull();
+    expect(container.textContent).not.toContain('上游响应等待中');
+    expect(container.textContent).not.toContain('NVIDIA');
+    expect(container.textContent).not.toContain('P95');
+    expect(container.textContent).not.toContain('Provider');
+
+    await act(async () => {
+      emitRunEvent({
+        type: 'message_delta',
+        runId: 'run_waiting_first_byte',
+        delta: '首字节'
+      });
+    });
+
+    expect(container.querySelector('[data-testid="chat-wait-indicator"]')).toBeNull();
+  });
+
+  function emitRunEvent(event: ChatRunEvent): void {
+    if (runEventHandler === null) {
+      throw new Error('Chat run event handler was not registered.');
+    }
+    runEventHandler(event);
+  }
 });
 
-function createMockPreloadApi(): RocPreloadApi {
+function createMockPreloadApi(
+  onRunEvent: (handler: (event: ChatRunEvent) => void) => () => void
+): RocPreloadApi {
   return {
     chat: {
-      onRunEvent: vi.fn().mockReturnValue(() => {}),
+      onRunEvent: vi.fn().mockImplementation(onRunEvent),
       resumeRun: vi.fn(),
       startRun: vi.fn(),
       cancelRun: vi.fn()

@@ -146,6 +146,30 @@ describe('native packaging contract', () => {
     expect(stopProcess).toHaveBeenCalledWith(101);
   });
 
+  it('continues when a packaged Roc process exits before taskkill can terminate it', async () => {
+    const listProcesses = vi.fn()
+      .mockReturnValueOnce([
+        {
+          pid: 7332,
+          executablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe'
+        }
+      ])
+      .mockReturnValueOnce([]);
+    const stopProcess = vi.fn().mockReturnValue(128);
+    const { terminateRunningPackagedApp } = await loadNativePackagingModule();
+
+    const result = terminateRunningPackagedApp({
+      packagedExecutablePath: 'F:\\Code\\Roc\\release\\win-unpacked\\Roc.exe',
+      listProcesses,
+      stopProcess,
+      waitTimeoutMs: 0
+    });
+
+    expect(result.terminatedPids).toEqual([]);
+    expect(stopProcess).toHaveBeenCalledWith(7332);
+    expect(listProcesses).toHaveBeenCalledTimes(2);
+  });
+
   it('builds Windows shell command lines so child_process does not receive shell args', async () => {
     const { buildWindowsShellCommand } = await loadNativePackagingModule();
 

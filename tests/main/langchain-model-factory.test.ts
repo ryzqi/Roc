@@ -106,6 +106,48 @@ describe('LangChainModelFactory', () => {
     expect((result.model as { timeout?: number }).timeout).toBe(120_000);
   });
 
+  it('builds the fixed OpenRouter ChatOpenAI model with OpenRouter attribution headers', async () => {
+    services.secretService.setProviderSecret('openrouter', 'sk-or-v1-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: '~openai/gpt-latest',
+      providers: [
+        {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          type: 'openrouter',
+          endpoint: 'https://openrouter.ai/api/v1',
+          credentialRef: 'secret:openrouter',
+          enabled: true,
+          models: [
+            {
+              id: '~openai/gpt-latest',
+              displayName: 'OpenAI GPT Latest',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+
+    expect(result.provider.id).toBe('openrouter');
+    expect(result.runtime.providerType).toBe('openrouter');
+    expect(result.runtime.baseUrl).toBe('https://openrouter.ai/api/v1');
+    expect((result.model as { clientConfig?: { baseURL?: string; defaultHeaders?: Record<string, string> } }).clientConfig)
+      .toMatchObject({
+        baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: {
+          'HTTP-Referer': 'https://github.com/roc-ai/roc',
+          'X-OpenRouter-Title': 'Roc'
+        }
+      });
+  });
+
   it('resolves cheap model handle to the active handle when no explicit cheap model is configured', async () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({

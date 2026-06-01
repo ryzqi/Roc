@@ -157,6 +157,52 @@ describe('providers section', () => {
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });
 
+  it('renders fixed OpenRouter details as API-key-only configuration', () => {
+    const provider: ProviderConfig = {
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: true,
+      models: [
+        {
+          id: '~openai/gpt-latest',
+          displayName: 'OpenAI GPT Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('openrouter', provider),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [provider],
+        providerSecretStatus: [{ providerId: provider.id, stored: true }],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-api-key"');
+    expect(html).toContain('保存 OpenRouter 配置');
+    expect(html).not.toContain('data-testid="provider-draft-name"');
+    expect(html).not.toContain('data-testid="provider-draft-endpoint"');
+    expect(html).not.toContain('data-testid="provider-draft-models"');
+    expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
+  });
+
   it('renders NVIDIA advanced parameter panel with all NIM fields', () => {
     const provider: ProviderConfig = {
       id: 'nvidia',

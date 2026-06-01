@@ -612,13 +612,18 @@ export class LangChainModelFactory {
       };
     }
 
-    if (provider.type !== 'openai_compatible' && provider.type !== 'nvidia' && provider.type !== 'llama_cpp') {
+    if (
+      provider.type !== 'openai_compatible' &&
+      provider.type !== 'openrouter' &&
+      provider.type !== 'nvidia' &&
+      provider.type !== 'llama_cpp'
+    ) {
       throw new RocDomainError({
         code: 'provider_type_unsupported',
         message: '当前 Provider 类型尚未支持 LangChain 聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
+        userAction: '请先使用 OpenAI-compatible、OpenRouter、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
       });
     }
 
@@ -634,6 +639,13 @@ export class LangChainModelFactory {
     const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
     const apiKeyForChatModel =
       provider.type === 'llama_cpp' && apiKey.length === 0 ? openAiNoAuthPlaceholderKey : apiKey;
+    const defaultHeaders =
+      provider.type === 'openrouter'
+        ? {
+            'HTTP-Referer': 'https://github.com/roc-ai/roc',
+            'X-OpenRouter-Title': 'Roc'
+          }
+        : undefined;
     const openAiConfiguration =
       provider.type === 'llama_cpp' && apiKey.length === 0
         ? {
@@ -643,7 +655,8 @@ export class LangChainModelFactory {
           }
         : {
             baseURL: baseUrl,
-            maxRetries: 0
+            maxRetries: 0,
+            ...(defaultHeaders === undefined ? {} : { defaultHeaders })
           };
     const OpenAiChatModelClass = provider.type === 'llama_cpp' ? LlamaCppCompatibleChatOpenAI : ReasoningAwareChatOpenAI;
     const chatModelFields: ChatOpenAIFields = {

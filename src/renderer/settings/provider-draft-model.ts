@@ -6,11 +6,19 @@ import {
   fixedNvidiaBaseUrl,
   fixedNvidiaProviderId,
   fixedNvidiaProviderName,
+  fixedOpenRouterBaseUrl,
+  fixedOpenRouterProviderId,
+  fixedOpenRouterProviderName,
+  createFixedOpenRouterModelConfigs,
   normalizeFixedLlamaCppProvider,
-  normalizeFixedNvidiaProvider
+  normalizeFixedNvidiaProvider,
+  normalizeFixedOpenRouterProvider
 } from '../../shared/provider-defaults';
 
-export type EditableProviderType = Extract<ProviderType, 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'llama_cpp'>;
+export type EditableProviderType = Extract<
+  ProviderType,
+  'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'openrouter' | 'llama_cpp'
+>;
 export type CreatableProviderType = Extract<EditableProviderType, 'openai_compatible' | 'anthropic_compatible'>;
 
 export type ProviderDraft = {
@@ -59,6 +67,7 @@ const editableProviderTypes: readonly EditableProviderType[] = [
   'openai_compatible',
   'anthropic_compatible',
   'nvidia',
+  'openrouter',
   'llama_cpp'
 ];
 
@@ -183,6 +192,23 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
         typeof normalized.options?.maxTokens === 'number' ? String(normalized.options.maxTokens) : '',
       thinking: booleanDraftValue(normalized.options?.thinking),
       ...createNvidiaAdvancedFields(normalized)
+    };
+  }
+  if (type === 'openrouter') {
+    const normalized = normalizeFixedOpenRouterProvider(provider);
+    return {
+      mode: 'edit',
+      id: fixedOpenRouterProviderId,
+      name: fixedOpenRouterProviderName,
+      type: 'openrouter',
+      endpoint: fixedOpenRouterBaseUrl,
+      apiKey: '',
+      enabled: normalized.enabled,
+      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      temperature: '',
+      maxTokens: '',
+      thinking: 'unset',
+      ...defaultNvidiaAdvancedFields()
     };
   }
   if (type === 'llama_cpp') {
@@ -455,6 +481,20 @@ export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConf
     });
     return options === undefined ? { ...provider, options: undefined } : provider;
   }
+  if (draft.type === 'openrouter') {
+    const modelsText = draft.modelsText.trim();
+    const provider = normalizeFixedOpenRouterProvider({
+      id: fixedOpenRouterProviderId,
+      name: fixedOpenRouterProviderName,
+      type: 'openrouter',
+      endpoint: fixedOpenRouterBaseUrl,
+      credentialRef: `secret:${fixedOpenRouterProviderId}`,
+      enabled: draft.enabled,
+      models: modelsText.length === 0 ? createFixedOpenRouterModelConfigs() : parseProviderModelDraft(modelsText),
+      options: undefined
+    });
+    return { ...provider, options: undefined };
+  }
   if (draft.type === 'llama_cpp') {
     const models = parseProviderModelDraft(draft.modelsText);
     if (models.length === 0) {
@@ -515,6 +555,11 @@ export function providerTypeMeta(type: EditableProviderType): ProviderTypeMeta {
   if (type === 'nvidia') {
     return {
       defaultBaseUrl: fixedNvidiaBaseUrl
+    };
+  }
+  if (type === 'openrouter') {
+    return {
+      defaultBaseUrl: fixedOpenRouterBaseUrl
     };
   }
   if (type === 'llama_cpp') {

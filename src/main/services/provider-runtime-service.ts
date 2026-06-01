@@ -183,6 +183,7 @@ export class ProviderRuntimeService {
   ): Promise<ProviderTransportResponse> {
     if (
       request.provider.type !== 'openai_compatible' &&
+      request.provider.type !== 'openrouter' &&
       request.provider.type !== 'anthropic_compatible' &&
       request.provider.type !== 'nvidia' &&
       request.provider.type !== 'llama_cpp'
@@ -192,7 +193,7 @@ export class ProviderRuntimeService {
         message: '当前 Provider 类型尚未支持测试或聊天执行。',
         category: 'external',
         retryable: false,
-        userAction: '请先使用 OpenAI-compatible、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
+        userAction: '请先使用 OpenAI-compatible、OpenRouter、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
       });
     }
     if (this.deterministicTransport !== null) {

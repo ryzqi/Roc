@@ -66,7 +66,14 @@ export type ShortcutsConfig = {
   shortcuts: unknown[];
 };
 
-export type ProviderType = 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'llama_cpp' | 'ollama' | 'custom';
+export type ProviderType =
+  | 'openai_compatible'
+  | 'anthropic_compatible'
+  | 'nvidia'
+  | 'openrouter'
+  | 'llama_cpp'
+  | 'ollama'
+  | 'custom';
 
 export type NvidiaToolChoice =
   | 'auto'

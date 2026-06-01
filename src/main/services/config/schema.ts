@@ -128,7 +128,7 @@ export const ProviderOptionsSchema = z
 export const ProviderSchema: z.ZodType<ProviderConfig> = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'llama_cpp', 'ollama', 'custom']),
+  type: z.enum(['openai_compatible', 'anthropic_compatible', 'nvidia', 'openrouter', 'llama_cpp', 'ollama', 'custom']),
   endpoint: z.string().min(1),
   credentialRef: ProviderCredentialRefSchema,
   enabled: z.boolean(),

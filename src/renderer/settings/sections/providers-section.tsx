@@ -98,6 +98,7 @@ export function ProvidersSection({
   );
   const fixedProviderSelected = selectedProvider !== null && isFixedProvider(selectedProvider.id);
   const fixedProviderDraft = isFixedProviderType(draft.type);
+  const apiKeyOnlyProviderDraft = draft.type === 'openrouter';
   const fixedEndpoint = draft.type === 'nvidia';
 
   const meta = providerTypeMeta(draft.type);
@@ -327,31 +328,35 @@ export function ProvidersSection({
               </div>
             )}
           </label>
-          <label className="field">
-            <span>{fixedEndpoint ? '固定端点' : 'Base URL'}</span>
-            <input
-              data-testid="provider-draft-endpoint"
-              onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
-              placeholder={meta.defaultBaseUrl}
-              readOnly={fixedEndpoint}
-              value={draft.endpoint}
-            />
-            <span className="field-hint">
-              {draft.type === 'nvidia'
-                ? '留空使用 NVIDIA 官方 OpenAI-compatible 端点；自托管 NIM 可在高级参数中覆盖。'
-                : `留空将回退到默认 ${meta.defaultBaseUrl}`}
-            </span>
-          </label>
-          <label className="field">
-            <span>模型列表</span>
-            <textarea
-              data-testid="provider-draft-models"
-              onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
-              placeholder="一行一个,格式:modelId | displayName"
-              rows={4}
-              value={draft.modelsText}
-            />
-          </label>
+          {apiKeyOnlyProviderDraft ? null : (
+            <>
+              <label className="field">
+                <span>{fixedEndpoint ? '固定端点' : 'Base URL'}</span>
+                <input
+                  data-testid="provider-draft-endpoint"
+                  onChange={(event) => onUpdateDraft({ endpoint: event.currentTarget.value })}
+                  placeholder={meta.defaultBaseUrl}
+                  readOnly={fixedEndpoint}
+                  value={draft.endpoint}
+                />
+                <span className="field-hint">
+                  {draft.type === 'nvidia'
+                    ? '留空使用 NVIDIA 官方 OpenAI-compatible 端点；自托管 NIM 可在高级参数中覆盖。'
+                    : `留空将回退到默认 ${meta.defaultBaseUrl}`}
+                </span>
+              </label>
+              <label className="field">
+                <span>模型列表</span>
+                <textarea
+                  data-testid="provider-draft-models"
+                  onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
+                  placeholder="一行一个,格式:modelId | displayName"
+                  rows={4}
+                  value={draft.modelsText}
+                />
+              </label>
+            </>
+          )}
           {draft.type === 'nvidia' ? (
             <>
               <p className="provider-nvidia-note" data-testid="provider-nvidia-endpoint-note">

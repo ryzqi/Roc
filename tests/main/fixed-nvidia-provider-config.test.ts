@@ -19,6 +19,73 @@ afterEach(() => {
 });
 
 describe('fixed NVIDIA provider config', () => {
+  it('always exposes a normalized built-in OpenRouter provider with default latest-alias models', () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        {
+          id: 'openrouter',
+          name: 'Custom Router',
+          type: 'openai_compatible',
+          endpoint: 'https://example.invalid/v1',
+          credentialRef: 'secret:custom',
+          enabled: false,
+          models: [
+            {
+              id: 'stale/custom-model',
+              displayName: 'Stale custom model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            temperature: 0.1,
+            maxTokens: 512,
+            contextBudgetTokens: 4096
+          }
+        }
+      ]
+    });
+
+    const providers = services.configService.getProviders().providers;
+    const openRouter = providers.find((provider) => provider.id === 'openrouter');
+
+    expect(openRouter).toEqual({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: false,
+      models: [
+        {
+          id: '~openai/gpt-latest',
+          displayName: 'OpenAI GPT Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~anthropic/claude-sonnet-latest',
+          displayName: 'Claude Sonnet Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~google/gemini-pro-latest',
+          displayName: 'Gemini Pro Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: undefined
+    });
+  });
+
   it('always exposes a normalized built-in NVIDIA provider while preserving multiple saved models', () => {
     services.configService.saveProviders({
       schemaVersion: 1,

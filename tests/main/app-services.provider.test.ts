@@ -1,4 +1,5 @@
 import { createAppServices } from '../../src/main/services/app-service';
+import type { LangChainChatModelHandle } from '../../src/main/services/langchain-model-factory';
 import { RocDomainError } from '../../src/main/services/errors';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../src/main/services/deep-agent/types';
 import {
@@ -320,6 +321,88 @@ describe('Roc foundation services providers', () => {
     } finally {
       liveServices.databaseService.close();
       await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('tests the fixed OpenRouter provider through the LangChain model factory', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-openrouter-langchain-test-'));
+    const liveServices = createAppServices(liveRoot);
+    const invoke = vi.fn().mockResolvedValue({
+      content: 'OK',
+      response_metadata: {
+        finish_reason: 'stop'
+      },
+      usage_metadata: {
+        input_tokens: 4,
+        output_tokens: 1
+      }
+    });
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('openrouter', 'sk-or-v1-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'openrouter',
+            name: 'OpenRouter',
+            type: 'openrouter',
+            endpoint: 'https://openrouter.ai/api/v1',
+            credentialRef: 'secret:openrouter',
+            enabled: true,
+            models: [
+              {
+                id: '~openai/gpt-latest',
+                displayName: 'OpenAI GPT Latest',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      });
+      Reflect.set(liveServices.providerRuntimeService as object, 'deterministicTransport', null);
+      const createModelSpy = vi
+        .spyOn(liveServices.langChainModelFactory, 'createModelForProvider')
+        .mockImplementation(async (provider, modelId, options) => ({
+          provider,
+          modelId,
+          runtime: {
+            providerType: provider.type,
+            baseUrl: provider.endpoint,
+            streaming: options?.streaming ?? true,
+            modelKwargs: {},
+            contextBudgetTokens: 8192
+          },
+          model: { invoke } as unknown as LangChainChatModelHandle['model']
+        }));
+      const nvidiaProbeSpy = vi.spyOn(liveServices.langChainModelFactory, 'probeNvidiaTtfb');
+
+      const result = await liveServices.providerRuntimeService.testProvider('openrouter');
+
+      expect(result).toMatchObject({
+        providerId: 'openrouter',
+        status: 'ready',
+        defaultModelReady: false,
+        modelId: '~openai/gpt-latest',
+        error: null
+      });
+      expect(createModelSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'openrouter',
+          type: 'openrouter'
+        }),
+        '~openai/gpt-latest',
+        { streaming: false }
+      );
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(nvidiaProbeSpy).not.toHaveBeenCalled();
+    } finally {
+      liveServices.databaseService.close();
       rmSync(liveRoot, { recursive: true, force: true });
     }
   });
@@ -779,6 +862,7 @@ describe('Roc foundation services providers', () => {
 
     expect(config.providers.map((provider) => `${provider.type}:${provider.id}`)).toEqual([
       'nvidia:nvidia',
+      'openrouter:openrouter',
       'llama_cpp:llama_cpp',
       'openai_compatible:provider-openai-a',
       'openai_compatible:provider-openai-b',

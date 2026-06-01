@@ -298,6 +298,12 @@ describe('ConfigService unified settings document', () => {
             endpoint: 'https://integrate.api.nvidia.com/v1'
           }),
           expect.objectContaining({
+            id: 'openrouter',
+            type: 'openrouter',
+            endpoint: 'https://openrouter.ai/api/v1',
+            credentialRef: 'secret:openrouter'
+          }),
+          expect.objectContaining({
             id: 'llama_cpp',
             type: 'llama_cpp',
             endpoint: 'http://127.0.0.1:8081/v1',
@@ -580,6 +586,12 @@ describe('ConfigService unified settings document', () => {
           endpoint: 'https://integrate.api.nvidia.com/v1'
         }),
         expect.objectContaining({
+          id: 'openrouter',
+          type: 'openrouter',
+          endpoint: 'https://openrouter.ai/api/v1',
+          credentialRef: 'secret:openrouter'
+        }),
+        expect.objectContaining({
           id: 'llama_cpp',
           type: 'llama_cpp',
           endpoint: 'http://127.0.0.1:8081/v1',
@@ -597,6 +609,12 @@ describe('ConfigService unified settings document', () => {
             id: 'nvidia',
             type: 'nvidia',
             endpoint: 'https://integrate.api.nvidia.com/v1'
+          }),
+          expect.objectContaining({
+            id: 'openrouter',
+            type: 'openrouter',
+            endpoint: 'https://openrouter.ai/api/v1',
+            credentialRef: 'secret:openrouter'
           }),
           expect.objectContaining({
             id: 'llama_cpp',
@@ -646,6 +664,12 @@ describe('ConfigService unified settings document', () => {
         credentialRef: 'secret:nvidia'
       }),
       expect.objectContaining({
+        id: 'openrouter',
+        type: 'openrouter',
+        endpoint: 'https://openrouter.ai/api/v1',
+        credentialRef: 'secret:openrouter'
+      }),
+      expect.objectContaining({
         id: 'llama_cpp',
         name: 'llama.cpp',
         type: 'llama_cpp',
@@ -667,6 +691,12 @@ describe('ConfigService unified settings document', () => {
           endpoint: 'https://integrate.api.nvidia.com/v1',
           credentialRef: 'secret:nvidia'
         }),
+        expect.objectContaining({
+          id: 'openrouter',
+          type: 'openrouter',
+          endpoint: 'https://openrouter.ai/api/v1',
+          credentialRef: 'secret:openrouter'
+        }),
         {
           id: 'llama_cpp',
           name: 'llama.cpp',
@@ -685,7 +715,7 @@ describe('config helper modules', () => {
   it('exports defaults and schemas used by ConfigService', () => {
     expect(defaultSettings.memory.sessionRetentionDays).toBe(90);
     expect(defaultPermissions.mode).toBe('fully_automatic');
-    expect(defaultProviders.providers.map((provider) => provider.id)).toEqual(['nvidia', 'llama_cpp']);
+    expect(defaultProviders.providers.map((provider) => provider.id)).toEqual(['nvidia', 'openrouter', 'llama_cpp']);
     expect(defaultMcpConfig).toEqual({
       schemaVersion: 1,
       servers: []
@@ -736,6 +766,7 @@ describe('config helper modules', () => {
 
     expect(normalized.providers.map((provider) => provider.id)).toEqual([
       'nvidia',
+      'openrouter',
       'llama_cpp',
       'custom-provider'
     ]);

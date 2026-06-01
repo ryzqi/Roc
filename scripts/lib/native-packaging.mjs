@@ -91,6 +91,10 @@ function normalizeWindowsPath(value) {
   return value.replaceAll('/', '\\').toLowerCase();
 }
 
+function isPackagedExecutableProcess(process, targetPath) {
+  return normalizeWindowsPath(resolve(process.executablePath)) === targetPath;
+}
+
 function sleepSync(ms) {
   if (ms <= 0) {
     return;
@@ -110,7 +114,7 @@ export function terminateRunningPackagedApp({
 
   const targetPath = normalizeWindowsPath(resolve(packagedExecutablePath));
   const matchingProcesses = listProcesses().filter(
-    (process) => normalizeWindowsPath(resolve(process.executablePath)) === targetPath
+    (process) => isPackagedExecutableProcess(process, targetPath)
   );
   if (matchingProcesses.length === 0) {
     return { terminatedPids: [] };
@@ -120,7 +124,13 @@ export function terminateRunningPackagedApp({
   for (const matchingProcess of matchingProcesses) {
     const status = stopProcess(matchingProcess.pid);
     if (status !== 0) {
-      throw new Error(`Failed to terminate packaged Roc.exe process ${matchingProcess.pid}.`);
+      const stillRunning = listProcesses().some(
+        (process) => process.pid === matchingProcess.pid && isPackagedExecutableProcess(process, targetPath)
+      );
+      if (stillRunning) {
+        throw new Error(`Failed to terminate packaged Roc.exe process ${matchingProcess.pid}.`);
+      }
+      continue;
     }
     terminatedPids.push(matchingProcess.pid);
   }
@@ -132,7 +142,7 @@ export function terminateRunningPackagedApp({
 
   while (Date.now() - startedAt < waitTimeoutMs) {
     const stillRunning = listProcesses().some(
-      (process) => normalizeWindowsPath(resolve(process.executablePath)) === targetPath
+      (process) => isPackagedExecutableProcess(process, targetPath)
     );
     if (!stillRunning) {
       return { terminatedPids };

@@ -111,9 +111,10 @@ export function SettingsView({
       provider.type !== 'openai_compatible' &&
       provider.type !== 'anthropic_compatible' &&
       provider.type !== 'nvidia' &&
+      provider.type !== 'openrouter' &&
       provider.type !== 'llama_cpp'
     ) {
-      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible、NVIDIA 和 llama.cpp provider。');
+      setProviderDraftError('当前设置页只编辑 OpenAI-compatible、Anthropic-compatible、NVIDIA、OpenRouter 和 llama.cpp provider。');
       return;
     }
     setProviderDraft(createProviderDraft(provider.type, provider));
@@ -409,6 +410,10 @@ function createInitialProviderDraft(providers: ProviderConfig[]): ProviderDraft 
   const nvidia = providers.find((provider) => provider.id === 'nvidia');
   if (nvidia !== undefined) {
     return createProviderDraft('nvidia', nvidia);
+  }
+  const openRouter = providers.find((provider) => provider.id === 'openrouter');
+  if (openRouter !== undefined) {
+    return createProviderDraft('openrouter', openRouter);
   }
   const llamaCpp = providers.find((provider) => provider.id === 'llama_cpp');
   if (llamaCpp !== undefined) {

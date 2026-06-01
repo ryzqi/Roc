@@ -168,6 +168,23 @@ describe('settings model helpers', () => {
       thinking: 'unset',
       ...defaultNvidiaDraftFields()
     });
+    expect(createProviderDraft('openrouter')).toEqual({
+      mode: 'edit',
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      apiKey: '',
+      enabled: true,
+      modelsText:
+        '~openai/gpt-latest | OpenAI GPT Latest\n' +
+        '~anthropic/claude-sonnet-latest | Claude Sonnet Latest\n' +
+        '~google/gemini-pro-latest | Gemini Pro Latest',
+      temperature: '',
+      maxTokens: '',
+      thinking: 'unset',
+      ...defaultNvidiaDraftFields()
+    });
     expect(createProviderDraft('llama_cpp')).toEqual({
       mode: 'edit',
       id: 'llama_cpp',
@@ -362,6 +379,48 @@ describe('settings model helpers', () => {
         maxTokens: 16384,
         thinking: true
       }
+    });
+  });
+
+  it('builds the fixed OpenRouter provider config without requiring endpoint or model input', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('openrouter'),
+      endpoint: '',
+      modelsText: '',
+      apiKey: 'sk-or-v1-test'
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: true,
+      models: [
+        {
+          id: '~openai/gpt-latest',
+          displayName: 'OpenAI GPT Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~anthropic/claude-sonnet-latest',
+          displayName: 'Claude Sonnet Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~google/gemini-pro-latest',
+          displayName: 'Gemini Pro Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: undefined
     });
   });
 
@@ -857,6 +916,9 @@ describe('settings model helpers', () => {
   it('providerTypeMeta returns OpenAI defaults for openai_compatible', () => {
     expect(providerTypeMeta('openai_compatible')).toEqual({
       defaultBaseUrl: 'https://api.openai.com/v1'
+    });
+    expect(providerTypeMeta('openrouter')).toEqual({
+      defaultBaseUrl: 'https://openrouter.ai/api/v1'
     });
   });
 
