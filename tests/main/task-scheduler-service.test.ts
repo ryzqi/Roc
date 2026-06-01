@@ -176,7 +176,7 @@ describe('TaskSchedulerService', () => {
       expect.objectContaining({
         id: task.id,
         status: 'running',
-        lastRunStatus: 'success',
+        lastRunStatus: null,
         runCount: 1
       })
     );

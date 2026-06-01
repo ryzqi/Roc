@@ -2590,7 +2590,7 @@ try {
       typeof manualRunOutputText === 'string' &&
       manualRunOutputText.includes('运行输出'),
     traySummaryVisible:
-      taskText.includes('活跃任务') &&
+      taskText.includes('全部任务') &&
       taskText.includes('调度器') &&
       backgroundTaskApiEvidence.schedulerStatus.running &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&

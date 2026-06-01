@@ -144,8 +144,8 @@ function activeItemFromBackgroundTask(task: BackgroundTask): ActiveTaskItem {
     taskId: task.id,
     title: task.goal.slice(0, 60),
     goal: task.goal,
-    status: task.status,
-    trigger: triggerFromBackgroundTask(task),
+    status: resolveActiveTaskStatus(task),
+    trigger: resolveActiveTaskTrigger(task),
     nextRunAt: task.nextRunAt,
     lastRunAt: task.lastRunAt,
     riskLevel: task.riskLevel,
@@ -153,6 +153,24 @@ function activeItemFromBackgroundTask(task: BackgroundTask): ActiveTaskItem {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
+}
+
+function resolveActiveTaskStatus(task: BackgroundTask): BackgroundTask['status'] {
+  if (task.lastRunStatus === null && task.lastRunAt !== null && task.status === 'completed') {
+    return 'running';
+  }
+  return task.status;
+}
+
+function resolveActiveTaskTrigger(task: BackgroundTask): ActiveTaskItem['trigger'] {
+  if (task.triggerType === 'once' && task.nextRunAt === null) {
+    return {
+      type: 'once',
+      description: task.triggerDescription,
+      nextRunAt: task.lastRunAt ?? task.updatedAt
+    };
+  }
+  return triggerFromBackgroundTask(task);
 }
 
 function listRunsForThread(database: DatabaseService, threadId: string, limit: number): TaskRun[] {

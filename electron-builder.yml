@@ -13,6 +13,15 @@ files:
   - "!**/*.d.ts"
   - "!**/*.d.mts"
   - "!**/*.d.cts"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/node-pty/src/**"
+  - "!node_modules/node-pty/typings/**"
+  - "!node_modules/node-pty/scripts/**"
+  - "!node_modules/node-pty/deps/**"
+  - "!node_modules/node-pty/prebuilds/darwin-*/**"
+  - "!node_modules/node-pty/prebuilds/win32-arm64/**"
+  - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 extraResources:
   - from: resources/rtk-binaries
     to: rtk-binaries

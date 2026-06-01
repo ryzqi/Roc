@@ -44,6 +44,18 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('win32-x64/**');
   });
 
+  it('excludes native module build inputs and non-target prebuilds from the package', () => {
+    expect(electronBuilderConfig).toContain('!node_modules/better-sqlite3/deps/**');
+    expect(electronBuilderConfig).toContain('!node_modules/better-sqlite3/src/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/src/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/typings/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/scripts/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/deps/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/prebuilds/win32-arm64/**');
+    expect(electronBuilderConfig).toContain('!node_modules/node-pty/third_party/conpty/**/win10-arm64/**');
+  });
+
   it('uses electron-rebuild first and skips prebuild-install when rebuild succeeds', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
     const { prepareBetterSqlite3ForElectron } = await loadNativePackagingModule();

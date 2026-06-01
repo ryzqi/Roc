@@ -253,6 +253,9 @@ export function completeRunWithProviderResult(input: {
   const transaction = input.database.db.transaction(() => {
     input.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('completed', now, run.threadId);
     input.database.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('completed', now, run.id);
+    input.database.db
+      .prepare('UPDATE background_tasks SET last_run_status = ?, updated_at = ? WHERE run_id = ?')
+      .run('success', now, run.id);
     insertTaskEvent(input.database, {
       threadId: run.threadId,
       runId: run.id,
@@ -301,6 +304,9 @@ export function failRunWithProviderError(input: {
   const transaction = input.database.db.transaction(() => {
     input.database.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('failed', now, run.threadId);
     input.database.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('failed', now, run.id);
+    input.database.db
+      .prepare('UPDATE background_tasks SET status = ?, last_run_status = ?, updated_at = ? WHERE run_id = ?')
+      .run('failed', 'failed', now, run.id);
     insertTaskEvent(input.database, {
       threadId: run.threadId,
       runId: run.id,

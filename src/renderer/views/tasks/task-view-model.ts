@@ -51,8 +51,8 @@ export function buildTaskViewModel(state: LoadedState, nowIso = new Date().toISO
   );
   const railItems: TaskRailItem[] = [
     { id: 'all', title: '全部', count: allItems.length },
-    { id: 'running', title: '运行中', count: allItems.filter((item) => runningStatuses.has(item.status) && !isScheduledBeforeFirstRun(item)).length },
-    { id: 'scheduled', title: '计划中', count: allItems.filter(isScheduledBeforeFirstRun).length },
+    { id: 'running', title: '运行中', count: allItems.filter((item) => runningStatuses.has(item.status) && !isWaitingForScheduledRun(item)).length },
+    { id: 'scheduled', title: '计划中', count: allItems.filter(isWaitingForScheduledRun).length },
     { id: 'pending_confirmation', title: '待确认', count: allItems.filter((item) => item.status === 'pending_confirmation').length },
     { id: 'paused', title: '已暂停', count: allItems.filter((item) => item.status === 'paused').length },
     { id: 'failed', title: '异常', count: allItems.filter((item) => item.status === 'failed').length },
@@ -71,10 +71,10 @@ export function filterTaskItems(items: ActiveTaskItem[], railId: TaskRailId): Ac
     return items;
   }
   if (railId === 'running') {
-    return items.filter((item) => runningStatuses.has(item.status) && !isScheduledBeforeFirstRun(item));
+    return items.filter((item) => runningStatuses.has(item.status) && !isWaitingForScheduledRun(item));
   }
   if (railId === 'scheduled') {
-    return items.filter(isScheduledBeforeFirstRun);
+    return items.filter(isWaitingForScheduledRun);
   }
   if (railId === 'pending_confirmation') {
     return items.filter((item) => item.status === 'pending_confirmation');
@@ -89,7 +89,7 @@ export function filterTaskItems(items: ActiveTaskItem[], railId: TaskRailId): Ac
 }
 
 export function resolveTaskDisplayStatus(item: ActiveTaskItem): string {
-  if (isScheduledBeforeFirstRun(item)) {
+  if (isWaitingForScheduledRun(item)) {
     return '计划中';
   }
   if (item.status === 'pending_confirmation') {
@@ -130,6 +130,6 @@ function dedupeBackgroundFirst(items: ActiveTaskItem[]): ActiveTaskItem[] {
   return [...byTask.values()];
 }
 
-function isScheduledBeforeFirstRun(item: ActiveTaskItem): boolean {
-  return item.nextRunAt !== null && item.lastRunAt === null && item.status === 'running';
+function isWaitingForScheduledRun(item: ActiveTaskItem): boolean {
+  return item.nextRunAt !== null && item.status === 'running';
 }

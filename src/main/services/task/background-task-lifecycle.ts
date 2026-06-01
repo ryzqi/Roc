@@ -213,20 +213,21 @@ export function markBackgroundTaskFired(input: {
   input.database.db
     .prepare(
       `UPDATE background_tasks
-       SET status = ?, last_run_at = ?, last_run_status = ?, run_count = run_count + 1, next_run_at = ?, updated_at = ?
+       SET status = ?, run_id = ?, last_run_at = ?, last_run_status = ?, run_count = run_count + 1, next_run_at = ?, updated_at = ?
        WHERE id = ?`
     )
-    .run(status, input.firedAt, 'success', input.nextRunAt, now, input.taskId);
+    .run(status, input.runId, input.firedAt, null, input.nextRunAt, now, input.taskId);
   input.database.db
     .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
     .run(status, now, task.threadId);
 
   return {
     ...task,
+    runId: input.runId,
     status,
     nextRunAt: input.nextRunAt,
     lastRunAt: input.firedAt,
-    lastRunStatus: 'success',
+    lastRunStatus: null,
     runCount: task.runCount + 1,
     updatedAt: now
   };

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveTaskItem } from '../../src/shared/types';
-import { buildTaskViewModel, countTaskNavMeta } from '../../src/renderer/views/tasks/task-view-model';
+import {
+  buildTaskViewModel,
+  countTaskNavMeta,
+  filterTaskItems,
+  resolveTaskDisplayStatus
+} from '../../src/renderer/views/tasks/task-view-model';
 import { createLoadedState } from './view-test-helpers';
 
 function task(input: Partial<ActiveTaskItem> & Pick<ActiveTaskItem, 'threadId' | 'title' | 'status'>): ActiveTaskItem {
@@ -202,5 +207,34 @@ describe('task workbench view model', () => {
       pendingApprovalCount: 1,
       scheduledCount: 1
     });
+  });
+
+  it('shows recurring background tasks waiting for their next run as scheduled after a previous run fired', () => {
+    const recurring = task({
+      threadId: 'recurring',
+      title: '周期检查',
+      status: 'running',
+      trigger: {
+        type: 'cron',
+        description: '每小时',
+        cronExpression: '0 * * * *',
+        nextRunAt: '2026-05-22T02:00:00.000Z'
+      },
+      nextRunAt: '2026-05-22T02:00:00.000Z',
+      lastRunAt: '2026-05-22T01:00:00.000Z'
+    });
+    const model = buildTaskViewModel(createLoadedState({ activeTasks: [recurring] }), '2026-05-22T01:05:00.000Z');
+
+    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
+      ['all', 1],
+      ['running', 0],
+      ['scheduled', 1],
+      ['pending_confirmation', 0],
+      ['paused', 0],
+      ['failed', 0],
+      ['terminal', 0]
+    ]);
+    expect(filterTaskItems(model.allItems, 'scheduled')).toEqual([recurring]);
+    expect(resolveTaskDisplayStatus(recurring)).toBe('计划中');
   });
 });
