@@ -239,7 +239,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
 
   it('nudges when edit_file is called before read_file for the same path', async () => {
     const update = await runAfterModel({
-      messages: [aiWithToolCall({ name: 'edit_file', args: { path: '/a.md' }, id: 'call-edit' })]
+      messages: [aiWithToolCall({ name: 'edit_file', args: { file_path: '/workspace/a.md' }, id: 'call-edit' })]
     });
 
     expect(update?.jumpTo).toBe('model');
@@ -250,17 +250,31 @@ describe('ForgeStepEnforcementMiddleware', () => {
     expect(nudge.name).toBe('edit_file');
     expect(nudge.status).toBe('error');
     expect(String(nudge.content)).toContain('[PrerequisiteError]');
-    expect(String(nudge.content)).toContain('read_file(path="/a.md")');
+    expect(String(nudge.content)).toContain('read_file(file_path="a.md")');
     expect(readForgeMessageTag(nudge)).toBe('forge:prerequisite_nudge');
   });
 
   it('allows edit_file after read_file has succeeded for the same path', async () => {
     const update = await runAfterModel({
-      messages: [aiWithToolCall({ name: 'edit_file', args: { path: '/a.md' } })],
+      messages: [aiWithToolCall({ name: 'edit_file', args: { file_path: '/workspace/a.md' } })],
       stepTracker: {
         ...defaultStepTracker(),
         executedTools: {
-          read_file: [{ path: '/a.md' }]
+          read_file: [{ file_path: '/workspace/a.md' }]
+        }
+      }
+    });
+
+    expect(update).toBeUndefined();
+  });
+
+  it('allows write_file after read_file for the same DeepAgents file_path', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'write_file', args: { file_path: '/workspace/quicksort_example.py' } })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        executedTools: {
+          read_file: [{ file_path: '/workspace/quicksort_example.py' }]
         }
       }
     });
@@ -270,18 +284,18 @@ describe('ForgeStepEnforcementMiddleware', () => {
 
   it('nudges when edit_file targets a different path than the prior read_file call', async () => {
     const update = await runAfterModel({
-      messages: [aiWithToolCall({ name: 'edit_file', args: { path: '/b.md' } })],
+      messages: [aiWithToolCall({ name: 'edit_file', args: { file_path: '/workspace/b.md' } })],
       stepTracker: {
         ...defaultStepTracker(),
         executedTools: {
-          read_file: [{ path: '/a.md' }]
+          read_file: [{ file_path: '/workspace/a.md' }]
         }
       }
     });
 
     const nudge = update?.messages?.[0] as ToolMessage;
     expect(update?.jumpTo).toBe('model');
-    expect(String(nudge.content)).toContain('read_file(path="/b.md")');
+    expect(String(nudge.content)).toContain('read_file(file_path="b.md")');
   });
 
   it('allows terminal tools after all required steps have succeeded', async () => {
@@ -304,7 +318,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
   it('throws after prerequisite violations exceed the configured budget', async () => {
     await expect(
       runAfterModel({
-        messages: [aiWithToolCall({ name: 'edit_file', args: { path: '/a.md' } })],
+        messages: [aiWithToolCall({ name: 'edit_file', args: { file_path: '/workspace/a.md' } })],
         stepTracker: {
           ...defaultStepTracker(),
           prereqViolations: 2

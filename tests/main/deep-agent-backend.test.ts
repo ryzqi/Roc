@@ -354,6 +354,26 @@ describe('deep agent backend', () => {
     }
   });
 
+  it('rejects Windows absolute write_file paths instead of writing outside /workspace/', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-windows-absolute-'));
+    try {
+      services.workspaceService.selectWorkspace(workspaceRoot);
+      const backend: RocCompositeBackend = createTestBackend({
+        workspaceService: services.workspaceService,
+        paths: services.paths,
+        shellExecutionService: createShellExecutionAdapter()
+      }).backend;
+
+      const writeResult = await backend.write('G:\\杂\\test\\quicksort_example.py', 'print("hello")\n');
+
+      expect(writeResult.error).toBe('Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。');
+      expect(writeResult.path).toBeUndefined();
+      expect(existsSync(join(workspaceRoot, 'quicksort_example.py'))).toBe(false);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('allows root-scoped grep and glob aggregation across mounted routes', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'roc-backend-root-search-'));
     try {
