@@ -424,6 +424,34 @@ describe('settings model helpers', () => {
     });
   });
 
+  it('builds the fixed OpenRouter provider config with configured models and fixed endpoint', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('openrouter'),
+      endpoint: 'https://example.invalid/v1',
+      modelsText: 'custom/openrouter-model | Custom OpenRouter model',
+      apiKey: 'sk-or-v1-test'
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: true,
+      models: [
+        {
+          id: 'custom/openrouter-model',
+          displayName: 'Custom OpenRouter model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: undefined
+    });
+  });
+
   it('round-trips NVIDIA advanced options through draft and ProviderConfig', () => {
     const provider: ProviderConfig = {
       id: 'nvidia',

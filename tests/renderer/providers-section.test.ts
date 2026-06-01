@@ -157,7 +157,7 @@ describe('providers section', () => {
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });
 
-  it('renders fixed OpenRouter details as API-key-only configuration', () => {
+  it('renders fixed OpenRouter details with API key and configurable models', () => {
     const provider: ProviderConfig = {
       id: 'openrouter',
       name: 'OpenRouter',
@@ -199,7 +199,8 @@ describe('providers section', () => {
     expect(html).toContain('保存 OpenRouter 配置');
     expect(html).not.toContain('data-testid="provider-draft-name"');
     expect(html).not.toContain('data-testid="provider-draft-endpoint"');
-    expect(html).not.toContain('data-testid="provider-draft-models"');
+    expect(html).toContain('data-testid="provider-draft-models"');
+    expect(html).toContain('~openai/gpt-latest | OpenAI GPT Latest');
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });
 

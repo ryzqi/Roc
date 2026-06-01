@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('fixed NVIDIA provider config', () => {
-  it('always exposes a normalized built-in OpenRouter provider with default latest-alias models', () => {
+  it('always exposes a normalized built-in OpenRouter provider while preserving configured models', () => {
     services.configService.saveProviders({
       schemaVersion: 1,
       defaultModelId: null,
@@ -33,8 +33,8 @@ describe('fixed NVIDIA provider config', () => {
           enabled: false,
           models: [
             {
-              id: 'stale/custom-model',
-              displayName: 'Stale custom model',
+              id: 'custom/openrouter-model',
+              displayName: 'Custom OpenRouter model',
               enabled: true,
               supportsStreaming: true,
               supportsToolCalls: true
@@ -61,22 +61,8 @@ describe('fixed NVIDIA provider config', () => {
       enabled: false,
       models: [
         {
-          id: '~openai/gpt-latest',
-          displayName: 'OpenAI GPT Latest',
-          enabled: true,
-          supportsStreaming: true,
-          supportsToolCalls: true
-        },
-        {
-          id: '~anthropic/claude-sonnet-latest',
-          displayName: 'Claude Sonnet Latest',
-          enabled: true,
-          supportsStreaming: true,
-          supportsToolCalls: true
-        },
-        {
-          id: '~google/gemini-pro-latest',
-          displayName: 'Gemini Pro Latest',
+          id: 'custom/openrouter-model',
+          displayName: 'Custom OpenRouter model',
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true

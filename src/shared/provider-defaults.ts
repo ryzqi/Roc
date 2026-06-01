@@ -108,7 +108,7 @@ export function normalizeFixedOpenRouterProvider(provider?: ProviderConfig): Pro
   return {
     ...base,
     enabled: provider.enabled,
-    models: base.models,
+    models: provider.models.length === 0 ? base.models : provider.models,
     options: undefined
   };
 }
