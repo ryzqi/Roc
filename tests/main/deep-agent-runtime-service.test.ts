@@ -281,6 +281,7 @@ describe('DeepAgentRuntimeService', () => {
         expect.objectContaining({ name: 'toolRetryMiddleware' }),
         expect.objectContaining({ name: 'ForgeErrorBudgetMiddleware' }),
         expect.objectContaining({ name: 'ForgeStepEnforcement' }),
+        expect.objectContaining({ name: 'ForgeFilesystemToolErrorMiddleware' }),
         expect.objectContaining({ name: 'ForgeRespondToolInjection' }),
         expect.objectContaining({ name: 'ContextEditingMiddleware' }),
         expect.objectContaining({ name: 'ForgeRescueParsingMiddleware' }),

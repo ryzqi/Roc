@@ -14,6 +14,7 @@ import {
   createRespondToolInjectionMiddleware,
   createResponseValidationMiddleware,
   createStepEnforcementMiddleware,
+  createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
   ROC_PREREQUISITES
 } from '../forge-guardrails';
@@ -78,6 +79,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       resolveWorkflowFromContext: () => input.workflowHint,
       prerequisitesConfig: ROC_PREREQUISITES
     }),
+    createFilesystemToolErrorMiddleware(),
     createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens
