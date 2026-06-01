@@ -32,7 +32,7 @@ function task(input: Partial<ActiveTaskItem> & Pick<ActiveTaskItem, 'threadId' |
 }
 
 describe('task workbench view model', () => {
-  it('groups active tasks by pending, running, scheduled, paused, failed, and recent completion rules', () => {
+  it('builds rail counts while keeping the main task list unique', () => {
     const state = createLoadedState({
       activeTasks: [
         task({ threadId: 'pending', title: '等待审批', status: 'pending_confirmation' }),
@@ -71,17 +71,25 @@ describe('task workbench view model', () => {
 
     const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
 
-    expect(model.groups.map((group) => [group.id, group.items.map((item) => item.threadId)])).toEqual([
-      ['pending_confirmation', ['pending']],
-      ['running', ['running']],
-      ['scheduled', ['scheduled']],
-      ['paused', ['paused']],
-      ['failed', ['failed']],
-      ['recent_completed', ['recent-completed']],
-      ['terminal', ['old-completed']]
+    expect(model.allItems.map((item) => item.threadId)).toEqual([
+      'pending',
+      'running',
+      'scheduled',
+      'paused',
+      'failed',
+      'recent-completed',
+      'old-completed'
     ]);
-    expect(model.groups.find((group) => group.id === 'pending_confirmation')?.defaultExpanded).toBe(true);
-    expect(model.groups.find((group) => group.id === 'paused')?.defaultExpanded).toBe(false);
+    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
+      ['all', 7],
+      ['running', 1],
+      ['scheduled', 1],
+      ['pending_confirmation', 1],
+      ['paused', 1],
+      ['failed', 1],
+      ['terminal', 2]
+    ]);
+    expect(model.allItems.filter((item) => item.threadId === 'scheduled')).toHaveLength(1);
   });
 
   it('keeps cancelled terminal tasks visible so task counts cannot render an empty list', () => {
@@ -107,12 +115,47 @@ describe('task workbench view model', () => {
     const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
 
     expect(model.allItems).toHaveLength(3);
-    expect(model.groups.map((group) => [group.id, group.items.map((item) => item.threadId)])).toEqual([
-      ['terminal', ['cancelled-1', 'cancelled-2', 'cancelled-3']]
+    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
+      ['all', 3],
+      ['running', 0],
+      ['scheduled', 0],
+      ['pending_confirmation', 0],
+      ['paused', 0],
+      ['failed', 0],
+      ['terminal', 3]
     ]);
   });
 
-  it('keeps one item per background thread', () => {
+  it('keeps one item per background task id', () => {
+    const state = createLoadedState({
+      activeTasks: [
+        task({
+          threadId: 'thread-first',
+          taskId: 'background-same',
+          title: '后台任务一',
+          status: 'running'
+        }),
+        task({
+          threadId: 'thread-second',
+          taskId: 'background-same',
+          title: '后台任务二',
+          status: 'running'
+        })
+      ]
+    });
+
+    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
+
+    expect(model.allItems).toEqual([
+      expect.objectContaining({
+        kind: 'background',
+        threadId: 'thread-first',
+        taskId: 'background-same'
+      })
+    ]);
+  });
+
+  it('keeps different background task ids even if a thread id repeats', () => {
     const state = createLoadedState({
       activeTasks: [
         task({
@@ -132,13 +175,7 @@ describe('task workbench view model', () => {
 
     const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
 
-    expect(model.allItems).toEqual([
-      expect.objectContaining({
-        kind: 'background',
-        threadId: 'same-thread',
-        taskId: 'background-first'
-      })
-    ]);
+    expect(model.allItems.map((item) => item.taskId)).toEqual(['background-first', 'background-second']);
   });
 
   it('counts nav metadata from active task statuses and scheduled definitions', () => {

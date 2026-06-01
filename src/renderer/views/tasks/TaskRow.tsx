@@ -1,5 +1,6 @@
 import type { ActiveTaskItem } from '../../../shared/types';
 import { sanitizeTestId } from '../../utils/sanitize-test-id';
+import { resolveTaskDisplayStatus } from './task-view-model';
 
 export function TaskRow({
   item,
@@ -22,16 +23,21 @@ export function TaskRow({
         <span className="task-row-title">{item.goal}</span>
         <span className="task-row-meta">{formatTaskMeta(item)}</span>
       </span>
-      <span className="task-row-tags">
-        <span className="pill info">{formatTriggerTag(item)}</span>
-        <span className="pill warn">{formatPrimaryAction(item)}</span>
+      <span className={`pill ${resolveStatusTone(item)}`}>{resolveTaskDisplayStatus(item)}</span>
+      <span className="task-row-time">
+        <span className="task-row-time-label">下次运行</span>
+        {item.nextRunAt ?? '无'}
+      </span>
+      <span className="task-row-time">
+        <span className="task-row-time-label">最近运行</span>
+        {item.lastRunAt ?? '无'}
       </span>
     </button>
   );
 }
 
 function formatTaskMeta(item: ActiveTaskItem): string {
-  return [item.status, item.riskLevel, formatWorkspacePath(item.workspacePath)].join(' · ');
+  return [formatTriggerTag(item), item.riskLevel, formatWorkspacePath(item.workspacePath)].join(' · ');
 }
 
 function formatWorkspacePath(workspacePath: string | null): string {
@@ -55,15 +61,15 @@ function formatTriggerTag(item: ActiveTaskItem): string {
   return '定时';
 }
 
-function formatPrimaryAction(item: ActiveTaskItem): string {
+function resolveStatusTone(item: ActiveTaskItem): 'ok' | 'warn' | 'bad' | 'info' {
   if (item.status === 'pending_confirmation') {
-    return '处理审批';
-  }
-  if (item.status === 'paused') {
-    return '继续';
+    return 'warn';
   }
   if (item.status === 'failed') {
-    return '诊断';
+    return 'bad';
   }
-  return '查看';
+  if (item.status === 'completed') {
+    return 'ok';
+  }
+  return 'info';
 }

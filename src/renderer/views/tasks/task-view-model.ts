@@ -1,25 +1,17 @@
 import type { ActiveTaskItem, TaskStatus } from '../../../shared/types';
 import type { LoadedState } from '../../loaded-state';
 
-export type TaskGroupId =
-  | 'pending_confirmation'
-  | 'running'
-  | 'scheduled'
-  | 'paused'
-  | 'failed'
-  | 'recent_completed'
-  | 'terminal';
+export type TaskRailId = 'all' | 'running' | 'scheduled' | 'pending_confirmation' | 'paused' | 'failed' | 'terminal';
 
-export type TaskViewGroup = {
-  id: TaskGroupId;
+export type TaskRailItem = {
+  id: TaskRailId;
   title: string;
-  defaultExpanded: boolean;
-  items: ActiveTaskItem[];
+  count: number;
 };
 
 export type TaskViewModel = {
   allItems: ActiveTaskItem[];
-  groups: TaskViewGroup[];
+  railItems: TaskRailItem[];
   counts: {
     activeCount: number;
     pendingApprovalCount: number;
@@ -49,70 +41,93 @@ export function countTaskNavMeta(items: ActiveTaskItem[]): TaskViewModel['counts
 export function buildTaskViewModel(state: LoadedState, nowIso = new Date().toISOString()): TaskViewModel {
   const allItems = dedupeBackgroundFirst(state.activeTasks).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const nowMs = new Date(nowIso).getTime();
-  const groups = [
-    {
-      id: 'pending_confirmation',
-      title: '待确认',
-      defaultExpanded: true,
-      items: allItems.filter((item) => item.status === 'pending_confirmation')
-    },
-    {
-      id: 'running',
-      title: '运行中',
-      defaultExpanded: true,
-      items: allItems.filter((item) => runningStatuses.has(item.status) && !isScheduledBeforeFirstRun(item))
-    },
-    {
-      id: 'scheduled',
-      title: '计划中',
-      defaultExpanded: true,
-      items: allItems.filter(isScheduledBeforeFirstRun)
-    },
-    {
-      id: 'paused',
-      title: '已暂停',
-      defaultExpanded: false,
-      items: allItems.filter((item) => item.status === 'paused')
-    },
-    {
-      id: 'failed',
-      title: '已失败',
-      defaultExpanded: false,
-      items: allItems.filter((item) => item.status === 'failed')
-    },
-    {
-      id: 'recent_completed',
-      title: '最近完成',
-      defaultExpanded: false,
-      items: allItems.filter((item) => item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs)
-    },
-    {
-      id: 'terminal',
-      title: '已结束',
-      defaultExpanded: false,
-      items: allItems.filter(
-        (item) =>
-          terminalStatuses.has(item.status) &&
-          !(item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs)
-      )
-    }
-  ].filter((group) => group.items.length > 0) as TaskViewGroup[];
+  const recentCompletedItems = allItems.filter(
+    (item) => item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs
+  );
+  const terminalItems = allItems.filter(
+    (item) =>
+      terminalStatuses.has(item.status) &&
+      !(item.status === 'completed' && nowMs - new Date(item.updatedAt).getTime() <= recentCompletedWindowMs)
+  );
+  const railItems: TaskRailItem[] = [
+    { id: 'all', title: '全部', count: allItems.length },
+    { id: 'running', title: '运行中', count: allItems.filter((item) => runningStatuses.has(item.status) && !isScheduledBeforeFirstRun(item)).length },
+    { id: 'scheduled', title: '计划中', count: allItems.filter(isScheduledBeforeFirstRun).length },
+    { id: 'pending_confirmation', title: '待确认', count: allItems.filter((item) => item.status === 'pending_confirmation').length },
+    { id: 'paused', title: '已暂停', count: allItems.filter((item) => item.status === 'paused').length },
+    { id: 'failed', title: '异常', count: allItems.filter((item) => item.status === 'failed').length },
+    { id: 'terminal', title: '已结束', count: recentCompletedItems.length + terminalItems.length }
+  ];
 
   return {
     allItems,
-    groups,
+    railItems,
     counts: countTaskNavMeta(allItems)
   };
 }
 
+export function filterTaskItems(items: ActiveTaskItem[], railId: TaskRailId): ActiveTaskItem[] {
+  if (railId === 'all') {
+    return items;
+  }
+  if (railId === 'running') {
+    return items.filter((item) => runningStatuses.has(item.status) && !isScheduledBeforeFirstRun(item));
+  }
+  if (railId === 'scheduled') {
+    return items.filter(isScheduledBeforeFirstRun);
+  }
+  if (railId === 'pending_confirmation') {
+    return items.filter((item) => item.status === 'pending_confirmation');
+  }
+  if (railId === 'paused') {
+    return items.filter((item) => item.status === 'paused');
+  }
+  if (railId === 'failed') {
+    return items.filter((item) => item.status === 'failed');
+  }
+  return items.filter((item) => terminalStatuses.has(item.status));
+}
+
+export function resolveTaskDisplayStatus(item: ActiveTaskItem): string {
+  if (isScheduledBeforeFirstRun(item)) {
+    return '计划中';
+  }
+  if (item.status === 'pending_confirmation') {
+    return '待确认';
+  }
+  if (item.status === 'waiting_user') {
+    return '等待用户';
+  }
+  if (item.status === 'waiting_next_turn') {
+    return '等待下轮';
+  }
+  if (item.status === 'running') {
+    return '运行中';
+  }
+  if (item.status === 'paused') {
+    return '已暂停';
+  }
+  if (item.status === 'failed') {
+    return '失败';
+  }
+  if (item.status === 'completed') {
+    return '已完成';
+  }
+  if (item.status === 'cancelled') {
+    return '已取消';
+  }
+  return item.status;
+}
+
 function dedupeBackgroundFirst(items: ActiveTaskItem[]): ActiveTaskItem[] {
-  const byThread = new Map<string, ActiveTaskItem>();
+  const byTask = new Map<string, ActiveTaskItem>();
   for (const item of items) {
-    if (!byThread.has(item.threadId)) {
-      byThread.set(item.threadId, item);
+    const itemId = item.taskId ?? item.threadId;
+    if (!byTask.has(itemId)) {
+      byTask.set(itemId, item);
     }
   }
-  return [...byThread.values()];
+  return [...byTask.values()];
 }
 
 function isScheduledBeforeFirstRun(item: ActiveTaskItem): boolean {

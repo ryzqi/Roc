@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocPreloadApi } from '../../src/shared/ipc';
+import type { ActiveTaskItem } from '../../src/shared/types';
 import { TasksView } from '../../src/renderer/views/tasks/TasksView';
 import { createLoadedState } from './view-test-helpers';
 
@@ -181,6 +182,74 @@ describe('TasksView interactions', () => {
       })
     );
   });
+
+  it('filters tasks from the status rail and keeps paused tasks reachable after status changes', async () => {
+    const runningTask = createActiveTask({
+      taskId: 'background-running',
+      threadId: 'thread-running',
+      goal: '运行任务',
+      status: 'running'
+    });
+    const scheduledTask = createActiveTask({
+      taskId: 'background-scheduled',
+      threadId: 'thread-scheduled',
+      goal: '计划任务',
+      status: 'running',
+      nextRunAt: '2026-05-22T01:00:00.000Z'
+    });
+    const pausedTask = createActiveTask({
+      taskId: 'background-paused',
+      threadId: 'thread-paused',
+      goal: '暂停任务',
+      status: 'paused'
+    });
+    const baseProps = {
+      updateLoadedState: () => {},
+      liveTaskRun: null,
+      onNavigateToThread: () => {},
+      onSelectedTaskIdChange: () => {},
+      onSubmitTaskPrompt: async () => ({ ok: true as const })
+    };
+
+    await act(async () => {
+      root.render(
+        React.createElement(TasksView, {
+          ...baseProps,
+          state: createLoadedState({
+            activeTasks: [runningTask, scheduledTask, pausedTask]
+          })
+        })
+      );
+    });
+
+    await clickRailButton(container, '计划中');
+    expect(taskTableTitle(container)).toBe('计划中任务');
+    expect(container.querySelector('[data-testid="task-row-background-scheduled"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-row-background-running"]')).toBeNull();
+
+    await clickRailButton(container, '已暂停');
+    expect(taskTableTitle(container)).toBe('已暂停任务');
+    expect(container.querySelector('[data-testid="task-row-background-paused"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-row-background-scheduled"]')).toBeNull();
+
+    await clickRailButton(container, '运行中');
+    expect(container.querySelector('[data-testid="task-row-background-running"]')).not.toBeNull();
+
+    await act(async () => {
+      root.render(
+        React.createElement(TasksView, {
+          ...baseProps,
+          state: createLoadedState({
+            activeTasks: [{ ...runningTask, status: 'paused' }]
+          })
+        })
+      );
+    });
+
+    expect(container.querySelector('[data-testid="task-row-background-running"]')).toBeNull();
+    expect(container.textContent).toContain('当前筛选没有任务');
+    expect(railButtonText(container, '已暂停')).toContain('1');
+  });
 });
 
 function createMockPreloadApi(): RocPreloadApi {
@@ -257,4 +326,59 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
+}
+
+function createActiveTask(input: {
+  taskId: string;
+  threadId: string;
+  goal: string;
+  status: ActiveTaskItem['status'];
+  nextRunAt?: string | null;
+}): ActiveTaskItem {
+  return {
+    kind: 'background',
+    threadId: input.threadId,
+    taskId: input.taskId,
+    title: input.goal,
+    goal: input.goal,
+    status: input.status,
+    trigger: input.nextRunAt === undefined || input.nextRunAt === null
+      ? null
+      : {
+          type: 'cron',
+          description: '每天 09:00',
+          cronExpression: '0 9 * * *',
+          nextRunAt: input.nextRunAt
+        },
+    nextRunAt: input.nextRunAt ?? null,
+    lastRunAt: null,
+    riskLevel: 'low',
+    workspacePath: 'F:\\Code\\Roc',
+    createdAt: '2026-05-21T00:00:00.000Z',
+    updatedAt: '2026-05-21T00:00:00.000Z'
+  };
+}
+
+async function clickRailButton(container: HTMLElement, label: string): Promise<void> {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="task-status-rail"] button')).find((item) =>
+    item.textContent?.includes(label)
+  );
+  expect(button).not.toBeUndefined();
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
+function railButtonText(container: HTMLElement, label: string): string {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="task-status-rail"] button')).find((item) =>
+    item.textContent?.includes(label)
+  );
+  expect(button).not.toBeUndefined();
+  return button?.textContent ?? '';
+}
+
+function taskTableTitle(container: HTMLElement): string {
+  const title = container.querySelector('.task-table-head .section-title');
+  expect(title).not.toBeNull();
+  return title?.textContent ?? '';
 }

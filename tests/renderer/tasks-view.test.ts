@@ -5,7 +5,7 @@ import { TasksView } from '../../src/renderer/views/tasks/TasksView';
 import { createLoadedState } from './view-test-helpers';
 
 describe('TasksView', () => {
-  it('renders active task center sections instead of the legacy single background task panel', () => {
+  it('renders the mission-control task workbench without the removed top metrics', () => {
     const html = renderToStaticMarkup(
       React.createElement(TasksView, {
         state: createLoadedState({
@@ -125,9 +125,17 @@ describe('TasksView', () => {
     );
 
     expect(html).toContain('class="canvas-stage stage-grid task-command-center"');
-    expect(html).toContain('class="task-summary-band"');
+    expect(html).not.toContain('class="task-summary-band"');
     expect(html).toContain('data-testid="tasks-view"');
-    expect(html).toContain('活跃任务');
+    expect(html).toContain('data-testid="task-status-rail"');
+    expect(html).toContain('data-testid="task-table"');
+    expect(html).toContain('全部任务');
+    expect(html).toContain('当前状态');
+    expect(html).toContain('下次运行');
+    expect(html).toContain('最近运行');
+    expect(html).toContain('计划中');
+    expect(html).toContain('调度器运行中');
+    expect(html).toContain('注册 1');
     expect(html).toContain('详情');
     expect(html).toContain('最近调度');
     expect(html).toContain('调度器');
@@ -138,13 +146,50 @@ describe('TasksView', () => {
     expect(html).toContain('让 AI 修改');
     expect(html).toContain('立即运行');
     expect(html).toContain('bg-1');
-    expect(html).toContain('class="task-summary-band"');
-    expect(html).toContain('class="section task-list-section"');
-    expect(html).toContain('class="section-head"');
-    expect(html).toContain('class="list-rows"');
+    expect(html).not.toContain('class="section task-list-section"');
     expect(html).not.toContain('暂无后台任务');
     expect(html).not.toContain('后台任务</h2>');
     expect(html).not.toContain('card-title');
+  });
+
+  it('renders one row for a scheduled task that is still running before its first run', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(TasksView, {
+        state: createLoadedState({
+          activeTasks: [
+            {
+              kind: 'background',
+              threadId: 'thread-scheduled',
+              taskId: 'bg-scheduled',
+              title: '同步每日新闻',
+              goal: '同步每日新闻',
+              status: 'running',
+              trigger: {
+                type: 'cron',
+                description: '每天 09:00',
+                cronExpression: '0 9 * * *',
+                nextRunAt: '2026-05-22T01:00:00.000Z'
+              },
+              nextRunAt: '2026-05-22T01:00:00.000Z',
+              lastRunAt: null,
+              riskLevel: 'low',
+              workspacePath: 'F:\\Code\\Roc',
+              createdAt: '2026-05-21T00:00:00.000Z',
+              updatedAt: '2026-05-21T00:00:00.000Z'
+            }
+          ]
+        }),
+        updateLoadedState: () => {},
+        liveTaskRun: null,
+        onNavigateToThread: () => {},
+        onSelectedTaskIdChange: () => {},
+        onSubmitTaskPrompt: async () => ({ ok: true as const })
+      })
+    );
+
+    expect(html.match(/data-testid="task-row-bg-scheduled"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('计划中');
+    expect(html).not.toContain('运行中</h2>');
   });
 
   it('renders the task workbench empty state when there are no active tasks', () => {
@@ -164,6 +209,7 @@ describe('TasksView', () => {
     expect(html).toContain('data-testid="tasks-empty-state"');
     expect(html).toContain('class="task-empty-shell"');
     expect(html).toContain('class="canvas-stage stage-grid task-command-center"');
+    expect(html).not.toContain('class="task-summary-band"');
     expect(html).toContain('帮我创建一个定时任务');
     expect(html).toContain('新建任务');
     expect(html).not.toContain('data-testid="task-create-dialog-panel"');

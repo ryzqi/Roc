@@ -3,14 +3,21 @@ productName: Roc
 npmRebuild: false
 directories:
   output: release
+electronLanguages:
+  - en-US
+  - zh-CN
 files:
   - dist/**
   - package.json
+  - "!**/*.map"
+  - "!**/*.d.ts"
+  - "!**/*.d.mts"
+  - "!**/*.d.cts"
 extraResources:
   - from: resources/rtk-binaries
     to: rtk-binaries
     filter:
-      - "**/*"
+      - win32-x64/**
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**

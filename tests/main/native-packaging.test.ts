@@ -33,6 +33,17 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('to: rtk-binaries');
   });
 
+  it('limits Windows package resources to runtime files', () => {
+    expect(electronBuilderConfig).toContain('electronLanguages:');
+    expect(electronBuilderConfig).toContain('  - en-US');
+    expect(electronBuilderConfig).toContain('  - zh-CN');
+    expect(electronBuilderConfig).toContain('!**/*.map');
+    expect(electronBuilderConfig).toContain('!**/*.d.ts');
+    expect(electronBuilderConfig).toContain('!**/*.d.mts');
+    expect(electronBuilderConfig).toContain('!**/*.d.cts');
+    expect(electronBuilderConfig).toContain('win32-x64/**');
+  });
+
   it('uses electron-rebuild first and skips prebuild-install when rebuild succeeds', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
     const { prepareBetterSqlite3ForElectron } = await loadNativePackagingModule();

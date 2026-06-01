@@ -285,8 +285,8 @@ try {
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
   await page.click('[data-testid="nav-tasks"]');
   await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="background-task-summary"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid^="task-list-section-"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="task-status-rail"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid="task-table"]', { timeout: 5000 });
   const manualRunNowEvidence = await page.evaluate(async (workspacePath) => {
     async function unwrap(result, label) {
       if (!result.ok) {
