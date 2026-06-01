@@ -89,7 +89,7 @@ describe('forge guardrails state schema', () => {
 
     expect(checkPrerequisitesMet(state, 'edit_file', { path: '/b' }, rules)).toEqual({
       satisfied: false,
-      missing: ['read_file(path="/b")']
+      missing: ['read_file(path="b")']
     });
     expect(checkPrerequisitesMet(state, 'edit_file', { path: '/a' }, rules)).toEqual({ satisfied: true });
   });
@@ -102,6 +102,36 @@ describe('forge guardrails state schema', () => {
     expect(checkPrerequisitesMet(state, 'delete_file', { relativePath: 'src/b.ts' }, rules)).toEqual({
       satisfied: false,
       missing: ['read_file(path="src/b.ts")']
+    });
+  });
+
+  it('checks DeepAgents file_path prerequisites for write and edit tools', () => {
+    const state = recordToolExecution(defaultStepTracker(), 'read_file', {
+      file_path: '/workspace/quicksort_example.py'
+    });
+    const rules = [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }] as const;
+
+    expect(checkPrerequisitesMet(state, 'write_file', { file_path: '/workspace/quicksort_example.py' }, rules)).toEqual({
+      satisfied: true
+    });
+    expect(checkPrerequisitesMet(state, 'edit_file', { file_path: '/workspace/other.py' }, rules)).toEqual({
+      satisfied: false,
+      missing: ['read_file(file_path="other.py")']
+    });
+  });
+
+  it('matches delete_file relativePath against a prior /workspace/ read_file path', () => {
+    const state = recordToolExecution(defaultStepTracker(), 'read_file', {
+      file_path: '/workspace/src/old.py'
+    });
+    const rules = [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path', currentArg: 'relativePath' }] as const;
+
+    expect(checkPrerequisitesMet(state, 'delete_file', { relativePath: 'src/old.py' }, rules)).toEqual({
+      satisfied: true
+    });
+    expect(checkPrerequisitesMet(state, 'delete_file', { relativePath: 'src/new.py' }, rules)).toEqual({
+      satisfied: false,
+      missing: ['read_file(file_path="src/new.py")']
     });
   });
 

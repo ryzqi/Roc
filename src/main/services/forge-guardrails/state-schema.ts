@@ -89,6 +89,8 @@ export type PrereqRule =
   | { kind: 'nameOnly'; tool: string }
   | { kind: 'argMatched'; tool: string; matchArg: string; currentArg?: string };
 
+const WORKSPACE_PATH_PREFIX = '/workspace/';
+
 export function checkPrerequisitesMet(
   state: ForgeStepTrackerState,
   toolName: string,
@@ -106,13 +108,24 @@ export function checkPrerequisitesMet(
       continue;
     }
     const currentArg = rule.currentArg ?? rule.matchArg;
-    const currentValue = args[currentArg];
-    const matched = executions.some((prevArgs) => prevArgs[rule.matchArg] === currentValue);
+    const currentValue = normalizePrereqValue(args[currentArg]);
+    const matched = executions.some((prevArgs) => normalizePrereqValue(prevArgs[rule.matchArg]) === currentValue);
     if (!matched) {
       missing.push(`${rule.tool}(${rule.matchArg}=${JSON.stringify(currentValue)})`);
     }
   }
   return missing.length === 0 ? { satisfied: true } : { satisfied: false, missing };
+}
+
+function normalizePrereqValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const normalized = value.replace(/\\/g, '/');
+  if (normalized.startsWith(WORKSPACE_PATH_PREFIX)) {
+    return normalized.slice(WORKSPACE_PATH_PREFIX.length);
+  }
+  return normalized.startsWith('/') ? normalized.slice(1) : normalized;
 }
 
 export function recordToolExecution(

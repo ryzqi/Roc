@@ -20,9 +20,9 @@ describe('forge prerequisites config', () => {
 
   it('declares all file and background task prerequisite rules', () => {
     expect(ROC_PREREQUISITES.prerequisites).toEqual({
-      edit_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'path' }],
-      delete_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'path', currentArg: 'relativePath' }],
-      write_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'path' }],
+      edit_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }],
+      delete_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path', currentArg: 'relativePath' }],
+      write_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }],
       schedule_background_task: [{ kind: 'nameOnly', tool: 'propose_background_task' }],
       update_background_task: [{ kind: 'argMatched', tool: 'read_background_task', matchArg: 'taskId' }],
       cancel_background_task: [{ kind: 'argMatched', tool: 'read_background_task', matchArg: 'taskId' }]
