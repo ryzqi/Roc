@@ -45,8 +45,15 @@ function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
     return [
       '',
       '本轮工作流：创建后台任务。',
-      '可用工具：propose_background_task / schedule_background_task / confirm_with_user。',
-      'propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成。'
+      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task / confirm_with_user。',
+      '先调用 resolve_background_task_time 解析触发时间。',
+      '用返回的 trigger 组装 propose_background_task。',
+      'propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成或请求用户补充缺失时间。',
+      'One-shot：用户说“每天 9:00 检查测试失败情况”时，依次调用：',
+      '1. resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })',
+      '2. propose_background_task({ goal, trigger: resolved.trigger, workspacePath })',
+      '3. schedule_background_task({ previewId })',
+      '4. confirm_with_user({ summary })'
     ];
   }
 

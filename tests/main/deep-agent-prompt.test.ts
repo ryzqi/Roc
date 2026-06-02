@@ -167,7 +167,7 @@ describe('deep agent prompt', () => {
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
   });
 
-  it('adds a propose-background-task workflow overview without hard step ordering', () => {
+  it('adds a propose-background-task workflow overview with time resolution one-shot', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
@@ -176,10 +176,15 @@ describe('deep agent prompt', () => {
     });
 
     expect(prompt).toContain('本轮工作流：创建后台任务。');
-    expect(prompt).toContain('可用工具：propose_background_task / schedule_background_task / confirm_with_user。');
-    expect(prompt).toContain('propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成。');
-    expect(prompt).not.toContain('先 propose');
-    expect(prompt).not.toContain('先调用 propose_background_task');
+    expect(prompt).toContain(
+      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task / confirm_with_user。'
+    );
+    expect(prompt).toContain('先调用 resolve_background_task_time 解析触发时间。');
+    expect(prompt).toContain('resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })');
+    expect(prompt).toContain('propose_background_task({ goal, trigger: resolved.trigger, workspacePath })');
+    expect(prompt).toContain('schedule_background_task({ previewId })');
+    expect(prompt).toContain('confirm_with_user({ summary })');
+    expect(prompt).not.toContain('buildTaskProposalPrompt');
   });
 
   it('adds a background-task-change workflow overview without hard prerequisite ordering', () => {
