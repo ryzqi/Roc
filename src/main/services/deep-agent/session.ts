@@ -16,6 +16,7 @@ import type { WebReadService } from '../web-read-service';
 import type { WorkspaceService } from '../workspace-service';
 import { PreviewStore } from '../forge-guardrails';
 import { createBackgroundTaskTools } from './background-task-tools';
+import { createResolveBackgroundTaskTimeTool } from './background-task-time-tool';
 import { createUsageAccumulator, type ProviderUsageAccumulator } from './stream-consumers';
 import { buildDeepAgent } from './agent-builder';
 import { createBackend, type RocCompositeBackend } from './backend';
@@ -155,6 +156,7 @@ async function createRunTools(input: {
   const deleteFileTool = tools.createDeleteFileTool(input.fileService);
   const readBackgroundTaskTool = tools.createReadBackgroundTaskTool(input.taskService);
   const confirmWithUserTool = tools.createConfirmWithUserTool();
+  const resolveBackgroundTaskTimeTool = createResolveBackgroundTaskTimeTool();
   const backgroundTaskTools = createBackgroundTaskTools({
     taskService: input.taskService,
     schedulerService: input.taskSchedulerService,
@@ -167,6 +169,7 @@ async function createRunTools(input: {
     deleteFileTool,
     readBackgroundTaskTool,
     confirmWithUserTool,
+    resolveBackgroundTaskTimeTool,
     ...backgroundTaskTools,
     sessionSearchTool
   ];

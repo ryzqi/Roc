@@ -1770,6 +1770,7 @@ describe('DeepAgentRuntimeService', () => {
       'delete_file',
       'read_background_task',
       'confirm_with_user',
+      'resolve_background_task_time',
       'propose_background_task',
       'schedule_background_task',
       'update_background_task',
@@ -1841,6 +1842,7 @@ describe('DeepAgentRuntimeService', () => {
 
     const call = getLastCreateDeepAgentCall();
     const toolNames = call.tools?.map((tool) => tool.name) ?? [];
+    const timeTool = call.tools?.find((tool) => tool.name === 'resolve_background_task_time');
     const proposeTool = call.tools?.find((tool) => tool.name === PROPOSE_TOOL_NAME);
 
     expect(toolNames).toEqual([
@@ -1848,12 +1850,15 @@ describe('DeepAgentRuntimeService', () => {
       'delete_file',
       'read_background_task',
       'confirm_with_user',
+      'resolve_background_task_time',
       'propose_background_task',
       'schedule_background_task',
       'update_background_task',
       'cancel_background_task',
       'session_search'
     ]);
+    expect(readToolSchemaKeys(timeTool)).toEqual(['text']);
+    expect(timeTool?.description ?? '').toContain('解析后台任务');
     expect(readToolSchemaKeys(proposeTool)).toEqual(['goal', 'trigger', 'workspacePath']);
     expect(proposeTool?.description ?? '').toContain('goal');
     expect(proposeTool?.description ?? '').toContain('trigger.type');

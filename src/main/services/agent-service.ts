@@ -130,6 +130,9 @@ export class AgentService {
       executeCard,
       webReadCard,
       deleteFileCard,
+      this.createBackgroundTaskCard('resolve_background_task_time', '解析后台任务触发时间，不创建任务。', false, [
+        'background_task_time_resolution'
+      ]),
       this.createBackgroundTaskCard('propose_background_task', '生成后台任务 preview，不实际创建。', false, [
         'background_task_preview'
       ]),

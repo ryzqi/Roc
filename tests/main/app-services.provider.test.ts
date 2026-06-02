@@ -1039,10 +1039,11 @@ describe('Roc foundation services providers', () => {
         skills: ['project-review']
       }
     });
-    expect(preview.toolCards.slice(0, 9).map((card) => card.name)).toEqual([
+    expect(preview.toolCards.slice(0, 10).map((card) => card.name)).toEqual([
       'execute',
       'web_read',
       'delete_file',
+      'resolve_background_task_time',
       'propose_background_task',
       'schedule_background_task',
       'confirm_with_user',
@@ -1087,6 +1088,15 @@ describe('Roc foundation services providers', () => {
         capabilityType: 'web_read',
         scope: 'network',
         untrustedContext: true
+      })
+    );
+    expect(preview.toolCards).toContainEqual(
+      expect.objectContaining({
+        id: 'builtin:resolve_background_task_time',
+        name: 'resolve_background_task_time',
+        description: '解析后台任务触发时间，不创建任务。',
+        sideEffects: ['background_task_time_resolution'],
+        requiresApproval: false
       })
     );
     expect(preview.toolCards).toContainEqual(
