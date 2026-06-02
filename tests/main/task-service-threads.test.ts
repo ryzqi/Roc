@@ -181,6 +181,35 @@ describe('TaskService thread lifecycle', () => {
     expect(eventCountRow.count).toBe(1);
   });
 
+  it('archives linked background tasks when archiving their thread', () => {
+    const background = services.taskService.createBackgroundTask(
+      services.taskService.createBackgroundTaskPreview({
+        goal: '需要随会话归档的后台任务',
+        trigger: {
+          type: 'cron',
+          description: '每天 09:00',
+          cronExpression: '0 9 * * *',
+          nextRunAt: '2026-05-22T01:00:00.000Z'
+        },
+        workspacePath: root,
+        allowedActions: ['pnpm test'],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    );
+
+    services.taskService.archiveThread(background.threadId);
+
+    const taskRow = services.databaseService.db
+      .prepare('SELECT status FROM background_tasks WHERE id = ?')
+      .get(background.id) as { status: string } | undefined;
+
+    expect(taskRow?.status).toBe('archived');
+    expect(services.taskService.getActiveTasks()).toEqual([]);
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+  });
+
   it('throws a clear not found error when archiving an unknown thread', () => {
     const taskService = services.taskService as TaskServiceThreadLifecycleApi;
 

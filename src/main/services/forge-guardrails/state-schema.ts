@@ -108,8 +108,11 @@ export function checkPrerequisitesMet(
       continue;
     }
     const currentArg = rule.currentArg ?? rule.matchArg;
-    const currentValue = normalizePrereqValue(args[currentArg]);
-    const matched = executions.some((prevArgs) => normalizePrereqValue(prevArgs[rule.matchArg]) === currentValue);
+    const compareAsWorkspaceRelative = rule.currentArg !== undefined && rule.currentArg !== rule.matchArg;
+    const currentValue = normalizePrereqValue(args[currentArg], { workspaceRelative: compareAsWorkspaceRelative });
+    const matched = executions.some(
+      (prevArgs) => normalizePrereqValue(prevArgs[rule.matchArg], { workspaceRelative: compareAsWorkspaceRelative }) === currentValue
+    );
     if (!matched) {
       missing.push(`${rule.tool}(${rule.matchArg}=${JSON.stringify(currentValue)})`);
     }
@@ -117,15 +120,14 @@ export function checkPrerequisitesMet(
   return missing.length === 0 ? { satisfied: true } : { satisfied: false, missing };
 }
 
-function normalizePrereqValue(value: unknown): unknown {
+function normalizePrereqValue(value: unknown, opts: { workspaceRelative: boolean }): unknown {
   if (typeof value !== 'string') {
     return value;
   }
   const normalized = value.replace(/\\/g, '/');
-  if (normalized.startsWith(WORKSPACE_PATH_PREFIX)) {
-    return normalized.slice(WORKSPACE_PATH_PREFIX.length);
-  }
-  return normalized.startsWith('/') ? normalized.slice(1) : normalized;
+  return opts.workspaceRelative && normalized.startsWith(WORKSPACE_PATH_PREFIX)
+    ? normalized.slice(WORKSPACE_PATH_PREFIX.length)
+    : normalized;
 }
 
 export function recordToolExecution(

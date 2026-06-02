@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerIpc } from '../../src/main/ipc/register-ipc';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { ipcChannels } from '../../src/shared/ipc';
-import type { HostIntegrationStatus, Workspace } from '../../src/shared/types';
+import type { BackgroundTask, HostIntegrationStatus, Workspace } from '../../src/shared/types';
 
 const electronMock = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -154,6 +154,32 @@ describe('workspace dialog IPC', () => {
 
   it('registers delete thread IPC and delegates to TaskService', async () => {
     registerWorkspaceHandlers();
+    const linkedTask = {
+      id: 'task_123',
+      threadId: 'thread_123',
+      runId: 'run_123',
+      goal: '归档会话关联任务',
+      status: 'running',
+      scheduled: true,
+      triggerType: 'cron',
+      triggerDescription: '每天 09:00',
+      nextRunAt: '2026-05-22T01:00:00.000Z',
+      cronExpression: '0 9 * * *',
+      workspacePath: workspaceRoot,
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      riskLevel: 'medium',
+      requiresConfirmation: false,
+      lastRunAt: null,
+      lastRunStatus: null,
+      runCount: 0,
+      createdAt: '2026-05-21T00:00:00.000Z',
+      updatedAt: '2026-05-21T00:00:00.000Z',
+      enabledCapabilities: null
+    } satisfies BackgroundTask;
+    vi.spyOn(services.taskService, 'listBackgroundTasks').mockReturnValue([linkedTask]);
     const archiveThreadSpy = vi
       .spyOn(
         services.taskService as AppServices['taskService'] & {
@@ -165,6 +191,7 @@ describe('workspace dialog IPC', () => {
         deleted: true,
         threadId: 'thread_123'
       });
+    const unregisterTaskSpy = vi.spyOn(services.taskSchedulerService, 'unregisterTask').mockImplementation(() => {});
 
     const deleteHandler = electronMock.handlers.get(ipcChannels.tasksDeleteThread);
     if (deleteHandler === undefined) {
@@ -174,6 +201,7 @@ describe('workspace dialog IPC', () => {
     const result = await deleteHandler({}, { threadId: 'thread_123' });
 
     expect(archiveThreadSpy).toHaveBeenCalledWith('thread_123');
+    expect(unregisterTaskSpy).toHaveBeenCalledWith('task_123');
     expect(result).toEqual({
       ok: true,
       data: {

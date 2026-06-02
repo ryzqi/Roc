@@ -89,7 +89,7 @@ describe('forge guardrails state schema', () => {
 
     expect(checkPrerequisitesMet(state, 'edit_file', { path: '/b' }, rules)).toEqual({
       satisfied: false,
-      missing: ['read_file(path="b")']
+      missing: ['read_file(path="/b")']
     });
     expect(checkPrerequisitesMet(state, 'edit_file', { path: '/a' }, rules)).toEqual({ satisfied: true });
   });
@@ -116,7 +116,31 @@ describe('forge guardrails state schema', () => {
     });
     expect(checkPrerequisitesMet(state, 'edit_file', { file_path: '/workspace/other.py' }, rules)).toEqual({
       satisfied: false,
-      missing: ['read_file(file_path="other.py")']
+      missing: ['read_file(file_path="/workspace/other.py")']
+    });
+  });
+
+  it('does not match DeepAgents file_path prerequisites across mounted routes', () => {
+    const state = recordToolExecution(defaultStepTracker(), 'read_file', {
+      file_path: '/memory/foo.md'
+    });
+    const rules = [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }] as const;
+
+    expect(checkPrerequisitesMet(state, 'write_file', { file_path: '/workspace/memory/foo.md' }, rules)).toEqual({
+      satisfied: false,
+      missing: ['read_file(file_path="/workspace/memory/foo.md")']
+    });
+  });
+
+  it('does not match DeepAgents file_path prerequisites against relative file paths', () => {
+    const state = recordToolExecution(defaultStepTracker(), 'read_file', {
+      file_path: '/workspace/a.md'
+    });
+    const rules = [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }] as const;
+
+    expect(checkPrerequisitesMet(state, 'write_file', { file_path: 'a.md' }, rules)).toEqual({
+      satisfied: false,
+      missing: ['read_file(file_path="a.md")']
     });
   });
 

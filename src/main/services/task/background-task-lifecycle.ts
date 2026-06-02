@@ -157,6 +157,13 @@ export function listBackgroundTasks(input: { database: DatabaseService }): Backg
               requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
               enabled_capabilities_json
        FROM background_tasks
+       WHERE status != 'archived'
+         AND EXISTS (
+           SELECT 1
+           FROM task_threads
+           WHERE task_threads.id = background_tasks.thread_id
+             AND task_threads.archived_at IS NULL
+         )
        ORDER BY updated_at DESC
        LIMIT 50`
     )
@@ -192,6 +199,12 @@ export function listSchedulableBackgroundTasks(input: { database: DatabaseServic
        FROM background_tasks
        WHERE scheduled = 1
          AND status IN ('running', 'pending_confirmation', 'paused')
+         AND EXISTS (
+           SELECT 1
+           FROM task_threads
+           WHERE task_threads.id = background_tasks.thread_id
+             AND task_threads.archived_at IS NULL
+         )
        ORDER BY next_run_at ASC, updated_at DESC`
     )
     .all() as BackgroundTaskRow[];

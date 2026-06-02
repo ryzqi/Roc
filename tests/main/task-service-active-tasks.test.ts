@@ -57,6 +57,39 @@ describe('TaskService active task projection', () => {
     ]);
   });
 
+  it('excludes legacy background tasks whose thread was already archived', () => {
+    const background = services.taskService.createBackgroundTask(
+      services.taskService.createBackgroundTaskPreview({
+        goal: '旧数据里的孤儿后台任务',
+        trigger: {
+          type: 'cron',
+          description: '每天 09:00',
+          cronExpression: '0 9 * * *',
+          nextRunAt: '2026-05-22T01:00:00.000Z'
+        },
+        workspacePath: root,
+        allowedActions: ['pnpm test'],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    );
+    services.databaseService.db
+      .prepare('UPDATE task_threads SET status = ?, archived_at = ? WHERE id = ?')
+      .run('archived', '2026-05-21T00:00:00.000Z', background.threadId);
+
+    expect(services.taskService.getActiveTasks()).toEqual([]);
+    expect(services.taskService.listBackgroundTasks()).toEqual([]);
+    expect(services.taskService.listSchedulableBackgroundTasks()).toEqual([]);
+    expect(services.taskService.getBackgroundTaskSummary()).toEqual({
+      total: 0,
+      running: 0,
+      failed: 0,
+      pendingConfirmation: 0,
+      nextRunAt: null
+    });
+  });
+
   it('returns task details and scheduled run history for a background task', () => {
     const background = services.taskService.createBackgroundTask(
       services.taskService.createBackgroundTaskPreview({

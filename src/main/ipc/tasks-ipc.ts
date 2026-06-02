@@ -18,7 +18,14 @@ export function registerTasksIpc(
   timedHandle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => taskService.listBackgroundTasks()));
   timedHandle(ipcChannels.tasksDeleteThread, (_event, request) =>
     wrapIpc(() => {
+      const linkedTaskIds = taskService
+        .listBackgroundTasks()
+        .filter((task) => task.threadId === request.threadId)
+        .map((task) => task.id);
       const result = taskService.archiveThread(request.threadId);
+      for (const taskId of linkedTaskIds) {
+        taskSchedulerService.unregisterTask(taskId);
+      }
       controls.broadcastTaskUpdated();
       return result;
     })

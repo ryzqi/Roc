@@ -250,7 +250,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
     expect(nudge.name).toBe('edit_file');
     expect(nudge.status).toBe('error');
     expect(String(nudge.content)).toContain('[PrerequisiteError]');
-    expect(String(nudge.content)).toContain('read_file(file_path="a.md")');
+    expect(String(nudge.content)).toContain('read_file(file_path="/workspace/a.md")');
     expect(readForgeMessageTag(nudge)).toBe('forge:prerequisite_nudge');
   });
 
@@ -295,7 +295,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
 
     const nudge = update?.messages?.[0] as ToolMessage;
     expect(update?.jumpTo).toBe('model');
-    expect(String(nudge.content)).toContain('read_file(file_path="b.md")');
+    expect(String(nudge.content)).toContain('read_file(file_path="/workspace/b.md")');
   });
 
   it('allows terminal tools after all required steps have succeeded', async () => {

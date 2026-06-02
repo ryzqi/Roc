@@ -56,6 +56,21 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
     expect((result as ToolMessage).status).toBe('error');
   });
 
+  it('does not mark successful read_file content as an error when it contains route error text', async () => {
+    const result = await runWrapToolCall({
+      toolName: 'read_file',
+      content: [
+        {
+          type: 'text',
+          text: "34: const UNKNOWN_ROUTE_ERROR = 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。';"
+        }
+      ]
+    });
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).status).toBe('success');
+  });
+
   it('does not mark read_file file-not-found as hard because new-file creation may check absence first', async () => {
     const result = await runWrapToolCall({
       toolName: 'read_file',

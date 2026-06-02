@@ -24,6 +24,12 @@ export function getBackgroundTaskSummary(input: { database: DatabaseService }): 
       `SELECT status, next_run_at
        FROM background_tasks
        WHERE status != 'archived'
+         AND EXISTS (
+           SELECT 1
+           FROM task_threads
+           WHERE task_threads.id = background_tasks.thread_id
+             AND task_threads.archived_at IS NULL
+         )
        ORDER BY updated_at DESC`
     )
     .all() as Array<{ status: TaskThread['status']; next_run_at: string | null }>;

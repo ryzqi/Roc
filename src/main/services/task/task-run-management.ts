@@ -101,9 +101,15 @@ export function archiveThread(input: { database: DatabaseService; threadId: stri
   requireActiveThread(input.database, normalizedThreadId);
   const now = new Date().toISOString();
 
-  input.database.db
-    .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
-    .run('archived', now, now, normalizedThreadId);
+  const transaction = input.database.db.transaction(() => {
+    input.database.db
+      .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
+      .run('archived', now, now, normalizedThreadId);
+    input.database.db
+      .prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE thread_id = ? AND status != ?')
+      .run('archived', now, normalizedThreadId, 'archived');
+  });
+  transaction();
 
   return {
     deleted: true,

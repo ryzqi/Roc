@@ -37,7 +37,7 @@ export function createFilesystemToolErrorMiddleware() {
 }
 
 function isHardFilesystemToolFailure(toolName: string, content: string): boolean {
-  if (ROUTE_OR_PERMISSION_ERROR_PATTERNS.some((pattern) => content.includes(pattern))) {
+  if (isRouteOrPermissionToolFailure(toolName, content)) {
     return true;
   }
   if (toolName === 'write_file') {
@@ -48,6 +48,23 @@ function isHardFilesystemToolFailure(toolName: string, content: string): boolean
   }
   if (toolName === 'glob') {
     return content.startsWith('Error finding files:');
+  }
+  return false;
+}
+
+function isRouteOrPermissionToolFailure(toolName: string, content: string): boolean {
+  const trimmed = content.trim();
+  if (ROUTE_OR_PERMISSION_ERROR_PATTERNS.some((pattern) => trimmed === pattern)) {
+    return true;
+  }
+  if (toolName === 'read_file') {
+    return ROUTE_OR_PERMISSION_ERROR_PATTERNS.some((pattern) => trimmed.startsWith(`Error: ${pattern}`));
+  }
+  if (toolName === 'ls') {
+    return ROUTE_OR_PERMISSION_ERROR_PATTERNS.some((pattern) => trimmed.startsWith(`Error listing files: ${pattern}`));
+  }
+  if (toolName === 'glob') {
+    return ROUTE_OR_PERMISSION_ERROR_PATTERNS.some((pattern) => trimmed.startsWith(`Error finding files: ${pattern}`));
   }
   return false;
 }
