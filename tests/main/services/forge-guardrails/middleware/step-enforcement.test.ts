@@ -83,11 +83,12 @@ describe('ForgeStepEnforcementMiddleware', () => {
     expect(update).toEqual({
       forge_step_tracker: {
         executedTools: {},
-        requiredSteps: ['propose_background_task', 'schedule_background_task'],
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
         terminalTools: ['confirm_with_user'],
         iterationIndex: 0,
         prematureAttempts: 0,
-        prereqViolations: 0
+        prereqViolations: 0,
+        backgroundTaskTimeResolution: null
       }
     });
   });
@@ -105,7 +106,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
           executedTools: {
             propose_background_task: [{ goal: 'X' }]
           },
-          requiredSteps: ['propose_background_task', 'schedule_background_task'],
+          requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
           terminalTools: ['confirm_with_user'],
           iterationIndex: 3
         }
@@ -158,7 +159,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
       messages: [aiWithToolCall({ name: 'confirm_with_user', args: { summary: 'done' }, id: 'call-confirm' })],
       stepTracker: {
         ...defaultStepTracker(),
-        requiredSteps: ['propose_background_task', 'schedule_background_task'],
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
         terminalTools: ['confirm_with_user']
       }
     });
@@ -180,7 +181,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
       messages: [aiWithToolCall({ name: 'confirm_with_user' })],
       stepTracker: {
         ...defaultStepTracker(),
-        requiredSteps: ['propose_background_task', 'schedule_background_task'],
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
         terminalTools: ['confirm_with_user'],
         prematureAttempts: 1
       }
@@ -189,7 +190,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
       messages: [aiWithToolCall({ name: 'confirm_with_user' })],
       stepTracker: {
         ...defaultStepTracker(),
-        requiredSteps: ['propose_background_task', 'schedule_background_task'],
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
         terminalTools: ['confirm_with_user'],
         prematureAttempts: 2
       }
@@ -207,7 +208,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
         messages: [aiWithToolCall({ name: 'confirm_with_user' })],
         stepTracker: {
           ...defaultStepTracker(),
-          requiredSteps: ['propose_background_task', 'schedule_background_task'],
+          requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
           terminalTools: ['confirm_with_user'],
           prematureAttempts: 3
         },
@@ -223,7 +224,7 @@ describe('ForgeStepEnforcementMiddleware', () => {
         messages: [aiWithToolCall({ name: 'confirm_with_user' })],
         stepTracker: {
           ...defaultStepTracker(),
-          requiredSteps: ['propose_background_task', 'schedule_background_task'],
+          requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
           terminalTools: ['confirm_with_user'],
           prematureAttempts: 3
         },
@@ -298,14 +299,93 @@ describe('ForgeStepEnforcementMiddleware', () => {
     expect(String(nudge.content)).toContain('read_file(file_path="/workspace/b.md")');
   });
 
+  it('records needs_clarification from the background time resolver tool result', async () => {
+    const middleware = getStepEnforcementMiddleware();
+    if (typeof middleware.wrapToolCall !== 'function') {
+      throw new Error('Expected step enforcement middleware to expose wrapToolCall.');
+    }
+    const toolMessage = new ToolMessage({
+      tool_call_id: 'call-time',
+      name: 'resolve_background_task_time',
+      content: JSON.stringify({
+        status: 'needs_clarification',
+        clarificationQuestion: '请提供未来时间。'
+      }),
+      status: 'success'
+    });
+
+    const result = await middleware.wrapToolCall(
+      {
+        toolCall: {
+          name: 'resolve_background_task_time',
+          args: { text: '今天 09:00 检查测试' },
+          id: 'call-time'
+        },
+        state: baseState()
+      } as never,
+      (async () => toolMessage) as never
+    );
+
+    expect(result).toBeInstanceOf(Command);
+    expect((result as Command).update).toMatchObject({
+      messages: [toolMessage],
+      forge_step_tracker: {
+        backgroundTaskTimeResolution: 'needs_clarification',
+        executedTools: {
+          resolve_background_task_time: [{ text: '今天 09:00 检查测试' }]
+        }
+      }
+    });
+  });
+
+  it('allows confirm_with_user as terminal when time resolution needs clarification', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'confirm_with_user', args: { summary: '请提供未来时间。' } })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
+        terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'needs_clarification',
+        executedTools: {
+          resolve_background_task_time: [{ text: '今天 09:00 检查测试' }]
+        }
+      }
+    });
+
+    expect(update).toBeUndefined();
+  });
+
+  it('still nudges early confirm_with_user when time resolution is resolved', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'confirm_with_user', args: { summary: 'done' }, id: 'call-confirm' })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
+        terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'resolved',
+        executedTools: {
+          resolve_background_task_time: [{ text: '每天 09:00 检查测试' }]
+        }
+      }
+    });
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.forge_step_tracker?.prematureAttempts).toBe(1);
+    const nudge = update?.messages?.[0] as ToolMessage;
+    expect(String(nudge.content)).toContain('propose_background_task');
+    expect(String(nudge.content)).toContain('schedule_background_task');
+  });
+
   it('allows terminal tools after all required steps have succeeded', async () => {
     const update = await runAfterModel({
       messages: [aiWithToolCall({ name: 'confirm_with_user' })],
       stepTracker: {
         ...defaultStepTracker(),
-        requiredSteps: ['propose_background_task', 'schedule_background_task'],
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
         terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'resolved',
         executedTools: {
+          resolve_background_task_time: [{ text: '每天 09:00 检查测试' }],
           propose_background_task: [{ goal: 'X' }],
           schedule_background_task: [{ previewId: 'preview-1' }]
         }

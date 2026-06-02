@@ -41,7 +41,8 @@ export function createStepEnforcementMiddleware(opts: {
           terminalTools: workflow === null ? [] : workflow.terminalTools,
           iterationIndex: 0,
           prematureAttempts: 0,
-          prereqViolations: 0
+          prereqViolations: 0,
+          backgroundTaskTimeResolution: existing?.backgroundTaskTimeResolution ?? null
         }
       };
     },
@@ -79,7 +80,7 @@ export function createStepEnforcementMiddleware(opts: {
         }
 
         const terminalCalls = toolCalls.filter((toolCall) => tracker.terminalTools.includes(toolCall.name));
-        if (terminalCalls.length > 0 && !areRequiredStepsSatisfied(tracker)) {
+        if (terminalCalls.length > 0 && !areRequiredStepsSatisfied(tracker) && !allowsClarificationTerminalBranch(tracker)) {
           const nextAttempts = tracker.prematureAttempts + 1;
           const maxAttempts = readMaxPrematureAttempts(state.forge_error_tracker);
           if (nextAttempts > maxAttempts) {
@@ -154,7 +155,14 @@ export function createStepEnforcementMiddleware(opts: {
         return result;
       }
 
-      const updatedTracker = recordToolExecution(tracker, request.toolCall.name, readToolArgs(request.toolCall.args));
+      const timeResolution = readBackgroundTaskTimeResolution(result, request.toolCall.name);
+      const updatedTracker =
+        timeResolution === null
+          ? recordToolExecution(tracker, request.toolCall.name, readToolArgs(request.toolCall.args))
+          : {
+              ...recordToolExecution(tracker, request.toolCall.name, readToolArgs(request.toolCall.args)),
+              backgroundTaskTimeResolution: timeResolution
+            };
       return new Command({
         update: {
           messages: [result],
@@ -176,6 +184,27 @@ type PrereqViolation = {
   toolCall: ToolCallLike;
   toolName: string;
 };
+
+const BACKGROUND_TASK_TIME_TOOL_NAME = 'resolve_background_task_time';
+
+function readBackgroundTaskTimeResolution(result: ToolMessage, toolName: string): 'resolved' | 'needs_clarification' | null {
+  if (toolName !== BACKGROUND_TASK_TIME_TOOL_NAME || typeof result.content !== 'string') {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(result.content) as { status?: unknown };
+    return parsed.status === 'resolved' || parsed.status === 'needs_clarification' ? parsed.status : null;
+  } catch {
+    return null;
+  }
+}
+
+function allowsClarificationTerminalBranch(tracker: ForgeStepTrackerState): boolean {
+  return (
+    tracker.backgroundTaskTimeResolution === 'needs_clarification' &&
+    (tracker.executedTools[BACKGROUND_TASK_TIME_TOOL_NAME] ?? []).length > 0
+  );
+}
 
 function isInitializedTracker(tracker: ForgeStepTrackerState): boolean {
   return tracker.requiredSteps.length > 0 || tracker.terminalTools.length > 0 || tracker.iterationIndex > 0;

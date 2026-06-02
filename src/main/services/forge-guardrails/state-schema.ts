@@ -8,7 +8,8 @@ const stepTrackerSchema = z.object({
   terminalTools: z.array(z.string()).default(() => []),
   iterationIndex: z.number().int().nonnegative().default(0),
   prematureAttempts: z.number().int().nonnegative().default(0),
-  prereqViolations: z.number().int().nonnegative().default(0)
+  prereqViolations: z.number().int().nonnegative().default(0),
+  backgroundTaskTimeResolution: z.enum(['resolved', 'needs_clarification']).nullable().default(null)
 });
 
 const stepTrackerUpdateSchema = stepTrackerSchema.partial();
