@@ -355,6 +355,76 @@ describe('ForgeStepEnforcementMiddleware', () => {
     expect(update).toBeUndefined();
   });
 
+  it('nudges propose_background_task when time resolution needs clarification', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'propose_background_task', args: { goal: 'X' }, id: 'call-propose' })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
+        terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'needs_clarification',
+        executedTools: {
+          resolve_background_task_time: [{ text: '今天 09:00 检查测试' }]
+        }
+      }
+    });
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.forge_step_tracker?.prereqViolations).toBe(1);
+    const nudge = update?.messages?.[0] as ToolMessage;
+    expect(nudge).toBeInstanceOf(ToolMessage);
+    expect(nudge.tool_call_id).toBe('call-propose');
+    expect(nudge.name).toBe('propose_background_task');
+    expect(nudge.status).toBe('error');
+    expect(String(nudge.content)).toContain('[PrerequisiteError]');
+    expect(String(nudge.content)).toContain('resolve_background_task_time(status="resolved")');
+    expect(readForgeMessageTag(nudge)).toBe('forge:prerequisite_nudge');
+  });
+
+  it('nudges schedule_background_task when time resolution needs clarification', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'schedule_background_task', args: { previewId: 'preview-1' }, id: 'call-schedule' })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
+        terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'needs_clarification',
+        executedTools: {
+          resolve_background_task_time: [{ text: '今天 09:00 检查测试' }],
+          propose_background_task: [{ goal: 'X' }]
+        }
+      }
+    });
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.forge_step_tracker?.prereqViolations).toBe(1);
+    const nudge = update?.messages?.[0] as ToolMessage;
+    expect(nudge).toBeInstanceOf(ToolMessage);
+    expect(nudge.tool_call_id).toBe('call-schedule');
+    expect(nudge.name).toBe('schedule_background_task');
+    expect(nudge.status).toBe('error');
+    expect(String(nudge.content)).toContain('[PrerequisiteError]');
+    expect(String(nudge.content)).toContain('resolve_background_task_time(status="resolved")');
+    expect(readForgeMessageTag(nudge)).toBe('forge:prerequisite_nudge');
+  });
+
+  it('allows propose_background_task when time resolution is resolved', async () => {
+    const update = await runAfterModel({
+      messages: [aiWithToolCall({ name: 'propose_background_task', args: { goal: 'X' } })],
+      stepTracker: {
+        ...defaultStepTracker(),
+        requiredSteps: ['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'],
+        terminalTools: ['confirm_with_user'],
+        backgroundTaskTimeResolution: 'resolved',
+        executedTools: {
+          resolve_background_task_time: [{ text: '每天 09:00 检查测试' }]
+        }
+      }
+    });
+
+    expect(update).toBeUndefined();
+  });
+
   it('still nudges early confirm_with_user when time resolution is resolved', async () => {
     const update = await runAfterModel({
       messages: [aiWithToolCall({ name: 'confirm_with_user', args: { summary: 'done' }, id: 'call-confirm' })],

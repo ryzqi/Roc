@@ -185,6 +185,9 @@ function resolveAbsoluteDate(text: string, now: Date, reference: TimeReference):
     return clarification(reference, '请使用有效的 HH:mm 时间。', ['小时必须为 0-23，分钟必须为 0-59。']);
   }
   const candidate = new Date(year, month - 1, day, clock.hour, clock.minute, 0, 0);
+  if (!matchesLocalDateTime(candidate, year, month, day, clock)) {
+    return invalidAbsoluteDate(reference);
+  }
   if (candidate.getTime() <= now.getTime()) {
     return pastOnce(reference);
   }
@@ -290,6 +293,20 @@ function clarification(reference: TimeReference, clarificationQuestion: string, 
 
 function pastOnce(reference: TimeReference): ResolveBackgroundTaskTimeResult {
   return clarification(reference, '你给出的触发时间已经过去。请提供一个未来时间。', ['一次性触发时间必须晚于当前时间。']);
+}
+
+function invalidAbsoluteDate(reference: TimeReference): ResolveBackgroundTaskTimeResult {
+  return clarification(reference, '请使用有效的 YYYY-MM-DD HH:mm 时间。', ['绝对日期必须是真实存在的日期。']);
+}
+
+function matchesLocalDateTime(candidate: Date, year: number, month: number, day: number, clock: ClockParts): boolean {
+  return (
+    candidate.getFullYear() === year &&
+    candidate.getMonth() + 1 === month &&
+    candidate.getDate() === day &&
+    candidate.getHours() === clock.hour &&
+    candidate.getMinutes() === clock.minute
+  );
 }
 
 function hasExplicitUnsupportedTimeIntent(text: string): boolean {

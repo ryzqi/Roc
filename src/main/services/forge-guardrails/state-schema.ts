@@ -87,7 +87,13 @@ export type ForgeGuardrailsState = typeof forgeGuardrailsStateSchema.State;
 export type ForgeGuardrailsUpdate = typeof forgeGuardrailsStateSchema.Update;
 
 export type PrereqRule =
-  | { kind: 'nameOnly'; tool: string }
+  | { kind: 'toolCalled'; tool: string }
+  | {
+      kind: 'stateEquals';
+      field: 'backgroundTaskTimeResolution';
+      value: NonNullable<ForgeStepTrackerState['backgroundTaskTimeResolution']>;
+      missing: string;
+    }
   | { kind: 'argMatched'; tool: string; matchArg: string; currentArg?: string };
 
 const WORKSPACE_PATH_PREFIX = '/workspace/';
@@ -101,13 +107,20 @@ export function checkPrerequisitesMet(
   void toolName;
   const missing: string[] = [];
   for (const rule of rules) {
-    const executions = state.executedTools[rule.tool] ?? [];
-    if (rule.kind === 'nameOnly') {
+    if (rule.kind === 'toolCalled') {
+      const executions = state.executedTools[rule.tool] ?? [];
       if (executions.length === 0) {
         missing.push(rule.tool);
       }
       continue;
     }
+    if (rule.kind === 'stateEquals') {
+      if (state[rule.field] !== rule.value) {
+        missing.push(rule.missing);
+      }
+      continue;
+    }
+    const executions = state.executedTools[rule.tool] ?? [];
     const currentArg = rule.currentArg ?? rule.matchArg;
     const compareAsWorkspaceRelative = rule.currentArg !== undefined && rule.currentArg !== rule.matchArg;
     const currentValue = normalizePrereqValue(args[currentArg], { workspaceRelative: compareAsWorkspaceRelative });

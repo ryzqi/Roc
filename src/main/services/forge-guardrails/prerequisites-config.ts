@@ -9,8 +9,24 @@ export const ROC_PREREQUISITES: PrerequisitesConfig = {
     edit_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }],
     delete_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path', currentArg: 'relativePath' }],
     write_file: [{ kind: 'argMatched', tool: 'read_file', matchArg: 'file_path' }],
-    propose_background_task: [{ kind: 'nameOnly', tool: 'resolve_background_task_time' }],
-    schedule_background_task: [{ kind: 'nameOnly', tool: 'propose_background_task' }],
+    propose_background_task: [
+      { kind: 'toolCalled', tool: 'resolve_background_task_time' },
+      {
+        kind: 'stateEquals',
+        field: 'backgroundTaskTimeResolution',
+        value: 'resolved',
+        missing: 'resolve_background_task_time(status="resolved")'
+      }
+    ],
+    schedule_background_task: [
+      { kind: 'toolCalled', tool: 'propose_background_task' },
+      {
+        kind: 'stateEquals',
+        field: 'backgroundTaskTimeResolution',
+        value: 'resolved',
+        missing: 'resolve_background_task_time(status="resolved")'
+      }
+    ],
     update_background_task: [{ kind: 'argMatched', tool: 'read_background_task', matchArg: 'taskId' }],
     cancel_background_task: [{ kind: 'argMatched', tool: 'read_background_task', matchArg: 'taskId' }]
   }

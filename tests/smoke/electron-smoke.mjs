@@ -50,9 +50,21 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
-const naturalLanguageTaskGoal = '每天 19:40 抓取 AI 新闻并写入 docx';
-const naturalLanguageTaskCronExpression = '40 19 * * *';
-const naturalLanguageTaskNextRunAt = nextDailyRunAtUtc(19, 40);
+const naturalLanguageTaskClock = createSafeDailySmokeClock();
+const naturalLanguageTaskGoal = `每天 ${formatSmokeClock(naturalLanguageTaskClock)} 抓取 AI 新闻并写入 docx`;
+const naturalLanguageTaskCronExpression = `${naturalLanguageTaskClock.minute} ${naturalLanguageTaskClock.hour} * * *`;
+
+function createSafeDailySmokeClock(now = new Date()) {
+  const candidate = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  return {
+    hour: candidate.getHours(),
+    minute: candidate.getMinutes()
+  };
+}
+
+function formatSmokeClock(clock) {
+  return `${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}`;
+}
 
 function nextDailyRunAtUtc(hour, minute, now = new Date()) {
   const candidate = new Date(now.getTime());
@@ -141,7 +153,7 @@ async function probeWindowMaterial(browserWindow, requestedMaterial) {
 let app;
 let smokeProvider;
 try {
-  smokeProvider = await startSmokeProvider();
+  smokeProvider = await startSmokeProvider({ taskProposalGoal: naturalLanguageTaskGoal });
   app = await electron.launch({
     executablePath: smokeTarget.executablePath,
     args: smokeTarget.launchArgs,
@@ -498,7 +510,7 @@ try {
     {
       expectedGoal: naturalLanguageTaskGoal,
       expectedCronExpression: naturalLanguageTaskCronExpression,
-      expectedNextRunAt: naturalLanguageTaskNextRunAt
+      expectedNextRunAt: nextDailyRunAtUtc(naturalLanguageTaskClock.hour, naturalLanguageTaskClock.minute)
     }
   );
   let workspaceText = await readMainPageText(page, {
@@ -2589,7 +2601,7 @@ try {
       taskProposalEvidence.activeTaskGoal === naturalLanguageTaskGoal &&
       taskProposalEvidence.triggerType === 'cron' &&
       taskProposalEvidence.cronExpression === naturalLanguageTaskCronExpression &&
-      taskProposalEvidence.nextRunAt === naturalLanguageTaskNextRunAt &&
+      taskProposalEvidence.nextRunAt === taskProposalEvidence.expectedNextRunAt &&
       taskProposalEvidence.hasCreatedEvent &&
       taskProposalEvidence.hasTimeResolutionToolCallStart &&
       taskProposalEvidence.hasTimeResolutionToolCallEnd &&

@@ -145,6 +145,44 @@ describe('background task time resolver', () => {
     });
   });
 
+  it('asks for clarification when an absolute date uses an invalid month', () => {
+    const result = resolveBackgroundTaskTime({
+      text: '2026-13-01 09:00 检查测试失败情况',
+      now: referenceDate,
+      timeZone: 'Asia/Shanghai'
+    });
+
+    expect(result).toEqual({
+      status: 'needs_clarification',
+      reference: {
+        nowUtc: referenceDate.toISOString(),
+        nowLocal: '2026-06-02 10:30',
+        timeZone: 'Asia/Shanghai'
+      },
+      clarificationQuestion: '请使用有效的 YYYY-MM-DD HH:mm 时间。',
+      notes: ['绝对日期必须是真实存在的日期。']
+    });
+  });
+
+  it('asks for clarification when an absolute date uses an invalid day', () => {
+    const result = resolveBackgroundTaskTime({
+      text: '2026-02-31 09:00 检查测试失败情况',
+      now: referenceDate,
+      timeZone: 'Asia/Shanghai'
+    });
+
+    expect(result).toEqual({
+      status: 'needs_clarification',
+      reference: {
+        nowUtc: referenceDate.toISOString(),
+        nowLocal: '2026-06-02 10:30',
+        timeZone: 'Asia/Shanghai'
+      },
+      clarificationQuestion: '请使用有效的 YYYY-MM-DD HH:mm 时间。',
+      notes: ['绝对日期必须是真实存在的日期。']
+    });
+  });
+
   it('asks for clarification when the time expression is explicit but unsupported', () => {
     const result = resolveBackgroundTaskTime({
       text: '每个工作日早上检查状态',

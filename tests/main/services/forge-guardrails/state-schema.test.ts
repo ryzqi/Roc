@@ -30,7 +30,8 @@ describe('forge guardrails state schema', () => {
       terminalTools: [],
       iterationIndex: 0,
       prematureAttempts: 0,
-      prereqViolations: 0
+      prereqViolations: 0,
+      backgroundTaskTimeResolution: null
     });
     expect(defaultErrorTracker()).toEqual({
       consecutiveRetries: 0,
@@ -68,9 +69,9 @@ describe('forge guardrails state schema', () => {
     expect(next.executedTools.read_file).toEqual([{ path: 'a' }]);
   });
 
-  it('checks name-only prerequisites', () => {
+  it('checks tool-called prerequisites', () => {
     const missing = checkPrerequisitesMet(defaultStepTracker(), 'schedule_background_task', {}, [
-      { kind: 'nameOnly', tool: 'propose_background_task' }
+      { kind: 'toolCalled', tool: 'propose_background_task' }
     ]);
 
     expect(missing).toEqual({ satisfied: false, missing: ['propose_background_task'] });
@@ -78,9 +79,35 @@ describe('forge guardrails state schema', () => {
     const satisfiedState = recordToolExecution(defaultStepTracker(), 'propose_background_task', { goal: 'x' });
     expect(
       checkPrerequisitesMet(satisfiedState, 'schedule_background_task', {}, [
-        { kind: 'nameOnly', tool: 'propose_background_task' }
+        { kind: 'toolCalled', tool: 'propose_background_task' }
       ])
     ).toEqual({ satisfied: true });
+  });
+
+  it('checks tracker-state prerequisites', () => {
+    const unresolvedState: ForgeStepTrackerState = {
+      ...recordToolExecution(defaultStepTracker(), 'resolve_background_task_time', { text: '今天 09:00 检查测试' }),
+      backgroundTaskTimeResolution: 'needs_clarification'
+    };
+    const resolvedState: ForgeStepTrackerState = {
+      ...recordToolExecution(defaultStepTracker(), 'resolve_background_task_time', { text: '每天 09:00 检查测试' }),
+      backgroundTaskTimeResolution: 'resolved'
+    };
+    const rules = [
+      { kind: 'toolCalled', tool: 'resolve_background_task_time' },
+      {
+        kind: 'stateEquals',
+        field: 'backgroundTaskTimeResolution',
+        value: 'resolved',
+        missing: 'resolve_background_task_time(status="resolved")'
+      }
+    ] as const;
+
+    expect(checkPrerequisitesMet(unresolvedState, 'propose_background_task', {}, rules)).toEqual({
+      satisfied: false,
+      missing: ['resolve_background_task_time(status="resolved")']
+    });
+    expect(checkPrerequisitesMet(resolvedState, 'propose_background_task', {}, rules)).toEqual({ satisfied: true });
   });
 
   it('checks argument-matched prerequisites', () => {
