@@ -10,4 +10,4 @@ coverage/
 docs/
 .claude/
 .superpowers/
-.code-review-graph/
+.codegraph/
