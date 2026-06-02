@@ -50,9 +50,18 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
-const naturalLanguageTaskGoal = '每天晚上 7:40 抓取 AI 新闻并写入 docx';
+const naturalLanguageTaskGoal = '每天 19:40 抓取 AI 新闻并写入 docx';
 const naturalLanguageTaskCronExpression = '40 19 * * *';
-const naturalLanguageTaskNextRunAt = '2026-05-26T11:40:00.000Z';
+const naturalLanguageTaskNextRunAt = nextDailyRunAtUtc(19, 40);
+
+function nextDailyRunAtUtc(hour, minute, now = new Date()) {
+  const candidate = new Date(now.getTime());
+  candidate.setHours(hour, minute, 0, 0);
+  if (candidate.getTime() <= now.getTime()) {
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  return candidate.toISOString();
+}
 
 function delay(ms) {
   return new Promise((resolve) => {
@@ -385,7 +394,7 @@ try {
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { timeout: 5000 });
   await page.fill(
     '[data-testid="task-create-description"]',
-    `${naturalLanguageTaskGoal}，每天晚上 7:40 运行，使用当前工作区。`
+    `${naturalLanguageTaskGoal}，使用当前工作区。`
   );
   await page.click('[data-testid="task-create-submit"]');
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { state: 'detached', timeout: 5000 });
@@ -408,6 +417,7 @@ try {
           return false;
         }
         return (
+          Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
           Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
           Reflect.get(item.payload, 'name') === 'confirm_with_user'
@@ -416,6 +426,8 @@ try {
       const hasToolCall = (name, status) =>
         toolCalls.some((item) => Reflect.get(item.payload, 'name') === name && Reflect.get(item.payload, 'status') === status);
       return (
+        hasToolCall('resolve_background_task_time', 'start') &&
+        hasToolCall('resolve_background_task_time', 'end') &&
         hasToolCall('propose_background_task', 'start') &&
         hasToolCall('propose_background_task', 'end') &&
         hasToolCall('schedule_background_task', 'start') &&
@@ -455,6 +467,7 @@ try {
           return false;
         }
         return (
+          Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
           Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
           Reflect.get(item.payload, 'name') === 'confirm_with_user'
@@ -467,6 +480,8 @@ try {
         createdEventPayload: createdEvent?.payload ?? null,
         cronExpression: task?.trigger.type === 'cron' ? task.trigger.cronExpression : null,
         hasCreatedEvent: createdEvent !== undefined,
+        hasTimeResolutionToolCallStart: hasToolCall('resolve_background_task_time', 'start'),
+        hasTimeResolutionToolCallEnd: hasToolCall('resolve_background_task_time', 'end'),
         hasProposeToolCallStart: hasToolCall('propose_background_task', 'start'),
         hasProposeToolCallEnd: hasToolCall('propose_background_task', 'end'),
         hasScheduleToolCallStart: hasToolCall('schedule_background_task', 'start'),
@@ -2576,6 +2591,8 @@ try {
       taskProposalEvidence.cronExpression === naturalLanguageTaskCronExpression &&
       taskProposalEvidence.nextRunAt === naturalLanguageTaskNextRunAt &&
       taskProposalEvidence.hasCreatedEvent &&
+      taskProposalEvidence.hasTimeResolutionToolCallStart &&
+      taskProposalEvidence.hasTimeResolutionToolCallEnd &&
       taskProposalEvidence.hasProposeToolCallStart &&
       taskProposalEvidence.hasProposeToolCallEnd &&
       taskProposalEvidence.hasScheduleToolCallStart &&

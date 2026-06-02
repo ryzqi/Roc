@@ -90,11 +90,10 @@ function readRequestBody(request) {
   });
 }
 
-const smokeTaskProposalGoal = '每天晚上 7:40 抓取 AI 新闻并写入 docx';
-const smokeTaskProposalNextRunAt = '2026-05-26T11:40:00.000Z';
+const smokeTaskProposalGoal = '每天 19:40 抓取 AI 新闻并写入 docx';
 const smokeProviderText =
   'Smoke Provider 已生成首轮回复。\n\n短行一。\n短行二。\n短行三。\n短行四。\n短行五。\n短行六。\n短行七。\n短行八。';
-const smokeTaskProposalFinalText = `Smoke Provider 已通过 propose / schedule / confirm 完成后台任务创建：${smokeTaskProposalGoal}。`;
+const smokeTaskProposalFinalText = `Smoke Provider 已通过 time / propose / schedule / confirm 完成后台任务创建：${smokeTaskProposalGoal}。`;
 
 function readTextContent(value) {
   if (typeof value === 'string') {
@@ -141,16 +140,6 @@ function readWorkspacePathFromMessages(messages) {
   return null;
 }
 
-function hasProposeBackgroundTaskTool(tools) {
-  return Array.isArray(tools)
-    ? tools.some((tool) => tool?.function?.name === 'propose_background_task' || tool?.name === 'propose_background_task')
-    : false;
-}
-
-function hasToolResultMessage(messages) {
-  return Array.isArray(messages) ? messages.some((message) => message?.role === 'tool') : false;
-}
-
 function readToolResultJson(messages, toolCallId) {
   if (!Array.isArray(messages)) {
     return null;
@@ -167,6 +156,15 @@ function readToolResultJson(messages, toolCallId) {
   }
 }
 
+function readLastUserText(messages) {
+  if (!Array.isArray(messages)) {
+    return smokeTaskProposalGoal;
+  }
+  const message = [...messages].reverse().find((item) => item?.role === 'user');
+  const text = readMessageText(message);
+  return text.length === 0 ? smokeTaskProposalGoal : text;
+}
+
 function isTaskProposalRequest(parsedBody) {
   const messages = parsedBody?.messages;
   const hasTaskProposalPrompt = Array.isArray(messages)
@@ -175,18 +173,13 @@ function isTaskProposalRequest(parsedBody) {
         return text.includes('本轮工作流：创建后台任务。') || text.includes('必须调用 propose_background_task');
       })
     : false;
-  return hasProposeBackgroundTaskTool(parsedBody?.tools) && hasTaskProposalPrompt;
+  return hasTaskProposalPrompt;
 }
 
-function buildSmokeTaskProposal(workspacePath) {
+function buildSmokeTaskProposal(workspacePath, trigger) {
   return {
     goal: smokeTaskProposalGoal,
-    trigger: {
-      type: 'cron',
-      description: '每天晚上 7:40 触发',
-      cronExpression: '40 19 * * *',
-      nextRunAt: smokeTaskProposalNextRunAt
-    },
+    trigger,
     workspacePath
   };
 }
@@ -264,15 +257,29 @@ function writeStreamingToolCallResponse(response, toolCall) {
   response.end('data: [DONE]\n\n');
 }
 
+function writeTaskTimeResolutionToolCallResponse(response, parsedBody) {
+  writeStreamingToolCallResponse(response, {
+    id: 'call_smoke_resolve_background_task_time',
+    name: 'resolve_background_task_time',
+    args: {
+      text: readLastUserText(parsedBody?.messages)
+    }
+  });
+}
+
 function writeTaskProposalToolCallResponse(response, parsedBody) {
   const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
   if (workspacePath === null || workspacePath.length === 0) {
     throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
   }
+  const timeResult = readToolResultJson(parsedBody?.messages, 'call_smoke_resolve_background_task_time');
+  if (timeResult?.status !== 'resolved' || timeResult.trigger === null || typeof timeResult.trigger !== 'object') {
+    throw new Error('Smoke provider could not resolve trigger from resolve_background_task_time result.');
+  }
   writeStreamingToolCallResponse(response, {
     id: 'call_smoke_propose_background_task',
     name: 'propose_background_task',
-    args: buildSmokeTaskProposal(workspacePath)
+    args: buildSmokeTaskProposal(workspacePath, timeResult.trigger)
   });
 }
 
@@ -317,7 +324,18 @@ export async function startSmokeProvider() {
         response.setHeader('content-type', 'text/event-stream');
         response.setHeader('cache-control', 'no-cache');
         response.setHeader('connection', 'keep-alive');
-        if (isTaskProposalRequest(parsedBody) && !hasToolResultMessage(parsedBody?.messages)) {
+        if (
+          isTaskProposalRequest(parsedBody) &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_resolve_background_task_time') === null
+        ) {
+          writeTaskTimeResolutionToolCallResponse(response, parsedBody);
+          return;
+        }
+        if (
+          isTaskProposalRequest(parsedBody) &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_resolve_background_task_time') !== null &&
+          readToolResultJson(parsedBody?.messages, 'call_smoke_propose_background_task') === null
+        ) {
           writeTaskProposalToolCallResponse(response, parsedBody);
           return;
         }
