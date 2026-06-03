@@ -39,6 +39,9 @@ import { handleExternalWindowOpen } from './external-link-policy';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
+const appIconPath = isDevelopment
+  ? join(__dirname, '../../resources/icon.ico')
+  : join(process.resourcesPath, 'icon.ico');
 const mainReadyStartedAtMs = performance.now();
 const pdfPreviewScheme = 'roc-preview';
 let pdfPreviewServices: ReturnType<typeof createAppServices> | null = null;
@@ -127,8 +130,13 @@ const hostService = new WindowsHostService({
     }
   },
   menu: Menu,
-  createTray: (iconDataUrl) => {
-    const tray = new Tray(nativeImage.createFromDataURL(iconDataUrl).resize({ width: 16, height: 16 }));
+  trayIconPath: appIconPath,
+  createTray: (iconPath) => {
+    const trayImage = nativeImage.createFromPath(iconPath);
+    if (trayImage.isEmpty()) {
+      throw new Error(`Failed to load tray icon from ${iconPath}.`);
+    }
+    const tray = new Tray(trayImage.resize({ width: 16, height: 16 }));
     return {
       setToolTip: (tooltip) => {
         tray.setToolTip(tooltip);
@@ -241,7 +249,7 @@ async function createWindow(): Promise<void> {
   }
 
   mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
-    new BrowserWindow(buildMainWindowOptions(preloadPath, restoredBounds))
+    new BrowserWindow(buildMainWindowOptions(preloadPath, appIconPath, restoredBounds))
   );
   applyWindowMaterial(mainWindow, 'mica', services.logService);
   if (restoredPlacement !== null && restoredPlacement.maximized) {

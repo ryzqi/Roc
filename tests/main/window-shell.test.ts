@@ -9,9 +9,10 @@ import {
 
 describe('immersive window shell', () => {
   it('builds a frameless window with hidden system menu bar', () => {
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs');
+    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs', 'C:/roc/resources/icon.ico');
 
     expect(options.title).toBe('Roc');
+    expect(options.icon).toBe('C:/roc/resources/icon.ico');
     expect(options.frame).toBe(false);
     expect(options.autoHideMenuBar).toBe(true);
     expect(options.show).toBe(false);
@@ -41,7 +42,7 @@ describe('immersive window shell', () => {
         }
       ]
     );
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs', restored);
+    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs', 'C:/roc/resources/icon.ico', restored);
 
     expect(restored).toEqual({
       x: 1920,

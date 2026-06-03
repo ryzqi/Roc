@@ -20,6 +20,7 @@ const minMainWindowSize = {
 
 export function buildMainWindowOptions(
   preloadPath: string,
+  iconPath: string,
   restoredBounds: WindowBoundsSnapshot | null = null
 ): BrowserWindowConstructorOptions {
   const bounds = restoredBounds === null ? defaultMainWindowBounds : restoredBounds;
@@ -36,6 +37,7 @@ export function buildMainWindowOptions(
     backgroundColor: '#f7f8f5',
     backgroundMaterial: 'mica',
     title: 'Roc',
+    icon: iconPath,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

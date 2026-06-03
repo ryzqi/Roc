@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { getElectronVersion, packageJsonPath, projectRoot } from './electron-version.mjs';
 
@@ -43,6 +43,55 @@ export function runCommand(command, args, options = {}) {
     shell: useWindowsShell
   });
   return result.status === null ? 1 : result.status;
+}
+
+export function resolveWindowsRceditPath({
+  projectRoot: targetProjectRoot = projectRoot
+} = {}) {
+  const pnpmPackagesRoot = resolve(targetProjectRoot, 'node_modules', '.pnpm');
+  const packageDirectories = readdirSync(pnpmPackagesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('electron-winstaller@'))
+    .map((entry) => entry.name)
+    .sort();
+  for (const packageDirectory of packageDirectories) {
+    const rceditPath = resolve(
+      pnpmPackagesRoot,
+      packageDirectory,
+      'node_modules',
+      'electron-winstaller',
+      'vendor',
+      'rcedit.exe'
+    );
+    if (existsSync(rceditPath)) {
+      return rceditPath;
+    }
+  }
+  throw new Error('Unable to locate electron-winstaller vendor rcedit.exe.');
+}
+
+export function applyWindowsExecutableIcon({
+  appOutDir,
+  executableName = 'Roc',
+  iconPath = resolve(projectRoot, 'resources', 'icon.ico'),
+  projectRoot: targetProjectRoot = projectRoot,
+  run = runCommand,
+  platform = process.platform,
+  resolveRceditPath = resolveWindowsRceditPath,
+  terminateRunningApp = terminateRunningPackagedApp
+}) {
+  if (platform !== 'win32') {
+    return { applied: false };
+  }
+  const executablePath = resolve(appOutDir, `${executableName}.exe`);
+  terminateRunningApp({ packagedExecutablePath: executablePath });
+  const rceditPath = resolveRceditPath({ projectRoot: targetProjectRoot });
+  const status = run(rceditPath, [executablePath, '--set-icon', iconPath], {
+    cwd: targetProjectRoot
+  });
+  if (status !== 0) {
+    throw new Error(`Failed to apply Windows executable icon to ${executablePath}.`);
+  }
+  return { applied: true, executablePath, iconPath };
 }
 
 export function listWindowsProcessesByName(processName) {

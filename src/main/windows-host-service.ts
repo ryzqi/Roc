@@ -71,14 +71,6 @@ function createDefaultHostIntegrationStatus(): HostIntegrationStatus {
 
 export class WindowsHostService {
   private readonly hostIntegration = createDefaultHostIntegrationStatus();
-  private readonly trayIconDataUrl =
-    'data:image/svg+xml,' +
-    encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">' +
-        '<rect width="16" height="16" rx="4" fill="#1f6feb"/>' +
-        '<path d="M4.5 12V4h3.7c2.1 0 3.3 1.1 3.3 2.8 0 1.2-.7 2.1-1.8 2.5L12 12H9.9L7.9 9.7H6.3V12H4.5zm1.8-3.8h1.7c1 0 1.7-.5 1.7-1.4s-.7-1.4-1.7-1.4H6.3v2.8z" fill="#ffffff"/>' +
-      '</svg>'
-    );
   private mainWindow: MainWindowLike | null = null;
   private tray: TrayLike | null = null;
   private explicitQuit = false;
@@ -93,7 +85,8 @@ export class WindowsHostService {
       lifecycleService: Pick<LifecycleService, 'getTraySummary' | 'pauseBackgroundExecution' | 'resumeBackgroundExecution'>;
       logService: Pick<LogService, 'append'>;
       menu: MenuLike;
-      createTray: (iconDataUrl: string) => TrayLike;
+      trayIconPath: string;
+      createTray: (iconPath: string) => TrayLike;
       openMainPage: (page: string) => void;
       broadcastTaskUpdated: () => void;
     }
@@ -289,7 +282,7 @@ export class WindowsHostService {
     if (this.tray !== null) {
       return this.tray;
     }
-    this.tray = this.input.createTray(this.trayIconDataUrl);
+    this.tray = this.input.createTray(this.input.trayIconPath);
     this.tray.on('click', () => this.input.openMainPage('chat'));
     return this.tray;
   }

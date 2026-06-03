@@ -5,6 +5,7 @@ import { WindowsHostService } from '../../src/main/windows-host-service';
 type WindowEvent = 'close';
 type AppEvent = 'before-quit' | 'second-instance';
 type TrayEvent = 'click';
+const trayIconPath = 'C:/roc/resources/icon.ico';
 
 function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
@@ -151,6 +152,7 @@ describe('WindowsHostService', () => {
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
+      trayIconPath,
       createTray: vi.fn(() => tray),
       openMainPage: vi.fn(),
       broadcastTaskUpdated: vi.fn()
@@ -210,6 +212,7 @@ describe('WindowsHostService', () => {
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
+      trayIconPath,
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
       broadcastTaskUpdated: vi.fn()
@@ -268,6 +271,7 @@ describe('WindowsHostService', () => {
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
+      trayIconPath,
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
       broadcastTaskUpdated: vi.fn()
@@ -318,6 +322,7 @@ describe('WindowsHostService', () => {
     const openMainPage = vi.fn();
     const registerHotkey = vi.fn<(accelerator: string, callback: () => void) => boolean>(() => true);
     const tray = createTrayMock();
+    const createTray = vi.fn(() => tray);
     const menu = {
       buildFromTemplate: vi.fn((template) => template)
     };
@@ -348,7 +353,8 @@ describe('WindowsHostService', () => {
       },
       logService: { append: vi.fn() },
       menu,
-      createTray: vi.fn(() => tray),
+      trayIconPath,
+      createTray,
       openMainPage,
       broadcastTaskUpdated
     });
@@ -375,6 +381,7 @@ describe('WindowsHostService', () => {
         registrationError: null
       }
     });
+    expect(createTray).toHaveBeenCalledWith(trayIconPath);
 
     const template = menu.buildFromTemplate.mock.calls.at(-1)?.[0] as Array<{ label?: string; click?: () => void }>;
     expect(template.map((item) => item.label).filter(Boolean)).not.toContain('快速入口');
@@ -434,6 +441,7 @@ describe('WindowsHostService', () => {
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
+      trayIconPath,
       createTray: vi.fn(() => createTrayMock()),
       openMainPage: vi.fn(),
       broadcastTaskUpdated: vi.fn()
