@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { LangChainModelFactory, resolveAnthropicBetas } from '../../src/main/services/langchain-model-factory';
-import type { ProviderConfig } from '../../src/shared/types';
+import type { ProviderConfig, ProviderOptions } from '../../src/shared/types';
 
 let root: string;
 let services: AppServices;
@@ -116,6 +116,54 @@ describe('LangChainModelFactory', () => {
       const result = factory.buildAnthropicClientOptions(provider, 60_000);
 
       expect(result.defaultHeaders).toBeUndefined();
+    });
+  });
+
+  describe('applyAnthropicSamplingParams', () => {
+    it('applies all configured sampling params', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+      };
+      const config: Record<string, unknown> = {};
+      const options: ProviderOptions = {
+        temperature: 0.7,
+        maxTokens: 1000,
+        topP: 0.9,
+        topK: 10,
+        stop: ['stop1', 'stop2']
+      };
+
+      factory.applyAnthropicSamplingParams(config, options);
+
+      expect(config.temperature).toBe(0.7);
+      expect(config.maxTokens).toBe(1000);
+      expect(config.topP).toBe(0.9);
+      expect(config.topK).toBe(10);
+      expect(config.stopSequences).toEqual(['stop1', 'stop2']);
+    });
+
+    it('skips undefined sampling params', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+      };
+      const config: Record<string, unknown> = {};
+
+      factory.applyAnthropicSamplingParams(config, { temperature: 0.7 });
+
+      expect(config.temperature).toBe(0.7);
+      expect(config.maxTokens).toBeUndefined();
+      expect(config.topP).toBeUndefined();
+    });
+
+    it('skips empty stop arrays', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        applyAnthropicSamplingParams(config: Record<string, unknown>, options: ProviderOptions): void;
+      };
+      const config: Record<string, unknown> = {};
+
+      factory.applyAnthropicSamplingParams(config, { stop: [] });
+
+      expect(config.stopSequences).toBeUndefined();
     });
   });
 

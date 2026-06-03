@@ -22,7 +22,7 @@ import {
   type ChatOpenAIFields
 } from '@langchain/openai';
 import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
-import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderType } from '../../shared/types';
+import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderOptions, type ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
@@ -554,6 +554,24 @@ export class LangChainModelFactory {
       clientOptions.defaultHeaders = provider.options.defaultHeaders;
     }
     return clientOptions;
+  }
+
+  private applyAnthropicSamplingParams(config: ChatAnthropicInput, options: ProviderOptions): void {
+    if (options.temperature !== undefined) {
+      config.temperature = options.temperature;
+    }
+    if (options.maxTokens !== undefined) {
+      config.maxTokens = options.maxTokens;
+    }
+    if (options.topP !== undefined) {
+      config.topP = options.topP;
+    }
+    if (options.topK !== undefined) {
+      config.topK = options.topK;
+    }
+    if (options.stop !== undefined && options.stop.length > 0) {
+      config.stopSequences = options.stop;
+    }
   }
 
   async createModelForProvider(
