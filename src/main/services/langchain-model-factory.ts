@@ -574,6 +574,18 @@ export class LangChainModelFactory {
     }
   }
 
+  private applyAnthropicPhase1Features(config: ChatAnthropicInput, options: ProviderOptions): void {
+    if (options.anthropicBetas !== undefined) {
+      const betas = resolveAnthropicBetas(options.anthropicBetas);
+      if (betas.length > 0) {
+        config.betas = betas as NonNullable<ChatAnthropicInput['betas']>;
+      }
+    }
+    if (options.invocationKwargs !== undefined) {
+      config.invocationKwargs = options.invocationKwargs;
+    }
+  }
+
   async createModelForProvider(
     provider: ProviderConfig,
     modelId: string,
