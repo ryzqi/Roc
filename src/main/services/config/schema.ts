@@ -153,7 +153,13 @@ export const ProviderOptionsSchema = z
     guidedGrammar: z.string().min(1).optional(),
     endpointOverride: z.string().url().optional(),
     contextBudgetTokens: z.number().int().positive().optional(),
-    samplingProfileOverrides: SamplingProfileOverridesSchema.optional()
+    samplingProfileOverrides: SamplingProfileOverridesSchema.optional(),
+    invocationKwargs: z.record(z.string(), z.unknown()).optional(),
+    anthropicBetas: z.array(z.string()).optional(),
+    anthropicCacheControl: z.object({
+      type: z.literal('ephemeral'),
+      ttl: z.enum(['5m', '1h']).optional()
+    }).optional()
   })
   .superRefine((options, ctx) => {
     if (
