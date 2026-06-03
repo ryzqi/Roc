@@ -385,6 +385,7 @@
   cursor: not-allowed;
 }
 
+.provider-advanced,
 .provider-nvidia-advanced {
   margin-top: 4px;
   padding: 12px 14px;
@@ -393,6 +394,7 @@
   background: rgba(245, 248, 252, 0.5);
 }
 
+.provider-advanced > summary,
 .provider-nvidia-advanced > summary {
   display: flex;
   align-items: center;
@@ -403,10 +405,12 @@
   font-weight: 500;
 }
 
+.provider-advanced > summary::-webkit-details-marker,
 .provider-nvidia-advanced > summary::-webkit-details-marker {
   display: none;
 }
 
+.provider-advanced > summary::before,
 .provider-nvidia-advanced > summary::before {
   content: '▸';
   display: inline-block;
@@ -415,10 +419,12 @@
   transition: transform var(--transition-fast);
 }
 
+.provider-advanced[open] > summary,
 .provider-nvidia-advanced[open] > summary {
   margin-bottom: 12px;
 }
 
+.provider-advanced[open] > summary::before,
 .provider-nvidia-advanced[open] > summary::before {
   transform: rotate(90deg);
 }

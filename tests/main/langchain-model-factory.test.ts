@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
+import type { ProviderConfig } from '../../src/shared/types';
 
 let root: string;
 let services: AppServices;
@@ -593,6 +594,366 @@ describe('LangChainModelFactory', () => {
 
     expect(result.runtime.streaming).toBe(false);
     expect(requests[0]?.stream).toBe(false);
+  });
+
+  it('maps OpenAI-compatible advanced provider settings into ChatOpenAI configuration and request defaults', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            temperature: 0.25,
+            maxTokens: 2048,
+            topP: 0.7,
+            frequencyPenalty: 0.4,
+            presencePenalty: 0.15,
+            stop: ['DONE'],
+            seed: 42,
+            organization: 'org-roc',
+            streamUsage: false,
+            parallelToolCalls: true,
+            serviceTier: 'flex',
+            timeoutMs: 45_000,
+            verbosity: 'low',
+            defaultHeaders: {
+              'x-client': 'roc'
+            }
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<Record<string, unknown>> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as Record<string, unknown>);
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([new HumanMessage('Hi')]);
+
+    expect(result.runtime.baseUrl).toBe('http://127.0.0.1:9090/v1');
+    expect((result.model as { timeout?: number }).timeout).toBe(45_000);
+    expect(
+      (result.model as {
+        clientConfig?: { baseURL?: string; organization?: string; defaultHeaders?: Record<string, string> };
+      }).clientConfig
+    )
+      .toMatchObject({
+        baseURL: 'http://127.0.0.1:9090/v1',
+        organization: 'org-roc',
+        defaultHeaders: {
+          'x-client': 'roc'
+        }
+      });
+    expect(requests[0]).toMatchObject({
+      top_p: 0.7,
+      frequency_penalty: 0.4,
+      presence_penalty: 0.15,
+      stop: ['DONE'],
+      seed: 42,
+      parallel_tool_calls: true,
+      service_tier: 'flex',
+      verbosity: 'low',
+      stream: true
+    });
+    expect(requests[0]).not.toHaveProperty('stream_options');
+  });
+
+  it('maps OpenAI responses-api provider settings into ChatOpenAI response invocation params', async () => {
+    services.secretService.setProviderSecret('openai-responses', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'gpt-5',
+      providers: [
+        {
+          id: 'openai-responses',
+          name: 'OpenAI Responses',
+          type: 'openai_compatible',
+          endpoint: 'https://api.openai.example.test/v1',
+          credentialRef: 'secret:openai-responses',
+          enabled: true,
+          models: [
+            {
+              id: 'gpt-5',
+              displayName: 'GPT 5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            organization: 'org-roc-responses',
+            useResponsesApi: true,
+            reasoning: {
+              summary: 'detailed'
+            },
+            serviceTier: 'scale',
+            verbosity: 'high',
+            zdrEnabled: true
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+    const chatModel = result.model as unknown as {
+      clientConfig?: { baseURL?: string; organization?: string };
+      invocationParams: () => Record<string, unknown>;
+      useResponsesApi?: boolean;
+    };
+
+    expect(chatModel.useResponsesApi).toBe(true);
+    expect(chatModel.clientConfig).toMatchObject({
+      baseURL: 'https://api.openai.example.test/v1',
+      organization: 'org-roc-responses'
+    });
+    expect(chatModel.invocationParams()).toMatchObject({
+      model: 'gpt-5',
+      service_tier: 'scale',
+      reasoning: {
+        summary: 'detailed'
+      },
+      text: {
+        verbosity: 'high'
+      },
+      stream: false,
+      store: false
+    });
+  });
+
+  it('maps Anthropic-compatible advanced provider settings into ChatAnthropic configuration', async () => {
+    services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-5',
+      providers: [
+        {
+          id: 'anthropic-local',
+          name: 'Anthropic Local',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-local',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet 4.5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            temperature: 0.1,
+            maxTokens: 4096,
+            topP: 0.85,
+            topK: 12,
+            stop: ['\n\nHuman:'],
+            streamUsage: false,
+            timeoutMs: 33_000,
+            defaultHeaders: {
+              'x-tenant': 'east'
+            },
+            anthropicThinking: {
+              mode: 'enabled',
+              budgetTokens: 2048
+            }
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect(result.runtime.baseUrl).toBe('https://anthropic.example.test/');
+    expect((result.model as {
+      apiUrl?: string;
+      topP?: number;
+      topK?: number;
+      stopSequences?: string[];
+      streamUsage?: boolean;
+      thinking?: unknown;
+      clientOptions?: { timeout?: number; maxRetries?: number; defaultHeaders?: Record<string, string> };
+    })).toMatchObject({
+      apiUrl: 'https://anthropic.example.test/',
+      topP: 0.85,
+      topK: 12,
+      stopSequences: ['\n\nHuman:'],
+      streamUsage: false,
+      thinking: {
+        type: 'enabled',
+        budget_tokens: 2048
+      },
+      clientOptions: {
+        timeout: 33_000,
+        maxRetries: 0,
+        defaultHeaders: {
+          'x-tenant': 'east'
+        }
+      }
+    });
+  });
+
+  it('maps explicit OpenAI-compatible reasoning none into OpenAI reasoning requests', async () => {
+    services.secretService.setProviderSecret('openai-reasoning-none', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'gpt-5.1',
+      providers: [
+        {
+          id: 'openai-reasoning-none',
+          name: 'OpenAI Reasoning None',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-reasoning-none',
+          enabled: true,
+          models: [
+            {
+              id: 'gpt-5.1',
+              displayName: 'GPT 5.1',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            reasoning: {
+              effort: 'none'
+            }
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<Record<string, unknown>> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+      reasoning?: unknown;
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as Record<string, unknown>);
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([new HumanMessage('Hi')]);
+
+    expect(completionModel.reasoning).toEqual({
+      effort: 'none'
+    });
+    expect(requests[0]).toMatchObject({
+      reasoning_effort: 'none',
+      stream: true
+    });
+  });
+
+  it('rejects Anthropic enabled thinking budgets below the official minimum at runtime', async () => {
+    services.secretService.setProviderSecret('anthropic-runtime-invalid', 'sk-ant-test');
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+
+    await expect(
+      factory.createModelForProvider(
+        {
+          id: 'anthropic-runtime-invalid',
+          name: 'Anthropic Runtime Invalid',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-runtime-invalid',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet 4.5',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            maxTokens: 4096,
+            anthropicThinking: {
+              mode: 'enabled',
+              budgetTokens: 1023
+            }
+          }
+        },
+        'claude-sonnet-4-5',
+        { streaming: true }
+      )
+    ).rejects.toThrow('Anthropic thinking budget tokens 必须大于等于 1024。');
+  });
+
+  it('maps explicit Anthropic disabled thinking into ChatAnthropic configuration', async () => {
+    services.secretService.setProviderSecret('anthropic-disabled', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-opus-4-6',
+      providers: [
+        {
+          id: 'anthropic-disabled',
+          name: 'Anthropic Disabled',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-disabled',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-opus-4-6',
+              displayName: 'Claude Opus 4.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            anthropicThinking: {
+              mode: 'disabled'
+            }
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as { thinking?: unknown }).thinking).toEqual({
+      type: 'disabled'
+    });
   });
 
   it('ignores legacy Anthropic cache TTL inputs and leaves cache_control to deepagents middleware', async () => {

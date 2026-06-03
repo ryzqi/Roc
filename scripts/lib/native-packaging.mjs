@@ -15,6 +15,48 @@ export const betterSqlite3WorkspaceRequireBase = packageJsonPath;
 
 const probeScriptPath = resolve(projectRoot, 'scripts', 'probe-better-sqlite3.cjs');
 const electronBuilderCache = resolve(projectRoot, '.runtime', 'electron-builder-cache');
+const compareExecutableIconScript = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+
+$exePath = $env:ROC_EXECUTABLE_ICON_EXE
+$iconPath = $env:ROC_EXECUTABLE_ICON_ICO
+$exeIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
+if ($null -eq $exeIcon) {
+  throw "Unable to extract icon from $exePath."
+}
+
+$resourceIcon = [System.Drawing.Icon]::new($iconPath)
+$exeBitmap = $exeIcon.ToBitmap()
+$resourceBitmap = $resourceIcon.ToBitmap()
+
+try {
+  if ($exeBitmap.Width -ne $resourceBitmap.Width -or $exeBitmap.Height -ne $resourceBitmap.Height) {
+    throw "Icon dimensions differ: exe=$($exeBitmap.Width)x$($exeBitmap.Height), resource=$($resourceBitmap.Width)x$($resourceBitmap.Height)."
+  }
+
+  for ($y = 0; $y -lt $exeBitmap.Height; $y++) {
+    for ($x = 0; $x -lt $exeBitmap.Width; $x++) {
+      if ($exeBitmap.GetPixel($x, $y).ToArgb() -ne $resourceBitmap.GetPixel($x, $y).ToArgb()) {
+        throw "Icon pixel mismatch at $x,$y."
+      }
+    }
+  }
+} finally {
+  if ($null -ne $exeBitmap) {
+    $exeBitmap.Dispose()
+  }
+  if ($null -ne $resourceBitmap) {
+    $resourceBitmap.Dispose()
+  }
+  if ($null -ne $exeIcon) {
+    $exeIcon.Dispose()
+  }
+  if ($null -ne $resourceIcon) {
+    $resourceIcon.Dispose()
+  }
+}
+`;
 
 export function createPackagingEnvironment(baseEnvironment = process.env) {
   mkdirSync(electronBuilderCache, { recursive: true });
@@ -92,6 +134,36 @@ export function applyWindowsExecutableIcon({
     throw new Error(`Failed to apply Windows executable icon to ${executablePath}.`);
   }
   return { applied: true, executablePath, iconPath };
+}
+
+export function verifyWindowsExecutableIcon({
+  appOutDir,
+  executableName = 'Roc',
+  iconPath = resolve(projectRoot, 'resources', 'icon.ico'),
+  projectRoot: targetProjectRoot = projectRoot,
+  run = runCommand,
+  platform = process.platform
+}) {
+  if (platform !== 'win32') {
+    return { verified: false };
+  }
+  const executablePath = resolve(appOutDir, `${executableName}.exe`);
+  const status = run(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', compareExecutableIconScript],
+    {
+      cwd: targetProjectRoot,
+      env: {
+        ...process.env,
+        ROC_EXECUTABLE_ICON_EXE: executablePath,
+        ROC_EXECUTABLE_ICON_ICO: iconPath
+      }
+    }
+  );
+  if (status !== 0) {
+    throw new Error(`Packaged Windows executable icon does not match ${iconPath}: ${executablePath}.`);
+  }
+  return { verified: true, executablePath, iconPath };
 }
 
 export function listWindowsProcessesByName(processName) {

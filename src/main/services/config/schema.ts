@@ -1,14 +1,15 @@
 import { z } from 'zod';
-import type {
-  AppSettings,
-  McpServerConfig,
-  McpServersConfig,
-  PermissionsConfig,
-  ProviderConfig,
-  ProvidersConfig,
-  RocSettingsDocument,
-  SettingsSaveRequest,
-  ShortcutsConfig
+import {
+  anthropicThinkingMinBudgetTokens,
+  type AppSettings,
+  type McpServerConfig,
+  type McpServersConfig,
+  type PermissionsConfig,
+  type ProviderConfig,
+  type ProvidersConfig,
+  type RocSettingsDocument,
+  type SettingsSaveRequest,
+  type ShortcutsConfig
 } from '../../../shared/types';
 
 export const PROVIDER_CREDENTIAL_REF_PATTERN = /^secret:[A-Za-z0-9_-]+$/;
@@ -98,6 +99,28 @@ const SamplingProfileOverridesSchema = z.object({
   repeatPenalty: z.number().min(0).max(2).optional()
 });
 
+const AnthropicThinkingSchema = z.union([
+  z.object({
+    mode: z.literal('disabled')
+  }),
+  z.object({
+    mode: z.literal('adaptive')
+  }),
+  z.object({
+    mode: z.literal('enabled'),
+    budgetTokens: z.number().int().min(anthropicThinkingMinBudgetTokens)
+  })
+]);
+
+const OpenAiReasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const OpenAiReasoningSummarySchema = z.enum(['auto', 'concise', 'detailed']);
+const OpenAiServiceTierSchema = z.enum(['auto', 'default', 'flex', 'scale', 'priority']);
+const OpenAiVerbositySchema = z.enum(['low', 'medium', 'high']);
+const OpenAiReasoningSchema = z.object({
+  effort: OpenAiReasoningEffortSchema.optional(),
+  summary: OpenAiReasoningSummarySchema.optional()
+});
+
 export const ProviderOptionsSchema = z
   .object({
     temperature: z.number().finite().optional(),
@@ -111,9 +134,18 @@ export const ProviderOptionsSchema = z
     repetitionPenalty: z.number().min(0).max(2).optional(),
     seed: z.number().int().optional(),
     stop: z.array(z.string().min(1)).max(4).optional(),
+    organization: z.string().min(1).optional(),
+    useResponsesApi: z.boolean().optional(),
+    reasoning: OpenAiReasoningSchema.optional(),
     includeReasoning: z.boolean().optional(),
     parallelToolCalls: z.boolean().optional(),
     streamUsage: z.boolean().optional(),
+    serviceTier: OpenAiServiceTierSchema.optional(),
+    timeoutMs: z.number().int().positive().optional(),
+    verbosity: OpenAiVerbositySchema.optional(),
+    zdrEnabled: z.boolean().optional(),
+    defaultHeaders: z.record(z.string(), z.string()).optional(),
+    anthropicThinking: AnthropicThinkingSchema.optional(),
     toolChoice: NvidiaToolChoiceSchema.optional(),
     guidedJson: z.record(z.string(), z.unknown()).optional(),
     guidedRegex: z.string().min(1).optional(),
@@ -122,6 +154,29 @@ export const ProviderOptionsSchema = z
     endpointOverride: z.string().url().optional(),
     contextBudgetTokens: z.number().int().positive().optional(),
     samplingProfileOverrides: SamplingProfileOverridesSchema.optional()
+  })
+  .superRefine((options, ctx) => {
+    if (
+      options.reasoning !== undefined &&
+      options.reasoning.effort === undefined &&
+      options.reasoning.summary === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reasoning'],
+        message: 'OpenAI reasoning 至少需要 effort 或 summary。'
+      });
+    }
+    if (options.anthropicThinking?.mode !== 'enabled') {
+      return;
+    }
+    if (typeof options.maxTokens === 'number' && options.anthropicThinking.budgetTokens >= options.maxTokens) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['anthropicThinking', 'budgetTokens'],
+        message: 'Anthropic thinking budget tokens 必须小于 Max tokens。'
+      });
+    }
   })
   .optional();
 

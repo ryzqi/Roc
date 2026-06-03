@@ -90,6 +90,33 @@ export type ProviderSamplingProfileOverrides = {
   repeatPenalty?: number;
 };
 
+export const anthropicThinkingMinBudgetTokens = 1024;
+
+export type AnthropicThinkingOption =
+  | {
+      mode: 'disabled';
+    }
+  | {
+      mode: 'adaptive';
+    }
+  | {
+      mode: 'enabled';
+      budgetTokens: number;
+    };
+
+export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export type OpenAiReasoningSummary = 'auto' | 'concise' | 'detailed';
+
+export type OpenAiReasoningOption = {
+  effort?: OpenAiReasoningEffort;
+  summary?: OpenAiReasoningSummary;
+};
+
+export type OpenAiServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority';
+
+export type OpenAiVerbosity = 'low' | 'medium' | 'high';
+
 export type ProviderOptions = {
   temperature?: number;
   maxTokens?: number;
@@ -102,9 +129,18 @@ export type ProviderOptions = {
   repetitionPenalty?: number;
   seed?: number;
   stop?: string[];
+  organization?: string;
+  useResponsesApi?: boolean;
+  reasoning?: OpenAiReasoningOption;
   includeReasoning?: boolean;
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
+  serviceTier?: OpenAiServiceTier;
+  timeoutMs?: number;
+  verbosity?: OpenAiVerbosity;
+  zdrEnabled?: boolean;
+  defaultHeaders?: Record<string, string>;
+  anthropicThinking?: AnthropicThinkingOption;
   toolChoice?: NvidiaToolChoice;
   guidedJson?: Record<string, unknown>;
   guidedRegex?: string;

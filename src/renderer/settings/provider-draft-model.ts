@@ -1,4 +1,16 @@
-import type { NvidiaToolChoice, ProviderConfig, ProviderModel, ProviderType } from '../../shared/types';
+import {
+  anthropicThinkingMinBudgetTokens,
+  type AnthropicThinkingOption,
+  type NvidiaToolChoice,
+  type OpenAiReasoningEffort,
+  type OpenAiReasoningOption,
+  type OpenAiReasoningSummary,
+  type OpenAiServiceTier,
+  type OpenAiVerbosity,
+  type ProviderConfig,
+  type ProviderModel,
+  type ProviderType
+} from '../../shared/types';
 import {
   fixedLlamaCppBaseUrl,
   fixedLlamaCppProviderId,
@@ -41,9 +53,20 @@ export type ProviderDraft = {
   repetitionPenalty: string;
   seed: string;
   stop: string;
+  organization: string;
+  useResponsesApi: 'unset' | 'true' | 'false';
+  openAiReasoningEffort: 'unset' | OpenAiReasoningEffort;
+  openAiReasoningSummary: 'unset' | OpenAiReasoningSummary;
   includeReasoning: 'unset' | 'true' | 'false';
   parallelToolCalls: 'unset' | 'true' | 'false';
   streamUsage: 'unset' | 'true' | 'false';
+  serviceTier: 'unset' | OpenAiServiceTier;
+  timeoutMs: string;
+  verbosity: 'unset' | OpenAiVerbosity;
+  zdrEnabled: 'unset' | 'true' | 'false';
+  defaultHeaders: string;
+  anthropicThinkingMode: 'unset' | 'disabled' | 'adaptive' | 'enabled';
+  anthropicThinkingBudgetTokens: string;
   toolChoice: 'unset' | 'auto' | 'required' | 'none' | 'function';
   toolChoiceFunctionName: string;
   endpointOverride: string;
@@ -73,7 +96,7 @@ const editableProviderTypes: readonly EditableProviderType[] = [
 
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-type NvidiaAdvancedDraftFields = Pick<
+type ProviderAdvancedDraftFields = Pick<
   ProviderDraft,
   | 'topP'
   | 'topK'
@@ -83,9 +106,20 @@ type NvidiaAdvancedDraftFields = Pick<
   | 'repetitionPenalty'
   | 'seed'
   | 'stop'
+  | 'organization'
+  | 'useResponsesApi'
+  | 'openAiReasoningEffort'
+  | 'openAiReasoningSummary'
   | 'includeReasoning'
   | 'parallelToolCalls'
   | 'streamUsage'
+  | 'serviceTier'
+  | 'timeoutMs'
+  | 'verbosity'
+  | 'zdrEnabled'
+  | 'defaultHeaders'
+  | 'anthropicThinkingMode'
+  | 'anthropicThinkingBudgetTokens'
   | 'toolChoice'
   | 'toolChoiceFunctionName'
   | 'endpointOverride'
@@ -95,7 +129,7 @@ type NvidiaAdvancedDraftFields = Pick<
   | 'guidedGrammar'
 >;
 
-function defaultNvidiaAdvancedFields(): NvidiaAdvancedDraftFields {
+function defaultProviderAdvancedFields(): ProviderAdvancedDraftFields {
   return {
     topP: '',
     topK: '',
@@ -105,9 +139,20 @@ function defaultNvidiaAdvancedFields(): NvidiaAdvancedDraftFields {
     repetitionPenalty: '',
     seed: '',
     stop: '',
+    organization: '',
+    useResponsesApi: 'unset',
+    openAiReasoningEffort: 'unset',
+    openAiReasoningSummary: 'unset',
     includeReasoning: 'unset',
     parallelToolCalls: 'unset',
     streamUsage: 'unset',
+    serviceTier: 'unset',
+    timeoutMs: '',
+    verbosity: 'unset',
+    zdrEnabled: 'unset',
+    defaultHeaders: '',
+    anthropicThinkingMode: 'unset',
+    anthropicThinkingBudgetTokens: '',
     toolChoice: 'unset',
     toolChoiceFunctionName: '',
     endpointOverride: '',
@@ -146,10 +191,10 @@ function jsonDraftValue(value: Record<string, unknown> | undefined): string {
   return value === undefined ? '' : JSON.stringify(value, null, 2);
 }
 
-function createNvidiaAdvancedFields(provider?: ProviderConfig): NvidiaAdvancedDraftFields {
+function createNvidiaAdvancedFields(provider?: ProviderConfig): ProviderAdvancedDraftFields {
   const options = provider?.options;
   return {
-    ...defaultNvidiaAdvancedFields(),
+    ...defaultProviderAdvancedFields(),
     topP: typeof options?.topP === 'number' ? String(options.topP) : '',
     topK: typeof options?.topK === 'number' ? String(options.topK) : '',
     minP: typeof options?.minP === 'number' ? String(options.minP) : '',
@@ -168,6 +213,107 @@ function createNvidiaAdvancedFields(provider?: ProviderConfig): NvidiaAdvancedDr
     guidedRegex: typeof options?.guidedRegex === 'string' ? options.guidedRegex : '',
     guidedChoice: Array.isArray(options?.guidedChoice) ? options.guidedChoice.join('\n') : '',
     guidedGrammar: typeof options?.guidedGrammar === 'string' ? options.guidedGrammar : ''
+  };
+}
+
+function anthropicThinkingModeDraftValue(
+  value: AnthropicThinkingOption | undefined
+): ProviderDraft['anthropicThinkingMode'] {
+  if (value === undefined || value === null || typeof value !== 'object') {
+    return 'unset';
+  }
+  if (value.mode === 'disabled') {
+    return 'disabled';
+  }
+  if (value.mode === 'adaptive') {
+    return 'adaptive';
+  }
+  if (value.mode === 'enabled') {
+    return 'enabled';
+  }
+  return 'unset';
+}
+
+function anthropicThinkingBudgetDraftValue(
+  value: AnthropicThinkingOption | undefined
+): string {
+  if (value === undefined || value === null || typeof value !== 'object' || value.mode !== 'enabled') {
+    return '';
+  }
+  return typeof value.budgetTokens === 'number' ? String(value.budgetTokens) : '';
+}
+
+function openAiReasoningEffortDraftValue(
+  value: OpenAiReasoningEffort | undefined
+): ProviderDraft['openAiReasoningEffort'] {
+  if (value === undefined) {
+    return 'unset';
+  }
+  return value;
+}
+
+function openAiReasoningSummaryDraftValue(
+  value: OpenAiReasoningSummary | undefined
+): ProviderDraft['openAiReasoningSummary'] {
+  if (value === undefined) {
+    return 'unset';
+  }
+  return value;
+}
+
+function openAiServiceTierDraftValue(
+  value: OpenAiServiceTier | undefined
+): ProviderDraft['serviceTier'] {
+  if (value === undefined) {
+    return 'unset';
+  }
+  return value;
+}
+
+function openAiVerbosityDraftValue(
+  value: OpenAiVerbosity | undefined
+): ProviderDraft['verbosity'] {
+  if (value === undefined) {
+    return 'unset';
+  }
+  return value;
+}
+
+function createOpenAiCompatibleAdvancedFields(provider?: ProviderConfig): ProviderAdvancedDraftFields {
+  const options = provider?.options;
+  return {
+    ...defaultProviderAdvancedFields(),
+    topP: typeof options?.topP === 'number' ? String(options.topP) : '',
+    frequencyPenalty: typeof options?.frequencyPenalty === 'number' ? String(options.frequencyPenalty) : '',
+    presencePenalty: typeof options?.presencePenalty === 'number' ? String(options.presencePenalty) : '',
+    seed: typeof options?.seed === 'number' ? String(options.seed) : '',
+    stop: Array.isArray(options?.stop) ? options.stop.join('\n') : '',
+    organization: typeof options?.organization === 'string' ? options.organization : '',
+    useResponsesApi: booleanDraftValue(options?.useResponsesApi),
+    openAiReasoningEffort: openAiReasoningEffortDraftValue(options?.reasoning?.effort),
+    openAiReasoningSummary: openAiReasoningSummaryDraftValue(options?.reasoning?.summary),
+    parallelToolCalls: booleanDraftValue(options?.parallelToolCalls),
+    streamUsage: booleanDraftValue(options?.streamUsage),
+    serviceTier: openAiServiceTierDraftValue(options?.serviceTier),
+    timeoutMs: typeof options?.timeoutMs === 'number' ? String(options.timeoutMs) : '',
+    verbosity: openAiVerbosityDraftValue(options?.verbosity),
+    zdrEnabled: booleanDraftValue(options?.zdrEnabled),
+    defaultHeaders: options?.defaultHeaders === undefined ? '' : JSON.stringify(options.defaultHeaders, null, 2)
+  };
+}
+
+function createAnthropicCompatibleAdvancedFields(provider?: ProviderConfig): ProviderAdvancedDraftFields {
+  const options = provider?.options;
+  return {
+    ...defaultProviderAdvancedFields(),
+    topP: typeof options?.topP === 'number' ? String(options.topP) : '',
+    topK: typeof options?.topK === 'number' ? String(options.topK) : '',
+    stop: Array.isArray(options?.stop) ? options.stop.join('\n') : '',
+    streamUsage: booleanDraftValue(options?.streamUsage),
+    timeoutMs: typeof options?.timeoutMs === 'number' ? String(options.timeoutMs) : '',
+    defaultHeaders: options?.defaultHeaders === undefined ? '' : JSON.stringify(options.defaultHeaders, null, 2),
+    anthropicThinkingMode: anthropicThinkingModeDraftValue(options?.anthropicThinking),
+    anthropicThinkingBudgetTokens: anthropicThinkingBudgetDraftValue(options?.anthropicThinking)
   };
 }
 
@@ -208,7 +354,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
-      ...defaultNvidiaAdvancedFields()
+      ...defaultProviderAdvancedFields()
     };
   }
   if (type === 'llama_cpp') {
@@ -225,7 +371,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
-      ...defaultNvidiaAdvancedFields()
+      ...defaultProviderAdvancedFields()
     };
   }
   if (provider === undefined) {
@@ -241,12 +387,18 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
-      ...defaultNvidiaAdvancedFields()
+      ...defaultProviderAdvancedFields()
     };
   }
   if (!editableProviderTypes.includes(provider.type as EditableProviderType)) {
     throw new Error(`Unsupported provider edit type: ${provider.type}`);
   }
+  const advancedFields =
+    provider.type === 'openai_compatible'
+      ? createOpenAiCompatibleAdvancedFields(provider)
+      : provider.type === 'anthropic_compatible'
+        ? createAnthropicCompatibleAdvancedFields(provider)
+        : defaultProviderAdvancedFields();
   return {
     mode: 'edit',
     id: provider.id,
@@ -259,7 +411,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
     maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
     thinking: booleanDraftValue(provider.options?.thinking),
-    ...defaultNvidiaAdvancedFields()
+    ...advancedFields
   };
 }
 
@@ -368,6 +520,34 @@ function parseOptionalBoolean(value: 'unset' | 'true' | 'false'): boolean | unde
   return value === 'true';
 }
 
+function parseOpenAiReasoning(
+  draft: Pick<ProviderDraft, 'openAiReasoningEffort' | 'openAiReasoningSummary'>
+): OpenAiReasoningOption | undefined {
+  const effort = draft.openAiReasoningEffort === 'unset' ? undefined : draft.openAiReasoningEffort;
+  const summary = draft.openAiReasoningSummary === 'unset' ? undefined : draft.openAiReasoningSummary;
+  if (effort === undefined && summary === undefined) {
+    return undefined;
+  }
+  return {
+    ...(effort === undefined ? {} : { effort }),
+    ...(summary === undefined ? {} : { summary })
+  };
+}
+
+function parseOpenAiServiceTier(value: ProviderDraft['serviceTier']): OpenAiServiceTier | undefined {
+  if (value === 'unset') {
+    return undefined;
+  }
+  return value;
+}
+
+function parseOpenAiVerbosity(value: ProviderDraft['verbosity']): OpenAiVerbosity | undefined {
+  if (value === 'unset') {
+    return undefined;
+  }
+  return value;
+}
+
 function parseNvidiaToolChoice(draft: ProviderDraft): NvidiaToolChoice | undefined {
   if (draft.toolChoice === 'unset') {
     return undefined;
@@ -401,6 +581,52 @@ function parseOptionalJsonObject(value: string, label: string): Record<string, u
   } catch {
     throw new Error(`${label} 必须是合法 JSON 对象。`);
   }
+}
+
+function parseOptionalPositiveInteger(value: string, label: string): number | undefined {
+  const parsed = parseOptionalInteger(value, label);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  if (parsed <= 0) {
+    throw new Error(`${label} 必须是正整数。`);
+  }
+  return parsed;
+}
+
+function parseOptionalStringRecord(value: string, label: string): Record<string, string> | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} 必须是合法 JSON 对象。`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label} 必须是合法 JSON 对象。`);
+  }
+  const entries = Object.entries(parsed);
+  if (entries.some((entry) => typeof entry[1] !== 'string')) {
+    throw new Error(`${label} 必须是 string -> string 的 JSON 对象。`);
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function parseAnthropicThinkingBudgetTokens(value: string): number {
+  if (value.trim().length === 0) {
+    throw new Error('Anthropic thinking budget tokens 不能为空。');
+  }
+  const budgetTokens = parseOptionalPositiveInteger(value, 'Anthropic thinking budget tokens');
+  if (budgetTokens === undefined) {
+    throw new Error('Anthropic thinking budget tokens 不能为空。');
+  }
+  if (budgetTokens < anthropicThinkingMinBudgetTokens) {
+    throw new Error(`Anthropic thinking budget tokens 必须大于等于 ${anthropicThinkingMinBudgetTokens}。`);
+  }
+  return budgetTokens;
 }
 
 function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['options'] {
@@ -451,15 +677,78 @@ function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['op
     if (guidedGrammar.length > 0) options.guidedGrammar = guidedGrammar;
     return Object.keys(options).length === 0 ? undefined : options;
   }
-  const thinking = parseOptionalBoolean(draft.thinking);
-  if (temperature === undefined && maxTokens === undefined && thinking === undefined) {
-    return undefined;
+  const options: NonNullable<ProviderConfig['options']> = {};
+  if (temperature !== undefined) options.temperature = temperature;
+  if (maxTokens !== undefined) options.maxTokens = maxTokens;
+
+  if (draft.type === 'openai_compatible') {
+    const topP = parseOptionalNumber(draft.topP, 'top_p');
+    if (topP !== undefined) options.topP = topP;
+    const frequencyPenalty = parseOptionalNumber(draft.frequencyPenalty, 'frequency_penalty');
+    if (frequencyPenalty !== undefined) options.frequencyPenalty = frequencyPenalty;
+    const presencePenalty = parseOptionalNumber(draft.presencePenalty, 'presence_penalty');
+    if (presencePenalty !== undefined) options.presencePenalty = presencePenalty;
+    const seed = parseOptionalInteger(draft.seed, 'seed');
+    if (seed !== undefined) options.seed = seed;
+    const stop = parseStringList(draft.stop);
+    if (stop !== undefined) options.stop = stop;
+    const organization = draft.organization.trim();
+    if (organization.length > 0) options.organization = organization;
+    const useResponsesApi = parseOptionalBoolean(draft.useResponsesApi);
+    if (useResponsesApi !== undefined) options.useResponsesApi = useResponsesApi;
+    const reasoning = parseOpenAiReasoning(draft);
+    if (reasoning !== undefined) options.reasoning = reasoning;
+    const streamUsage = parseOptionalBoolean(draft.streamUsage);
+    if (streamUsage !== undefined) options.streamUsage = streamUsage;
+    const parallelToolCalls = parseOptionalBoolean(draft.parallelToolCalls);
+    if (parallelToolCalls !== undefined) options.parallelToolCalls = parallelToolCalls;
+    const serviceTier = parseOpenAiServiceTier(draft.serviceTier);
+    if (serviceTier !== undefined) options.serviceTier = serviceTier;
+    const timeoutMs = parseOptionalPositiveInteger(draft.timeoutMs, 'timeoutMs');
+    if (timeoutMs !== undefined) options.timeoutMs = timeoutMs;
+    const verbosity = parseOpenAiVerbosity(draft.verbosity);
+    if (verbosity !== undefined) options.verbosity = verbosity;
+    const zdrEnabled = parseOptionalBoolean(draft.zdrEnabled);
+    if (zdrEnabled !== undefined) options.zdrEnabled = zdrEnabled;
+    const defaultHeaders = parseOptionalStringRecord(draft.defaultHeaders, 'default_headers');
+    if (defaultHeaders !== undefined) options.defaultHeaders = defaultHeaders;
   }
-  return {
-    ...(temperature === undefined ? {} : { temperature }),
-    ...(maxTokens === undefined ? {} : { maxTokens }),
-    ...(thinking === undefined ? {} : { thinking })
-  };
+  if (draft.type === 'anthropic_compatible') {
+    const topP = parseOptionalNumber(draft.topP, 'top_p');
+    if (topP !== undefined) options.topP = topP;
+    const topK = parseOptionalInteger(draft.topK, 'top_k');
+    if (topK !== undefined) options.topK = topK;
+    const stop = parseStringList(draft.stop);
+    if (stop !== undefined) options.stop = stop;
+    const streamUsage = parseOptionalBoolean(draft.streamUsage);
+    if (streamUsage !== undefined) options.streamUsage = streamUsage;
+    const timeoutMs = parseOptionalPositiveInteger(draft.timeoutMs, 'timeoutMs');
+    if (timeoutMs !== undefined) options.timeoutMs = timeoutMs;
+    const defaultHeaders = parseOptionalStringRecord(draft.defaultHeaders, 'default_headers');
+    if (defaultHeaders !== undefined) options.defaultHeaders = defaultHeaders;
+    if (draft.anthropicThinkingMode === 'adaptive') {
+      options.anthropicThinking = {
+        mode: 'adaptive'
+      };
+    }
+    if (draft.anthropicThinkingMode === 'disabled') {
+      options.anthropicThinking = {
+        mode: 'disabled'
+      };
+    }
+    if (draft.anthropicThinkingMode === 'enabled') {
+      const budgetTokens = parseAnthropicThinkingBudgetTokens(draft.anthropicThinkingBudgetTokens);
+      if (maxTokens !== undefined && budgetTokens >= maxTokens) {
+        throw new Error('Anthropic thinking budget tokens 必须小于 Max tokens。');
+      }
+      options.anthropicThinking = {
+        mode: 'enabled',
+        budgetTokens
+      };
+    }
+  }
+
+  return Object.keys(options).length === 0 ? undefined : options;
 }
 
 export function buildProviderConfigFromDraft(draft: ProviderDraft): ProviderConfig {

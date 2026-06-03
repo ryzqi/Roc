@@ -261,6 +261,88 @@ describe('providers section', () => {
     expect(html).toContain('data-testid="provider-draft-guided-grammar"');
   });
 
+  it('renders OpenAI-compatible basic and advanced fields without Anthropic-only controls', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('openai_compatible'),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [],
+        providerSecretStatus: [],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-temperature"');
+    expect(html).toContain('data-testid="provider-draft-max-tokens"');
+    expect(html).toContain('data-testid="provider-draft-top-p"');
+    expect(html).toContain('data-testid="provider-draft-frequency-penalty"');
+    expect(html).toContain('data-testid="provider-draft-presence-penalty"');
+    expect(html).toContain('data-testid="provider-draft-seed"');
+    expect(html).toContain('data-testid="provider-draft-stop"');
+    expect(html).toContain('data-testid="provider-draft-organization"');
+    expect(html).toContain('data-testid="provider-draft-use-responses-api"');
+    expect(html).toContain('data-testid="provider-draft-openai-reasoning-effort"');
+    expect(html).toContain('data-testid="provider-draft-openai-reasoning-summary"');
+    expect(html).toContain('<option value="none">none</option>');
+    expect(html).toContain('data-testid="provider-draft-stream-usage"');
+    expect(html).toContain('data-testid="provider-draft-parallel-tool-calls"');
+    expect(html).toContain('data-testid="provider-draft-service-tier"');
+    expect(html).toContain('data-testid="provider-draft-timeout-ms"');
+    expect(html).toContain('data-testid="provider-draft-verbosity"');
+    expect(html).toContain('data-testid="provider-draft-zdr-enabled"');
+    expect(html).toContain('data-testid="provider-draft-default-headers"');
+    expect(html).not.toContain('data-testid="provider-draft-top-k"');
+    expect(html).not.toContain('data-testid="provider-draft-anthropic-thinking-mode"');
+    expect(html).not.toContain('data-testid="provider-draft-anthropic-thinking-budget-tokens"');
+  });
+
+  it('renders Anthropic-compatible basic and advanced fields without OpenAI-only controls', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProvidersSection, {
+        draft: createProviderDraft('anthropic_compatible'),
+        draftError: null,
+        onClearProviderSecret: async () => {},
+        onDeleteProvider: async () => {},
+        onEditProvider: () => {},
+        onSaveProviderDraft: async () => {},
+        onSetProviderSecret: async () => {},
+        onStartNewProvider: () => {},
+        onTestProvider: async () => {},
+        onUpdateDraft: () => {},
+        providers: [],
+        providerSecretStatus: [],
+        providerTestStatus: null,
+        secretBusyProviderId: null
+      })
+    );
+
+    expect(html).toContain('data-testid="provider-draft-temperature"');
+    expect(html).toContain('data-testid="provider-draft-max-tokens"');
+    expect(html).toContain('data-testid="provider-draft-top-p"');
+    expect(html).toContain('data-testid="provider-draft-top-k"');
+    expect(html).toContain('data-testid="provider-draft-stop"');
+    expect(html).toContain('stop_sequences');
+    expect(html).toContain('data-testid="provider-draft-stream-usage"');
+    expect(html).toContain('data-testid="provider-draft-timeout-ms"');
+    expect(html).toContain('data-testid="provider-draft-default-headers"');
+    expect(html).toContain('data-testid="provider-draft-anthropic-thinking-mode"');
+    expect(html).toContain('data-testid="provider-draft-anthropic-thinking-budget-tokens"');
+    expect(html).toContain('<option value="disabled">disabled</option>');
+    expect(html).not.toContain('data-testid="provider-draft-frequency-penalty"');
+    expect(html).not.toContain('data-testid="provider-draft-presence-penalty"');
+    expect(html).not.toContain('data-testid="provider-draft-seed"');
+    expect(html).not.toContain('data-testid="provider-draft-parallel-tool-calls"');
+  });
+
   it('renders fixed llama.cpp details with an editable endpoint and without delete controls', () => {
     const provider: ProviderConfig = {
       id: 'llama_cpp',

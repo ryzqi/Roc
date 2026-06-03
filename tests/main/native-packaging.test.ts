@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
+const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
 
 async function loadElectronVersionModule() {
   return import(new URL('../../scripts/lib/electron-version.mjs', import.meta.url).href);
@@ -45,6 +46,14 @@ describe('native packaging contract', () => {
     expect(electronBuilderConfig).toContain('to: icon.ico');
   });
 
+  it('verifies the Windows executable icon after applying it', () => {
+    expect(afterPackHook).toContain('applyWindowsExecutableIcon');
+    expect(afterPackHook).toContain('verifyWindowsExecutableIcon');
+    expect(afterPackHook.indexOf('applyWindowsExecutableIcon({')).toBeLessThan(
+      afterPackHook.indexOf('verifyWindowsExecutableIcon({')
+    );
+  });
+
   it('applies the Windows executable icon with rcedit without enabling the signing toolchain', async () => {
     const run = vi.fn().mockReturnValueOnce(0);
     const terminateRunningApp = vi.fn();
@@ -72,6 +81,45 @@ describe('native packaging contract', () => {
     );
     expect(terminateRunningApp).toHaveBeenCalledWith({
       packagedExecutablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe')
+    });
+  });
+
+  it('verifies packaged Roc.exe icon pixels against resources icon on Windows', async () => {
+    const run = vi.fn().mockReturnValueOnce(0);
+    const { verifyWindowsExecutableIcon } = await loadNativePackagingModule();
+
+    const result = verifyWindowsExecutableIcon({
+      appOutDir: 'F:/Code/Roc/release/win-unpacked',
+      iconPath: 'F:/Code/Roc/resources/icon.ico',
+      projectRoot: 'F:/Code/Roc',
+      run,
+      platform: 'win32'
+    });
+
+    const executablePath = resolve('F:/Code/Roc/release/win-unpacked/Roc.exe');
+    expect(result).toEqual({
+      verified: true,
+      executablePath,
+      iconPath: 'F:/Code/Roc/resources/icon.ico'
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    const [command, args, options] = run.mock.calls[0];
+    expect(command).toBe('powershell.exe');
+    expect(args).toEqual([
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      expect.stringContaining('[System.Drawing.Icon]::ExtractAssociatedIcon')
+    ]);
+    expect(args[5]).toContain('GetPixel');
+    expect(options).toEqual({
+      cwd: 'F:/Code/Roc',
+      env: expect.objectContaining({
+        ROC_EXECUTABLE_ICON_EXE: executablePath,
+        ROC_EXECUTABLE_ICON_ICO: 'F:/Code/Roc/resources/icon.ico'
+      })
     });
   });
 

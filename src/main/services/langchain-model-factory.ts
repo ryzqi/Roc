@@ -22,7 +22,7 @@ import {
   type ChatOpenAIFields
 } from '@langchain/openai';
 import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
-import type { ProviderConfig, ProviderType } from '../../shared/types';
+import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
@@ -592,9 +592,19 @@ export class LangChainModelFactory {
         maxRetries: 0,
         temperature,
         maxTokens,
+        topP: provider.options?.topP,
+        topK: provider.options?.topK,
+        stopSequences: provider.options?.stop,
+        streamUsage: resolveStreamUsage(provider, streaming),
+        ...(resolveAnthropicThinking(provider.options) === undefined
+          ? {}
+          : {
+              thinking: resolveAnthropicThinking(provider.options)
+            }),
         clientOptions: {
           maxRetries: 0,
-          timeout: providerRequestTimeoutMs
+          timeout: provider.type === 'anthropic_compatible' ? provider.options?.timeoutMs ?? providerRequestTimeoutMs : providerRequestTimeoutMs,
+          ...(provider.options?.defaultHeaders === undefined ? {} : { defaultHeaders: provider.options.defaultHeaders })
         }
       });
       warnIfAnthropicCacheControlConfigured(model);
@@ -645,7 +655,26 @@ export class LangChainModelFactory {
             'HTTP-Referer': 'https://github.com/roc-ai/roc',
             'X-OpenRouter-Title': 'Roc'
           }
-        : undefined;
+        : provider.type === 'openai_compatible'
+          ? provider.options?.defaultHeaders
+          : undefined;
+    const openAiRequestTimeoutMs =
+      provider.type === 'openai_compatible' ? provider.options?.timeoutMs ?? requestTimeoutMs : requestTimeoutMs;
+    const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(provider);
+    const openAiReasoning = resolveOpenAiCompatibleReasoning(provider);
+    const openAiOrganization =
+      provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
+    const openAiUseResponsesApi = provider.type === 'openai_compatible' ? provider.options?.useResponsesApi : undefined;
+    const openAiServiceTier = provider.type === 'openai_compatible' ? provider.options?.serviceTier : undefined;
+    const openAiVerbosity = provider.type === 'openai_compatible' ? provider.options?.verbosity : undefined;
+    const openAiZdrEnabled = provider.type === 'openai_compatible' ? provider.options?.zdrEnabled : undefined;
+    const openAiTopP = provider.type === 'llama_cpp' ? provider.options?.topP ?? llamaCppSamplingProfile?.topP : provider.options?.topP;
+    const openAiPresencePenalty =
+      provider.type === 'llama_cpp'
+        ? provider.options?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
+        : provider.options?.presencePenalty;
+    const openAiStop = provider.type === 'openai_compatible' ? provider.options?.stop : undefined;
+    const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? provider.options?.frequencyPenalty : undefined;
     const openAiConfiguration =
       provider.type === 'llama_cpp' && apiKey.length === 0
         ? {
@@ -656,6 +685,7 @@ export class LangChainModelFactory {
         : {
             baseURL: baseUrl,
             maxRetries: 0,
+            ...(openAiOrganization.length === 0 ? {} : { organization: openAiOrganization }),
             ...(defaultHeaders === undefined ? {} : { defaultHeaders })
           };
     const OpenAiChatModelClass = provider.type === 'llama_cpp' ? LlamaCppCompatibleChatOpenAI : ReasoningAwareChatOpenAI;
@@ -666,14 +696,18 @@ export class LangChainModelFactory {
       streamUsage: resolveStreamUsage(provider, streaming),
       maxRetries: 0,
       temperature,
-      topP: provider.type === 'llama_cpp' ? provider.options?.topP ?? llamaCppSamplingProfile?.topP : undefined,
-      presencePenalty:
-        provider.type === 'llama_cpp'
-          ? provider.options?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
-          : undefined,
+      topP: openAiTopP,
+      presencePenalty: openAiPresencePenalty,
+      frequencyPenalty: openAiFrequencyPenalty,
+      stop: openAiStop,
       maxTokens,
-      timeout: requestTimeoutMs,
+      timeout: openAiRequestTimeoutMs,
       configuration: openAiConfiguration,
+      ...(openAiUseResponsesApi === undefined ? {} : { useResponsesApi: openAiUseResponsesApi }),
+      ...(openAiReasoning === undefined ? {} : { reasoning: openAiReasoning }),
+      ...(openAiServiceTier === undefined ? {} : { service_tier: openAiServiceTier }),
+      ...(openAiVerbosity === undefined ? {} : { verbosity: openAiVerbosity }),
+      ...(openAiZdrEnabled === undefined ? {} : { zdrEnabled: openAiZdrEnabled }),
       modelKwargs
     };
     const chatModel =
@@ -682,6 +716,7 @@ export class LangChainModelFactory {
         : streaming
           ? new OpenAiChatModelClass(chatModelFields)
           : new ChatOpenAI(chatModelFields);
+    applyOpenAiCompatibleDefaultOptions(chatModel, openAiDefaultOptions);
 
     return {
       provider,
@@ -1082,7 +1117,103 @@ function resolveStreamUsage(provider: ProviderConfig, streaming: boolean): boole
   if (provider.type === 'nvidia') {
     return provider.options?.streamUsage ?? true;
   }
+  if (provider.type === 'openai_compatible' || provider.type === 'anthropic_compatible') {
+    return provider.options?.streamUsage;
+  }
   return undefined;
+}
+
+function resolveAnthropicThinking(
+  options: ProviderConfig['options']
+): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {
+  if (options?.anthropicThinking === undefined) {
+    return undefined;
+  }
+  if (options.anthropicThinking.mode === 'disabled') {
+    return {
+      type: 'disabled'
+    };
+  }
+  if (options.anthropicThinking.mode === 'adaptive') {
+    return {
+      type: 'adaptive'
+    };
+  }
+  if (options.anthropicThinking.mode === 'enabled') {
+    if (
+      !Number.isInteger(options.anthropicThinking.budgetTokens) ||
+      options.anthropicThinking.budgetTokens < anthropicThinkingMinBudgetTokens
+    ) {
+      throw new RocDomainError({
+        code: 'provider_invalid',
+        message: `Anthropic thinking budget tokens 必须大于等于 ${anthropicThinkingMinBudgetTokens}。`,
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页将 Anthropic thinking budget tokens 调整到官方下限以上。'
+      });
+    }
+    if (
+      typeof options.maxTokens === 'number' &&
+      options.anthropicThinking.budgetTokens >= options.maxTokens
+    ) {
+      throw new RocDomainError({
+        code: 'provider_invalid',
+        message: 'Anthropic thinking budget tokens 必须小于 Max tokens。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页调大 Max tokens，或调小 Anthropic thinking budget tokens。'
+      });
+    }
+    return {
+      type: 'enabled',
+      budget_tokens: options.anthropicThinking.budgetTokens
+    };
+  }
+  return undefined;
+}
+
+function resolveOpenAiCompatibleDefaultOptions(
+  provider: ProviderConfig
+): Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean } {
+  if (provider.type !== 'openai_compatible') {
+    return {};
+  }
+  const defaults: Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean } = {};
+  if (typeof provider.options?.seed === 'number') {
+    defaults.seed = provider.options.seed;
+  }
+  if (typeof provider.options?.parallelToolCalls === 'boolean') {
+    defaults.parallel_tool_calls = provider.options.parallelToolCalls;
+  }
+  if (provider.options?.verbosity !== undefined) {
+    defaults.verbosity = provider.options.verbosity;
+  }
+  return defaults;
+}
+
+function resolveOpenAiCompatibleReasoning(
+  provider: ProviderConfig
+): NonNullable<NonNullable<ProviderConfig['options']>['reasoning']> | undefined {
+  if (provider.type !== 'openai_compatible' || provider.options?.reasoning === undefined) {
+    return undefined;
+  }
+  return provider.options.reasoning;
+}
+
+function applyOpenAiCompatibleDefaultOptions(
+  model: BaseChatModel,
+  defaults: Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean }
+): void {
+  if (Object.keys(defaults).length === 0) {
+    return;
+  }
+  const target = model as BaseChatModel & {
+    defaultOptions?: Record<string, unknown>;
+  };
+  target.defaultOptions = {
+    ...(target.defaultOptions ?? {}),
+    ...defaults
+  };
 }
 
 function rebuildResultWithReasoningContent(result: ChatResult): ChatResult {
