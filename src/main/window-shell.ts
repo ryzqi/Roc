@@ -34,7 +34,7 @@ export function buildMainWindowOptions(
     autoHideMenuBar: true,
     backgroundColor: '#f7f8f5',
     backgroundMaterial: 'mica',
-    title: 'Roc Windows Super Assistant',
+    title: 'Roc',
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

@@ -1,7 +1,7 @@
 {
-  "name": "roc-windows-super-assistant",
+  "name": "roc",
   "version": "0.1.0",
-  "description": "Roc Windows local desktop assistant",
+  "description": "Roc",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {

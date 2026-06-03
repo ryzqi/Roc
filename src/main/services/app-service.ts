@@ -149,7 +149,7 @@ export class AppService {
     const settings = this.configService.getSettings();
 
     return {
-      appName: 'Roc Windows Super Assistant',
+      appName: 'Roc',
       version: this.runtimeEnvironment.version,
       mode: this.detectMode(),
       startedAt: this.startedAt,

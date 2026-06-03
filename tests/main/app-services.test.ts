@@ -127,6 +127,7 @@ describe('Roc foundation services', () => {
     const { root, services } = context;
     const status = services.appService.getStatus();
 
+    expect(status.appName).toBe('Roc');
     expect(status.workspace).toEqual({
       selectedPath: null,
       label: '未选择工作区'

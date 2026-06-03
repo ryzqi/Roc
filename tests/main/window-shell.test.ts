@@ -10,6 +10,7 @@ describe('immersive window shell', () => {
   it('builds a frameless window with hidden system menu bar', () => {
     const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs');
 
+    expect(options.title).toBe('Roc');
     expect(options.frame).toBe(false);
     expect(options.autoHideMenuBar).toBe(true);
     expect(options.show).toBe(false);
