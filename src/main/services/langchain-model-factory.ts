@@ -14,7 +14,7 @@ import {
 } from '@langchain/core/messages';
 import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 import type { Runnable } from '@langchain/core/runnables';
-import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
 import {
   ChatOpenAI,
   ChatOpenAICompletions,
@@ -58,6 +58,7 @@ type CreateModelOptions = {
 };
 
 type JsonObject = Record<string, unknown>;
+type AnthropicClientOptions = NonNullable<ChatAnthropicInput['clientOptions']>;
 
 const openAiNoAuthPlaceholderKey = 'roc-no-auth';
 const llamaCppProviderRequestTimeoutMs = 600_000;
@@ -541,6 +542,18 @@ export class LangChainModelFactory {
 
   resolveCheapModelHandle(activeHandle: LangChainChatModelHandle): LangChainChatModelHandle {
     return activeHandle;
+  }
+
+  private buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): AnthropicClientOptions {
+    const providerTimeoutMs = provider.options?.timeoutMs;
+    const clientOptions: AnthropicClientOptions = {
+      maxRetries: 0,
+      timeout: providerTimeoutMs === undefined ? timeoutMs : providerTimeoutMs
+    };
+    if (provider.options?.defaultHeaders !== undefined) {
+      clientOptions.defaultHeaders = provider.options.defaultHeaders;
+    }
+    return clientOptions;
   }
 
   async createModelForProvider(

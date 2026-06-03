@@ -47,6 +47,78 @@ describe('LangChainModelFactory', () => {
     });
   });
 
+  describe('buildAnthropicClientOptions', () => {
+    it('uses provider timeout when configured', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): {
+          timeout?: number;
+          maxRetries?: number;
+        };
+      };
+      const provider = {
+        type: 'anthropic_compatible',
+        options: {
+          timeoutMs: 30_000
+        }
+      } as ProviderConfig;
+
+      const result = factory.buildAnthropicClientOptions(provider, 60_000);
+
+      expect(result.timeout).toBe(30_000);
+      expect(result.maxRetries).toBe(0);
+    });
+
+    it('uses the default timeout when provider timeout is not configured', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): {
+          timeout?: number;
+        };
+      };
+      const provider = {
+        type: 'anthropic_compatible',
+        options: {}
+      } as ProviderConfig;
+
+      const result = factory.buildAnthropicClientOptions(provider, 60_000);
+
+      expect(result.timeout).toBe(60_000);
+    });
+
+    it('includes default headers when configured', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): {
+          defaultHeaders?: Record<string, string>;
+        };
+      };
+      const provider = {
+        type: 'anthropic_compatible',
+        options: {
+          defaultHeaders: { 'X-Custom': 'value' }
+        }
+      } as ProviderConfig;
+
+      const result = factory.buildAnthropicClientOptions(provider, 60_000);
+
+      expect(result.defaultHeaders).toEqual({ 'X-Custom': 'value' });
+    });
+
+    it('omits default headers when they are not configured', () => {
+      const factory = new LangChainModelFactory(services.configService, services.secretService) as unknown as {
+        buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): {
+          defaultHeaders?: Record<string, string>;
+        };
+      };
+      const provider = {
+        type: 'anthropic_compatible',
+        options: {}
+      } as ProviderConfig;
+
+      const result = factory.buildAnthropicClientOptions(provider, 60_000);
+
+      expect(result.defaultHeaders).toBeUndefined();
+    });
+  });
+
   it('builds a fixed NVIDIA ChatOpenAI model with thinking kwargs', async () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
