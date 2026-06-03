@@ -60,7 +60,7 @@ describe('LangChainModelFactory', () => {
         options: {
           timeoutMs: 30_000
         }
-      } as ProviderConfig;
+      } as unknown as ProviderConfig;
 
       const result = factory.buildAnthropicClientOptions(provider, 60_000);
 
@@ -77,7 +77,7 @@ describe('LangChainModelFactory', () => {
       const provider = {
         type: 'anthropic_compatible',
         options: {}
-      } as ProviderConfig;
+      } as unknown as ProviderConfig;
 
       const result = factory.buildAnthropicClientOptions(provider, 60_000);
 
@@ -95,7 +95,7 @@ describe('LangChainModelFactory', () => {
         options: {
           defaultHeaders: { 'X-Custom': 'value' }
         }
-      } as ProviderConfig;
+      } as unknown as ProviderConfig;
 
       const result = factory.buildAnthropicClientOptions(provider, 60_000);
 
@@ -111,7 +111,7 @@ describe('LangChainModelFactory', () => {
       const provider = {
         type: 'anthropic_compatible',
         options: {}
-      } as ProviderConfig;
+      } as unknown as ProviderConfig;
 
       const result = factory.buildAnthropicClientOptions(provider, 60_000);
 

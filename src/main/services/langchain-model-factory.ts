@@ -586,6 +586,49 @@ export class LangChainModelFactory {
     }
   }
 
+  private createAnthropicModel(
+    provider: ProviderConfig,
+    modelId: string,
+    apiKey: string,
+    options: {
+      streaming: boolean;
+      contextBudgetTokens: number;
+      requestTimeoutMs: number;
+    }
+  ): LangChainChatModelHandle {
+    const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
+    const providerOptions = provider.options === undefined ? {} : provider.options;
+    const config: ChatAnthropicInput = {
+      model: modelId,
+      apiKey,
+      anthropicApiUrl: baseUrl,
+      streaming: options.streaming,
+      maxRetries: 0,
+      streamUsage: resolveStreamUsage(provider, options.streaming),
+      clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
+    };
+    this.applyAnthropicSamplingParams(config, providerOptions);
+    const thinking = resolveAnthropicThinking(providerOptions);
+    if (thinking !== undefined) {
+      config.thinking = thinking;
+    }
+    this.applyAnthropicPhase1Features(config, providerOptions);
+    const model = new ChatAnthropic(config);
+    warnIfAnthropicCacheControlConfigured(model);
+    return {
+      provider,
+      modelId,
+      runtime: {
+        providerType: provider.type,
+        baseUrl,
+        streaming: options.streaming,
+        modelKwargs: {},
+        contextBudgetTokens: options.contextBudgetTokens
+      },
+      model
+    };
+  }
+
   async createModelForProvider(
     provider: ProviderConfig,
     modelId: string,
@@ -626,43 +669,11 @@ export class LangChainModelFactory {
     const contextBudgetTokens = provider.options?.contextBudgetTokens ?? 8192;
 
     if (provider.type === 'anthropic_compatible') {
-      const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
-      const model = new ChatAnthropic({
-        model: modelId,
-        apiKey,
-        anthropicApiUrl: baseUrl,
+      return this.createAnthropicModel(provider, modelId, apiKey, {
         streaming,
-        maxRetries: 0,
-        temperature,
-        maxTokens,
-        topP: provider.options?.topP,
-        topK: provider.options?.topK,
-        stopSequences: provider.options?.stop,
-        streamUsage: resolveStreamUsage(provider, streaming),
-        ...(resolveAnthropicThinking(provider.options) === undefined
-          ? {}
-          : {
-              thinking: resolveAnthropicThinking(provider.options)
-            }),
-        clientOptions: {
-          maxRetries: 0,
-          timeout: provider.type === 'anthropic_compatible' ? provider.options?.timeoutMs ?? providerRequestTimeoutMs : providerRequestTimeoutMs,
-          ...(provider.options?.defaultHeaders === undefined ? {} : { defaultHeaders: provider.options.defaultHeaders })
-        }
+        contextBudgetTokens,
+        requestTimeoutMs
       });
-      warnIfAnthropicCacheControlConfigured(model);
-      return {
-        provider,
-        modelId,
-        runtime: {
-          providerType: provider.type,
-          baseUrl,
-          streaming,
-          modelKwargs: {},
-          contextBudgetTokens
-        },
-        model
-      };
     }
 
     if (
