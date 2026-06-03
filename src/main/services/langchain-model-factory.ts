@@ -1123,6 +1123,16 @@ function resolveStreamUsage(provider: ProviderConfig, streaming: boolean): boole
   return undefined;
 }
 
+export function resolveAnthropicBetas(betas: string[]): string[] {
+  const validBetas: string[] = [];
+  for (const beta of betas) {
+    if (beta.trim().length > 0) {
+      validBetas.push(beta);
+    }
+  }
+  return validBetas;
+}
+
 function resolveAnthropicThinking(
   options: ProviderConfig['options']
 ): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {

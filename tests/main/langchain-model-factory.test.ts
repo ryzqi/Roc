@@ -9,7 +9,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
-import { LangChainModelFactory } from '../../src/main/services/langchain-model-factory';
+import { LangChainModelFactory, resolveAnthropicBetas } from '../../src/main/services/langchain-model-factory';
 import type { ProviderConfig } from '../../src/shared/types';
 
 let root: string;
@@ -27,6 +27,26 @@ afterEach(() => {
 });
 
 describe('LangChainModelFactory', () => {
+  describe('resolveAnthropicBetas', () => {
+    it('filters empty beta strings', () => {
+      expect(resolveAnthropicBetas(['valid-beta', '', 'another-valid'])).toEqual(['valid-beta', 'another-valid']);
+    });
+
+    it('filters whitespace-only beta strings', () => {
+      expect(resolveAnthropicBetas(['valid', '  ', '\t', 'also-valid'])).toEqual(['valid', 'also-valid']);
+    });
+
+    it('returns an empty array for an empty array', () => {
+      expect(resolveAnthropicBetas([])).toEqual([]);
+    });
+
+    it('keeps all valid beta strings', () => {
+      const betas = ['prompt-caching-2024-07-31', 'pdfs-2024-09-25'];
+
+      expect(resolveAnthropicBetas(betas)).toEqual(betas);
+    });
+  });
+
   it('builds a fixed NVIDIA ChatOpenAI model with thinking kwargs', async () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
