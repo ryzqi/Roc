@@ -1024,6 +1024,185 @@ describe('LangChainModelFactory', () => {
     });
   });
 
+  it('maps Anthropic invocationKwargs into ChatAnthropic configuration', async () => {
+    services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-6',
+      providers: [
+        {
+          id: 'anthropic-phase1',
+          name: 'Anthropic Phase 1',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-phase1',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-6',
+              displayName: 'Claude Sonnet 4.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            maxTokens: 1000,
+            invocationKwargs: {
+              metadata: { user_id: 'test-user', session_id: 'test-session' }
+            }
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as { invocationKwargs?: unknown; maxTokens?: number })).toMatchObject({
+      invocationKwargs: {
+        metadata: { user_id: 'test-user', session_id: 'test-session' }
+      },
+      maxTokens: 1000
+    });
+  });
+
+  it('maps Anthropic betas into ChatAnthropic configuration', async () => {
+    services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-6',
+      providers: [
+        {
+          id: 'anthropic-phase1',
+          name: 'Anthropic Phase 1',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-phase1',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-6',
+              displayName: 'Claude Sonnet 4.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            anthropicBetas: ['prompt-caching-2024-07-31', '', 'pdfs-2024-09-25']
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as { betas?: string[] }).betas).toEqual(['prompt-caching-2024-07-31', 'pdfs-2024-09-25']);
+  });
+
+  it('keeps Anthropic-compatible behavior unchanged without phase 1 fields', async () => {
+    services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-sonnet-4-6',
+      providers: [
+        {
+          id: 'anthropic-phase1',
+          name: 'Anthropic Phase 1',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-phase1',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-sonnet-4-6',
+              displayName: 'Claude Sonnet 4.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            temperature: 0.7,
+            maxTokens: 2000
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as {
+      temperature?: number;
+      maxTokens?: number;
+      betas?: string[];
+      invocationKwargs?: Record<string, unknown>;
+    })).toMatchObject({
+      temperature: 0.7,
+      maxTokens: 2000,
+      invocationKwargs: {}
+    });
+    expect((result.model as { betas?: string[] }).betas).toBeUndefined();
+  });
+
+  it('maps combined Anthropic phase 1 and thinking options into ChatAnthropic configuration', async () => {
+    services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'claude-opus-4-6',
+      providers: [
+        {
+          id: 'anthropic-phase1',
+          name: 'Anthropic Phase 1',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-phase1',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-opus-4-6',
+              displayName: 'Claude Opus 4.6',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            temperature: 0.8,
+            maxTokens: 4000,
+            anthropicBetas: ['prompt-caching-2024-07-31'],
+            anthropicThinking: { mode: 'adaptive' },
+            invocationKwargs: {
+              metadata: { app_version: '1.0.0' }
+            }
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect((result.model as {
+      temperature?: number;
+      maxTokens?: number;
+      thinking?: unknown;
+      betas?: string[];
+      invocationKwargs?: unknown;
+    })).toMatchObject({
+      temperature: 0.8,
+      maxTokens: 4000,
+      thinking: { type: 'adaptive' },
+      betas: ['prompt-caching-2024-07-31'],
+      invocationKwargs: {
+        metadata: { app_version: '1.0.0' }
+      }
+    });
+  });
+
   it('maps explicit OpenAI-compatible reasoning none into OpenAI reasoning requests', async () => {
     services.secretService.setProviderSecret('openai-reasoning-none', 'sk-openai-test');
     services.configService.saveProviders({
