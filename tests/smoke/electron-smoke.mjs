@@ -2212,6 +2212,20 @@ try {
     controlBlock.style.marginTop = '';
     return result;
   });
+  const sidebarSettingsReachable =
+    sidebarScrollEvidenceBefore.sidebarExists &&
+    sidebarScrollEvidenceBefore.controlBlockExists &&
+    sidebarScrollEvidenceBefore.settingsExists &&
+    sidebarScrollEvidenceBefore.probeApplied &&
+    sidebarScrollEvidenceAfter.probeApplied &&
+    (sidebarScrollEvidenceBefore.settingsVisible ||
+      (typeof sidebarScrollEvidenceBefore.clientHeight === 'number' &&
+        typeof sidebarScrollEvidenceBefore.scrollHeight === 'number' &&
+        sidebarScrollEvidenceBefore.scrollHeight > sidebarScrollEvidenceBefore.clientHeight &&
+        typeof sidebarScrollEvidenceBefore.scrollTop === 'number' &&
+        typeof sidebarScrollEvidenceAfter.scrollTop === 'number' &&
+        sidebarScrollEvidenceAfter.scrollTop > sidebarScrollEvidenceBefore.scrollTop &&
+        sidebarScrollEvidenceAfter.settingsVisible));
   const buttonInteractionEvidence = {
     chatTopbarActionsGrouped: false,
     chatSidebarToggleVisible: false,
@@ -2866,19 +2880,7 @@ try {
       workspaceSelectButtonEvidence.clickable &&
       workspaceSelectButtonEvidence.visibleInViewport &&
       workspaceSelectButtonEvidence.text.includes('选择'),
-    sidebarScrollableToSettings:
-      sidebarScrollEvidenceBefore.sidebarExists &&
-      sidebarScrollEvidenceBefore.controlBlockExists &&
-      sidebarScrollEvidenceBefore.settingsExists &&
-      sidebarScrollEvidenceBefore.probeApplied &&
-      sidebarScrollEvidenceAfter.probeApplied &&
-      typeof sidebarScrollEvidenceBefore.clientHeight === 'number' &&
-      typeof sidebarScrollEvidenceBefore.scrollHeight === 'number' &&
-      sidebarScrollEvidenceBefore.scrollHeight > sidebarScrollEvidenceBefore.clientHeight &&
-      typeof sidebarScrollEvidenceBefore.scrollTop === 'number' &&
-      typeof sidebarScrollEvidenceAfter.scrollTop === 'number' &&
-      sidebarScrollEvidenceAfter.scrollTop > sidebarScrollEvidenceBefore.scrollTop &&
-      sidebarScrollEvidenceAfter.settingsVisible,
+    sidebarScrollableToSettings: sidebarSettingsReachable,
     workspaceDialogApiExposed: boundary.workspaceKeys.includes('selectFromDialog'),
     chatCapabilitySelectionVisible:
       chatCapabilityEvidence.toolTriggerClass.includes('active') &&
@@ -3218,6 +3220,8 @@ try {
     evidence: {
       chatInputEvidence,
       workspaceSelectButtonEvidence,
+      sidebarScrollEvidenceBefore,
+      sidebarScrollEvidenceAfter,
       buttonInteractionEvidence,
       historySidebarEvidence,
       memoryStatusApiEvidence,

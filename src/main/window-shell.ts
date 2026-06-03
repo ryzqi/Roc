@@ -1,4 +1,5 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
+import { CHAT_WINDOW_MIN_WIDTH } from '../shared/chat-layout';
 import type { WindowBoundsSnapshot, WindowStateSnapshot } from '../shared/types';
 
 type DisplayLike = {
@@ -13,7 +14,7 @@ const defaultMainWindowBounds: WindowBoundsSnapshot = {
 };
 
 const minMainWindowSize = {
-  width: 920,
+  width: CHAT_WINDOW_MIN_WIDTH,
   height: 640
 };
 

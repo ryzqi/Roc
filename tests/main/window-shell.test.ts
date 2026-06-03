@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHAT_WINDOW_MIN_WIDTH } from '../../src/shared/chat-layout';
 import {
   buildMainWindowOptions,
   getWindowBounds,
@@ -52,7 +53,8 @@ describe('immersive window shell', () => {
     expect(options.y).toBe(0);
     expect(options.width).toBe(1280);
     expect(options.height).toBe(720);
-    expect(options.minWidth).toBeLessThanOrEqual(920);
+    expect(options.minWidth).toBe(CHAT_WINDOW_MIN_WIDTH);
+    expect(options.minWidth).toBeGreaterThan(1180);
     expect(options.minHeight).toBeLessThanOrEqual(640);
   });
 

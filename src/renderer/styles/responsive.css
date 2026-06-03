@@ -3,12 +3,12 @@
     max-width: 100%;
   }
 
-  .workspace {
+  .workspace:not(.workspace--chat) {
     grid-template-columns: 220px minmax(0, 1fr);
     padding-right: 14px;
   }
 
-  .sidebar-block-scroll {
+  .workspace:not(.workspace--chat) .sidebar-block-scroll {
     overflow: visible;
   }
 
@@ -22,18 +22,7 @@
     grid-template-rows: minmax(0, 1fr) minmax(300px, 44vh);
   }
 
-  .workspace-shell--chat {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto minmax(300px, 44vh);
-  }
-
-  .workspace-shell--chat-collapsed {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-
-  .workspace-main,
-  .workspace-main--chat {
+  .workspace-shell:not(.workspace-shell--chat):not(.workspace-shell--chat-collapsed) .workspace-main {
     padding: 10px 12px 0;
   }
 
@@ -50,65 +39,28 @@
     justify-content: flex-start;
   }
 
-  .rail-overlay {
-    position: relative;
-    right: auto;
-    bottom: auto;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 0 0;
-  }
-
-  .rail,
-  .rail--chat {
-    width: auto;
-    max-width: 100%;
-    flex-direction: row;
-    padding: 6px;
-    border-radius: 16px;
-  }
-
-  .composer--chat {
-    box-sizing: border-box;
-    width: 100%;
-  }
-
-  .composer--chat .composer-bottom {
-    min-width: 0;
-  }
-
-  .composer-left {
-    min-width: 0;
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-  }
-
-  .composer-right {
-    flex: 0 0 auto;
-  }
-
-  .workbench {
+  .workspace-shell--with-workbench .workbench {
     min-height: 0;
     border-left: 0;
     border-top: 1px solid rgba(220, 227, 237, 0.94);
   }
 
-  .workbench-resize-handle {
+  .workspace-shell--with-workbench .workbench-resize-handle {
     display: none;
   }
 
-  .workbench-files {
+  .workspace-shell--with-workbench .workbench-files {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(100px, 0.46fr) 0 minmax(100px, 0.54fr);
   }
 
-  .workbench-file-splitter {
+  .workspace-shell--with-workbench .workbench-file-splitter {
     min-height: 0;
     cursor: default;
     pointer-events: none;
   }
 
-  .workbench-file-splitter::after {
+  .workspace-shell--with-workbench .workbench-file-splitter::after {
     display: none;
   }
 
@@ -148,7 +100,7 @@
 }
 
 @media (max-width: 760px) {
-  .workspace {
+  .workspace:not(.workspace--chat) {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
     padding: 0 12px 14px;
@@ -159,29 +111,14 @@
     height: 100%;
   }
 
-  .workspace-shell--chat {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto minmax(240px, 40vh);
-  }
-
-  .workspace-shell--chat-collapsed {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-
-  .workspace-main--chat {
-    min-height: 0;
-    padding: 8px 0 0;
-  }
-
-  .sidebar {
+  .workspace:not(.workspace--chat) .sidebar {
     max-height: 172px;
     padding: 10px 0 12px;
     border-right: 0;
     border-bottom: 1px solid rgba(223, 230, 239, 0.92);
   }
 
-  .canvas-scroll {
+  .workspace:not(.workspace--chat) .canvas-scroll {
     padding-right: 0;
   }
 
@@ -191,47 +128,13 @@
     gap: 10px;
   }
 
-  .rail-overlay {
-    align-items: center;
-    justify-content: center;
-    padding: 8px 0 0;
-  }
-
-  .rail,
-  .rail--chat {
-    width: auto;
-    max-width: 100%;
-    flex-direction: row;
-    padding: 6px;
-    border-radius: 16px;
-  }
-
-  .composer--chat {
-    box-sizing: border-box;
-    width: 100%;
-  }
-
-  .composer--chat .composer-bottom {
-    min-width: 0;
-  }
-
-  .composer-left {
-    min-width: 0;
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-  }
-
-  .composer-right {
-    flex: 0 0 auto;
-  }
-
-  .workbench {
+  .workspace-shell--with-workbench .workbench {
     min-height: 0;
     border-left: 0;
     border-top: 1px solid rgba(220, 227, 237, 0.94);
   }
 
-  .workbench-resize-handle {
+  .workspace-shell--with-workbench .workbench-resize-handle {
     display: none;
   }
 

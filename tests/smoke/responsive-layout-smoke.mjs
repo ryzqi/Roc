@@ -102,64 +102,6 @@ const taskWorkbenchMarkup = `
   </div>
 `;
 
-const chatWorkbenchMarkup = `
-  <div class="app-shell" data-testid="roc-app">
-    <div class="window-workband"></div>
-    <div class="workspace workspace--chat">
-      <aside class="sidebar"></aside>
-      <div class="workspace-shell workspace-shell--chat-collapsed">
-        <main class="workspace-main workspace-main--chat" data-testid="active-view">
-          <section class="canvas canvas--chat">
-            <div class="canvas-scroll">
-              <section class="canvas-stage chat-stage" data-testid="chat-view">
-                <div class="chat-empty-plane">
-                  <div class="chat-page-shell">
-                    <div class="chat-feedback-shell chat-feedback-shell--empty">
-                      <div class="chat-feedback-stack">
-                        <div class="chat-empty-copy">
-                          <h1>Roc 本地工作台</h1>
-                          <p>问问 Roc 或交给它一个任务</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="chat-bottom-stack chat-bottom-stack--empty">
-                  <div class="composer composer--chat">
-                    <textarea class="composer-input" data-testid="chat-input" rows="3">测试输入</textarea>
-                    <div class="composer-bottom">
-                      <div class="composer-left">
-                        <button class="composer-tool" type="button" aria-label="上传文件"></button>
-                        <span class="composer-popover-anchor"><button class="composer-tool composer-tool--tools" type="button" aria-label="工具"></button></span>
-                        <span class="composer-popover-anchor"><button class="composer-tool composer-tool--skills" type="button" aria-label="技能"></button></span>
-                        <span class="composer-popover-anchor">
-                          <button class="model-pill model-pill--composer" type="button" aria-label="模型">
-                            <span class="model-pill-copy">Smoke Model With Long Label</span>
-                          </button>
-                        </span>
-                      </div>
-                      <div class="composer-right">
-                        <button class="send-button" data-testid="chat-task-submit" type="button" aria-label="发送"></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </section>
-        </main>
-        <aside class="rail-overlay rail-overlay--chat">
-          <div class="rail rail--chat">
-            <button class="rail-button" type="button" aria-label="文件"></button>
-            <button class="rail-button" type="button" aria-label="Git"></button>
-            <button class="rail-button" type="button" aria-label="终端"></button>
-          </div>
-        </aside>
-      </div>
-    </div>
-  </div>
-`;
-
 const workbenchMarkup = `
   <aside class="workbench" data-testid="workbench-panel">
     <div class="workbench-bar">
@@ -192,9 +134,81 @@ const workbenchMarkup = `
   </aside>
 `;
 
-const chatOpenWorkbenchMarkup = chatWorkbenchMarkup
-  .replace('workspace-shell workspace-shell--chat-collapsed', 'workspace-shell workspace-shell--chat')
-  .replace('      </div>\n    </div>\n  </div>', `        ${workbenchMarkup}\n      </div>\n    </div>\n  </div>`);
+const chatWorkspaceBaseWidth = 1032;
+
+function resolveChatScale(viewportWidth) {
+  const expandedSidebarShellWidth = viewportWidth - 248 - 40;
+  return Math.min(1, expandedSidebarShellWidth / chatWorkspaceBaseWidth);
+}
+
+function buildChatWorkbenchMarkup({ scale, scaleActive = true, workbenchOpen = false }) {
+  const shellClass = workbenchOpen ? 'workspace-shell workspace-shell--chat' : 'workspace-shell workspace-shell--chat-collapsed';
+  const workbenchSection = workbenchOpen ? workbenchMarkup : '';
+  const chatScaleActive = scaleActive ? 'true' : 'false';
+
+  return `
+  <div class="app-shell" data-testid="roc-app">
+    <div class="window-workband"></div>
+    <div class="workspace workspace--chat">
+      <aside class="sidebar"></aside>
+      <div class="chat-workspace-scale-host" data-chat-scale-active="${chatScaleActive}" style="--chat-workspace-scale:${scale}; --chat-workspace-base-width:${chatWorkspaceBaseWidth}px;">
+        <div class="chat-workspace-scale-frame">
+          <div class="${shellClass}">
+            <main class="workspace-main workspace-main--chat" data-testid="active-view">
+              <section class="canvas canvas--chat">
+                <div class="canvas-scroll">
+                  <section class="canvas-stage chat-stage" data-testid="chat-view">
+                    <div class="chat-empty-plane">
+                      <div class="chat-page-shell">
+                        <div class="chat-feedback-shell chat-feedback-shell--empty">
+                          <div class="chat-feedback-stack">
+                            <div class="chat-empty-copy">
+                              <h1>Roc 本地工作台</h1>
+                              <p>问问 Roc 或交给它一个任务</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="chat-bottom-stack chat-bottom-stack--empty">
+                      <div class="composer composer--chat">
+                        <textarea class="composer-input" data-testid="chat-input" rows="3">测试输入</textarea>
+                        <div class="composer-bottom">
+                          <div class="composer-left">
+                            <button class="composer-tool" type="button" aria-label="上传文件"></button>
+                            <span class="composer-popover-anchor"><button class="composer-tool composer-tool--tools" type="button" aria-label="工具"></button></span>
+                            <span class="composer-popover-anchor"><button class="composer-tool composer-tool--skills" type="button" aria-label="技能"></button></span>
+                            <span class="composer-popover-anchor">
+                              <button class="model-pill model-pill--composer" type="button" aria-label="模型">
+                                <span class="model-pill-copy">Smoke Model With Long Label</span>
+                              </button>
+                            </span>
+                          </div>
+                          <div class="composer-right">
+                            <button class="send-button" data-testid="chat-task-submit" type="button" aria-label="发送"></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </section>
+            </main>
+            <aside class="rail-overlay rail-overlay--chat">
+              <div class="rail rail--chat">
+                <button class="rail-button" type="button" aria-label="文件"></button>
+                <button class="rail-button" type="button" aria-label="Git"></button>
+                <button class="rail-button" type="button" aria-label="终端"></button>
+              </div>
+            </aside>
+            ${workbenchSection}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+}
 
 function assertCondition(condition, message, evidence) {
   if (!condition) {
@@ -232,6 +246,7 @@ async function readBoxes(page, selectors) {
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
         flexDirection: style.flexDirection,
+        flexWrap: style.flexWrap,
         gridTemplateColumns: style.gridTemplateColumns
       };
     }
@@ -271,7 +286,9 @@ try {
   assertCondition(evidence.drawerSub.scrollWidth <= evidence.drawerSub.clientWidth + 1, 'Detail row subtext must wrap instead of overflowing', evidence);
   assertCondition(evidence.drawerPill.scrollWidth <= evidence.drawerPill.clientWidth + 1, 'Detail row pill must wrap or shrink inside the drawer', evidence);
 
-  await page.setContent(buildDocument(chatWorkbenchMarkup));
+  const narrowChatViewportWidth = 1160;
+  await page.setViewportSize({ width: narrowChatViewportWidth, height: 720 });
+  await page.setContent(buildDocument(buildChatWorkbenchMarkup({ scale: resolveChatScale(narrowChatViewportWidth) })));
   const chatEvidence = await readBoxes(page, [
     { key: 'workspace', selector: '.workspace' },
     { key: 'shell', selector: '.workspace-shell' },
@@ -288,16 +305,19 @@ try {
 
   assertCondition(chatEvidence.shell.bottom <= chatEvidence.windowHeight, 'Narrow chat shell must stay inside the viewport', chatEvidence);
   assertCondition(chatEvidence.composer.bottom <= chatEvidence.windowHeight, 'Narrow chat composer must stay inside the viewport', chatEvidence);
-  assertCondition(chatEvidence.input.width >= 520, 'Narrow chat input must keep full-width composition space', chatEvidence);
-  assertCondition(chatEvidence.rail.flexDirection === 'row', 'Narrow chat rail must become a horizontal toolbar', chatEvidence);
-  assertCondition(chatEvidence.rail.width > chatEvidence.rail.height, 'Narrow chat rail must not remain a vertical right toolbar', chatEvidence);
+  assertCondition(chatEvidence.input.width >= 560, 'Narrow chat input must stay usable after proportional scaling', chatEvidence);
+  assertCondition(chatEvidence.composerLeft.flexWrap === 'nowrap', 'Narrow chat composer controls must keep their desktop row positions while scaled', chatEvidence);
+  assertCondition(chatEvidence.rail.flexDirection === 'column', 'Narrow chat rail must remain a vertical right toolbar', chatEvidence);
+  assertCondition(chatEvidence.rail.height > chatEvidence.rail.width, 'Narrow chat rail must stay taller than it is wide', chatEvidence);
+  assertCondition(chatEvidence.railOverlay.left >= chatEvidence.main.right - 2, 'Narrow chat rail must stay to the right of the main chat column', chatEvidence);
+  assertCondition(chatEvidence.shell.gridTemplateColumns.trim().split(/\s+/).length === 2, 'Collapsed narrow chat shell must keep two columns instead of stacking', chatEvidence);
   assertCondition(chatEvidence.railOverlay.bottom <= chatEvidence.windowHeight, 'Narrow chat rail must stay inside the viewport', chatEvidence);
 
-  await page.setViewportSize({ width: 360, height: 640 });
-  const compactChatEvidence = await readBoxes(page, [
+  await page.setViewportSize({ width: narrowChatViewportWidth, height: 720 });
+  await page.setContent(buildDocument(buildChatWorkbenchMarkup({ scale: 1, scaleActive: false })));
+  const unscaledBreakpointEvidence = await readBoxes(page, [
     { key: 'shell', selector: '.workspace-shell' },
-    { key: 'composer', selector: '.composer' },
-    { key: 'input', selector: '[data-testid="chat-input"]' },
+    { key: 'main', selector: '.workspace-main' },
     { key: 'composerBottom', selector: '.composer-bottom' },
     { key: 'composerLeft', selector: '.composer-left' },
     { key: 'composerRight', selector: '.composer-right' },
@@ -305,22 +325,42 @@ try {
     { key: 'rail', selector: '.rail' }
   ]);
 
-  assertCondition(compactChatEvidence.shell.bottom <= compactChatEvidence.windowHeight, 'Compact chat shell must stay inside the viewport', compactChatEvidence);
-  assertCondition(compactChatEvidence.composer.bottom <= compactChatEvidence.windowHeight, 'Compact chat composer must stay inside the viewport', compactChatEvidence);
-  assertCondition(compactChatEvidence.input.width >= 300, 'Compact chat input must keep usable composition space', compactChatEvidence);
-  assertCondition(compactChatEvidence.composerBottom.scrollWidth <= compactChatEvidence.composerBottom.clientWidth + 1, 'Compact composer controls must wrap instead of overflowing', compactChatEvidence);
-  assertCondition(compactChatEvidence.rail.flexDirection === 'row', 'Compact chat rail must stay horizontal', compactChatEvidence);
-  assertCondition(compactChatEvidence.railOverlay.bottom <= compactChatEvidence.windowHeight, 'Compact chat rail must stay inside the viewport', compactChatEvidence);
+  assertCondition(
+    unscaledBreakpointEvidence.shell.gridTemplateColumns.trim().split(/\s+/).length === 2,
+    'Legacy breakpoint must not stack collapsed chat shell when scale is inactive',
+    unscaledBreakpointEvidence
+  );
+  assertCondition(
+    unscaledBreakpointEvidence.rail.flexDirection === 'column',
+    'Legacy breakpoint must not turn the chat rail into a horizontal toolbar',
+    unscaledBreakpointEvidence
+  );
+  assertCondition(
+    unscaledBreakpointEvidence.railOverlay.left >= unscaledBreakpointEvidence.main.right - 2,
+    'Legacy breakpoint must keep the chat rail to the right of the main column',
+    unscaledBreakpointEvidence
+  );
+  assertCondition(
+    unscaledBreakpointEvidence.composerLeft.flexWrap === 'nowrap',
+    'Legacy breakpoint must not let composer controls wrap away from their desktop positions',
+    unscaledBreakpointEvidence
+  );
+  assertCondition(
+    unscaledBreakpointEvidence.composerBottom.scrollWidth <= unscaledBreakpointEvidence.composerBottom.clientWidth + 1,
+    'Legacy breakpoint composer controls must stay inside the input footer row',
+    unscaledBreakpointEvidence
+  );
 
   const openWorkbenchResults = [];
-  for (const width of [920, 640]) {
-    await page.setViewportSize({ width, height: 640 });
-    await page.setContent(buildDocument(chatOpenWorkbenchMarkup));
+  for (const width of [1160]) {
+    await page.setViewportSize({ width, height: 720 });
+    await page.setContent(buildDocument(buildChatWorkbenchMarkup({ scale: resolveChatScale(width), workbenchOpen: true })));
     const openWorkbenchEvidence = await readBoxes(page, [
       { key: 'shell', selector: '.workspace-shell' },
       { key: 'main', selector: '.workspace-main' },
       { key: 'composer', selector: '.composer' },
       { key: 'input', selector: '[data-testid="chat-input"]' },
+      { key: 'composerLeft', selector: '.composer-left' },
       { key: 'railOverlay', selector: '.rail-overlay' },
       { key: 'rail', selector: '.rail' },
       { key: 'workbench', selector: '[data-testid="workbench-panel"]' },
@@ -331,13 +371,18 @@ try {
 
     assertCondition(openWorkbenchEvidence.shell.bottom <= openWorkbenchEvidence.windowHeight, 'Open workbench shell must stay inside the viewport', openWorkbenchEvidence);
     assertCondition(openWorkbenchEvidence.composer.bottom <= openWorkbenchEvidence.main.bottom, 'Open workbench composer must stay inside the chat main area', openWorkbenchEvidence);
-    assertCondition(openWorkbenchEvidence.input.width >= Math.min(520, width - 50), 'Open workbench input must keep usable width', openWorkbenchEvidence);
-    assertCondition(openWorkbenchEvidence.rail.flexDirection === 'row', 'Open workbench rail must be horizontal after shrink', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.input.width >= 300, 'Open workbench input must keep usable width after scaling', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.composerLeft.flexWrap === 'nowrap', 'Open workbench composer controls must keep their desktop row positions while scaled', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.rail.flexDirection === 'column', 'Open workbench rail must remain vertical after shrink', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.rail.height > openWorkbenchEvidence.rail.width, 'Open workbench rail must stay taller than it is wide', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.railOverlay.left >= openWorkbenchEvidence.main.right - 2, 'Open workbench rail must stay to the right of the main chat column', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.workbench.left >= openWorkbenchEvidence.railOverlay.right - 2, 'Open workbench panel must stay to the right of the rail', openWorkbenchEvidence);
+    assertCondition(openWorkbenchEvidence.shell.gridTemplateColumns.trim().split(/\s+/).length === 3, 'Open workbench shell must keep three columns instead of stacking', openWorkbenchEvidence);
     assertCondition(openWorkbenchEvidence.workbench.bottom <= openWorkbenchEvidence.windowHeight, 'Open workbench panel must stay inside the viewport', openWorkbenchEvidence);
     assertCondition(openWorkbenchEvidence.workbenchContent.height >= 100, 'Open workbench content pane must keep usable height', openWorkbenchEvidence);
   }
 
-  console.log(JSON.stringify({ task: evidence, chat: chatEvidence, compactChat: compactChatEvidence, openWorkbench: openWorkbenchResults }, null, 2));
+  console.log(JSON.stringify({ task: evidence, chat: chatEvidence, unscaledBreakpointChat: unscaledBreakpointEvidence, openWorkbench: openWorkbenchResults }, null, 2));
 } finally {
   await browser.close();
 }

@@ -11,6 +11,7 @@ import type {
   WindowStateSnapshot,
   Workspace
 } from '../shared/types';
+import { resolveChatWorkspaceScale } from '../shared/chat-layout';
 import {
   emptyMemoryData,
   emptyOperationsData,
@@ -116,6 +117,7 @@ export function App(): React.JSX.Element {
   const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const [taskSurfaceLoadState, setTaskSurfaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
   const workspaceRefreshSubscriptionRef = useRef<ReturnType<typeof createWorkspaceRefreshSubscription> | null>(null);
   const workspaceRefreshSnapshotRef = useRef({
     workspace: null as Workspace | null,
@@ -123,6 +125,7 @@ export function App(): React.JSX.Element {
     fileWorkbenchPdfRelativePath: null as string | null,
     gitSelectedPath: null as string | null
   });
+  const [chatWorkspaceHostWidth, setChatWorkspaceHostWidth] = useState(0);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
     const [taskSnapshot, taskSurfaceData] = await Promise.all([
@@ -568,6 +571,27 @@ export function App(): React.JSX.Element {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
 
+  useEffect(() => {
+    if (activeView !== 'chat') {
+      setChatWorkspaceHostWidth(0);
+      return;
+    }
+    const host = chatWorkspaceScaleHostRef.current;
+    if (host === null) {
+      return;
+    }
+    const syncWidth = () => {
+      const nextWidth = host.clientWidth;
+      setChatWorkspaceHostWidth((current) => (current === nextWidth ? current : nextWidth));
+    };
+    syncWidth();
+    const resizeObserver = new ResizeObserver(syncWidth);
+    resizeObserver.observe(host);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [activeView, chatSidebarCollapsed]);
+
   async function selectWorkspaceFromDialog(): Promise<void> {
     setWorkspaceSelectError(null);
     const selected = await window.roc.workspace.selectFromDialog();
@@ -624,6 +648,91 @@ export function App(): React.JSX.Element {
   const showChatSidebar = activeView !== 'chat' || !chatSidebarCollapsed;
   const workspaceNavItems = buildWorkspaceNavItems(state);
   const controlNavItems = buildControlNavItems(state);
+  const chatWorkspaceScale =
+    activeView !== 'chat'
+      ? { active: false, baseWidth: 0, scale: 1 }
+      : resolveChatWorkspaceScale({
+          availableWidth: chatWorkspaceHostWidth,
+          chatSidebarCollapsed
+        });
+  const chatWorkspaceScaleStyle =
+    activeView !== 'chat'
+      ? undefined
+      : ({
+          '--chat-workspace-scale': String(chatWorkspaceScale.scale),
+          '--chat-workspace-base-width': `${chatWorkspaceScale.baseWidth}px`
+        } as React.CSSProperties);
+  const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined;
+  const workspaceShellClassName =
+    activeView === 'chat'
+      ? hasWorkbench
+        ? 'workspace-shell workspace-shell--chat'
+        : 'workspace-shell workspace-shell--chat-collapsed'
+      : hasWorkbench
+        ? 'workspace-shell workspace-shell--with-workbench'
+        : 'workspace-shell';
+  const workspaceShellNode = (
+    <div style={workspaceShellStyle} className={workspaceShellClassName}>
+      <main className={activeView === 'chat' ? 'workspace-main workspace-main--chat' : 'workspace-main'} data-testid="active-view">
+        <section className={activeView === 'chat' ? 'canvas canvas--chat' : 'canvas'}>
+          <div className="canvas-scroll">
+            <ViewContent
+              activeView={activeView}
+              chatSelectionVersion={chatSelectionVersion}
+              liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
+              memoryLoadState={memoryLoadState}
+              onNavigateToTaskThread={navigateToTaskThread}
+              operationsLoadState={operationsLoadState}
+              onQueueTaskPrompt={queueTaskPrompt}
+              queuedTaskPrompt={queuedTaskPrompt}
+              onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
+              onSelectWorkspace={selectWorkspaceFromDialog}
+              onSubmitChatTask={startTaskRun}
+              onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
+              selectedThreadId={selectedThreadId}
+              state={state}
+              updateLoadedState={(partial) =>
+                setState((current) => (current === null ? current : { ...current, ...partial }))
+              }
+              workspaceLoadState={workspaceLoadState}
+            />
+          </div>
+        </section>
+      </main>
+
+      {activeView === 'chat' ? (
+        <RailOverlay
+          activeTool={activeWorkbenchTool}
+          activeView={activeView}
+          workbenchVisible={hasWorkbench}
+          onOpenToolView={(tool) => {
+            setActiveWorkbenchTool(tool);
+            setActiveView('chat');
+            setWorkbenchVisible(true);
+          }}
+        />
+      ) : null}
+      {hasWorkbench ? (
+        <Suspense fallback={<aside className="workbench" data-testid="workbench-panel" />}>
+          <WorkbenchPanel
+            activeTool={activeWorkbenchTool}
+            activeView={activeView}
+            onToolChange={setActiveWorkbenchTool}
+            onClose={() => {
+              setActiveView('chat');
+              setWorkbenchVisible(false);
+            }}
+            state={state}
+            updateWorkspaceData={updateWorkspaceData}
+            workspaceLoadState={workspaceLoadState}
+            width={workbenchWidth}
+            onWidthChange={setWorkbenchWidth}
+            windowState={windowState}
+          />
+        </Suspense>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className={state.appStatus.mode === 'smoke' ? 'app-shell app-shell--smoke' : 'app-shell'} data-testid="roc-app">
@@ -783,78 +892,18 @@ export function App(): React.JSX.Element {
             </div>
           </aside>
         ) : null}
-
-        <div
-          style={hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined}
-          className={
-            activeView === 'chat'
-              ? hasWorkbench
-                ? 'workspace-shell workspace-shell--chat'
-                : 'workspace-shell workspace-shell--chat-collapsed'
-              : hasWorkbench
-                ? 'workspace-shell workspace-shell--with-workbench'
-                : 'workspace-shell'
-          }
-        >
-          <main className={activeView === 'chat' ? 'workspace-main workspace-main--chat' : 'workspace-main'} data-testid="active-view">
-            <section className={activeView === 'chat' ? 'canvas canvas--chat' : 'canvas'}>
-              <div className="canvas-scroll">
-                <ViewContent
-                  activeView={activeView}
-                  chatSelectionVersion={chatSelectionVersion}
-                  liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
-                  memoryLoadState={memoryLoadState}
-                  onNavigateToTaskThread={navigateToTaskThread}
-                  operationsLoadState={operationsLoadState}
-                  onQueueTaskPrompt={queueTaskPrompt}
-                  queuedTaskPrompt={queuedTaskPrompt}
-                  onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
-                  onSelectWorkspace={selectWorkspaceFromDialog}
-                  onSubmitChatTask={startTaskRun}
-                  onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
-                  selectedThreadId={selectedThreadId}
-                  state={state}
-                  updateLoadedState={(partial) =>
-                    setState((current) => (current === null ? current : { ...current, ...partial }))
-                  }
-                  workspaceLoadState={workspaceLoadState}
-                />
-              </div>
-            </section>
-          </main>
-
-          {activeView === 'chat' ? (
-            <RailOverlay
-              activeTool={activeWorkbenchTool}
-              activeView={activeView}
-              workbenchVisible={hasWorkbench}
-              onOpenToolView={(tool) => {
-                setActiveWorkbenchTool(tool);
-                setActiveView('chat');
-                setWorkbenchVisible(true);
-              }}
-            />
-          ) : null}
-          {hasWorkbench ? (
-            <Suspense fallback={<aside className="workbench" data-testid="workbench-panel" />}>
-              <WorkbenchPanel
-                activeTool={activeWorkbenchTool}
-                activeView={activeView}
-                onToolChange={setActiveWorkbenchTool}
-                onClose={() => {
-                  setActiveView('chat');
-                  setWorkbenchVisible(false);
-                }}
-                state={state}
-                updateWorkspaceData={updateWorkspaceData}
-                workspaceLoadState={workspaceLoadState}
-                width={workbenchWidth}
-                onWidthChange={setWorkbenchWidth}
-                windowState={windowState}
-              />
-            </Suspense>
-          ) : null}
-        </div>
+        {activeView === 'chat' ? (
+          <div
+            className="chat-workspace-scale-host"
+            data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
+            ref={chatWorkspaceScaleHostRef}
+            style={chatWorkspaceScaleStyle}
+          >
+            <div className="chat-workspace-scale-frame">{workspaceShellNode}</div>
+          </div>
+        ) : (
+          workspaceShellNode
+        )}
       </div>
       {settingsOpen ? (
         <SettingsModal onClose={() => setSettingsOpen(false)}>
