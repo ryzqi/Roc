@@ -149,6 +149,24 @@ export type ProviderOptions = {
   endpointOverride?: string;
   contextBudgetTokens?: number;
   samplingProfileOverrides?: ProviderSamplingProfileOverrides;
+  /**
+   * 传递给 Anthropic API 的额外参数。
+   * 用于支持未来新增的 API 参数而无需修改类型定义。
+   */
+  invocationKwargs?: Record<string, unknown>;
+  /**
+   * Anthropic Beta 功能列表。
+   * 例如: ['prompt-caching-2024-07-31', 'pdfs-2024-09-25']。
+   */
+  anthropicBetas?: string[];
+  /**
+   * 自动缓存控制配置。
+   * @deprecated 这是 CallOptions，应在运行时传递而非构造参数。
+   */
+  anthropicCacheControl?: {
+    type: 'ephemeral';
+    ttl?: '5m' | '1h';
+  };
 };
 
 export type ProviderModel = {
