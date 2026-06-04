@@ -145,6 +145,7 @@ function extractRehearsalToolCalls(text: string, availableTools: readonly string
       }
     } catch {
       // ignore malformed rehearsal payloads
+      continue;
     }
   }
   return found;
@@ -216,6 +217,7 @@ function extractMistralBracketToolCalls(text: string, availableTools: readonly s
       }
     } catch {
       // ignore malformed mistral payloads
+      continue;
     }
   }
   return found;

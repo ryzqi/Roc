@@ -888,7 +888,20 @@ export class LangChainModelFactory {
         }
       } finally {
         // 收到非空文本即可，无需继续读取——主动 cancel 让上游断开。
-        await reader.cancel().catch(() => {});
+        try {
+          await reader.cancel();
+        } catch (cancelError) {
+          const error = cancelError instanceof Error ? cancelError : new Error(String(cancelError));
+          this.logService?.warn('NVIDIA probe response reader cancel failed.', {
+            service: 'langchain-model-factory',
+            component: 'probeNvidiaEndpoint',
+            error: {
+              code: 'reader_cancel_failed',
+              message: error.message,
+              stack: error.stack
+            }
+          });
+        }
       }
     } catch (error) {
       if (isAbortLikeError(error) && internalAbort.signal.aborted && options.signal?.aborted !== true) {
