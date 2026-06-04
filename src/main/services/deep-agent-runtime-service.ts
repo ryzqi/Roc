@@ -23,6 +23,7 @@ import type { LogService } from './log-service';
 import type { ConsolidatorService } from './memory/consolidator';
 import type { PrecompactionService } from './memory/precompaction';
 import type { MemoryService } from './memory-service';
+import type { MetricsService } from './metrics-service';
 import type { SessionArchiveService } from './memory/session-archive';
 import type { McpService } from './mcp-service';
 import type { PerformanceObserverService } from './performance-observer-service';
@@ -87,7 +88,8 @@ export class DeepAgentRuntimeService {
     private readonly paths: RocPaths,
     private readonly getMemorySettings: () => AppSettings['memory'],
     private readonly performanceObserverService: PerformanceObserverService,
-    private readonly logService: LogService
+    private readonly logService: LogService,
+    private readonly metricsService: MetricsService
   ) {
     void databaseService;
     this.store = new InMemoryStore();
@@ -141,6 +143,10 @@ export class DeepAgentRuntimeService {
     const threadId = request.mode === 'task' && taskRun !== null ? taskRun.threadId : prompt.resolveThreadId(request.threadId);
     const runId = request.mode === 'task' && taskRun !== null ? taskRun.id : `chat_${randomUUID()}`;
     const abortController = new AbortController();
+    this.metricsService.incrementCounter('agent.run.started', {
+      mode: request.mode,
+      providerId: modelHandle.provider.id
+    });
     const activeRun: ActiveRun = {
       abortController,
       createdAt,
@@ -460,6 +466,11 @@ export class DeepAgentRuntimeService {
           await Promise.allSettled(session.closers.map(async (close) => close()));
         }
       }, {
+        labels: {
+          mode: context.mode,
+          providerId: context.modelHandle.provider.id
+        },
+        metricsService: this.metricsService,
         signal: context.abortController.signal,
         shouldRetry: (error) => {
           const retryable = !attemptProducedVisibleOutput && isRetryableProviderRequestFailure(error);
@@ -938,6 +949,14 @@ export class DeepAgentRuntimeService {
       usage
     });
     this.logProviderUsage(context, usage);
+    this.metricsService.incrementCounter('agent.run.completed', {
+      mode: context.mode,
+      providerId: context.modelHandle.provider.id
+    });
+    this.metricsService.recordHistogram('agent.run.duration_ms', Date.now() - context.startedAtMs, {
+      mode: context.mode,
+      providerId: context.modelHandle.provider.id
+    });
     if (providerStartedAtMs !== null) {
       this.recordProviderTiming('provider_completed', context, providerStartedAtMs, retryCount, usage);
     }
@@ -966,6 +985,11 @@ export class DeepAgentRuntimeService {
   private failRun(context: RunExecutionContext, error: unknown): void {
     const failure = errorMapping.toRunFailure(error);
     const logError = toRedactedLogError(error, failure.message);
+    this.metricsService.incrementCounter('agent.run.failed', {
+      errorCode: failure.code,
+      mode: context.mode,
+      providerId: context.modelHandle.provider.id
+    });
     this.logService.error('Agent run failed.', logError, {
       service: 'deep-agent-runtime',
       component: 'failRun',

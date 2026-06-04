@@ -1,5 +1,6 @@
 import { ipcChannels } from '../../shared/ipc';
 import type { DiagnosticsService } from '../services/diagnostics-service';
+import type { MetricsService } from '../services/metrics-service';
 import type { TaskSchedulerService } from '../services/task-scheduler-service';
 import { wrapIpc } from '../services/errors';
 import type { TimedHandle } from './ipc-common';
@@ -7,7 +8,8 @@ import type { TimedHandle } from './ipc-common';
 export function registerDiagnosticsIpc(
   timedHandle: TimedHandle,
   diagnosticsService: DiagnosticsService,
-  taskSchedulerService: TaskSchedulerService
+  taskSchedulerService: TaskSchedulerService,
+  metricsService: MetricsService
 ): void {
   timedHandle(ipcChannels.diagnosticsSamplePerformance, (_event, request) =>
     wrapIpc(() => diagnosticsService.samplePerformance(request))
@@ -17,5 +19,8 @@ export function registerDiagnosticsIpc(
   );
   timedHandle(ipcChannels.diagnosticsRunChecks, () =>
     wrapIpc(() => diagnosticsService.runChecks(taskSchedulerService.getStatus()))
+  );
+  timedHandle(ipcChannels.diagnosticsGetMetricsSnapshot, (_event, filter) =>
+    wrapIpc(() => metricsService.getSnapshot(filter))
   );
 }

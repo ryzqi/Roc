@@ -48,6 +48,8 @@ import type {
   MemoryKind,
   MemoryScope,
   MemoryStatus,
+  MetricFilter,
+  MetricsSnapshot,
   SessionMessageEntry,
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
@@ -130,6 +132,7 @@ export const ipcChannels = {
   diagnosticsSamplePerformance: 'roc:diagnostics:sample-performance',
   diagnosticsCreatePackage: 'roc:diagnostics:create-package',
   diagnosticsRunChecks: 'roc:diagnostics:run-checks',
+  diagnosticsGetMetricsSnapshot: 'roc:diagnostics:get-metrics-snapshot',
   memoryStatus: 'roc:memory:status',
   memoryReadFile: 'roc:memory:read-file',
   memoryWriteFile: 'roc:memory:write-file',
@@ -234,6 +237,7 @@ export type RocPreloadApi = {
     samplePerformance: (request: PerformanceSampleRequest) => Promise<IpcResult<PerformanceSample>>;
     createDiagnosticPackage: (request: DiagnosticPackageRequest) => Promise<IpcResult<DiagnosticPackage>>;
     runChecks: () => Promise<IpcResult<DiagnosticCheck[]>>;
+    getMetricsSnapshot: (filter?: MetricFilter) => Promise<IpcResult<MetricsSnapshot>>;
   };
   memory: {
     status: () => Promise<IpcResult<MemoryStatus>>;

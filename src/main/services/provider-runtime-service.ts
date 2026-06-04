@@ -7,6 +7,7 @@ import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import { LangChainModelFactory } from './langchain-model-factory';
+import type { MetricsService } from './metrics-service';
 import {
   executeWithProviderRequestRetry,
   isRetryableProviderHttpStatus,
@@ -40,7 +41,8 @@ export class ProviderRuntimeService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly langChainModelFactory: LangChainModelFactory
+    private readonly langChainModelFactory: LangChainModelFactory,
+    private readonly metricsService: MetricsService
   ) {}
 
   setDeterministicResponse(response: ProviderTransportResponse): void {
@@ -87,12 +89,17 @@ export class ProviderRuntimeService {
     const startedAt = Date.now();
     if (provider.type === 'nvidia' && this.deterministicTransport === null) {
       try {
-        const probe = await executeWithProviderRequestRetry(() =>
-          this.langChainModelFactory.probeNvidiaTtfb(
-            provider,
-            enabledModel.id,
-            providerTestPromptForProvider(provider)
-          )
+        const probe = await executeWithProviderRequestRetry(
+          () =>
+            this.langChainModelFactory.probeNvidiaTtfb(
+              provider,
+              enabledModel.id,
+              providerTestPromptForProvider(provider)
+            ),
+          {
+            labels: { providerId: provider.id, providerType: provider.type },
+            metricsService: this.metricsService
+          }
         );
         return {
           providerId: provider.id,
@@ -117,19 +124,25 @@ export class ProviderRuntimeService {
       }
     }
     try {
-      const response = await executeWithProviderRequestRetry(async () => {
-        const result = await this.executeTransportRequest({
-          provider,
-          modelId: enabledModel.id,
-          input: providerTestPromptForProvider(provider),
-          capabilitySummary: this.createCapabilitySummary({
-            mcpServers: [],
-            skills: []
-          })
-        });
-        this.requireResponseContent(result, provider);
-        return result;
-      });
+      const response = await executeWithProviderRequestRetry(
+        async () => {
+          const result = await this.executeTransportRequest({
+            provider,
+            modelId: enabledModel.id,
+            input: providerTestPromptForProvider(provider),
+            capabilitySummary: this.createCapabilitySummary({
+              mcpServers: [],
+              skills: []
+            })
+          });
+          this.requireResponseContent(result, provider);
+          return result;
+        },
+        {
+          labels: { providerId: provider.id, providerType: provider.type },
+          metricsService: this.metricsService
+        }
+      );
       return {
         providerId: provider.id,
         status: 'ready',

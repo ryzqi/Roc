@@ -100,7 +100,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   registerWindowIpc(timedHandle, mainWindow, controls);
   registerTasksIpc(timedHandle, services.taskService, services.taskSchedulerService, controls);
   registerLifecycleIpc(timedHandle, services.lifecycleService, controls);
-  registerDiagnosticsIpc(timedHandle, services.diagnosticsService, services.taskSchedulerService);
+  registerDiagnosticsIpc(timedHandle, services.diagnosticsService, services.taskSchedulerService, services.metricsService);
   registerMemoryIpc(timedHandle, services.memoryService, services.sessionArchiveService);
   registerSettingsIpc(
     timedHandle,

@@ -304,6 +304,7 @@ export function createAppServices(
   const consolidatorService = new ConsolidatorService({
     memoryDir: paths.memoryDir,
     backupDir: join(paths.memoryDir, '.consolidator-backup'),
+    metricsService,
     resolveCheapModelHandle: (activeHandle) => langChainModelFactory.resolveCheapModelHandle(activeHandle),
     resolveDefaultModelHandle: async () => await langChainModelFactory.createDefaultChatModel({ streaming: false }),
     callLLM: async ({ systemPrompt, content, activeHandle }) => {
@@ -343,11 +344,13 @@ export function createAppServices(
     paths,
     () => configService.getSettings().memory,
     performanceObserverService,
-    logService
+    logService,
+    metricsService
   );
-  const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory);
+  const providerRuntimeService = new ProviderRuntimeService(configService, langChainModelFactory, metricsService);
   const taskSchedulerService = new TaskSchedulerService(taskService, deepAgentRuntimeService, {
-    capabilityResolver: createRuntimeCapabilityResolver({ configService, skillService })
+    capabilityResolver: createRuntimeCapabilityResolver({ configService, skillService }),
+    metricsService
   });
   deepAgentRuntimeService.attachScheduler(taskSchedulerService);
   lifecycleService.attachScheduler(taskSchedulerService);

@@ -38,9 +38,9 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
-  services.databaseService.close();
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -69,6 +69,8 @@ describe('Provider request retry behavior', () => {
       modelId: 'model-tools',
       error: 'Provider 请求超时，请稍后重试或检查 Provider endpoint。'
     });
+    expect(services.metricsService.query({ name: 'provider.request.total' })).toHaveLength(4);
+    expect(services.metricsService.query({ name: 'provider.request.errors', labels: { kind: 'timeout' } })).toHaveLength(4);
   });
 
   it('retries network failures up to three times before returning the final error', async () => {

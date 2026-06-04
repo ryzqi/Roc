@@ -33,6 +33,7 @@ function createScheduler(maxRegisteredTasks = 256): TaskSchedulerService {
     },
     {
       maxRegisteredTasks,
+      metricsService: services.metricsService,
       capabilityResolver: {
         resolveCurrentEnabledCapabilities: () => ({ mcpServers: [], skills: [] })
       }
@@ -105,9 +106,9 @@ beforeEach(() => {
   runRequests = [];
 });
 
-afterEach(() => {
+afterEach(async () => {
   services.taskSchedulerService.stop();
-  services.databaseService.close();
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
   vi.useRealTimers();
 });
@@ -180,6 +181,8 @@ describe('TaskSchedulerService', () => {
         runCount: 1
       })
     );
+    expect(services.metricsService.query({ name: 'scheduler.fire.delay_ms' })).toHaveLength(1);
+    expect(services.metricsService.query({ name: 'scheduler.fire.success', labels: { taskId: task.id } })).toHaveLength(1);
   });
 
   it('suspends timers and resumes with next run based on current time', async () => {

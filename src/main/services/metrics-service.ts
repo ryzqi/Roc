@@ -1,41 +1,4 @@
-export type MetricType = 'counter' | 'gauge' | 'histogram';
-
-export type Metric = {
-  name: string;
-  type: MetricType;
-  value: number;
-  timestamp: string;
-  labels: Record<string, string>;
-};
-
-export type MetricFilter = {
-  name?: string;
-  type?: MetricType;
-  labels?: Record<string, string>;
-  since?: string;
-};
-
-export type MetricsSnapshot = {
-  generatedAt: string;
-  metrics: Metric[];
-  summary: {
-    totalMetrics: number;
-    counterCount: number;
-    gaugeCount: number;
-    histogramCount: number;
-  };
-};
-
-export type HistogramStats = {
-  count: number;
-  sum: number;
-  avg: number;
-  min: number;
-  max: number;
-  p50: number;
-  p95: number;
-  p99: number;
-};
+import type { HistogramStats, Metric, MetricFilter, MetricsSnapshot } from '../../shared/types';
 
 type StoredMetric = Metric & {
   sequence: number;
@@ -92,8 +55,8 @@ export class MetricsService {
       .map(({ sequence: _sequence, ...metric }) => metric);
   }
 
-  getSnapshot(): MetricsSnapshot {
-    const metrics = this.query();
+  getSnapshot(filter: MetricFilter = {}): MetricsSnapshot {
+    const metrics = this.query(filter);
     return {
       generatedAt: new Date().toISOString(),
       metrics,

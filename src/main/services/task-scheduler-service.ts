@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { BackgroundTask, ChatStartRunRequest, ChatStartRunResult, SchedulerStatus } from '../../shared/types';
 import { RocDomainError } from './errors';
+import type { MetricsService } from './metrics-service';
 import type { RuntimeCapabilityResolver } from './runtime-capability-resolver';
 import type { TaskService } from './task-service';
 import { computeNextRunAt } from './task/next-run-calculator';
@@ -12,6 +13,7 @@ type RuntimeStarter = {
 type TaskSchedulerOptions = {
   maxRegisteredTasks?: number;
   capabilityResolver: RuntimeCapabilityResolver;
+  metricsService?: MetricsService;
 };
 
 const maxTimeoutDelayMs = 24 * 24 * 60 * 60 * 1000;
@@ -21,6 +23,7 @@ export class TaskSchedulerService {
   private readonly firingTaskIds = new Set<string>();
   private readonly maxRegisteredTasks: number;
   private readonly capabilityResolver: RuntimeCapabilityResolver;
+  private readonly metricsService: MetricsService | null;
   private running = false;
   private suspended = false;
   private lastError: string | null = null;
@@ -32,6 +35,7 @@ export class TaskSchedulerService {
   ) {
     this.maxRegisteredTasks = options.maxRegisteredTasks ?? 256;
     this.capabilityResolver = options.capabilityResolver;
+    this.metricsService = options.metricsService ?? null;
   }
 
   start(): void {
@@ -98,6 +102,7 @@ export class TaskSchedulerService {
       void this.fire(task.id);
     }, safeDelay);
     this.timers.set(task.id, timer);
+    this.metricsService?.setGauge('scheduler.registered_tasks', this.timers.size);
   }
 
   unregisterTask(taskId: string): void {
@@ -127,6 +132,10 @@ export class TaskSchedulerService {
     if (task === null) {
       return null;
     }
+    const scheduledTimeMs = task.nextRunAt === null ? Date.now() : new Date(task.nextRunAt).getTime();
+    this.metricsService?.recordHistogram('scheduler.fire.delay_ms', Date.now() - scheduledTimeMs, {
+      taskId: task.id
+    });
     this.clearTimer(task.id);
     this.firingTaskIds.add(task.id);
 
@@ -173,8 +182,10 @@ export class TaskSchedulerService {
       if (updated.status === 'running') {
         this.registerTask(updated);
       }
+      this.metricsService?.incrementCounter('scheduler.fire.success', { taskId: task.id });
       return result.runId;
     } catch (error) {
+      this.metricsService?.incrementCounter('scheduler.fire.failed', { taskId: task.id });
       this.lastError = error instanceof Error ? error.message : String(error);
       const failed = this.taskService.recordScheduledTaskRun({
         backgroundTaskId: task.id,

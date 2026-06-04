@@ -47,7 +47,12 @@ describe('preload contract', () => {
     ]);
     expect(Object.keys(api.window).sort()).toEqual(['close', 'getBounds', 'getState', 'minimize', 'toggleMaximize']);
     expect(Object.keys(api.shell).sort()).toEqual(['confirm', 'execute']);
-    expect(Object.keys(api.diagnostics).sort()).toEqual(['createDiagnosticPackage', 'runChecks', 'samplePerformance']);
+    expect(Object.keys(api.diagnostics).sort()).toEqual([
+      'createDiagnosticPackage',
+      'getMetricsSnapshot',
+      'runChecks',
+      'samplePerformance'
+    ]);
     expect(Object.keys(api.memory).sort()).toEqual(['readFile', 'snapshotPreview', 'status', 'writeFile']);
     expect(Object.keys(api.sessions).sort()).toEqual(['list', 'search']);
   });

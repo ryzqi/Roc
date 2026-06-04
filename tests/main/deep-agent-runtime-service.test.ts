@@ -106,7 +106,8 @@ function createRuntime(logService: RuntimeLogServiceMock = createRuntimeLogServi
       services.paths,
       () => services.configService.getSettings().memory,
       services.performanceObserverService,
-      logService as never
+      logService as never,
+      services.metricsService
     );
     runtime.attachScheduler(services.taskSchedulerService);
     return runtime;
@@ -259,9 +260,9 @@ beforeEach(() => {
   mocked.invokeMock.mockReset();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
-  services.databaseService.close();
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
   rmSync(userHome, { recursive: true, force: true });
   if (previousUserProfile === undefined) {
@@ -315,6 +316,9 @@ describe('DeepAgentRuntimeService', () => {
     expect(secondStarted.traceId).not.toBe(firstStarted.traceId);
     expect(firstUsage.traceId).toBe(firstStarted.traceId);
     expect(secondUsage.traceId).toBe(secondStarted.traceId);
+    expect(services.metricsService.query({ name: 'agent.run.started', labels: { mode: 'task', providerId: 'nvidia' } })).toHaveLength(2);
+    expect(services.metricsService.query({ name: 'agent.run.completed', labels: { mode: 'task', providerId: 'nvidia' } })).toHaveLength(2);
+    expect(services.metricsService.query({ name: 'agent.run.duration_ms', labels: { mode: 'task', providerId: 'nvidia' } })).toHaveLength(2);
   });
 
   it('assigns a new trace id to resumed runs and propagates it into completion logs', async () => {

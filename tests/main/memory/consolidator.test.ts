@@ -2,8 +2,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConsolidatorService } from '../../../src/main/services/memory/consolidator';
+import { ConsolidatorService, type ConsolidatorDeps } from '../../../src/main/services/memory/consolidator';
 import type { LangChainChatModelHandle } from '../../../src/main/services/langchain-model-factory';
+import { MetricsService } from '../../../src/main/services/metrics-service';
 
 const limits = { user: 1375, agents: 800, memory: 2200 };
 const allOn = { promptInjection: true, credential: true, sshBackdoor: true, invisibleUnicode: true };
@@ -37,9 +38,10 @@ function makeService(
     consolidatorDebounceMinutes: number;
     consolidatorTargetRatio: number;
     consolidatorDailyQuota: number;
-  }> = {}
+  }> = {},
+  metricsService?: MetricsService
 ) {
-  return new ConsolidatorService({
+  const deps: ConsolidatorDeps = {
     memoryDir,
     backupDir,
     resolveCheapModelHandle: (handle) => handle,
@@ -54,20 +56,51 @@ function makeService(
       consolidatorDailyQuota: 50,
       ...settings
     })
-  });
+  };
+  if (metricsService !== undefined) {
+    return new ConsolidatorService({
+      ...deps,
+      metricsService
+    });
+  }
+  return new ConsolidatorService(deps);
 }
 
 describe('ConsolidatorService', () => {
   it('writes compressed content back when LLM result passes security+capacity', async () => {
     const file = join(memoryDir, 'global', 'MEMORY.md');
     writeFileSync(file, 'x'.repeat(2300));
+    const metricsService = new MetricsService();
     const svc = makeService(async ({ activeHandle: handle }) => {
       expect(handle).toBe(activeHandle);
       return 'compressed result line 1\ncompressed line 2';
-    });
+    }, {}, metricsService);
     await svc.runForFile(file, 'memory', activeHandle);
     expect(readFileSync(file, 'utf8')).toContain('compressed result');
     expect(readdirSync(backupDir).some((f) => f.startsWith('MEMORY.md.') && f.endsWith('.md'))).toBe(true);
+    expect(metricsService.query({ name: 'memory.consolidation.success', labels: { kind: 'memory' } })).toHaveLength(1);
+    expect(metricsService.query({ name: 'memory.consolidation.duration_ms', labels: { kind: 'memory' } })).toHaveLength(1);
+    const reductionMetrics = metricsService.query({ name: 'memory.consolidation.reduction_ratio', labels: { kind: 'memory' } });
+    expect(reductionMetrics).toHaveLength(1);
+    expect(reductionMetrics[0]!.value).toBeGreaterThan(0.9);
+  });
+
+  it('records failed metrics when consolidation throws', async () => {
+    const file = join(memoryDir, 'global', 'MEMORY.md');
+    writeFileSync(file, 'original content');
+    const metricsService = new MetricsService();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const svc = makeService(async () => {
+      throw new Error('LLM failed');
+    }, {}, metricsService);
+
+    await svc.runForFile(file, 'memory', activeHandle);
+
+    expect(readFileSync(file, 'utf8')).toBe('original content');
+    expect(metricsService.query({ name: 'memory.consolidation.failed', labels: { kind: 'memory' } })).toHaveLength(1);
+    expect(metricsService.query({ name: 'memory.consolidation.success', labels: { kind: 'memory' } })).toHaveLength(0);
+    expect(consoleError).toHaveBeenCalledWith('[consolidator] failed', expect.any(Error));
+    consoleError.mockRestore();
   });
 
   it('does NOT overwrite when LLM result fails security scan', async () => {

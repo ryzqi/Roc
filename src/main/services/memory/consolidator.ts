@@ -11,6 +11,7 @@ import {
 import { basename, join } from 'node:path';
 import type { AppSettings, MemoryKind } from '../../../shared/types';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
+import type { MetricsService } from '../metrics-service';
 import { CapacityService } from './capacity';
 import { SecurityScanService } from './security-scan';
 
@@ -28,6 +29,7 @@ Output ONLY the new markdown content. No explanation, no fences, no preface.`;
 export type ConsolidatorDeps = {
   memoryDir: string;
   backupDir: string;
+  metricsService?: MetricsService;
   resolveCheapModelHandle: (activeHandle: LangChainChatModelHandle) => LangChainChatModelHandle;
   resolveDefaultModelHandle: () => Promise<LangChainChatModelHandle>;
   callLLM: (input: { systemPrompt: string; content: string; activeHandle: LangChainChatModelHandle }) => Promise<string>;
@@ -85,6 +87,7 @@ export class ConsolidatorService {
 
     this.inflight.add(absolutePath);
     this.lastRunAtMs.set(absolutePath, Date.now());
+    const startedAtMs = Date.now();
     try {
       if (!existsSync(absolutePath)) {
         return;
@@ -125,8 +128,13 @@ export class ConsolidatorService {
       }
 
       writeFileSync(absolutePath, compressed, 'utf8');
+      const reductionRatio = content.length === 0 ? 0 : 1 - compressed.length / content.length;
+      this.deps.metricsService?.recordHistogram('memory.consolidation.reduction_ratio', reductionRatio, { kind });
+      this.deps.metricsService?.recordHistogram('memory.consolidation.duration_ms', Date.now() - startedAtMs, { kind });
+      this.deps.metricsService?.incrementCounter('memory.consolidation.success', { kind });
       console.log(`[consolidator] compressed ${absolutePath} -> ${cap.chars}/${cap.limit}; backup at ${backupPath}`);
     } catch (err) {
+      this.deps.metricsService?.incrementCounter('memory.consolidation.failed', { kind });
       console.error('[consolidator] failed', err);
     } finally {
       this.inflight.delete(absolutePath);

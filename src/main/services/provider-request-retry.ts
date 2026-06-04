@@ -1,10 +1,13 @@
 import { RocDomainError } from './errors';
+import type { MetricsService } from './metrics-service';
 
 export const providerRequestTimeoutMs = 120_000;
 export const providerRequestRetryBackoffMs = [1_000, 2_000, 4_000] as const;
 export const providerRequestTimeoutMessage = 'Provider 请求超时，请稍后重试或检查 Provider endpoint。';
 
 type RetryOptions = {
+  labels?: Record<string, string>;
+  metricsService?: MetricsService;
   signal?: AbortSignal;
   shouldRetry?: (error: unknown) => boolean;
 };
@@ -35,13 +38,30 @@ export async function executeWithProviderRequestRetry<T>(
   options: RetryOptions = {}
 ): Promise<T> {
   const shouldRetry = options.shouldRetry ?? isRetryableProviderRequestFailure;
+  const startedAtMs = Date.now();
 
   for (let attemptIndex = 0; ; attemptIndex += 1) {
     throwIfAborted(options.signal);
+    const attempt = String(attemptIndex + 1);
+    options.metricsService?.incrementCounter('provider.request.total', {
+      ...options.labels,
+      attempt
+    });
 
     try {
-      return await operation();
+      const result = await operation();
+      options.metricsService?.recordHistogram('provider.request.duration_ms', Date.now() - startedAtMs, {
+        ...options.labels,
+        attempt
+      });
+      return result;
     } catch (error) {
+      const classification = classifyProviderRequestFailure(error);
+      options.metricsService?.incrementCounter('provider.request.errors', {
+        ...options.labels,
+        attempt,
+        kind: classification.kind
+      });
       if (attemptIndex >= providerRequestRetryBackoffMs.length || !shouldRetry(error)) {
         throw error;
       }
