@@ -1,4 +1,5 @@
 import { Diff, Hunk, type FileData as GitDiffFileData } from 'react-diff-view';
+import 'react-diff-view/style/index.css';
 import type { GitFileDiffResult, GitStatusChange } from '../../shared/types';
 import type { LoadedState } from '../loaded-state';
 import { buildGitDiffTitle } from '../git-diff-adapter';

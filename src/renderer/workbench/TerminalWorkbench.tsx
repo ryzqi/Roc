@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
 import type {
   TerminalSessionExitEvent,
   TerminalSessionOutputEvent,

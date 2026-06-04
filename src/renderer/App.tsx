@@ -69,8 +69,6 @@ import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from './chat/task-run-pa
 import type { TaskPromptSubmission } from './views/tasks/TasksView';
 import { RailOverlay } from './workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from './chat-run-state';
-import '@xterm/xterm/css/xterm.css';
-import 'react-diff-view/style/index.css';
 
 const WorkbenchPanel = lazy(() =>
   import('./workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))

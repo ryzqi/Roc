@@ -1,11 +1,13 @@
+import { Suspense, lazy } from 'react';
 import type { WindowStateSnapshot } from '../../shared/types';
 import type { LazyLoadState, ViewId, WorkbenchTool, WorkspaceData } from '../app/types';
 import { WORKBENCH_TOOLS } from '../app/view-routing';
 import { PreviewIcon } from '../components/PreviewIcon';
 import type { LoadedState } from '../loaded-state';
-import { FilesWorkbench } from './FilesWorkbench';
-import { GitWorkbench } from './GitWorkbench';
-import { TerminalWorkbench } from './TerminalWorkbench';
+
+const FilesWorkbench = lazy(() => import('./FilesWorkbench').then((module) => ({ default: module.FilesWorkbench })));
+const GitWorkbench = lazy(() => import('./GitWorkbench').then((module) => ({ default: module.GitWorkbench })));
+const TerminalWorkbench = lazy(() => import('./TerminalWorkbench').then((module) => ({ default: module.TerminalWorkbench })));
 
 export function WorkbenchPanel({
   activeTool,
@@ -79,13 +81,15 @@ export function WorkbenchPanel({
         </button>
       </div>
       <div className="workbench-panel">
-        {activeTool === 'git' ? (
-          <GitWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
-        ) : activeTool === 'terminal' ? (
-          <TerminalWorkbench state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
-        ) : (
-          <FilesWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
-        )}
+        <Suspense fallback={<section className="tool-panel workbench-surface" data-testid="workbench-tool-loading" />}>
+          {activeTool === 'git' ? (
+            <GitWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
+          ) : activeTool === 'terminal' ? (
+            <TerminalWorkbench state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
+          ) : (
+            <FilesWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
+          )}
+        </Suspense>
       </div>
     </aside>
   );
