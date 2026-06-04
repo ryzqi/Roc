@@ -5,14 +5,18 @@ import type { TimedHandle } from './ipc-common';
 
 export type PluginCapabilityDomain =
   | 'agent'
+  | 'app'
   | 'chat'
   | 'diagnostics'
+  | 'files'
   | 'lifecycle'
   | 'mcp'
   | 'memory'
+  | 'rtk'
   | 'sessions'
   | 'skills'
-  | 'tasks';
+  | 'tasks'
+  | 'workspace';
 
 export type PluginCapabilityInvoker = {
   invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
@@ -31,6 +35,7 @@ export type PluginCapabilityAdapter = {
 };
 
 export const pluginCapabilityMappings = [
+  mapping('app', 'app.getStatus', ipcChannels.appGetStatus, 'app.status.get', emptyInput),
   mapping('agent', 'agent.getStatus', ipcChannels.agentGetStatus, 'agent.status.get', emptyInput),
   mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', firstArg),
   mapping('chat', 'chat.cancelRun', ipcChannels.chatCancelRun, 'agent.run.cancel', idInput('runId')),
@@ -76,6 +81,13 @@ export const pluginCapabilityMappings = [
   mapping('memory', 'memory.readFile', ipcChannels.memoryReadFile, 'memory.file.read', firstArg),
   mapping('memory', 'memory.writeFile', ipcChannels.memoryWriteFile, 'memory.file.write', firstArg),
   mapping('memory', 'memory.snapshotPreview', ipcChannels.memorySnapshotPreview, 'memory.snapshot.preview', emptyInput),
+  mapping('workspace', 'workspace.getCurrent', ipcChannels.workspaceGetCurrent, 'workspace.getCurrent', emptyInput),
+  mapping('workspace', 'workspace.select', ipcChannels.workspaceSelect, 'workspace.select', firstArg),
+  mapping('files', 'files.listTree', ipcChannels.filesListTree, 'files.listTree', firstArg),
+  mapping('files', 'files.search', ipcChannels.filesSearch, 'files.search', firstArg),
+  mapping('files', 'files.preview', ipcChannels.filesPreview, 'files.preview', firstArg),
+  mapping('files', 'files.previewPdf', ipcChannels.filesPreviewPdf, 'files.previewPdf', firstArg),
+  mapping('files', 'files.writeText', ipcChannels.filesWriteText, 'files.writeText', firstArg),
   mapping('mcp', 'mcp.listServers', ipcChannels.mcpListServers, 'mcp.listServers', emptyInput),
   mapping('mcp', 'mcp.upsertServer', ipcChannels.mcpUpsertServer, 'mcp.upsertServer', firstArg),
   mapping('mcp', 'mcp.setServerEnabled', ipcChannels.mcpSetServerEnabled, 'mcp.setServerEnabled', firstArg),
@@ -86,7 +98,8 @@ export const pluginCapabilityMappings = [
   mapping('skills', 'skills.setEnabled', ipcChannels.skillsSetEnabled, 'skills.setEnabled', firstArg),
   mapping('skills', 'skills.deleteSkill', ipcChannels.skillsDelete, 'skills.delete', idInput('id')),
   mapping('skills', 'skills.listFiles', ipcChannels.skillsListFiles, 'skills.files.list', firstArg),
-  mapping('skills', 'skills.readFile', ipcChannels.skillsReadFile, 'skills.file.read', firstArg)
+  mapping('skills', 'skills.readFile', ipcChannels.skillsReadFile, 'skills.file.read', firstArg),
+  mapping('rtk', 'rtk.status', ipcChannels.rtkStatus, 'rtk.status', emptyInput)
 ] as const satisfies readonly PluginCapabilityMapping[];
 
 export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker): PluginCapabilityAdapter {

@@ -102,7 +102,6 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     const startResult = await context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', {
       input: task.goal,
       mode: 'task',
-      threadId: task.threadId,
       enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities
     });
     const result = scheduler.runNow(id, startResult.runId);

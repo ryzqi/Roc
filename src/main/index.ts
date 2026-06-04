@@ -253,8 +253,11 @@ async function createWindow(): Promise<void> {
   }
   const kernel = createMainKernelBootstrap({
     dataRoot: process.env.ROC_DATA_ROOT,
+    getAppearance: getSystemAppearanceSnapshot,
+    isPackaged: app.isPackaged,
     safeStorage: createElectronSafeStorageBackend(),
-    runtimeMetricsProvider: createElectronRuntimeMetricsProvider()
+    runtimeMetricsProvider: createElectronRuntimeMetricsProvider(),
+    version: app.getVersion()
   });
   await kernel.start();
   activeKernel = kernel;

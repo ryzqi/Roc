@@ -7,7 +7,7 @@ import { registerAgentIpc } from './agent-ipc';
 import { registerAppIpc } from './app-ipc';
 import { registerChatIpc } from './chat-ipc';
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
-import { registerFilesIpc } from './files-ipc';
+import { registerFilesDialogIpc, registerFilesIpc } from './files-ipc';
 import { registerGitIpc } from './git-ipc';
 import { registerLifecycleIpc } from './lifecycle-ipc';
 import { registerMcpIpc } from './mcp-ipc';
@@ -19,7 +19,7 @@ import { registerSkillsIpc } from './skills-ipc';
 import { registerTasksIpc } from './tasks-ipc';
 import { registerTerminalIpc } from './terminal-ipc';
 import { registerWindowIpc } from './window-ipc';
-import { registerWorkspaceIpc } from './workspace-ipc';
+import { registerWorkspaceDialogIpc, registerWorkspaceIpc } from './workspace-ipc';
 import type { IpcHandler, IpcMainHandler } from './ipc-common';
 import { registerPluginCapabilityIpc, type PluginCapabilityInvoker } from './plugin-capability-adapter';
 
@@ -106,7 +106,7 @@ export function registerIpc(
 
   if (pluginCapabilityInvoker !== undefined) {
     registerPluginCapabilityIpc(timedHandle, pluginCapabilityInvoker);
-    registerAppIpc(timedHandle, services.appService, controls);
+    registerLegacyAppSupplementIpc(timedHandle, controls);
     registerWindowIpc(timedHandle, mainWindow, controls);
     registerLegacyTaskSupplementIpc(timedHandle, services, controls);
     registerSettingsIpc(
@@ -120,11 +120,10 @@ export function registerIpc(
     );
     registerLegacyMcpSupplementIpc(timedHandle, services);
     registerLegacyAgentSupplementIpc(timedHandle, services);
-    registerWorkspaceIpc(timedHandle, mainWindow, services.workspaceService);
-    registerFilesIpc(timedHandle, mainWindow, services.workspaceService, services.fileService);
+    registerWorkspaceDialogIpc(timedHandle, mainWindow, services.workspaceService);
+    registerFilesDialogIpc(timedHandle, mainWindow, services.workspaceService);
     registerGitIpc(timedHandle, services.gitService);
     registerTerminalIpc(timedHandle, services.terminalSessionService);
-    registerRtkIpc(timedHandle, services.rtkService);
     registerShellIpc(timedHandle, mainWindow, services.logService, services.shellExecutionService);
     return;
   }
@@ -167,6 +166,21 @@ function toLogError(error: unknown): Error {
     return error;
   }
   return new Error(String(error));
+}
+
+function registerLegacyAppSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, controls: AppWindowControls): void {
+  timedHandle(ipcChannels.appOpenSettings, () =>
+    wrapIpc(() => {
+      controls.openMainPage('settings');
+      return { opened: true as const };
+    })
+  );
+  timedHandle(ipcChannels.appOpenMainPage, (_event, page: string) =>
+    wrapIpc(() => {
+      controls.openMainPage(page);
+      return { opened: true as const, page };
+    })
+  );
 }
 
 function registerLegacyAgentSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, services: AppServices): void {

@@ -12,6 +12,14 @@ export function registerWorkspaceIpc(
 ): void {
   timedHandle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => workspaceService.getCurrentWorkspace()));
   timedHandle(ipcChannels.workspaceSelect, (_event, request) => wrapIpc(() => workspaceService.selectWorkspace(request.path)));
+  registerWorkspaceDialogIpc(timedHandle, mainWindow, workspaceService);
+}
+
+export function registerWorkspaceDialogIpc(
+  timedHandle: TimedHandle,
+  mainWindow: BrowserWindow,
+  workspaceService: WorkspaceService
+): void {
   timedHandle(ipcChannels.workspaceSelectFromDialog, () =>
     wrapIpc(async () => {
       const result = await dialog.showOpenDialog(mainWindow, {

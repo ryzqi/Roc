@@ -1,11 +1,12 @@
 import { join } from 'node:path';
 
-import type { AgentRuntimeStatus } from '../shared/types';
+import type { AgentRuntimeStatus, AppStatus, SystemAppearanceSnapshot } from '../shared/types';
 import type { RuntimeMetricsProvider } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
 import { activatePluginDataMigration } from './infrastructure/migration/monolith-to-plugins';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { RocPlugin } from './kernel/types';
+import { createAppPlugin } from './plugins/app';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
 import { createAgentPlugin } from './plugins/agent';
 import { createDiagnosticsPlugin } from './plugins/diagnostics';
@@ -37,6 +38,9 @@ export type MainKernelBootstrapOptions = {
   activateMigration?: MainKernelMigrationActivator;
   performanceObserverService?: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
+  version?: string;
+  isPackaged?: boolean;
+  getAppearance?: () => SystemAppearanceSnapshot;
 };
 
 export type MainKernelBootstrap = {
@@ -58,6 +62,9 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       paths,
       performanceObserverService,
       runtimeMetricsProvider: options.runtimeMetricsProvider,
+      version: options.version,
+      isPackaged: options.isPackaged,
+      getAppearance: options.getAppearance,
       safeStorage: options.safeStorage
     });
   const activateMigration = options.activateMigration ?? activateMainKernelMigration;
@@ -106,6 +113,9 @@ function createDefaultMainKernelPlugins(input: {
   safeStorage: SafeStorageBackend;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
+  version?: string;
+  isPackaged?: boolean;
+  getAppearance?: () => SystemAppearanceSnapshot;
 }): readonly RocPlugin[] {
   input.paths.ensureTree();
   const configService = new ConfigService(input.paths);
@@ -117,6 +127,17 @@ function createDefaultMainKernelPlugins(input: {
   const defaultWorkspace = configService.getSettings().defaultWorkspace;
 
   return [
+    createAppPlugin({
+      statusProvider: () =>
+        createAppStatus({
+          configService,
+          defaultWorkspace,
+          getAppearance: input.getAppearance,
+          isPackaged: input.isPackaged === true,
+          paths: input.paths,
+          version: input.version === undefined ? '0.1.0' : input.version
+        })
+    }),
     createAgentPlugin({
       modelFactory: new LangChainAgentModelFactoryAdapter(modelFactory),
       status: createAgentRuntimeStatus(configService)
@@ -138,6 +159,83 @@ function createDefaultMainKernelPlugins(input: {
       runtimeMetricsProvider: input.runtimeMetricsProvider
     })
   ];
+}
+
+function createAppStatus(input: {
+  configService: ConfigService;
+  defaultWorkspace: string | null;
+  getAppearance?: () => SystemAppearanceSnapshot;
+  isPackaged: boolean;
+  paths: RocPaths;
+  version: string;
+}): AppStatus {
+  const workspaceLabel = input.defaultWorkspace === null ? '未选择工作区' : input.defaultWorkspace;
+  const workspaceReady = input.defaultWorkspace === null ? 'blocked' : 'ready';
+  return {
+    appName: 'Roc',
+    version: input.version,
+    mode: detectMode(input.isPackaged),
+    startedAt: new Date().toISOString(),
+    appearance: input.getAppearance === undefined ? defaultAppearance() : input.getAppearance(),
+    workspace: {
+      selectedPath: input.defaultWorkspace,
+      label: workspaceLabel
+    },
+    paths: input.paths.snapshot(),
+    services: {
+      app: 'ready',
+      config: 'ready',
+      database: 'ready',
+      memory: 'ready',
+      tasks: 'ready',
+      lifecycle: 'ready',
+      diagnostics: 'ready',
+      mcp: 'ready',
+      skills: 'ready',
+      agent: input.configService.hasDefaultModel() ? 'ready' : 'blocked',
+      workspace: workspaceReady,
+      files: workspaceReady,
+      git: workspaceReady,
+      terminal: workspaceReady,
+      rtk: 'ready'
+    },
+    defaultModelConfigured: input.configService.hasDefaultModel(),
+    rendererBoundary: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: {
+        enabled: false,
+        evaluated: true,
+        reason: 'Electron sandbox blocks the current bundled ESM preload; smoke timed out before renderer root appeared.',
+        compensatingControls: ['contextIsolation', 'nodeIntegration=false', 'typed preload API', 'external URL scheme allowlist']
+      }
+    }
+  };
+}
+
+function detectMode(isPackaged: boolean): AppStatus['mode'] {
+  if (process.env.VITEST === 'true') {
+    return 'test';
+  }
+  if (process.env.ROC_SMOKE === '1') {
+    return 'smoke';
+  }
+  if (isPackaged) {
+    return 'packaged';
+  }
+  return 'development';
+}
+
+function defaultAppearance(): SystemAppearanceSnapshot {
+  return {
+    accentColor: '#0078d4',
+    inForcedColorsMode: false,
+    prefersReducedTransparency: false,
+    resolvedTheme: 'dark',
+    shouldUseHighContrastColors: false,
+    shouldUseInvertedColorScheme: false,
+    themeSource: 'system'
+  };
 }
 
 function createAgentRuntimeStatus(configService: ConfigService): AgentRuntimeStatus {

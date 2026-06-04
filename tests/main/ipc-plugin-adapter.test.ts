@@ -37,7 +37,21 @@ describe('plugin capability IPC adapter', () => {
 
   it('covers current plugin-backed IPC domains through the mapping table', () => {
     expect(new Set(pluginCapabilityMappings.map((mapping) => mapping.domain))).toEqual(
-      new Set(['agent', 'chat', 'diagnostics', 'lifecycle', 'mcp', 'memory', 'sessions', 'skills', 'tasks'])
+      new Set([
+        'agent',
+        'app',
+        'chat',
+        'diagnostics',
+        'files',
+        'lifecycle',
+        'mcp',
+        'memory',
+        'rtk',
+        'sessions',
+        'skills',
+        'tasks',
+        'workspace'
+      ])
     );
   });
 
