@@ -44,7 +44,12 @@ export type RocMcpConfig = typeof defaultMcpConfig;
 export type RocPermissions = PermissionsConfig;
 export type RocTaskSettings = RocSettings['tasks'];
 
+const settingsDocumentCacheTtlMs = 5000;
+
 export class ConfigService {
+  private settingsDocumentCache: RocSettingsDocument | null = null;
+  private settingsDocumentCacheLoadedAtMs: number | null = null;
+
   constructor(private readonly paths: RocPaths) {}
 
   initialize(): void {
@@ -325,6 +330,11 @@ export class ConfigService {
   }
 
   private getSettingsDocument(): RocSettingsDocument {
+    const cached = this.getFreshSettingsDocumentCache();
+    if (cached !== null) {
+      return cached;
+    }
+
     const parsed = JSON.parse(readFileSync(this.filePath('settings.json'), 'utf8')) as unknown;
     const document = SettingsDocumentSchema.parse(parsed);
     const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
@@ -334,12 +344,17 @@ export class ConfigService {
         mcp: normalizedMcp
       };
       this.writeSettingsDocument(normalizedDocument);
-      return normalizedDocument;
+      return this.cloneSettingsDocument(normalizedDocument);
     }
-    return document;
+    return this.setSettingsDocumentCache(document);
   }
 
   private async getSettingsDocumentAsync(): Promise<RocSettingsDocument> {
+    const cached = this.getFreshSettingsDocumentCache();
+    if (cached !== null) {
+      return cached;
+    }
+
     const parsed = JSON.parse(await readFile(this.filePath('settings.json'), 'utf8')) as unknown;
     const document = SettingsDocumentSchema.parse(parsed);
     const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
@@ -349,19 +364,44 @@ export class ConfigService {
         mcp: normalizedMcp
       };
       await this.writeSettingsDocumentAsync(normalizedDocument);
-      return normalizedDocument;
+      return this.cloneSettingsDocument(normalizedDocument);
     }
-    return document;
+    return this.setSettingsDocumentCache(document);
   }
 
   private writeSettingsDocument(document: RocSettingsDocument): void {
     const parsed = SettingsDocumentSchema.parse(document);
     writeFileSync(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    this.setSettingsDocumentCache(parsed);
   }
 
   private async writeSettingsDocumentAsync(document: RocSettingsDocument): Promise<void> {
     const parsed = SettingsDocumentSchema.parse(document);
     await writeFile(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    this.setSettingsDocumentCache(parsed);
+  }
+
+  private getFreshSettingsDocumentCache(): RocSettingsDocument | null {
+    if (this.settingsDocumentCache === null || this.settingsDocumentCacheLoadedAtMs === null) {
+      return null;
+    }
+    if (Date.now() - this.settingsDocumentCacheLoadedAtMs >= settingsDocumentCacheTtlMs) {
+      this.settingsDocumentCache = null;
+      this.settingsDocumentCacheLoadedAtMs = null;
+      return null;
+    }
+    return this.cloneSettingsDocument(this.settingsDocumentCache);
+  }
+
+  private setSettingsDocumentCache(document: RocSettingsDocument): RocSettingsDocument {
+    const cached = this.cloneSettingsDocument(document);
+    this.settingsDocumentCache = cached;
+    this.settingsDocumentCacheLoadedAtMs = Date.now();
+    return this.cloneSettingsDocument(cached);
+  }
+
+  private cloneSettingsDocument(document: RocSettingsDocument): RocSettingsDocument {
+    return SettingsDocumentSchema.parse(JSON.parse(JSON.stringify(document)) as unknown);
   }
 
   private readLegacyConfig(name: string, fallback: RocProviders): unknown {

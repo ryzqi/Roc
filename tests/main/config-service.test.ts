@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ZodError } from 'zod';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings, McpServerConfig, PermissionsConfig, ProviderConfig } from '../../src/shared/types';
 import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
 import {
@@ -42,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -83,6 +84,34 @@ describe('ConfigService unified settings document', () => {
     });
     await expect(configService.getSettingsAsync()).resolves.toMatchObject({
       globalHotkey: 'Ctrl+Shift+R'
+    });
+  });
+
+  it('reuses fresh async settings reads from cache until the cache expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-04T00:00:00.000Z'));
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    const firstSettings = await configService.getSettingsAsync();
+    const document = SettingsDocumentSchema.parse(readSettingsDocument());
+    const externallyChangedDocument = {
+      ...document,
+      settings: {
+        ...document.settings,
+        globalHotkey: 'Ctrl+Alt+External'
+      }
+    };
+    writeFileSync(join(root, 'config', 'settings.json'), `${JSON.stringify(externallyChangedDocument, null, 2)}\n`, 'utf8');
+
+    await expect(configService.getSettingsAsync()).resolves.toMatchObject({
+      globalHotkey: firstSettings.globalHotkey
+    });
+
+    vi.setSystemTime(new Date('2026-06-04T00:00:06.000Z'));
+
+    await expect(configService.getSettingsAsync()).resolves.toMatchObject({
+      globalHotkey: 'Ctrl+Alt+External'
     });
   });
 
