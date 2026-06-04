@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatView } from '../../src/renderer/chat/chat-view';
+import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
 import type { ChatRunEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
@@ -59,6 +60,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
+          client: createChatClient(),
           queuedTaskPrompt: {
             input: '请调用 propose_background_task 创建任务',
             workflowHint: 'propose_background_task'
@@ -89,6 +91,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
+          client: createChatClient(),
           queuedTaskPrompt: {
             input: '重复任务提议',
             workflowHint: 'propose_background_task'
@@ -107,6 +110,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
+          client: createChatClient(),
           queuedTaskPrompt: null,
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
@@ -121,6 +125,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 2,
+          client: createChatClient(),
           queuedTaskPrompt: {
             input: '重复任务提议',
             workflowHint: 'propose_background_task'
@@ -147,6 +152,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
+          client: createChatClient(),
           queuedTaskPrompt: {
             input: '失败的任务提议',
             workflowHint: 'propose_background_task'
@@ -171,6 +177,7 @@ describe('ChatView queued task prompt', () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
+          client: createChatClient(),
           queuedTaskPrompt: null,
           onQueuedTaskPromptHandled: () => {},
           selectedThreadId: null,
@@ -243,4 +250,8 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+function createChatClient(): RocClient {
+  return { api: window.roc };
 }

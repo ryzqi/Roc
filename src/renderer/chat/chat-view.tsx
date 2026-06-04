@@ -5,6 +5,7 @@ import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
 import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
+import type { RocClient } from '../shared/roc-client';
 import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from './task-run-payload';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
@@ -21,8 +22,9 @@ function ChatWaitingIndicator({ visible }: { visible: boolean }): React.JSX.Elem
   );
 }
 
-type ChatViewProps = {
+export type ChatViewProps = {
   chatSelectionVersion: number;
+  client: RocClient;
   queuedTaskPrompt: QueuedTaskPrompt | null;
   onQueuedTaskPromptHandled: () => void;
   selectedThreadId: string | null;
@@ -47,6 +49,7 @@ export function buildChatResumeRunRequest(input: {
 
 export function ChatView({
   chatSelectionVersion,
+  client,
   queuedTaskPrompt,
   onQueuedTaskPromptHandled,
   selectedThreadId,
@@ -54,7 +57,7 @@ export function ChatView({
   updateLoadedState,
   onSubmitChatTask
 }: ChatViewProps): React.JSX.Element {
-  const chatRun = useChatRun();
+  const chatRun = useChatRun(client);
   const [chatInput, setChatInput] = useState('');
   const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
@@ -124,7 +127,7 @@ export function ChatView({
     let cancelled = false;
 
     async function loadPersistedMessages(threadId: string): Promise<void> {
-      const result = await window.roc.tasks.getThreadMessages({ threadId });
+      const result = await client.api.tasks.getThreadMessages({ threadId });
       if (!result.ok) {
         throw new Error(result.error.message);
       }
@@ -221,7 +224,7 @@ export function ChatView({
       chatRun.setError('当前没有可恢复的审批运行。');
       return;
     }
-    const result = await window.roc.chat.resumeRun(buildChatResumeRunRequest({
+    const result = await client.api.chat.resumeRun(buildChatResumeRunRequest({
       runId: chatRun.state.runId,
       threadId: chatRun.state.threadId,
       interruptId: approvalId,

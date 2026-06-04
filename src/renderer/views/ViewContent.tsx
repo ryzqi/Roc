@@ -1,9 +1,10 @@
 import { Suspense, lazy } from 'react';
 import type { ChatRunState } from '../chat-run-state';
-import { ChatView } from '../chat/chat-view';
 import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { ChatFeature } from '../features/chat';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 import type { WorkflowHint } from '../../shared/types';
 
@@ -22,6 +23,7 @@ const DiagnosticsView = lazy(() =>
 export function ViewContent({
   activeView,
   chatSelectionVersion,
+  client,
   liveTaskRun,
   memoryLoadState,
   onNavigateToTaskThread,
@@ -39,6 +41,7 @@ export function ViewContent({
 }: {
   activeView: ViewId;
   chatSelectionVersion: number;
+  client: RocClient;
   liveTaskRun: ChatRunState | null;
   memoryLoadState: LazyLoadState;
   onNavigateToTaskThread: (threadId: string, workflowHint?: WorkflowHint) => void;
@@ -95,8 +98,9 @@ export function ViewContent({
     return renderLazyView(<DiagnosticsView loadState={operationsLoadState} state={state} />);
   }
   return (
-    <ChatView
+    <ChatFeature
       chatSelectionVersion={chatSelectionVersion}
+      client={client}
       onSubmitChatTask={onSubmitChatTask}
       queuedTaskPrompt={queuedTaskPrompt}
       onQueuedTaskPromptHandled={onQueuedTaskPromptHandled}

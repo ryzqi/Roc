@@ -114,14 +114,14 @@ Expected: PASS.
 - Test: `tests/renderer/features/chat-feature.test.tsx`
 - Test: existing chat renderer tests.
 
-- [ ] **Step 1: Write feature tests**
+- [x] **Step 1: Write feature tests**
 
 Assert chat start, resume, cancel, stream event subscription, queued task prompt, and transcript rendering use `RocClient.api.chat` and `RocClient.api.tasks`.
 
 Run: `pnpm test -- tests/renderer/features/chat-feature.test.tsx tests/renderer/chat-view.test.ts tests/renderer/chat-view.queued-task.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 2: Implement feature wrapper**
+- [x] **Step 2: Implement feature wrapper**
 
 Move feature orchestration into `useChatFeature`. Keep existing message row, composer, markdown, and transcript components unless a test requires a split.
 

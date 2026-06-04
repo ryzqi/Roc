@@ -5,6 +5,7 @@ import {
   type ChatRunState
 } from '../chat-run-state';
 import type { ChatRunEvent } from '../../shared/types';
+import type { RocClient } from '../shared/roc-client';
 
 export function applyChatRunEventBatch(state: ChatRunState, events: ChatRunEvent[]): ChatRunState {
   if (events.length === 0) {
@@ -44,7 +45,7 @@ export type ChatRunController = {
   errorMessage: string | null;
 };
 
-export function useChatRun(): ChatRunController {
+export function useChatRun(client: RocClient): ChatRunController {
   const [state, setState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const pendingEventsRef = useRef<ChatRunEvent[]>([]);
@@ -61,7 +62,7 @@ export function useChatRun(): ChatRunController {
       setState((current) => applyChatRunEventBatch(current, buffered));
     }
 
-    const unsubscribe = window.roc.chat.onRunEvent((event) => {
+    const unsubscribe = client.api.chat.onRunEvent((event) => {
       pendingEventsRef.current.push(event);
 
       if (event.type === 'run_started') {
@@ -88,7 +89,7 @@ export function useChatRun(): ChatRunController {
       unsubscribe();
       clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
     };
-  }, []);
+  }, [client]);
 
   const reset = (): void => {
     clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);

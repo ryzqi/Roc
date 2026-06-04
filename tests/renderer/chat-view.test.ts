@@ -6,6 +6,8 @@ import { buildChatResumeRunRequest, ChatView } from '../../src/renderer/chat/cha
 import { buildManualScrollBottomOptions, buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
 import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
+import type { RocClient } from '../../src/renderer/shared/roc-client';
+import type { RocPreloadApi } from '../../src/shared/ipc';
 import { bubbleEnterTransition, resolveMotionTransition } from '../../src/renderer/animations';
 import { createLoadedState } from './view-test-helpers';
 
@@ -40,6 +42,7 @@ describe('chat view', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatView, {
         chatSelectionVersion: 1,
+        client: createChatClient(),
         queuedTaskPrompt: null,
         onQueuedTaskPromptHandled: () => {},
         selectedThreadId: null,
@@ -148,3 +151,7 @@ describe('chat view', () => {
     });
   });
 });
+
+function createChatClient(): RocClient {
+  return { api: globalThis.window.roc as RocPreloadApi };
+}

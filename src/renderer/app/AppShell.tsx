@@ -61,6 +61,7 @@ import type { TaskPromptSubmission } from '../views/tasks/TasksView';
 import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
 import type { AppBootstrap } from './use-app-bootstrap';
+import { useChatFeature } from '../features/chat/use-chat-feature';
 
 const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
@@ -212,6 +213,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const currentAgentExecution = state?.agent.execution ?? null;
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
+  const chatFeature = useChatFeature(client);
 
   useEffect(() => {
     const nextSnapshot = {
@@ -279,7 +281,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const startTaskRun = useCallback(
     async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
       const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
-      const result = await client.api.chat.startRun({
+      const result = await chatFeature.startRun({
         input: payload.input,
         mode: 'task',
         threadId: selectedThreadId,
@@ -300,7 +302,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       setHistoryContextMenu(null);
       return { ok: true };
     },
-    [currentSelectedMcpServers, currentSelectedSkills, pendingWorkflowHint, selectedThreadId]
+    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingWorkflowHint, selectedThreadId]
   );
 
   const queueTaskPrompt = useCallback(async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
@@ -604,6 +606,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             <ViewContent
               activeView={activeView}
               chatSelectionVersion={chatSelectionVersion}
+              client={client}
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
               memoryLoadState={memoryLoadState}
               onNavigateToTaskThread={navigateToTaskThread}
