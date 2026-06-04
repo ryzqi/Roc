@@ -7,7 +7,7 @@ import { SecretManager, type SafeStorageBackend } from '../infrastructure/secret
 import { CapabilityRegistry } from './capability-registry';
 import { EventBus } from './event-bus';
 import { PluginLoader } from './plugin-loader';
-import type { RocPlugin, RocPluginHealth } from './types';
+import type { RocEventEnvelope, RocPlugin, RocPluginHealth } from './types';
 
 export type KernelRuntimeOptions = {
   rootDir: string;
@@ -21,7 +21,9 @@ export type KernelRuntimeStatus = {
 };
 
 type KernelInfrastructure = {
+  capabilities: CapabilityRegistry;
   databasePool: DatabasePool;
+  eventBus: EventBus;
   loader: PluginLoader;
 };
 
@@ -56,7 +58,7 @@ export class KernelRuntime {
       })
     });
 
-    this.infrastructure = { databasePool, loader };
+    this.infrastructure = { capabilities, databasePool, eventBus, loader };
     try {
       await loader.load(this.options.plugins);
       this.started = true;
@@ -89,5 +91,19 @@ export class KernelRuntime {
       started: this.started,
       plugins: this.infrastructure.loader.getStatus().plugins
     };
+  }
+
+  async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
+    if (this.infrastructure === null) {
+      throw new Error('kernel_runtime_not_started');
+    }
+    return await this.infrastructure.capabilities.invoke<TInput, TOutput>(name, input);
+  }
+
+  async publishEvent<TPayload>(event: RocEventEnvelope<TPayload>): Promise<void> {
+    if (this.infrastructure === null) {
+      throw new Error('kernel_runtime_not_started');
+    }
+    await this.infrastructure.eventBus.publish(event);
   }
 }
