@@ -51,6 +51,7 @@ describe('preload contract', () => {
       'createDiagnosticPackage',
       'getMetricsSnapshot',
       'runChecks',
+      'runHealthCheck',
       'samplePerformance'
     ]);
     expect(Object.keys(api.memory).sort()).toEqual(['readFile', 'snapshotPreview', 'status', 'writeFile']);

@@ -20,6 +20,9 @@ describe('diagnostics IPC', () => {
       {
         getStatus: vi.fn()
       } as never,
+      {
+        check: vi.fn()
+      } as never,
       metricsService
     );
 
@@ -43,6 +46,43 @@ describe('diagnostics IPC', () => {
           })
         ]
       }
+    });
+  });
+
+  it('returns health checks through diagnostics IPC', async () => {
+    const handlers = new Map<string, IpcMainHandler>();
+    const healthCheck = {
+      status: 'healthy',
+      checks: [
+        {
+          name: 'database',
+          status: 'pass',
+          lastChecked: '2026-06-04T00:00:00.000Z'
+        }
+      ]
+    };
+
+    registerDiagnosticsIpc(
+      (channel, handler) => handlers.set(channel, handler),
+      {
+        samplePerformance: vi.fn(),
+        createDiagnosticPackage: vi.fn(),
+        runChecks: vi.fn()
+      } as never,
+      {
+        getStatus: vi.fn()
+      } as never,
+      {
+        check: vi.fn().mockResolvedValue(healthCheck)
+      } as never,
+      new MetricsService()
+    );
+
+    const result = await handlers.get(ipcChannels.diagnosticsRunHealthCheck)?.(null);
+
+    expect(result).toEqual({
+      ok: true,
+      data: healthCheck
     });
   });
 });

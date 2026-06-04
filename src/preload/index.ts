@@ -57,7 +57,8 @@ const rocApi: RocPreloadApi = {
     samplePerformance: (request) => ipcRenderer.invoke(ipcChannels.diagnosticsSamplePerformance, request),
     createDiagnosticPackage: (request) => ipcRenderer.invoke(ipcChannels.diagnosticsCreatePackage, request),
     runChecks: () => ipcRenderer.invoke(ipcChannels.diagnosticsRunChecks),
-    getMetricsSnapshot: (filter) => ipcRenderer.invoke(ipcChannels.diagnosticsGetMetricsSnapshot, filter)
+    getMetricsSnapshot: (filter) => ipcRenderer.invoke(ipcChannels.diagnosticsGetMetricsSnapshot, filter),
+    runHealthCheck: () => ipcRenderer.invoke(ipcChannels.diagnosticsRunHealthCheck)
   },
   memory: {
     status: () => ipcRenderer.invoke(ipcChannels.memoryStatus),

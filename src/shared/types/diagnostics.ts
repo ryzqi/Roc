@@ -26,3 +26,23 @@ export type DiagnosticCheck = {
   message: string;
   checkedAt: string;
 };
+
+export type HealthCheckName =
+  | 'database'
+  | 'task_scheduler'
+  | 'disk_space'
+  | 'memory_usage'
+  | 'memory_service'
+  | 'provider_connectivity';
+
+export type HealthCheck = {
+  name: HealthCheckName;
+  status: 'pass' | 'warn' | 'fail';
+  message?: string;
+  lastChecked: string;
+};
+
+export type HealthCheckResult = {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  checks: HealthCheck[];
+};

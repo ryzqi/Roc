@@ -8,6 +8,7 @@ import { DiagnosticsService, type RuntimeMetricsProvider } from './diagnostics-s
 import { setLogService } from './errors';
 import { FileService } from './file-service';
 import { GitService } from './git-service';
+import { HealthCheckService } from './health-check-service';
 import { LifecycleService } from './lifecycle-service';
 import { LogService } from './log-service';
 import { LangChainModelFactory } from './langchain-model-factory';
@@ -44,6 +45,7 @@ export type AppServices = {
   taskSchedulerService: TaskSchedulerService;
   lifecycleService: LifecycleService;
   diagnosticsService: DiagnosticsService;
+  healthCheckService: HealthCheckService;
   mcpService: McpService;
   skillService: SkillService;
   agentService: AgentService;
@@ -101,6 +103,7 @@ export class AppService {
     private readonly taskSchedulerService: TaskSchedulerService,
     private readonly lifecycleService: LifecycleService,
     private readonly diagnosticsService: DiagnosticsService,
+    private readonly healthCheckService: HealthCheckService,
     private readonly mcpService: McpService,
     private readonly skillService: SkillService,
     private readonly agentService: AgentService,
@@ -216,6 +219,7 @@ export class AppService {
       taskSchedulerService: this.taskSchedulerService,
       lifecycleService: this.lifecycleService,
       diagnosticsService: this.diagnosticsService,
+      healthCheckService: this.healthCheckService,
       mcpService: this.mcpService,
       skillService: this.skillService,
       agentService: this.agentService,
@@ -352,6 +356,7 @@ export function createAppServices(
     capabilityResolver: createRuntimeCapabilityResolver({ configService, skillService }),
     metricsService
   });
+  const healthCheckService = new HealthCheckService(paths, databaseService, taskSchedulerService, memoryService, configService);
   deepAgentRuntimeService.attachScheduler(taskSchedulerService);
   lifecycleService.attachScheduler(taskSchedulerService);
   const gitService = new GitService(workspaceService);
@@ -368,6 +373,7 @@ export function createAppServices(
     taskSchedulerService,
     lifecycleService,
     diagnosticsService,
+    healthCheckService,
     mcpService,
     skillService,
     agentService,
@@ -400,6 +406,7 @@ export function createAppServices(
     taskSchedulerService,
     lifecycleService,
     diagnosticsService,
+    healthCheckService,
     mcpService,
     skillService,
     agentService,

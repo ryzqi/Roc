@@ -17,6 +17,7 @@ import type {
   DiagnosticPackage,
   DiagnosticPackageRequest,
   DiagnosticCheck,
+  HealthCheckResult,
   FilePreviewRequest,
   FilePreviewResult,
   FilesWorkbenchPdfPreviewRequest,
@@ -133,6 +134,7 @@ export const ipcChannels = {
   diagnosticsCreatePackage: 'roc:diagnostics:create-package',
   diagnosticsRunChecks: 'roc:diagnostics:run-checks',
   diagnosticsGetMetricsSnapshot: 'roc:diagnostics:get-metrics-snapshot',
+  diagnosticsRunHealthCheck: 'roc:diagnostics:health-check',
   memoryStatus: 'roc:memory:status',
   memoryReadFile: 'roc:memory:read-file',
   memoryWriteFile: 'roc:memory:write-file',
@@ -238,6 +240,7 @@ export type RocPreloadApi = {
     createDiagnosticPackage: (request: DiagnosticPackageRequest) => Promise<IpcResult<DiagnosticPackage>>;
     runChecks: () => Promise<IpcResult<DiagnosticCheck[]>>;
     getMetricsSnapshot: (filter?: MetricFilter) => Promise<IpcResult<MetricsSnapshot>>;
+    runHealthCheck: () => Promise<IpcResult<HealthCheckResult>>;
   };
   memory: {
     status: () => Promise<IpcResult<MemoryStatus>>;
