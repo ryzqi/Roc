@@ -33,6 +33,7 @@ import {
 } from './window-state-store';
 import { applyWindowMaterial } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
+import { createTerminalOutputBatcher } from './terminal-output-batcher';
 import { bindNativeContextMenu } from './native-context-menu';
 import { buildSystemAppearanceSnapshot } from './system-appearance';
 import { handleExternalWindowOpen } from './external-link-policy';
@@ -335,12 +336,19 @@ async function createWindow(): Promise<void> {
     pdfPreviewProtocolRegistered = true;
   }
 
+  const terminalOutputBatcher = createTerminalOutputBatcher({
+    intervalMs: 16,
+    send: (event) => {
+      broadcastToWindows([mainWindow], 'roc:terminal:output', event, {
+        include: (_window, index) => index === 0
+      });
+    }
+  });
   services.terminalSessionService.onOutput((event) => {
-    broadcastToWindows([mainWindow], 'roc:terminal:output', event, {
-      include: (_window, index) => index === 0
-    });
+    terminalOutputBatcher.schedule(event);
   });
   services.terminalSessionService.onExit((event) => {
+    terminalOutputBatcher.flush();
     broadcastToWindows([mainWindow], 'roc:terminal:exit', event, {
       include: (_window, index) => index === 0
     });
