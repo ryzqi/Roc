@@ -1,10 +1,9 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
-import type { ShellExecutionDecision, ShellExecutionRequest, ShellExecutionResult } from '../../shared/types';
+import type { ShellExecutionDecision, ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
 import { parseRtkArgs } from '../../rtk-integration';
 import { RocDomainError } from './errors';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
-import type { TaskService } from './task-service';
 import type { WorkspaceService } from './workspace-service';
 import { redact } from './deep-agent/redact';
 
@@ -36,11 +35,15 @@ type ExecutedShellCommand = {
   bypassReason?: ShellExecutionResult['bypassReason'];
 };
 
+export type ShellTaskEventRecorder = {
+  recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): unknown;
+};
+
 export class ShellExecutionService {
   constructor(
     private readonly workspaceService: WorkspaceService,
     private readonly rtkService: RtkService,
-    private readonly taskService: TaskService
+    private readonly taskService: ShellTaskEventRecorder
   ) {}
 
   evaluate(request: ShellExecutionRequest): ShellExecutionDecision {
