@@ -19,6 +19,20 @@ afterEach(() => {
 });
 
 describe('MemoryService.writeFile', () => {
+  it('rejects workspace-scoped USER.md as an invalid path', () => {
+    const result = services.memoryService.writeFile({
+      scope: 'workspace',
+      kind: 'user',
+      content: 'workspace user memory'
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('invalid_path');
+      expect(result.detail).toContain('USER.md lives only at /memory/global/USER.md');
+    }
+  });
+
   it('writes a fresh global USER.md', () => {
     const result = services.memoryService.writeFile({
       scope: 'global',
@@ -45,6 +59,28 @@ describe('MemoryService.writeFile', () => {
       expect(result.chars).toBe(1500);
       expect(result.limit).toBe(1375);
     }
+  });
+
+  it('schedules consolidation on overflow for an existing file', () => {
+    const scheduleForFile = vi.spyOn(services.consolidatorService, 'scheduleForFile').mockImplementation(() => undefined);
+    const first = services.memoryService.writeFile({
+      scope: 'global',
+      kind: 'user',
+      content: 'initial small content'
+    });
+    expect(first.ok).toBe(true);
+
+    const result = services.memoryService.writeFile({
+      scope: 'global',
+      kind: 'user',
+      content: 'x'.repeat(1500)
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('capacity_exceeded');
+    }
+    expect(scheduleForFile).toHaveBeenCalledWith(expect.stringContaining('USER.md'), 'user');
   });
 
   it('rejects credential pattern', () => {
@@ -131,6 +167,29 @@ describe('MemoryService.readFileAsync', () => {
   it('reads back what was written asynchronously', async () => {
     await services.memoryService.writeFileAsync({ scope: 'global', kind: 'user', content: 'hello' });
     await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'user' })).resolves.toBe('hello');
+  });
+
+  it('writes different memory files concurrently', async () => {
+    const writes = [
+      { scope: 'global' as const, kind: 'user' as const, content: 'concurrent user' },
+      { scope: 'global' as const, kind: 'agents' as const, content: 'concurrent agents' },
+      { scope: 'global' as const, kind: 'memory' as const, content: 'concurrent memory' }
+    ];
+
+    const results = await Promise.all(writes.map((write) => services.memoryService.writeFileAsync(write)));
+
+    expect(results).toEqual([
+      expect.objectContaining({ ok: true }),
+      expect.objectContaining({ ok: true }),
+      expect.objectContaining({ ok: true })
+    ]);
+    await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'user' })).resolves.toBe('concurrent user');
+    await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'agents' })).resolves.toBe(
+      'concurrent agents'
+    );
+    await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'memory' })).resolves.toBe(
+      'concurrent memory'
+    );
   });
 });
 
