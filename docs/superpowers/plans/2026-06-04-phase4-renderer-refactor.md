@@ -140,14 +140,14 @@ Expected: PASS.
 - Test: `tests/renderer/features/memory-feature.test.tsx`
 - Test: existing tasks and memory renderer tests.
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 Tasks tests cover create preview, create background task, run now, pause/resume/cancel/delete, open in chat. Memory tests cover status, read file, write file, session search, snapshot preview.
 
 Run: `pnpm test -- tests/renderer/features/tasks-feature.test.tsx tests/renderer/features/memory-feature.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 2: Implement features**
+- [x] **Step 2: Implement features**
 
 Move feature-level loading and action handlers out of `App.tsx` and `ViewContent.tsx`. Preserve current test IDs.
 

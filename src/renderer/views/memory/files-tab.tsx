@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MemoryFileMeta, MemoryFileWriteOutcome, MemoryStatus, RocError } from '../../../shared/types';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 
 type FileTabError =
   | MemoryFileWriteOutcome
@@ -9,7 +11,7 @@ type FileTabError =
       detail: string;
     };
 
-export function FilesTab({ initialStatus }: { initialStatus: MemoryStatus }): React.JSX.Element {
+export function FilesTab({ client, initialStatus }: { client?: RocClient; initialStatus: MemoryStatus }): React.JSX.Element {
   const [status, setStatus] = useState<MemoryStatus>(initialStatus);
   const [selected, setSelected] = useState<MemoryFileMeta | null>(null);
   const [buffer, setBuffer] = useState('');
@@ -22,7 +24,8 @@ export function FilesTab({ initialStatus }: { initialStatus: MemoryStatus }): Re
   }, []);
 
   async function refreshStatus(): Promise<void> {
-    const result = await window.roc.memory.status();
+    const memoryClient = client ?? createRocClient();
+    const result = await memoryClient.api.memory.status();
     if (result.ok) {
       setStatus(result.data);
       setSelected((current) => syncSelectedMeta(current, result.data.files));
@@ -33,7 +36,8 @@ export function FilesTab({ initialStatus }: { initialStatus: MemoryStatus }): Re
     setSelected(file);
     setError(null);
     setLoading(true);
-    const result = await window.roc.memory.readFile({ scope: file.scope, kind: file.kind });
+    const memoryClient = client ?? createRocClient();
+    const result = await memoryClient.api.memory.readFile({ scope: file.scope, kind: file.kind });
     setLoading(false);
     if (!result.ok) {
       setBuffer('');
@@ -49,7 +53,8 @@ export function FilesTab({ initialStatus }: { initialStatus: MemoryStatus }): Re
     }
     setSaving(true);
     setError(null);
-    const result = await window.roc.memory.writeFile({
+    const memoryClient = client ?? createRocClient();
+    const result = await memoryClient.api.memory.writeFile({
       scope: selected.scope,
       kind: selected.kind,
       content: buffer

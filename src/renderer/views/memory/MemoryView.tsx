@@ -4,6 +4,7 @@ import { PageHeading } from '../../components/PageHeading';
 import type { LazyLoadState } from '../../app/types';
 import { visibleMemoryLabel } from '../../app/view-routing';
 import type { LoadedState } from '../../loaded-state';
+import type { RocClient } from '../../shared/roc-client';
 import { FilesTab } from './files-tab';
 import { SessionsTab } from './sessions-tab';
 import { SnapshotTab } from './snapshot-tab';
@@ -11,9 +12,11 @@ import { SnapshotTab } from './snapshot-tab';
 type MemoryTab = 'files' | 'sessions' | 'snapshot';
 
 export function MemoryView({
+  client,
   loadState,
   state
 }: {
+  client?: RocClient;
   loadState: LazyLoadState;
   state: LoadedState;
 }): React.JSX.Element {
@@ -74,9 +77,9 @@ export function MemoryView({
             系统快照
           </button>
         </div>
-        {tab === 'files' ? <FilesTab initialStatus={state.memoryStatus} /> : null}
-        {tab === 'sessions' ? <SessionsTab /> : null}
-        {tab === 'snapshot' ? <SnapshotTab /> : null}
+        {tab === 'files' ? <FilesTab client={client} initialStatus={state.memoryStatus} /> : null}
+        {tab === 'sessions' ? <SessionsTab client={client} /> : null}
+        {tab === 'snapshot' ? <SnapshotTab client={client} /> : null}
       </section>
     </>
   );

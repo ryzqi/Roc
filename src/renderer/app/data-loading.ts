@@ -22,6 +22,8 @@ import type {
   Workspace
 } from '../../shared/types';
 import { unwrap } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 import { applySettingsSnapshot } from '../settings-model';
 import { findNextGitSelection } from '../workbench/git-helpers';
 import { emptyWorkspaceData } from './empty-states';
@@ -121,11 +123,12 @@ async function loadGitSelectedPreview(request: { relativePath: string }): Promis
   return previewResult.ok ? previewResult.data : null;
 }
 
-export async function loadTaskSurfaceData(selectedTaskId?: string | null): Promise<TaskSurfaceData> {
+export async function loadTaskSurfaceData(selectedTaskId?: string | null, client: RocClient = createRocClient()): Promise<TaskSurfaceData> {
+  const api = client.api;
   const [activeTasksResult, schedulerStatusResult, traySummaryResult] = await Promise.all([
-    window.roc.tasks.getActiveTasks(),
-    window.roc.tasks.getSchedulerStatus(),
-    window.roc.lifecycle.getTraySummary()
+    api.tasks.getActiveTasks(),
+    api.tasks.getSchedulerStatus(),
+    api.lifecycle.getTraySummary()
   ]);
   const activeTasks = unwrap<ActiveTaskItem[]>('active tasks', activeTasksResult);
   const schedulerStatus = unwrap('scheduler status', schedulerStatusResult);
@@ -143,8 +146,8 @@ export async function loadTaskSurfaceData(selectedTaskId?: string | null): Promi
     primaryTaskId === null
       ? [null, null]
       : await Promise.all([
-          window.roc.tasks.getTaskDetail({ taskId: primaryTaskId }),
-          window.roc.tasks.listScheduledRuns({ taskId: primaryTaskId })
+          api.tasks.getTaskDetail({ taskId: primaryTaskId }),
+          api.tasks.listScheduledRuns({ taskId: primaryTaskId })
         ]);
 
   return {

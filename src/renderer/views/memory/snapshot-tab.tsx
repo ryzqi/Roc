@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 
-export function SnapshotTab(): React.JSX.Element {
+export function SnapshotTab({ client }: { client?: RocClient }): React.JSX.Element {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -9,7 +11,8 @@ export function SnapshotTab(): React.JSX.Element {
   }, []);
 
   async function refresh(): Promise<void> {
-    const result = await window.roc.memory.snapshotPreview();
+    const memoryClient = client ?? createRocClient();
+    const result = await memoryClient.api.memory.snapshotPreview();
     if (result.ok) {
       setText(result.data.text);
       setError(null);

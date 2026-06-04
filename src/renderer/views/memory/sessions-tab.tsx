@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { RocError, SessionMessageSearchResult } from '../../../shared/types';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 
 type WorkspaceScope = 'current' | 'global' | 'all';
 
-export function SessionsTab(): React.JSX.Element {
+export function SessionsTab({ client }: { client?: RocClient }): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>('current');
   const [sinceDays, setSinceDays] = useState(30);
@@ -18,7 +20,8 @@ export function SessionsTab(): React.JSX.Element {
     }
     setLoading(true);
     setError(null);
-    const response = await window.roc.sessions.search({
+    const memoryClient = client ?? createRocClient();
+    const response = await memoryClient.api.sessions.search({
       query: normalizedQuery,
       workspaceScope,
       sinceDays,

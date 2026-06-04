@@ -2,6 +2,8 @@ import type { ActiveTaskItem, TaskSnapshot, WorkflowHint } from '../../../shared
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
 import { loadTaskSurfaceData } from '../../app/data-loading';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 
 export type TaskActions = {
   cancelTask: (item: ActiveTaskItem) => void;
@@ -13,11 +15,16 @@ export type TaskActions = {
 };
 
 export function createTaskActions(input: {
+  client?: RocClient;
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
   navigateToChat: (threadId: string, workflowHint?: WorkflowHint) => void;
 }): TaskActions {
   function requireTaskId(item: ActiveTaskItem): string | null {
     return item.taskId;
+  }
+
+  function resolveClient(): RocClient {
+    return input.client ?? createRocClient();
   }
 
   return {
@@ -26,14 +33,16 @@ export function createTaskActions(input: {
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.cancelBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      const client = resolveClient();
+      void client.api.tasks.cancelBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
     },
     deleteTask: (item) => {
       const taskId = requireTaskId(item);
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.deleteBackgroundTask(taskId).then(async () => input.refreshTaskSurface(null));
+      const client = resolveClient();
+      void client.api.tasks.deleteBackgroundTask(taskId).then(async () => input.refreshTaskSurface(null));
     },
     openInChat: (item) => {
       const taskId = requireTaskId(item);
@@ -41,7 +50,8 @@ export function createTaskActions(input: {
         input.navigateToChat(item.threadId);
         return;
       }
-      void window.roc.tasks.openInChat({ taskId }).then((result) => {
+      const client = resolveClient();
+      void client.api.tasks.openInChat({ taskId }).then((result) => {
         if (!result.ok) {
           return;
         }
@@ -53,21 +63,24 @@ export function createTaskActions(input: {
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.pauseBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      const client = resolveClient();
+      void client.api.tasks.pauseBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
     },
     resumeTask: (item) => {
       const taskId = requireTaskId(item);
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.resumeBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      const client = resolveClient();
+      void client.api.tasks.resumeBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
     },
     runNow: (item) => {
       const taskId = requireTaskId(item);
       if (taskId === null) {
         return;
       }
-      void window.roc.tasks.runBackgroundNow(taskId).then(async (result) => {
+      const client = resolveClient();
+      void client.api.tasks.runBackgroundNow(taskId).then(async (result) => {
         if (!result.ok) {
           return;
         }
@@ -78,6 +91,7 @@ export function createTaskActions(input: {
 }
 
 export function useTaskActions(
+  client: RocClient | undefined,
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   input?: {
     navigateToChat?: (threadId: string, workflowHint?: WorkflowHint) => void;
@@ -85,10 +99,12 @@ export function useTaskActions(
   }
 ): TaskActions {
   return createTaskActions({
+    client,
     refreshTaskSurface: async (selectedTaskId) => {
+      const taskClient = client ?? createRocClient();
       const [taskSnapshot, taskSurfaceData] = await Promise.all([
-        window.roc.tasks.getSnapshot(),
-        loadTaskSurfaceData(selectedTaskId ?? input?.selectedTaskId)
+        taskClient.api.tasks.getSnapshot(),
+        loadTaskSurfaceData(selectedTaskId ?? input?.selectedTaskId, taskClient)
       ]);
       updateLoadedState({
         taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),

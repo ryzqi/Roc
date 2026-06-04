@@ -115,7 +115,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const refreshTaskState = useCallback(async (): Promise<void> => {
     const [taskSnapshot, taskSurfaceData] = await Promise.all([
       client.api.tasks.getSnapshot(),
-      loadTaskSurfaceData(selectedTaskSurfaceTaskId)
+      loadTaskSurfaceData(selectedTaskSurfaceTaskId, client)
     ]);
     setState((current) =>
       current === null
@@ -474,7 +474,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             ? 'task-surface:none'
             : `task-surface:${selectedTaskSurfaceTaskId}`,
     enabled: state !== null && startupLoadIntent.targets.has('taskSurface'),
-    load: useCallback(() => loadTaskSurfaceData(selectedTaskSurfaceTaskId), [selectedTaskSurfaceTaskId]),
+    load: useCallback(() => loadTaskSurfaceData(selectedTaskSurfaceTaskId, client), [client, selectedTaskSurfaceTaskId]),
     loadState: taskSurfaceLoadState,
     setLoadState: setTaskSurfaceLoadState
   });

@@ -5,6 +5,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
 import { buildTopMeta } from '../../app/view-routing';
 import type { LoadedState } from '../../loaded-state';
+import type { RocClient } from '../../shared/roc-client';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { TaskRow } from './TaskRow';
@@ -19,6 +20,7 @@ export type TaskPromptSubmission = {
 };
 
 export function TasksView({
+  client,
   state,
   updateLoadedState,
   liveTaskRun,
@@ -26,6 +28,7 @@ export function TasksView({
   onSelectedTaskIdChange,
   onSubmitTaskPrompt
 }: {
+  client?: RocClient;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   liveTaskRun: ChatRunState | null;
@@ -40,7 +43,7 @@ export function TasksView({
   const visibleItems = useMemo(() => filterTaskItems(model.allItems, selectedRailId), [model.allItems, selectedRailId]);
   const selectedRail = model.railItems.find((item) => item.id === selectedRailId) ?? model.railItems[0];
   const taskTableTitle = selectedRailId === 'all' ? '全部任务' : `${selectedRail?.title ?? '全部'}任务`;
-  const actions = useTaskActions(updateLoadedState, {
+  const actions = useTaskActions(client, updateLoadedState, {
     navigateToChat: onNavigateToThread,
     selectedTaskId: selectedTaskId === null || selectedTaskId.startsWith('thread_') ? null : selectedTaskId
   });
