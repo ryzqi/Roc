@@ -70,8 +70,8 @@ beforeEach(() => {
   services.appService.initialize();
 });
 
-afterEach(() => {
-  services.databaseService.close();
+afterEach(async () => {
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
   rmSync(userHome, { recursive: true, force: true });
   if (previousUserProfile === undefined) {

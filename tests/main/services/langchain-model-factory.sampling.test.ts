@@ -15,9 +15,9 @@ beforeEach(() => {
   services.appService.initialize();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
-  services.databaseService.close();
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
 });
 

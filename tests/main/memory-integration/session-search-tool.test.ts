@@ -22,8 +22,8 @@ beforeEach(() => {
   services.sessionArchiveService.recordAssistantMessage('t1', '建议检查 ndarray 原生模块', 10);
 });
 
-afterEach(() => {
-  services.databaseService.close();
+afterEach(async () => {
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
 });
 
