@@ -262,6 +262,36 @@ describe('LogService', () => {
     expect(warn).toHaveBeenCalledWith('[LogService] Queue overflow, dropping 1 logs');
   });
 
+  it('keeps every queued log when the queue reaches the maximum size exactly', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    for (let index = 0; index < 1000; index += 1) {
+      logService.append({ level: 'info', message: `Exact capacity ${index}` });
+    }
+
+    await logService.flush();
+
+    const lines = readLogLines();
+    expect(lines).toHaveLength(1000);
+    expect(lines[0]).toEqual(expect.objectContaining({ message: 'Exact capacity 0' }));
+    expect(lines.at(-1)).toEqual(expect.objectContaining({ message: 'Exact capacity 999' }));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate or lose queued logs when flush is requested concurrently', async () => {
+    logService.append({ level: 'info', message: 'Concurrent flush A' });
+    logService.append({ level: 'info', message: 'Concurrent flush B' });
+    logService.append({ level: 'info', message: 'Concurrent flush C' });
+
+    await Promise.all([logService.flush(), logService.flush(), logService.flush()]);
+
+    expect(readLogLines()).toEqual([
+      expect.objectContaining({ message: 'Concurrent flush A' }),
+      expect.objectContaining({ message: 'Concurrent flush B' }),
+      expect.objectContaining({ message: 'Concurrent flush C' })
+    ]);
+  });
+
   it('creates an empty app log file during initialization', () => {
     expect(existsSync(join(paths.logsDir, 'app.jsonl'))).toBe(true);
     expect(readFileSync(join(paths.logsDir, 'app.jsonl'), 'utf8')).toBe('');

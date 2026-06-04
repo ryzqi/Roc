@@ -115,6 +115,18 @@ describe('ConfigService unified settings document', () => {
     });
   });
 
+  it('returns defensive copies from the fresh settings cache', async () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    const firstSettings = await configService.getSettingsAsync();
+    firstSettings.globalHotkey = 'Ctrl+Alt+Mutated';
+
+    await expect(configService.getSettingsAsync()).resolves.toMatchObject({
+      globalHotkey: defaultSettings.globalHotkey
+    });
+  });
+
   it('migrates legacy v1 split config files into schemaVersion 4 settings.json with safeStorage credentials', () => {
     const legacyV1Settings = {
       schemaVersion: 1 as const,
