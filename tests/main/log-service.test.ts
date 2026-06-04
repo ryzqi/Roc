@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LogService } from '../../src/main/services/log-service';
 import { RocPaths } from '../../src/main/services/paths';
@@ -158,6 +159,34 @@ describe('LogService', () => {
     ]);
   });
 
+  it('writes fatal events with default fatal error metadata', async () => {
+    const fatalError = new Error('startup failed');
+    fatalError.stack = 'startup stack';
+
+    logService.fatal('Critical startup failure.', fatalError, {
+      service: 'app',
+      component: 'bootstrap',
+      metadata: { phase: 'startup' }
+    });
+
+    await logService.flush();
+
+    expect(readLogLines()).toEqual([
+      expect.objectContaining({
+        level: 'fatal',
+        message: 'Critical startup failure.',
+        service: 'app',
+        component: 'bootstrap',
+        metadata: { phase: 'startup' },
+        error: {
+          code: 'fatal',
+          message: 'startup failed',
+          stack: 'startup stack'
+        }
+      })
+    ]);
+  });
+
   it('flushes queued logs asynchronously after append', async () => {
     logService.append({ level: 'info', message: 'Automatic flush' });
 
@@ -167,6 +196,22 @@ describe('LogService', () => {
       expect.objectContaining({
         level: 'info',
         message: 'Automatic flush'
+      })
+    ]);
+  });
+
+  it('preserves logs appended before initialization', async () => {
+    await logService.close();
+    logService = new LogService(paths);
+
+    logService.append({ level: 'info', message: 'Queued before initialize' });
+    logService.initialize();
+    await logService.flush();
+
+    expect(readLogLines()).toEqual([
+      expect.objectContaining({
+        level: 'info',
+        message: 'Queued before initialize'
       })
     ]);
   });
@@ -201,6 +246,22 @@ describe('LogService', () => {
     expect(warn).toHaveBeenCalledWith('[LogService] Attempted to log after close:', 'After close');
   });
 
+  it('drops the oldest queued logs when the queue exceeds its maximum size', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    for (let index = 0; index < 1005; index += 1) {
+      logService.append({ level: 'info', message: `Overflow ${index}` });
+    }
+
+    await logService.flush();
+
+    const lines = readLogLines();
+    expect(lines).toHaveLength(1000);
+    expect(lines[0]).toEqual(expect.objectContaining({ message: 'Overflow 5' }));
+    expect(lines.at(-1)).toEqual(expect.objectContaining({ message: 'Overflow 1004' }));
+    expect(warn).toHaveBeenCalledWith('[LogService] Queue overflow, dropping 1 logs');
+  });
+
   it('creates an empty app log file during initialization', () => {
     expect(existsSync(join(paths.logsDir, 'app.jsonl'))).toBe(true);
     expect(readFileSync(join(paths.logsDir, 'app.jsonl'), 'utf8')).toBe('');
@@ -225,6 +286,28 @@ describe('LogService', () => {
     expect(archiveFiles.length).toBeGreaterThan(0);
     expect(statSync(join(paths.logsDir, 'app.jsonl')).size).toBeLessThanOrEqual(Math.ceil(0.0008 * 1024 * 1024));
     expect(readAllLogLines()).toHaveLength(20);
+  });
+
+  it('compresses rotated app logs when compression is enabled', async () => {
+    await logService.close();
+    logService = new LogService(paths, {
+      maxFileSizeMb: 0.0006,
+      maxFiles: 10,
+      compress: true
+    });
+    logService.initialize();
+
+    for (let index = 0; index < 12; index += 1) {
+      logService.append({ level: 'info', message: `Compressed rotation ${index} ${'c'.repeat(80)}` });
+    }
+
+    await logService.flush();
+
+    const compressedArchives = readCompressedArchiveFileNames();
+    expect(compressedArchives.length).toBeGreaterThan(0);
+    expect(readArchiveFileNames()).toEqual([]);
+    const decompressed = gunzipSync(readFileSync(join(paths.logsDir, compressedArchives[0]!))).toString('utf8');
+    expect(decompressed).toContain('Compressed rotation');
   });
 
   it('keeps only the configured number of rotated app logs', async () => {
@@ -291,6 +374,12 @@ describe('LogService', () => {
   function readArchiveFileNames(): string[] {
     return readdirSync(paths.logsDir)
       .filter((fileName) => fileName !== 'app.jsonl' && fileName.startsWith('app.') && fileName.endsWith('.jsonl'))
+      .sort();
+  }
+
+  function readCompressedArchiveFileNames(): string[] {
+    return readdirSync(paths.logsDir)
+      .filter((fileName) => fileName !== 'app.jsonl' && fileName.startsWith('app.') && fileName.endsWith('.jsonl.gz'))
       .sort();
   }
 
