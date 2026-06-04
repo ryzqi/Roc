@@ -271,6 +271,7 @@ export function ChatView({
       </div>
       <div className={showEmptyState ? 'chat-bottom-stack chat-bottom-stack--empty' : 'chat-bottom-stack'}>
         <ChatComposer
+          client={client}
           chatInput={chatInput}
           onChatInputChange={setChatInput}
           selectedAttachments={selectedAttachments}

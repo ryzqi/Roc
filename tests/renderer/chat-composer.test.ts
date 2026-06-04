@@ -1,13 +1,18 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { RocPreloadApi } from '../../src/shared/ipc';
 import { ChatComposer } from '../../src/renderer/chat/chat-composer';
+import type { RocClient } from '../../src/renderer/shared/roc-client';
 import { createLoadedState } from './view-test-helpers';
+
+const testClient: RocClient = { api: {} as RocPreloadApi };
 
 describe('chat composer skills popover', () => {
   it('renders skill names and descriptions inside the skill popover choices', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatComposer, {
+        client: testClient,
         chatInput: '规划一下',
         onChatInputChange: () => {},
         selectedAttachments: [],
@@ -45,6 +50,7 @@ describe('chat composer capability triggers', () => {
   it('keeps tool and skill triggers active without numeric badges', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatComposer, {
+        client: testClient,
         chatInput: '继续',
         onChatInputChange: () => {},
         selectedAttachments: [],
@@ -71,6 +77,7 @@ describe('chat composer capability triggers', () => {
   it('renders shared popover structure for tools and models', () => {
     const toolsHtml = renderToStaticMarkup(
       React.createElement(ChatComposer, {
+        client: testClient,
         chatInput: '继续',
         onChatInputChange: () => {},
         selectedAttachments: [],
@@ -102,6 +109,7 @@ describe('chat composer capability triggers', () => {
 
     const modelsHtml = renderToStaticMarkup(
       React.createElement(ChatComposer, {
+        client: testClient,
         chatInput: '继续',
         onChatInputChange: () => {},
         selectedAttachments: [],

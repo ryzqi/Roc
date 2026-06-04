@@ -30,21 +30,27 @@ describe('renderer bundle boundaries', () => {
     expect(preloadContract).not.toContain('openTrayEntry');
   });
 
-  it('keeps non-chat views behind lazy renderer boundaries', () => {
+  it('keeps heavy workbench views behind lazy renderer boundaries', () => {
     const viewContent = readFileSync('src/renderer/views/ViewContent.tsx', 'utf8');
 
     expect(viewContent).not.toContain("import { GitView } from './git/GitView';");
     expect(viewContent).not.toContain("import { TerminalView } from './terminal/TerminalView';");
-    expect(viewContent).not.toContain("import { SkillsHostView } from './skills/SkillsHostView';");
     expect(viewContent).toContain("lazy(() => import('./git/GitView')");
     expect(viewContent).toContain("lazy(() => import('./terminal/TerminalView')");
-    expect(viewContent).toContain("lazy(() => import('./skills/SkillsHostView')");
+  });
+
+  it('routes skills through the feature boundary instead of importing the host view directly', () => {
+    const viewContent = readFileSync('src/renderer/views/ViewContent.tsx', 'utf8');
+
+    expect(viewContent).not.toContain("import { SkillsHostView } from './skills/SkillsHostView';");
+    expect(viewContent).toContain("import { SkillsFeature } from '../features/skills';");
   });
 
   it('lazy-loads the workbench panel outside the chat first-screen bundle', () => {
     const app = readFileSync('src/renderer/App.tsx', 'utf8');
+    const appShell = readFileSync('src/renderer/app/AppShell.tsx', 'utf8');
 
     expect(app).not.toContain("import { WorkbenchPanel } from './workbench/WorkbenchPanel';");
-    expect(app).toContain("import('./workbench/WorkbenchPanel')");
+    expect(appShell).toContain("import('../workbench/WorkbenchPanel')");
   });
 });

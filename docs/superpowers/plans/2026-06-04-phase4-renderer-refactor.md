@@ -193,7 +193,7 @@ Expected: PASS.
 - Modify: `tests/renderer/bundle-boundaries.test.ts`
 - Create: `tests/renderer/renderer-boundaries.test.ts`
 
-- [ ] **Step 1: Add boundary tests**
+- [x] **Step 1: Add boundary tests**
 
 Assert:
 - `src/renderer/App.tsx` is under 180 lines.
@@ -203,7 +203,7 @@ Assert:
 Run: `pnpm test -- tests/renderer/renderer-boundaries.test.ts tests/renderer/bundle-boundaries.test.ts`
 Expected: FAIL until Tasks 1-5 are complete.
 
-- [ ] **Step 2: Make boundary tests pass**
+- [x] **Step 2: Make boundary tests pass**
 
 Move remaining orchestration into feature hooks. Do not change UI behavior to satisfy line-count tests.
 

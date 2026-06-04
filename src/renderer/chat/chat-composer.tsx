@@ -3,11 +3,13 @@ import { unwrap } from '../loaded-state';
 import type { Dispatch, SetStateAction } from 'react';
 import type { SettingsSnapshot } from '../../shared/types';
 import { applySettingsSnapshot, buildSettingsSaveRequest, setDefaultModelInSettingsSaveRequest } from '../settings-model';
+import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
 type ChatComposerProps = {
+  client: RocClient;
   chatInput: string;
   onChatInputChange: (value: string) => void;
   selectedAttachments: string[];
@@ -84,6 +86,7 @@ function CapabilityPopover({
 }
 
 export function ChatComposer({
+  client,
   chatInput,
   onChatInputChange,
   selectedAttachments,
@@ -125,7 +128,7 @@ export function ChatComposer({
   const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
 
   async function selectAttachmentsFromDialog(): Promise<void> {
-    const selection = await window.roc.files.selectFromDialog();
+    const selection = await client.api.files.selectFromDialog();
     if (!selection.ok || selection.data === null) {
       return;
     }
@@ -337,7 +340,7 @@ export function ChatComposer({
                       key={model.id}
                       type="button"
                       onClick={() => {
-                        void window.roc.settings
+                        void client.api.settings
                           .save(
                             setDefaultModelInSettingsSaveRequest(
                               buildSettingsSaveRequest({
