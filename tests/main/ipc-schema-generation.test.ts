@@ -43,4 +43,18 @@ describe('IPC schema generation', () => {
     expect(ipcRequestChannelKeys).toEqual(schema.requests.map((entry) => entry.key));
     expect(ipcEventChannelKeys).toEqual(schema.events.map((entry) => entry.key));
   });
+
+  it('keeps preload on generated channels without raw capability or wildcard IPC', () => {
+    const schema = readIpcSchema();
+    const preloadSource = readFileSync('src/preload/index.ts', 'utf8');
+    const schemaKeys = new Set([...schema.requests, ...schema.events].map((entry) => entry.key));
+    const preloadChannelKeys = Array.from(preloadSource.matchAll(/ipcChannels\.([A-Za-z0-9_]+)/gu), (match) => match[1]!);
+
+    expect(preloadChannelKeys.length).toBeGreaterThan(0);
+    expect(new Set(preloadChannelKeys)).toEqual(new Set(preloadChannelKeys.filter((key) => schemaKeys.has(key))));
+    expect(preloadSource).not.toContain('invokeCapability');
+    expect(preloadSource).not.toContain("ipcRenderer.invoke('*'");
+    expect(JSON.stringify(schema)).not.toContain('invokeCapability');
+    expect(JSON.stringify(schema)).not.toContain('"*"');
+  });
 });
