@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -96,12 +96,92 @@ describe('LogService', () => {
     expect(readFileSync(join(paths.logsDir, 'app.jsonl'), 'utf8')).toBe('');
   });
 
+  it('rotates the app log when the configured size limit is exceeded', async () => {
+    await logService.close();
+    logService = new LogService(paths, {
+      maxFileSizeMb: 0.0008,
+      maxFiles: 10,
+      compress: false
+    });
+    logService.initialize();
+
+    for (let index = 0; index < 20; index += 1) {
+      logService.append({ level: 'info', message: `Rotate ${index} ${'x'.repeat(80)}` });
+    }
+
+    await logService.flush();
+
+    const archiveFiles = readArchiveFileNames();
+    expect(archiveFiles.length).toBeGreaterThan(0);
+    expect(statSync(join(paths.logsDir, 'app.jsonl')).size).toBeLessThanOrEqual(Math.ceil(0.0008 * 1024 * 1024));
+    expect(readAllLogLines()).toHaveLength(20);
+  });
+
+  it('keeps only the configured number of rotated app logs', async () => {
+    await logService.close();
+    logService = new LogService(paths, {
+      maxFileSizeMb: 0.0002,
+      maxFiles: 3,
+      compress: false
+    });
+    logService.initialize();
+
+    for (let index = 0; index < 30; index += 1) {
+      logService.append({ level: 'warn', message: `Archive ${index} ${'y'.repeat(60)}` });
+    }
+
+    await logService.flush();
+
+    expect(readArchiveFileNames().length).toBeLessThanOrEqual(3);
+  });
+
+  it('removes the oldest archives when rotation names share a timestamp', async () => {
+    await logService.close();
+    const oldestArchive = 'app.2000-01-01T00-00-00-000Z.jsonl';
+    const newerArchive = 'app.2000-01-01T00-00-00-000Z-1.jsonl';
+    const newestArchive = 'app.2000-01-01T00-00-00-000Z-2.jsonl';
+    writeFileSync(join(paths.logsDir, oldestArchive), '{"message":"oldest"}\n', 'utf8');
+    writeFileSync(join(paths.logsDir, newerArchive), '{"message":"newer"}\n', 'utf8');
+    writeFileSync(join(paths.logsDir, newestArchive), '{"message":"newest"}\n', 'utf8');
+    logService = new LogService(paths, {
+      maxFileSizeMb: 0.000001,
+      maxFiles: 2,
+      compress: false
+    });
+    logService.initialize();
+
+    logService.append({ level: 'info', message: `Current ${'z'.repeat(80)}` });
+    await logService.flush();
+
+    const archiveFiles = readArchiveFileNames();
+    expect(archiveFiles).toHaveLength(2);
+    expect(archiveFiles).not.toContain(oldestArchive);
+    expect(archiveFiles).toContain(newestArchive);
+  });
+
   function readLogLines(): Array<Record<string, unknown>> {
     const content = readFileSync(join(paths.logsDir, 'app.jsonl'), 'utf8').trim();
     if (content.length === 0) {
       return [];
     }
     return content.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  function readAllLogLines(): Array<Record<string, unknown>> {
+    const fileNames = ['app.jsonl', ...readArchiveFileNames()];
+    return fileNames.flatMap((fileName) => {
+      const content = readFileSync(join(paths.logsDir, fileName), 'utf8').trim();
+      if (content.length === 0) {
+        return [];
+      }
+      return content.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    });
+  }
+
+  function readArchiveFileNames(): string[] {
+    return readdirSync(paths.logsDir)
+      .filter((fileName) => fileName !== 'app.jsonl' && fileName.startsWith('app.') && fileName.endsWith('.jsonl'))
+      .sort();
   }
 
   async function waitForLogCount(expectedCount: number): Promise<void> {

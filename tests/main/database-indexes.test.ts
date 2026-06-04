@@ -14,7 +14,8 @@ beforeEach(() => {
   services.appService.initialize();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await services.logService.close();
   services.databaseService.close();
   rmSync(root, { recursive: true, force: true });
 });

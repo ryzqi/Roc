@@ -1,5 +1,8 @@
-import { createWriteStream, existsSync, writeFileSync, type WriteStream } from 'node:fs';
-import { join } from 'node:path';
+import { createReadStream, createWriteStream, existsSync, statSync, writeFileSync, type WriteStream } from 'node:fs';
+import { readdir, rename, unlink } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
+import { createGzip } from 'node:zlib';
+import { dirname, join } from 'node:path';
 import type { RocPaths } from './paths';
 
 export type LogEvent = {
@@ -8,29 +11,51 @@ export type LogEvent = {
   data?: unknown;
 };
 
+export type LogRotationConfig = {
+  maxFileSizeMb: number;
+  maxFiles: number;
+  compress: boolean;
+};
+
+type LogArchiveFile = {
+  fileName: string;
+  sequence: number;
+  timestamp: string;
+};
+
+const defaultRotationConfig: LogRotationConfig = {
+  maxFileSizeMb: 50,
+  maxFiles: 10,
+  compress: false
+};
+
 export class LogService {
   private readonly appLogPath: string;
+  private readonly rotationConfig: LogRotationConfig;
   private writeStream: WriteStream | null = null;
   private writeQueue: string[] = [];
   private flushPromise: Promise<void> | null = null;
   private flushScheduled = false;
   private closed = false;
+  private currentSizeBytes = 0;
   private readonly maxQueueSize = 1000;
   private readonly batchSize = 100;
 
-  constructor(paths: RocPaths) {
+  constructor(paths: RocPaths, rotationConfig: Partial<LogRotationConfig> = {}) {
     this.appLogPath = join(paths.logsDir, 'app.jsonl');
+    this.rotationConfig = {
+      ...defaultRotationConfig,
+      ...rotationConfig
+    };
   }
 
   initialize(): void {
     if (!existsSync(this.appLogPath)) {
       writeFileSync(this.appLogPath, '', 'utf8');
     }
+    this.currentSizeBytes = statSync(this.appLogPath).size;
     if (this.writeStream === null) {
-      this.writeStream = createWriteStream(this.appLogPath, { flags: 'a', encoding: 'utf8' });
-      this.writeStream.on('error', (error) => {
-        this.reportWriteFailure(error);
-      });
+      this.openWriteStream();
     }
     if (this.writeQueue.length > 0) {
       this.scheduleFlush();
@@ -75,6 +100,13 @@ export class LogService {
     }
   }
 
+  async checkAndRotate(): Promise<void> {
+    await this.flush();
+    if (this.shouldRotate()) {
+      await this.rotateCurrentFile();
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     await this.flush();
@@ -85,6 +117,13 @@ export class LogService {
       });
       this.writeStream = null;
     }
+  }
+
+  private openWriteStream(): void {
+    this.writeStream = createWriteStream(this.appLogPath, { flags: 'a', encoding: 'utf8' });
+    this.writeStream.on('error', (error) => {
+      this.reportWriteFailure(error);
+    });
   }
 
   private scheduleFlush(): void {
@@ -114,8 +153,89 @@ export class LogService {
             resolve();
           });
         });
+        this.currentSizeBytes += Buffer.byteLength(line, 'utf8');
+        if (this.shouldRotate()) {
+          await this.rotateCurrentFile();
+        }
       }
     }
+  }
+
+  private shouldRotate(): boolean {
+    return this.currentSizeBytes >= this.rotationConfig.maxFileSizeMb * 1024 * 1024;
+  }
+
+  private async rotateCurrentFile(): Promise<void> {
+    if (this.writeStream === null) {
+      return;
+    }
+
+    const stream = this.writeStream;
+    await new Promise<void>((resolve) => {
+      stream.end(() => resolve());
+    });
+    this.writeStream = null;
+
+    const archivePath = this.createArchivePath();
+    await rename(this.appLogPath, archivePath);
+    if (this.rotationConfig.compress) {
+      await this.compressFile(archivePath);
+    }
+    writeFileSync(this.appLogPath, '', 'utf8');
+    this.currentSizeBytes = 0;
+    this.openWriteStream();
+    await this.cleanupOldLogs();
+  }
+
+  private createArchivePath(): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    for (let index = 0; index < 1000; index += 1) {
+      const suffix = index === 0 ? timestamp : `${timestamp}-${index}`;
+      const archivePath = this.appLogPath.replace('.jsonl', `.${suffix}.jsonl`);
+      if (!existsSync(archivePath) && !existsSync(`${archivePath}.gz`)) {
+        return archivePath;
+      }
+    }
+    throw new Error('Unable to allocate a unique log archive path.');
+  }
+
+  private async compressFile(filePath: string): Promise<void> {
+    const gzipPath = `${filePath}.gz`;
+    const source = createReadStream(filePath);
+    const destination = createWriteStream(gzipPath);
+    const gzip = createGzip();
+    await pipeline(source, gzip, destination);
+    await unlink(filePath);
+  }
+
+  private async cleanupOldLogs(): Promise<void> {
+    const files = await readdir(dirname(this.appLogPath));
+    const archiveFiles = files
+      .map((fileName) => this.parseArchiveFile(fileName))
+      .filter((archiveFile): archiveFile is LogArchiveFile => archiveFile !== null)
+      .sort((left, right) => {
+        const timestampOrder = right.timestamp.localeCompare(left.timestamp);
+        if (timestampOrder !== 0) {
+          return timestampOrder;
+        }
+        return right.sequence - left.sequence;
+      });
+
+    for (const archiveFile of archiveFiles.slice(this.rotationConfig.maxFiles)) {
+      await unlink(join(dirname(this.appLogPath), archiveFile.fileName));
+    }
+  }
+
+  private parseArchiveFile(fileName: string): LogArchiveFile | null {
+    const match = /^app\.(.+Z)(?:-(\d+))?\.jsonl(?:\.gz)?$/.exec(fileName);
+    if (match === null) {
+      return null;
+    }
+    return {
+      fileName,
+      timestamp: match[1],
+      sequence: match[2] === undefined ? 0 : Number(match[2])
+    };
   }
 
   private reportWriteFailure(error: unknown): void {
