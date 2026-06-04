@@ -280,7 +280,16 @@ export class DeepAgentRuntimeService {
     let taskRun: TaskRun;
     try {
       taskRun = this.taskService.getRun(runId);
-    } catch {
+    } catch (error) {
+      this.logService.warn('Failed to retrieve task run.', {
+        service: 'deep-agent-runtime',
+        component: 'readResumeContext',
+        runId,
+        threadId,
+        metadata: {
+          error: String(error)
+        }
+      });
       throw new RocDomainError({
         code: 'chat_resume_run_missing',
         message: '待恢复的运行上下文不存在。',
@@ -924,6 +933,26 @@ export class DeepAgentRuntimeService {
 
   private failRun(context: RunExecutionContext, error: unknown): void {
     const failure = errorMapping.toRunFailure(error);
+    const logError = toRedactedLogError(error, failure.message);
+    this.logService.error('Agent run failed.', logError, {
+      service: 'deep-agent-runtime',
+      component: 'failRun',
+      runId: context.runId,
+      threadId: context.threadId,
+      error: {
+        code: failure.code,
+        message: failure.message,
+        category: failure.retryable ? 'retryable' : 'permanent',
+        stack: logError.stack
+      },
+      metadata: {
+        mode: context.mode,
+        modelId: context.modelHandle.modelId,
+        providerId: context.modelHandle.provider.id,
+        diagnostic: failure.diagnostic,
+        suggestion: failure.suggestion
+      }
+    });
     if (context.taskRun !== null) {
       this.taskService.failRunWithProviderError({
         runId: context.taskRun.id,
@@ -969,6 +998,14 @@ export class DeepAgentRuntimeService {
       payload: approval
     });
   }
+}
+
+function toRedactedLogError(error: unknown, message: string): Error {
+  const logError = new Error(message);
+  if (error instanceof Error && error.stack !== undefined) {
+    logError.stack = redact(error.stack);
+  }
+  return logError;
 }
 
 function createInitialForgeGuardrailsState(): {

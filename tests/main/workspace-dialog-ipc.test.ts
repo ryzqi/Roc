@@ -48,8 +48,8 @@ beforeEach(() => {
   services.appService.initialize();
 });
 
-afterEach(() => {
-  services.databaseService.close();
+afterEach(async () => {
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -90,6 +90,32 @@ describe('workspace dialog IPC', () => {
     expect(electronMock.handlers.has(ipcChannels.terminalWriteInput)).toBe(true);
     expect(electronMock.handlers.has(ipcChannels.terminalResize)).toBe(true);
     expect(electronMock.handlers.has(ipcChannels.terminalCloseSession)).toBe(true);
+  });
+
+  it('logs IPC failures with the channel and argument count only', async () => {
+    registerWorkspaceHandlers();
+    const observerError = new Error('observer failed');
+    vi.spyOn(services.performanceObserverService, 'record').mockImplementation(() => {
+      throw observerError;
+    });
+    const logError = vi.spyOn(services.logService, 'error');
+    const handler = electronMock.handlers.get(ipcChannels.appGetStatus);
+    if (handler === undefined) {
+      throw new Error('appGetStatus handler was not registered.');
+    }
+
+    await expect(handler({ sender: 'secret-sender' }, { token: 'secret-token' })).rejects.toBe(observerError);
+
+    expect(logError).toHaveBeenCalledWith('IPC handler failed.', observerError, {
+      service: 'ipc',
+      component: 'register-ipc',
+      metadata: {
+        channel: ipcChannels.appGetStatus,
+        args: 2
+      }
+    });
+    expect(JSON.stringify(logError.mock.calls)).not.toContain('secret-token');
+    expect(JSON.stringify(logError.mock.calls)).not.toContain('secret-sender');
   });
 
   it('registers chat run IPC handlers and delegates to the Deep Agents runtime', async () => {

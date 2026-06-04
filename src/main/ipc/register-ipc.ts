@@ -31,7 +31,7 @@ export type AppWindowControls = {
 const slowIpcThresholdMs = 50;
 
 export function registerIpc(services: AppServices, mainWindow: BrowserWindow, controls: AppWindowControls): void {
-  function timedIpc<T>(channel: string, operation: IpcHandler<T>): Promise<IpcResult<T>> {
+  function timedIpc<T>(channel: string, argsLength: number, operation: IpcHandler<T>): Promise<IpcResult<T>> {
     const startedAtMs = performance.now();
     return Promise.resolve(operation()).then((result) => {
       const durationMs = performance.now() - startedAtMs;
@@ -59,6 +59,14 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
       return result;
     }).catch((error: unknown) => {
       const durationMs = performance.now() - startedAtMs;
+      services.logService.error('IPC handler failed.', toLogError(error), {
+        service: 'ipc',
+        component: 'register-ipc',
+        metadata: {
+          channel,
+          args: argsLength
+        }
+      });
       services.performanceObserverService.record({
         phase: 'ipc_call',
         label: channel,
@@ -85,7 +93,7 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   }
 
   function timedHandle(channel: string, handler: IpcMainHandler): void {
-    ipcMain.handle(channel, (...args: any[]) => timedIpc(channel, () => handler(...args)));
+    ipcMain.handle(channel, (...args: any[]) => timedIpc(channel, args.length, () => handler(...args)));
   }
 
   registerAppIpc(timedHandle, services.appService, controls);
@@ -113,4 +121,11 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
   registerTerminalIpc(timedHandle, services.terminalSessionService);
   registerRtkIpc(timedHandle, services.rtkService);
   registerShellIpc(timedHandle, mainWindow, services.logService, services.shellExecutionService);
+}
+
+function toLogError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
 }

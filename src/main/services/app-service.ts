@@ -5,6 +5,7 @@ import { ConfigService } from './config-service';
 import { DatabaseService } from './database-service';
 import { DeepAgentRuntimeService } from './deep-agent-runtime-service';
 import { DiagnosticsService, type RuntimeMetricsProvider } from './diagnostics-service';
+import { setLogService } from './errors';
 import { FileService } from './file-service';
 import { GitService } from './git-service';
 import { LifecycleService } from './lifecycle-service';
@@ -127,6 +128,7 @@ export class AppService {
     this.mcpService.ensureExaPreset();
     this.databaseService.initialize();
     this.logService.initialize();
+    setLogService(this.logService);
     this.logService.info('Roc critical services initialized.', {
       service: 'app-service',
       component: 'initializeCritical'
@@ -150,6 +152,7 @@ export class AppService {
     this.taskSchedulerService.stop();
     this.databaseService.close();
     await this.logService.close();
+    setLogService(null);
   }
 
   getStatus(): AppStatus {

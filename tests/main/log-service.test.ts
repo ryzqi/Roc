@@ -127,6 +127,37 @@ describe('LogService', () => {
     ]);
   });
 
+  it('allows structured error context to override the default error code', async () => {
+    const providerError = new Error('provider failed');
+    providerError.stack = 'provider stack';
+
+    logService.error('Provider request failed.', providerError, {
+      service: 'deep-agent-runtime',
+      error: {
+        code: 'provider_http_error',
+        message: 'Provider 请求失败。',
+        category: 'external',
+        stack: providerError.stack
+      }
+    });
+
+    await logService.flush();
+
+    expect(readLogLines()).toEqual([
+      expect.objectContaining({
+        level: 'error',
+        message: 'Provider request failed.',
+        service: 'deep-agent-runtime',
+        error: {
+          code: 'provider_http_error',
+          message: 'Provider 请求失败。',
+          category: 'external',
+          stack: 'provider stack'
+        }
+      })
+    ]);
+  });
+
   it('flushes queued logs asynchronously after append', async () => {
     logService.append({ level: 'info', message: 'Automatic flush' });
 

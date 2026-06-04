@@ -32,7 +32,7 @@ export type LogEvent = {
   data?: unknown;
 };
 
-export type LogEventContext = Omit<Partial<LogEvent>, 'level' | 'message' | 'error'>;
+export type LogEventContext = Omit<Partial<LogEvent>, 'level' | 'message'>;
 
 export type LogRotationConfig = {
   maxFileSizeMb: number;
@@ -115,27 +115,27 @@ export class LogService {
 
   error(message: string, error: Error, context: LogEventContext = {}): void {
     this.append({
-      ...context,
       level: 'error',
       message,
       error: {
         code: 'error',
         message: error.message,
         stack: error.stack
-      }
+      },
+      ...context
     });
   }
 
   fatal(message: string, error: Error, context: LogEventContext = {}): void {
     this.append({
-      ...context,
       level: 'fatal',
       message,
       error: {
         code: 'fatal',
         message: error.message,
         stack: error.stack
-      }
+      },
+      ...context
     });
   }
 

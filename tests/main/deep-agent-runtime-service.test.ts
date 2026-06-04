@@ -44,6 +44,15 @@ vi.mock('@langchain/mcp-adapters', () => {
   };
 });
 
+type RuntimeLogServiceMock = {
+  append: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  fatal: ReturnType<typeof vi.fn>;
+};
+
 function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
   return {
     async *[Symbol.asyncIterator]() {
@@ -54,7 +63,18 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
   };
 }
 
-  function createRuntime(): DeepAgentRuntimeService {
+function createRuntimeLogServiceMock(): RuntimeLogServiceMock {
+  return {
+    append: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn()
+  };
+}
+
+function createRuntime(logService: RuntimeLogServiceMock = createRuntimeLogServiceMock()): DeepAgentRuntimeService {
     const runtime = new DeepAgentRuntimeService(
       services.langChainModelFactory,
       services.taskService,
@@ -72,18 +92,11 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       services.paths,
       () => services.configService.getSettings().memory,
       services.performanceObserverService,
-      {
-        append: vi.fn(),
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        fatal: vi.fn()
-      } as never
+      logService as never
     );
     runtime.attachScheduler(services.taskSchedulerService);
     return runtime;
-  }
+}
 
 function waitForEvent(
   runtime: DeepAgentRuntimeService,
@@ -3631,6 +3644,79 @@ describe('DeepAgentRuntimeService', () => {
     });
   });
 
+  it('logs the missing persisted task run when resume context cannot be read', async () => {
+    mocked.streamEventsMock.mockResolvedValueOnce({
+      messages: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      interrupted: true,
+      interrupts: [
+        {
+          interruptId: 'interrupt-missing-run',
+          payload: {
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      ],
+      output: Promise.resolve({
+        interrupted: true
+      })
+    });
+    const logService = createRuntimeLogServiceMock();
+    const runtime = createRuntime(logService);
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: '执行 git status',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+    vi.spyOn(services.taskService, 'getRun').mockImplementation(() => {
+      throw new Error('task run missing');
+    });
+
+    await expect(
+      runtime.resumeRun({
+        runId: started.runId,
+        threadId: started.threadId as string,
+        interruptId: 'interrupt-missing-run',
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
+      })
+    ).rejects.toMatchObject({
+      code: 'chat_resume_run_missing'
+    });
+
+    expect(logService.warn).toHaveBeenCalledWith('Failed to retrieve task run.', {
+      service: 'deep-agent-runtime',
+      component: 'readResumeContext',
+      runId: started.runId,
+      threadId: started.threadId,
+      metadata: {
+        error: 'Error: task run missing'
+      }
+    });
+  });
+
   it('rejects respond for delete_file with the configured product policy', async () => {
     mocked.streamEventsMock.mockResolvedValueOnce({
       messages: createAsyncIterable([]),
@@ -3776,6 +3862,52 @@ describe('DeepAgentRuntimeService', () => {
       modelId: 'moonshotai/kimi-k2.6'
     });
     expect(JSON.stringify(errorEvent?.payload)).not.toContain('sk-secret-value');
+  });
+
+  it('logs run failures with structured provider and run metadata', async () => {
+    const providerFailure = new RocDomainError({
+      code: 'provider_http_error',
+      message: 'Provider 请求失败：Authorization: Bearer sk-secret-value',
+      category: 'external',
+      retryable: true,
+      userAction: '请检查 Provider 网络和凭据。'
+    });
+    mocked.streamEventsMock.mockRejectedValue(providerFailure);
+    const logService = createRuntimeLogServiceMock();
+
+    const runtime = createRuntime(logService);
+    const failed = waitForEvent(runtime, (event) => event.type === 'run_failed');
+    const started = await runtime.startRun({
+      input: '触发 provider 失败',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await failed;
+
+    expect(logService.error).toHaveBeenCalledWith('Agent run failed.', expect.any(Error), {
+      service: 'deep-agent-runtime',
+      component: 'failRun',
+      runId: started.runId,
+      threadId: started.threadId,
+      error: {
+        code: 'provider_http_error',
+        message: 'Provider 请求失败：[REDACTED]',
+        category: 'retryable',
+        stack: expect.stringContaining('[REDACTED]')
+      },
+      metadata: expect.objectContaining({
+        mode: 'task',
+        modelId: 'moonshotai/kimi-k2.6',
+        providerId: 'nvidia'
+      })
+    });
+    const loggedError = logService.error.mock.calls[0]?.[1] as Error | undefined;
+    expect(loggedError?.message).toBe('Provider 请求失败：[REDACTED]');
+    expect(loggedError?.stack).toContain('[REDACTED]');
+    expect(JSON.stringify(logService.error.mock.calls)).not.toContain('sk-secret-value');
   });
 
   it('emits and persists tool schema failure diagnostics', async () => {
