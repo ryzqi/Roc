@@ -11,6 +11,7 @@ import {
 import { basename, join } from 'node:path';
 import type { AppSettings, MemoryKind } from '../../../shared/types';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
+import type { LogService } from '../log-service';
 import type { MetricsService } from '../metrics-service';
 import { CapacityService } from './capacity';
 import { SecurityScanService } from './security-scan';
@@ -30,6 +31,7 @@ export type ConsolidatorDeps = {
   memoryDir: string;
   backupDir: string;
   metricsService?: MetricsService;
+  logService?: Pick<LogService, 'info' | 'warn' | 'error'>;
   resolveCheapModelHandle: (activeHandle: LangChainChatModelHandle) => LangChainChatModelHandle;
   resolveDefaultModelHandle: () => Promise<LangChainChatModelHandle>;
   callLLM: (input: { systemPrompt: string; content: string; activeHandle: LangChainChatModelHandle }) => Promise<string>;
@@ -112,18 +114,30 @@ export class ConsolidatorService {
       });
 
       if (content.trim().length > 0 && compressed.trim().length === 0) {
-        console.warn(`[consolidator] LLM output was empty for ${absolutePath}; keeping original.`);
+        this.deps.logService?.warn('Memory consolidation output was empty.', {
+          service: 'memory-consolidator',
+          component: 'runForFile',
+          metadata: { absolutePath, kind }
+        });
         return;
       }
 
       const scanIssues = securityScan.scan(compressed);
       if (scanIssues.length > 0) {
-        console.warn(`[consolidator] LLM output failed security scan for ${absolutePath}; keeping original.`);
+        this.deps.logService?.warn('Memory consolidation output failed security scan.', {
+          service: 'memory-consolidator',
+          component: 'runForFile',
+          metadata: { absolutePath, kind }
+        });
         return;
       }
       const cap = capacity.check(kind, compressed);
       if (!cap.ok) {
-        console.warn(`[consolidator] LLM output still over limit for ${absolutePath} (${cap.chars}/${cap.limit}); keeping original.`);
+        this.deps.logService?.warn('Memory consolidation output still exceeds capacity.', {
+          service: 'memory-consolidator',
+          component: 'runForFile',
+          metadata: { absolutePath, kind, chars: cap.chars, limit: cap.limit }
+        });
         return;
       }
 
@@ -132,10 +146,22 @@ export class ConsolidatorService {
       this.deps.metricsService?.recordHistogram('memory.consolidation.reduction_ratio', reductionRatio, { kind });
       this.deps.metricsService?.recordHistogram('memory.consolidation.duration_ms', Date.now() - startedAtMs, { kind });
       this.deps.metricsService?.incrementCounter('memory.consolidation.success', { kind });
-      console.log(`[consolidator] compressed ${absolutePath} -> ${cap.chars}/${cap.limit}; backup at ${backupPath}`);
+      this.deps.logService?.info('Memory consolidation completed.', {
+        service: 'memory-consolidator',
+        component: 'runForFile',
+        metadata: { absolutePath, kind, backupPath, chars: cap.chars, limit: cap.limit }
+      });
     } catch (err) {
       this.deps.metricsService?.incrementCounter('memory.consolidation.failed', { kind });
-      console.error('[consolidator] failed', err);
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.deps.logService?.error('Memory consolidation failed.', error, {
+        service: 'memory-consolidator',
+        component: 'runForFile',
+        metadata: {
+          absolutePath,
+          kind
+        }
+      });
     } finally {
       this.inflight.delete(absolutePath);
     }

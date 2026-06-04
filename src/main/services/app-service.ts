@@ -304,11 +304,12 @@ export function createAppServices(
   );
   const agentService = new AgentService(configService, mcpService, skillService);
   const secretService = new SecretService(paths, safeStorageBackend);
-  const langChainModelFactory = new LangChainModelFactory(configService, secretService);
+  const langChainModelFactory = new LangChainModelFactory(configService, secretService, logService);
   const consolidatorService = new ConsolidatorService({
     memoryDir: paths.memoryDir,
     backupDir: join(paths.memoryDir, '.consolidator-backup'),
     metricsService,
+    logService,
     resolveCheapModelHandle: (activeHandle) => langChainModelFactory.resolveCheapModelHandle(activeHandle),
     resolveDefaultModelHandle: async () => await langChainModelFactory.createDefaultChatModel({ streaming: false }),
     callLLM: async ({ systemPrompt, content, activeHandle }) => {

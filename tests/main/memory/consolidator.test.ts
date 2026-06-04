@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsolidatorService, type ConsolidatorDeps } from '../../../src/main/services/memory/consolidator';
 import type { LangChainChatModelHandle } from '../../../src/main/services/langchain-model-factory';
+import type { LogService } from '../../../src/main/services/log-service';
 import { MetricsService } from '../../../src/main/services/metrics-service';
 
 const limits = { user: 1375, agents: 800, memory: 2200 };
@@ -39,7 +40,8 @@ function makeService(
     consolidatorTargetRatio: number;
     consolidatorDailyQuota: number;
   }> = {},
-  metricsService?: MetricsService
+  metricsService?: MetricsService,
+  logService?: Pick<LogService, 'info' | 'warn' | 'error'>
 ) {
   const deps: ConsolidatorDeps = {
     memoryDir,
@@ -58,12 +60,20 @@ function makeService(
     })
   };
   if (metricsService !== undefined) {
-    return new ConsolidatorService({
-      ...deps,
-      metricsService
-    });
+    Object.assign(deps, { metricsService });
+  }
+  if (logService !== undefined) {
+    Object.assign(deps, { logService });
   }
   return new ConsolidatorService(deps);
+}
+
+function createLogServiceMock(): Pick<LogService, 'info' | 'warn' | 'error'> {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  } as unknown as Pick<LogService, 'info' | 'warn' | 'error'>;
 }
 
 describe('ConsolidatorService', () => {
@@ -71,10 +81,11 @@ describe('ConsolidatorService', () => {
     const file = join(memoryDir, 'global', 'MEMORY.md');
     writeFileSync(file, 'x'.repeat(2300));
     const metricsService = new MetricsService();
+    const logService = createLogServiceMock();
     const svc = makeService(async ({ activeHandle: handle }) => {
       expect(handle).toBe(activeHandle);
       return 'compressed result line 1\ncompressed line 2';
-    }, {}, metricsService);
+    }, {}, metricsService, logService);
     await svc.runForFile(file, 'memory', activeHandle);
     expect(readFileSync(file, 'utf8')).toContain('compressed result');
     expect(readdirSync(backupDir).some((f) => f.startsWith('MEMORY.md.') && f.endsWith('.md'))).toBe(true);
@@ -83,24 +94,42 @@ describe('ConsolidatorService', () => {
     const reductionMetrics = metricsService.query({ name: 'memory.consolidation.reduction_ratio', labels: { kind: 'memory' } });
     expect(reductionMetrics).toHaveLength(1);
     expect(reductionMetrics[0]!.value).toBeGreaterThan(0.9);
+    expect(logService.info).toHaveBeenCalledWith('Memory consolidation completed.', {
+      service: 'memory-consolidator',
+      component: 'runForFile',
+      metadata: expect.objectContaining({
+        absolutePath: file,
+        kind: 'memory'
+      })
+    });
   });
 
   it('records failed metrics when consolidation throws', async () => {
     const file = join(memoryDir, 'global', 'MEMORY.md');
     writeFileSync(file, 'original content');
     const metricsService = new MetricsService();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logService = createLogServiceMock();
     const svc = makeService(async () => {
       throw new Error('LLM failed');
-    }, {}, metricsService);
+    }, {}, metricsService, logService);
 
     await svc.runForFile(file, 'memory', activeHandle);
 
     expect(readFileSync(file, 'utf8')).toBe('original content');
     expect(metricsService.query({ name: 'memory.consolidation.failed', labels: { kind: 'memory' } })).toHaveLength(1);
     expect(metricsService.query({ name: 'memory.consolidation.success', labels: { kind: 'memory' } })).toHaveLength(0);
-    expect(consoleError).toHaveBeenCalledWith('[consolidator] failed', expect.any(Error));
-    consoleError.mockRestore();
+    expect(logService.error).toHaveBeenCalledWith(
+      'Memory consolidation failed.',
+      expect.any(Error),
+      {
+        service: 'memory-consolidator',
+        component: 'runForFile',
+        metadata: {
+          absolutePath: file,
+          kind: 'memory'
+        }
+      }
+    );
   });
 
   it('does NOT overwrite when LLM result fails security scan', async () => {

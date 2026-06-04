@@ -37,6 +37,7 @@ import {
 } from './nvidia-model-family';
 import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
+import type { LogService } from './log-service';
 
 export type LangChainModelRuntime = {
   providerType: ProviderType;
@@ -59,6 +60,7 @@ type CreateModelOptions = {
 
 type JsonObject = Record<string, unknown>;
 type AnthropicClientOptions = NonNullable<ChatAnthropicInput['clientOptions']>;
+type ModelFactoryLogService = Pick<LogService, 'info' | 'warn'>;
 
 const openAiNoAuthPlaceholderKey = 'roc-no-auth';
 const llamaCppProviderRequestTimeoutMs = 600_000;
@@ -199,16 +201,17 @@ class LlamaCppCompatibleChatOpenAICompletions extends ChatOpenAICompletions {
   }
 }
 
-function warnIfAnthropicCacheControlConfigured(model: ChatAnthropic): void {
+function warnIfAnthropicCacheControlConfigured(model: ChatAnthropic, logService: ModelFactoryLogService | null): void {
   const defaultOptions = (model as ChatAnthropic & {
     defaultOptions?: {
       cache_control?: unknown;
     };
   }).defaultOptions;
   if (defaultOptions?.cache_control !== undefined) {
-    console.warn(
-      '[LangChainModelFactory] Anthropic model retained defaultOptions.cache_control; Deep Agents middleware should own prompt caching.'
-    );
+    logService?.warn('Anthropic model retained cache_control defaults.', {
+      service: 'langchain-model-factory',
+      component: 'warnIfAnthropicCacheControlConfigured'
+    });
   }
 }
 
@@ -485,7 +488,8 @@ function stripOutputVersion(responseMetadata: BaseMessage['response_metadata']):
 export class LangChainModelFactory {
   constructor(
     private readonly configService: ConfigService,
-    private readonly secretService: SecretService
+    private readonly secretService: SecretService,
+    private readonly logService: ModelFactoryLogService | null = null
   ) {}
 
   async createDefaultChatModel(options: CreateModelOptions = {}): Promise<LangChainChatModelHandle> {
@@ -614,7 +618,7 @@ export class LangChainModelFactory {
     }
     this.applyAnthropicPhase1Features(config, providerOptions);
     const model = new ChatAnthropic(config);
-    warnIfAnthropicCacheControlConfigured(model);
+    warnIfAnthropicCacheControlConfigured(model, this.logService);
     return {
       provider,
       modelId,
@@ -657,7 +661,7 @@ export class LangChainModelFactory {
 
     const apiKey = this.resolveCredential(provider);
     const llamaCppSamplingProfile =
-      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId) : null;
+      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, this.logService) : null;
     const temperature =
       provider.type === 'llama_cpp'
         ? provider.options?.temperature ?? llamaCppSamplingProfile?.temperature
@@ -1009,14 +1013,22 @@ export class LangChainModelFactory {
   }
 }
 
-function resolveLlamaCppSamplingProfile(provider: ProviderConfig, modelId: string): SamplingProfile | null {
+function resolveLlamaCppSamplingProfile(
+  provider: ProviderConfig,
+  modelId: string,
+  logService: ModelFactoryLogService | null
+): SamplingProfile | null {
   const familyProfile = resolveSamplingProfile(modelId);
   const overrides = provider.options?.samplingProfileOverrides ?? {};
   if (familyProfile === null) {
     if (Object.keys(overrides).length === 0) {
-      console.info('provider_local_family_unknown', {
-        providerId: provider.id,
-        modelId
+      logService?.info('Provider local model family is unknown.', {
+        service: 'langchain-model-factory',
+        component: 'resolveLlamaCppSamplingProfile',
+        metadata: {
+          providerId: provider.id,
+          modelId
+        }
       });
       return null;
     }

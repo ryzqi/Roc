@@ -1395,7 +1395,10 @@ describe('LangChainModelFactory', () => {
       ]
     });
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logService = {
+      info: vi.fn(),
+      warn: vi.fn()
+    };
     const originalDefaultOptions = (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions;
     (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions = {
       cache_control: {
@@ -1404,17 +1407,19 @@ describe('LangChainModelFactory', () => {
     };
 
     try {
-      const factory = new LangChainModelFactory(services.configService, services.secretService);
+      const factory = new LangChainModelFactory(services.configService, services.secretService, logService as never);
       await factory.createDefaultChatModel({ streaming: true });
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('cache_control'));
+      expect(logService.warn).toHaveBeenCalledWith('Anthropic model retained cache_control defaults.', {
+        service: 'langchain-model-factory',
+        component: 'warnIfAnthropicCacheControlConfigured'
+      });
     } finally {
       if (originalDefaultOptions === undefined) {
         delete (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions;
       } else {
         (ChatAnthropic.prototype as { defaultOptions?: unknown }).defaultOptions = originalDefaultOptions;
       }
-      warnSpy.mockRestore();
     }
   });
 

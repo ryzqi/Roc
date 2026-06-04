@@ -81,14 +81,21 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
   });
 
   it('logs unknown local model families without forcing sampling defaults', async () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const logService = {
+      info: vi.fn(),
+      warn: vi.fn()
+    };
     saveProviders([llamaCppProvider({ modelId: 'llama-3.1' })]);
 
-    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+    const result = await new LangChainModelFactory(services.configService, services.secretService, logService as never).createDefaultChatModel();
 
-    expect(infoSpy).toHaveBeenCalledWith('provider_local_family_unknown', {
-      providerId: 'llama_cpp',
-      modelId: 'llama-3.1'
+    expect(logService.info).toHaveBeenCalledWith('Provider local model family is unknown.', {
+      service: 'langchain-model-factory',
+      component: 'resolveLlamaCppSamplingProfile',
+      metadata: {
+        providerId: 'llama_cpp',
+        modelId: 'llama-3.1'
+      }
     });
     expect(readSamplingFields(result.model)).toMatchObject({
       temperature: undefined,
@@ -100,7 +107,10 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
   });
 
   it('does not run local family logging for cloud providers', async () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const logService = {
+      info: vi.fn(),
+      warn: vi.fn()
+    };
     services.secretService.setProviderSecret('openai-cloud', 'sk-test');
     saveProviders([
       {
@@ -122,9 +132,9 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
       }
     ]);
 
-    const result = await new LangChainModelFactory(services.configService, services.secretService).createDefaultChatModel();
+    const result = await new LangChainModelFactory(services.configService, services.secretService, logService as never).createDefaultChatModel();
 
-    expect(infoSpy).not.toHaveBeenCalled();
+    expect(logService.info).not.toHaveBeenCalled();
     expect(result.runtime.modelKwargs).toEqual({});
   });
 });
