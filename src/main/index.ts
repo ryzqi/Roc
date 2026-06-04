@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { ipcChannels } from '../shared/ipc';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
+import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';
@@ -63,6 +64,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+let activeKernel: MainKernelBootstrap | null = null;
 let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
 let screenBoundsBound = false;
@@ -198,14 +200,23 @@ app.on('before-quit', (event) => {
     return;
   }
   const services = activeServices;
+  const kernel = activeKernel;
   activeServices = null;
-  if (services === null) {
+  activeKernel = null;
+  if (services === null && kernel === null) {
     appShutdownComplete = true;
     return;
   }
   event.preventDefault();
-  appShutdownInProgress = services.appService
-    .shutdown()
+  appShutdownInProgress = Promise.resolve()
+    .then(async () => {
+      if (kernel !== null) {
+        await kernel.shutdown();
+      }
+      if (services !== null) {
+        await services.appService.shutdown();
+      }
+    })
     .catch((error: unknown) => {
       console.error(error);
     })
@@ -240,6 +251,13 @@ async function createWindow(): Promise<void> {
   if (!ownsSingleInstanceLock) {
     return;
   }
+  const kernel = createMainKernelBootstrap({
+    dataRoot: process.env.ROC_DATA_ROOT,
+    safeStorage: createElectronSafeStorageBackend(),
+    runtimeMetricsProvider: createElectronRuntimeMetricsProvider()
+  });
+  await kernel.start();
+  activeKernel = kernel;
   const services = createAppServices(
     process.env.ROC_DATA_ROOT,
     {
