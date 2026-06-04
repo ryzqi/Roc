@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { AgentRuntimeStatus } from '../shared/types';
 import type { RuntimeMetricsProvider } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
+import { activatePluginDataMigration } from './infrastructure/migration/monolith-to-plugins';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { RocPlugin } from './kernel/types';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
@@ -59,19 +60,9 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       runtimeMetricsProvider: options.runtimeMetricsProvider,
       safeStorage: options.safeStorage
     });
-  const runtime = new KernelRuntime({
-    rootDir: pluginDataDir,
-    plugins,
-    safeStorage: options.safeStorage
-  });
   const activateMigration = options.activateMigration ?? activateMainKernelMigration;
-
-  return {
-    paths,
-    runtime,
-    performanceObserverService,
-    async start() {
-      paths.ensureTree();
+  const runtime = new KernelRuntime({
+    activateMigration: async () => {
       const activatedPluginDataDir = await activateMigration({
         paths,
         pluginDataDir,
@@ -80,6 +71,18 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       if (activatedPluginDataDir !== pluginDataDir) {
         throw new Error('kernel_plugin_data_root_mismatch');
       }
+    },
+    rootDir: pluginDataDir,
+    plugins,
+    safeStorage: options.safeStorage
+  });
+
+  return {
+    paths,
+    runtime,
+    performanceObserverService,
+    async start() {
+      paths.ensureTree();
       await runtime.start();
     },
     async shutdown() {
@@ -92,7 +95,10 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 }
 
 export function activateMainKernelMigration(input: MainKernelMigrationInput): string {
-  return input.pluginDataDir;
+  return activatePluginDataMigration({
+    pluginDataDir: input.pluginDataDir,
+    sourceDatabasePath: input.sourceDatabasePath
+  }).pluginDataDir;
 }
 
 function createDefaultMainKernelPlugins(input: {

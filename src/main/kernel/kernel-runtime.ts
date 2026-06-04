@@ -13,6 +13,7 @@ export type KernelRuntimeOptions = {
   rootDir: string;
   plugins: readonly RocPlugin[];
   safeStorage: SafeStorageBackend;
+  activateMigration?: () => Promise<void> | void;
 };
 
 export type KernelRuntimeStatus = {
@@ -36,6 +37,10 @@ export class KernelRuntime {
   async start(): Promise<void> {
     if (this.started) {
       throw new Error('kernel_runtime_already_started');
+    }
+
+    if (this.options.activateMigration !== undefined) {
+      await this.options.activateMigration();
     }
 
     const databasePool = new DatabasePool(this.options.rootDir);
