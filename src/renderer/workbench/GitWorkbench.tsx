@@ -23,12 +23,16 @@ import { GitBranchPopover } from './GitBranchPopover';
 import { GitChangeList } from './GitChangeList';
 import { GitDiffPanel } from './GitDiffPanel';
 import { useGitDiffPreview } from './useGitDiffPreview';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 
 export function GitWorkbench({
+  client,
   loadState,
   state,
   updateWorkspaceData
 }: {
+  client?: RocClient;
   loadState: LazyLoadState;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
@@ -46,6 +50,10 @@ export function GitWorkbench({
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [gitPaneWidth, setGitPaneWidth] = useState(GIT_SPLIT_DEFAULT_WIDTH);
 
+  function resolveClient(): RocClient {
+    return client ?? createRocClient();
+  }
+
   const changes = state.gitStatus === null ? [] : gitStatusChanges(state.gitStatus);
   const selectedPath = findNextGitSelection(changes, state.gitSelectedPath);
   const selectedChange = selectedPath === null ? null : changes.find((change) => change.relativePath === selectedPath) ?? null;
@@ -55,6 +63,7 @@ export function GitWorkbench({
   const selectedPathSet = new Set(selectedPaths);
   const { allSelectableSelected, selectedCount } = buildGitSelectionModel(selectableChanges, selectedPaths);
   const { failedPath, loadingPath, loadGitDiffPreview, selectedDiffFile, selectionPreview } = useGitDiffPreview({
+    client,
     onActionError: setActionError,
     selectedChange,
     selectedPath,
@@ -155,7 +164,8 @@ export function GitWorkbench({
   }
 
   async function refreshGitWorkspace(): Promise<void> {
-    const [gitStatus, branches] = await Promise.all([window.roc.git.status(), window.roc.git.listBranches()]);
+    const gitClient = resolveClient();
+    const [gitStatus, branches] = await Promise.all([gitClient.api.git.status(), gitClient.api.git.listBranches()]);
     if (gitStatus.ok && branches.ok) {
       updateWorkspaceData({
         gitBranches: branches.data
@@ -184,7 +194,7 @@ export function GitWorkbench({
   async function stageSelectedFiles(): Promise<void> {
     setPendingAction('stage-batch');
     setActionError(null);
-    const result = await window.roc.git.stageFiles({ relativePaths: selectedPaths });
+    const result = await resolveClient().api.git.stageFiles({ relativePaths: selectedPaths });
     if (result.ok) {
       await applyGitStatusResult(result.data, state.gitSelectedPath);
     } else {
@@ -200,7 +210,7 @@ export function GitWorkbench({
     }
     setPendingAction('commit');
     setActionError(null);
-    const result = await window.roc.git.commit({ message: commitMessage });
+    const result = await resolveClient().api.git.commit({ message: commitMessage });
     if (result.ok) {
       updateWorkspaceData({
         gitStatus: result.data.status,
@@ -225,7 +235,8 @@ export function GitWorkbench({
     }
     const branchName = branchDraft.trim();
     const workspacePath = gitStatus.workspacePath;
-    const confirmation = await window.roc.shell.confirm(
+    const gitClient = resolveClient();
+    const confirmation = await gitClient.api.shell.confirm(
       buildGitCreateBranchConfirmationRequest({
         workspacePath,
         branchName,
@@ -241,7 +252,7 @@ export function GitWorkbench({
     }
     setPendingAction('branch-create');
     setActionError(null);
-    const result = await window.roc.git.createBranch({
+    const result = await gitClient.api.git.createBranch({
       name: branchName,
       checkoutAfterCreate
     });
@@ -266,7 +277,8 @@ export function GitWorkbench({
       return;
     }
     const workspacePath = gitStatus.workspacePath;
-    const confirmation = await window.roc.shell.confirm(
+    const gitClient = resolveClient();
+    const confirmation = await gitClient.api.shell.confirm(
       buildGitCheckoutBranchConfirmationRequest({
         workspacePath,
         targetBranch
@@ -281,7 +293,7 @@ export function GitWorkbench({
     }
     setPendingAction('branch-checkout');
     setActionError(null);
-    const result = await window.roc.git.checkoutBranch({ name: targetBranch });
+    const result = await gitClient.api.git.checkoutBranch({ name: targetBranch });
     if (result.ok) {
       applyBranchMutationResult(result.data);
       setBranchTarget(result.data.branchInfo.currentBranch);

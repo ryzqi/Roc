@@ -173,14 +173,14 @@ Expected: PASS.
 - Test: `tests/renderer/features/skills-feature.test.tsx`
 - Test: `tests/renderer/features/diagnostics-feature.test.tsx`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 Assert each feature calls only `RocClient`, not `window.roc` directly.
 
 Run: `pnpm test -- tests/renderer/features/settings-feature.test.tsx tests/renderer/features/workspace-feature.test.tsx tests/renderer/features/mcp-feature.test.tsx tests/renderer/features/skills-feature.test.tsx tests/renderer/features/diagnostics-feature.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 2: Implement features**
+- [x] **Step 2: Implement features**
 
 Keep existing visual layout and CSS. Do not introduce landing-page or marketing content.
 

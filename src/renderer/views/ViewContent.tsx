@@ -5,20 +5,18 @@ import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { ChatFeature } from '../features/chat';
+import { DiagnosticsFeature } from '../features/diagnostics';
 import { MemoryFeature } from '../features/memory';
+import { McpFeature } from '../features/mcp';
+import { SkillsFeature } from '../features/skills';
 import { TasksFeature } from '../features/tasks';
+import { WorkspaceFeature } from '../features/workspace';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 import type { WorkflowHint } from '../../shared/types';
 
-const WorkspaceView = lazy(() => import('./workspace/WorkspaceView').then((module) => ({ default: module.WorkspaceView })));
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
 const PreviewView = lazy(() => import('./preview/PreviewView').then((module) => ({ default: module.PreviewView })));
-const McpView = lazy(() => import('./mcp/McpView').then((module) => ({ default: module.McpView })));
-const SkillsHostView = lazy(() => import('./skills/SkillsHostView').then((module) => ({ default: module.SkillsHostView })));
-const DiagnosticsView = lazy(() =>
-  import('./diagnostics/DiagnosticsView').then((module) => ({ default: module.DiagnosticsView }))
-);
 
 export function ViewContent({
   activeView,
@@ -75,7 +73,7 @@ export function ViewContent({
     );
   }
   if (activeView === 'workspace') {
-    return renderLazyView(<WorkspaceView loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);
+    return <WorkspaceFeature client={client} loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />;
   }
   if (activeView === 'git') {
     return renderLazyView(<GitView loadState={workspaceLoadState} state={state} />);
@@ -87,16 +85,16 @@ export function ViewContent({
     return renderLazyView(<PreviewView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'mcp') {
-    return renderLazyView(<McpView state={state} updateLoadedState={updateLoadedState} />);
+    return <McpFeature client={client} state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'skills') {
-    return renderLazyView(<SkillsHostView state={state} updateLoadedState={updateLoadedState} />);
+    return <SkillsFeature client={client} state={state} updateLoadedState={updateLoadedState} />;
   }
   if (activeView === 'memory') {
     return <MemoryFeature client={client} loadState={memoryLoadState} state={state} />;
   }
   if (activeView === 'diagnostics') {
-    return renderLazyView(<DiagnosticsView loadState={operationsLoadState} state={state} />);
+    return <DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />;
   }
   return (
     <ChatFeature

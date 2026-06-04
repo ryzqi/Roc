@@ -9,14 +9,18 @@ import type {
 import { TreeItem } from '../../components/TreeItem';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 import { SkillsView as SkillControlView, buildSkillManagementViewModel, type SkillFilterId } from '../../skills-view';
 import { SkillDrawer, type SkillBrowserViewState } from '../../skill-drawer';
 import { flattenTreeEntries, isImagePreview, previewTextBody } from '../../workbench/file-tree-helpers';
 
 export function SkillsHostView({
+  client,
   state,
   updateLoadedState
 }: {
+  client?: RocClient;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
@@ -37,6 +41,10 @@ export function SkillsHostView({
   const model = buildSkillManagementViewModel(state.skills, filter, selectedSkillId);
   const selectedSkill = selectedSkillId === null ? null : state.skills.find((skill) => skill.id === selectedSkillId) ?? null;
 
+  function resolveClient(): RocClient {
+    return client ?? createRocClient();
+  }
+
   function resetBrowser(): void {
     setBrowser({
       rootEntries: null,
@@ -51,7 +59,7 @@ export function SkillsHostView({
   }
 
   async function refreshSkills(): Promise<void> {
-    const skills = unwrap<SkillSnapshot[]>('skills', await window.roc.skills.list());
+    const skills = unwrap<SkillSnapshot[]>('skills', await resolveClient().api.skills.list());
     updateLoadedState({
       skills,
       selectedSkills: skills.filter((item) => item.enabled && item.status === 'ready').map((item) => item.id)
@@ -63,14 +71,14 @@ export function SkillsHostView({
     try {
       const tree = unwrap<SkillFileTreeResult>(
         'skill files',
-        await window.roc.skills.listFiles({ id: skillId, relativePath: '' })
+        await resolveClient().api.skills.listFiles({ id: skillId, relativePath: '' })
       );
       const firstFile = tree.entries.find((entry) => entry.type === 'file');
       let preview: SkillFilePreviewResult | null = null;
       if (firstFile !== undefined) {
         preview = unwrap<SkillFilePreviewResult>(
           'skill file preview',
-          await window.roc.skills.readFile({ id: skillId, relativePath: firstFile.relativePath })
+          await resolveClient().api.skills.readFile({ id: skillId, relativePath: firstFile.relativePath })
         );
       }
       setBrowser({
@@ -114,7 +122,7 @@ export function SkillsHostView({
       try {
         const tree = unwrap<SkillFileTreeResult>(
           'skill files',
-          await window.roc.skills.listFiles({ id: selectedSkillId, relativePath })
+          await resolveClient().api.skills.listFiles({ id: selectedSkillId, relativePath })
         );
         setBrowser((current) => ({
           ...current,
@@ -143,7 +151,7 @@ export function SkillsHostView({
     try {
       const preview = unwrap<SkillFilePreviewResult>(
         'skill file preview',
-        await window.roc.skills.readFile({ id: selectedSkillId, relativePath })
+        await resolveClient().api.skills.readFile({ id: selectedSkillId, relativePath })
       );
       setBrowser((current) => ({ ...current, preview, loadingPreview: false }));
     } catch (error) {
@@ -158,7 +166,7 @@ export function SkillsHostView({
   async function setSkillEnabled(id: string, enabled: boolean): Promise<void> {
     setBusySkillId(id);
     try {
-      unwrap<SkillSnapshot>('skill toggle', await window.roc.skills.setEnabled({ id, enabled }));
+      unwrap<SkillSnapshot>('skill toggle', await resolveClient().api.skills.setEnabled({ id, enabled }));
       await refreshSkills();
     } finally {
       setBusySkillId((current) => (current === id ? null : current));
@@ -168,7 +176,7 @@ export function SkillsHostView({
   async function deleteSkill(id: string): Promise<void> {
     setBusySkillId(id);
     try {
-      unwrap<{ deleted: true }>('skill delete', await window.roc.skills.deleteSkill(id));
+      unwrap<{ deleted: true }>('skill delete', await resolveClient().api.skills.deleteSkill(id));
       await refreshSkills();
     } finally {
       setBusySkillId((current) => (current === id ? null : current));

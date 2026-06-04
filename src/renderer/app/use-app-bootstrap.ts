@@ -37,7 +37,7 @@ export function useAppBootstrap(client: RocClient): AppBootstrap {
         client.api.workspace.getCurrent(),
         client.api.rtk.status(),
         client.api.window.getState(),
-        loadSettingsState()
+        loadSettingsState(client)
       ]);
 
       const loadedWorkspace = unwrap<Workspace | null>('workspace', workspace);

@@ -38,24 +38,26 @@ export type WorkspaceDataLoadOptions = {
 
 export async function loadWorkspaceData(
   workspace: Workspace | null,
-  options: WorkspaceDataLoadOptions = {}
+  options: WorkspaceDataLoadOptions = {},
+  client: RocClient = createRocClient()
 ): Promise<WorkspaceData> {
   if (workspace === null) {
     return emptyWorkspaceData();
   }
 
-  const fileTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath: '' }));
-  const filePreview = await loadWorkspaceFilePreview(fileTree, options);
-  const fileWorkbenchPdfPreview = await loadWorkspacePdfWorkbenchPreview(filePreview, options);
+  const api = client.api;
+  const fileTree = unwrap<FileTreeResult>('file tree', await api.files.listTree({ relativePath: '' }));
+  const filePreview = await loadWorkspaceFilePreview(client, fileTree, options);
+  const fileWorkbenchPdfPreview = await loadWorkspacePdfWorkbenchPreview(client, filePreview, options);
   const fileSearch = null;
-  const gitResult = await window.roc.git.status();
-  const gitBranchesResult = gitResult.ok ? await window.roc.git.listBranches() : null;
+  const gitResult = await api.git.status();
+  const gitBranchesResult = gitResult.ok ? await api.git.listBranches() : null;
   const gitSelectedPath =
     options.gitSelectedPath === undefined || !gitResult.ok
       ? null
       : findNextGitSelection(gitResult.data.changes, options.gitSelectedPath);
   const gitSelectedPreview =
-    gitSelectedPath === null ? null : await loadGitSelectedPreview({ relativePath: gitSelectedPath });
+    gitSelectedPath === null ? null : await loadGitSelectedPreview(client, { relativePath: gitSelectedPath });
 
   return {
     fileTree,
@@ -75,6 +77,7 @@ export async function loadWorkspaceData(
 }
 
 async function loadWorkspaceFilePreview(
+  client: RocClient,
   fileTree: FileTreeResult,
   options: WorkspaceDataLoadOptions
 ): Promise<FilePreviewResult | null> {
@@ -83,7 +86,7 @@ async function loadWorkspaceFilePreview(
     if (previewRelativePath === null) {
       return null;
     }
-    return await loadOptionalFilePreview({ relativePath: previewRelativePath });
+    return await loadOptionalFilePreview(client, { relativePath: previewRelativePath });
   }
   if (options.fallbackToFirstFilePreview === false) {
     return null;
@@ -92,15 +95,16 @@ async function loadWorkspaceFilePreview(
   if (firstFile === undefined) {
     return null;
   }
-  return await loadOptionalFilePreview({ relativePath: firstFile.relativePath });
+  return await loadOptionalFilePreview(client, { relativePath: firstFile.relativePath });
 }
 
-async function loadOptionalFilePreview(request: FilePreviewRequest): Promise<FilePreviewResult | null> {
-  const previewResult = await window.roc.files.preview(request);
+async function loadOptionalFilePreview(client: RocClient, request: FilePreviewRequest): Promise<FilePreviewResult | null> {
+  const previewResult = await client.api.files.preview(request);
   return previewResult.ok ? previewResult.data : null;
 }
 
 async function loadWorkspacePdfWorkbenchPreview(
+  client: RocClient,
   filePreview: FilePreviewResult | null,
   options: WorkspaceDataLoadOptions
 ): Promise<FilesWorkbenchPdfPreviewResult | null> {
@@ -110,16 +114,16 @@ async function loadWorkspacePdfWorkbenchPreview(
   const sharedPreview =
     filePreview?.relativePath === options.fileWorkbenchPdfRelativePath
       ? filePreview
-      : await loadOptionalFilePreview({ relativePath: options.fileWorkbenchPdfRelativePath });
+      : await loadOptionalFilePreview(client, { relativePath: options.fileWorkbenchPdfRelativePath });
   if (sharedPreview === null || sharedPreview.mediaType !== 'application/pdf') {
     return null;
   }
-  const previewResult = await window.roc.files.previewPdf({ relativePath: options.fileWorkbenchPdfRelativePath });
+  const previewResult = await client.api.files.previewPdf({ relativePath: options.fileWorkbenchPdfRelativePath });
   return previewResult.ok ? previewResult.data : null;
 }
 
-async function loadGitSelectedPreview(request: { relativePath: string }): Promise<WorkspaceData['gitSelectedPreview']> {
-  const previewResult = await window.roc.git.fileDiff(request);
+async function loadGitSelectedPreview(client: RocClient, request: { relativePath: string }): Promise<WorkspaceData['gitSelectedPreview']> {
+  const previewResult = await client.api.git.fileDiff(request);
   return previewResult.ok ? previewResult.data : null;
 }
 
@@ -159,23 +163,24 @@ export async function loadTaskSurfaceData(selectedTaskId?: string | null, client
   };
 }
 
-export async function loadOperationsData(mode: AppStatus['mode']): Promise<OperationsData> {
-  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await window.roc.tasks.listBackgroundTasks());
+export async function loadOperationsData(mode: AppStatus['mode'], client: RocClient = createRocClient()): Promise<OperationsData> {
+  const api = client.api;
+  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await api.tasks.listBackgroundTasks());
   const backgroundTask = backgroundTasks[0] ?? null;
   const performanceSample = unwrap<PerformanceSample>(
     'performance sample',
-    await window.roc.diagnostics.samplePerformance({
+    await api.diagnostics.samplePerformance({
       mode,
       memoryBudgetMb: 300
     })
   );
-  const diagnosticChecks = unwrap('diagnostic checks', await window.roc.diagnostics.runChecks());
+  const diagnosticChecks = unwrap('diagnostic checks', await api.diagnostics.runChecks());
   const diagnosticPackage =
     backgroundTask === null
       ? null
       : unwrap<DiagnosticPackage>(
           'diagnostic package',
-          await window.roc.diagnostics.createDiagnosticPackage({
+          await api.diagnostics.createDiagnosticPackage({
             taskId: backgroundTask.id,
             errorSummary: '后台任务诊断请求'
           })
@@ -188,15 +193,15 @@ export async function loadOperationsData(mode: AppStatus['mode']): Promise<Opera
   };
 }
 
-export async function loadMemoryData(_mode: AppStatus['mode']): Promise<MemoryData> {
-  const memoryStatus = await window.roc.memory.status();
+export async function loadMemoryData(_mode: AppStatus['mode'], client: RocClient = createRocClient()): Promise<MemoryData> {
+  const memoryStatus = await client.api.memory.status();
   return {
     memoryStatus: unwrap<MemoryStatus>('memory status', memoryStatus),
     memoryRecovery: null
   };
 }
 
-export async function loadSettingsState(): Promise<{
+export async function loadSettingsState(client: RocClient = createRocClient()): Promise<{
   settings: AppSettings;
   providers: ProviderConfig[];
   defaultModelId: string | null;
@@ -208,6 +213,6 @@ export async function loadSettingsState(): Promise<{
   providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
 }> {
-  const snapshot = unwrap<SettingsSnapshot>('settings snapshot', await window.roc.settings.get());
+  const snapshot = unwrap<SettingsSnapshot>('settings snapshot', await client.api.settings.get());
   return applySettingsSnapshot(snapshot);
 }

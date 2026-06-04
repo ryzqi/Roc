@@ -2,9 +2,11 @@ import type { McpServerSnapshot, McpServerTestResult } from '../../../shared/typ
 import { StatusPill } from '../../components/StatusPill';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
+import type { RocClient } from '../../shared/roc-client';
+import { createRocClient } from '../../shared/roc-client';
 
-async function refreshMcpState(updateLoadedState: (partial: Partial<LoadedState>) => void): Promise<void> {
-  const mcpServers = unwrap<McpServerSnapshot[]>('mcp servers', await window.roc.mcp.listServers());
+async function refreshMcpState(client: RocClient, updateLoadedState: (partial: Partial<LoadedState>) => void): Promise<void> {
+  const mcpServers = unwrap<McpServerSnapshot[]>('mcp servers', await client.api.mcp.listServers());
   updateLoadedState({
     mcpServers,
     selectedMcpServers: mcpServers.filter((item) => item.enabled).map((item) => item.id)
@@ -12,12 +14,18 @@ async function refreshMcpState(updateLoadedState: (partial: Partial<LoadedState>
 }
 
 export function McpManagementPanel({
+  client,
   state,
   updateLoadedState
 }: {
+  client?: RocClient;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
+  function resolveClient(): RocClient {
+    return client ?? createRocClient();
+  }
+
   return (
     <section className="single-panel" data-testid="mcp-management">
       <div className="section-head">
@@ -44,7 +52,7 @@ export function McpManagementPanel({
                 data-testid={`mcp-test-${server.id}`}
                 type="button"
                 onClick={() => {
-                  void window.roc.mcp.testServer(server.id).then((result) => {
+                  void resolveClient().api.mcp.testServer(server.id).then((result) => {
                     updateLoadedState({ mcpTestStatus: unwrap<McpServerTestResult>('mcp test', result) });
                   });
                 }}
@@ -55,8 +63,9 @@ export function McpManagementPanel({
                 data-testid={`mcp-toggle-${server.id}`}
                 type="button"
                 onClick={() => {
-                  void window.roc.mcp.setServerEnabled({ id: server.id, enabled: !server.enabled }).then(async () => {
-                    await refreshMcpState(updateLoadedState);
+                  const mcpClient = resolveClient();
+                  void mcpClient.api.mcp.setServerEnabled({ id: server.id, enabled: !server.enabled }).then(async () => {
+                    await refreshMcpState(mcpClient, updateLoadedState);
                   });
                 }}
               >
@@ -66,8 +75,9 @@ export function McpManagementPanel({
                 data-testid={`mcp-delete-${server.id}`}
                 type="button"
                 onClick={() => {
-                  void window.roc.mcp.deleteServer(server.id).then(async () => {
-                    await refreshMcpState(updateLoadedState);
+                  const mcpClient = resolveClient();
+                  void mcpClient.api.mcp.deleteServer(server.id).then(async () => {
+                    await refreshMcpState(mcpClient, updateLoadedState);
                   });
                 }}
               >

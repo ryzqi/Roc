@@ -5,6 +5,8 @@ import type { WorkspaceData } from '../app/types';
 import { buildGitDiffCacheKey, normalizeGitDiffText, selectGitDiffFile } from '../git-diff-adapter';
 import { buildGitDiffPreviewRequest } from '../git-workbench';
 import { unwrap, type IpcLikeResult } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 
 type GitDiffPreviewState = {
   failedPath: string | null;
@@ -19,6 +21,7 @@ type GitDiffPreviewControllerInput = {
 };
 
 type UseGitDiffPreviewInput = {
+  client?: RocClient;
   onActionError: (message: string | null) => void;
   selectedChange: GitStatusChange | null;
   selectedPath: string | null;
@@ -108,6 +111,7 @@ export function createGitDiffPreviewController({
 }
 
 export function useGitDiffPreview({
+  client,
   onActionError,
   selectedChange,
   selectedPath,
@@ -134,7 +138,7 @@ export function useGitDiffPreview({
 
   if (controllerRef.current === null) {
     controllerRef.current = createGitDiffPreviewController({
-      fileDiff: async ({ relativePath }) => window.roc.git.fileDiff({ relativePath }),
+      fileDiff: async ({ relativePath }) => (client ?? createRocClient()).api.git.fileDiff({ relativePath }),
       onActionError: (message) => {
         actionErrorRef.current(message);
       },

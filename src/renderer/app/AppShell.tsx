@@ -49,7 +49,6 @@ import { PreviewIcon } from '../components/PreviewIcon';
 import { filterHistoryItems } from '../history-sidebar';
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
-import { SettingsView } from '../settings';
 import { SettingsModal } from '../settings/settings-modal';
 import type { RocClient } from '../shared/roc-client';
 import { getStartupLoadIntent } from '../startup-load-policy';
@@ -62,6 +61,7 @@ import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
 import type { AppBootstrap } from './use-app-bootstrap';
 import { useChatFeature } from '../features/chat/use-chat-feature';
+import { SettingsFeature } from '../features/settings';
 
 const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
@@ -386,7 +386,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     const subscription = createWorkspaceRefreshSubscription({
       initialSnapshot: workspaceRefreshSnapshotRef.current,
       load: async (workspace, options) => {
-        const workspaceData = await loadWorkspaceData(workspace, options);
+        const workspaceData = await loadWorkspaceData(workspace, options, client);
         return {
           fileTree: workspaceData.fileTree,
           filePreview: workspaceData.filePreview,
@@ -434,7 +434,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     }, []),
     cacheKey: state === null ? null : currentWorkspace?.path ?? 'no-workspace',
     enabled: state !== null && startupLoadIntent.targets.has('workspace'),
-    load: useCallback(() => loadWorkspaceData(currentWorkspace), [currentWorkspace]),
+    load: useCallback(() => loadWorkspaceData(currentWorkspace, {}, client), [client, currentWorkspace]),
     loadState: workspaceLoadState,
     setLoadState: setWorkspaceLoadState
   });
@@ -445,7 +445,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     }, []),
     cacheKey: currentAppMode,
     enabled: currentAppMode !== null && startupLoadIntent.targets.has('memory'),
-    load: useCallback(() => loadMemoryData(currentAppMode as AppStatus['mode']), [currentAppMode]),
+    load: useCallback(() => loadMemoryData(currentAppMode as AppStatus['mode'], client), [client, currentAppMode]),
     loadState: memoryLoadState,
     setLoadState: setMemoryLoadState
   });
@@ -456,7 +456,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     }, []),
     cacheKey: currentAppMode,
     enabled: currentAppMode !== null && startupLoadIntent.targets.has('operations'),
-    load: useCallback(() => loadOperationsData(currentAppMode as AppStatus['mode']), [currentAppMode]),
+    load: useCallback(() => loadOperationsData(currentAppMode as AppStatus['mode'], client), [client, currentAppMode]),
     loadState: operationsLoadState,
     setLoadState: setOperationsLoadState
   });
@@ -532,7 +532,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
     const [appStatus, workspaceData] = await Promise.all([
       client.api.app.getStatus(),
-      loadWorkspaceData(selected.data)
+      loadWorkspaceData(selected.data, {}, client)
     ]);
     const selectedAppStatus = unwrap<AppStatus>('app status', appStatus);
     applySystemAppearance(selectedAppStatus.appearance);
@@ -645,6 +645,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           <WorkbenchPanel
             activeTool={activeWorkbenchTool}
             activeView={activeView}
+            client={client}
             onToolChange={setActiveWorkbenchTool}
             onClose={() => {
               setActiveView('chat');
@@ -835,7 +836,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       </div>
       {settingsOpen ? (
         <SettingsModal onClose={() => setSettingsOpen(false)}>
-          <SettingsView
+          <SettingsFeature
+            client={client}
             onNavigate={(target) => {
               setSettingsOpen(false);
               setActiveView(target);

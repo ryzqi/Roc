@@ -11,12 +11,16 @@ import type {
 import { EmptyState } from '../components/EmptyState';
 import type { WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 
 export function TerminalWorkbench({
+  client,
   state,
   updateWorkspaceData,
   windowState: _windowState
 }: {
+  client?: RocClient;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
   windowState: WindowStateSnapshot;
@@ -80,14 +84,15 @@ export function TerminalWorkbench({
     fitAddonRef.current = fitAddon;
 
     let disposed = false;
+    const terminalClient = client ?? createRocClient();
 
-    const onOutputDispose = window.roc.terminal.onOutput((event: TerminalSessionOutputEvent) => {
+    const onOutputDispose = terminalClient.api.terminal.onOutput((event: TerminalSessionOutputEvent) => {
       if (event.sessionId !== sessionRef.current?.id) {
         return;
       }
       terminal.write(event.data);
     });
-    const onExitDispose = window.roc.terminal.onExit((event: TerminalSessionExitEvent) => {
+    const onExitDispose = terminalClient.api.terminal.onExit((event: TerminalSessionExitEvent) => {
       if (event.sessionId !== sessionRef.current?.id) {
         return;
       }
@@ -104,7 +109,7 @@ export function TerminalWorkbench({
       terminal.write(`\r\n[session exited: ${event.exitCode}]\r\n`);
     });
 
-    void window.roc.terminal
+    void terminalClient.api.terminal
       .createSession({
         cwd: state.workspace.path,
         cols: Math.max(80, Math.floor((terminalHostRef.current.clientWidth || 720) / 9)),
@@ -122,7 +127,7 @@ export function TerminalWorkbench({
         fitAddon.fit();
         const nextCols = Math.max(20, terminal.cols);
         const nextRows = Math.max(5, terminal.rows);
-        void window.roc.terminal.resize({
+        void terminalClient.api.terminal.resize({
           sessionId: result.data.id,
           cols: nextCols,
           rows: nextRows
@@ -142,7 +147,7 @@ export function TerminalWorkbench({
       if (sessionRef.current === null) {
         return;
       }
-      void window.roc.terminal.resize({
+      void terminalClient.api.terminal.resize({
         sessionId: sessionRef.current.id,
         cols: Math.max(20, terminalRef.current.cols),
         rows: Math.max(5, terminalRef.current.rows)
@@ -159,7 +164,7 @@ export function TerminalWorkbench({
       if (sessionRef.current === null) {
         return;
       }
-      void window.roc.terminal.writeInput({
+      void terminalClient.api.terminal.writeInput({
         sessionId: sessionRef.current.id,
         data
       });
@@ -173,14 +178,14 @@ export function TerminalWorkbench({
       onExitDispose();
       const sessionId = sessionRef.current?.id;
       if (sessionId !== undefined) {
-        void window.roc.terminal.closeSession({ sessionId });
+        void terminalClient.api.terminal.closeSession({ sessionId });
       }
       sessionRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [state.workspace?.path, updateWorkspaceData]);
+  }, [client, state.workspace?.path, updateWorkspaceData]);
 
   if (state.workspace === null) {
     return (

@@ -6,13 +6,17 @@ import { TreeItem } from '../components/TreeItem';
 import type { LazyLoadState, WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 import { flattenTreeEntries, isImagePreview, parentRelativePath, previewTextBody } from './file-tree-helpers';
 
 export function FilesWorkbench({
+  client,
   loadState,
   state,
   updateWorkspaceData
 }: {
+  client?: RocClient;
   loadState: LazyLoadState;
   state: LoadedState;
   updateWorkspaceData: (partial: Partial<WorkspaceData>) => void;
@@ -23,6 +27,10 @@ export function FilesWorkbench({
   const [filePaneWidth, setFilePaneWidth] = useState(304);
   const selectedPreviewRelativePath = state.fileWorkbenchPdfPreview?.relativePath ?? state.filePreview?.relativePath ?? null;
   const previewPath = selectedPreviewRelativePath ?? '当前没有可预览文件';
+
+  function resolveClient(): RocClient {
+    return client ?? createRocClient();
+  }
 
   useEffect(() => {
     setExpandedDirectories(new Set());
@@ -38,10 +46,11 @@ export function FilesWorkbench({
   }, [state.fileTree]);
 
   async function openFilePreview(relativePath: string): Promise<void> {
-    const preview = unwrap<FilePreviewResult>('file preview', await window.roc.files.preview({ relativePath }));
+    const filesClient = resolveClient();
+    const preview = unwrap<FilePreviewResult>('file preview', await filesClient.api.files.preview({ relativePath }));
     const pdfPreview =
       preview.mediaType === 'application/pdf'
-        ? unwrap<FilesWorkbenchPdfPreviewResult>('file pdf preview', await window.roc.files.previewPdf({ relativePath }))
+        ? unwrap<FilesWorkbenchPdfPreviewResult>('file pdf preview', await filesClient.api.files.previewPdf({ relativePath }))
         : null;
     updateWorkspaceData({ filePreview: preview, fileWorkbenchPdfPreview: pdfPreview, fileSearch: null });
   }
@@ -59,7 +68,7 @@ export function FilesWorkbench({
     if (directoryChildren[relativePath] === undefined) {
       setDirectoryLoadingPath(relativePath);
       try {
-        const childTree = unwrap<FileTreeResult>('file tree', await window.roc.files.listTree({ relativePath }));
+        const childTree = unwrap<FileTreeResult>('file tree', await resolveClient().api.files.listTree({ relativePath }));
         setDirectoryChildren((current) => ({ ...current, [relativePath]: childTree.entries }));
       } finally {
         setDirectoryLoadingPath((current) => (current === relativePath ? null : current));

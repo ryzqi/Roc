@@ -4,6 +4,7 @@ import type { LazyLoadState, ViewId, WorkbenchTool, WorkspaceData } from '../app
 import { WORKBENCH_TOOLS } from '../app/view-routing';
 import { PreviewIcon } from '../components/PreviewIcon';
 import type { LoadedState } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
 
 const FilesWorkbench = lazy(() => import('./FilesWorkbench').then((module) => ({ default: module.FilesWorkbench })));
 const GitWorkbench = lazy(() => import('./GitWorkbench').then((module) => ({ default: module.GitWorkbench })));
@@ -12,6 +13,7 @@ const TerminalWorkbench = lazy(() => import('./TerminalWorkbench').then((module)
 export function WorkbenchPanel({
   activeTool,
   activeView: _activeView,
+  client,
   onClose,
   onToolChange,
   onWidthChange,
@@ -23,6 +25,7 @@ export function WorkbenchPanel({
 }: {
   activeTool: WorkbenchTool;
   activeView: ViewId;
+  client?: RocClient;
   onClose: () => void;
   onToolChange: (tool: WorkbenchTool) => void;
   onWidthChange: (width: number) => void;
@@ -83,11 +86,11 @@ export function WorkbenchPanel({
       <div className="workbench-panel">
         <Suspense fallback={<section className="tool-panel workbench-surface" data-testid="workbench-tool-loading" />}>
           {activeTool === 'git' ? (
-            <GitWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
+            <GitWorkbench client={client} loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
           ) : activeTool === 'terminal' ? (
-            <TerminalWorkbench state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
+            <TerminalWorkbench client={client} state={state} updateWorkspaceData={updateWorkspaceData} windowState={windowState} />
           ) : (
-            <FilesWorkbench loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
+            <FilesWorkbench client={client} loadState={workspaceLoadState} state={state} updateWorkspaceData={updateWorkspaceData} />
           )}
         </Suspense>
       </div>

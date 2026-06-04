@@ -26,6 +26,8 @@ import {
   type SettingsSectionId
 } from '../settings-model';
 import { unwrap } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
 import { useSettingsDraft } from './use-settings-draft';
 import { ProvidersSection } from './sections/providers-section';
 import { DefaultModelSection } from './sections/default-model-section';
@@ -50,10 +52,12 @@ export type SettingsViewState = {
 export type SettingsViewUpdate = (partial: Partial<LoadedSettingsState>) => void;
 
 export function SettingsView({
+  client,
   onNavigate,
   state,
   updateLoadedState
 }: {
+  client?: RocClient;
   onNavigate: (target: 'mcp' | 'skills') => void;
   state: SettingsViewState;
   updateLoadedState: SettingsViewUpdate;
@@ -65,6 +69,10 @@ export function SettingsView({
   const [exaTestLabel, setExaTestLabel] = useState<string>('未测试');
   const [savingAll, setSavingAll] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  function resolveClient(): RocClient {
+    return client ?? createRocClient();
+  }
 
   const draft = useSettingsDraft({
     baseSettings: state.settings,
@@ -87,10 +95,10 @@ export function SettingsView({
   );
 
   const refreshSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
-    const refreshed = unwrap<SettingsSnapshot>('settings get', await window.roc.settings.get());
+    const refreshed = unwrap<SettingsSnapshot>('settings get', await resolveClient().api.settings.get());
     updateLoadedState(applySettingsSnapshot(refreshed));
     return refreshed;
-  }, [updateLoadedState]);
+  }, [client, updateLoadedState]);
 
   const updateProviderDraft = useCallback((partial: Partial<ProviderDraft>): void => {
     setProviderDraft((current) => ({
@@ -152,7 +160,7 @@ export function SettingsView({
     try {
       saved = unwrap<SettingsSnapshot>(
         'settings save',
-        await window.roc.settings.save(upsertProviderInSettingsSaveRequest(buildBaseSaveRequest(), provider))
+        await resolveClient().api.settings.save(upsertProviderInSettingsSaveRequest(buildBaseSaveRequest(), provider))
       );
     } catch (error) {
       setProviderDraftError(error instanceof Error ? error.message : 'Provider 保存失败。');
@@ -181,50 +189,50 @@ export function SettingsView({
       setProviderDraft(nextDraft);
       setProviderDraftError(error instanceof Error ? error.message : 'API Key 保存失败。');
     }
-  }, [providerDraft, buildBaseSaveRequest, saveProviderSecret, state.providers, updateLoadedState]);
+  }, [client, providerDraft, buildBaseSaveRequest, saveProviderSecret, state.providers, updateLoadedState]);
 
   const deleteProvider = useCallback(
     async (providerId: string): Promise<void> => {
       const saved = unwrap<SettingsSnapshot>(
         'settings save',
-        await window.roc.settings.save(
+        await resolveClient().api.settings.save(
           deleteProviderFromSettingsSaveRequest(buildBaseSaveRequest(), providerId)
         )
       );
       updateLoadedState(applySettingsSnapshot(saved));
       setProviderDraft(createInitialProviderDraft(saved.providers));
     },
-    [buildBaseSaveRequest, updateLoadedState]
+    [buildBaseSaveRequest, client, updateLoadedState]
   );
 
   const setDefaultModel = useCallback(
     async (modelId: string | null): Promise<void> => {
       const saved = unwrap<SettingsSnapshot>(
         'settings save',
-        await window.roc.settings.save(
+        await resolveClient().api.settings.save(
           setDefaultModelInSettingsSaveRequest(buildBaseSaveRequest(), modelId)
         )
       );
       updateLoadedState(applySettingsSnapshot(saved));
     },
-    [buildBaseSaveRequest, updateLoadedState]
+    [buildBaseSaveRequest, client, updateLoadedState]
   );
 
   const testProvider = useCallback(
     async (providerId: string): Promise<void> => {
       const result = unwrap<ProviderTestResult>(
         'provider test',
-        await window.roc.settings.testProvider(providerId)
+        await resolveClient().api.settings.testProvider(providerId)
       );
       updateLoadedState({ providerTestStatus: result });
     },
-    [updateLoadedState]
+    [client, updateLoadedState]
   );
 
   async function saveProviderSecret(providerId: string, plaintext: string): Promise<SettingsSnapshot> {
     setSecretBusyProviderId(providerId);
     try {
-      unwrap('provider secret save', await window.roc.settings.setProviderSecret({ providerId, plaintext }));
+      unwrap('provider secret save', await resolveClient().api.settings.setProviderSecret({ providerId, plaintext }));
       return await refreshSettingsSnapshot();
     } finally {
       setSecretBusyProviderId(null);
@@ -242,7 +250,7 @@ export function SettingsView({
     async (providerId: string): Promise<void> => {
       setSecretBusyProviderId(providerId);
       try {
-        unwrap('provider secret clear', await window.roc.settings.clearProviderSecret(providerId));
+        unwrap('provider secret clear', await resolveClient().api.settings.clearProviderSecret(providerId));
         await refreshSettingsSnapshot();
         setProviderDraft((current) =>
           current.id === providerId
@@ -259,7 +267,7 @@ export function SettingsView({
         setSecretBusyProviderId(null);
       }
     },
-    [refreshSettingsSnapshot]
+    [client, refreshSettingsSnapshot]
   );
 
   const testExa = useCallback(async (): Promise<void> => {
@@ -268,12 +276,12 @@ export function SettingsView({
       return;
     }
     try {
-      const result = unwrap('mcp test exa', await window.roc.mcp.testServer(exaServer.id));
+      const result = unwrap('mcp test exa', await resolveClient().api.mcp.testServer(exaServer.id));
       setExaTestLabel(result.status);
     } catch (error) {
       setExaTestLabel(error instanceof Error ? error.message : 'invalid');
     }
-  }, [exaServer]);
+  }, [client, exaServer]);
 
   const saveAll = useCallback(async (): Promise<void> => {
     setSaveError(null);
@@ -281,7 +289,7 @@ export function SettingsView({
     try {
       const saved = unwrap<SettingsSnapshot>(
         'settings save all',
-        await window.roc.settings.save(buildBaseSaveRequest())
+        await resolveClient().api.settings.save(buildBaseSaveRequest())
       );
       updateLoadedState(applySettingsSnapshot(saved));
       setSaveError(null);
@@ -290,7 +298,7 @@ export function SettingsView({
     } finally {
       setSavingAll(false);
     }
-  }, [buildBaseSaveRequest, updateLoadedState]);
+  }, [buildBaseSaveRequest, client, updateLoadedState]);
 
   useEffect(() => {
     setExaTestLabel('未测试');
