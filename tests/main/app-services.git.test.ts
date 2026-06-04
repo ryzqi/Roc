@@ -15,8 +15,8 @@ describe('Roc foundation services git', () => {
     context = initializeAppServicesTest();
   });
 
-  afterEach(() => {
-    cleanupAppServicesTest(context);
+  afterEach(async () => {
+    await cleanupAppServicesTest(context);
   });
 
   it('selects a real workspace and keeps the app status bound to the same path', () => {

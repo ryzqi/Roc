@@ -12,8 +12,8 @@ describe('Roc foundation services tasks', () => {
     context = initializeAppServicesTest();
   });
 
-  afterEach(() => {
-    cleanupAppServicesTest(context);
+  afterEach(async () => {
+    await cleanupAppServicesTest(context);
   });
 
   it('creates scheduled background tasks and keeps tray summary bound to task state', () => {

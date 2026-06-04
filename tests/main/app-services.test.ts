@@ -10,8 +10,8 @@ describe('Roc foundation services', () => {
     context = initializeAppServicesTest();
   });
 
-  afterEach(() => {
-    cleanupAppServicesTest(context);
+  afterEach(async () => {
+    await cleanupAppServicesTest(context);
     vi.useRealTimers();
   });
 
@@ -52,8 +52,8 @@ describe('Roc foundation services', () => {
     expect(tableNames).toContain('skills');
   });
 
-  it('separates critical and deferred startup initialization', () => {
-    cleanupAppServicesTest(context);
+  it('separates critical and deferred startup initialization', async () => {
+    await cleanupAppServicesTest(context);
     context = initializeAppServicesTest({ skipInitialize: true });
     const { root, services } = context;
 
@@ -66,8 +66,8 @@ describe('Roc foundation services', () => {
     expect(existsSync(join(root, 'memory', 'global'))).toBe(true);
   });
 
-  it('sweeps expired session messages during deferred startup', () => {
-    cleanupAppServicesTest(context);
+  it('sweeps expired session messages during deferred startup', async () => {
+    await cleanupAppServicesTest(context);
     context = initializeAppServicesTest({ skipInitialize: true });
     const { services } = context;
 
@@ -95,7 +95,7 @@ describe('Roc foundation services', () => {
   });
 
   it('schedules a daily session retention sweep', async () => {
-    cleanupAppServicesTest(context);
+    await cleanupAppServicesTest(context);
     context = initializeAppServicesTest({ skipInitialize: true });
     vi.useFakeTimers();
     const { services } = context;
@@ -181,8 +181,8 @@ describe('Roc foundation services', () => {
     expect(existsSync(resolve('scripts/package-dir.mjs'))).toBe(true);
   });
 
-  it('includes Electron window and process metrics in performance samples', () => {
-    cleanupAppServicesTest(context);
+  it('includes Electron window and process metrics in performance samples', async () => {
+    await cleanupAppServicesTest(context);
     context = initializeAppServicesTest({
       runtimeMetrics: {
         getBrowserWindowCount: () => 3,

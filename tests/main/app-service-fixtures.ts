@@ -31,8 +31,8 @@ export function initializeAppServicesTest(
   };
 }
 
-export function cleanupAppServicesTest(input: AppServicesTestContext): void {
-  input.services.appService.shutdown();
+export async function cleanupAppServicesTest(input: AppServicesTestContext): Promise<void> {
+  await input.services.appService.shutdown();
   rmSync(input.root, { recursive: true, force: true });
 }
 

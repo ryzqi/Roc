@@ -138,11 +138,12 @@ export class AppService {
     this.logService.append({ level: 'info', message: 'Roc deferred services initialized.' });
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
     this.terminalSessionService.shutdown();
     this.stopMemoryRetentionSweepTimer();
     this.taskSchedulerService.stop();
     this.databaseService.close();
+    await this.logService.close();
   }
 
   getStatus(): AppStatus {

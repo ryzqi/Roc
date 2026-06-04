@@ -23,8 +23,8 @@ beforeEach(() => {
   services.appService.initializeCritical();
 });
 
-afterEach(() => {
-  services.appService.shutdown();
+afterEach(async () => {
+  await services.appService.shutdown();
   rmSync(root, { recursive: true, force: true });
   vi.useRealTimers();
 });

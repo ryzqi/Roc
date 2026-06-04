@@ -64,7 +64,8 @@ let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
 let screenBoundsBound = false;
 let systemAppearanceBound = false;
-let appShutdownApplied = false;
+let appShutdownComplete = false;
+let appShutdownInProgress: Promise<void> | null = null;
 
 const hostService = new WindowsHostService({
   app: {
@@ -162,13 +163,31 @@ const hostService = new WindowsHostService({
 
 const ownsSingleInstanceLock = hostService.initializeProcessIdentity();
 
-app.on('before-quit', () => {
-  if (appShutdownApplied) {
+app.on('before-quit', (event) => {
+  if (appShutdownComplete) {
     return;
   }
-  appShutdownApplied = true;
-  activeServices?.appService.shutdown();
+  if (appShutdownInProgress !== null) {
+    event.preventDefault();
+    return;
+  }
+  const services = activeServices;
   activeServices = null;
+  if (services === null) {
+    appShutdownComplete = true;
+    return;
+  }
+  event.preventDefault();
+  appShutdownInProgress = services.appService
+    .shutdown()
+    .catch((error: unknown) => {
+      console.error(error);
+    })
+    .finally(() => {
+      appShutdownComplete = true;
+      appShutdownInProgress = null;
+      app.quit();
+    });
 });
 
 async function loadMainRenderer(window: BrowserWindow): Promise<void> {

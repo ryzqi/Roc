@@ -28,9 +28,9 @@ describe('Roc foundation services providers', () => {
     context = initializeAppServicesTest();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
-    cleanupAppServicesTest(context);
+    await cleanupAppServicesTest(context);
   });
 
   it('reports blocked agent state until default model is configured', () => {
@@ -930,8 +930,8 @@ describe('Roc foundation services providers', () => {
     });
   });
 
-  it('keeps the Exa preset visible after critical-only startup initialization', () => {
-    cleanupAppServicesTest(context);
+  it('keeps the Exa preset visible after critical-only startup initialization', async () => {
+    await cleanupAppServicesTest(context);
     context = initializeAppServicesTest({ skipInitialize: true });
 
     context.services.appService.initializeCritical();
