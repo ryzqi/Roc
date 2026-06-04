@@ -8,13 +8,13 @@ const rocApi: RocPreloadApi = {
     openMainPage: (page) => ipcRenderer.invoke(ipcChannels.appOpenMainPage, page),
     onAppearanceUpdated: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, appearance: Parameters<typeof callback>[0]) => callback(appearance);
-      ipcRenderer.on('roc:appearance:updated', listener);
-      return () => ipcRenderer.off('roc:appearance:updated', listener);
+      ipcRenderer.on(ipcChannels.appearanceUpdated, listener);
+      return () => ipcRenderer.off(ipcChannels.appearanceUpdated, listener);
     },
     onNavigate: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, page: string) => callback(page);
-      ipcRenderer.on('roc:navigate', listener);
-      return () => ipcRenderer.off('roc:navigate', listener);
+      ipcRenderer.on(ipcChannels.navigate, listener);
+      return () => ipcRenderer.off(ipcChannels.navigate, listener);
     }
   },
   window: {
@@ -44,8 +44,8 @@ const rocApi: RocPreloadApi = {
     getSchedulerStatus: () => ipcRenderer.invoke(ipcChannels.tasksGetSchedulerStatus),
     onUpdated: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
-      ipcRenderer.on('roc:tasks:updated', listener);
-      return () => ipcRenderer.off('roc:tasks:updated', listener);
+      ipcRenderer.on(ipcChannels.tasksUpdated, listener);
+      return () => ipcRenderer.off(ipcChannels.tasksUpdated, listener);
     }
   },
   lifecycle: {
@@ -142,13 +142,13 @@ const rocApi: RocPreloadApi = {
     closeSession: (request) => ipcRenderer.invoke(ipcChannels.terminalCloseSession, request),
     onOutput: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
-      ipcRenderer.on('roc:terminal:output', listener);
-      return () => ipcRenderer.off('roc:terminal:output', listener);
+      ipcRenderer.on(ipcChannels.terminalOutput, listener);
+      return () => ipcRenderer.off(ipcChannels.terminalOutput, listener);
     },
     onExit: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
-      ipcRenderer.on('roc:terminal:exit', listener);
-      return () => ipcRenderer.off('roc:terminal:exit', listener);
+      ipcRenderer.on(ipcChannels.terminalExit, listener);
+      return () => ipcRenderer.off(ipcChannels.terminalExit, listener);
     }
   },
   rtk: {

@@ -16,6 +16,7 @@ import {
   type ProcessMetric
 } from 'electron';
 import { join } from 'node:path';
+import { ipcChannels } from '../shared/ipc';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
@@ -182,7 +183,7 @@ const hostService = new WindowsHostService({
   },
   openMainPage: showMainPage,
   broadcastTaskUpdated: () => {
-    broadcastToWindows([mainWindow], 'roc:tasks:updated', null);
+    broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
   }
 });
 
@@ -232,7 +233,7 @@ function showMainPage(page: string): void {
   }
   mainWindow.show();
   mainWindow.focus();
-  sendToWindow(mainWindow, 'roc:navigate', page);
+  sendToWindow(mainWindow, ipcChannels.navigate, page);
 }
 
 async function createWindow(): Promise<void> {
@@ -326,7 +327,7 @@ async function createWindow(): Promise<void> {
     getHostIntegrationStatus: () => hostService.getIntegrationStatus(),
     broadcastTaskUpdated: (event) => {
       hostService.refreshTray();
-      broadcastToWindows([mainWindow], 'roc:tasks:updated', event ?? null);
+      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
     }
   });
   if (!pdfPreviewProtocolRegistered) {
@@ -348,7 +349,7 @@ async function createWindow(): Promise<void> {
   const terminalOutputBatcher = createTerminalOutputBatcher({
     intervalMs: 16,
     send: (event) => {
-      broadcastToWindows([mainWindow], 'roc:terminal:output', event, {
+      broadcastToWindows([mainWindow], ipcChannels.terminalOutput, event, {
         include: (_window, index) => index === 0
       });
     }
@@ -358,16 +359,16 @@ async function createWindow(): Promise<void> {
   });
   services.terminalSessionService.onExit((event) => {
     terminalOutputBatcher.flush();
-    broadcastToWindows([mainWindow], 'roc:terminal:exit', event, {
+    broadcastToWindows([mainWindow], ipcChannels.terminalExit, event, {
       include: (_window, index) => index === 0
     });
   });
   services.deepAgentRuntimeService.onRunEvent((event) => {
-    broadcastToWindows([mainWindow], 'roc:chat:run-event', event, {
+    broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event, {
       include: (_window, index) => index === 0
     });
     if (event.runId.startsWith('run_')) {
-      broadcastToWindows([mainWindow], 'roc:tasks:updated', null);
+      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
     }
   });
   if (!powerResumeBound) {
@@ -474,7 +475,7 @@ function bindSystemAppearanceBroadcast(): void {
   }
   systemAppearanceBound = true;
   const broadcastSystemAppearance = (): void => {
-    broadcastToWindows([mainWindow], 'roc:appearance:updated', getSystemAppearanceSnapshot());
+    broadcastToWindows([mainWindow], ipcChannels.appearanceUpdated, getSystemAppearanceSnapshot());
   };
   nativeTheme.on('updated', broadcastSystemAppearance);
   systemPreferences.on('color-changed', broadcastSystemAppearance);
