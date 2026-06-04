@@ -212,9 +212,9 @@ Expected: PASS.
 
 ## Phase 4 Verification
 
-- [ ] `pnpm test -- tests/renderer`
-- [ ] `pnpm typecheck`
-- [ ] `pnpm build`
+- [x] `pnpm test -- tests/renderer`
+- [x] `pnpm typecheck`
+- [x] `pnpm build`
 
 ## Phase 4 Exit Criteria
 
