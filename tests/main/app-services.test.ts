@@ -30,6 +30,12 @@ describe('Roc foundation services', () => {
     expect(existsSync(join(root, 'skills'))).toBe(true);
     expect(existsSync(join(root, 'tasks', 'recovery'))).toBe(true);
     expect(existsSync(join(root, 'rtk', 'tee'))).toBe(true);
+    expect(services.metricsService.getSnapshot().summary).toEqual({
+      totalMetrics: 0,
+      counterCount: 0,
+      gaugeCount: 0,
+      histogramCount: 0
+    });
   });
 
   it('initializes SQLite with WAL and required first-wave tables', () => {

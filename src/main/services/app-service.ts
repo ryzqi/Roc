@@ -12,6 +12,7 @@ import { LifecycleService } from './lifecycle-service';
 import { LogService } from './log-service';
 import { LangChainModelFactory } from './langchain-model-factory';
 import { McpService } from './mcp-service';
+import { MetricsService } from './metrics-service';
 import { MemoryService } from './memory-service';
 import { ConsolidatorService } from './memory/consolidator';
 import { PrecompactionService } from './memory/precompaction';
@@ -50,6 +51,7 @@ export type AppServices = {
   deepAgentRuntimeService: DeepAgentRuntimeService;
   providerRuntimeService: ProviderRuntimeService;
   performanceObserverService: PerformanceObserverService;
+  metricsService: MetricsService;
   logService: LogService;
   workspaceService: WorkspaceService;
   fileService: FileService;
@@ -106,6 +108,7 @@ export class AppService {
     private readonly deepAgentRuntimeService: DeepAgentRuntimeService,
     private readonly providerRuntimeService: ProviderRuntimeService,
     private readonly performanceObserverService: PerformanceObserverService,
+    private readonly metricsService: MetricsService,
     private readonly workspaceService: WorkspaceService,
     private readonly fileService: FileService,
     private readonly gitService: GitService,
@@ -220,6 +223,7 @@ export class AppService {
       deepAgentRuntimeService: this.deepAgentRuntimeService,
       providerRuntimeService: this.providerRuntimeService,
       performanceObserverService: this.performanceObserverService,
+      metricsService: this.metricsService,
       workspaceService: this.workspaceService,
       fileService: this.fileService,
       gitService: this.gitService,
@@ -285,6 +289,7 @@ export function createAppServices(
   const sessionArchiveService = new SessionArchiveService(databaseService);
   const rtkService = new RtkService(paths);
   const performanceObserverService = new PerformanceObserverService();
+  const metricsService = new MetricsService();
   const diagnosticsService = new DiagnosticsService(
     paths,
     databaseService,
@@ -367,6 +372,7 @@ export function createAppServices(
     deepAgentRuntimeService,
     providerRuntimeService,
     performanceObserverService,
+    metricsService,
     workspaceService,
     fileService,
     gitService,
@@ -398,6 +404,7 @@ export function createAppServices(
     deepAgentRuntimeService,
     providerRuntimeService,
     performanceObserverService,
+    metricsService,
     logService,
     workspaceService,
     fileService,
