@@ -347,7 +347,7 @@ async function createWindow(): Promise<void> {
       hostService.refreshTray();
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
     }
-  });
+  }, kernel);
   if (!pdfPreviewProtocolRegistered) {
     protocol.handle(pdfPreviewScheme, (request) => {
       const activeServices = pdfPreviewServices;

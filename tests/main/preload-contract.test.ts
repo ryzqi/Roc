@@ -56,5 +56,7 @@ describe('preload contract', () => {
     ]);
     expect(Object.keys(api.memory).sort()).toEqual(['readFile', 'snapshotPreview', 'status', 'writeFile']);
     expect(Object.keys(api.sessions).sort()).toEqual(['list', 'search']);
+    expect(JSON.stringify(api)).not.toContain('invokeCapability');
+    expect(JSON.stringify(api)).not.toContain('*');
   });
 });

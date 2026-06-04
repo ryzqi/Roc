@@ -20,13 +20,16 @@ const serverEnabledRequestSchema = z.object({
   id: z.string(),
   enabled: z.boolean()
 });
+const idInputSchema = z.object({
+  id: z.string()
+});
 
 const mcpCapabilityDescriptors = [
   descriptor('mcp.listServers', emptyInputSchema, z.custom<McpServerSnapshot[]>()),
   descriptor('mcp.upsertServer', McpServerSchema, z.custom<McpServerConfig>()),
   descriptor('mcp.setServerEnabled', serverEnabledRequestSchema, z.custom<McpServerConfig>()),
-  descriptor('mcp.deleteServer', z.string(), z.object({ deleted: z.literal(true) })),
-  descriptor('mcp.testServer', z.string(), z.custom<McpServerTestResult>()),
+  descriptor('mcp.deleteServer', idInputSchema, z.object({ deleted: z.literal(true) })),
+  descriptor('mcp.testServer', idInputSchema, z.custom<McpServerTestResult>()),
   descriptor('mcp.tools.get', emptyInputSchema, z.array(z.unknown()))
 ] as const satisfies readonly CapabilityDescriptor[];
 
@@ -61,11 +64,11 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
         return service.setServerEnabled(request.id, request.enabled);
       });
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[3], async (input) => {
-        service.deleteServer(input as string);
+        service.deleteServer((input as { id: string }).id);
         return { deleted: true as const };
       });
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[4], async (input) =>
-        service.testServer(input as string)
+        service.testServer((input as { id: string }).id)
       );
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[5], async () =>
         clientAdapter.loadTools(configAdapter.getMcpConfig().servers.filter((server) => server.enabled))

@@ -24,6 +24,9 @@ const skillSetEnabledRequestSchema = z.object({
   id: z.string(),
   enabled: z.boolean()
 });
+const idInputSchema = z.object({
+  id: z.string()
+});
 const skillFileTreeRequestSchema = z.object({
   id: z.string(),
   relativePath: z.string()
@@ -38,7 +41,7 @@ const skillsCapabilityDescriptors = [
   descriptor('skills.list', emptyInputSchema, z.custom<SkillSnapshot[]>()),
   descriptor('skills.import', skillImportRequestSchema, z.custom<SkillSnapshot>()),
   descriptor('skills.setEnabled', skillSetEnabledRequestSchema, z.custom<SkillSnapshot>()),
-  descriptor('skills.delete', z.string(), z.object({ deleted: z.literal(true) })),
+  descriptor('skills.delete', idInputSchema, z.object({ deleted: z.literal(true) })),
   descriptor('skills.files.list', skillFileTreeRequestSchema, z.custom<SkillFileTreeResult>()),
   descriptor('skills.file.read', skillFilePreviewRequestSchema, z.custom<SkillFilePreviewResult>())
 ] as const satisfies readonly CapabilityDescriptor[];
@@ -73,7 +76,7 @@ export function createSkillsPlugin(options: SkillsPluginOptions = {}): RocPlugin
         return service.setEnabled(request.id, request.enabled);
       });
       context.capabilities.register(pluginId, skillsCapabilityDescriptors[3], async (input) => {
-        service.deleteSkill(input as string);
+        service.deleteSkill((input as { id: string }).id);
         return { deleted: true as const };
       });
       context.capabilities.register(pluginId, skillsCapabilityDescriptors[4], async (input) =>

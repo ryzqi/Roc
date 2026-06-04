@@ -58,7 +58,7 @@ describe('MCP plugin', () => {
       allowedTools: ['search_docs']
     });
     const snapshots = await capabilities.invoke('mcp.listServers', {});
-    const testResult = await capabilities.invoke<string, unknown>('mcp.testServer', stdioServer.id);
+    const testResult = await capabilities.invoke<{ id: string }, unknown>('mcp.testServer', { id: stdioServer.id });
 
     expect(initialSnapshots).toEqual([
       expect.objectContaining({

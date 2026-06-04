@@ -65,7 +65,7 @@ describe('skills plugin', () => {
       const files = await capabilities.invoke('skills.files.list', { id: imported.id, relativePath: '' });
       const preview = await capabilities.invoke('skills.file.read', { id: imported.id, relativePath: 'SKILL.md' });
       const listed = await capabilities.invoke('skills.list', {});
-      const deleted = await capabilities.invoke('skills.delete', imported.id);
+      const deleted = await capabilities.invoke('skills.delete', { id: imported.id });
 
       expect(imported).toMatchObject({
         id: 'project-review',
