@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyWindowMaterial } from '../../src/main/window-material';
+import { applyWindowMaterial, applyWindowMaterialWithFallback } from '../../src/main/window-material';
 
 describe('window material fallback', () => {
   it('applies the requested Windows material when Electron accepts it', () => {
@@ -32,6 +32,64 @@ describe('window material fallback', () => {
       metadata: {
         material: 'acrylic',
         error: 'unsupported material'
+      }
+    });
+  });
+
+  it('tries fallback materials when the primary material is unavailable', () => {
+    const setBackgroundMaterial = vi.fn((material: 'mica' | 'acrylic') => {
+      if (material === 'mica') {
+        throw new Error('mica unavailable');
+      }
+    });
+    const setBackgroundColor = vi.fn();
+    const logService = { info: vi.fn(), warn: vi.fn() };
+
+    const result = applyWindowMaterialWithFallback(
+      { setBackgroundMaterial, setBackgroundColor },
+      {
+        primary: 'mica',
+        fallbacks: ['acrylic'],
+        staticBackground: '#f7f8f5'
+      },
+      logService
+    );
+
+    expect(result).toEqual({ material: 'acrylic', applied: true });
+    expect(setBackgroundMaterial).toHaveBeenNthCalledWith(1, 'mica');
+    expect(setBackgroundMaterial).toHaveBeenNthCalledWith(2, 'acrylic');
+    expect(setBackgroundColor).not.toHaveBeenCalled();
+  });
+
+  it('uses the static background when every material fails', () => {
+    const setBackgroundMaterial = vi.fn((material: 'mica' | 'acrylic') => {
+      throw new Error(`${material} unavailable`);
+    });
+    const setBackgroundColor = vi.fn();
+    const logService = { info: vi.fn(), warn: vi.fn() };
+
+    const result = applyWindowMaterialWithFallback(
+      { setBackgroundMaterial, setBackgroundColor },
+      {
+        primary: 'mica',
+        fallbacks: ['acrylic'],
+        staticBackground: '#f7f8f5'
+      },
+      logService
+    );
+
+    expect(result).toEqual({
+      material: 'acrylic',
+      applied: false,
+      errorMessage: 'acrylic unavailable'
+    });
+    expect(setBackgroundMaterial).toHaveBeenCalledTimes(2);
+    expect(setBackgroundColor).toHaveBeenCalledWith('#f7f8f5');
+    expect(logService.info).toHaveBeenCalledWith('Roc window background material fallback applied.', {
+      service: 'window-material',
+      component: 'applyWindowMaterialWithFallback',
+      metadata: {
+        color: '#f7f8f5'
       }
     });
   });

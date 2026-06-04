@@ -18,6 +18,8 @@ const minMainWindowSize = {
   height: 640
 };
 
+export const mainWindowStaticBackground = '#f7f8f5';
+
 export function buildMainWindowOptions(
   preloadPath: string,
   iconPath: string,
@@ -34,7 +36,7 @@ export function buildMainWindowOptions(
     show: false,
     frame: false,
     autoHideMenuBar: true,
-    backgroundColor: '#f7f8f5',
+    backgroundColor: mainWindowStaticBackground,
     backgroundMaterial: 'mica',
     title: 'Roc',
     icon: iconPath,

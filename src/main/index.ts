@@ -24,6 +24,7 @@ import { WindowsHostService } from './windows-host-service';
 import {
   buildMainWindowOptions,
   getWindowBounds,
+  mainWindowStaticBackground,
   resolveMainWindowBounds
 } from './window-shell';
 import {
@@ -31,7 +32,7 @@ import {
   writeWindowPlacementSnapshot,
   type WindowPlacementSnapshot
 } from './window-state-store';
-import { applyWindowMaterial } from './window-material';
+import { applyWindowMaterialWithFallback } from './window-material';
 import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { createTerminalOutputBatcher } from './terminal-output-batcher';
 import { bindNativeContextMenu } from './native-context-menu';
@@ -291,7 +292,15 @@ async function createWindow(): Promise<void> {
   mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
     new BrowserWindow(buildMainWindowOptions(preloadPath, appIconPath, restoredBounds))
   );
-  applyWindowMaterial(mainWindow, 'mica', services.logService);
+  applyWindowMaterialWithFallback(
+    mainWindow,
+    {
+      primary: 'mica',
+      fallbacks: ['acrylic'],
+      staticBackground: mainWindowStaticBackground
+    },
+    services.logService
+  );
   if (restoredPlacement !== null && restoredPlacement.maximized) {
     mainWindow.maximize();
   }

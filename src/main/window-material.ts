@@ -1,7 +1,11 @@
-type WindowMaterial = 'mica' | 'acrylic';
+export type WindowMaterial = 'mica' | 'acrylic';
 
 type MaterialWindow = {
   setBackgroundMaterial(material: WindowMaterial): void;
+};
+
+type MaterialFallbackWindow = MaterialWindow & {
+  setBackgroundColor(color: string): void;
 };
 
 type MaterialLogService = {
@@ -16,6 +20,25 @@ type MaterialLogService = {
       };
     }
   ): void;
+};
+
+type MaterialFallbackLogService = MaterialLogService & {
+  info(
+    message: string,
+    context: {
+      service: string;
+      component: string;
+      metadata: {
+        color: string;
+      };
+    }
+  ): void;
+};
+
+export type MaterialFallbackStrategy = {
+  primary: WindowMaterial;
+  fallbacks: WindowMaterial[];
+  staticBackground: string;
 };
 
 export type WindowMaterialResult =
@@ -56,4 +79,32 @@ export function applyWindowMaterial(
       errorMessage
     };
   }
+}
+
+export function applyWindowMaterialWithFallback(
+  window: MaterialFallbackWindow,
+  strategy: MaterialFallbackStrategy,
+  logService: MaterialFallbackLogService
+): WindowMaterialResult {
+  const primaryResult = applyWindowMaterial(window, strategy.primary, logService);
+  if (primaryResult.applied) {
+    return primaryResult;
+  }
+  let lastResult: WindowMaterialResult = primaryResult;
+  for (const fallback of strategy.fallbacks) {
+    const fallbackResult = applyWindowMaterial(window, fallback, logService);
+    if (fallbackResult.applied) {
+      return fallbackResult;
+    }
+    lastResult = fallbackResult;
+  }
+  window.setBackgroundColor(strategy.staticBackground);
+  logService.info('Roc window background material fallback applied.', {
+    service: 'window-material',
+    component: 'applyWindowMaterialWithFallback',
+    metadata: {
+      color: strategy.staticBackground
+    }
+  });
+  return lastResult;
 }
