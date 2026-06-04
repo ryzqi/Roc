@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
 import { RocDomainError } from './errors';
-import type { ConfigService } from './config-service';
 import { requireText } from './validation';
 
 const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
@@ -16,8 +15,13 @@ const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   allowedTools: z.array(z.string().min(1))
 });
 
+export type McpConfigService = {
+  getMcpConfig(): McpServersConfig;
+  saveMcpConfig(config: McpServersConfig): void;
+};
+
 export class McpService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: McpConfigService) {}
 
   listServers(): McpServerSnapshot[] {
     const config = this.readConfig();
