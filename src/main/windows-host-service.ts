@@ -83,7 +83,7 @@ export class WindowsHostService {
       app: AppLike;
       globalShortcut: GlobalShortcutLike;
       lifecycleService: Pick<LifecycleService, 'getTraySummary' | 'pauseBackgroundExecution' | 'resumeBackgroundExecution'>;
-      logService: Pick<LogService, 'append'>;
+      logService: Pick<LogService, 'info' | 'warn' | 'error'>;
       menu: MenuLike;
       trayIconPath: string;
       createTray: (iconPath: string) => TrayLike;
@@ -106,10 +106,10 @@ export class WindowsHostService {
       this.focusMainWindow();
       const args = Array.isArray(commandLine) ? commandLine.slice(1) : [];
       if (args.length > 0) {
-        this.input.logService.append({
-          level: 'info',
-          message: 'Roc received second-instance launch arguments.',
-          data: {
+        this.input.logService.info('Roc received second-instance launch arguments.', {
+          service: 'windows-host',
+          component: 'initializeProcessIdentity',
+          metadata: {
             argv: args
           }
         });
@@ -145,12 +145,9 @@ export class WindowsHostService {
       const message = error instanceof Error ? error.message : String(error);
       this.hostIntegration.startup.syncError = message;
       this.hostIntegration.startup.effectiveOpenAtLogin = false;
-      this.input.logService.append({
-        level: 'error',
-        message: 'Roc open-at-login sync failed.',
-        data: {
-          error: message
-        }
+      this.input.logService.error('Roc open-at-login sync failed.', toLogError(error), {
+        service: 'windows-host',
+        component: 'syncSettings'
       });
     }
 
@@ -173,10 +170,10 @@ export class WindowsHostService {
           this.currentHotkey = settings.globalHotkey;
         } else {
           this.hostIntegration.globalHotkey.registrationError = 'globalShortcut.register returned false.';
-          this.input.logService.append({
-            level: 'warn',
-            message: 'Roc global hotkey registration failed.',
-            data: {
+          this.input.logService.warn('Roc global hotkey registration failed.', {
+            service: 'windows-host',
+            component: 'syncSettings',
+            metadata: {
               accelerator: settings.globalHotkey
             }
           });
@@ -184,10 +181,10 @@ export class WindowsHostService {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.hostIntegration.globalHotkey.registrationError = message;
-        this.input.logService.append({
-          level: 'warn',
-          message: 'Roc global hotkey registration failed.',
-          data: {
+        this.input.logService.warn('Roc global hotkey registration failed.', {
+          service: 'windows-host',
+          component: 'syncSettings',
+          metadata: {
             accelerator: settings.globalHotkey,
             error: message
           }
@@ -297,4 +294,11 @@ export class WindowsHostService {
     this.mainWindow.show();
     this.mainWindow.focus();
   }
+}
+
+function toLogError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
 }

@@ -122,12 +122,35 @@ const hostService = new WindowsHostService({
     }
   },
   logService: {
-    append: (event) => {
+    info: (message, context) => {
       if (activeServices === null) {
-        console.log(JSON.stringify(event));
+        console.log(JSON.stringify({ ...context, level: 'info', message }));
         return;
       }
-      activeServices.logService.append(event);
+      activeServices.logService.info(message, context);
+    },
+    warn: (message, context) => {
+      if (activeServices === null) {
+        console.log(JSON.stringify({ ...context, level: 'warn', message }));
+        return;
+      }
+      activeServices.logService.warn(message, context);
+    },
+    error: (message, error, context) => {
+      if (activeServices === null) {
+        console.log(JSON.stringify({
+          ...context,
+          level: 'error',
+          message,
+          error: {
+            code: 'error',
+            message: error.message,
+            stack: error.stack
+          }
+        }));
+        return;
+      }
+      activeServices.logService.error(message, error, context);
     }
   },
   menu: Menu,
@@ -256,12 +279,9 @@ async function createWindow(): Promise<void> {
           services.appService.initializeDeferred();
         });
       } catch (error) {
-        services.logService.append({
-          level: 'error',
-          message: 'Roc deferred services failed to initialize.',
-          data: {
-            error: error instanceof Error ? error.message : String(error)
-          }
+        services.logService.error('Roc deferred services failed to initialize.', toLogError(error), {
+          service: 'main',
+          component: 'initializeDeferredServices'
         });
       }
     });
@@ -512,4 +532,11 @@ function toRuntimeProcessMetric(metric: ProcessMetric): RuntimeProcessMetric {
       privateBytesKb: metric.memory.privateBytes
     }
   };
+}
+
+function toLogError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
 }

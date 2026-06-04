@@ -73,7 +73,12 @@ function createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
       () => services.configService.getSettings().memory,
       services.performanceObserverService,
       {
-        append: vi.fn()
+        append: vi.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn()
       } as never
     );
     runtime.attachScheduler(services.taskSchedulerService);

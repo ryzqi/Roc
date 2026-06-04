@@ -6,7 +6,7 @@ type ShellLike = {
 
 type ExternalLinkPolicyInput = {
   shell: ShellLike;
-  logService: Pick<LogService, 'append'>;
+  logService: Pick<LogService, 'warn'>;
 };
 
 const allowedExternalSchemes = new Set(['http:', 'https:']);
@@ -19,10 +19,10 @@ export function handleExternalWindowOpen(
   try {
     parsedUrl = new URL(url);
   } catch {
-    input.logService.append({
-      level: 'warn',
-      message: 'Blocked invalid external link.',
-      data: {
+    input.logService.warn('Blocked invalid external link.', {
+      service: 'external-link-policy',
+      component: 'handleExternalWindowOpen',
+      metadata: {
         url
       }
     });
@@ -30,10 +30,10 @@ export function handleExternalWindowOpen(
   }
 
   if (!allowedExternalSchemes.has(parsedUrl.protocol)) {
-    input.logService.append({
-      level: 'warn',
-      message: 'Blocked external link with unsupported scheme.',
-      data: {
+    input.logService.warn('Blocked external link with unsupported scheme.', {
+      service: 'external-link-policy',
+      component: 'handleExternalWindowOpen',
+      metadata: {
         scheme: parsedUrl.protocol
       }
     });

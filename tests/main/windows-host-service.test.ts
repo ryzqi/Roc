@@ -118,11 +118,19 @@ function createTrayMock() {
   };
 }
 
+function createLogServiceMock() {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  };
+}
+
 describe('WindowsHostService', () => {
   it('configures AppUserModelID, keeps single-instance ownership, and focuses the existing window on second-instance', async () => {
     const app = createAppMock({ singleInstanceLock: true });
     const mainWindow = createWindowMock({ minimized: true });
-    const logService = { append: vi.fn() };
+    const logService = createLogServiceMock();
     const tray = createTrayMock();
     const host = new WindowsHostService({
       app,
@@ -173,12 +181,13 @@ describe('WindowsHostService', () => {
     expect(mainWindow.restore).toHaveBeenCalledTimes(1);
     expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(mainWindow.focus).toHaveBeenCalledTimes(1);
-    expect(logService.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'info',
-        message: 'Roc received second-instance launch arguments.'
-      })
-    );
+    expect(logService.info).toHaveBeenCalledWith('Roc received second-instance launch arguments.', {
+      service: 'windows-host',
+      component: 'initializeProcessIdentity',
+      metadata: {
+        argv: ['roc://open/tasks']
+      }
+    });
   });
 
   it('hides the main window on close when minimizeToTray is enabled, but explicit quit bypasses tray residency', () => {
@@ -208,7 +217,7 @@ describe('WindowsHostService', () => {
         pauseBackgroundExecution: vi.fn(),
         resumeBackgroundExecution: vi.fn()
       },
-      logService: { append: vi.fn() },
+      logService: createLogServiceMock(),
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
@@ -267,7 +276,7 @@ describe('WindowsHostService', () => {
         pauseBackgroundExecution: vi.fn(),
         resumeBackgroundExecution: vi.fn()
       },
-      logService: { append: vi.fn() },
+      logService: createLogServiceMock(),
       menu: {
         buildFromTemplate: vi.fn((template) => template)
       },
@@ -351,7 +360,7 @@ describe('WindowsHostService', () => {
         pauseBackgroundExecution,
         resumeBackgroundExecution
       },
-      logService: { append: vi.fn() },
+      logService: createLogServiceMock(),
       menu,
       trayIconPath,
       createTray,
@@ -412,7 +421,7 @@ describe('WindowsHostService', () => {
 
   it('surfaces global hotkey registration failures instead of silently accepting them', () => {
     const register = vi.fn(() => false);
-    const logService = { append: vi.fn() };
+    const logService = createLogServiceMock();
     const host = new WindowsHostService({
       app: createAppMock(),
       globalShortcut: {
@@ -462,11 +471,12 @@ describe('WindowsHostService', () => {
         registrationError: 'globalShortcut.register returned false.'
       }
     });
-    expect(logService.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warn',
-        message: 'Roc global hotkey registration failed.'
-      })
-    );
+    expect(logService.warn).toHaveBeenCalledWith('Roc global hotkey registration failed.', {
+      service: 'windows-host',
+      component: 'syncSettings',
+      metadata: {
+        accelerator: 'Ctrl+Alt+R'
+      }
+    });
   });
 });

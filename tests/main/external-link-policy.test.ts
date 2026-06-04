@@ -7,14 +7,14 @@ describe('external link policy', () => {
       openExternal: vi.fn()
     };
     const logService = {
-      append: vi.fn()
+      warn: vi.fn()
     };
 
     const result = handleExternalWindowOpen('https://example.com/docs', { shell, logService });
 
     expect(result).toEqual({ action: 'deny' });
     expect(shell.openExternal).toHaveBeenCalledWith('https://example.com/docs');
-    expect(logService.append).not.toHaveBeenCalled();
+    expect(logService.warn).not.toHaveBeenCalled();
   });
 
   it('blocks arbitrary schemes instead of forwarding them to shell.openExternal', () => {
@@ -22,18 +22,19 @@ describe('external link policy', () => {
       openExternal: vi.fn()
     };
     const logService = {
-      append: vi.fn()
+      warn: vi.fn()
     };
 
     const result = handleExternalWindowOpen('roc-preview://workspace/pdf/secret.pdf', { shell, logService });
 
     expect(result).toEqual({ action: 'deny' });
     expect(shell.openExternal).not.toHaveBeenCalled();
-    expect(logService.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warn',
-        message: 'Blocked external link with unsupported scheme.'
-      })
-    );
+    expect(logService.warn).toHaveBeenCalledWith('Blocked external link with unsupported scheme.', {
+      service: 'external-link-policy',
+      component: 'handleExternalWindowOpen',
+      metadata: {
+        scheme: 'roc-preview:'
+      }
+    });
   });
 });

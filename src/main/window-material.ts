@@ -5,14 +5,17 @@ type MaterialWindow = {
 };
 
 type MaterialLogService = {
-  append(entry: {
-    level: 'warn';
-    message: string;
-    data: {
-      material: WindowMaterial;
-      error: string;
-    };
-  }): void;
+  warn(
+    message: string,
+    context: {
+      service: string;
+      component: string;
+      metadata: {
+        material: WindowMaterial;
+        error: string;
+      };
+    }
+  ): void;
 };
 
 export type WindowMaterialResult =
@@ -39,10 +42,10 @@ export function applyWindowMaterial(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logService.append({
-      level: 'warn',
-      message: 'Roc window background material is unavailable; static background will be used.',
-      data: {
+    logService.warn('Roc window background material is unavailable; static background will be used.', {
+      service: 'window-material',
+      component: 'applyWindowMaterial',
+      metadata: {
         material,
         error: errorMessage
       }

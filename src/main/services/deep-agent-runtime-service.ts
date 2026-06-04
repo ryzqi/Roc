@@ -587,10 +587,11 @@ export class DeepAgentRuntimeService {
         await Promise.allSettled(flushSession.closers.map(async (close) => close()));
       }
     } catch (error) {
-      this.logService.append({
-        level: 'warn',
-        message: 'Pre-compaction flush failed; continuing user run.',
-        data: {
+      this.logService.warn('Pre-compaction flush failed; continuing user run.', {
+        service: 'deep-agent-runtime',
+        component: 'runPreCompactionFlush',
+        threadId: context.threadId,
+        metadata: {
           threadId: context.threadId,
           error: String(error)
         }
@@ -617,10 +618,12 @@ export class DeepAgentRuntimeService {
   private logProviderUsage(context: RunExecutionContext, usage: streamConsumers.ProviderUsageAccumulator): void {
     const promptTokens = usage.promptTokens ?? 0;
     const cacheReadTokens = usage.cacheReadTokens ?? 0;
-    this.logService.append({
-      level: 'info',
-      message: 'Deep Agent provider usage recorded.',
-      data: {
+    this.logService.info('Deep Agent provider usage recorded.', {
+      service: 'deep-agent-runtime',
+      component: 'logProviderUsage',
+      runId: context.runId,
+      threadId: context.threadId,
+      metadata: {
         provider: context.modelHandle.provider.type,
         providerId: context.modelHandle.provider.id,
         model: context.modelHandle.modelId,

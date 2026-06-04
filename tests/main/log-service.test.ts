@@ -48,6 +48,85 @@ describe('LogService', () => {
     expect(lines[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('writes structured timestamp fields while preserving legacy data', async () => {
+    logService.append({
+      level: 'warn',
+      message: 'Legacy compatible structured log',
+      data: { source: 'legacy' }
+    });
+
+    await logService.flush();
+
+    const lines = readLogLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toEqual(
+      expect.objectContaining({
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        level: 'warn',
+        message: 'Legacy compatible structured log',
+        data: { source: 'legacy' }
+      })
+    );
+  });
+
+  it('provides convenience methods for structured log events', async () => {
+    const providerError = new Error('provider failed');
+    providerError.stack = 'provider stack';
+
+    logService.info('Critical services initialized.', {
+      service: 'app',
+      component: 'initializeCritical',
+      traceId: 'trace_1',
+      metadata: { phase: 'critical' },
+      durationMs: 12,
+      memoryMb: 64
+    });
+    logService.debug('Debug details recorded.', {
+      service: 'app',
+      metadata: { detail: 'debug' }
+    });
+    logService.error('Provider request failed.', providerError, {
+      service: 'provider-runtime',
+      runId: 'run_1',
+      metadata: { providerId: 'openai' }
+    });
+
+    await logService.flush();
+
+    const lines = readLogLines();
+    expect(lines).toEqual([
+      expect.objectContaining({
+        level: 'info',
+        message: 'Critical services initialized.',
+        service: 'app',
+        component: 'initializeCritical',
+        traceId: 'trace_1',
+        metadata: { phase: 'critical' },
+        durationMs: 12,
+        memoryMb: 64
+      }),
+      expect.objectContaining({
+        level: 'debug',
+        message: 'Debug details recorded.',
+        service: 'app',
+        metadata: { detail: 'debug' }
+      }),
+      expect.objectContaining({
+        level: 'error',
+        message: 'Provider request failed.',
+        service: 'provider-runtime',
+        runId: 'run_1',
+        metadata: { providerId: 'openai' },
+        error: {
+          code: 'error',
+          message: 'provider failed',
+          stack: 'provider stack'
+        }
+      })
+    ]);
+  });
+
   it('flushes queued logs asynchronously after append', async () => {
     logService.append({ level: 'info', message: 'Automatic flush' });
 

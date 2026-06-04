@@ -5,11 +5,34 @@ import { createGzip } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import type { RocPaths } from './paths';
 
-export type LogEvent = {
-  level: 'info' | 'warn' | 'error';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+export type LogEventError = {
+  code: string;
   message: string;
+  stack?: string;
+  category?: string;
+};
+
+export type LogEvent = {
+  level: LogLevel;
+  message: string;
+  service?: string;
+  component?: string;
+  traceId?: string;
+  runId?: string;
+  threadId?: string;
+  error?: LogEventError;
+  metadata?: Record<string, unknown>;
+  durationMs?: number;
+  memoryMb?: number;
+  /**
+   * 兼容旧日志调用。新日志调用应使用 metadata。
+   */
   data?: unknown;
 };
+
+export type LogEventContext = Omit<Partial<LogEvent>, 'level' | 'message' | 'error'>;
 
 export type LogRotationConfig = {
   maxFileSizeMb: number;
@@ -68,13 +91,52 @@ export class LogService {
       return;
     }
 
-    this.writeQueue.push(`${JSON.stringify({ ...event, createdAt: new Date().toISOString() })}\n`);
+    const timestamp = new Date().toISOString();
+    this.writeQueue.push(`${JSON.stringify({ ...event, createdAt: timestamp, timestamp })}\n`);
     if (this.writeQueue.length > this.maxQueueSize) {
       const droppedCount = this.writeQueue.length - this.maxQueueSize;
       this.writeQueue = this.writeQueue.slice(-this.maxQueueSize);
       console.warn(`[LogService] Queue overflow, dropping ${droppedCount} logs`);
     }
     this.scheduleFlush();
+  }
+
+  debug(message: string, context: LogEventContext = {}): void {
+    this.append({ ...context, level: 'debug', message });
+  }
+
+  info(message: string, context: LogEventContext = {}): void {
+    this.append({ ...context, level: 'info', message });
+  }
+
+  warn(message: string, context: LogEventContext = {}): void {
+    this.append({ ...context, level: 'warn', message });
+  }
+
+  error(message: string, error: Error, context: LogEventContext = {}): void {
+    this.append({
+      ...context,
+      level: 'error',
+      message,
+      error: {
+        code: 'error',
+        message: error.message,
+        stack: error.stack
+      }
+    });
+  }
+
+  fatal(message: string, error: Error, context: LogEventContext = {}): void {
+    this.append({
+      ...context,
+      level: 'fatal',
+      message,
+      error: {
+        code: 'fatal',
+        message: error.message,
+        stack: error.stack
+      }
+    });
   }
 
   async flush(): Promise<void> {

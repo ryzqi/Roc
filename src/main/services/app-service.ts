@@ -127,7 +127,10 @@ export class AppService {
     this.mcpService.ensureExaPreset();
     this.databaseService.initialize();
     this.logService.initialize();
-    this.logService.append({ level: 'info', message: 'Roc critical services initialized.' });
+    this.logService.info('Roc critical services initialized.', {
+      service: 'app-service',
+      component: 'initializeCritical'
+    });
   }
 
   initializeDeferred(): void {
@@ -135,7 +138,10 @@ export class AppService {
     this.runMemoryRetentionSweep();
     this.startMemoryRetentionSweepTimer();
     this.taskSchedulerService.start();
-    this.logService.append({ level: 'info', message: 'Roc deferred services initialized.' });
+    this.logService.info('Roc deferred services initialized.', {
+      service: 'app-service',
+      component: 'initializeDeferred'
+    });
   }
 
   async shutdown(): Promise<void> {

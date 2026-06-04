@@ -46,10 +46,10 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
         }
       });
       if (durationMs > slowIpcThresholdMs) {
-        services.logService.append({
-          level: 'warn',
-          message: 'Slow IPC handler recorded.',
-          data: {
+        services.logService.warn('Slow IPC handler recorded.', {
+          service: 'ipc',
+          component: 'register-ipc',
+          metadata: {
             channel,
             durationMs,
             ok: result.ok
@@ -70,10 +70,10 @@ export function registerIpc(services: AppServices, mainWindow: BrowserWindow, co
         }
       });
       if (durationMs > slowIpcThresholdMs) {
-        services.logService.append({
-          level: 'warn',
-          message: 'Slow IPC handler recorded.',
-          data: {
+        services.logService.warn('Slow IPC handler recorded.', {
+          service: 'ipc',
+          component: 'register-ipc',
+          metadata: {
             channel,
             durationMs,
             ok: false

@@ -110,7 +110,7 @@ export class SkillService {
     return imported;
   }
 
-  migrateLegacySkills(input: { legacySkillsDir: string; logService?: Pick<LogService, 'append'> }): void {
+  migrateLegacySkills(input: { legacySkillsDir: string; logService?: Pick<LogService, 'info'> }): void {
     const legacyRoot = resolve(input.legacySkillsDir);
     const currentRoot = resolve(this.paths.skillsDir);
     if (legacyRoot === currentRoot || !existsSync(legacyRoot)) {
@@ -141,10 +141,10 @@ export class SkillService {
       this.mergeSkillDirectory(sourceDir, targetDir, summary);
     }
 
-    input.logService?.append({
-      level: 'info',
-      message: 'Migrated legacy root-scoped skills into the canonical user skill library.',
-      data: summary
+    input.logService?.info('Migrated legacy root-scoped skills into the canonical user skill library.', {
+      service: 'skill-service',
+      component: 'migrateLegacySkills',
+      metadata: summary
     });
   }
 
