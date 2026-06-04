@@ -239,6 +239,15 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_task_events_recent_active_threads
       ON task_events(thread_id, created_at DESC);
 
+      CREATE INDEX IF NOT EXISTS idx_task_events_thread_run_created
+      ON task_events(thread_id, run_id, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_task_events_run_type_created
+      ON task_events(run_id, type, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_task_runs_thread_run_number
+      ON task_runs(thread_id, run_number DESC);
+
       CREATE INDEX IF NOT EXISTS idx_background_tasks_updated
       ON background_tasks(updated_at DESC);
 

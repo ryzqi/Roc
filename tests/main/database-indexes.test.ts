@@ -31,7 +31,10 @@ describe('database indexes', () => {
         'idx_background_tasks_updated',
         'idx_scheduled_task_runs_task_status',
         'idx_task_events_recent_active_threads',
+        'idx_task_events_thread_run_created',
         'idx_task_events_thread_type_created',
+        'idx_task_events_run_type_created',
+        'idx_task_runs_thread_run_number',
         'idx_task_threads_kind_status',
         'idx_task_threads_active_updated'
       ])
@@ -256,5 +259,40 @@ describe('database indexes', () => {
       .all() as Array<{ detail: string }>;
 
     expect(plan.map((row) => row.detail).join('\n')).toContain('idx_task_threads_active_updated');
+  });
+
+  it('uses indexes for task detail run history and run event lookups', () => {
+    const runHistoryPlan = services.databaseService.db
+      .prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
+         FROM task_runs
+         WHERE thread_id = ?
+         ORDER BY run_number DESC
+         LIMIT ?`
+      )
+      .all('thread-id', 20) as Array<{ detail: string }>;
+    const runEventsPlan = services.databaseService.db
+      .prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE run_id = ? AND type = 'message_delta'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all('run-id') as Array<{ detail: string }>;
+    const threadRunEventsPlan = services.databaseService.db
+      .prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ? AND run_id = ?
+         ORDER BY created_at DESC, rowid DESC`
+      )
+      .all('thread-id', 'run-id') as Array<{ detail: string }>;
+
+    expect(runHistoryPlan.map((row) => row.detail).join('\n')).toContain('idx_task_runs_thread_run_number');
+    expect(runEventsPlan.map((row) => row.detail).join('\n')).toContain('idx_task_events_run_type_created');
+    expect(threadRunEventsPlan.map((row) => row.detail).join('\n')).toContain('idx_task_events_thread_run_created');
   });
 });
