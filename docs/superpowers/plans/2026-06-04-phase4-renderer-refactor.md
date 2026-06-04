@@ -64,7 +64,7 @@ Feature hooks receive `RocClient` as an argument. Tests inject a fake client; fe
 - Test: `tests/renderer/shared/roc-client.test.ts`
 - Test: `tests/renderer/shared/async-state.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 Assert:
 - `createRocClient()` returns the provided API.
@@ -74,7 +74,7 @@ Assert:
 Run: `pnpm test -- tests/renderer/shared/roc-client.test.ts tests/renderer/shared/async-state.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 2: Implement shared modules**
+- [x] **Step 2: Implement shared modules**
 
 Do not add a custom Observable system. React state and existing hooks remain the state mechanism.
 
