@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { resolveRendererManualChunk } from '../../electron.vite.config';
+import { rendererChunkRules, resolveRendererManualChunk } from '../../electron.vite.config';
 
 describe('renderer bundle splitting', () => {
   it('keeps heavy renderer dependencies in named lazy chunks', () => {
@@ -13,6 +13,20 @@ describe('renderer bundle splitting', () => {
     expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-markdown/index.js')).toBe('renderer-markdown');
     expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/rehype-highlight/index.js')).toBe('renderer-markdown');
     expect(resolveRendererManualChunk('F:/Code/Roc/src/renderer/App.tsx')).toBeUndefined();
+  });
+
+  it('keeps manual chunk rules aligned to installed package dependencies', () => {
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    const installedPackages = new Set([...Object.keys(packageJson.dependencies), ...Object.keys(packageJson.devDependencies)]);
+    const chunkPackages = rendererChunkRules.flatMap((rule) => [...rule.packages]);
+
+    expect(chunkPackages).not.toContain('monaco-editor');
+    for (const packageName of chunkPackages) {
+      expect(installedPackages.has(packageName)).toBe(true);
+    }
   });
 
   it('loads workbench tools and their css only when their tool chunk is rendered', () => {

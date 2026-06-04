@@ -2,7 +2,7 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
-const rendererChunkRules = [
+export const rendererChunkRules = [
   {
     chunk: 'renderer-terminal',
     packages: ['@xterm/addon-fit', '@xterm/xterm']
