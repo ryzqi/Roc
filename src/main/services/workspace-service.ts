@@ -2,11 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { Workspace } from '../../shared/types';
-import type { ConfigService } from './config-service';
+import type { RocSettings } from './config-service';
 import { RocDomainError } from './errors';
 
+export type WorkspaceConfigService = {
+  getSettings(): RocSettings;
+  saveSettings(settings: RocSettings): void;
+};
+
 export class WorkspaceService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: WorkspaceConfigService) {}
 
   selectWorkspace(path: string): Workspace {
     const resolvedPath = resolve(path);

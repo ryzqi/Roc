@@ -13,6 +13,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
   FileDeleteResult,
   FilePreviewRequest,
@@ -27,7 +28,6 @@ import type {
   FileWriteTextRequest,
   RecoveryPoint
 } from '../../shared/types';
-import type { DatabaseService } from './database-service';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import type { WorkspaceService } from './workspace-service';
@@ -60,10 +60,14 @@ const ignoredDirectoryNames = new Set([
   '.artifacts'
 ]);
 
+export type FileRecoveryPointDatabase = {
+  readonly db: DatabaseConnection;
+};
+
 export class FileService {
   constructor(
     private readonly paths: RocPaths,
-    private readonly database: DatabaseService,
+    private readonly database: FileRecoveryPointDatabase,
     private readonly workspaceService: WorkspaceService
   ) {}
 
