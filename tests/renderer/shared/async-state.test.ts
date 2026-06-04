@@ -12,6 +12,10 @@ describe('async state', () => {
   it('keeps failed message as a string', () => {
     const state = failedAsyncState('Roc failed');
 
+    expect(state.status).toBe('failed');
+    if (state.status !== 'failed') {
+      throw new Error('expected failed async state');
+    }
     expect(state.message).toBe('Roc failed');
     expect(typeof state.message).toBe('string');
   });

@@ -90,14 +90,14 @@ Expected: PASS.
 - Test: `tests/renderer/app-shell.test.tsx`
 - Test: `tests/renderer/startup-load-policy.test.ts`
 
-- [ ] **Step 1: Write shell tests**
+- [x] **Step 1: Write shell tests**
 
 Assert `AppShell` renders current navigation, window controls, selected view, settings modal trigger, and task update subscription.
 
 Run: `pnpm test -- tests/renderer/app-shell.test.tsx tests/renderer/startup-load-policy.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 2: Extract shell**
+- [x] **Step 2: Extract shell**
 
 Move shell-only state from `App.tsx` into `AppShell` and `useAppBootstrap`. `App.tsx` should only create `RocClient`, bootstrap, and render `AppShell`.
 
