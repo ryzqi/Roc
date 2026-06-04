@@ -74,6 +74,20 @@ function createRuntimeLogServiceMock(): RuntimeLogServiceMock {
   };
 }
 
+function readLogContext(
+  logService: RuntimeLogServiceMock,
+  message: string,
+  runId: string
+): Record<string, unknown> {
+  const call = logService.info.mock.calls.find(([loggedMessage, context]) => {
+    return loggedMessage === message && (context as { runId?: string } | undefined)?.runId === runId;
+  });
+  if (call === undefined) {
+    throw new Error(`Missing log entry: ${message}`);
+  }
+  return call[1] as Record<string, unknown>;
+}
+
 function createRuntime(logService: RuntimeLogServiceMock = createRuntimeLogServiceMock()): DeepAgentRuntimeService {
     const runtime = new DeepAgentRuntimeService(
       services.langChainModelFactory,
@@ -259,6 +273,125 @@ afterEach(() => {
 });
 
 describe('DeepAgentRuntimeService', () => {
+  it('assigns unique trace ids to started runs and propagates each trace into completion logs', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([{ text: createAsyncIterable(['ok']) }]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+    const logService = createRuntimeLogServiceMock();
+    const runtime = createRuntime(logService);
+
+    const firstCompleted = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const first = await runtime.startRun({
+      input: 'first trace',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await firstCompleted;
+
+    const secondCompleted = waitForEvent(runtime, (event) => event.type === 'run_completed');
+    const second = await runtime.startRun({
+      input: 'second trace',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await secondCompleted;
+
+    const firstStarted = readLogContext(logService, 'Agent run started.', first.runId);
+    const secondStarted = readLogContext(logService, 'Agent run started.', second.runId);
+    const firstUsage = readLogContext(logService, 'Deep Agent provider usage recorded.', first.runId);
+    const secondUsage = readLogContext(logService, 'Deep Agent provider usage recorded.', second.runId);
+
+    expect(firstStarted.traceId).toMatch(/^trace_/);
+    expect(secondStarted.traceId).toMatch(/^trace_/);
+    expect(secondStarted.traceId).not.toBe(firstStarted.traceId);
+    expect(firstUsage.traceId).toBe(firstStarted.traceId);
+    expect(secondUsage.traceId).toBe(secondStarted.traceId);
+  });
+
+  it('assigns a new trace id to resumed runs and propagates it into completion logs', async () => {
+    mocked.streamEventsMock
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        interrupted: true,
+        interrupts: [
+          {
+            interruptId: 'interrupt-trace-resume',
+            payload: {
+              actionRequests: [
+                {
+                  name: 'execute',
+                  args: {
+                    command: 'git status'
+                  }
+                }
+              ],
+              reviewConfigs: [
+                {
+                  actionName: 'execute',
+                  allowedDecisions: ['approve', 'reject']
+                }
+              ]
+            }
+          }
+        ],
+        output: Promise.resolve({
+          interrupted: true
+        })
+      })
+      .mockResolvedValueOnce({
+        messages: createAsyncIterable([{ text: createAsyncIterable(['resumed']) }]),
+        toolCalls: createAsyncIterable([]),
+        subagents: createAsyncIterable([]),
+        output: Promise.resolve({})
+      });
+    const logService = createRuntimeLogServiceMock();
+    const runtime = createRuntime(logService);
+
+    const interrupted = waitForEvent(runtime, (event) => event.type === 'run_interrupted');
+    const started = await runtime.startRun({
+      input: 'resume trace',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await interrupted;
+
+    const completed = waitForEvent(runtime, (event) => event.type === 'run_completed' && event.runId === started.runId);
+    await runtime.resumeRun({
+      runId: started.runId,
+      threadId: started.threadId as string,
+      interruptId: 'interrupt-trace-resume',
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
+    });
+    await completed;
+
+    const startContext = readLogContext(logService, 'Agent run started.', started.runId);
+    const resumeContext = readLogContext(logService, 'Agent run resumed.', started.runId);
+    const usageContext = readLogContext(logService, 'Deep Agent provider usage recorded.', started.runId);
+
+    expect(startContext.traceId).toMatch(/^trace_/);
+    expect(resumeContext.traceId).toMatch(/^trace_/);
+    expect(resumeContext.traceId).not.toBe(startContext.traceId);
+    expect(usageContext.traceId).toBe(resumeContext.traceId);
+  });
+
   it('delegates deep agent assembly through a single buildDeepAgent helper', async () => {
     mocked.createDeepAgentMock.mockClear();
 
@@ -3890,6 +4023,7 @@ describe('DeepAgentRuntimeService', () => {
     expect(logService.error).toHaveBeenCalledWith('Agent run failed.', expect.any(Error), {
       service: 'deep-agent-runtime',
       component: 'failRun',
+      traceId: expect.stringMatching(/^trace_/),
       runId: started.runId,
       threadId: started.threadId,
       error: {
@@ -3904,6 +4038,9 @@ describe('DeepAgentRuntimeService', () => {
         providerId: 'nvidia'
       })
     });
+    const startContext = readLogContext(logService, 'Agent run started.', started.runId);
+    const failureContext = logService.error.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    expect(failureContext?.traceId).toBe(startContext.traceId);
     const loggedError = logService.error.mock.calls[0]?.[1] as Error | undefined;
     expect(loggedError?.message).toBe('Provider 请求失败：[REDACTED]');
     expect(loggedError?.stack).toContain('[REDACTED]');

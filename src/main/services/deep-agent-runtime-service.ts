@@ -135,6 +135,7 @@ export class DeepAgentRuntimeService {
       streaming: true
     });
     const createdAt = new Date().toISOString();
+    const traceId = `trace_${randomUUID()}`;
     const agentInput = this.prependWorkflowHintContext(request, input);
     const taskRun = this.createTaskRunIfNeeded(request, input, modelHandle.modelId);
     const threadId = request.mode === 'task' && taskRun !== null ? taskRun.threadId : prompt.resolveThreadId(request.threadId);
@@ -167,8 +168,22 @@ export class DeepAgentRuntimeService {
       ...activeRun,
       agentInput,
       input,
-      startedAtMs: Date.now()
+      startedAtMs: Date.now(),
+      traceId
     };
+    this.logService.info('Agent run started.', {
+      service: 'deep-agent-runtime',
+      component: 'startRun',
+      traceId,
+      runId,
+      threadId,
+      metadata: {
+        mode: request.mode,
+        modelId: modelHandle.modelId,
+        providerId: modelHandle.provider.id,
+        workflowHint: request.workflowHint ?? null
+      }
+    });
     void this.executeRun(context);
 
     return {
@@ -242,6 +257,7 @@ export class DeepAgentRuntimeService {
     this.activeRuns.set(request.runId, activeRun);
 
     const resumedAt = new Date().toISOString();
+    const traceId = `trace_${randomUUID()}`;
     const decisions = this.resolveResumeDecisions(request, pending.approval);
     const resumePayload: HITLResponse = {
       decisions
@@ -265,8 +281,21 @@ export class DeepAgentRuntimeService {
       ...activeRun,
       agentInput: resumeContext.taskRun.userInput,
       input: resumeContext.taskRun.userInput,
-      startedAtMs: Date.now()
+      startedAtMs: Date.now(),
+      traceId
     };
+    this.logService.info('Agent run resumed.', {
+      service: 'deep-agent-runtime',
+      component: 'resumeRun',
+      traceId,
+      runId: request.runId,
+      threadId: request.threadId,
+      metadata: {
+        interruptId: pending.approval.interruptId,
+        modelId: resumeContext.modelHandle.modelId,
+        providerId: resumeContext.modelHandle.provider.id
+      }
+    });
     await this.executeResume(context, resumePayload);
 
     return {
@@ -599,6 +628,8 @@ export class DeepAgentRuntimeService {
       this.logService.warn('Pre-compaction flush failed; continuing user run.', {
         service: 'deep-agent-runtime',
         component: 'runPreCompactionFlush',
+        traceId: context.traceId,
+        runId: context.runId,
         threadId: context.threadId,
         metadata: {
           threadId: context.threadId,
@@ -630,6 +661,7 @@ export class DeepAgentRuntimeService {
     this.logService.info('Deep Agent provider usage recorded.', {
       service: 'deep-agent-runtime',
       component: 'logProviderUsage',
+      traceId: context.traceId,
       runId: context.runId,
       threadId: context.threadId,
       metadata: {
@@ -937,6 +969,7 @@ export class DeepAgentRuntimeService {
     this.logService.error('Agent run failed.', logError, {
       service: 'deep-agent-runtime',
       component: 'failRun',
+      traceId: context.traceId,
       runId: context.runId,
       threadId: context.threadId,
       error: {

@@ -25,6 +25,7 @@ export type RunExecutionContext = ActiveRun & {
   input: string;
   previewStore?: PreviewStore;
   startedAtMs: number;
+  traceId: string;
 };
 
 export type RunFailure = {
