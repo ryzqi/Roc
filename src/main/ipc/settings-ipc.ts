@@ -19,13 +19,13 @@ export function registerSettingsIpc(
   controls: Pick<AppWindowControls, 'getHostIntegrationStatus' | 'syncHostSettings'>
 ): void {
   timedHandle(ipcChannels.settingsGet, () =>
-    wrapIpc(() => buildSettingsSnapshot(configService, secretService, mcpService, skillService, controls))
+    wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, mcpService, skillService, controls))
   );
   timedHandle(ipcChannels.settingsSave, (_event, settings) =>
-    wrapIpc(() => {
-      configService.saveSettingsSnapshot(settings);
+    wrapIpc(async () => {
+      await configService.saveSettingsSnapshotAsync(settings);
       controls.syncHostSettings(settings.settings);
-      return buildSettingsSnapshot(configService, secretService, mcpService, skillService, controls);
+      return await buildSettingsSnapshotAsync(configService, secretService, mcpService, skillService, controls);
     })
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>
@@ -38,11 +38,11 @@ export function registerSettingsIpc(
     })
   );
   timedHandle(ipcChannels.settingsClearProviderSecret, (_event, providerId: string) =>
-    wrapIpc(() => {
+    wrapIpc(async () => {
       secretService.clearProviderSecret(providerId);
-      const provider = configService.getProviders().providers.find((entry) => entry.id === providerId);
+      const provider = (await configService.getProvidersAsync()).providers.find((entry) => entry.id === providerId);
       if (provider?.type === 'llama_cpp' && provider.credentialRef !== null) {
-        configService.upsertProvider({
+        await configService.upsertProviderAsync({
           ...provider,
           credentialRef: null
         });
@@ -52,21 +52,21 @@ export function registerSettingsIpc(
   );
 }
 
-function buildSettingsSnapshot(
+async function buildSettingsSnapshotAsync(
   configService: ConfigService,
   secretService: SecretService,
   mcpService: McpService,
   skillService: SkillService,
   controls: Pick<AppWindowControls, 'getHostIntegrationStatus'>
-): SettingsSnapshot {
-  const providersConfig = configService.getProviders();
+): Promise<SettingsSnapshot> {
+  const providersConfig = await configService.getProvidersAsync();
   const providerSecretStatus = secretService.listSecretStatuses(providersConfig.providers.map((provider) => provider.id));
   return {
-    settings: configService.getSettings(),
+    settings: await configService.getSettingsAsync(),
     providers: providersConfig.providers,
     defaultModelId: providersConfig.defaultModelId,
     providerSecretStatus,
-    permissions: configService.getPermissions(),
+    permissions: await configService.getPermissionsAsync(),
     mcpServers: mcpService.listServers(),
     skills: skillService.list(),
     hostIntegration: controls.getHostIntegrationStatus()

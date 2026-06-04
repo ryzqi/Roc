@@ -46,6 +46,46 @@ afterEach(() => {
 });
 
 describe('ConfigService unified settings document', () => {
+  it('saves and reads the unified settings document asynchronously', async () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+    const nextSettings = {
+      ...defaultSettings,
+      globalHotkey: 'Ctrl+Alt+R'
+    };
+
+    const saved = await configService.saveSettingsSnapshotAsync({
+      settings: nextSettings,
+      providers: defaultProviders.providers,
+      defaultModelId: defaultProviders.defaultModelId,
+      permissions: expectedPermissions()
+    });
+
+    await expect(configService.getSettingsAsync()).resolves.toMatchObject({
+      globalHotkey: 'Ctrl+Alt+R'
+    });
+    await expect(configService.getProvidersAsync()).resolves.toMatchObject({
+      providers: defaultProviders.providers,
+      defaultModelId: defaultProviders.defaultModelId
+    });
+    await expect(configService.getPermissionsAsync()).resolves.toEqual(expectedPermissions());
+    expect(saved).toMatchObject({
+      settings: {
+        globalHotkey: 'Ctrl+Alt+R'
+      },
+      defaultModelId: defaultProviders.defaultModelId,
+      permissions: expectedPermissions()
+    });
+
+    await configService.saveSettingsAsync({
+      ...nextSettings,
+      globalHotkey: 'Ctrl+Shift+R'
+    });
+    await expect(configService.getSettingsAsync()).resolves.toMatchObject({
+      globalHotkey: 'Ctrl+Shift+R'
+    });
+  });
+
   it('migrates legacy v1 split config files into schemaVersion 4 settings.json with safeStorage credentials', () => {
     const legacyV1Settings = {
       schemaVersion: 1 as const,

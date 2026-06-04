@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile, stat as statAsync, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { DatabaseService } from './database-service';
 import { buildWorkspaceHash, type RocPaths } from './paths';
@@ -94,12 +95,77 @@ export class MemoryService {
     return { ok: true, meta: this.buildMeta(request.scope, request.kind, resolved) };
   }
 
+  async writeFileAsync(request: MemoryFileWriteRequest): Promise<MemoryFileWriteOutcome> {
+    if (request.scope === 'workspace' && request.kind === 'user') {
+      return {
+        ok: false,
+        reason: 'invalid_path',
+        detail: 'USER.md lives only at /memory/global/USER.md.'
+      };
+    }
+
+    const resolved = this.resolveAbsolutePath(request.scope, request.kind);
+    if (resolved === null) {
+      return {
+        ok: false,
+        reason: 'workspace_required',
+        detail: 'No workspace selected; select a workspace before writing workspace-scoped memory.'
+      };
+    }
+
+    const securityScan = new SecurityScanService(this.getMemorySettings().securityScan);
+    const issues = securityScan.scan(request.content);
+    if (issues.length > 0) {
+      return {
+        ok: false,
+        reason: 'security_scan',
+        detail: securityScan.formatIssues(issues),
+        issues
+      };
+    }
+
+    const capacity = new CapacityService(this.getMemorySettings().charLimits);
+    const check = capacity.check(request.kind, request.content);
+    if (!check.ok) {
+      if (await this.fileExists(resolved)) {
+        this.consolidatorService.scheduleForFile(resolved, request.kind);
+      }
+      return {
+        ok: false,
+        reason: 'capacity_exceeded',
+        detail: capacity.formatOverflow(request.kind, check.chars, check.limit),
+        chars: check.chars,
+        limit: check.limit
+      };
+    }
+
+    await mkdir(dirname(resolved), { recursive: true });
+    await writeFile(resolved, request.content, 'utf8');
+
+    return { ok: true, meta: await this.buildMetaAsync(request.scope, request.kind, resolved) };
+  }
+
   readFile(input: { scope: MemoryScope; kind: MemoryKind }): string | null {
     const resolved = this.resolveAbsolutePath(input.scope, input.kind);
     if (resolved === null || !existsSync(resolved)) {
       return null;
     }
     return readFileSync(resolved, 'utf8');
+  }
+
+  async readFileAsync(input: { scope: MemoryScope; kind: MemoryKind }): Promise<string | null> {
+    const resolved = this.resolveAbsolutePath(input.scope, input.kind);
+    if (resolved === null) {
+      return null;
+    }
+    try {
+      return await readFile(resolved, 'utf8');
+    } catch (error) {
+      if (isFileMissing(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   buildSnapshotForCurrentWorkspace(): FrozenSnapshot {
@@ -236,6 +302,34 @@ export class MemoryService {
     };
   }
 
+  private async buildMetaAsync(scope: MemoryScope, kind: MemoryKind, absolutePath: string): Promise<MemoryFileMeta> {
+    const charLimit = this.getMemorySettings().charLimits[kind];
+    if (!(await this.fileExists(absolutePath))) {
+      return {
+        scope,
+        kind,
+        exists: false,
+        charCount: 0,
+        charLimit,
+        absolutePath,
+        effective: await this.isEffectiveAsync(scope, kind),
+        updatedAt: null
+      };
+    }
+
+    const [content, fileStat] = await Promise.all([readFile(absolutePath, 'utf8'), statAsync(absolutePath)]);
+    return {
+      scope,
+      kind,
+      exists: true,
+      charCount: [...content].length,
+      charLimit,
+      absolutePath,
+      effective: await this.isEffectiveAsync(scope, kind),
+      updatedAt: fileStat.mtime.toISOString()
+    };
+  }
+
   private isEffective(scope: MemoryScope, kind: MemoryKind): boolean {
     if (kind === 'user') {
       return scope === 'global';
@@ -244,6 +338,28 @@ export class MemoryService {
     const workspaceAbsolute = this.resolveAbsolutePath('workspace', kind);
     const workspaceHasFile = workspaceAbsolute !== null && existsSync(workspaceAbsolute);
     return scope === 'workspace' ? workspaceHasFile : !workspaceHasFile;
+  }
+
+  private async isEffectiveAsync(scope: MemoryScope, kind: MemoryKind): Promise<boolean> {
+    if (kind === 'user') {
+      return scope === 'global';
+    }
+
+    const workspaceAbsolute = this.resolveAbsolutePath('workspace', kind);
+    const workspaceHasFile = workspaceAbsolute !== null && await this.fileExists(workspaceAbsolute);
+    return scope === 'workspace' ? workspaceHasFile : !workspaceHasFile;
+  }
+
+  private async fileExists(absolutePath: string): Promise<boolean> {
+    try {
+      await statAsync(absolutePath);
+      return true;
+    } catch (error) {
+      if (isFileMissing(error)) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   private filenameForKind(kind: MemoryKind): string {
@@ -256,4 +372,8 @@ export class MemoryService {
         return 'MEMORY.md';
     }
   }
+}
+
+function isFileMissing(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }

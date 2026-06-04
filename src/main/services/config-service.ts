@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type {
@@ -56,6 +57,10 @@ export class ConfigService {
     return this.getSettingsDocument().settings;
   }
 
+  async getSettingsAsync(): Promise<RocSettings> {
+    return (await this.getSettingsDocumentAsync()).settings;
+  }
+
   getTaskSettings(): RocTaskSettings {
     return this.getSettings().tasks;
   }
@@ -68,14 +73,35 @@ export class ConfigService {
     });
   }
 
+  async saveSettingsAsync(settings: RocSettings): Promise<void> {
+    const document = await this.getSettingsDocumentAsync();
+    await this.writeSettingsDocumentAsync({
+      ...document,
+      settings: SettingsSchema.parse(settings)
+    });
+  }
+
   getProviders(): RocProviders {
     return normalizeProvidersConfig(this.getSettingsDocument().providers);
+  }
+
+  async getProvidersAsync(): Promise<RocProviders> {
+    return normalizeProvidersConfig((await this.getSettingsDocumentAsync()).providers);
   }
 
   saveProviders(providers: RocProviders): void {
     const document = this.getSettingsDocument();
     const normalizedProviders = normalizeProvidersConfig(ProvidersSchema.parse(providers));
     this.writeSettingsDocument({
+      ...document,
+      providers: normalizedProviders
+    });
+  }
+
+  async saveProvidersAsync(providers: RocProviders): Promise<void> {
+    const document = await this.getSettingsDocumentAsync();
+    const normalizedProviders = normalizeProvidersConfig(ProvidersSchema.parse(providers));
+    await this.writeSettingsDocumentAsync({
       ...document,
       providers: normalizedProviders
     });
@@ -97,9 +123,21 @@ export class ConfigService {
     return this.getSettingsDocument().permissions;
   }
 
+  async getPermissionsAsync(): Promise<RocPermissions> {
+    return (await this.getSettingsDocumentAsync()).permissions;
+  }
+
   savePermissions(permissions: RocPermissions): void {
     const document = this.getSettingsDocument();
     this.writeSettingsDocument({
+      ...document,
+      permissions: PermissionsConfigSchema.parse(permissions)
+    });
+  }
+
+  async savePermissionsAsync(permissions: RocPermissions): Promise<void> {
+    const document = await this.getSettingsDocumentAsync();
+    await this.writeSettingsDocumentAsync({
       ...document,
       permissions: PermissionsConfigSchema.parse(permissions)
     });
@@ -127,6 +165,28 @@ export class ConfigService {
     };
   }
 
+  async saveSettingsSnapshotAsync(request: SettingsSaveRequest): Promise<SettingsSaveRequest> {
+    const parsed = SettingsSaveRequestSchema.parse(request);
+    const normalizedProviders = normalizeProvidersConfig({
+      schemaVersion: 1,
+      defaultModelId: parsed.defaultModelId,
+      providers: parsed.providers
+    });
+    const document = await this.getSettingsDocumentAsync();
+    await this.writeSettingsDocumentAsync({
+      ...document,
+      settings: parsed.settings,
+      providers: normalizedProviders,
+      permissions: parsed.permissions
+    });
+    return {
+      settings: parsed.settings,
+      providers: normalizedProviders.providers,
+      defaultModelId: normalizedProviders.defaultModelId,
+      permissions: parsed.permissions
+    };
+  }
+
   upsertProvider(provider: ProviderConfig): ProviderConfig {
     const parsedProvider = ProviderSchema.parse(provider);
     const config = this.getProviders();
@@ -136,6 +196,22 @@ export class ConfigService {
         ? [...config.providers, parsedProvider]
         : config.providers.map((item) => (item.id === parsedProvider.id ? parsedProvider : item));
     this.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: config.defaultModelId,
+      providers: nextProviders
+    });
+    return parsedProvider;
+  }
+
+  async upsertProviderAsync(provider: ProviderConfig): Promise<ProviderConfig> {
+    const parsedProvider = ProviderSchema.parse(provider);
+    const config = await this.getProvidersAsync();
+    const existingIndex = config.providers.findIndex((item) => item.id === parsedProvider.id);
+    const nextProviders =
+      existingIndex === -1
+        ? [...config.providers, parsedProvider]
+        : config.providers.map((item) => (item.id === parsedProvider.id ? parsedProvider : item));
+    await this.saveProvidersAsync({
       schemaVersion: 1,
       defaultModelId: config.defaultModelId,
       providers: nextProviders
@@ -263,9 +339,29 @@ export class ConfigService {
     return document;
   }
 
+  private async getSettingsDocumentAsync(): Promise<RocSettingsDocument> {
+    const parsed = JSON.parse(await readFile(this.filePath('settings.json'), 'utf8')) as unknown;
+    const document = SettingsDocumentSchema.parse(parsed);
+    const normalizedMcp = normalizeLegacyMcpConfig(document.mcp);
+    if (JSON.stringify(normalizedMcp) !== JSON.stringify(document.mcp)) {
+      const normalizedDocument: RocSettingsDocument = {
+        ...document,
+        mcp: normalizedMcp
+      };
+      await this.writeSettingsDocumentAsync(normalizedDocument);
+      return normalizedDocument;
+    }
+    return document;
+  }
+
   private writeSettingsDocument(document: RocSettingsDocument): void {
     const parsed = SettingsDocumentSchema.parse(document);
     writeFileSync(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  }
+
+  private async writeSettingsDocumentAsync(document: RocSettingsDocument): Promise<void> {
+    const parsed = SettingsDocumentSchema.parse(document);
+    await writeFile(this.filePath('settings.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
   }
 
   private readLegacyConfig(name: string, fallback: RocProviders): unknown {

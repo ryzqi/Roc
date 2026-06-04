@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppServices, type AppServices } from '../../../src/main/services/app-service';
 
 let root: string;
@@ -73,6 +73,45 @@ describe('MemoryService.writeFile', () => {
   });
 });
 
+describe('MemoryService.writeFileAsync', () => {
+  it('writes a fresh global USER.md without using the synchronous API', async () => {
+    const result = await services.memoryService.writeFileAsync({
+      scope: 'global',
+      kind: 'user',
+      content: '# 用户偏好\n- 语言：中文'
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const onDisk = readFileSync(result.meta.absolutePath, 'utf8');
+      expect(onDisk).toContain('用户偏好');
+    }
+  });
+
+  it('rejects capacity overflow while preserving consolidation scheduling', async () => {
+    const scheduleForFile = vi.spyOn(services.consolidatorService, 'scheduleForFile').mockImplementation(() => undefined);
+    const first = await services.memoryService.writeFileAsync({
+      scope: 'global',
+      kind: 'memory',
+      content: 'initial small content'
+    });
+    expect(first.ok).toBe(true);
+
+    const result = await services.memoryService.writeFileAsync({
+      scope: 'global',
+      kind: 'memory',
+      content: 'x'.repeat(2300)
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('capacity_exceeded');
+      expect(result.chars).toBe(2300);
+      expect(result.limit).toBe(2200);
+    }
+    expect(scheduleForFile).toHaveBeenCalledWith(expect.stringContaining('MEMORY.md'), 'memory');
+  });
+});
+
 describe('MemoryService.readFile', () => {
   it('returns null for non-existent file', () => {
     expect(services.memoryService.readFile({ scope: 'global', kind: 'user' })).toBeNull();
@@ -81,6 +120,17 @@ describe('MemoryService.readFile', () => {
   it('reads back what was written', () => {
     services.memoryService.writeFile({ scope: 'global', kind: 'user', content: 'hello' });
     expect(services.memoryService.readFile({ scope: 'global', kind: 'user' })).toBe('hello');
+  });
+});
+
+describe('MemoryService.readFileAsync', () => {
+  it('returns null for non-existent file', async () => {
+    await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'user' })).resolves.toBeNull();
+  });
+
+  it('reads back what was written asynchronously', async () => {
+    await services.memoryService.writeFileAsync({ scope: 'global', kind: 'user', content: 'hello' });
+    await expect(services.memoryService.readFileAsync({ scope: 'global', kind: 'user' })).resolves.toBe('hello');
   });
 });
 

@@ -10,8 +10,14 @@ describe('memory IPC', () => {
     const handlers = new Map<string, IpcMainHandler>();
     const service = {
       status: vi.fn(() => ({ root: 'F:\\Code\\Roc\\.roc\\memory' })),
-      readFile: vi.fn(() => '# user prefers PowerShell'),
-      writeFile: vi.fn(() => ({ ok: true, meta: { scope: 'global', kind: 'user' } })),
+      readFile: vi.fn(() => {
+        throw new Error('memoryReadFile IPC must use readFileAsync.');
+      }),
+      readFileAsync: vi.fn(async () => '# user prefers PowerShell'),
+      writeFile: vi.fn(() => {
+        throw new Error('memoryWriteFile IPC must use writeFileAsync.');
+      }),
+      writeFileAsync: vi.fn(async () => ({ ok: true, meta: { scope: 'global', kind: 'user' } })),
       buildSnapshotForCurrentWorkspace: vi.fn(() => ({
         user: {
           kind: 'user',
@@ -80,8 +86,10 @@ describe('memory IPC', () => {
       data: { text: expect.stringContaining('<FROZEN_SNAPSHOT>') }
     });
     expect(service.buildSnapshotForCurrentWorkspace).toHaveBeenCalled();
-    expect(service.readFile).toHaveBeenCalledWith({ scope: 'global', kind: 'user' });
-    expect(service.writeFile).toHaveBeenCalledWith({
+    expect(service.readFile).not.toHaveBeenCalled();
+    expect(service.writeFile).not.toHaveBeenCalled();
+    expect(service.readFileAsync).toHaveBeenCalledWith({ scope: 'global', kind: 'user' });
+    expect(service.writeFileAsync).toHaveBeenCalledWith({
       scope: 'global',
       kind: 'user',
       content: '# user prefers PowerShell'

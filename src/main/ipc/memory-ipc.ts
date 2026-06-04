@@ -11,8 +11,8 @@ export function registerMemoryIpc(
   sessionArchiveService: SessionArchiveService
 ): void {
   timedHandle(ipcChannels.memoryStatus, () => wrapIpc(() => memoryService.status()));
-  timedHandle(ipcChannels.memoryReadFile, (_event, input) => wrapIpc(() => memoryService.readFile(input)));
-  timedHandle(ipcChannels.memoryWriteFile, (_event, request) => wrapIpc(() => memoryService.writeFile(request)));
+  timedHandle(ipcChannels.memoryReadFile, (_event, input) => wrapIpc(() => memoryService.readFileAsync(input)));
+  timedHandle(ipcChannels.memoryWriteFile, (_event, request) => wrapIpc(() => memoryService.writeFileAsync(request)));
   timedHandle(ipcChannels.memorySnapshotPreview, () =>
     wrapIpc(() => ({
       text: renderFrozenSnapshot(memoryService.buildSnapshotForCurrentWorkspace())
