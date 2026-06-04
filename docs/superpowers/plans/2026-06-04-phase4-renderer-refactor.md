@@ -667,6 +667,500 @@ git commit -m "feat(renderer): refactor Chat feature to MVVM
 
 ---
 
+## Week 9-10: 其他 Feature Modules 重构
+
+### Task 5: Tasks Feature 重构
+
+#### 步骤 1: 编写 TaskViewModel 测试
+
+**目标文件:** `src/renderer/features/tasks/TaskViewModel.test.ts`
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TaskViewModel } from './TaskViewModel';
+
+describe('TaskViewModel', () => {
+  let viewModel: TaskViewModel;
+  let mockIpc: any;
+
+  beforeEach(() => {
+    mockIpc = {
+      invoke: vi.fn(),
+      on: vi.fn(),
+    };
+    viewModel = new TaskViewModel(mockIpc);
+  });
+
+  describe('initialize', () => {
+    it('应该加载所有任务', async () => {
+      mockIpc.invoke.mockResolvedValue([
+        { id: 'task-1', title: 'Test task', status: 'pending' },
+      ]);
+
+      await viewModel.initialize('ws-123');
+
+      expect(viewModel.tasks.value).toHaveLength(1);
+      expect(viewModel.tasks.value[0].title).toBe('Test task');
+    });
+  });
+
+  describe('createTask', () => {
+    it('应该创建新任务', async () => {
+      mockIpc.invoke.mockResolvedValue({ id: 'task-2', title: 'New task' });
+
+      await viewModel.createTask({
+        title: 'New task',
+        schedule: '0 * * * *',
+        command: 'npm test',
+      });
+
+      expect(mockIpc.invoke).toHaveBeenCalledWith('task.create', expect.any(Object));
+    });
+  });
+
+  describe('deleteTask', () => {
+    it('应该删除任务', async () => {
+      mockIpc.invoke.mockResolvedValue(true);
+
+      await viewModel.deleteTask('task-1');
+
+      expect(mockIpc.invoke).toHaveBeenCalledWith('task.delete', 'task-1');
+    });
+  });
+});
+```
+
+**执行:** `npm test -- TaskViewModel.test.ts`
+**预期:** ❌ 测试失败
+
+---
+
+#### 步骤 2: 实现 TaskViewModel
+
+**目标文件:** `src/renderer/features/tasks/TaskViewModel.ts`
+
+```typescript
+import { ViewModelBase } from '../../core/ViewModelBase';
+import { ObservableArray } from '../../core/Observable';
+
+interface TaskData {
+  id: string;
+  title: string;
+  schedule: string;
+  command: string;
+  status: string;
+  enabled: boolean;
+}
+
+export class TaskViewModel extends ViewModelBase {
+  readonly tasks = new ObservableArray<TaskData>([]);
+
+  async initialize(workspaceId: string): Promise<void> {
+    const tasks = await this.ipc.invoke('task.list', workspaceId);
+    this.tasks.replaceAll(tasks);
+  }
+
+  async createTask(params: Omit<TaskData, 'id' | 'status' | 'enabled'>): Promise<void> {
+    const task = await this.ipc.invoke('task.create', params);
+    this.tasks.push(task);
+  }
+
+  async deleteTask(taskId: string): Promise<void> {
+    await this.ipc.invoke('task.delete', taskId);
+    const index = this.tasks.value.findIndex(t => t.id === taskId);
+    if (index !== -1) {
+      this.tasks.removeAt(index);
+    }
+  }
+
+  async toggleTask(taskId: string): Promise<void> {
+    await this.ipc.invoke('task.toggle', taskId);
+    const task = this.tasks.value.find(t => t.id === taskId);
+    if (task) {
+      task.enabled = !task.enabled;
+      this.tasks.notify();
+    }
+  }
+}
+```
+
+**执行:** `npm test -- TaskViewModel.test.ts`
+**预期:** ✅ 测试通过
+
+**提交:**
+```bash
+git add src/renderer/features/tasks/TaskViewModel.ts src/renderer/features/tasks/TaskViewModel.test.ts
+git commit -m "feat(renderer): implement TaskViewModel"
+```
+
+---
+
+#### 步骤 3: 重构 Tasks 组件
+
+**目标文件:** `src/renderer/features/tasks/index.tsx` (~75 行)
+
+```typescript
+import React from 'react';
+import { useObservable } from '../../hooks/useObservable';
+import { TaskViewModel } from './TaskViewModel';
+import { TaskList } from './components/TaskList';
+import { TaskCreateDialog } from './components/TaskCreateDialog';
+
+const viewModel = new TaskViewModel(window.electron);
+
+export const Tasks: React.FC = () => {
+  const tasks = useObservable(viewModel.tasks);
+  const [showCreate, setShowCreate] = React.useState(false);
+
+  React.useEffect(() => {
+    viewModel.initialize(window.workspaceId);
+  }, []);
+
+  return (
+    <div className="tasks-container">
+      <header>
+        <h1>Scheduled Tasks</h1>
+        <button onClick={() => setShowCreate(true)}>New Task</button>
+      </header>
+
+      <TaskList 
+        tasks={tasks}
+        onDelete={viewModel.deleteTask.bind(viewModel)}
+        onToggle={viewModel.toggleTask.bind(viewModel)}
+      />
+
+      {showCreate && (
+        <TaskCreateDialog
+          onSubmit={(params) => {
+            viewModel.createTask(params);
+            setShowCreate(false);
+          }}
+          onCancel={() => setShowCreate(false)}
+        />
+      )}
+    </div>
+  );
+};
+```
+
+**验收:** Tasks Feature 主文件 <80 行, ViewModel <150 行
+
+**提交:**
+```bash
+git add src/renderer/features/tasks/
+git commit -m "refactor(renderer): refactor Tasks feature with MVVM"
+```
+
+---
+
+### Task 6: Memory Feature 重构
+
+#### 步骤 1: 编写 MemoryViewModel 及实现 (~200 行完整流程)
+
+**文件:** `src/renderer/features/memory/MemoryViewModel.ts`
+
+```typescript
+import { ViewModelBase } from '../../core/ViewModelBase';
+import { ObservableArray, Observable } from '../../core/Observable';
+
+interface MemoryData {
+  id: string;
+  content: string;
+  category: string;
+  accessCount: number;
+  createdAt: string;
+}
+
+export class MemoryViewModel extends ViewModelBase {
+  readonly memories = new ObservableArray<MemoryData>([]);
+  readonly searchQuery = new Observable<string>('');
+
+  async initialize(workspaceId: string): Promise<void> {
+    const memories = await this.ipc.invoke('memory.list', workspaceId);
+    this.memories.replaceAll(memories);
+  }
+
+  async searchMemories(query: string): Promise<void> {
+    this.searchQuery.set(query);
+    const memories = await this.ipc.invoke('memory.search', query);
+    this.memories.replaceAll(memories);
+  }
+
+  async deleteMemory(memoryId: string): Promise<void> {
+    await this.ipc.invoke('memory.delete', memoryId);
+    const index = this.memories.value.findIndex(m => m.id === memoryId);
+    if (index !== -1) {
+      this.memories.removeAt(index);
+    }
+  }
+
+  async consolidateMemories(): Promise<void> {
+    await this.ipc.invoke('memory.consolidate');
+    const memories = await this.ipc.invoke('memory.list');
+    this.memories.replaceAll(memories);
+  }
+}
+```
+
+#### 步骤 2: 重构 Memory 组件
+
+**文件:** `src/renderer/features/memory/index.tsx` (~65 行)
+
+```typescript
+import React from 'react';
+import { useObservable } from '../../hooks/useObservable';
+import { MemoryViewModel } from './MemoryViewModel';
+import { MemoryList } from './components/MemoryList';
+import { SearchBar } from './components/SearchBar';
+
+const viewModel = new MemoryViewModel(window.electron);
+
+export const Memory: React.FC = () => {
+  const memories = useObservable(viewModel.memories);
+  const searchQuery = useObservable(viewModel.searchQuery);
+
+  React.useEffect(() => {
+    viewModel.initialize(window.workspaceId);
+  }, []);
+
+  return (
+    <div className="memory-container">
+      <header>
+        <h1>Memory Bank</h1>
+        <button onClick={() => viewModel.consolidateMemories()}>Consolidate</button>
+      </header>
+
+      <SearchBar value={searchQuery} onChange={(q) => viewModel.searchMemories(q)} />
+      <MemoryList memories={memories} onDelete={viewModel.deleteMemory.bind(viewModel)} />
+    </div>
+  );
+};
+```
+
+**提交:**
+```bash
+git add src/renderer/features/memory/
+git commit -m "refactor(renderer): refactor Memory feature with MVVM"
+```
+
+---
+
+### Task 7: Settings Feature 重构
+
+#### 步骤 1: 编写 SettingsViewModel 及实现
+
+**文件:** `src/renderer/features/settings/SettingsViewModel.ts` (~120 行)
+
+```typescript
+import { ViewModelBase } from '../../core/ViewModelBase';
+import { Observable } from '../../core/Observable';
+
+interface SettingsData {
+  theme: 'light' | 'dark';
+  language: string;
+  modelConfig: {
+    model: string;
+    temperature: number;
+    maxTokens: number;
+  };
+  shortcuts: Record<string, string>;
+}
+
+export class SettingsViewModel extends ViewModelBase {
+  readonly settings = new Observable<SettingsData>({
+    theme: 'dark',
+    language: 'en',
+    modelConfig: { model: 'gpt-4', temperature: 0.7, maxTokens: 4096 },
+    shortcuts: {},
+  });
+
+  async initialize(): Promise<void> {
+    const settings = await this.ipc.invoke('settings.load');
+    this.settings.set(settings);
+  }
+
+  async updateSetting<K extends keyof SettingsData>(
+    key: K,
+    value: SettingsData[K]
+  ): Promise<void> {
+    await this.ipc.invoke('settings.update', key, value);
+    this.settings.set({ ...this.settings.value, [key]: value });
+  }
+
+  async resetSettings(): Promise<void> {
+    const defaults = await this.ipc.invoke('settings.reset');
+    this.settings.set(defaults);
+  }
+}
+```
+
+#### 步骤 2: 重构 Settings 组件
+
+**文件:** `src/renderer/features/settings/index.tsx` (~70 行)
+
+```typescript
+import React from 'react';
+import { useObservable } from '../../hooks/useObservable';
+import { SettingsViewModel } from './SettingsViewModel';
+import { ThemeSettings } from './components/ThemeSettings';
+import { ModelSettings } from './components/ModelSettings';
+
+const viewModel = new SettingsViewModel(window.electron);
+
+export const Settings: React.FC = () => {
+  const settings = useObservable(viewModel.settings);
+
+  React.useEffect(() => {
+    viewModel.initialize();
+  }, []);
+
+  return (
+    <div className="settings-container">
+      <header>
+        <h1>Settings</h1>
+        <button onClick={() => viewModel.resetSettings()}>Reset to Defaults</button>
+      </header>
+
+      <ThemeSettings theme={settings.theme} onChange={(t) => viewModel.updateSetting('theme', t)} />
+      <ModelSettings config={settings.modelConfig} onChange={(c) => viewModel.updateSetting('modelConfig', c)} />
+    </div>
+  );
+};
+```
+
+**提交:**
+```bash
+git add src/renderer/features/settings/
+git commit -m "refactor(renderer): refactor Settings feature with MVVM"
+```
+
+---
+
+### Task 8: Workbench Feature 重构
+
+#### 步骤 1: 编写 WorkbenchViewModel 及实现
+
+**文件:** `src/renderer/features/workbench/WorkbenchViewModel.ts` (~130 行)
+
+```typescript
+import { ViewModelBase } from '../../core/ViewModelBase';
+import { Observable, ObservableArray } from '../../core/Observable';
+
+interface FileNode {
+  name: string;
+  type: 'file' | 'directory';
+  path: string;
+  children?: FileNode[];
+}
+
+export class WorkbenchViewModel extends ViewModelBase {
+  readonly fileTree = new Observable<FileNode | null>(null);
+  readonly currentFile = new Observable<string | null>(null);
+  readonly terminalOutput = new ObservableArray<string>([]);
+
+  async initialize(workspacePath: string): Promise<void> {
+    const tree = await this.ipc.invoke('workspace.getFileTree', workspacePath);
+    this.fileTree.set(tree);
+  }
+
+  async openFile(filePath: string): Promise<void> {
+    const content = await this.ipc.invoke('file.read', filePath);
+    this.currentFile.set(filePath);
+    this.ipc.emit('file.opened', { filePath, content });
+  }
+
+  async runTerminalCommand(command: string): Promise<void> {
+    this.terminalOutput.push(`$ ${command}`);
+    const result = await this.ipc.invoke('terminal.execute', command);
+    if (result.stdout) this.terminalOutput.push(result.stdout);
+    if (result.stderr) this.terminalOutput.push(`Error: ${result.stderr}`);
+  }
+
+  clearTerminal(): void {
+    this.terminalOutput.clear();
+  }
+}
+```
+
+#### 步骤 2: 重构 Workbench 组件
+
+**文件:** `src/renderer/features/workbench/index.tsx` (~80 行)
+
+```typescript
+import React from 'react';
+import { useObservable } from '../../hooks/useObservable';
+import { WorkbenchViewModel } from './WorkbenchViewModel';
+import { FileTree } from './components/FileTree';
+import { Editor } from './components/Editor';
+import { Terminal } from './components/Terminal';
+
+const viewModel = new WorkbenchViewModel(window.electron);
+
+export const Workbench: React.FC = () => {
+  const fileTree = useObservable(viewModel.fileTree);
+  const currentFile = useObservable(viewModel.currentFile);
+  const terminalOutput = useObservable(viewModel.terminalOutput);
+
+  React.useEffect(() => {
+    viewModel.initialize(window.workspaceId);
+  }, []);
+
+  return (
+    <div className="workbench-container">
+      <aside className="file-explorer">
+        <FileTree tree={fileTree} onFileClick={(p) => viewModel.openFile(p)} />
+      </aside>
+      <main className="editor-area">
+        {currentFile && <Editor filePath={currentFile} />}
+      </main>
+      <footer className="terminal-area">
+        <Terminal
+          output={terminalOutput}
+          onCommand={(c) => viewModel.runTerminalCommand(c)}
+          onClear={() => viewModel.clearTerminal()}
+        />
+      </footer>
+    </div>
+  );
+};
+```
+
+**提交:**
+```bash
+git add src/renderer/features/workbench/
+git commit -m "refactor(renderer): refactor Workbench feature with MVVM"
+```
+
+---
+
+## Week 9-10 验收标准
+
+### 功能验收
+- ✅ Tasks Feature: 创建、删除、切换定时任务
+- ✅ Memory Feature: 搜索、删除、整合记忆
+- ✅ Settings Feature: 修改主题、语言、模型配置
+- ✅ Workbench Feature: 浏览文件、打开编辑器、运行终端命令
+
+### 代码质量验收
+- ✅ 所有 ViewModel <150 行
+- ✅ 所有组件 <100 行
+- ✅ 测试覆盖率 >85%
+
+### 集成验收
+```bash
+npm test -- renderer/features/
+
+# 预期输出:
+# ✓ Chat: 18 tests passed
+# ✓ Tasks: 12 tests passed
+# ✓ Memory: 14 tests passed
+# ✓ Settings: 10 tests passed
+# ✓ Workbench: 15 tests passed
+# Total: 69 tests passed
+```
+
+---
+
 ## Phase 4 完成标志
 
 ✅ 所有 Feature Modules 重构完成  
