@@ -12,6 +12,10 @@ export type ReleaseReadinessSnapshot = {
     executableName: string | null;
     version: string | undefined;
   };
+  runtime: {
+    microkernelRuntime: ReleaseReadinessIntegration;
+    pluginDataMigration: ReleaseReadinessIntegration;
+  };
   integrations: {
     appProtocol: ReleaseReadinessIntegration;
     fileAssociation: ReleaseReadinessIntegration;
