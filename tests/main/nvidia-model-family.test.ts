@@ -36,11 +36,11 @@ describe('nvidiaThinkingParameterName', () => {
   it('returns thinking for kimi and granite families', () => {
     expect(nvidiaThinkingParameterName('kimi')).toBe('thinking');
     expect(nvidiaThinkingParameterName('granite')).toBe('thinking');
+    expect(nvidiaThinkingParameterName('deepseek')).toBe('thinking');
   });
 
   it('returns null for families without chat_template_kwargs thinking switch', () => {
     expect(nvidiaThinkingParameterName('nemotron')).toBeNull();
-    expect(nvidiaThinkingParameterName('deepseek')).toBeNull();
     expect(nvidiaThinkingParameterName('gpt-oss')).toBeNull();
     expect(nvidiaThinkingParameterName('llama')).toBeNull();
     expect(nvidiaThinkingParameterName('mistral')).toBeNull();

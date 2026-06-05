@@ -609,6 +609,50 @@ describe('settings model helpers', () => {
     });
   });
 
+  it('replaces a saved llama.cpp provider with a null credentialRef when API key is cleared before save', () => {
+    const settings = defaultSettings();
+    const permissions = defaultPermissions();
+    const request = buildSettingsSaveRequest({
+      settings,
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081/v1',
+          credentialRef: 'secret:llama_cpp',
+          enabled: true,
+          models: [
+            {
+              id: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ],
+      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      permissions
+    });
+
+    const savedProvider = buildProviderConfigFromDraft({
+      ...createProviderDraft('llama_cpp'),
+      endpoint: 'http://127.0.0.1:8081',
+      modelsText: 'Qwen3.5-4B-UD-Q5_K_XL.gguf | Qwen 3.5 4B',
+      apiKey: ''
+    });
+
+    expect(upsertProviderInSettingsSaveRequest(request, savedProvider)).toEqual({
+      settings,
+      providers: [savedProvider],
+      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      permissions
+    });
+    expect(savedProvider.credentialRef).toBeNull();
+  });
+
   it('keeps the existing provider id when editing a saved provider', () => {
     const provider: ProviderConfig = {
       id: 'anthropic-east',

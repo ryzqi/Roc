@@ -220,4 +220,69 @@ describe('fixed NVIDIA provider config', () => {
       options: undefined
     });
   });
+
+  it('drops stale saved llama.cpp credential references during normalization', () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'Custom llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:9090',
+          credentialRef: 'secret:llama_cpp',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const llamaCpp = services.configService.getProviders().providers.find((provider) => provider.id === 'llama_cpp');
+
+    expect(llamaCpp).toMatchObject({
+      id: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090',
+      credentialRef: null
+    });
+  });
+
+  it('normalizes legacy llama.cpp root endpoint to the OpenAI-compatible /v1 base path', () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: null,
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'Custom llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081',
+          credentialRef: 'secret:llama_cpp',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const llamaCpp = services.configService.getProviders().providers.find((provider) => provider.id === 'llama_cpp');
+
+    expect(llamaCpp?.endpoint).toBe('http://127.0.0.1:8081/v1');
+    expect(llamaCpp?.credentialRef).toBeNull();
+  });
 });

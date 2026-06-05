@@ -131,10 +131,16 @@ export function normalizeFixedLlamaCppProvider(provider?: ProviderConfig): Provi
     return base;
   }
   const endpoint = provider.endpoint.trim();
+  const normalizedEndpoint =
+    endpoint === 'http://127.0.0.1:8081'
+      ? base.endpoint
+      : endpoint.length === 0
+        ? base.endpoint
+        : endpoint;
   return {
     ...base,
-    endpoint: endpoint.length === 0 ? base.endpoint : endpoint,
-    credentialRef: provider.credentialRef,
+    endpoint: normalizedEndpoint,
+    credentialRef: null,
     enabled: provider.enabled,
     models: provider.models,
     options: provider.options

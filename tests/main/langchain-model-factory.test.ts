@@ -1541,6 +1541,45 @@ describe('LangChainModelFactory', () => {
     expect(result.runtime.modelKwargs).not.toHaveProperty('chat_template_kwargs.thinking');
   });
 
+  it('uses thinking plus reasoning_effort for DeepSeek V4 Flash on NVIDIA', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'deepseek-ai/deepseek-v4-flash',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'deepseek-ai/deepseek-v4-flash',
+              displayName: 'DeepSeek V4 Flash',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: { thinking: true }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect(result.runtime.modelKwargs).toMatchObject({
+      chat_template_kwargs: {
+        thinking: true
+      },
+      reasoning_effort: 'medium'
+    });
+    expect(result.runtime.modelKwargs).not.toHaveProperty('chat_template_kwargs.enable_thinking');
+  });
+
   it('injects detailed thinking system messages for nemotron models', async () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({

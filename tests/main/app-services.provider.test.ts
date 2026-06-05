@@ -1355,6 +1355,74 @@ describe('Roc foundation services providers', () => {
     }
   });
 
+  it('includes NVIDIA thinking probe kwargs for DeepSeek V4 Flash', async () => {
+    const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-nvidia-thinking-'));
+    const liveServices = createAppServices(liveRoot);
+    const sseRawBody =
+      'data: {"id":"chatcmpl-thinking","choices":[{"index":0,"delta":{"role":"assistant","content":"2"}}]}\n\n' +
+      'data: [DONE]\n\n';
+    const fakeProvider = await startFakeProvider({}, 200, {
+      contentType: 'text/event-stream',
+      rawBody: sseRawBody
+    });
+
+    try {
+      liveServices.appService.initialize();
+      liveServices.secretService.setProviderSecret('nvidia', 'nvapi-live-test-secret');
+      liveServices.configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: null,
+        providers: [
+          {
+            id: 'nvidia',
+            name: 'NVIDIA',
+            type: 'nvidia',
+            endpoint: 'https://integrate.api.nvidia.com/v1',
+            credentialRef: 'secret:nvidia',
+            enabled: true,
+            models: [
+              {
+                id: 'deepseek-ai/deepseek-v4-flash',
+                displayName: 'DeepSeek V4 Flash',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ],
+            options: {
+              endpointOverride: fakeProvider.endpoint,
+              thinking: true
+            }
+          }
+        ]
+      });
+
+      Reflect.set(liveServices.providerRuntimeService as object, 'deterministicTransport', null);
+
+      const result = await liveServices.providerRuntimeService.testProvider('nvidia');
+
+      expect(result).toMatchObject({
+        providerId: 'nvidia',
+        status: 'ready',
+        modelId: 'deepseek-ai/deepseek-v4-flash',
+        error: null
+      });
+      expect(fakeProvider.requests).toHaveLength(1);
+      expect(fakeProvider.requests[0]?.body).toMatchObject({
+        model: 'deepseek-ai/deepseek-v4-flash',
+        stream: true,
+        chat_template_kwargs: {
+          thinking: true
+        },
+        reasoning_effort: 'medium'
+      });
+    } finally {
+      liveServices.databaseService.close();
+      await fakeProvider.close();
+      rmSync(liveRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports empty NVIDIA streaming probes as invalid provider test results', async () => {
     const liveRoot = mkdtempSync(join(tmpdir(), 'roc-live-nvidia-empty-'));
     const liveServices = createAppServices(liveRoot);

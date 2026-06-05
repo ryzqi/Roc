@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RocPaths } from '../../src/main/services/paths';
+import { RocDomainError } from '../../src/main/services/errors';
 import { SecretService, type SafeStorageBackend } from '../../src/main/services/secret-service';
 
 let root: string;
@@ -76,5 +77,30 @@ describe('SecretService', () => {
   it('throws provider_credential_unavailable when reading a missing secret', () => {
     const service = new SecretService(paths, createBackend());
     expect(() => service.getProviderSecret('provider-openai')).toThrowError(/Provider 凭据未存储/u);
+  });
+
+  it('maps decrypt failures into a recoverable provider credential error', () => {
+    const backend: SafeStorageBackend = {
+      ...createBackend(),
+      decryptString: () => {
+        throw new Error('Error while decrypting the ciphertext provided to safeStorage.decryptString.');
+      }
+    };
+    const service = new SecretService(paths, backend);
+    service.setProviderSecret('provider-openai', 'sk-test-1');
+
+    try {
+      service.getProviderSecret('provider-openai');
+      expect.unreachable('expected decrypt failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RocDomainError);
+      expect(error).toMatchObject({
+        code: 'provider_credential_unavailable',
+        message: 'Provider 凭据无法解密，请重新录入。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页清除并重新录入该 Provider 的 API Key。'
+      });
+    }
   });
 });

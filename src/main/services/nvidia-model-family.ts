@@ -24,7 +24,11 @@ export function resolveNvidiaModelFamily(modelId: string): NvidiaModelFamily {
   if (normalizedModelId.startsWith('ibm/granite-3')) {
     return 'granite';
   }
-  if (normalizedModelId.startsWith('deepseek-ai/deepseek-v3') || normalizedModelId.startsWith('deepseek-ai/deepseek-r')) {
+  if (
+    normalizedModelId.startsWith('deepseek-ai/deepseek-v3') ||
+    normalizedModelId.startsWith('deepseek-ai/deepseek-v4') ||
+    normalizedModelId.startsWith('deepseek-ai/deepseek-r')
+  ) {
     return 'deepseek';
   }
   if (normalizedModelId.startsWith('nvidia/llama-3.') && normalizedModelId.includes('-nemotron-')) {
@@ -46,7 +50,7 @@ export function nvidiaThinkingParameterName(family: NvidiaModelFamily): 'enable_
   if (family === 'qwen' || family === 'glm') {
     return 'enable_thinking';
   }
-  if (family === 'kimi' || family === 'granite') {
+  if (family === 'kimi' || family === 'granite' || family === 'deepseek') {
     return 'thinking';
   }
   return null;

@@ -23,6 +23,7 @@ import type {
   TaskThread,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
+import { RocDomainError } from '../../services/errors';
 
 type BackgroundTaskRow = {
   id: string;
@@ -555,9 +556,30 @@ export class TaskRepository {
     };
   }
 
+  private listActiveBackgroundTasks(): BackgroundTask[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+                trigger_type, cron_expression,
+                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+                enabled_capabilities_json
+         FROM background_tasks
+         WHERE status != 'archived'
+           AND EXISTS (
+             SELECT 1
+             FROM task_threads
+             WHERE task_threads.id = background_tasks.thread_id
+               AND task_threads.archived_at IS NULL
+           )
+         ORDER BY updated_at DESC`
+      )
+      .all() as BackgroundTaskRow[];
+    return rows.map(mapBackgroundTask);
+  }
+
   getActiveTasks(): ActiveTaskItem[] {
-    return this.listBackgroundTasks()
-      .filter((task) => task.status !== 'archived')
+    return this.listActiveBackgroundTasks()
       .map((task) => ({
         kind: 'background',
         threadId: task.threadId,
@@ -888,7 +910,13 @@ export class TaskRepository {
   private requireActiveThread(threadId: string): TaskThread {
     const thread = this.findActiveThread(threadId);
     if (thread === null) {
-      throw new Error('task_thread_not_found');
+      throw new RocDomainError({
+        code: 'task_thread_not_found',
+        message: '任务会话不存在或已被删除。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '该会话可能已被删除，请刷新任务列表后重试。'
+      });
     }
     return thread;
   }

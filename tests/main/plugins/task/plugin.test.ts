@@ -517,6 +517,55 @@ describe('task plugin', () => {
     expect(new Set(readToolCallStatuses(snapshot, 'schedule_background_task'))).toEqual(new Set(['start', 'end']));
     expect(new Set(readToolCallStatuses(snapshot, 'confirm_with_user'))).toEqual(new Set(['start', 'end']));
   });
+
+  it('excludes background tasks whose thread was archived from the active list', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    const healthyPreview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
+    const healthy = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', healthyPreview);
+    const ghostPreview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
+    const ghost = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', ghostPreview);
+
+    // 模拟历史脏数据：thread 已归档（6/1 旧 archiveThread 只归档 thread），但 background_tasks.status 仍为 running。
+    db.prepare("UPDATE task_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
+      '2026-06-01T14:10:00.000Z',
+      ghost.threadId
+    );
+
+    const activeTasks = await capabilities.invoke<{}, ActiveTaskItem[]>('task.active.list', {});
+
+    expect(activeTasks).toContainEqual(expect.objectContaining({ taskId: healthy.id }));
+    expect(activeTasks).not.toContainEqual(expect.objectContaining({ taskId: ghost.id }));
+  });
+
+  it('returns a not_found domain error from task.detail.get when the task thread was archived', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
+    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+
+    db.prepare("UPDATE task_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
+      '2026-06-01T14:10:00.000Z',
+      task.threadId
+    );
+
+    await expect(capabilities.invoke('task.detail.get', { taskId: task.id })).rejects.toMatchObject({
+      code: 'task_thread_not_found',
+      category: 'not_found'
+    });
+  });
 });
 
 function registerWorkspaceGetCurrent(capabilities: CapabilityRegistry): void {

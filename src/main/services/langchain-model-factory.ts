@@ -819,6 +819,7 @@ export class LangChainModelFactory {
     const apiKey = this.resolveCredential(provider);
     const baseUrl = resolveNvidiaBaseUrl(provider).replace(/\/+$/, '');
     const url = `${baseUrl}/chat/completions`;
+    const modelKwargs = buildNvidiaModelKwargs(modelId, provider.options ?? {}, true);
     const startedAt = Date.now();
     const internalAbort = new AbortController();
     const timeoutMs = options.timeoutMs ?? 30_000;
@@ -840,7 +841,8 @@ export class LangChainModelFactory {
           stream: true,
           max_tokens: 4,
           temperature: 0,
-          messages: [{ role: 'user', content: prompt }]
+          messages: [{ role: 'user', content: prompt }],
+          ...modelKwargs
         }),
         signal: linkedSignal
       });
@@ -1134,6 +1136,9 @@ function buildNvidiaModelKwargs(
     if (paramName !== null) {
       kwargs.chat_template_kwargs = { [paramName]: options.thinking };
     }
+  }
+  if (family === 'deepseek') {
+    kwargs.reasoning_effort = typeof options.thinking === 'boolean' && options.thinking ? 'medium' : 'none';
   }
   if (typeof options.includeReasoning === 'boolean' && !streaming) {
     kwargs.include_reasoning = options.includeReasoning;

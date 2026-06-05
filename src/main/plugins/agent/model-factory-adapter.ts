@@ -1,5 +1,16 @@
 import type { LangChainModelFactory } from '../../services/langchain-model-factory';
 
+const nonFinalTextBlockTypes = new Set([
+  'reasoning',
+  'tool_call',
+  'tool_call_chunk',
+  'invalid_tool_call',
+  'server_tool_call',
+  'server_tool_call_chunk',
+  'server_tool_call_result',
+  'non_standard'
+]);
+
 export type AgentModelHandle = {
   providerId: string;
   modelId: string;
@@ -68,28 +79,56 @@ function readModelResponseText(response: unknown): string {
   if (typeof response === 'string') {
     return requireNonEmptyResponse(response);
   }
-  if (response === null || typeof response !== 'object' || !('content' in response)) {
+  if (response === null || typeof response !== 'object') {
     throw new Error('agent_model_response_invalid');
   }
-  const content = response.content;
+  const content = 'content' in response ? response.content : undefined;
   if (typeof content === 'string') {
     return requireNonEmptyResponse(content);
   }
-  if (!Array.isArray(content)) {
+  const blocks = readResponseBlocks(response, content);
+  if (blocks === null) {
     throw new Error('agent_model_response_invalid');
   }
   const textBlocks: string[] = [];
-  for (const block of content) {
+  for (const block of blocks) {
     if (typeof block === 'string') {
       textBlocks.push(block);
       continue;
     }
-    if (block === null || typeof block !== 'object' || !('type' in block) || block.type !== 'text' || !('text' in block) || typeof block.text !== 'string') {
+    if (block === null || typeof block !== 'object' || !('type' in block) || typeof block.type !== 'string') {
       throw new Error('agent_model_response_invalid');
     }
-    textBlocks.push(block.text);
+    if (block.type === 'text') {
+      if (!('text' in block) || typeof block.text !== 'string') {
+        throw new Error('agent_model_response_invalid');
+      }
+      textBlocks.push(block.text);
+      continue;
+    }
+    if (nonFinalTextBlockTypes.has(block.type)) {
+      continue;
+    }
+    throw new Error('agent_model_response_invalid');
   }
   return requireNonEmptyResponse(textBlocks.join('\n\n'));
+}
+
+function readResponseBlocks(response: object, content: unknown): unknown[] | null {
+  if ('contentBlocks' in response) {
+    const contentBlocks = response.contentBlocks;
+    if (contentBlocks === undefined) {
+      return Array.isArray(content) ? content : null;
+    }
+    if (!Array.isArray(contentBlocks)) {
+      throw new Error('agent_model_response_invalid');
+    }
+    return contentBlocks;
+  }
+  if (Array.isArray(content)) {
+    return content;
+  }
+  return null;
 }
 
 function requireNonEmptyResponse(value: string): string {

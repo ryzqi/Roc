@@ -135,17 +135,6 @@ export function SettingsView({
     const apiKey = providerDraft.apiKey.trim();
     try {
       provider = buildProviderConfigFromDraft(providerDraft);
-      if (provider.type === 'llama_cpp' && apiKey.length === 0) {
-        const secretStored = state.providerSecretStatus.some(
-          (entry) => entry.providerId === provider.id && entry.stored === true
-        );
-        if (secretStored) {
-          provider = {
-            ...provider,
-            credentialRef: `secret:${provider.id}`
-          };
-        }
-      }
       if (providerDraft.mode === 'create') {
         assertProviderCreateIdAvailable(state.providers, provider.id);
         if (apiKey.length === 0) {

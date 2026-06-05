@@ -66,7 +66,17 @@ export class SecretService {
       });
     }
     const encrypted = readFileSync(target);
-    return this.backend.decryptString(encrypted);
+    try {
+      return this.backend.decryptString(encrypted);
+    } catch {
+      throw new RocDomainError({
+        code: 'provider_credential_unavailable',
+        message: 'Provider 凭据无法解密，请重新录入。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页清除并重新录入该 Provider 的 API Key。'
+      });
+    }
   }
 
   clearProviderSecret(providerId: string): void {
