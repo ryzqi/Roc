@@ -21,3 +21,13 @@ pnpm smoke:performance
 - The Electron smoke artifact records renderer readiness, native module probe, IPC evidence, release readiness, and packaged executable path.
 - The performance smoke artifact records measured startup and memory values.
 - Release readiness keeps installer, updater, and signing as absent or manual-required until an approved plan adds them.
+
+## Owner Approval
+
+Owner approval is required before:
+
+- tagging a release.
+- pushing to `main`.
+- publishing installer artifacts.
+- changing `electron-builder.yml` targets beyond the current Windows directory package.
+- adding signing certificates or update server config.

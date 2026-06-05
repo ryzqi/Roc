@@ -67,4 +67,18 @@ describe('package scripts', () => {
       }
     }
   });
+
+  it('documents owner approval before publishing or widening release scope', () => {
+    const releaseChecklist = readFileSync(
+      new URL('../../docs/release/release-candidate-checklist.md', import.meta.url),
+      'utf8'
+    );
+
+    expect(releaseChecklist).toContain('Owner Approval');
+    expect(releaseChecklist).toContain('tagging a release');
+    expect(releaseChecklist).toContain('pushing to `main`');
+    expect(releaseChecklist).toContain('publishing installer artifacts');
+    expect(releaseChecklist).toContain('changing `electron-builder.yml` targets beyond the current Windows directory package');
+    expect(releaseChecklist).toContain('adding signing certificates or update server config');
+  });
 });
