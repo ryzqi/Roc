@@ -53,6 +53,11 @@ export type AgentExecuteAdapter = {
   >;
 };
 
+/**
+ * deepagents 默认装配的内置工具名单一来源（write_todos/task + 文件系统 7 件）。
+ * deepagents 未导出对应常量，故在此集中维护；agent-builder 等处一律引用本常量，
+ * 不得再各自硬编码。漂移由 deep-agent-official-contracts.test.ts 的守卫用例兜底。
+ */
 export const DEEP_AGENT_BUILT_IN_TOOLS = [
   'write_todos',
   'task',

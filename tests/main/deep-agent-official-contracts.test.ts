@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFilesystemMiddleware, createSkillsMiddleware } from 'deepagents';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { createBackend } from '../../src/main/services/deep-agent/backend';
+import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../src/main/services/deep-agent/types';
 import type { LangChainChatModelHandle } from '../../src/main/services/langchain-model-factory';
 import { CapacityService } from '../../src/main/services/memory/capacity';
 import { SecurityScanService } from '../../src/main/services/memory/security-scan';
@@ -158,5 +159,25 @@ describe('deep agent official contracts', () => {
         name: 'alpha-review'
       })
     );
+  });
+
+  it('keeps DEEP_AGENT_BUILT_IN_TOOLS in sync with the official filesystem tool set', async () => {
+    const backend = createTestBackend({
+      workspaceService: services.workspaceService,
+      paths: services.paths,
+      shellExecutionService: createShellExecutionAdapter()
+    }).backend;
+    const filesystemToolNames = Array.from(
+      ((createFilesystemMiddleware({ backend }) as { tools?: Array<{ name: string }> }).tools ?? [])
+    ).map((tool) => tool.name);
+
+    // 文件系统中间件暴露的每个内置工具都必须在单一来源里声明（防止包升级后名集合漂移而我们漏更）。
+    expect(filesystemToolNames.length).toBeGreaterThan(0);
+    for (const name of filesystemToolNames) {
+      expect(DEEP_AGENT_BUILT_IN_TOOLS).toContain(name);
+    }
+    // 规划与委派内置工具同样属于单一来源。
+    expect(DEEP_AGENT_BUILT_IN_TOOLS).toContain('write_todos');
+    expect(DEEP_AGENT_BUILT_IN_TOOLS).toContain('task');
   });
 });

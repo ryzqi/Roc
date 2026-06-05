@@ -20,7 +20,7 @@ import {
 } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
-import type { RuntimeSubagent } from './types';
+import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
   model: BaseChatModel;
@@ -46,24 +46,12 @@ const NETWORK_SENSITIVE_TOOLS = [
   'cancel_background_task'
 ] as const;
 
-const DEEPAGENTS_BUILT_IN_TOOL_NAMES = [
-  'ls',
-  'read_file',
-  'write_file',
-  'edit_file',
-  'glob',
-  'grep',
-  'execute',
-  'write_todos',
-  'task'
-] as const;
-
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();
   const isLocalProvider = input.providerType === 'llama_cpp';
   const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolNames = (): string[] => {
-    const names = [...input.tools.map((tool) => tool.name), ...DEEPAGENTS_BUILT_IN_TOOL_NAMES];
+    const names = [...input.tools.map((tool) => tool.name), ...DEEP_AGENT_BUILT_IN_TOOLS];
     if (isLocalProvider) {
       names.push('respond');
     }
