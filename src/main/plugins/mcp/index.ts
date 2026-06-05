@@ -26,6 +26,7 @@ const idInputSchema = z.object({
 
 const mcpCapabilityDescriptors = [
   descriptor('mcp.listServers', emptyInputSchema, z.custom<McpServerSnapshot[]>()),
+  descriptor('mcp.ensureExaPreset', emptyInputSchema, z.custom<McpServerConfig>()),
   descriptor('mcp.upsertServer', McpServerSchema, z.custom<McpServerConfig>()),
   descriptor('mcp.setServerEnabled', serverEnabledRequestSchema, z.custom<McpServerConfig>()),
   descriptor('mcp.deleteServer', idInputSchema, z.object({ deleted: z.literal(true) })),
@@ -35,6 +36,7 @@ const mcpCapabilityDescriptors = [
 
 export type McpPluginOptions = {
   clientAdapter?: McpClientAdapter;
+  configService?: McpConfigService;
 };
 
 export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
@@ -52,25 +54,26 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
       capabilities: mcpCapabilityDescriptors
     },
     initialize: async (context) => {
-      const configAdapter = createConfigAdapter(context);
+      const configAdapter = options.configService ?? createConfigAdapter(context);
       const service = new McpService(configAdapter);
       service.ensureExaPreset();
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[0], async () => service.listServers());
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[1], async (input) =>
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[1], async () => service.ensureExaPreset());
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[2], async (input) =>
         service.upsertServer(input as McpServerConfig)
       );
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[2], async (input) => {
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[3], async (input) => {
         const request = input as { id: string; enabled: boolean };
         return service.setServerEnabled(request.id, request.enabled);
       });
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[3], async (input) => {
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[4], async (input) => {
         service.deleteServer((input as { id: string }).id);
         return { deleted: true as const };
       });
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[4], async (input) =>
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[5], async (input) =>
         service.testServer((input as { id: string }).id)
       );
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[5], async () =>
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[6], async () =>
         clientAdapter.loadTools(configAdapter.getMcpConfig().servers.filter((server) => server.enabled))
       );
     },

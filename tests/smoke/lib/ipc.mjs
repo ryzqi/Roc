@@ -17,9 +17,18 @@ export async function readMainPageText(page, { pageId, viewSelector, label }) {
   return text;
 }
 
-export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePath }) {
+export async function seedSmokeRuntimeData(
+  page,
+  { providerEndpoint, workspacePath, backgroundTaskGoal, backgroundTaskCronExpression, backgroundTaskNextRunAt }
+) {
   await page.evaluate(
-    async ({ providerEndpoint: endpoint, workspacePath: rootPath }) => {
+    async ({
+      providerEndpoint: endpoint,
+      workspacePath: rootPath,
+      backgroundTaskGoal: seededBackgroundTaskGoal,
+      backgroundTaskCronExpression: seededBackgroundTaskCronExpression,
+      backgroundTaskNextRunAt: seededBackgroundTaskNextRunAt
+    }) => {
       async function unwrap(result, label) {
         if (!result.ok) {
           throw new Error(`${label} failed: ${result.error.message}`);
@@ -80,12 +89,12 @@ export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePa
 
       const backgroundPreview = await unwrap(
         await window.roc.tasks.createBackgroundTaskPreview({
-          goal: 'Phase 6 smoke background diagnostic task',
+          goal: seededBackgroundTaskGoal,
           trigger: {
             type: 'cron',
             description: 'smoke scheduled run',
-            cronExpression: '0 9 * * *',
-            nextRunAt: '2026-05-22T01:00:00.000Z'
+            cronExpression: seededBackgroundTaskCronExpression,
+            nextRunAt: seededBackgroundTaskNextRunAt
           },
           workspacePath: rootPath,
           allowedActions: ['pnpm test'],
@@ -99,6 +108,6 @@ export async function seedSmokeRuntimeData(page, { providerEndpoint, workspacePa
 
       await unwrap(await window.roc.memory.status(), 'memory status');
     },
-    { providerEndpoint, workspacePath }
+    { providerEndpoint, workspacePath, backgroundTaskGoal, backgroundTaskCronExpression, backgroundTaskNextRunAt }
   );
 }

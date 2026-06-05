@@ -419,6 +419,75 @@ describe('WindowsHostService', () => {
     expect(openMainPage).toHaveBeenCalledWith('chat');
   });
 
+  it('updates tray state from async kernel lifecycle callbacks', async () => {
+    const app = createAppMock();
+    const tray = createTrayMock();
+    const menu = {
+      buildFromTemplate: vi.fn((template) => template)
+    };
+    const broadcastTaskUpdated = vi.fn();
+    const pauseBackgroundExecution = vi.fn(async () => ({
+      residentEnabled: true,
+      backgroundPaused: true,
+      backgroundTasks: {
+        total: 1,
+        running: 0,
+        failed: 0,
+        pendingConfirmation: 0,
+        nextRunAt: null
+      },
+      nextRunAt: null,
+      updatedAt: '2026-06-05T00:00:00.000Z'
+    }));
+    const host = new WindowsHostService({
+      app,
+      globalShortcut: {
+        register: vi.fn(() => true),
+        unregister: vi.fn(),
+        unregisterAll: vi.fn()
+      },
+      lifecycleService: {
+        getTraySummary: vi.fn(async () => ({
+          residentEnabled: true,
+          backgroundPaused: false,
+          backgroundTasks: {
+            total: 1,
+            running: 1,
+            failed: 0,
+            pendingConfirmation: 0,
+            nextRunAt: '2026-06-05T01:00:00.000Z'
+          },
+          nextRunAt: '2026-06-05T01:00:00.000Z',
+          updatedAt: '2026-06-05T00:00:00.000Z'
+        })),
+        pauseBackgroundExecution,
+        resumeBackgroundExecution: vi.fn()
+      },
+      logService: createLogServiceMock(),
+      menu,
+      trayIconPath,
+      createTray: vi.fn(() => tray),
+      openMainPage: vi.fn(),
+      broadcastTaskUpdated
+    });
+
+    host.refreshTray();
+    await Promise.resolve();
+
+    const template = menu.buildFromTemplate.mock.calls.at(-1)?.[0] as Array<{ label?: string; click?: () => void }>;
+    const pauseItem = template.find((item) => item.label === '暂停后台执行');
+    if (pauseItem?.click === undefined) {
+      throw new Error('pause tray item was not built.');
+    }
+
+    pauseItem.click();
+    await Promise.resolve();
+
+    expect(pauseBackgroundExecution).toHaveBeenCalledTimes(1);
+    expect(broadcastTaskUpdated).toHaveBeenCalledTimes(1);
+    expect(tray.setToolTip).toHaveBeenLastCalledWith('Roc 已暂停后台执行');
+  });
+
   it('surfaces global hotkey registration failures instead of silently accepting them', () => {
     const register = vi.fn(() => false);
     const logService = createLogServiceMock();

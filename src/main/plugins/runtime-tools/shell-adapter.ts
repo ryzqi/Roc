@@ -19,6 +19,7 @@ export type ShellCommandExecutor = (
 export type ShellAdapterOptions = {
   rootDir?: string;
   workspacePath?: string;
+  workspaceConfigService?: WorkspaceConfigService;
   rtkService: RtkService;
   commandExecutor?: ShellCommandExecutor;
   taskRecorder?: ShellTaskEventRecorder;
@@ -27,7 +28,7 @@ export type ShellAdapterOptions = {
 export function createShellExecutionService(options: ShellAdapterOptions): ShellExecutionService {
   const paths = new RocPaths(options.rootDir);
   paths.ensureTree();
-  const workspaceService = new WorkspaceService(createWorkspaceConfig(options.workspacePath));
+  const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfig(options.workspacePath));
   const taskRecorder = options.taskRecorder === undefined ? createNoopTaskRecorder() : options.taskRecorder;
   if (options.commandExecutor !== undefined) {
     return new InjectableShellExecutionService(

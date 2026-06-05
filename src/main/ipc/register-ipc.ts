@@ -1,27 +1,24 @@
 import { type BrowserWindow, ipcMain } from 'electron';
+
 import { ipcChannels } from '../../shared/ipc';
-import type { AppSettings, HostIntegrationStatus, IpcResult, TaskUpdateEvent, Workspace } from '../../shared/types';
-import type { AppServices } from '../services/app-service';
+import type {
+  AppSettings,
+  HostIntegrationStatus,
+  IpcResult,
+  McpServerSnapshot,
+  SkillSnapshot,
+  TaskUpdateEvent,
+  Workspace
+} from '../../shared/types';
+import type { MainKernelBootstrap } from '../main-kernel-bootstrap';
 import { wrapIpc } from '../services/errors';
-import { registerAgentIpc } from './agent-ipc';
-import { registerAppIpc } from './app-ipc';
-import { registerChatIpc } from './chat-ipc';
-import { registerDiagnosticsIpc } from './diagnostics-ipc';
-import { registerFilesDialogIpc, registerFilesIpc } from './files-ipc';
-import { registerGitIpc } from './git-ipc';
-import { registerLifecycleIpc } from './lifecycle-ipc';
-import { registerMcpIpc } from './mcp-ipc';
-import { registerMemoryIpc } from './memory-ipc';
-import { registerRtkIpc } from './rtk-ipc';
-import { registerSettingsIpc } from './settings-ipc';
-import { registerShellIpc } from './shell-ipc';
-import { registerSkillsIpc } from './skills-ipc';
-import { registerTasksIpc } from './tasks-ipc';
-import { registerTerminalIpc } from './terminal-ipc';
-import { registerWindowIpc } from './window-ipc';
-import { registerWorkspaceDialogIpc, registerWorkspaceIpc } from './workspace-ipc';
+import { registerFilesDialogIpc } from './files-ipc';
 import type { IpcHandler, IpcMainHandler } from './ipc-common';
-import { registerPluginCapabilityIpc, type PluginCapabilityInvoker } from './plugin-capability-adapter';
+import { registerPluginCapabilityIpc } from './plugin-capability-adapter';
+import { registerSettingsIpc } from './settings-ipc';
+import { registerShellConfirmIpc } from './shell-ipc';
+import { registerWindowIpc } from './window-ipc';
+import { registerWorkspaceDialogIpc } from './workspace-ipc';
 
 export type AppWindowControls = {
   openMainPage: (page: string) => void;
@@ -34,16 +31,15 @@ export type AppWindowControls = {
 const slowIpcThresholdMs = 50;
 
 export function registerIpc(
-  services: AppServices,
+  kernel: MainKernelBootstrap,
   mainWindow: BrowserWindow,
-  controls: AppWindowControls,
-  pluginCapabilityInvoker?: PluginCapabilityInvoker
+  controls: AppWindowControls
 ): void {
   function timedIpc<T>(channel: string, argsLength: number, operation: IpcHandler<T>): Promise<IpcResult<T>> {
     const startedAtMs = performance.now();
     return Promise.resolve(operation()).then((result) => {
       const durationMs = performance.now() - startedAtMs;
-      services.performanceObserverService.record({
+      kernel.performanceObserverService.record({
         phase: 'ipc_call',
         label: channel,
         startedAtMs,
@@ -54,7 +50,7 @@ export function registerIpc(
         }
       });
       if (durationMs > slowIpcThresholdMs) {
-        services.logService.warn('Slow IPC handler recorded.', {
+        kernel.logService.warn('Slow IPC handler recorded.', {
           service: 'ipc',
           component: 'register-ipc',
           metadata: {
@@ -67,7 +63,7 @@ export function registerIpc(
       return result;
     }).catch((error: unknown) => {
       const durationMs = performance.now() - startedAtMs;
-      services.logService.error('IPC handler failed.', toLogError(error), {
+      kernel.logService.error('IPC handler failed.', toLogError(error), {
         service: 'ipc',
         component: 'register-ipc',
         metadata: {
@@ -75,7 +71,7 @@ export function registerIpc(
           args: argsLength
         }
       });
-      services.performanceObserverService.record({
+      kernel.performanceObserverService.record({
         phase: 'ipc_call',
         label: channel,
         startedAtMs,
@@ -86,7 +82,7 @@ export function registerIpc(
         }
       });
       if (durationMs > slowIpcThresholdMs) {
-        services.logService.warn('Slow IPC handler recorded.', {
+        kernel.logService.warn('Slow IPC handler recorded.', {
           service: 'ipc',
           component: 'register-ipc',
           metadata: {
@@ -101,63 +97,33 @@ export function registerIpc(
   }
 
   function timedHandle(channel: string, handler: IpcMainHandler): void {
-    ipcMain.handle(channel, (...args: any[]) => timedIpc(channel, args.length, () => handler(...args)));
+    ipcMain.handle(channel, (...args: unknown[]) => timedIpc(channel, args.length, () => handler(...args)));
   }
 
-  if (pluginCapabilityInvoker !== undefined) {
-    registerPluginCapabilityIpc(timedHandle, pluginCapabilityInvoker);
-    registerLegacyAppSupplementIpc(timedHandle, controls);
-    registerWindowIpc(timedHandle, mainWindow, controls);
-    registerSettingsIpc(
-      timedHandle,
-      services.configService,
-      services.secretService,
-      services.mcpService,
-      services.skillService,
-      services.providerRuntimeService,
-      controls
-    );
-    registerLegacyMcpSupplementIpc(timedHandle, services);
-    registerLegacyAgentSupplementIpc(timedHandle, services);
-    registerWorkspaceDialogIpc(timedHandle, mainWindow, services.workspaceService);
-    registerFilesDialogIpc(timedHandle, mainWindow, {
-      getCurrentWorkspace: () => pluginCapabilityInvoker.invokeCapability<{}, Workspace | null>('workspace.getCurrent', {})
-    });
-    registerShellIpc(timedHandle, mainWindow, services.logService, services.shellExecutionService);
-    return;
-  }
-
-  registerAppIpc(timedHandle, services.appService, controls);
+  registerPluginCapabilityIpc(timedHandle, kernel);
+  registerLegacyAppSupplementIpc(timedHandle, controls);
   registerWindowIpc(timedHandle, mainWindow, controls);
-  registerTasksIpc(timedHandle, services.taskService, services.taskSchedulerService, controls);
-  registerLifecycleIpc(timedHandle, services.lifecycleService, controls);
-  registerDiagnosticsIpc(
-    timedHandle,
-    services.diagnosticsService,
-    services.taskSchedulerService,
-    services.healthCheckService,
-    services.metricsService
-  );
-  registerMemoryIpc(timedHandle, services.memoryService, services.sessionArchiveService);
+  registerShellConfirmIpc(timedHandle, mainWindow, kernel.logService);
   registerSettingsIpc(
     timedHandle,
-    services.configService,
-    services.secretService,
-    services.mcpService,
-    services.skillService,
-    services.providerRuntimeService,
+    kernel.configService,
+    kernel.secretService,
+    kernel.providerRuntimeService,
+    {
+      listMcpServers: () => kernel.invokeCapability<{}, McpServerSnapshot[]>('mcp.listServers', {}),
+      listSkills: () => kernel.invokeCapability<{}, SkillSnapshot[]>('skills.list', {}),
+      syncSettingsSnapshot: (request) => {
+        kernel.syncSettingsSnapshot(request);
+      }
+    },
     controls
   );
-  registerMcpIpc(timedHandle, services.mcpService);
-  registerSkillsIpc(timedHandle, services.skillService);
-  registerAgentIpc(timedHandle, services.agentService);
-  registerChatIpc(timedHandle, services.deepAgentRuntimeService);
-  registerWorkspaceIpc(timedHandle, mainWindow, services.workspaceService);
-  registerFilesIpc(timedHandle, mainWindow, services.workspaceService, services.fileService);
-  registerGitIpc(timedHandle, services.gitService);
-  registerTerminalIpc(timedHandle, services.terminalSessionService);
-  registerRtkIpc(timedHandle, services.rtkService);
-  registerShellIpc(timedHandle, mainWindow, services.logService, services.shellExecutionService);
+  registerWorkspaceDialogIpc(timedHandle, mainWindow, {
+    selectWorkspace: (path) => kernel.invokeCapability('workspace.select', { path })
+  });
+  registerFilesDialogIpc(timedHandle, mainWindow, {
+    getCurrentWorkspace: () => kernel.invokeCapability<{}, Workspace | null>('workspace.getCurrent', {})
+  });
 }
 
 function toLogError(error: unknown): Error {
@@ -180,14 +146,4 @@ function registerLegacyAppSupplementIpc(timedHandle: (channel: string, handler: 
       return { opened: true as const, page };
     })
   );
-}
-
-function registerLegacyAgentSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, services: AppServices): void {
-  timedHandle(ipcChannels.agentGetConfigPreview, () =>
-    wrapIpc(() => services.agentService.getDeepAgentConfigPreview())
-  );
-}
-
-function registerLegacyMcpSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, services: AppServices): void {
-  timedHandle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));
 }

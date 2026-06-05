@@ -5,6 +5,7 @@ import type {
   AgentRuntimeStatus,
   AgentSubagentPreview,
   ApprovalMode,
+  DeepAgentConfigPreview,
   EnabledCapabilities,
   InterruptDecisionType,
   McpServerSnapshot,
@@ -109,6 +110,30 @@ export function buildAgentCapabilityPreview(input: {
     interruptOn: createInterruptPolicy(input.approvalMode, selectedMcpCards.map((card) => card.name)),
     untrustedContextPolicy: 'external_content_reference_only',
     reason: '当前仅生成本轮能力清单预览，实际运行时才会装配 Deep Agents。'
+  };
+}
+
+export function buildDeepAgentConfigPreview(input: {
+  approvalMode: ApprovalMode;
+  runtimeStatus: AgentRuntimeStatus;
+}): DeepAgentConfigPreview {
+  const defaultModelState = input.runtimeStatus.defaultModelState;
+  if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
+    throw new Error('default_model_missing');
+  }
+
+  return {
+    runnable: false,
+    model: defaultModelState.modelId,
+    memoryAccess: 'store_backend',
+    builtInTools: [...DEEP_AGENT_BUILT_IN_TOOLS],
+    rocTools: [],
+    todoMapping: {
+      sourceTool: 'write_todos',
+      target: 'task_steps'
+    },
+    interruptOn: createInterruptPolicy(input.approvalMode, []),
+    reason: 'Roc 不在 preview 阶段实际装配 Deep Agents，本结果反映下一轮装配将使用的参数。'
   };
 }
 

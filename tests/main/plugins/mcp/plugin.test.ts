@@ -9,6 +9,7 @@ import type { McpServerConfig } from '../../../../src/shared/types';
 
 const mcpCapabilities = [
   'mcp.listServers',
+  'mcp.ensureExaPreset',
   'mcp.upsertServer',
   'mcp.setServerEnabled',
   'mcp.deleteServer',
@@ -43,6 +44,7 @@ describe('MCP plugin', () => {
     const capabilities = await initializePlugin();
 
     const initialSnapshots = await capabilities.invoke('mcp.listServers', {});
+    const ensuredPreset = await capabilities.invoke<{}, McpServerConfig>('mcp.ensureExaPreset', {});
     const enabled = await capabilities.invoke<{ id: string; enabled: boolean }, McpServerConfig>('mcp.setServerEnabled', {
       id: 'exa-hosted',
       enabled: true
@@ -68,6 +70,11 @@ describe('MCP plugin', () => {
         url: 'https://mcp.exa.ai/mcp'
       })
     ]);
+    expect(ensuredPreset).toMatchObject({
+      id: 'exa-hosted',
+      transport: 'http',
+      url: 'https://mcp.exa.ai/mcp'
+    });
     expect(mcpConfig.servers[0]).toMatchObject({
       id: 'exa-hosted',
       transport: 'http',

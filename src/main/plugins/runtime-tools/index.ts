@@ -9,6 +9,7 @@ import type {
 } from '../../../shared/types';
 import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
+import type { WorkspaceConfigService } from '../../services/workspace-service';
 import type { WebReadRequest } from '../../services/web-read-service';
 import { createRtkService } from './rtk-adapter';
 import {
@@ -55,6 +56,7 @@ const runtimeToolsCapabilityDescriptors = [
 export type RuntimeToolsPluginOptions = {
   rootDir?: string;
   workspacePath?: string;
+  workspaceConfigService?: WorkspaceConfigService;
   binaryManager?: RTKBinaryManager;
   commandExecutor?: ShellCommandExecutor;
   confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
@@ -82,6 +84,7 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
       const shellService = createShellExecutionService({
         rootDir: options.rootDir,
         workspacePath: options.workspacePath,
+        workspaceConfigService: options.workspaceConfigService,
         rtkService,
         commandExecutor: options.commandExecutor
       });

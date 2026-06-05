@@ -75,6 +75,19 @@ describe('main kernel bootstrap integration', () => {
     expect(source).not.toContain('services.terminalSessionService.onOutput');
   });
 
+  it('boots only the main kernel from the Electron entrypoint', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8');
+
+    expect(source).toContain('const kernel = createMainKernelBootstrap({');
+    expect(source).toContain('registerIpc(kernel, mainWindow');
+    expect(source).toContain("kernel.subscribeEvent<TaskUpdateEvent>('task.updated'");
+    expect(source).not.toContain('createAppServices');
+    expect(source).not.toContain('activeServices');
+    expect(source).not.toMatch(/\bservices\./u);
+    expect(source).not.toContain('deepAgentRuntimeService.onRunEvent');
+    expect(source).not.toContain('taskSchedulerService.handlePowerResume');
+  });
+
   it('reads provider settings saved after kernel startup before agent runs', async () => {
     const bootstrap = createMainKernelBootstrap({
       activateMigration: async ({ paths }) => join(paths.root, 'plugin-data'),

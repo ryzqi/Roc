@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 
-import type { AgentRuntimeStatus, AppStatus, SystemAppearanceSnapshot } from '../shared/types';
+import type { AgentRuntimeStatus, AppStatus, SettingsSaveRequest, SystemAppearanceSnapshot } from '../shared/types';
 import type { RuntimeMetricsProvider } from './services/diagnostics-service';
+import { setLogService } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
 import { activatePluginDataMigration } from './infrastructure/migration/monolith-to-plugins';
 import { KernelRuntime } from './kernel/kernel-runtime';
@@ -19,8 +20,10 @@ import { createWorkspacePlugin } from './plugins/workspace';
 import { ConfigService } from './services/config-service';
 import { LangChainModelFactory } from './services/langchain-model-factory';
 import { LogService } from './services/log-service';
+import { MetricsService } from './services/metrics-service';
 import { PerformanceObserverService } from './services/performance-observer-service';
 import { RocPaths } from './services/paths';
+import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
 
 export type MainKernelMigrationInput = {
@@ -46,9 +49,14 @@ export type MainKernelBootstrapOptions = {
 export type MainKernelBootstrap = {
   readonly paths: RocPaths;
   readonly runtime: KernelRuntime;
+  readonly configService: ConfigService;
+  readonly logService: LogService;
+  readonly secretService: SecretService;
+  readonly providerRuntimeService: ProviderRuntimeService;
   readonly performanceObserverService: PerformanceObserverService;
   start(): Promise<void>;
   shutdown(): Promise<void>;
+  syncSettingsSnapshot(request: SettingsSaveRequest): void;
   invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
   subscribeEvent<TPayload>(
     type: string,
@@ -60,16 +68,27 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const paths = new RocPaths(options.dataRoot);
   const pluginDataDir = join(paths.root, 'plugin-data');
   const performanceObserverService = options.performanceObserverService ?? new PerformanceObserverService();
+  paths.ensureTree();
+  const configService = new ConfigService(paths);
+  configService.initialize();
+  const logService = new LogService(paths);
+  logService.initialize();
+  setLogService(logService);
+  const secretService = new SecretService(paths, options.safeStorage);
+  const metricsService = new MetricsService();
+  const modelFactory = new LangChainModelFactory(configService, secretService, logService);
+  const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
   const plugins =
     options.plugins ??
     createDefaultMainKernelPlugins({
+      configService,
+      modelFactory,
       paths,
       performanceObserverService,
       runtimeMetricsProvider: options.runtimeMetricsProvider,
       version: options.version,
       isPackaged: options.isPackaged,
-      getAppearance: options.getAppearance,
-      safeStorage: options.safeStorage
+      getAppearance: options.getAppearance
     });
   const activateMigration = options.activateMigration ?? activateMainKernelMigration;
   const runtime = new KernelRuntime({
@@ -91,13 +110,26 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   return {
     paths,
     runtime,
+    configService,
+    logService,
+    secretService,
+    providerRuntimeService,
     performanceObserverService,
     async start() {
       paths.ensureTree();
       await runtime.start();
     },
     async shutdown() {
-      await runtime.shutdown();
+      try {
+        await runtime.shutdown();
+      } finally {
+        setLogService(null);
+        await logService.close();
+      }
+    },
+    syncSettingsSnapshot(request) {
+      void request;
+      configService.reloadSettingsDocument();
     },
     async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
       return await runtime.invokeCapability<TInput, TOutput>(name, input);
@@ -120,7 +152,8 @@ export function activateMainKernelMigration(input: MainKernelMigrationInput): st
 
 function createDefaultMainKernelPlugins(input: {
   paths: RocPaths;
-  safeStorage: SafeStorageBackend;
+  configService: ConfigService;
+  modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
   version?: string;
@@ -128,12 +161,7 @@ function createDefaultMainKernelPlugins(input: {
   getAppearance?: () => SystemAppearanceSnapshot;
 }): readonly RocPlugin[] {
   input.paths.ensureTree();
-  const configService = new ConfigService(input.paths);
-  configService.initialize();
-  const logService = new LogService(input.paths);
-  logService.initialize();
-  const secretService = new SecretService(input.paths, input.safeStorage);
-  const modelFactory = new LangChainModelFactory(configService, secretService, logService);
+  const configService = input.configService;
   const defaultWorkspace = configService.getSettings().defaultWorkspace;
 
   return [
@@ -156,7 +184,7 @@ function createDefaultMainKernelPlugins(input: {
           return configService.getPermissions().mode;
         }
       },
-      modelFactory: new LangChainAgentModelFactoryAdapter(modelFactory, {
+      modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
         beforeCreate: () => {
           configService.reloadSettingsDocument();
         }
@@ -172,11 +200,12 @@ function createDefaultMainKernelPlugins(input: {
       getMemorySettings: () => configService.getSettings().memory
     }),
     createTaskPlugin(),
-    createWorkspacePlugin({ rootDir: input.paths.root }),
-    createMcpPlugin(),
+    createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
+    createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),
     createRuntimeToolsPlugin({
       rootDir: input.paths.root,
+      workspaceConfigService: configService,
       workspacePath: defaultWorkspace === null ? undefined : defaultWorkspace
     }),
     createDiagnosticsPlugin({

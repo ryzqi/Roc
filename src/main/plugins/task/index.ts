@@ -48,6 +48,9 @@ export const taskCapabilityDescriptors = [
   descriptor('task.background.cancel', idInputSchema, z.custom<BackgroundTask>()),
   descriptor('task.background.delete', idInputSchema, z.object({ deleted: z.literal(true), taskId: z.string() })),
   descriptor('task.scheduler.status', z.object({}), z.custom<SchedulerStatus>()),
+  descriptor('task.scheduler.suspend', z.object({}), z.object({ suspended: z.literal(true) })),
+  descriptor('task.scheduler.resume', z.object({}), z.object({ resumed: z.literal(true) })),
+  descriptor('task.scheduler.handlePowerResume', z.object({}), z.object({ handled: z.literal(true) })),
   descriptor('task.background.summary', z.object({}), z.custom<BackgroundTaskSummary>()),
   descriptor('task.thread.messages.list', z.object({ threadId: z.string() }), z.array(z.custom<TaskEvent>())),
   descriptor('task.background.list', z.object({}), z.array(z.custom<BackgroundTask>())),
@@ -80,9 +83,10 @@ export function createTaskPlugin(): RocPlugin {
       const db = context.database.getConnection();
       applyTaskPluginSchema(db);
       const repository = new TaskRepository(db);
-      scheduler = new TaskScheduler(repository);
+      scheduler = new TaskScheduler(repository, {
+        startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
+      });
       scheduler.start();
-      scheduler.registerAllFromDatabase();
       registerTaskCapabilities(context, repository, scheduler);
       const taskProposalWorkflow = createTaskProposalWorkflow(context);
       unsubscribeAgentRunStarted = context.eventBus.subscribe('agent.run.started', async (event) => {
@@ -225,12 +229,24 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     return result;
   });
   context.capabilities.register(pluginId, taskCapabilityDescriptors[9], async () => scheduler.getStatus());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[10], async () => repository.getBackgroundTaskSummary());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[11], async (input) =>
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[10], async () => {
+    scheduler.suspendAll();
+    return { suspended: true as const };
+  });
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[11], async () => {
+    scheduler.resumeAll();
+    return { resumed: true as const };
+  });
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[12], async () => {
+    scheduler.handlePowerResume();
+    return { handled: true as const };
+  });
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[13], async () => repository.getBackgroundTaskSummary());
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[14], async (input) =>
     repository.listThreadMessages((input as { threadId: string }).threadId)
   );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[12], async () => repository.listBackgroundTasks());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[13], async (input) => {
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[15], async () => repository.listBackgroundTasks());
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[16], async (input) => {
     const { threadId } = input as TaskDeleteThreadRequest;
     const linkedTaskIds = repository.listBackgroundTasks()
       .filter((task) => task.threadId === threadId)
@@ -242,17 +258,17 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     }
     return result;
   });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[14], async () => repository.getActiveTasks());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[15], async (input) =>
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[17], async () => repository.getActiveTasks());
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[18], async (input) =>
     repository.getTaskDetail({
       taskId: (input as { taskId: string }).taskId,
       schedulerRegistered: scheduler.getStatus().registeredTaskCount > 0
     })
   );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[16], async (input) =>
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[19], async (input) =>
     repository.listScheduledRuns(input as { taskId: string; limit?: number })
   );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[17], async (input) =>
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[20], async (input) =>
     repository.openBackgroundTaskInChat((input as { taskId: string }).taskId)
   );
 }

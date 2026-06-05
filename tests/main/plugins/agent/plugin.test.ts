@@ -4,6 +4,7 @@ import { createAgentPlugin } from '../../../../src/main/plugins/agent';
 
 const agentCapabilities = [
   'agent.status.get',
+  'agent.config.preview',
   'agent.run.start',
   'agent.run.cancel',
   'agent.run.resume',

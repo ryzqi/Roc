@@ -49,6 +49,7 @@ describe('plugin capability IPC adapter', () => {
         'memory',
         'rtk',
         'sessions',
+        'shell',
         'skills',
         'tasks',
         'terminal',
@@ -107,6 +108,7 @@ function requiredMappings(): Array<{
     { preloadMethod: 'chat.startRun', capabilityName: 'agent.run.start', args: [request], expectedInput: request },
     { preloadMethod: 'chat.cancelRun', capabilityName: 'agent.run.cancel', args: ['run_1'], expectedInput: { runId: 'run_1' } },
     { preloadMethod: 'chat.resumeRun', capabilityName: 'agent.run.resume', args: [request], expectedInput: request },
+    { preloadMethod: 'agent.getConfigPreview', capabilityName: 'agent.config.preview', args: [], expectedInput: {} },
     { preloadMethod: 'agent.getCapabilityPreview', capabilityName: 'agent.capability.preview', args: [request], expectedInput: request },
     { preloadMethod: 'sessions.list', capabilityName: 'agent.sessions.list', args: [request], expectedInput: request },
     { preloadMethod: 'sessions.search', capabilityName: 'agent.sessions.search', args: [request], expectedInput: request },
@@ -144,6 +146,7 @@ function requiredMappings(): Array<{
     { preloadMethod: 'memory.readFile', capabilityName: 'memory.file.read', args: [request], expectedInput: request },
     { preloadMethod: 'memory.writeFile', capabilityName: 'memory.file.write', args: [request], expectedInput: request },
     { preloadMethod: 'memory.snapshotPreview', capabilityName: 'memory.snapshot.preview', args: [], expectedInput: {} },
+    { preloadMethod: 'mcp.ensureExaPreset', capabilityName: 'mcp.ensureExaPreset', args: [], expectedInput: {} },
     { preloadMethod: 'mcp.deleteServer', capabilityName: 'mcp.deleteServer', args: ['mcp_1'], expectedInput: { id: 'mcp_1' } },
     { preloadMethod: 'mcp.testServer', capabilityName: 'mcp.testServer', args: ['mcp_1'], expectedInput: { id: 'mcp_1' } },
     { preloadMethod: 'skills.importSkill', capabilityName: 'skills.import', args: [request], expectedInput: request },
@@ -155,7 +158,8 @@ function requiredMappings(): Array<{
       capabilityName: 'diagnostics.createPackage',
       args: [request],
       expectedInput: request
-    }
+    },
+    { preloadMethod: 'shell.execute', capabilityName: 'shell.execute', args: [request], expectedInput: request }
   ];
 }
 

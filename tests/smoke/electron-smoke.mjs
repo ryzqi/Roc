@@ -36,6 +36,10 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
+const backgroundTaskGoal = 'Phase 6 smoke background diagnostic task';
+const backgroundTaskClock = createSafeDailySmokeClock();
+const backgroundTaskCronExpression = `${backgroundTaskClock.minute} ${backgroundTaskClock.hour} * * *`;
+const backgroundTaskNextRunAt = nextDailyRunAtUtc(backgroundTaskClock.hour, backgroundTaskClock.minute);
 const naturalLanguageTaskClock = createSafeDailySmokeClock();
 const naturalLanguageTaskGoal = `每天 ${formatSmokeClock(naturalLanguageTaskClock)} 抓取 AI 新闻并写入 docx`;
 const naturalLanguageTaskCronExpression = `${naturalLanguageTaskClock.minute} ${naturalLanguageTaskClock.hour} * * *`;
@@ -286,7 +290,13 @@ try {
   if (selectedWorkspace !== workspaceRoot) {
     throw new Error(`Workspace selection mismatch: ${selectedWorkspace}`);
   }
-  await seedSmokeRuntimeData(page, { providerEndpoint: smokeProvider.endpoint, workspacePath: workspaceRoot });
+  await seedSmokeRuntimeData(page, {
+    providerEndpoint: smokeProvider.endpoint,
+    workspacePath: workspaceRoot,
+    backgroundTaskGoal,
+    backgroundTaskCronExpression,
+    backgroundTaskNextRunAt
+  });
   await page.reload();
   await waitForAppReady(page, 'after-runtime-seed', artifactDir);
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
@@ -2613,10 +2623,10 @@ try {
     packagedExeExists: existsSync(packagedExe),
     browserWindowCount: processMetricsSummary.browserWindowCount,
     backgroundTaskVisible:
-      taskText.includes('Phase 6 smoke background diagnostic task') &&
-      backgroundTaskApiEvidence.activeTasks.some((item) => item.goal === 'Phase 6 smoke background diagnostic task') &&
+      taskText.includes(backgroundTaskGoal) &&
+      backgroundTaskApiEvidence.activeTasks.some((item) => item.goal === backgroundTaskGoal) &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
-      backgroundTaskApiEvidence.tray.nextRunAt === '2026-05-22T01:00:00.000Z' &&
+      backgroundTaskApiEvidence.tray.nextRunAt === backgroundTaskNextRunAt &&
       backgroundTaskApiEvidence.hasCreatedEvent,
     naturalLanguageTaskCreated:
       taskProposalEvidence.activeTaskGoal === naturalLanguageTaskGoal &&

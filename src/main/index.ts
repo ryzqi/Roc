@@ -17,8 +17,7 @@ import {
 } from 'electron';
 import { join } from 'node:path';
 import { ipcChannels } from '../shared/ipc';
-import type { ChatRunEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent } from '../shared/types';
-import { createAppServices } from './services/app-service';
+import type { ChatRunEvent, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
 import { agentChatRunEventType } from './plugins/agent/runtime';
@@ -55,7 +54,7 @@ const appIconPath = isDevelopment
   : join(process.resourcesPath, 'icon.ico');
 const mainReadyStartedAtMs = performance.now();
 const pdfPreviewScheme = 'roc-preview';
-let pdfPreviewServices: ReturnType<typeof createAppServices> | null = null;
+let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
 
 protocol.registerSchemesAsPrivileged([
@@ -72,7 +71,6 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow: BrowserWindow | null = null;
 let activeKernel: MainKernelBootstrap | null = null;
-let activeServices: ReturnType<typeof createAppServices> | null = null;
 let powerResumeBound = false;
 let screenBoundsBound = false;
 let systemAppearanceBound = false;
@@ -102,54 +100,32 @@ const hostService = new WindowsHostService({
   },
   globalShortcut,
   lifecycleService: {
-    getTraySummary: () => {
-      if (activeServices !== null) {
-        return activeServices.lifecycleService.getTraySummary();
-      }
-      return {
-        residentEnabled: true,
-        backgroundPaused: false,
-        backgroundTasks: {
-          total: 0,
-          running: 0,
-          failed: 0,
-          pendingConfirmation: 0,
-          nextRunAt: null
-        },
-        nextRunAt: null,
-        updatedAt: new Date().toISOString()
-      };
-    },
-    pauseBackgroundExecution: () => {
-      if (activeServices === null) {
-        throw new Error('Lifecycle service is not ready.');
-      }
-      return activeServices.lifecycleService.pauseBackgroundExecution();
-    },
-    resumeBackgroundExecution: () => {
-      if (activeServices === null) {
-        throw new Error('Lifecycle service is not ready.');
-      }
-      return activeServices.lifecycleService.resumeBackgroundExecution();
-    }
+    getTraySummary: () => requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.getTraySummary', {}),
+    pauseBackgroundExecution: () =>
+      requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.pauseBackgroundExecution', {}),
+    resumeBackgroundExecution: () =>
+      requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.resumeBackgroundExecution', {})
   },
   logService: {
     info: (message, context) => {
-      if (activeServices === null) {
+      const kernel = activeKernel;
+      if (kernel === null) {
         console.log(JSON.stringify({ ...context, level: 'info', message }));
         return;
       }
-      activeServices.logService.info(message, context);
+      kernel.logService.info(message, context);
     },
     warn: (message, context) => {
-      if (activeServices === null) {
+      const kernel = activeKernel;
+      if (kernel === null) {
         console.log(JSON.stringify({ ...context, level: 'warn', message }));
         return;
       }
-      activeServices.logService.warn(message, context);
+      kernel.logService.warn(message, context);
     },
     error: (message, error, context) => {
-      if (activeServices === null) {
+      const kernel = activeKernel;
+      if (kernel === null) {
         console.log(JSON.stringify({
           ...context,
           level: 'error',
@@ -162,7 +138,7 @@ const hostService = new WindowsHostService({
         }));
         return;
       }
-      activeServices.logService.error(message, error, context);
+      kernel.logService.error(message, error, context);
     }
   },
   menu: Menu,
@@ -206,11 +182,10 @@ app.on('before-quit', (event) => {
     event.preventDefault();
     return;
   }
-  const services = activeServices;
   const kernel = activeKernel;
-  activeServices = null;
   activeKernel = null;
-  if (services === null && kernel === null) {
+  pdfPreviewKernel = null;
+  if (kernel === null) {
     appShutdownComplete = true;
     return;
   }
@@ -219,9 +194,6 @@ app.on('before-quit', (event) => {
     .then(async () => {
       if (kernel !== null) {
         await kernel.shutdown();
-      }
-      if (services !== null) {
-        await services.appService.shutdown();
       }
     })
     .catch((error: unknown) => {
@@ -254,16 +226,18 @@ function showMainPage(page: string): void {
   sendToWindow(mainWindow, ipcChannels.navigate, page);
 }
 
+function requireActiveKernel(): MainKernelBootstrap {
+  if (activeKernel === null) {
+    throw new Error('Kernel is not ready.');
+  }
+  return activeKernel;
+}
+
 async function createWindow(): Promise<void> {
   if (!ownsSingleInstanceLock) {
     return;
   }
   const performanceObserverService = new PerformanceObserverService();
-  const runtimeEnvironment = {
-    version: app.getVersion(),
-    isPackaged: app.isPackaged,
-    getAppearance: getSystemAppearanceSnapshot
-  };
   const safeStorageBackend = createElectronSafeStorageBackend();
   const runtimeMetricsProvider = createElectronRuntimeMetricsProvider();
   const kernel = createMainKernelBootstrap({
@@ -277,16 +251,8 @@ async function createWindow(): Promise<void> {
   });
   await kernel.start();
   activeKernel = kernel;
-  const services = createAppServices(
-    process.env.ROC_DATA_ROOT,
-    runtimeEnvironment,
-    safeStorageBackend,
-    runtimeMetricsProvider,
-    performanceObserverService
-  );
-  activeServices = services;
-  pdfPreviewServices = services;
-  services.performanceObserverService.record({
+  pdfPreviewKernel = kernel;
+  kernel.performanceObserverService.record({
     phase: 'main_ready',
     label: 'app.whenReady',
     startedAtMs: mainReadyStartedAtMs,
@@ -295,36 +261,14 @@ async function createWindow(): Promise<void> {
       packaged: app.isPackaged
     }
   });
-  services.performanceObserverService.measure('services_critical_initialized', 'appService.initializeCritical', () => {
-    services.appService.initializeCritical();
-  });
-  const windowStateFilePath = join(services.paths.configDir, 'window-state.json');
+  const windowStateFilePath = join(kernel.paths.configDir, 'window-state.json');
   const restoredPlacement = readWindowPlacementSnapshot(windowStateFilePath);
   const restoredBounds = resolveMainWindowBounds(
     restoredPlacement === null ? null : restoredPlacement.bounds,
     getDisplayWorkAreas()
   );
-  let deferredInitialized = false;
-  function initializeDeferredServices(): void {
-    if (deferredInitialized) {
-      return;
-    }
-    deferredInitialized = true;
-    setImmediate(() => {
-      try {
-        services.performanceObserverService.measure('services_deferred_initialized', 'appService.initializeDeferred', () => {
-          services.appService.initializeDeferred();
-        });
-      } catch (error) {
-        services.logService.error('Roc deferred services failed to initialize.', toLogError(error), {
-          service: 'main',
-          component: 'initializeDeferredServices'
-        });
-      }
-    });
-  }
 
-  mainWindow = services.performanceObserverService.measure('window_created', 'mainWindow', () =>
+  mainWindow = kernel.performanceObserverService.measure('window_created', 'mainWindow', () =>
     new BrowserWindow(buildMainWindowOptions(preloadPath, appIconPath, restoredBounds))
   );
   applyWindowMaterialWithFallback(
@@ -334,7 +278,7 @@ async function createWindow(): Promise<void> {
       fallbacks: ['acrylic'],
       staticBackground: mainWindowStaticBackground
     },
-    services.logService
+    kernel.logService
   );
   if (restoredPlacement !== null && restoredPlacement.maximized) {
     mainWindow.maximize();
@@ -343,14 +287,14 @@ async function createWindow(): Promise<void> {
   bindDisplayBoundsCorrection();
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
-  hostService.syncSettings(services.configService.getSettings());
+  hostService.syncSettings(kernel.configService.getSettings());
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 
-  registerIpc(services, mainWindow, {
+  registerIpc(kernel, mainWindow, {
     openMainPage: showMainPage,
     closeMainWindow: () => {
       mainWindow?.close();
@@ -363,11 +307,11 @@ async function createWindow(): Promise<void> {
       hostService.refreshTray();
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
     }
-  }, kernel);
+  });
   if (!pdfPreviewProtocolRegistered) {
     protocol.handle(pdfPreviewScheme, (request) => {
-      const activeServices = pdfPreviewServices;
-      if (activeServices === null) {
+      const kernel = pdfPreviewKernel;
+      if (kernel === null) {
         return new Response('Preview service unavailable', { status: 503 });
       }
       const url = new URL(request.url);
@@ -375,7 +319,7 @@ async function createWindow(): Promise<void> {
         return new Response('Not found', { status: 404 });
       }
       const relativePath = url.pathname.slice('/pdf/'.length);
-      return activeServices.fileService.streamPdfPreviewResource(relativePath);
+      return kernel.invokeCapability<{ relativePath: string }, Response>('files.streamPdfPreviewResource', { relativePath });
     });
     pdfPreviewProtocolRegistered = true;
   }
@@ -405,25 +349,35 @@ async function createWindow(): Promise<void> {
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
     }
   });
-  services.deepAgentRuntimeService.onRunEvent((event) => {
-    broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event, {
-      include: (_window, index) => index === 0
-    });
-    if (event.runId.startsWith('run_')) {
-      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
-    }
+  kernel.subscribeEvent<TaskUpdateEvent>('task.updated', (event) => {
+    hostService.refreshTray();
+    broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event.payload);
   });
   if (!powerResumeBound) {
     powerResumeBound = true;
     powerMonitor.on('resume', () => {
-      activeServices?.taskSchedulerService.handlePowerResume();
+      const kernel = activeKernel;
+      if (kernel === null) {
+        return;
+      }
+      void kernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {})
+        .then(() => {
+          hostService.refreshTray();
+          broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
+        })
+        .catch((error: unknown) => {
+          kernel.logService.error('Task scheduler power resume handling failed.', toLogError(error), {
+            service: 'main',
+            component: 'powerMonitor.resume'
+          });
+        });
     });
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return handleExternalWindowOpen(url, {
       shell,
-      logService: services.logService
+      logService: kernel.logService
     });
   });
   bindNativeContextMenu(mainWindow.webContents);
@@ -434,7 +388,7 @@ async function createWindow(): Promise<void> {
       return;
     }
     mainWindowShown = true;
-    services.performanceObserverService.record({
+    kernel.performanceObserverService.record({
       phase: 'ready_to_show',
       label,
       startedAtMs: mainReadyStartedAtMs,
@@ -444,7 +398,6 @@ async function createWindow(): Promise<void> {
       }
     });
     mainWindow?.show();
-    initializeDeferredServices();
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -454,7 +407,7 @@ async function createWindow(): Promise<void> {
     showMainWindowOnce('mainWindow.did-finish-load');
   });
 
-  await services.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+  await kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
 }
 
 function bindWindowPlacementPersistence(window: BrowserWindow, filePath: string): void {

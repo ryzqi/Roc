@@ -3,10 +3,8 @@ import { registerSettingsIpc } from '../../src/main/ipc/settings-ipc';
 import type { IpcMainHandler } from '../../src/main/ipc/ipc-common';
 import { defaultPermissions, defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
 import type { ConfigService } from '../../src/main/services/config-service';
-import type { McpService } from '../../src/main/services/mcp-service';
 import type { ProviderRuntimeService } from '../../src/main/services/provider-runtime-service';
 import type { SecretService } from '../../src/main/services/secret-service';
-import type { SkillService } from '../../src/main/services/skill-service';
 import { ipcChannels } from '../../src/shared/ipc';
 
 describe('settings IPC', () => {
@@ -33,15 +31,14 @@ describe('settings IPC', () => {
     const secretService = {
       listSecretStatuses: vi.fn(() => [])
     } as unknown as SecretService;
-    const mcpService = {
-      listServers: vi.fn(() => [])
-    } as unknown as McpService;
-    const skillService = {
-      list: vi.fn(() => [])
-    } as unknown as SkillService;
     const providerRuntimeService = {
       testProvider: vi.fn()
     } as unknown as ProviderRuntimeService;
+    const kernelSettings = {
+      listMcpServers: vi.fn(async () => []),
+      listSkills: vi.fn(async () => []),
+      syncSettingsSnapshot: vi.fn(async () => undefined)
+    };
     const controls = {
       getHostIntegrationStatus: vi.fn(() => ({
         startup: {
@@ -62,9 +59,8 @@ describe('settings IPC', () => {
       (channel, handler) => handlers.set(channel, handler),
       configService,
       secretService,
-      mcpService,
-      skillService,
       providerRuntimeService,
+      kernelSettings,
       controls
     );
 
@@ -102,6 +98,9 @@ describe('settings IPC', () => {
     expect(configService.getProvidersAsync).toHaveBeenCalledTimes(2);
     expect(configService.getPermissionsAsync).toHaveBeenCalledTimes(2);
     expect(configService.saveSettingsSnapshotAsync).toHaveBeenCalledWith(saveRequest);
+    expect(kernelSettings.listMcpServers).toHaveBeenCalledTimes(2);
+    expect(kernelSettings.listSkills).toHaveBeenCalledTimes(2);
+    expect(kernelSettings.syncSettingsSnapshot).toHaveBeenCalledWith(saveRequest);
     expect(controls.syncHostSettings).toHaveBeenCalledWith(saveRequest.settings);
   });
 });

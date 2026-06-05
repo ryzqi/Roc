@@ -1,8 +1,8 @@
 import type { BackgroundTaskSummary, TraySummary } from '../../../shared/types';
 
 export type DiagnosticsLifecycleScheduler = {
-  suspendAll(): void;
-  resumeAll(): void;
+  suspendAll(): void | Promise<void>;
+  resumeAll(): void | Promise<void>;
 };
 
 export type DiagnosticsLifecycleAdapterOptions = {
@@ -33,12 +33,18 @@ export function createDiagnosticsLifecycleAdapter(
     getTraySummary,
     pauseBackgroundExecution() {
       backgroundPaused = true;
-      options.scheduler.suspendAll();
+      const result = options.scheduler.suspendAll();
+      if (result instanceof Promise) {
+        return result.then(() => getTraySummary());
+      }
       return getTraySummary();
     },
     resumeBackgroundExecution() {
       backgroundPaused = false;
-      options.scheduler.resumeAll();
+      const result = options.scheduler.resumeAll();
+      if (result instanceof Promise) {
+        return result.then(() => getTraySummary());
+      }
       return getTraySummary();
     }
   };

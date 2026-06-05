@@ -120,7 +120,17 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
         options.lifecycleAdapter === undefined
           ? createDiagnosticsLifecycleAdapter({
               getBackgroundTaskSummary: () => context.capabilities.invoke<{}, BackgroundTaskSummary>('task.background.summary', {}),
-              scheduler: options.scheduler === undefined ? noopScheduler : options.scheduler
+              scheduler:
+                options.scheduler === undefined
+                  ? {
+                      suspendAll: async () => {
+                        await context.capabilities.invoke<{}, { suspended: true }>('task.scheduler.suspend', {});
+                      },
+                      resumeAll: async () => {
+                        await context.capabilities.invoke<{}, { resumed: true }>('task.scheduler.resume', {});
+                      }
+                    }
+                  : options.scheduler
             })
           : options.lifecycleAdapter;
       const healthCheckProvider =
@@ -346,8 +356,3 @@ function descriptor<TInput, TOutput>(
     outputSchema
   };
 }
-
-const noopScheduler: DiagnosticsLifecycleScheduler = {
-  suspendAll: () => {},
-  resumeAll: () => {}
-};

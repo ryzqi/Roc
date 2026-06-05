@@ -5,9 +5,18 @@ import type { BrowserWindow } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerIpc } from '../../src/main/ipc/register-ipc';
 import type { PluginCapabilityInvoker } from '../../src/main/ipc/plugin-capability-adapter';
+import type { MainKernelBootstrap } from '../../src/main/main-kernel-bootstrap';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import { RocDomainError } from '../../src/main/services/errors';
 import { ipcChannels } from '../../src/shared/ipc';
-import type { BackgroundTask, HostIntegrationStatus, Workspace } from '../../src/shared/types';
+import type {
+  BackgroundTask,
+  BackgroundTaskPreview,
+  HostIntegrationStatus,
+  ShellExecutionRequest,
+  UpdateBackgroundTaskRequest,
+  Workspace
+} from '../../src/shared/types';
 
 const electronMock = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -55,7 +64,7 @@ afterEach(async () => {
 });
 
 function registerWorkspaceHandlers(): void {
-  registerIpc(services, {} as BrowserWindow, {
+  registerIpc(createTestKernel(), {} as BrowserWindow, {
     openMainPage: () => undefined,
     closeMainWindow: () => undefined,
     broadcastTaskUpdated: () => undefined,
@@ -76,7 +85,7 @@ function registerWorkspaceHandlers(): void {
 }
 
 function registerPluginWorkspaceHandlers(invoker: PluginCapabilityInvoker): void {
-  registerIpc(services, {} as BrowserWindow, {
+  registerIpc(createTestKernel(invoker.invokeCapability), {} as BrowserWindow, {
     openMainPage: () => undefined,
     closeMainWindow: () => undefined,
     broadcastTaskUpdated: () => undefined,
@@ -93,7 +102,121 @@ function registerPluginWorkspaceHandlers(invoker: PluginCapabilityInvoker): void
       }
     }),
     syncHostSettings: () => undefined
-  }, invoker);
+  });
+}
+
+function createTestKernel(invokeCapability = invokeTestCapability): MainKernelBootstrap {
+  return {
+    paths: services.paths,
+    runtime: {} as MainKernelBootstrap['runtime'],
+    configService: services.configService,
+    logService: services.logService,
+    secretService: services.secretService,
+    providerRuntimeService: services.providerRuntimeService,
+    performanceObserverService: services.performanceObserverService,
+    start: async () => undefined,
+    shutdown: async () => undefined,
+    syncSettingsSnapshot: () => {
+      services.configService.reloadSettingsDocument();
+    },
+    invokeCapability,
+    subscribeEvent: () => () => undefined
+  };
+}
+
+async function invokeTestCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
+  switch (name) {
+    case 'app.status.get':
+      return services.appService.getStatus() as TOutput;
+    case 'agent.run.start':
+      return await services.deepAgentRuntimeService.startRun(input as Parameters<AppServices['deepAgentRuntimeService']['startRun']>[0]) as TOutput;
+    case 'agent.run.cancel':
+      return services.deepAgentRuntimeService.cancelRun((input as { runId: string }).runId) as TOutput;
+    case 'task.background.create': {
+      const task = services.taskService.createBackgroundTask(input as BackgroundTaskPreview);
+      services.taskSchedulerService.registerTask(task);
+      return task as TOutput;
+    }
+    case 'task.background.pause': {
+      const task = services.taskService.pauseBackgroundTask((input as { id: string }).id);
+      services.taskSchedulerService.unregisterTask(task.id);
+      return task as TOutput;
+    }
+    case 'task.background.resume': {
+      const task = services.taskService.resumeBackgroundTask((input as { id: string }).id);
+      services.taskSchedulerService.registerTask(task);
+      return task as TOutput;
+    }
+    case 'task.background.cancel': {
+      const task = services.taskService.cancelBackgroundTask((input as { id: string }).id);
+      services.taskSchedulerService.unregisterTask(task.id);
+      return task as TOutput;
+    }
+    case 'task.background.delete': {
+      const taskId = (input as { id: string }).id;
+      const result = services.taskService.deleteBackgroundTask(taskId);
+      const deletedTaskId = typeof result.taskId === 'string' ? result.taskId : taskId;
+      services.taskSchedulerService.unregisterTask(deletedTaskId);
+      return result as TOutput;
+    }
+    case 'task.background.update': {
+      const task = services.taskService.updateBackgroundTask(input as UpdateBackgroundTaskRequest);
+      services.taskSchedulerService.registerTask(task);
+      return task as TOutput;
+    }
+    case 'task.background.runNow': {
+      const taskId = (input as { id: string }).id;
+      const runId = await services.taskSchedulerService.fire(taskId);
+      if (runId === null) {
+        throw new RocDomainError({
+          code: 'background_task_run_not_started',
+          message: '后台任务没有启动新的运行。',
+          category: 'conflict',
+          retryable: true,
+          userAction: '请刷新任务工作台，确认任务仍处于可运行状态后重试。'
+        });
+      }
+      return { taskId, runId } as TOutput;
+    }
+    case 'task.scheduler.status':
+      return services.taskSchedulerService.getStatus() as TOutput;
+    case 'task.active.list':
+      return services.taskService.getActiveTasks() as TOutput;
+    case 'task.detail.get':
+      return services.taskService.getTaskDetail({
+        taskId: (input as { taskId: string }).taskId,
+        schedulerRegistered: services.taskSchedulerService.getStatus().registeredTaskCount > 0
+      }) as TOutput;
+    case 'task.scheduledRuns.list':
+      return services.taskService.listScheduledRuns(input as { taskId: string; limit?: number }) as TOutput;
+    case 'task.thread.delete': {
+      const { threadId } = input as { threadId: string };
+      const linkedTaskIds = services.taskService.listBackgroundTasks()
+        .filter((task) => task.threadId === threadId)
+        .map((task) => task.id);
+      const result = (services.taskService as AppServices['taskService'] & {
+        archiveThread: (targetThreadId: string) => { deleted: true; threadId: string };
+      }).archiveThread(threadId);
+      for (const taskId of linkedTaskIds) {
+        services.taskSchedulerService.unregisterTask(taskId);
+      }
+      return result as TOutput;
+    }
+    case 'task.background.openInChat':
+      return services.taskService.openBackgroundTaskInChat((input as { taskId: string }).taskId) as TOutput;
+    case 'workspace.select':
+      return services.workspaceService.selectWorkspace((input as { path: string }).path) as TOutput;
+    case 'workspace.getCurrent':
+      return services.workspaceService.getCurrentWorkspace() as TOutput;
+    case 'mcp.listServers':
+      return services.mcpService.listServers() as TOutput;
+    case 'skills.list':
+      return services.skillService.list() as TOutput;
+    case 'shell.execute':
+      return await services.shellExecutionService.executeAsync(input as ShellExecutionRequest) as TOutput;
+    default:
+      throw new Error(`unexpected_capability:${name}`);
+  }
 }
 
 async function invokeWorkspaceDialogHandler(): Promise<unknown> {
@@ -428,7 +551,7 @@ describe('workspace dialog IPC', () => {
 
   it('does not return fake run-now success when the scheduler starts no run', async () => {
     const broadcastTaskUpdated = vi.fn();
-    registerIpc(services, {} as BrowserWindow, {
+    registerIpc(createTestKernel(), {} as BrowserWindow, {
       openMainPage: () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated,
@@ -544,7 +667,7 @@ describe('workspace dialog IPC', () => {
         registrationError: '全局快捷键注册失败，请检查是否与系统或其他应用冲突。'
       }
     }));
-    registerIpc(services, {} as BrowserWindow, {
+    registerIpc(createTestKernel(), {} as BrowserWindow, {
       openMainPage: () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated: () => undefined,
@@ -591,7 +714,7 @@ describe('workspace dialog IPC', () => {
 
   it('uses a native message box for shell confirmation IPC', async () => {
     const mainWindow = {} as BrowserWindow;
-    registerIpc(services, mainWindow, {
+    registerIpc(createTestKernel(), mainWindow, {
       openMainPage: () => undefined,
       closeMainWindow: () => undefined,
       broadcastTaskUpdated: () => undefined,

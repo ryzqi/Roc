@@ -27,6 +27,9 @@ const taskCapabilities = [
   'task.background.cancel',
   'task.background.delete',
   'task.scheduler.status',
+  'task.scheduler.suspend',
+  'task.scheduler.resume',
+  'task.scheduler.handlePowerResume',
   'task.background.summary',
   'task.thread.messages.list',
   'task.background.list',
@@ -99,6 +102,13 @@ describe('task plugin', () => {
       running: true,
       registeredTaskCount: 0
     });
+    await expect(capabilities.invoke('task.scheduler.suspend', {})).resolves.toEqual({ suspended: true });
+    await expect(capabilities.invoke('task.scheduler.status', {})).resolves.toMatchObject({
+      running: false,
+      registeredTaskCount: 0
+    });
+    await expect(capabilities.invoke('task.scheduler.resume', {})).resolves.toEqual({ resumed: true });
+    await expect(capabilities.invoke('task.scheduler.handlePowerResume', {})).resolves.toEqual({ handled: true });
   });
 
   it('mirrors agent chat run events into the task snapshot contract', async () => {

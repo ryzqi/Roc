@@ -152,11 +152,13 @@ const workspaceCapabilityDescriptors = [
   descriptor('terminal.createSession', terminalSessionCreateRequestSchema, z.custom<TerminalSessionSnapshot>()),
   descriptor('terminal.writeInput', terminalSessionInputRequestSchema, z.object({ delivered: z.literal(true) })),
   descriptor('terminal.resize', terminalSessionResizeRequestSchema, z.custom<TerminalSessionSnapshot>()),
-  descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, z.object({ closed: z.literal(true) }))
+  descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, z.object({ closed: z.literal(true) })),
+  descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>())
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type WorkspacePluginOptions = {
   rootDir?: string;
+  workspaceConfigService?: WorkspaceConfigService;
 };
 
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
@@ -179,7 +181,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
       applyWorkspacePluginSchema(context.database.getConnection());
-      const workspaceService = new WorkspaceService(createWorkspaceConfigAdapter(context));
+      const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
       terminalService = new TerminalSessionService(paths, workspaceService);
@@ -217,6 +219,9 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       registerFileCapabilities(context, workspaceCapabilityDescriptors.slice(2, 8), fileService);
       registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService);
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
+        fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
+      );
     },
     shutdown: async () => {
       if (unsubscribeTerminalOutput !== null) {

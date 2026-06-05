@@ -20,15 +20,19 @@ const domainFiles = [
 ];
 
 describe('IPC domain registration structure', () => {
-  it('keeps register-ipc as an orchestrator over domain-specific registrars', () => {
+  it('keeps register-ipc as an orchestrator over capability adapters and boundary supplements', () => {
     const root = new URL('../../src/main/ipc/', import.meta.url);
     const registerIpcSource = readFileSync(new URL('register-ipc.ts', root), 'utf8');
 
     for (const fileName of domainFiles) {
       expect(existsSync(new URL(fileName, root))).toBe(true);
     }
-    expect(registerIpcSource).toContain('registerAppIpc');
-    expect(registerIpcSource).toContain('registerShellIpc');
+    expect(registerIpcSource).toContain('registerPluginCapabilityIpc');
+    expect(registerIpcSource).toContain('registerSettingsIpc');
+    expect(registerIpcSource).toContain('registerShellConfirmIpc');
+    expect(registerIpcSource).toContain('registerWorkspaceDialogIpc');
+    expect(registerIpcSource).not.toContain('registerAppIpc');
+    expect(registerIpcSource).not.toContain('registerShellIpc');
     expect(registerIpcSource).not.toContain('ipcChannels.gitStatus');
     expect(registerIpcSource).not.toContain('dialog.showOpenDialog');
   });

@@ -146,6 +146,41 @@ describe('diagnostics plugin', () => {
     });
     expect(resumed).toMatchObject({ backgroundPaused: false });
   });
+
+  it('routes default lifecycle pause and resume through task scheduler capabilities', async () => {
+    const plugin = createDiagnosticsPlugin({
+      rootDir: root,
+      performanceAdapter: createDiagnosticsPerformanceAdapter({ db }),
+      taskSnapshotProvider: () => taskSnapshot,
+      rtkStatusProvider: () => ({
+        enabledForAgentCommands: true,
+        binaryPath: join(root, 'rtk', 'roc-task'),
+        configPath: join(root, 'rtk', 'config.json'),
+        teeDir: join(root, 'rtk', 'tee'),
+        resourceState: 'ready'
+      }),
+      schedulerStatusProvider: () => ({
+        running: true,
+        registeredTaskCount: 1,
+        nextFireAt: '2026-06-04T10:00:00.000Z',
+        recentSkippedCount: 0,
+        lastError: null
+      }),
+      healthCheckProvider: async () => ({ status: 'healthy', checks: [] })
+    });
+    const capabilities = new CapabilityRegistry();
+    const calls: string[] = [];
+    registerTaskLifecycleCapabilities(capabilities, calls);
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext(capabilities));
+
+    await capabilities.invoke('lifecycle.pauseBackgroundExecution', {});
+    await capabilities.invoke('lifecycle.resumeBackgroundExecution', {});
+
+    expect(calls).toEqual(['suspend', 'resume']);
+  });
 });
 
 async function initializePlugin(options: {
@@ -178,11 +213,32 @@ async function initializePlugin(options: {
     healthCheckProvider: options.healthCheckProvider
   });
   const capabilities = new CapabilityRegistry();
+  registerTaskLifecycleCapabilities(capabilities, []);
+  for (const descriptor of plugin.manifest.capabilities) {
+    capabilities.declare(plugin.manifest.id, descriptor);
+  }
+  await plugin.initialize(createContext(capabilities));
+  return capabilities;
+}
+
+function registerTaskLifecycleCapabilities(capabilities: CapabilityRegistry, calls: string[]): void {
   const taskSummaryDescriptor = {
     name: 'task.background.summary',
     version: '1.0.0',
     inputSchema: z.object({}),
     outputSchema: z.custom()
+  };
+  const taskSuspendDescriptor = {
+    name: 'task.scheduler.suspend',
+    version: '1.0.0',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ suspended: z.literal(true) })
+  };
+  const taskResumeDescriptor = {
+    name: 'task.scheduler.resume',
+    version: '1.0.0',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ resumed: z.literal(true) })
   };
   capabilities.declare('@roc/plugin-task', taskSummaryDescriptor);
   capabilities.register('@roc/plugin-task', taskSummaryDescriptor, async () => ({
@@ -192,11 +248,16 @@ async function initializePlugin(options: {
     pendingConfirmation: 0,
     nextRunAt: '2026-05-22T01:00:00.000Z'
   }));
-  for (const descriptor of plugin.manifest.capabilities) {
-    capabilities.declare(plugin.manifest.id, descriptor);
-  }
-  await plugin.initialize(createContext(capabilities));
-  return capabilities;
+  capabilities.declare('@roc/plugin-task', taskSuspendDescriptor);
+  capabilities.register('@roc/plugin-task', taskSuspendDescriptor, async () => {
+    calls.push('suspend');
+    return { suspended: true as const };
+  });
+  capabilities.declare('@roc/plugin-task', taskResumeDescriptor);
+  capabilities.register('@roc/plugin-task', taskResumeDescriptor, async () => {
+    calls.push('resume');
+    return { resumed: true as const };
+  });
 }
 
 function createContext(capabilities: CapabilityRegistry): RocPluginContext {

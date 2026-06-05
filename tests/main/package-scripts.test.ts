@@ -52,6 +52,16 @@ describe('package scripts', () => {
     expect(releaseReadinessSmokeHelper).toContain('installerSigningUpdater');
   });
 
+  it('keeps seeded background task smoke timing dynamic', () => {
+    const electronSmokeScript = readFileSync(new URL('../smoke/electron-smoke.mjs', import.meta.url), 'utf8');
+    const smokeIpcHelper = readFileSync(new URL('../smoke/lib/ipc.mjs', import.meta.url), 'utf8');
+
+    expect(smokeIpcHelper).toContain('backgroundTaskNextRunAt');
+    expect(smokeIpcHelper).not.toContain('2026-05-22T01:00:00.000Z');
+    expect(electronSmokeScript).toContain('backgroundTaskNextRunAt');
+    expect(electronSmokeScript).not.toContain("backgroundTaskApiEvidence.tray.nextRunAt === '2026-05-22T01:00:00.000Z'");
+  });
+
   it('keeps release checklist commands aligned with package scripts', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     const releaseChecklist = readFileSync(

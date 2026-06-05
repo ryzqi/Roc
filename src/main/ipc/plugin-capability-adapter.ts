@@ -15,6 +15,7 @@ export type PluginCapabilityDomain =
   | 'memory'
   | 'rtk'
   | 'sessions'
+  | 'shell'
   | 'skills'
   | 'tasks'
   | 'terminal'
@@ -39,6 +40,7 @@ export type PluginCapabilityAdapter = {
 export const pluginCapabilityMappings = [
   mapping('app', 'app.getStatus', ipcChannels.appGetStatus, 'app.status.get', emptyInput),
   mapping('agent', 'agent.getStatus', ipcChannels.agentGetStatus, 'agent.status.get', emptyInput),
+  mapping('agent', 'agent.getConfigPreview', ipcChannels.agentGetConfigPreview, 'agent.config.preview', emptyInput),
   mapping('agent', 'agent.getCapabilityPreview', ipcChannels.agentGetCapabilityPreview, 'agent.capability.preview', firstArg),
   mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', firstArg),
   mapping('chat', 'chat.cancelRun', ipcChannels.chatCancelRun, 'agent.run.cancel', idInput('runId')),
@@ -116,6 +118,7 @@ export const pluginCapabilityMappings = [
   mapping('terminal', 'terminal.resize', ipcChannels.terminalResize, 'terminal.resize', firstArg),
   mapping('terminal', 'terminal.closeSession', ipcChannels.terminalCloseSession, 'terminal.closeSession', firstArg),
   mapping('mcp', 'mcp.listServers', ipcChannels.mcpListServers, 'mcp.listServers', emptyInput),
+  mapping('mcp', 'mcp.ensureExaPreset', ipcChannels.mcpEnsureExaPreset, 'mcp.ensureExaPreset', emptyInput),
   mapping('mcp', 'mcp.upsertServer', ipcChannels.mcpUpsertServer, 'mcp.upsertServer', firstArg),
   mapping('mcp', 'mcp.setServerEnabled', ipcChannels.mcpSetServerEnabled, 'mcp.setServerEnabled', firstArg),
   mapping('mcp', 'mcp.deleteServer', ipcChannels.mcpDeleteServer, 'mcp.deleteServer', idInput('id')),
@@ -126,7 +129,8 @@ export const pluginCapabilityMappings = [
   mapping('skills', 'skills.deleteSkill', ipcChannels.skillsDelete, 'skills.delete', idInput('id')),
   mapping('skills', 'skills.listFiles', ipcChannels.skillsListFiles, 'skills.files.list', firstArg),
   mapping('skills', 'skills.readFile', ipcChannels.skillsReadFile, 'skills.file.read', firstArg),
-  mapping('rtk', 'rtk.status', ipcChannels.rtkStatus, 'rtk.status', emptyInput)
+  mapping('rtk', 'rtk.status', ipcChannels.rtkStatus, 'rtk.status', emptyInput),
+  mapping('shell', 'shell.execute', ipcChannels.shellExecute, 'shell.execute', firstArg)
 ] as const satisfies readonly PluginCapabilityMapping[];
 
 export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker): PluginCapabilityAdapter {

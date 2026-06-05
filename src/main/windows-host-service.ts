@@ -1,5 +1,4 @@
-import type { AppSettings, HostIntegrationStatus } from '../shared/types';
-import type { LifecycleService } from './services/lifecycle-service';
+import type { AppSettings, HostIntegrationStatus, TraySummary } from '../shared/types';
 import type { LogService } from './services/log-service';
 
 type MainWindowLike = {
@@ -46,6 +45,8 @@ type MenuLike = {
   buildFromTemplate: (template: TrayMenuItem[]) => unknown;
 };
 
+type LifecycleResult = TraySummary | Promise<TraySummary>;
+
 type TrayMenuItem = {
   label?: string;
   type?: 'separator';
@@ -82,7 +83,11 @@ export class WindowsHostService {
     private readonly input: {
       app: AppLike;
       globalShortcut: GlobalShortcutLike;
-      lifecycleService: Pick<LifecycleService, 'getTraySummary' | 'pauseBackgroundExecution' | 'resumeBackgroundExecution'>;
+      lifecycleService: {
+        getTraySummary(): LifecycleResult;
+        pauseBackgroundExecution(): LifecycleResult;
+        resumeBackgroundExecution(): LifecycleResult;
+      };
       logService: Pick<LogService, 'info' | 'warn' | 'error'>;
       menu: MenuLike;
       trayIconPath: string;
@@ -196,7 +201,20 @@ export class WindowsHostService {
   }
 
   refreshTray(): void {
-    const summary = this.input.lifecycleService.getTraySummary();
+    this.applyTraySummaryResult(this.input.lifecycleService.getTraySummary());
+  }
+
+  private applyTraySummaryResult(result: LifecycleResult): void {
+    if (result instanceof Promise) {
+      void result.then((summary) => {
+        this.applyTraySummary(summary);
+      });
+      return;
+    }
+    this.applyTraySummary(result);
+  }
+
+  private applyTraySummary(summary: TraySummary): void {
     const tray = this.ensureTray();
     tray.setToolTip(summary.backgroundPaused ? 'Roc 已暂停后台执行' : 'Roc 正在后台运行');
     tray.setContextMenu(
@@ -210,13 +228,10 @@ export class WindowsHostService {
         {
           label: summary.backgroundPaused ? '恢复后台执行' : '暂停后台执行',
           click: () => {
-            if (summary.backgroundPaused) {
-              this.input.lifecycleService.resumeBackgroundExecution();
-            } else {
-              this.input.lifecycleService.pauseBackgroundExecution();
-            }
-            this.input.broadcastTaskUpdated();
-            this.refreshTray();
+            const nextSummary = summary.backgroundPaused
+              ? this.input.lifecycleService.resumeBackgroundExecution()
+              : this.input.lifecycleService.pauseBackgroundExecution();
+            this.applyTrayMutationResult(nextSummary);
           }
         },
         {
@@ -236,6 +251,18 @@ export class WindowsHostService {
         }
       ])
     );
+  }
+
+  private applyTrayMutationResult(result: LifecycleResult): void {
+    const applyMutation = (summary: TraySummary): void => {
+      this.input.broadcastTaskUpdated();
+      this.applyTraySummary(summary);
+    };
+    if (result instanceof Promise) {
+      void result.then(applyMutation);
+      return;
+    }
+    applyMutation(result);
   }
 
   getIntegrationStatus(): HostIntegrationStatus {

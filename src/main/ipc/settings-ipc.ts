@@ -1,31 +1,41 @@
 import { ipcChannels } from '../../shared/ipc';
-import type { ProviderSecretSetRequest, SettingsSnapshot } from '../../shared/types';
+import type {
+  McpServerSnapshot,
+  ProviderSecretSetRequest,
+  SettingsSaveRequest,
+  SettingsSnapshot,
+  SkillSnapshot
+} from '../../shared/types';
 import type { ConfigService } from '../services/config-service';
 import { wrapIpc } from '../services/errors';
-import type { McpService } from '../services/mcp-service';
 import type { ProviderRuntimeService } from '../services/provider-runtime-service';
 import type { SecretService } from '../services/secret-service';
-import type { SkillService } from '../services/skill-service';
 import type { TimedHandle } from './ipc-common';
 import type { AppWindowControls } from './register-ipc';
+
+export type KernelSettingsBridge = {
+  listMcpServers(): Promise<McpServerSnapshot[]>;
+  listSkills(): Promise<SkillSnapshot[]>;
+  syncSettingsSnapshot(request: SettingsSaveRequest): Promise<void> | void;
+};
 
 export function registerSettingsIpc(
   timedHandle: TimedHandle,
   configService: ConfigService,
   secretService: SecretService,
-  mcpService: McpService,
-  skillService: SkillService,
   providerRuntimeService: ProviderRuntimeService,
+  kernelSettings: KernelSettingsBridge,
   controls: Pick<AppWindowControls, 'getHostIntegrationStatus' | 'syncHostSettings'>
 ): void {
   timedHandle(ipcChannels.settingsGet, () =>
-    wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, mcpService, skillService, controls))
+    wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls))
   );
   timedHandle(ipcChannels.settingsSave, (_event, settings) =>
     wrapIpc(async () => {
-      await configService.saveSettingsSnapshotAsync(settings);
-      controls.syncHostSettings(settings.settings);
-      return await buildSettingsSnapshotAsync(configService, secretService, mcpService, skillService, controls);
+      const savedSettings = await configService.saveSettingsSnapshotAsync(settings);
+      await kernelSettings.syncSettingsSnapshot(savedSettings);
+      controls.syncHostSettings(savedSettings.settings);
+      return await buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls);
     })
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>
@@ -55,20 +65,23 @@ export function registerSettingsIpc(
 async function buildSettingsSnapshotAsync(
   configService: ConfigService,
   secretService: SecretService,
-  mcpService: McpService,
-  skillService: SkillService,
+  kernelSettings: Pick<KernelSettingsBridge, 'listMcpServers' | 'listSkills'>,
   controls: Pick<AppWindowControls, 'getHostIntegrationStatus'>
 ): Promise<SettingsSnapshot> {
   const providersConfig = await configService.getProvidersAsync();
   const providerSecretStatus = secretService.listSecretStatuses(providersConfig.providers.map((provider) => provider.id));
+  const [mcpServers, skills] = await Promise.all([
+    kernelSettings.listMcpServers(),
+    kernelSettings.listSkills()
+  ]);
   return {
     settings: await configService.getSettingsAsync(),
     providers: providersConfig.providers,
     defaultModelId: providersConfig.defaultModelId,
     providerSecretStatus,
     permissions: await configService.getPermissionsAsync(),
-    mcpServers: mcpService.listServers(),
-    skills: skillService.list(),
+    mcpServers,
+    skills,
     hostIntegration: controls.getHostIntegrationStatus()
   };
 }

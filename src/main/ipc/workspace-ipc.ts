@@ -1,9 +1,14 @@
 import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
+import type { Workspace } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
 import type { WorkspaceService } from '../services/workspace-service';
 import type { TimedHandle } from './ipc-common';
+
+type WorkspaceSelector = {
+  selectWorkspace(path: string): Promise<Workspace> | Workspace;
+};
 
 export function registerWorkspaceIpc(
   timedHandle: TimedHandle,
@@ -18,7 +23,7 @@ export function registerWorkspaceIpc(
 export function registerWorkspaceDialogIpc(
   timedHandle: TimedHandle,
   mainWindow: BrowserWindow,
-  workspaceService: WorkspaceService
+  workspaceService: WorkspaceSelector
 ): void {
   timedHandle(ipcChannels.workspaceSelectFromDialog, () =>
     wrapIpc(async () => {

@@ -13,6 +13,15 @@ export function registerShellIpc(
   logService: Pick<LogService, 'info'>,
   shellExecutionService: ShellExecutionService
 ): void {
+  registerShellConfirmIpc(timedHandle, mainWindow, logService);
+  timedHandle(ipcChannels.shellExecute, (_event, request) => wrapIpc(() => shellExecutionService.executeAsync(request)));
+}
+
+export function registerShellConfirmIpc(
+  timedHandle: TimedHandle,
+  mainWindow: BrowserWindow,
+  logService: Pick<LogService, 'info'>
+): void {
   timedHandle(ipcChannels.shellConfirm, (_event, request: ShellConfirmationRequest) =>
     wrapIpc(async () => {
       if (process.env.ROC_SMOKE === '1') {
@@ -44,5 +53,4 @@ export function registerShellIpc(
       };
     })
   );
-  timedHandle(ipcChannels.shellExecute, (_event, request) => wrapIpc(() => shellExecutionService.executeAsync(request)));
 }

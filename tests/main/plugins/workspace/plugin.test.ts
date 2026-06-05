@@ -33,7 +33,8 @@ const workspaceCapabilities = [
   'terminal.createSession',
   'terminal.writeInput',
   'terminal.resize',
-  'terminal.closeSession'
+  'terminal.closeSession',
+  'files.streamPdfPreviewResource'
 ];
 
 let root: string;
