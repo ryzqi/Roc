@@ -9,13 +9,13 @@
 ## Verification Evidence
 
 - Electron smoke artifact: `F:\Code\Roc\.artifacts\wave1\electron-smoke.json`
-- Electron smoke checked at: `2026-06-05T06:23:09.385Z`
+- Electron smoke checked at: `2026-06-05T06:32:22.104Z`
 - Electron smoke target: `packaged-exe`, `F:\Code\Roc\release\win-unpacked\Roc.exe`
 - Performance smoke artifact: `F:\Code\Roc\.artifacts\wave1\performance-smoke.json`
-- Performance smoke checked at: `2026-06-05T06:23:30.39Z`
+- Performance smoke checked at: `2026-06-05T06:32:41.345Z`
 - Performance smoke target: `packaged-exe`, `F:\Code\Roc\release\win-unpacked\Roc.exe`
-- Native module probe: `betterSqlite3` loaded; diagnostics sample `perf_95876cad-2549-4579-8a3c-c2c94c6e993f`
-- Performance initial sample: RSS `258.4 MB`, heap used `31.3 MB`, renderer loaded `282.8632 ms`, ready to show `424.1036 ms`
+- Native module probe: `betterSqlite3` loaded; diagnostics sample `perf_eb4d3454-a2c4-42b5-8ff5-774a052e8048`
+- Performance initial sample: RSS `258.2 MB`, heap used `31.3 MB`, renderer loaded `279.1393 ms`, ready to show `423.9507 ms`
 
 ## Migration Evidence
 
