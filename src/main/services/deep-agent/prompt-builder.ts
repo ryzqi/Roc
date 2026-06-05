@@ -131,8 +131,8 @@ export class SystemPromptBuilder {
   }
 
   private buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
-    const { renderFrozenSnapshot } = require('../memory/snapshot');
-    const content = renderFrozenSnapshot(snapshot);
+    const { renderFrozenSnapshotWithPercentage } = require('../memory/snapshot');
+    const content = renderFrozenSnapshotWithPercentage(snapshot);
     return {
       type: 'snapshot',
       content,

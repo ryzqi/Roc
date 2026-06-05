@@ -136,3 +136,27 @@ function buildPart(input: ReadPartInput, content: string, source: FrozenSnapshot
     enabled: true
   };
 }
+
+/**
+ * 使用百分比渲染 usage，减少绝对值微变对缓存的影响
+ */
+export function renderFrozenSnapshotWithPercentage(snapshot: FrozenSnapshot): string {
+  if (snapshot.parts.length === 0) {
+    return '';
+  }
+
+  const parts: string[] = ['<FROZEN_SNAPSHOT>'];
+
+  for (const part of snapshot.parts) {
+    const usagePercent = part.charLimit > 0
+      ? Math.floor((part.charCount / part.charLimit) * 100)
+      : 0;
+    const tag = TAG_BY_KIND[part.kind];
+    parts.push(`<${tag} usage="${usagePercent}%" source="${part.source}">`);
+    parts.push(part.content);
+    parts.push(`</${tag}>`);
+  }
+
+  parts.push('</FROZEN_SNAPSHOT>');
+  return parts.join('\n');
+}
