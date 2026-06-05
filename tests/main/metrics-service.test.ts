@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetricsService } from '../../src/main/services/metrics-service';
 
 describe('MetricsService', () => {
@@ -7,6 +7,10 @@ describe('MetricsService', () => {
 
   beforeEach(() => {
     metricsService = new MetricsService();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('increments counters by metric name and labels', () => {
@@ -65,14 +69,21 @@ describe('MetricsService', () => {
   });
 
   it('filters by type, labels, and timestamp', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     metricsService.incrementCounter('agent.run.started', { mode: 'task' });
-    const since = new Date(Date.now() + 1).toISOString();
+    const since = '2026-01-01T00:00:01.000Z';
+    vi.setSystemTime(new Date(since));
     metricsService.setGauge('scheduler.registered_tasks', 4, { state: 'active' });
     metricsService.recordHistogram('agent.run.duration_ms', 42, { mode: 'task' });
 
     expect(metricsService.query({ type: 'counter' })).toHaveLength(1);
     expect(metricsService.query({ labels: { mode: 'task' } })).toHaveLength(2);
-    expect(metricsService.query({ since })).toHaveLength(0);
+    expect(metricsService.query({ since }).map((metric) => metric.name)).toEqual([
+      'agent.run.duration_ms',
+      'scheduler.registered_tasks'
+    ]);
+    expect(metricsService.query({ since: '2026-01-01T00:00:02.000Z' })).toHaveLength(0);
   });
 
   it('caps samples per metric to bound memory use', () => {

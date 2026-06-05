@@ -1,19 +1,25 @@
 import { z } from 'zod';
 
 import type {
+  AgentCapabilityPreview,
   AgentRuntimeStatus,
+  ApprovalMode,
   ChatCancelRunResult,
   ChatResumeRunRequest,
   ChatResumeRunResult,
   ChatStartRunRequest,
   ChatStartRunResult,
+  EnabledCapabilities,
+  McpServerSnapshot,
   SessionMessageEntry,
   SessionMessageSearchRequest,
-  SessionMessageSearchResult
+  SessionMessageSearchResult,
+  SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { buildAgentCapabilityPreview } from './capability-preview';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
-import { AgentPluginRuntime } from './runtime';
+import { AgentPluginRuntime, type AgentCapabilityPreviewProvider } from './runtime';
 import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
@@ -110,7 +116,9 @@ const agentRuntimeStatusSchema = z.object({
   execution: z.enum(['blocked_until_provider_configured', 'ready'])
 }) satisfies z.ZodType<AgentRuntimeStatus>;
 
-export const agentCapabilityDescriptors = [
+const agentCapabilityPreviewSchema = z.custom<AgentCapabilityPreview>();
+
+const baseAgentCapabilityDescriptors = [
   descriptor('agent.status.get', z.object({}), agentRuntimeStatusSchema),
   descriptor('agent.run.start', chatStartRunRequestSchema, chatStartRunResultSchema),
   descriptor('agent.run.cancel', z.object({ runId: z.string() }), chatCancelRunResultSchema),
@@ -119,13 +127,30 @@ export const agentCapabilityDescriptors = [
   descriptor('agent.sessions.search', sessionSearchInputSchema, sessionSearchResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
+const agentCapabilityPreviewDescriptor = descriptor(
+  'agent.capability.preview',
+  enabledCapabilitiesSchema,
+  agentCapabilityPreviewSchema
+);
+
+export const agentCapabilityDescriptors = [
+  ...baseAgentCapabilityDescriptors,
+  agentCapabilityPreviewDescriptor
+] as const satisfies readonly CapabilityDescriptor[];
+
 export type AgentPluginOptions = {
+  capabilityPreview?: {
+    approvalModeProvider: () => ApprovalMode;
+  };
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
+  statusProvider?: () => AgentRuntimeStatus;
 };
 
 export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
   let runtime: AgentPluginRuntime | null = null;
+  const capabilities =
+    options.capabilityPreview === undefined ? baseAgentCapabilityDescriptors : agentCapabilityDescriptors;
   return {
     manifest: {
       id: pluginId,
@@ -135,42 +160,70 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       loadPhase: 'critical',
       required: true,
       order: 10,
-      dependencies: [],
-      capabilities: agentCapabilityDescriptors
+      dependencies: options.capabilityPreview === undefined ? [] : ['@roc/plugin-mcp', '@roc/plugin-skills'],
+      capabilities
     },
     initialize: async (context) => {
       const db = context.database.getConnection();
       applyAgentPluginSchema(db);
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       runtime = new AgentPluginRuntime({
+        capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         eventBus: context.eventBus,
         modelFactory,
         pluginId,
         repository: new AgentSessionRepository(db),
-        status: options.status
+        status: options.status,
+        statusProvider: options.statusProvider
       });
       registerAgentCapabilities(context, runtime);
     },
     shutdown: async () => {
+      if (runtime !== null) {
+        await runtime.shutdown();
+      }
       runtime = null;
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
 }
 
+function createCapabilityPreviewProvider(
+  context: RocPluginContext,
+  options: AgentPluginOptions
+): AgentCapabilityPreviewProvider | undefined {
+  if (options.capabilityPreview === undefined) {
+    return undefined;
+  }
+  const capabilityPreviewOptions = options.capabilityPreview;
+  return async ({ requestedCapabilities, runtimeStatus }) =>
+    buildAgentCapabilityPreview({
+      approvalMode: capabilityPreviewOptions.approvalModeProvider(),
+      mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
+      requestedCapabilities,
+      runtimeStatus,
+      skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {})
+    });
+}
+
 export const agentPlugin = createAgentPlugin();
 
 function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPluginRuntime): void {
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[0], async () => runtime.getStatus());
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[1], async (input) => runtime.startRun(input as ChatStartRunRequest));
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[2], async (input) => runtime.cancelRun(input as { runId: string }));
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[3], async (input) => runtime.resumeRun(input as ChatResumeRunRequest));
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[4], async (input) =>
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async (input) => runtime.startRun(input as ChatStartRunRequest));
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) => runtime.cancelRun(input as { runId: string }));
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[3], async (input) => runtime.resumeRun(input as ChatResumeRunRequest));
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[4], async (input) =>
     runtime.listSessionMessages(input as { threadId: string; limit?: number })
   );
-  context.capabilities.register(pluginId, agentCapabilityDescriptors[5], async (input) =>
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[5], async (input) =>
     runtime.searchSessionMessages(input as SessionMessageSearchRequest)
   );
+  if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
+    context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) =>
+      runtime.getCapabilityPreview(input as EnabledCapabilities)
+    );
+  }
 }
 
 function descriptor<TInput, TOutput>(

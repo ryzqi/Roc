@@ -124,7 +124,7 @@ class ScopedCapabilityRegistry implements RocCapabilityRegistry {
 
   async invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
     const ownerPluginId = this.options.capabilityOwners.get(name);
-    if (ownerPluginId !== undefined) {
+    if (ownerPluginId !== undefined && ownerPluginId !== this.options.plugin.manifest.id) {
       if (!this.options.plugin.manifest.dependencies.includes(ownerPluginId)) {
         throw new Error('capability_dependency_not_declared');
       }

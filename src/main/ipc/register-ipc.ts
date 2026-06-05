@@ -1,6 +1,6 @@
 import { type BrowserWindow, ipcMain } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
-import type { AppSettings, HostIntegrationStatus, IpcResult, TaskUpdateEvent } from '../../shared/types';
+import type { AppSettings, HostIntegrationStatus, IpcResult, TaskUpdateEvent, Workspace } from '../../shared/types';
 import type { AppServices } from '../services/app-service';
 import { wrapIpc } from '../services/errors';
 import { registerAgentIpc } from './agent-ipc';
@@ -108,7 +108,6 @@ export function registerIpc(
     registerPluginCapabilityIpc(timedHandle, pluginCapabilityInvoker);
     registerLegacyAppSupplementIpc(timedHandle, controls);
     registerWindowIpc(timedHandle, mainWindow, controls);
-    registerLegacyTaskSupplementIpc(timedHandle, services, controls);
     registerSettingsIpc(
       timedHandle,
       services.configService,
@@ -121,9 +120,9 @@ export function registerIpc(
     registerLegacyMcpSupplementIpc(timedHandle, services);
     registerLegacyAgentSupplementIpc(timedHandle, services);
     registerWorkspaceDialogIpc(timedHandle, mainWindow, services.workspaceService);
-    registerFilesDialogIpc(timedHandle, mainWindow, services.workspaceService);
-    registerGitIpc(timedHandle, services.gitService);
-    registerTerminalIpc(timedHandle, services.terminalSessionService);
+    registerFilesDialogIpc(timedHandle, mainWindow, {
+      getCurrentWorkspace: () => pluginCapabilityInvoker.invokeCapability<{}, Workspace | null>('workspace.getCurrent', {})
+    });
     registerShellIpc(timedHandle, mainWindow, services.logService, services.shellExecutionService);
     return;
   }
@@ -187,59 +186,8 @@ function registerLegacyAgentSupplementIpc(timedHandle: (channel: string, handler
   timedHandle(ipcChannels.agentGetConfigPreview, () =>
     wrapIpc(() => services.agentService.getDeepAgentConfigPreview())
   );
-  timedHandle(ipcChannels.agentGetCapabilityPreview, (_event, request) =>
-    wrapIpc(() => services.agentService.getCapabilityPreview(request))
-  );
 }
 
 function registerLegacyMcpSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, services: AppServices): void {
   timedHandle(ipcChannels.mcpEnsureExaPreset, () => wrapIpc(() => services.mcpService.ensureExaPreset()));
-}
-
-function registerLegacyTaskSupplementIpc(
-  timedHandle: (channel: string, handler: IpcMainHandler) => void,
-  services: AppServices,
-  controls: Pick<AppWindowControls, 'broadcastTaskUpdated'>
-): void {
-  timedHandle(ipcChannels.tasksGetThreadMessages, (_event, request) =>
-    wrapIpc(() => services.taskService.listThreadMessages(request.threadId))
-  );
-  timedHandle(ipcChannels.tasksListBackgroundTasks, () => wrapIpc(() => services.taskService.listBackgroundTasks()));
-  timedHandle(ipcChannels.tasksDeleteThread, (_event, request) =>
-    wrapIpc(() => {
-      const linkedTaskIds = services.taskService
-        .listBackgroundTasks()
-        .filter((task) => task.threadId === request.threadId)
-        .map((task) => task.id);
-      const result = services.taskService.archiveThread(request.threadId);
-      for (const taskId of linkedTaskIds) {
-        services.taskSchedulerService.unregisterTask(taskId);
-      }
-      controls.broadcastTaskUpdated();
-      return result;
-    })
-  );
-  timedHandle(ipcChannels.tasksGetActiveTasks, () => wrapIpc(() => services.taskService.getActiveTasks()));
-  timedHandle(ipcChannels.tasksGetTaskDetail, (_event, request) =>
-    wrapIpc(() =>
-      services.taskService.getTaskDetail({
-        taskId: request.taskId,
-        schedulerRegistered: services.taskSchedulerService.getStatus().registeredTaskCount > 0
-      })
-    )
-  );
-  timedHandle(ipcChannels.tasksListScheduledRuns, (_event, request) =>
-    wrapIpc(() => services.taskService.listScheduledRuns(request))
-  );
-  timedHandle(ipcChannels.tasksUpdateBackgroundTask, (_event, request) =>
-    wrapIpc(() => {
-      const task = services.taskService.updateBackgroundTask(request);
-      services.taskSchedulerService.refreshTask(task);
-      controls.broadcastTaskUpdated({ kind: 'task_status_changed', taskId: task.id, status: task.status });
-      return task;
-    })
-  );
-  timedHandle(ipcChannels.tasksOpenInChat, (_event, request) =>
-    wrapIpc(() => services.taskService.openBackgroundTaskInChat(request.taskId))
-  );
 }

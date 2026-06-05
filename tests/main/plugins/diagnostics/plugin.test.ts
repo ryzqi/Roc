@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocPluginContext } from '../../../../src/main/kernel/types';
@@ -132,7 +133,17 @@ describe('diagnostics plugin', () => {
     expect(health).toEqual(healthCheck);
     expect(scheduler.suspendAll).toHaveBeenCalledTimes(1);
     expect(scheduler.resumeAll).toHaveBeenCalledTimes(1);
-    expect(paused).toMatchObject({ backgroundPaused: true });
+    expect(paused).toMatchObject({
+      backgroundPaused: true,
+      backgroundTasks: {
+        total: 1,
+        running: 1,
+        failed: 0,
+        pendingConfirmation: 0,
+        nextRunAt: '2026-05-22T01:00:00.000Z'
+      },
+      nextRunAt: '2026-05-22T01:00:00.000Z'
+    });
     expect(resumed).toMatchObject({ backgroundPaused: false });
   });
 });
@@ -167,6 +178,20 @@ async function initializePlugin(options: {
     healthCheckProvider: options.healthCheckProvider
   });
   const capabilities = new CapabilityRegistry();
+  const taskSummaryDescriptor = {
+    name: 'task.background.summary',
+    version: '1.0.0',
+    inputSchema: z.object({}),
+    outputSchema: z.custom()
+  };
+  capabilities.declare('@roc/plugin-task', taskSummaryDescriptor);
+  capabilities.register('@roc/plugin-task', taskSummaryDescriptor, async () => ({
+    total: 1,
+    running: 1,
+    failed: 0,
+    pendingConfirmation: 0,
+    nextRunAt: '2026-05-22T01:00:00.000Z'
+  }));
   for (const descriptor of plugin.manifest.capabilities) {
     capabilities.declare(plugin.manifest.id, descriptor);
   }

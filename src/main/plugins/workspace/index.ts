@@ -35,7 +35,7 @@ import type {
   Workspace,
   WorkspaceSelectRequest
 } from '../../../shared/types';
-import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { defaultSettings } from '../../services/config/defaults';
 import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
 import { GitService } from '../../services/git-service';
@@ -44,7 +44,11 @@ import { TerminalSessionService } from '../../services/terminal-session-service'
 import { WorkspaceService, type WorkspaceConfigService } from '../../services/workspace-service';
 import { registerFileCapabilities } from './file-capabilities';
 import { registerGitCapabilities } from './git-capabilities';
-import { registerTerminalCapabilities } from './terminal-capabilities';
+import {
+  registerTerminalCapabilities,
+  terminalSessionExitEventType,
+  terminalSessionOutputEventType
+} from './terminal-capabilities';
 
 const pluginId = '@roc/plugin-workspace';
 const capabilityVersion = '1.0.0';
@@ -157,6 +161,8 @@ export type WorkspacePluginOptions = {
 
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
   let terminalService: TerminalSessionService | null = null;
+  let unsubscribeTerminalOutput: EventSubscription | null = null;
+  let unsubscribeTerminalExit: EventSubscription | null = null;
   return {
     manifest: {
       id: pluginId,
@@ -177,6 +183,30 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
       terminalService = new TerminalSessionService(paths, workspaceService);
+      unsubscribeTerminalOutput = terminalService.onOutput((payload) => {
+        void context.eventBus.publish({
+          type: terminalSessionOutputEventType,
+          source: pluginId,
+          payload,
+          createdAt: new Date().toISOString()
+        }).catch((error: unknown) => {
+          context.logger.error('Workspace terminal output event publish failed.', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      });
+      unsubscribeTerminalExit = terminalService.onExit((payload) => {
+        void context.eventBus.publish({
+          type: terminalSessionExitEventType,
+          source: pluginId,
+          payload,
+          createdAt: new Date().toISOString()
+        }).catch((error: unknown) => {
+          context.logger.error('Workspace terminal exit event publish failed.', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      });
 
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[0], async () =>
         workspaceService.getCurrentWorkspace()
@@ -189,6 +219,14 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
     },
     shutdown: async () => {
+      if (unsubscribeTerminalOutput !== null) {
+        unsubscribeTerminalOutput();
+      }
+      if (unsubscribeTerminalExit !== null) {
+        unsubscribeTerminalExit();
+      }
+      unsubscribeTerminalOutput = null;
+      unsubscribeTerminalExit = null;
       if (terminalService !== null) {
         terminalService.shutdown();
       }

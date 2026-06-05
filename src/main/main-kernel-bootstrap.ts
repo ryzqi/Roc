@@ -5,7 +5,7 @@ import type { RuntimeMetricsProvider } from './services/diagnostics-service';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
 import { activatePluginDataMigration } from './infrastructure/migration/monolith-to-plugins';
 import { KernelRuntime } from './kernel/kernel-runtime';
-import type { RocPlugin } from './kernel/types';
+import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';
 import { createAppPlugin } from './plugins/app';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
 import { createAgentPlugin } from './plugins/agent';
@@ -50,6 +50,10 @@ export type MainKernelBootstrap = {
   start(): Promise<void>;
   shutdown(): Promise<void>;
   invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
+  subscribeEvent<TPayload>(
+    type: string,
+    handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>
+  ): EventSubscription;
 };
 
 export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): MainKernelBootstrap {
@@ -97,6 +101,12 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     },
     async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
       return await runtime.invokeCapability<TInput, TOutput>(name, input);
+    },
+    subscribeEvent<TPayload>(
+      type: string,
+      handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>
+    ): EventSubscription {
+      return runtime.subscribeEvent(type, handler);
     }
   };
 }
@@ -128,23 +138,38 @@ function createDefaultMainKernelPlugins(input: {
 
   return [
     createAppPlugin({
-      statusProvider: () =>
-        createAppStatus({
+      statusProvider: () => {
+        configService.reloadSettingsDocument();
+        return createAppStatus({
           configService,
-          defaultWorkspace,
           getAppearance: input.getAppearance,
           isPackaged: input.isPackaged === true,
           paths: input.paths,
           version: input.version === undefined ? '0.1.0' : input.version
-        })
+        });
+      }
     }),
     createAgentPlugin({
-      modelFactory: new LangChainAgentModelFactoryAdapter(modelFactory),
-      status: createAgentRuntimeStatus(configService)
+      capabilityPreview: {
+        approvalModeProvider: () => {
+          configService.reloadSettingsDocument();
+          return configService.getPermissions().mode;
+        }
+      },
+      modelFactory: new LangChainAgentModelFactoryAdapter(modelFactory, {
+        beforeCreate: () => {
+          configService.reloadSettingsDocument();
+        }
+      }),
+      statusProvider: () => {
+        configService.reloadSettingsDocument();
+        return createAgentRuntimeStatus(configService);
+      }
     }),
     createMemoryPlugin({
       memoryRoot: input.paths.memoryDir,
-      workspace: defaultWorkspace === null ? null : { path: defaultWorkspace, label: defaultWorkspace }
+      workspace: defaultWorkspace === null ? null : { path: defaultWorkspace, label: defaultWorkspace },
+      getMemorySettings: () => configService.getSettings().memory
     }),
     createTaskPlugin(),
     createWorkspacePlugin({ rootDir: input.paths.root }),
@@ -155,6 +180,7 @@ function createDefaultMainKernelPlugins(input: {
       workspacePath: defaultWorkspace === null ? undefined : defaultWorkspace
     }),
     createDiagnosticsPlugin({
+      performanceObserverService: input.performanceObserverService,
       rootDir: input.paths.root,
       runtimeMetricsProvider: input.runtimeMetricsProvider
     })
@@ -163,14 +189,14 @@ function createDefaultMainKernelPlugins(input: {
 
 function createAppStatus(input: {
   configService: ConfigService;
-  defaultWorkspace: string | null;
   getAppearance?: () => SystemAppearanceSnapshot;
   isPackaged: boolean;
   paths: RocPaths;
   version: string;
 }): AppStatus {
-  const workspaceLabel = input.defaultWorkspace === null ? '未选择工作区' : input.defaultWorkspace;
-  const workspaceReady = input.defaultWorkspace === null ? 'blocked' : 'ready';
+  const defaultWorkspace = input.configService.getSettings().defaultWorkspace;
+  const workspaceLabel = defaultWorkspace === null ? '未选择工作区' : defaultWorkspace;
+  const workspaceReady = defaultWorkspace === null ? 'blocked' : 'ready';
   return {
     appName: 'Roc',
     version: input.version,
@@ -178,7 +204,7 @@ function createAppStatus(input: {
     startedAt: new Date().toISOString(),
     appearance: input.getAppearance === undefined ? defaultAppearance() : input.getAppearance(),
     workspace: {
-      selectedPath: input.defaultWorkspace,
+      selectedPath: defaultWorkspace,
       label: workspaceLabel
     },
     paths: input.paths.snapshot(),

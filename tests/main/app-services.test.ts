@@ -1,7 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeAppServicesTest, cleanupAppServicesTest, normalizeLineEndings, type AppServicesTestContext } from './app-service-fixtures';
+import { createAppServices } from '../../src/main/services/app-service';
+import { PerformanceObserverService } from '../../src/main/services/performance-observer-service';
 
 describe('Roc foundation services', () => {
   let context: AppServicesTestContext;
@@ -185,6 +188,50 @@ describe('Roc foundation services', () => {
       })
     );
     expect(existsSync(resolve('scripts/package-dir.mjs'))).toBe(true);
+  });
+
+  it('can share an injected performance observer with diagnostics samples', async () => {
+    await cleanupAppServicesTest(context);
+    const performanceObserverService = new PerformanceObserverService();
+    const root = mkdtempSync(join(tmpdir(), 'roc-app-services-shared-performance-'));
+    const services = createAppServices(
+      root,
+      undefined,
+      undefined,
+      undefined,
+      performanceObserverService
+    );
+    context = {
+      root,
+      services
+    };
+    services.appService.initializeCritical();
+
+    performanceObserverService.record({
+      phase: 'ipc_call',
+      label: 'roc:shell:confirm',
+      startedAtMs: 10,
+      durationMs: 3,
+      metadata: {
+        channel: 'roc:shell:confirm',
+        ok: true
+      }
+    });
+
+    const sample = services.diagnosticsService.samplePerformance({
+      mode: 'test',
+      memoryBudgetMb: 300
+    });
+
+    expect(sample.timing.samples).toContainEqual(
+      expect.objectContaining({
+        label: 'roc:shell:confirm',
+        metadata: {
+          channel: 'roc:shell:confirm',
+          ok: true
+        }
+      })
+    );
   });
 
   it('includes Electron window and process metrics in performance samples', async () => {

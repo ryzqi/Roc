@@ -14,7 +14,7 @@
 
 - Phase 1-2 已完成。
 - Current shared types remain the external renderer contract until Phase 4-5 replace renderer IPC wiring.
-- MCP client API source of truth is local package export: `MultiServerMCPClient` from `@langchain/mcp-adapters`.
+- MCP client API source of truth is the installed `@langchain/mcp-adapters@1.1.3` package export and README: `MultiServerMCPClient`, `mcpServers`, `getTools()`, and `close()`. If the official latest docs show a different config shape, do not silently switch; update the dependency and tests in the same task.
 
 ## File Structure
 
@@ -49,7 +49,7 @@
 | `@roc/plugin-runtime-tools` | `rtk.status`, `shell.execute`, `shell.confirm`, `web.read` |
 | `@roc/plugin-diagnostics` | `diagnostics.samplePerformance`, `diagnostics.createPackage`, `diagnostics.runChecks`, `diagnostics.getMetricsSnapshot`, `diagnostics.runHealthCheck`, `lifecycle.getTraySummary`, `lifecycle.pauseBackgroundExecution`, `lifecycle.resumeBackgroundExecution` |
 
-Each capability uses the current shared request/result type with the same name as the existing preload method.
+Capability names are internal microkernel names. They may differ from existing preload method names. Each capability must use the current shared request/result type from the existing preload contract, and Phase 5 must provide the explicit preload-method-to-capability mapping.
 
 ## Task 1: Workspace Plugin
 
@@ -87,7 +87,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Write tests against local package API**
 
-Assert adapter imports `MultiServerMCPClient`, not `MCPClient`. Assert tool loading uses `getTools()` and server inspection uses current config from the config store.
+Assert adapter imports `MultiServerMCPClient`, not `MCPClient`. Assert config uses the installed package's `mcpServers` shape, tool loading uses `getTools()`, cleanup calls `close()`, and server inspection uses current config from the config store.
 
 Run: `pnpm test -- tests/main/plugins/mcp`
 Expected: FAIL.

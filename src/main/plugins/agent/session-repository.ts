@@ -63,12 +63,13 @@ export class AgentSessionRepository {
     const eventId = `event_${randomUUID()}`;
     const existingThreadId = input.threadId === undefined ? null : requireNonEmpty(input.threadId, 'thread_id_empty');
     const threadId = existingThreadId === null ? `thread_${randomUUID()}` : existingThreadId;
-    const runNumber = existingThreadId === null ? 1 : this.nextRunNumber(threadId);
+    const hasActiveThread = existingThreadId !== null && this.hasActiveThread(threadId);
+    const runNumber = existingThreadId === null || !hasActiveThread ? 1 : this.nextRunNumber(threadId);
     const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
 
     this.db
       .transaction(() => {
-        if (existingThreadId === null) {
+        if (existingThreadId === null || !hasActiveThread) {
           this.db
             .prepare(
               `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
@@ -76,7 +77,6 @@ export class AgentSessionRepository {
             )
             .run(threadId, 'chat', input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now);
         } else {
-          this.requireActiveThread(threadId);
           this.db
             .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
             .run('waiting_next_turn', now, threadId);
@@ -277,12 +277,16 @@ export class AgentSessionRepository {
   }
 
   private requireActiveThread(threadId: string): void {
+    if (!this.hasActiveThread(threadId)) {
+      throw new Error('task_thread_not_found');
+    }
+  }
+
+  private hasActiveThread(threadId: string): boolean {
     const row = this.db.prepare('SELECT id FROM task_threads WHERE id = ? AND archived_at IS NULL').get(threadId) as
       | { id: string }
       | undefined;
-    if (row === undefined) {
-      throw new Error('task_thread_not_found');
-    }
+    return row !== undefined;
   }
 
   private findThreadTitle(threadId: string): string | null {

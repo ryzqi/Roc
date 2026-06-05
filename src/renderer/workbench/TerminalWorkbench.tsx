@@ -116,10 +116,12 @@ export function TerminalWorkbench({
         rows: Math.max(24, Math.floor((terminalHostRef.current.clientHeight || 420) / 18))
       })
       .then((result) => {
-        if (!result.ok || disposed) {
-          if (!result.ok) {
-            updateWorkspaceData({ terminalSession: null, terminalError: result.error.message });
-          }
+        if (!result.ok) {
+          updateWorkspaceData({ terminalSession: null, terminalError: result.error.message });
+          return;
+        }
+        if (disposed) {
+          void terminalClient.api.terminal.closeSession({ sessionId: result.data.id });
           return;
         }
         sessionRef.current = result.data;
@@ -201,7 +203,12 @@ export function TerminalWorkbench({
   return (
     <section className="tool-panel workbench-surface workbench-surface--terminal">
       <div className="workbench-terminal">
-        <div ref={terminalHostRef} className="terminal-xterm-host" data-testid="terminal-xterm" />
+        <div
+          ref={terminalHostRef}
+          className="terminal-xterm-host"
+          data-session-id={state.terminalSession?.id}
+          data-testid="terminal-xterm"
+        />
         <footer className="workbench-footer-bar terminal-status-bar">
           <span data-role="path">{state.terminalSession?.cwd ?? state.workspace.path}</span>
           {terminalFooterStatus === null ? null : <span data-role="status" data-state={terminalStatusLabel}>{terminalFooterStatus}</span>}

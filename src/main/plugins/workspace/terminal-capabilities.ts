@@ -9,6 +9,8 @@ import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types'
 import type { TerminalSessionService } from '../../services/terminal-session-service';
 
 const pluginId = '@roc/plugin-workspace';
+export const terminalSessionOutputEventType = 'terminal.session.output';
+export const terminalSessionExitEventType = 'terminal.session.exit';
 
 export function registerTerminalCapabilities(
   context: RocPluginContext,

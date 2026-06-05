@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { McpServerSnapshot, McpServerTestResult } from '../../../shared/types';
 import { StatusPill } from '../../components/StatusPill';
 import type { LoadedState } from '../../loaded-state';
@@ -22,9 +23,35 @@ export function McpManagementPanel({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
+  const updateLoadedStateRef = useRef(updateLoadedState);
+  updateLoadedStateRef.current = updateLoadedState;
+
   function resolveClient(): RocClient {
     return client ?? createRocClient();
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    const mcpClient = resolveClient();
+    void mcpClient.api.mcp
+      .listServers()
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        const mcpServers = unwrap<McpServerSnapshot[]>('mcp servers', result);
+        updateLoadedStateRef.current({
+          mcpServers,
+          selectedMcpServers: mcpServers.filter((item) => item.enabled).map((item) => item.id)
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('MCP state refresh failed.', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   return (
     <section className="single-panel" data-testid="mcp-management">

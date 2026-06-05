@@ -4,16 +4,23 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
   ActiveTaskItem,
+  AgentCapabilityManifest,
+  AgentCapabilityPreview,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
+  BackgroundTaskSummary,
   BackgroundTaskTrigger,
   ChatStartRunRequest,
   EnabledCapabilities,
   ScheduledTaskRun,
+  TaskDeleteThreadResult,
+  TaskDetail,
   TaskEvent,
+  TaskRun,
   TaskSnapshot,
   TaskStatus,
+  TaskThread,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
 
@@ -71,6 +78,21 @@ type ScheduledTaskRunRow = {
   status: ScheduledTaskRun['status'];
   skip_reason: string | null;
 };
+
+type TaskRunRow = {
+  id: string;
+  thread_id: string;
+  run_number: number;
+  user_input: string;
+  status: TaskRun['status'];
+  started_at: string;
+  ended_at: string | null;
+  model_id: string | null;
+  enabled_capabilities_json: string;
+};
+
+const taskDetailRunHistoryLimit = 20;
+const taskDetailRecentEventLimit = 20;
 
 const emptyCapabilities: EnabledCapabilities = {
   mcpServers: [],
@@ -238,6 +260,24 @@ export class TaskRepository {
     return mapBackgroundTask(row);
   }
 
+  findBackgroundTaskByRunId(runId: string): BackgroundTask | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+                trigger_type, cron_expression,
+                allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+                requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+                enabled_capabilities_json
+         FROM background_tasks
+         WHERE run_id = ?`
+      )
+      .get(runId) as BackgroundTaskRow | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return mapBackgroundTask(row);
+  }
+
   listBackgroundTasks(): BackgroundTask[] {
     const rows = this.db
       .prepare(
@@ -251,6 +291,20 @@ export class TaskRepository {
       )
       .all() as BackgroundTaskRow[];
     return rows.map(mapBackgroundTask);
+  }
+
+  archiveThread(threadId: string): TaskDeleteThreadResult {
+    const thread = this.requireActiveThread(threadId);
+    const now = new Date().toISOString();
+    this.db
+      .transaction(() => {
+        this.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE thread_id = ?').run('archived', now, thread.id);
+        this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?').run('archived', now, now, thread.id);
+      })();
+    return {
+      deleted: true,
+      threadId: thread.id
+    };
   }
 
   listSchedulableBackgroundTasks(): BackgroundTask[] {
@@ -376,8 +430,112 @@ export class TaskRepository {
          SET run_id = ?, last_run_at = ?, last_run_status = ?, run_count = run_count + 1, next_run_at = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(input.runId, input.firedAt, 'success', input.nextRunAt, input.firedAt, task.id);
+      .run(input.runId, input.firedAt, null, input.nextRunAt, input.firedAt, task.id);
     return this.requireBackgroundTask(task.id);
+  }
+
+  recordAgentRunStarted(input: {
+    runId: string;
+    threadId: string;
+    userInput: string;
+    providerId: string;
+    modelId: string;
+    enabledCapabilities: EnabledCapabilities;
+    capabilityPreview?: AgentCapabilityPreview;
+    createdAt: string;
+  }): TaskRun {
+    const existingRun = this.findRun(input.runId);
+    if (existingRun !== null) {
+      return existingRun;
+    }
+
+    const existingThread = this.findActiveThread(input.threadId);
+    const runNumber = existingThread === null ? 1 : this.nextRunNumber(input.threadId);
+    const title = input.userInput.trim().slice(0, 60);
+    const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
+    this.db
+      .transaction(() => {
+        if (existingThread === null) {
+          this.db
+            .prepare(
+              `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(input.threadId, 'chat', title, input.userInput, 'running', input.createdAt, input.createdAt);
+        } else {
+          this.db
+            .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+            .run('running', input.createdAt, input.threadId);
+        }
+
+        this.db
+          .prepare(
+            `INSERT INTO task_runs
+             (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(input.runId, input.threadId, runNumber, input.userInput, 'running', input.createdAt, null, input.modelId, enabledCapabilitiesJson);
+        this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'message',
+          payload: {
+            role: 'user',
+            content: input.userInput,
+            enabledCapabilities: input.enabledCapabilities
+          },
+          createdAt: input.createdAt
+        });
+        this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'context_manifest',
+          payload:
+            input.capabilityPreview === undefined
+              ? createFallbackCapabilityManifest(input.enabledCapabilities)
+              : createAgentCapabilityManifest(input.capabilityPreview),
+          createdAt: input.createdAt
+        });
+        this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'agent_update',
+          payload: {
+            status: 'running'
+          },
+          createdAt: input.createdAt
+        });
+      })();
+    return this.requireRun(input.runId);
+  }
+
+  getBackgroundTaskSummary(): BackgroundTaskSummary {
+    const rows = this.db
+      .prepare(
+        `SELECT status, next_run_at
+         FROM background_tasks
+         WHERE status != 'archived'
+           AND EXISTS (
+             SELECT 1
+             FROM task_threads
+             WHERE task_threads.id = background_tasks.thread_id
+               AND task_threads.archived_at IS NULL
+           )
+         ORDER BY updated_at DESC`
+      )
+      .all() as Array<{ status: TaskStatus; next_run_at: string | null }>;
+    const futureRuns = rows
+      .map((row) => row.next_run_at)
+      .filter((value): value is string => value !== null)
+      .sort();
+
+    return {
+      total: rows.length,
+      running: rows.filter((row) => row.status === 'running').length,
+      failed: rows.filter((row) => row.status === 'failed').length,
+      pendingConfirmation: rows.filter((row) => row.status === 'pending_confirmation').length,
+      nextRunAt: futureRuns.length === 0 ? null : futureRuns[0]
+    };
   }
 
   getSnapshot(): TaskSnapshot {
@@ -415,6 +573,208 @@ export class TaskRepository {
         createdAt: task.createdAt,
         updatedAt: task.updatedAt
       }));
+  }
+
+  getTaskDetail(input: { taskId: string; schedulerRegistered: boolean }): TaskDetail {
+    const task = this.requireBackgroundTask(input.taskId);
+    const thread = this.requireActiveThread(task.threadId);
+    const runHistory = this.listRunsForThread(task.threadId, taskDetailRunHistoryLimit);
+    const lastRunId = runHistory[0]?.id ?? null;
+    const recentEvents = mergeTaskEvents([
+      this.listRecentEventsForThread(task.threadId, taskDetailRecentEventLimit),
+      lastRunId === null ? [] : this.listEventsForRun(task.threadId, lastRunId)
+    ]);
+    return {
+      threadId: task.threadId,
+      taskId: task.id,
+      thread,
+      backgroundTask: task,
+      lastRunId,
+      runHistory,
+      recentEvents,
+      schedulerRegistered: input.schedulerRegistered
+    };
+  }
+
+  listScheduledRuns(input: { taskId: string; limit?: number }): ScheduledTaskRun[] {
+    const task = this.requireBackgroundTask(input.taskId);
+    const limit = input.limit === undefined ? 20 : input.limit;
+    const rows = this.db
+      .prepare(
+        `SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason
+         FROM scheduled_task_runs
+         WHERE background_task_id = ?
+         ORDER BY scheduled_at DESC, rowid DESC
+         LIMIT ?`
+      )
+      .all(task.id, limit) as ScheduledTaskRunRow[];
+    return rows.map(mapScheduledTaskRun);
+  }
+
+  listThreadMessages(threadId: string): TaskEvent[] {
+    this.requireActiveThread(threadId);
+    return this.listRecentEventsForThread(threadId, 100);
+  }
+
+  openBackgroundTaskInChat(taskId: string): { threadId: string } {
+    const task = this.requireBackgroundTask(taskId);
+    this.insertTaskEvent({
+      threadId: task.threadId,
+      runId: task.runId,
+      type: 'message',
+      payload: {
+        role: 'system',
+        content: `[系统] 用户准备修改后台任务 ${task.id}。`
+      },
+      createdAt: new Date().toISOString()
+    });
+    return {
+      threadId: task.threadId
+    };
+  }
+
+  recordAgentRunCompleted(input: {
+    runId: string;
+    threadId: string;
+    assistantMessage: string;
+    providerId: string;
+    modelId: string;
+    durationMs: number;
+    summary: string;
+    finishReason: string;
+  }): TaskEvent | null {
+    const run = this.findRun(input.runId);
+    let mirroredAssistantEvent: TaskEvent | null = null;
+    if (run !== null) {
+      const now = new Date().toISOString();
+      this.db
+        .transaction(() => {
+          this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('completed', now, run.threadId);
+          this.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('completed', now, input.runId);
+          this.insertTaskEvent({
+            threadId: run.threadId,
+            runId: input.runId,
+            type: 'agent_update',
+            payload: {
+              providerId: input.providerId,
+              modelId: input.modelId,
+              durationMs: input.durationMs,
+              finishReason: input.finishReason,
+              summary: input.summary
+            },
+            createdAt: now
+          });
+          mirroredAssistantEvent = this.insertTaskEvent({
+            threadId: run.threadId,
+            runId: input.runId,
+            type: 'message',
+            payload: {
+              role: 'assistant',
+              content: input.assistantMessage,
+              providerId: input.providerId,
+              modelId: input.modelId
+            },
+            createdAt: now
+          });
+        })();
+    }
+
+    const task = this.findBackgroundTaskByRunId(input.runId);
+    if (task !== null) {
+      this.updateBackgroundTaskLastRunStatus(task.id, 'success');
+    }
+    if (task !== null && (run === null || task.threadId !== run.threadId)) {
+      return this.insertTaskEvent({
+        threadId: task.threadId,
+        runId: input.runId,
+        type: 'message',
+        payload: {
+          role: 'assistant',
+          content: input.assistantMessage,
+          providerId: input.providerId,
+          modelId: input.modelId
+        },
+        createdAt: new Date().toISOString()
+      });
+    }
+    return mirroredAssistantEvent;
+  }
+
+  recordAgentRunFailed(input: {
+    runId: string;
+    threadId: string;
+    providerId: string;
+    modelId: string;
+    error: string;
+    code: string;
+    retryable: boolean;
+  }): TaskEvent | null {
+    const run = this.findRun(input.runId);
+    let failureEvent: TaskEvent | null = null;
+    const now = new Date().toISOString();
+    if (run !== null) {
+      this.db
+        .transaction(() => {
+          this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('failed', now, run.threadId);
+          this.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('failed', now, input.runId);
+          failureEvent = this.insertTaskEvent({
+            threadId: run.threadId,
+            runId: input.runId,
+            type: 'agent_update',
+            payload: {
+              status: 'failed',
+              providerId: input.providerId,
+              modelId: input.modelId,
+              code: input.code,
+              error: input.error,
+              retryable: input.retryable
+            },
+            createdAt: now
+          });
+        })();
+    }
+
+    const task = this.findBackgroundTaskByRunId(input.runId);
+    if (task !== null) {
+      this.updateBackgroundTaskLastRunStatus(task.id, 'failed');
+    }
+    if (task !== null && (run === null || task.threadId !== run.threadId)) {
+      return this.insertTaskEvent({
+        threadId: task.threadId,
+        runId: input.runId,
+        type: 'agent_update',
+        payload: {
+          status: 'failed',
+          providerId: input.providerId,
+          modelId: input.modelId,
+          code: input.code,
+          error: input.error,
+          retryable: input.retryable
+        },
+        createdAt: now
+      });
+    }
+    return failureEvent;
+  }
+
+  recordAgentTaskEvent(input: {
+    runId: string;
+    threadId: string;
+    type: TaskEvent['type'];
+    payload: Record<string, unknown>;
+    createdAt: string;
+  }): TaskEvent | null {
+    const run = this.findRun(input.runId);
+    if (run === null || run.threadId !== input.threadId) {
+      return null;
+    }
+    return this.insertTaskEvent({
+      threadId: input.threadId,
+      runId: input.runId,
+      type: input.type,
+      payload: input.payload,
+      createdAt: input.createdAt
+    });
   }
 
   private transitionBackgroundTask(task: BackgroundTask, status: TaskStatus, eventType: TaskEvent['type']): BackgroundTask {
@@ -525,6 +885,104 @@ export class TaskRepository {
     return task;
   }
 
+  private requireActiveThread(threadId: string): TaskThread {
+    const thread = this.findActiveThread(threadId);
+    if (thread === null) {
+      throw new Error('task_thread_not_found');
+    }
+    return thread;
+  }
+
+  private findActiveThread(threadId: string): TaskThread | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, kind, title, goal, status, created_at, updated_at
+         FROM task_threads
+         WHERE id = ?
+           AND archived_at IS NULL`
+      )
+      .get(threadId) as TaskThreadRow | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return mapTaskThread(row);
+  }
+
+  private requireRun(runId: string): TaskRun {
+    const run = this.findRun(runId);
+    if (run === null) {
+      throw new Error('task_run_not_found');
+    }
+    return run;
+  }
+
+  private findRun(runId: string): TaskRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
+         FROM task_runs
+         WHERE id = ?`
+      )
+      .get(runId) as TaskRunRow | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return mapTaskRun(row);
+  }
+
+  private nextRunNumber(threadId: string): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(run_number), 0) + 1 AS next_run_number FROM task_runs WHERE thread_id = ?')
+      .get(threadId) as { next_run_number: number };
+    return row.next_run_number;
+  }
+
+  private listRunsForThread(threadId: string, limit: number): TaskRun[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json
+         FROM task_runs
+         WHERE thread_id = ?
+         ORDER BY run_number DESC
+         LIMIT ?`
+      )
+      .all(threadId, limit) as TaskRunRow[];
+    return rows.map(mapTaskRun);
+  }
+
+  private listRecentEventsForThread(threadId: string, limit: number): TaskEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ?
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT ?`
+      )
+      .all(threadId, limit) as Array<TaskEventRow & { rowid: number }>;
+    return rows.map(mapTaskEvent);
+  }
+
+  private listEventsForRun(threadId: string, runId: string): TaskEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ? AND run_id = ?
+         ORDER BY created_at DESC, rowid DESC`
+      )
+      .all(threadId, runId) as Array<TaskEventRow & { rowid: number }>;
+    return rows.map(mapTaskEvent);
+  }
+
+  private updateBackgroundTaskLastRunStatus(taskId: string, status: Exclude<BackgroundTask['lastRunStatus'], null>): void {
+    this.db.prepare('UPDATE background_tasks SET last_run_status = ?, updated_at = ? WHERE id = ?').run(
+      status,
+      new Date().toISOString(),
+      taskId
+    );
+  }
+
   private readThreads(): TaskSnapshot['threads'] {
     const rows = this.db
       .prepare(
@@ -534,15 +992,7 @@ export class TaskRepository {
          ORDER BY updated_at DESC`
       )
       .all() as TaskThreadRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      kind: row.kind,
-      title: row.title,
-      goal: row.goal,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }));
+    return rows.map(mapTaskThread);
   }
 
   private readRecentEvents(): TaskEvent[] {
@@ -554,14 +1004,7 @@ export class TaskRepository {
          LIMIT 50`
       )
       .all() as TaskEventRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      threadId: row.thread_id,
-      runId: row.run_id,
-      type: row.type,
-      payload: JSON.parse(row.payload_json) as unknown,
-      createdAt: row.created_at
-    }));
+    return rows.map(mapTaskEvent);
   }
 }
 
@@ -591,6 +1034,103 @@ function mapBackgroundTask(row: BackgroundTaskRow): BackgroundTask {
     updatedAt: row.updated_at,
     enabledCapabilities: parseEnabledCapabilities(row.enabled_capabilities_json)
   };
+}
+
+function mapScheduledTaskRun(row: ScheduledTaskRunRow): ScheduledTaskRun {
+  return {
+    id: row.id,
+    backgroundTaskId: row.background_task_id,
+    taskRunId: row.task_run_id,
+    scheduledAt: row.scheduled_at,
+    triggeredAt: row.triggered_at,
+    status: row.status,
+    skipReason: row.skip_reason
+  };
+}
+
+function mapTaskEvent(row: TaskEventRow & { rowid?: number }): TaskEvent {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    runId: row.run_id,
+    type: row.type,
+    payload: JSON.parse(row.payload_json) as unknown,
+    createdAt: row.created_at,
+    sequence: row.rowid
+  };
+}
+
+function mapTaskRun(row: TaskRunRow): TaskRun {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    runNumber: row.run_number,
+    userInput: row.user_input,
+    status: row.status,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    modelId: row.model_id,
+    enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
+  };
+}
+
+function mapTaskThread(row: TaskThreadRow): TaskThread {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    goal: row.goal,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function mergeTaskEvents(eventGroups: readonly TaskEvent[][]): TaskEvent[] {
+  const eventsById = new Map<string, TaskEvent>();
+  for (const events of eventGroups) {
+    for (const event of events) {
+      if (!eventsById.has(event.id)) {
+        eventsById.set(event.id, event);
+      }
+    }
+  }
+  return [...eventsById.values()].sort(compareTaskEventsDescending);
+}
+
+function createFallbackCapabilityManifest(enabledCapabilities: EnabledCapabilities): AgentCapabilityManifest {
+  return {
+    requestedCapabilities: enabledCapabilities,
+    resolvedCapabilities: enabledCapabilities,
+    skippedCapabilities: [],
+    toolCards: [],
+    untrustedContextPolicy: 'external_content_reference_only'
+  };
+}
+
+function createAgentCapabilityManifest(preview: AgentCapabilityPreview): AgentCapabilityManifest {
+  return {
+    requestedCapabilities: preview.requestedCapabilities,
+    resolvedCapabilities: preview.selectedCapabilities,
+    skippedCapabilities: preview.skippedCapabilities,
+    toolCards: [...preview.toolCards, ...preview.skillCards].map((card) => ({
+      id: card.id,
+      name: card.name,
+      capabilityType: card.capabilityType,
+      riskLevel: card.riskLevel,
+      scope: card.scope,
+      requiresApproval: card.requiresApproval
+    })),
+    untrustedContextPolicy: preview.untrustedContextPolicy
+  };
+}
+
+function compareTaskEventsDescending(left: TaskEvent, right: TaskEvent): number {
+  const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder;
+  }
+  return (right.sequence === undefined ? 0 : right.sequence) - (left.sequence === undefined ? 0 : left.sequence);
 }
 
 function parseEnabledCapabilities(value: string | null): EnabledCapabilities | null {

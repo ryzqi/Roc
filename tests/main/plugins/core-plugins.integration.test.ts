@@ -10,6 +10,7 @@ import { createAgentPlugin } from '../../../src/main/plugins/agent';
 import { StaticAgentModelFactoryAdapter } from '../../../src/main/plugins/agent/model-factory-adapter';
 import { createMemoryPlugin } from '../../../src/main/plugins/memory';
 import { createTaskPlugin } from '../../../src/main/plugins/task';
+import { createWorkspacePlugin } from '../../../src/main/plugins/workspace';
 import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
@@ -33,7 +34,7 @@ afterEach(async () => {
 });
 
 describe('core plugins integration', () => {
-  it('loads agent, memory, and task plugins in KernelRuntime and delivers cross-plugin events', async () => {
+  it('loads agent, memory, workspace, and task plugins in KernelRuntime and delivers cross-plugin events', async () => {
     runtime = new KernelRuntime({
       rootDir: root,
       safeStorage: safeStorage(),
@@ -64,6 +65,7 @@ describe('core plugins integration', () => {
             label: 'Integration Workspace'
           }
         }),
+        createWorkspacePlugin({ rootDir: root }),
         createTaskPlugin()
       ]
     });
@@ -73,6 +75,7 @@ describe('core plugins integration', () => {
     expect(runtime.getStatus().plugins).toMatchObject({
       '@roc/plugin-agent': { status: 'healthy' },
       '@roc/plugin-memory': { status: 'healthy' },
+      '@roc/plugin-workspace': { status: 'healthy' },
       '@roc/plugin-task': { status: 'healthy' }
     });
 
@@ -100,7 +103,9 @@ describe('core plugins integration', () => {
     });
     expect(preview.goal).toBe('Create a task plugin preview');
 
-    await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toEqual({ text: '' });
+    await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toMatchObject({
+      text: expect.stringContaining('<FROZEN_SNAPSHOT>')
+    });
 
     await runtime.publishEvent({
       type: 'agent.run.completed',

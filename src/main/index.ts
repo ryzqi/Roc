@@ -17,10 +17,17 @@ import {
 } from 'electron';
 import { join } from 'node:path';
 import { ipcChannels } from '../shared/ipc';
+import type { ChatRunEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent } from '../shared/types';
 import { createAppServices } from './services/app-service';
 import { registerIpc } from './ipc/register-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
+import { agentChatRunEventType } from './plugins/agent/runtime';
+import {
+  terminalSessionExitEventType,
+  terminalSessionOutputEventType
+} from './plugins/workspace/terminal-capabilities';
 import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
+import { PerformanceObserverService } from './services/performance-observer-service';
 import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';
 import {
@@ -251,25 +258,31 @@ async function createWindow(): Promise<void> {
   if (!ownsSingleInstanceLock) {
     return;
   }
+  const performanceObserverService = new PerformanceObserverService();
+  const runtimeEnvironment = {
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+    getAppearance: getSystemAppearanceSnapshot
+  };
+  const safeStorageBackend = createElectronSafeStorageBackend();
+  const runtimeMetricsProvider = createElectronRuntimeMetricsProvider();
   const kernel = createMainKernelBootstrap({
     dataRoot: process.env.ROC_DATA_ROOT,
     getAppearance: getSystemAppearanceSnapshot,
     isPackaged: app.isPackaged,
-    safeStorage: createElectronSafeStorageBackend(),
-    runtimeMetricsProvider: createElectronRuntimeMetricsProvider(),
+    performanceObserverService,
+    safeStorage: safeStorageBackend,
+    runtimeMetricsProvider,
     version: app.getVersion()
   });
   await kernel.start();
   activeKernel = kernel;
   const services = createAppServices(
     process.env.ROC_DATA_ROOT,
-    {
-      version: app.getVersion(),
-      isPackaged: app.isPackaged,
-      getAppearance: getSystemAppearanceSnapshot
-    },
-    createElectronSafeStorageBackend(),
-    createElectronRuntimeMetricsProvider()
+    runtimeEnvironment,
+    safeStorageBackend,
+    runtimeMetricsProvider,
+    performanceObserverService
   );
   activeServices = services;
   pdfPreviewServices = services;
@@ -375,14 +388,22 @@ async function createWindow(): Promise<void> {
       });
     }
   });
-  services.terminalSessionService.onOutput((event) => {
-    terminalOutputBatcher.schedule(event);
+  kernel.subscribeEvent<TerminalSessionOutputEvent>(terminalSessionOutputEventType, (event) => {
+    terminalOutputBatcher.schedule(event.payload);
   });
-  services.terminalSessionService.onExit((event) => {
+  kernel.subscribeEvent<TerminalSessionExitEvent>(terminalSessionExitEventType, (event) => {
     terminalOutputBatcher.flush();
-    broadcastToWindows([mainWindow], ipcChannels.terminalExit, event, {
+    broadcastToWindows([mainWindow], ipcChannels.terminalExit, event.payload, {
       include: (_window, index) => index === 0
     });
+  });
+  kernel.subscribeEvent<ChatRunEvent>(agentChatRunEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event.payload, {
+      include: (_window, index) => index === 0
+    });
+    if (event.payload.runId.startsWith('run_')) {
+      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
+    }
   });
   services.deepAgentRuntimeService.onRunEvent((event) => {
     broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event, {

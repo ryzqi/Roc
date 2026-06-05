@@ -20,6 +20,7 @@ import { createTaskPlugin } from '../../src/main/plugins/task';
 import { createWorkspacePlugin } from '../../src/main/plugins/workspace';
 import { RTKBinaryManager } from '../../src/rtk-integration';
 import type {
+  ActiveTaskItem,
   AppStatus,
   BackgroundTask,
   BackgroundTaskPreview,
@@ -28,7 +29,9 @@ import type {
   FileTreeResult,
   IpcResult,
   McpServerSnapshot,
-  RtkStatus
+  RtkStatus,
+  ScheduledTaskRun,
+  TaskDetail
 } from '../../src/shared/types';
 
 let root: string;
@@ -187,9 +190,14 @@ describe('microkernel regression', () => {
       ])
     );
     const task = await unwrap<BackgroundTask>(adapter.invoke('tasks.createBackgroundTask', [preview]));
+    const backgroundTasks = await unwrap<BackgroundTask[]>(adapter.invoke('tasks.listBackgroundTasks', []));
+    const activeTasks = await unwrap<ActiveTaskItem[]>(adapter.invoke('tasks.getActiveTasks', []));
+    const taskDetail = await unwrap<TaskDetail>(adapter.invoke('tasks.getTaskDetail', [{ taskId: task.id }]));
+    const scheduledRuns = await unwrap<ScheduledTaskRun[]>(adapter.invoke('tasks.listScheduledRuns', [{ taskId: task.id }]));
     await unwrap<BackgroundTask>(adapter.invoke('tasks.pauseBackgroundTask', [task.id]));
     await unwrap<BackgroundTask>(adapter.invoke('tasks.resumeBackgroundTask', [task.id]));
     const runNow = await unwrap<{ taskId: string; runId: string }>(adapter.invoke('tasks.runBackgroundNow', [task.id]));
+    const runOutputEvents = await waitForTaskRunOutput(adapter, task.id, runNow.runId);
     await unwrap<BackgroundTask>(adapter.invoke('tasks.cancelBackgroundTask', [task.id]));
     const memorySnapshot = await unwrap<{ text: string }>(adapter.invoke('memory.snapshotPreview', []));
     const mcpServers = await unwrap<McpServerSnapshot[]>(adapter.invoke('mcp.listServers', []));
@@ -207,8 +215,13 @@ describe('microkernel regression', () => {
 
     expect(appStatus.appName).toBe('Roc');
     expect(chatRun.runId).toMatch(/^run_/u);
+    expect(backgroundTasks).toContainEqual(expect.objectContaining({ id: task.id }));
+    expect(activeTasks).toContainEqual(expect.objectContaining({ taskId: task.id }));
+    expect(taskDetail).toMatchObject({ taskId: task.id, backgroundTask: { id: task.id } });
+    expect(scheduledRuns).toEqual([]);
     expect(runNow).toMatchObject({ taskId: task.id });
-    expect(memorySnapshot).toEqual({ text: '' });
+    expect(runOutputEvents).toContainEqual(expect.objectContaining({ runId: runNow.runId, type: 'message', role: 'assistant' }));
+    expect(memorySnapshot.text).toContain('Recent Agent Memory Events');
     expect(mcpServers).toContainEqual(expect.objectContaining({ id: 'exa-hosted' }));
     expect(rtkStatus).toMatchObject({ resourceState: 'ready' });
     expect(fileTree.entries).toContainEqual(expect.objectContaining({ name: 'README.md' }));
@@ -222,6 +235,35 @@ async function unwrap<T>(resultPromise: Promise<IpcResult<unknown>>): Promise<T>
     throw new Error(result.error.code);
   }
   return result.data as T;
+}
+
+async function waitForTaskRunOutput(
+  adapter: ReturnType<typeof createPluginCapabilityAdapter>,
+  taskId: string,
+  runId: string
+): Promise<Array<{ runId: string; type: string; role: string | null }>> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const detail = await unwrap<TaskDetail>(adapter.invoke('tasks.getTaskDetail', [{ taskId }]));
+    const events = detail.recentEvents
+      .filter((event) => event.runId === runId && event.type === 'message')
+      .map((event) => ({
+        runId: event.runId,
+        type: event.type,
+        role:
+          event.payload !== null && typeof event.payload === 'object' && typeof Reflect.get(event.payload, 'role') === 'string'
+            ? Reflect.get(event.payload, 'role') as string
+            : null
+      }));
+    if (events.some((event) => event.role === 'assistant')) {
+      return events;
+    }
+    if (events.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      continue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return [];
 }
 
 function safeStorage(): SafeStorageBackend {

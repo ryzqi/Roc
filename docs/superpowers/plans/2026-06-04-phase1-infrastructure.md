@@ -76,11 +76,12 @@ export type RocEventEnvelope<TPayload = unknown> = {
 export type EventSubscription = () => void;
 
 export type RocEventBus = {
-  publish<TPayload>(event: RocEventEnvelope<TPayload>): void;
-  subscribe<TPayload>(type: string, handler: (event: RocEventEnvelope<TPayload>) => void): EventSubscription;
+  publish<TPayload>(event: RocEventEnvelope<TPayload>): Promise<void>;
+  subscribe<TPayload>(type: string, handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>): EventSubscription;
 };
 
 export type RocCapabilityRegistry = {
+  declare(pluginId: string, descriptor: CapabilityDescriptor): void;
   register(pluginId: string, descriptor: CapabilityDescriptor, handler: (input: unknown) => Promise<unknown>): void;
   invoke<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
   list(): readonly CapabilityDescriptor[];
@@ -90,8 +91,8 @@ export type RocPluginContext = {
   readonly pluginId: string;
   readonly eventBus: RocEventBus;
   readonly capabilities: RocCapabilityRegistry;
-  readonly database: { getConnection(pluginId: string): import('better-sqlite3').Database };
-  readonly config: { get<T>(pluginId: string, key: string): T | null; set<T>(pluginId: string, key: string, value: T): void };
+  readonly database: { getConnection(): import('better-sqlite3').Database };
+  readonly config: { get<T>(key: string): T | null; set<T>(key: string, value: T): void };
   readonly secrets: { get(key: string): string | null; set(key: string, plaintext: string): void; clear(key: string): void };
   readonly logger: { info(message: string, metadata?: Record<string, unknown>): void; warn(message: string, metadata?: Record<string, unknown>): void; error(message: string, metadata?: Record<string, unknown>): void };
 };
@@ -136,14 +137,15 @@ Assert:
 - `subscribe()` receives matching event types.
 - unsubscribe stops delivery.
 - handler order follows subscription order.
-- one handler failure is reported and does not prevent later handlers.
+- `publish()` awaits async handlers in subscription order.
+- one handler failure is collected and reported after later handlers have run.
 
 Run: `pnpm test -- tests/main/kernel/event-bus.test.ts`
 Expected: FAIL because `EventBus` is missing.
 
 - [ ] **Step 2: Implement `EventBus`**
 
-Implement public methods `publish` and `subscribe` only. Errors thrown by handlers must be collected and logged through constructor-injected logger; they must not be swallowed silently.
+Implement public methods `publish` and `subscribe` only. `publish()` returns a `Promise<void>`. Errors thrown or rejected by handlers must be collected and logged through constructor-injected logger; later handlers still run, then `publish()` rejects with an aggregate `event_publish_failed` error.
 
 Run: `pnpm test -- tests/main/kernel/event-bus.test.ts`
 Expected: PASS.
@@ -157,7 +159,9 @@ Expected: PASS.
 - [ ] **Step 1: Test registry**
 
 Assert:
-- duplicate capability names fail.
+- duplicate capability declarations fail.
+- registering a handler for an undeclared capability fails with `capability_not_declared`.
+- declaring a capability before plugin initialize makes it visible in `list()` but `invoke()` fails with `capability_not_ready` until a handler is registered.
 - input schema validates before handler invocation.
 - output schema validates after handler invocation.
 - unknown capability fails with `capability_not_found`.
@@ -167,7 +171,7 @@ Expected: FAIL.
 
 - [ ] **Step 2: Implement registry**
 
-Use Zod parse results directly. Do not default missing input fields.
+Use Zod parse results directly. `declare()` records manifest descriptors before initialization. `register()` binds the runtime handler and must match the declared descriptor exactly. Do not default missing input fields.
 
 Run: `pnpm test -- tests/main/kernel/capability-registry.test.ts`
 Expected: PASS.
@@ -182,7 +186,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Test database boundaries**
 
-Assert each plugin receives `data/plugins/<plugin-id>.db`, foreign keys and WAL are enabled, and `closeAll()` closes every connection.
+Assert each plugin receives `data/plugins/<plugin-id>.db`, foreign keys and WAL are enabled, and `closeAll()` closes every connection. Assert `RocPluginContext.database.getConnection()` is scoped to the current `pluginId` and accepts no arbitrary plugin ID.
 
 Run: `pnpm test -- tests/main/infrastructure/database-pool.test.ts`
 Expected: FAIL.
@@ -213,14 +217,14 @@ Expected: PASS.
 
 - [ ] **Step 1: Preserve current config migration contract**
 
-Config store must read current settings through existing JSON files as the source for migration, then write plugin-scoped records into `core.db`.
+Config store must read current settings through existing JSON files as the source for migration, then write plugin-scoped records into `core.db`. Plugin-facing config and secret facades are scoped by `context.pluginId`; they must not accept arbitrary plugin IDs from plugin code.
 
 Run: `pnpm test -- tests/main/infrastructure/config-store.test.ts`
 Expected: FAIL.
 
 - [ ] **Step 2: Implement stores**
 
-Secret manager wraps Electron `safeStorage` where available and fails with `secret_storage_unavailable` when unavailable. Logger writes through the existing log path contract.
+Secret manager wraps the currently installed Electron 41 `safeStorage` sync API (`isEncryptionAvailable`, `encryptString`, `decryptString`). Do not use latest-doc async safeStorage APIs unless Electron is upgraded in the same task with type and runtime tests. Calls fail with `secret_storage_unavailable` when encryption is unavailable after app ready. Logger writes through the existing log path contract.
 
 Run: `pnpm test -- tests/main/infrastructure/config-store.test.ts tests/main/infrastructure/secret-manager.test.ts tests/main/infrastructure/logger.test.ts`
 Expected: PASS.
@@ -247,7 +251,7 @@ Expected: FAIL.
 
 - [ ] **Step 2: Implement loader**
 
-Use `initialize` and `shutdown` only. Register every manifest capability before plugin initialize so plugins can call dependencies after load-order checks pass.
+Use `initialize` and `shutdown` only. Before initialization, the loader calls `capabilities.declare(pluginId, descriptor)` for every manifest capability so dependencies can be validated. During `initialize`, each plugin calls `capabilities.register(pluginId, descriptor, handler)` to bind handlers. A plugin may invoke only capabilities from dependencies that have already initialized and bound handlers.
 
 Run: `pnpm test -- tests/main/kernel/plugin-loader.test.ts`
 Expected: PASS.
@@ -269,10 +273,11 @@ Expected: PASS.
 
 Create a source database with current tables and rows:
 - `task_threads`, `task_runs`, `task_events`, `session_messages`
+- `session_messages_fts` virtual table behavior and its insert/update/delete synchronization triggers
 - `background_tasks`, `scheduled_task_runs`
 - `memory_flush_marks`, `mcp_servers`, `skills`, `performance_samples`, `diagnostic_packages`, `recovery_points`
 
-Assert deterministic row counts and checksum records are written to `core.db.migration_runs`.
+Assert deterministic row counts, searchable session-message FTS results, and checksum records are written to `core.db.migration_runs`.
 
 Run: `pnpm test -- tests/main/migration/monolith-to-plugins.test.ts`
 Expected: FAIL.
@@ -280,14 +285,14 @@ Expected: FAIL.
 - [ ] **Step 2: Implement migration**
 
 Mapping:
-- Agent plugin owns `task_threads`, `task_runs`, `task_events`, `session_messages`.
+- Agent plugin owns `task_threads`, `task_runs`, `task_events`, `session_messages`, plus rebuilt `session_messages_fts` virtual table and triggers.
 - Task plugin owns `background_tasks`, `scheduled_task_runs`.
 - Memory plugin owns `memory_flush_marks`.
 - MCP plugin owns `mcp_servers`.
 - Skills plugin owns `skills`.
 - Diagnostics plugin owns `performance_samples`, `diagnostic_packages`, `recovery_points`.
 
-The source database is opened readonly. The target directory is created beside the source as `plugin-data-next`. Existing target files fail with `migration_target_exists`. A backup copy is written before migration.
+The source database is opened readonly. The migration accepts an explicit target directory; the Phase 1 dry-run target is created beside the source as `plugin-data-next`. Existing target files fail with `migration_target_exists`. A backup copy is written before migration.
 
 Run: `pnpm test -- tests/main/migration/monolith-to-plugins.test.ts`
 Expected: PASS.

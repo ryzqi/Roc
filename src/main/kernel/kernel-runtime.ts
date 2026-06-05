@@ -7,7 +7,7 @@ import { SecretManager, type SafeStorageBackend } from '../infrastructure/secret
 import { CapabilityRegistry } from './capability-registry';
 import { EventBus } from './event-bus';
 import { PluginLoader } from './plugin-loader';
-import type { RocEventEnvelope, RocPlugin, RocPluginHealth } from './types';
+import type { EventSubscription, RocEventEnvelope, RocPlugin, RocPluginHealth } from './types';
 
 export type KernelRuntimeOptions = {
   rootDir: string;
@@ -110,5 +110,15 @@ export class KernelRuntime {
       throw new Error('kernel_runtime_not_started');
     }
     await this.infrastructure.eventBus.publish(event);
+  }
+
+  subscribeEvent<TPayload>(
+    type: string,
+    handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>
+  ): EventSubscription {
+    if (this.infrastructure === null) {
+      throw new Error('kernel_runtime_not_started');
+    }
+    return this.infrastructure.eventBus.subscribe(type, handler);
   }
 }

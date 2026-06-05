@@ -11,6 +11,8 @@ const agentCapabilities = [
   'agent.sessions.search'
 ];
 
+const agentCapabilitiesWithPreview = [...agentCapabilities, 'agent.capability.preview'];
+
 describe('agent plugin manifest', () => {
   it('declares the Phase 2 critical agent plugin contract', () => {
     const plugin = createAgentPlugin();
@@ -19,5 +21,16 @@ describe('agent plugin manifest', () => {
     expect(plugin.manifest.loadPhase).toBe('critical');
     expect(plugin.manifest.required).toBe(true);
     expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(agentCapabilities);
+  });
+
+  it('declares plugin dependencies when the capability preview API is enabled', () => {
+    const plugin = createAgentPlugin({
+      capabilityPreview: {
+        approvalModeProvider: () => 'fully_automatic'
+      }
+    });
+
+    expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-mcp', '@roc/plugin-skills']);
+    expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(agentCapabilitiesWithPreview);
   });
 });

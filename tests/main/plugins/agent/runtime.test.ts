@@ -6,17 +6,19 @@ import { AgentSessionRepository } from '../../../../src/main/plugins/agent/sessi
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
-import type { ChatStartRunRequest } from '../../../../src/shared/types';
+import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 
 let db: Database.Database;
 let events: RocEventEnvelope[];
 
 const modelFactory: AgentModelFactoryAdapter = {
   createDefaultModelHandle: async () => ({
+    invoke: async () => 'Static agent response.',
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
   createModelHandleByModelId: async (modelId) => ({
+    invoke: async () => 'Static agent response.',
     modelId,
     providerId: 'openai'
   })
@@ -71,7 +73,7 @@ describe('AgentPluginRuntime', () => {
       threadId: result.threadId,
       userInput: 'Summarize this workspace'
     });
-    expect(events).toEqual([
+    expect(events).toContainEqual(
       expect.objectContaining({
         payload: expect.objectContaining({
           runId: result.runId,
@@ -80,14 +82,71 @@ describe('AgentPluginRuntime', () => {
         source: '@roc/plugin-agent',
         type: 'agent.run.started'
       })
+    );
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+  });
+
+  it('publishes chat run events for renderer subscribers when a plugin run starts and completes', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      mode: 'chat'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    const chatEvents = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload));
+
+    expect(chatEvents).toEqual([
+      {
+        type: 'run_started',
+        runId: result.runId,
+        mode: 'chat',
+        threadId: result.threadId,
+        providerId: 'openai',
+        modelId: 'openai:gpt-4.1',
+        createdAt: result.createdAt
+      },
+      {
+        type: 'run_completed',
+        runId: result.runId,
+        threadId: result.threadId,
+        providerId: 'openai',
+        modelId: 'openai:gpt-4.1',
+        createdAt: result.createdAt,
+        durationMs: expect.any(Number),
+        summary: 'Static agent response.',
+        assistantMessage: 'Static agent response.'
+      }
     ]);
   });
 
   it('cancels only active plugin runs', async () => {
+    const repository = new AgentSessionRepository(db);
+    const deferred = createDeferred<string>();
     const runtime = new AgentPluginRuntime({
       eventBus,
-      modelFactory,
-      repository: new AgentSessionRepository(db)
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          invoke: async () => deferred.promise,
+          modelId: 'openai:gpt-4.1',
+          providerId: 'openai'
+        }),
+        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+      },
+      repository
     });
     const result = await runtime.startRun(startRequest);
 
@@ -99,6 +158,58 @@ describe('AgentPluginRuntime', () => {
       cancelled: false,
       runId: result.runId
     });
+    deferred.resolve('Response after cancel.');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(repository.getRun(result.runId).status).toBe('cancelled');
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          runId: result.runId,
+          type: 'run_completed'
+        })
+      })
+    );
+  });
+
+  it('publishes renderer failure events and marks the run failed when model invocation fails', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          invoke: async () => {
+            throw new Error('provider_unavailable');
+          },
+          modelId: 'openai:gpt-4.1',
+          providerId: 'openai'
+        }),
+        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+      },
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: {
+          type: 'run_failed',
+          runId: result.runId,
+          threadId: result.threadId,
+          code: 'agent_run_failed',
+          message: 'provider_unavailable',
+          retryable: true
+        }
+      })
+    );
   });
 
   it('lists and searches session messages from the plugin repository', async () => {
@@ -129,5 +240,41 @@ describe('AgentPluginRuntime', () => {
       query: 'memory',
       total: 1
     });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
   });
 });
+
+async function waitForEvent(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 250;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error('expected_event_not_published');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+function readChatRunEvent(payload: unknown): ChatRunEvent | null {
+  if (payload === null || typeof payload !== 'object' || !('type' in payload)) {
+    return null;
+  }
+  return payload as ChatRunEvent;
+}
+
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolveValue: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((resolve) => {
+    resolveValue = resolve;
+  });
+  return {
+    promise,
+    resolve: (value) => {
+      if (resolveValue === null) {
+        throw new Error('deferred_not_initialized');
+      }
+      resolveValue(value);
+    }
+  };
+}

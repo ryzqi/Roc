@@ -310,6 +310,7 @@ describe('workbench surfaces', () => {
     );
 
     expect(html).toContain('data-testid="terminal-xterm"');
+    expect(html).toContain('data-session-id="terminal-1"');
     expect(html).toContain('workbench-surface--terminal');
     expect(html).not.toContain('PowerShell');
   });

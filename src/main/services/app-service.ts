@@ -279,7 +279,8 @@ export function createAppServices(
   root?: string,
   runtimeEnvironment = defaultRuntimeEnvironment,
   safeStorageBackend: SafeStorageBackend = createInMemorySafeStorageBackend(),
-  runtimeMetricsProvider?: RuntimeMetricsProvider
+  runtimeMetricsProvider?: RuntimeMetricsProvider,
+  injectedPerformanceObserverService?: PerformanceObserverService
 ): AppServices {
   const paths = new RocPaths(root);
   const configService = new ConfigService(paths);
@@ -292,7 +293,10 @@ export function createAppServices(
   const workspaceService = new WorkspaceService(configService);
   const sessionArchiveService = new SessionArchiveService(databaseService);
   const rtkService = new RtkService(paths);
-  const performanceObserverService = new PerformanceObserverService();
+  const performanceObserverService =
+    injectedPerformanceObserverService === undefined
+      ? new PerformanceObserverService()
+      : injectedPerformanceObserverService;
   const metricsService = new MetricsService();
   const diagnosticsService = new DiagnosticsService(
     paths,

@@ -62,6 +62,12 @@ export class ConfigService {
     return this.getSettingsDocument().settings;
   }
 
+  reloadSettingsDocument(): RocSettingsDocument {
+    this.settingsDocumentCache = null;
+    this.settingsDocumentCacheLoadedAtMs = null;
+    return this.getSettingsDocument();
+  }
+
   async getSettingsAsync(): Promise<RocSettings> {
     return (await this.getSettingsDocumentAsync()).settings;
   }

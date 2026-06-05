@@ -9,6 +9,7 @@ export type PluginCapabilityDomain =
   | 'chat'
   | 'diagnostics'
   | 'files'
+  | 'git'
   | 'lifecycle'
   | 'mcp'
   | 'memory'
@@ -16,6 +17,7 @@ export type PluginCapabilityDomain =
   | 'sessions'
   | 'skills'
   | 'tasks'
+  | 'terminal'
   | 'workspace';
 
 export type PluginCapabilityInvoker = {
@@ -37,19 +39,28 @@ export type PluginCapabilityAdapter = {
 export const pluginCapabilityMappings = [
   mapping('app', 'app.getStatus', ipcChannels.appGetStatus, 'app.status.get', emptyInput),
   mapping('agent', 'agent.getStatus', ipcChannels.agentGetStatus, 'agent.status.get', emptyInput),
+  mapping('agent', 'agent.getCapabilityPreview', ipcChannels.agentGetCapabilityPreview, 'agent.capability.preview', firstArg),
   mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', firstArg),
   mapping('chat', 'chat.cancelRun', ipcChannels.chatCancelRun, 'agent.run.cancel', idInput('runId')),
   mapping('chat', 'chat.resumeRun', ipcChannels.chatResumeRun, 'agent.run.resume', firstArg),
   mapping('sessions', 'sessions.list', ipcChannels.sessionMessagesList, 'agent.sessions.list', firstArg),
   mapping('sessions', 'sessions.search', ipcChannels.sessionMessagesSearch, 'agent.sessions.search', firstArg),
   mapping('tasks', 'tasks.getSnapshot', ipcChannels.tasksGetSnapshot, 'task.snapshot.get', emptyInput),
+  mapping('tasks', 'tasks.getThreadMessages', ipcChannels.tasksGetThreadMessages, 'task.thread.messages.list', firstArg),
+  mapping('tasks', 'tasks.listBackgroundTasks', ipcChannels.tasksListBackgroundTasks, 'task.background.list', emptyInput),
+  mapping('tasks', 'tasks.deleteThread', ipcChannels.tasksDeleteThread, 'task.thread.delete', firstArg),
   mapping('tasks', 'tasks.createBackgroundTaskPreview', ipcChannels.tasksCreateBackgroundPreview, 'task.background.preview', firstArg),
   mapping('tasks', 'tasks.createBackgroundTask', ipcChannels.tasksCreateBackgroundTask, 'task.background.create', firstArg),
+  mapping('tasks', 'tasks.getActiveTasks', ipcChannels.tasksGetActiveTasks, 'task.active.list', emptyInput),
+  mapping('tasks', 'tasks.getTaskDetail', ipcChannels.tasksGetTaskDetail, 'task.detail.get', firstArg),
+  mapping('tasks', 'tasks.listScheduledRuns', ipcChannels.tasksListScheduledRuns, 'task.scheduledRuns.list', firstArg),
   mapping('tasks', 'tasks.runBackgroundNow', ipcChannels.tasksRunBackgroundNow, 'task.background.runNow', idInput('id')),
   mapping('tasks', 'tasks.pauseBackgroundTask', ipcChannels.tasksPauseBackgroundTask, 'task.background.pause', idInput('id')),
   mapping('tasks', 'tasks.resumeBackgroundTask', ipcChannels.tasksResumeBackgroundTask, 'task.background.resume', idInput('id')),
   mapping('tasks', 'tasks.cancelBackgroundTask', ipcChannels.tasksCancelBackgroundTask, 'task.background.cancel', idInput('id')),
   mapping('tasks', 'tasks.deleteBackgroundTask', ipcChannels.tasksDeleteBackgroundTask, 'task.background.delete', idInput('id')),
+  mapping('tasks', 'tasks.updateBackgroundTask', ipcChannels.tasksUpdateBackgroundTask, 'task.background.update', firstArg),
+  mapping('tasks', 'tasks.openInChat', ipcChannels.tasksOpenInChat, 'task.background.openInChat', firstArg),
   mapping('tasks', 'tasks.getSchedulerStatus', ipcChannels.tasksGetSchedulerStatus, 'task.scheduler.status', emptyInput),
   mapping('lifecycle', 'lifecycle.getTraySummary', ipcChannels.lifecycleGetTraySummary, 'lifecycle.getTraySummary', emptyInput),
   mapping(
@@ -88,6 +99,22 @@ export const pluginCapabilityMappings = [
   mapping('files', 'files.preview', ipcChannels.filesPreview, 'files.preview', firstArg),
   mapping('files', 'files.previewPdf', ipcChannels.filesPreviewPdf, 'files.previewPdf', firstArg),
   mapping('files', 'files.writeText', ipcChannels.filesWriteText, 'files.writeText', firstArg),
+  mapping('git', 'git.status', ipcChannels.gitStatus, 'git.status', emptyInput),
+  mapping('git', 'git.diffStat', ipcChannels.gitDiffStat, 'git.diffStat', emptyInput),
+  mapping('git', 'git.fileDiff', ipcChannels.gitFileDiff, 'git.fileDiff', firstArg),
+  mapping('git', 'git.stageFile', ipcChannels.gitStageFile, 'git.stageFile', firstArg),
+  mapping('git', 'git.stageFiles', ipcChannels.gitStageFiles, 'git.stageFiles', firstArg),
+  mapping('git', 'git.unstageFile', ipcChannels.gitUnstageFile, 'git.unstageFile', firstArg),
+  mapping('git', 'git.discardFile', ipcChannels.gitDiscardFile, 'git.discardFile', firstArg),
+  mapping('git', 'git.commit', ipcChannels.gitCommit, 'git.commit', firstArg),
+  mapping('git', 'git.push', ipcChannels.gitPush, 'git.push', emptyInput),
+  mapping('git', 'git.listBranches', ipcChannels.gitListBranches, 'git.listBranches', emptyInput),
+  mapping('git', 'git.createBranch', ipcChannels.gitCreateBranch, 'git.createBranch', firstArg),
+  mapping('git', 'git.checkoutBranch', ipcChannels.gitCheckoutBranch, 'git.checkoutBranch', firstArg),
+  mapping('terminal', 'terminal.createSession', ipcChannels.terminalCreateSession, 'terminal.createSession', firstArg),
+  mapping('terminal', 'terminal.writeInput', ipcChannels.terminalWriteInput, 'terminal.writeInput', firstArg),
+  mapping('terminal', 'terminal.resize', ipcChannels.terminalResize, 'terminal.resize', firstArg),
+  mapping('terminal', 'terminal.closeSession', ipcChannels.terminalCloseSession, 'terminal.closeSession', firstArg),
   mapping('mcp', 'mcp.listServers', ipcChannels.mcpListServers, 'mcp.listServers', emptyInput),
   mapping('mcp', 'mcp.upsertServer', ipcChannels.mcpUpsertServer, 'mcp.upsertServer', firstArg),
   mapping('mcp', 'mcp.setServerEnabled', ipcChannels.mcpSetServerEnabled, 'mcp.setServerEnabled', firstArg),

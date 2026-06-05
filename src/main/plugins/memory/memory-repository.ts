@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
+  AppSettings,
   MemoryFileMeta,
   MemoryFileWriteOutcome,
   MemoryFileWriteRequest,
@@ -12,6 +13,11 @@ import type {
   MemoryScope,
   MemoryStatus
 } from '../../../shared/types';
+import { defaultSettings } from '../../services/config/defaults';
+import { SecurityScanService } from '../../services/memory/security-scan';
+import { buildFrozenSnapshot, renderFrozenSnapshot } from '../../services/memory/snapshot';
+
+export type MemoryRepositorySettings = AppSettings['memory'];
 
 type MemoryRepositoryOptions = {
   db: DatabaseConnection;
@@ -20,19 +26,12 @@ type MemoryRepositoryOptions = {
     path: string;
     label: string;
   } | null;
-  charLimits?: Record<MemoryKind, number>;
-  sessionRetentionDays?: number;
+  getMemorySettings?: () => MemoryRepositorySettings;
 };
 
 type MemoryEventRow = {
   summary: string;
   created_at: string;
-};
-
-const defaultCharLimits: Record<MemoryKind, number> = {
-  user: 1375,
-  agents: 800,
-  memory: 2200
 };
 
 const globalFiles: Array<{ scope: 'global'; kind: MemoryKind }> = [
@@ -47,12 +46,11 @@ const workspaceFiles: Array<{ scope: 'workspace'; kind: Exclude<MemoryKind, 'use
 ];
 
 export class MemoryRepository {
-  private readonly charLimits: Record<MemoryKind, number>;
-  private readonly sessionRetentionDays: number;
+  private readonly getMemorySettings: () => MemoryRepositorySettings;
 
   constructor(private readonly options: MemoryRepositoryOptions) {
-    this.charLimits = options.charLimits === undefined ? defaultCharLimits : options.charLimits;
-    this.sessionRetentionDays = options.sessionRetentionDays === undefined ? 90 : options.sessionRetentionDays;
+    this.getMemorySettings =
+      options.getMemorySettings === undefined ? () => defaultSettings.memory : options.getMemorySettings;
   }
 
   readFile(input: { scope: MemoryScope; kind: MemoryKind }): string | null {
@@ -79,8 +77,19 @@ export class MemoryRepository {
         detail: 'No workspace selected; select a workspace before writing workspace-scoped memory.'
       };
     }
+    const settings = this.getMemorySettings();
+    const securityScan = new SecurityScanService(settings.securityScan);
+    const issues = securityScan.scan(request.content);
+    if (issues.length > 0) {
+      return {
+        ok: false,
+        reason: 'security_scan',
+        detail: securityScan.formatIssues(issues),
+        issues
+      };
+    }
     const charCount = [...request.content].length;
-    const limit = this.charLimits[request.kind];
+    const limit = settings.charLimits[request.kind];
     if (charCount > limit) {
       return {
         ok: false,
@@ -123,7 +132,7 @@ export class MemoryRepository {
       },
       sessionMessages: {
         totalRows: 0,
-        retentionDays: this.sessionRetentionDays,
+        retentionDays: this.getMemorySettings().sessionRetentionDays,
         oldestAt: null
       },
       fullTextIndex: { healthy: true, status: 'ready' }
@@ -132,11 +141,16 @@ export class MemoryRepository {
 
   buildSnapshotPreview(): { text: string } {
     const sections: string[] = [];
-    for (const slot of globalFiles) {
-      this.appendFileSection(sections, slot.scope, slot.kind);
-    }
-    for (const slot of workspaceFiles) {
-      this.appendFileSection(sections, slot.scope, slot.kind);
+    const settings = this.getMemorySettings();
+    const frozenSnapshotText = renderFrozenSnapshot(
+      buildFrozenSnapshot({
+        memoryDir: this.options.memoryRoot,
+        workspaceHash: this.workspaceHash(),
+        settings
+      })
+    );
+    if (frozenSnapshotText.length > 0) {
+      sections.push(frozenSnapshotText);
     }
     const eventRows = this.options.db
       .prepare(
@@ -168,14 +182,6 @@ export class MemoryRepository {
       .run(`mem_event_${randomUUID()}`, input.type, threadId, runId, input.summary, JSON.stringify(input.payload), new Date().toISOString());
   }
 
-  private appendFileSection(sections: string[], scope: MemoryScope, kind: MemoryKind): void {
-    const content = this.readFile({ scope, kind });
-    if (content === null || content.trim().length === 0) {
-      return;
-    }
-    sections.push(`# ${scope}/${this.filenameForKind(kind)}\n${content}`);
-  }
-
   private buildSlotMeta(scope: MemoryScope, kind: MemoryKind, absolutePath: string | null): MemoryFileMeta {
     if (absolutePath === null) {
       return {
@@ -183,7 +189,7 @@ export class MemoryRepository {
         kind,
         exists: false,
         charCount: 0,
-        charLimit: this.charLimits[kind],
+        charLimit: this.getMemorySettings().charLimits[kind],
         absolutePath: '',
         effective: false,
         updatedAt: null
@@ -199,7 +205,7 @@ export class MemoryRepository {
         kind,
         exists: false,
         charCount: 0,
-        charLimit: this.charLimits[kind],
+        charLimit: this.getMemorySettings().charLimits[kind],
         absolutePath,
         effective: this.isEffective(scope, kind),
         updatedAt: null
@@ -212,7 +218,7 @@ export class MemoryRepository {
       kind,
       exists: true,
       charCount: [...content].length,
-      charLimit: this.charLimits[kind],
+      charLimit: this.getMemorySettings().charLimits[kind],
       absolutePath,
       effective: this.isEffective(scope, kind),
       updatedAt: stat.mtime.toISOString()

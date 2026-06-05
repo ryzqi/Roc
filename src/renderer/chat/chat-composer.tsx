@@ -1,7 +1,7 @@
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SettingsSnapshot } from '../../shared/types';
+import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
 import { applySettingsSnapshot, buildSettingsSaveRequest, setDefaultModelInSettingsSaveRequest } from '../settings-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
@@ -127,6 +127,30 @@ export function ChatComposer({
   const trimmedInput = chatInput.trim();
   const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
 
+  function refreshCapabilityOptions(): void {
+    const currentSelectedMcpServers = state.selectedMcpServers;
+    const currentSelectedSkills = state.selectedSkills;
+    void Promise.all([client.api.mcp.listServers(), client.api.skills.list()])
+      .then(([mcpResult, skillsResult]) => {
+        const mcpServers = unwrap<McpServerSnapshot[]>('mcp servers', mcpResult);
+        const skills = unwrap<SkillSnapshot[]>('skills', skillsResult);
+        const availableMcpIds = new Set(mcpServers.filter((server) => server.enabled).map((server) => server.id));
+        const availableSkillIds = new Set(
+          skills.filter((skill) => skill.enabled && skill.status === 'ready').map((skill) => skill.id)
+        );
+        updateLoadedState({
+          mcpServers,
+          skills,
+          selectedMcpServers: currentSelectedMcpServers.filter((id) => availableMcpIds.has(id)),
+          selectedSkills: currentSelectedSkills.filter((id) => availableSkillIds.has(id)),
+          agentCapabilityPreview: null
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Composer capability refresh failed.', error);
+      });
+  }
+
   async function selectAttachmentsFromDialog(): Promise<void> {
     const selection = await client.api.files.selectFromDialog();
     if (!selection.ok || selection.data === null) {
@@ -177,7 +201,10 @@ export function ChatComposer({
           </button>
           <div
             className="composer-popover-anchor"
-            onMouseEnter={() => onActiveComposerPopoverChange('tools')}
+            onMouseEnter={() => {
+              refreshCapabilityOptions();
+              onActiveComposerPopoverChange('tools');
+            }}
             onMouseLeave={() => onActiveComposerPopoverChange((current) => (current === 'tools' ? null : current))}
           >
             <button
@@ -246,7 +273,10 @@ export function ChatComposer({
           </div>
           <div
             className="composer-popover-anchor"
-            onMouseEnter={() => onActiveComposerPopoverChange('skills')}
+            onMouseEnter={() => {
+              refreshCapabilityOptions();
+              onActiveComposerPopoverChange('skills');
+            }}
             onMouseLeave={() => onActiveComposerPopoverChange((current) => (current === 'skills' ? null : current))}
           >
             <button

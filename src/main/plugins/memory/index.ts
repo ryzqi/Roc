@@ -13,7 +13,7 @@ import {
   isAgentSessionArchivedPayload,
   MemoryConsolidatorAdapter
 } from './consolidator-adapter';
-import { MemoryRepository } from './memory-repository';
+import { MemoryRepository, type MemoryRepositorySettings } from './memory-repository';
 import { applyMemoryPluginSchema } from './schema';
 
 const pluginId = '@roc/plugin-memory';
@@ -103,6 +103,7 @@ export type MemoryPluginOptions = {
     path: string;
     label: string;
   } | null;
+  getMemorySettings?: () => MemoryRepositorySettings;
 };
 
 export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin {
@@ -126,7 +127,8 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
       const repository = new MemoryRepository({
         db,
         memoryRoot,
-        workspace: options.workspace
+        workspace: options.workspace,
+        getMemorySettings: options.getMemorySettings
       });
       const consolidator = new MemoryConsolidatorAdapter(repository);
       registerMemoryCapabilities(context, repository);

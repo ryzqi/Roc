@@ -1,10 +1,15 @@
 import type { BrowserWindow } from 'electron';
 import { dialog } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
+import type { Workspace } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
 import type { FileService } from '../services/file-service';
 import type { WorkspaceService } from '../services/workspace-service';
 import type { TimedHandle } from './ipc-common';
+
+type CurrentWorkspaceProvider = {
+  getCurrentWorkspace(): Promise<Workspace | null> | Workspace | null;
+};
 
 export function registerFilesIpc(
   timedHandle: TimedHandle,
@@ -25,12 +30,12 @@ export function registerFilesIpc(
 export function registerFilesDialogIpc(
   timedHandle: TimedHandle,
   mainWindow: BrowserWindow,
-  workspaceService: WorkspaceService
+  workspaceProvider: CurrentWorkspaceProvider
 ): void {
   timedHandle(ipcChannels.filesSelectFromDialog, () =>
     wrapIpc(async () => {
       if (process.env.ROC_SMOKE === '1') {
-        const smokeWorkspace = workspaceService.getCurrentWorkspace();
+        const smokeWorkspace = await workspaceProvider.getCurrentWorkspace();
         if (smokeWorkspace !== null) {
           return {
             filePaths: [`${smokeWorkspace.path}\\phase-three-notes.txt`]

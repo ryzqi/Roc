@@ -74,6 +74,7 @@ export type DiagnosticsPluginOptions = {
   rtkStatusProvider?: DiagnosticsValueProvider<RtkStatus>;
   schedulerStatusProvider?: DiagnosticsValueProvider<SchedulerStatus>;
   healthCheckProvider?: () => Promise<HealthCheckResult>;
+  performanceObserverService?: DiagnosticsPerformanceAdapterOptions['performanceObserverService'];
   runtimeMetricsProvider?: DiagnosticsPerformanceAdapterOptions['runtimeMetricsProvider'];
 };
 
@@ -99,6 +100,7 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
         options.performanceAdapter === undefined
           ? createDiagnosticsPerformanceAdapter({
               db,
+              performanceObserverService: options.performanceObserverService,
               runtimeMetricsProvider: options.runtimeMetricsProvider
             })
           : options.performanceAdapter;
@@ -117,7 +119,7 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
       const lifecycleAdapter =
         options.lifecycleAdapter === undefined
           ? createDiagnosticsLifecycleAdapter({
-              getBackgroundTaskSummary: () => emptyBackgroundTaskSummary(),
+              getBackgroundTaskSummary: () => context.capabilities.invoke<{}, BackgroundTaskSummary>('task.background.summary', {}),
               scheduler: options.scheduler === undefined ? noopScheduler : options.scheduler
             })
           : options.lifecycleAdapter;
@@ -322,16 +324,6 @@ async function runDefaultHealthCheck(
       ]
     };
   }
-}
-
-function emptyBackgroundTaskSummary(): BackgroundTaskSummary {
-  return {
-    total: 0,
-    running: 0,
-    failed: 0,
-    pendingConfirmation: 0,
-    nextRunAt: null
-  };
 }
 
 function redactText(value: string): string {

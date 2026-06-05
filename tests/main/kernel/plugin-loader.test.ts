@@ -143,6 +143,32 @@ describe('PluginLoader', () => {
     expect(calls).toEqual(['provider', 'hello']);
   });
 
+  it('allows a plugin to invoke its own registered capability', async () => {
+    const calls: string[] = [];
+    const descriptor: CapabilityDescriptor<z.infer<typeof inputSchema>, z.infer<typeof outputSchema>> = {
+      name: 'self.echo',
+      version: '1.0.0',
+      inputSchema,
+      outputSchema
+    };
+    const plugin = createPlugin(
+      createManifest({ id: '@roc/plugin-self', capabilities: [descriptor] }),
+      async (context) => {
+        context.capabilities.register('@roc/plugin-self', descriptor, async (input) => ({
+          echoed: (input as { value: string }).value
+        }));
+        const output = await context.capabilities.invoke<{ value: string }, { echoed: string }>('self.echo', {
+          value: 'hello'
+        });
+        calls.push(output.echoed);
+      }
+    );
+
+    await createLoader().load([plugin]);
+
+    expect(calls).toEqual(['hello']);
+  });
+
   it('blocks capability invocation from plugins that do not depend on the provider plugin', async () => {
     const descriptor: CapabilityDescriptor<z.infer<typeof inputSchema>, z.infer<typeof outputSchema>> = {
       name: 'alpha.echo',

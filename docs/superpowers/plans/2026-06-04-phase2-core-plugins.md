@@ -42,6 +42,8 @@
 
 Core plugins register these capability names:
 
+These names are the internal microkernel capability contract. They do not rename the renderer preload API. Phase 5 owns the explicit preload-method-to-capability mapping.
+
 | Plugin | Capability | Input | Output |
 |---|---|---|---|
 | `@roc/plugin-agent` | `agent.status.get` | `{}` | current agent runtime status |
@@ -131,7 +133,7 @@ Assert manifest:
 - `id: '@roc/plugin-memory'`
 - `dependencies: ['@roc/plugin-agent']`
 - `loadPhase: 'critical'`
-- no deferred extraction path; every capability has a handler.
+- no deferred extraction path; every manifest capability is declared before initialize and has a bound handler after initialize.
 
 Run: `pnpm test -- tests/main/plugins/memory/plugin.test.ts`
 Expected: FAIL.

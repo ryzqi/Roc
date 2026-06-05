@@ -78,6 +78,9 @@ export class TerminalSessionService {
     };
 
     pty.onData((data) => {
+      if (!this.sessions.has(sessionId)) {
+        return;
+      }
       appendFileSync(logPath, data, 'utf8');
       const payload: TerminalSessionOutputEvent = { sessionId, data };
       this.events.emit('output', payload);

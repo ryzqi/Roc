@@ -10,6 +10,11 @@ import { createMainKernelBootstrap } from '../../src/main/main-kernel-bootstrap'
 import { KernelRuntime } from '../../src/main/kernel/kernel-runtime';
 import type { RocPlugin } from '../../src/main/kernel/types';
 import type { SafeStorageBackend } from '../../src/main/infrastructure/secret-manager';
+import { ConfigService } from '../../src/main/services/config-service';
+import { PerformanceObserverService } from '../../src/main/services/performance-observer-service';
+import { RocPaths } from '../../src/main/services/paths';
+import { SecretService } from '../../src/main/services/secret-service';
+import type { AgentRuntimeStatus, ChatStartRunRequest, ChatStartRunResult, PerformanceSample } from '../../src/shared/types';
 
 let root: string;
 
@@ -62,6 +67,112 @@ describe('main kernel bootstrap integration', () => {
     expect(source).toContain('appIconPath');
     expect(source).toContain('protocol.handle(pdfPreviewScheme');
     expect(source).toContain('hostService.bindMainWindow');
+    expect(source).toContain('kernel.subscribeEvent<TerminalSessionOutputEvent>');
+    expect(source).toContain('kernel.subscribeEvent<ChatRunEvent>');
+    expect(source).toContain('agentChatRunEventType');
+    expect(source).toContain('const performanceObserverService = new PerformanceObserverService();');
+    expect(source).toContain('performanceObserverService,');
+    expect(source).not.toContain('services.terminalSessionService.onOutput');
+  });
+
+  it('reads provider settings saved after kernel startup before agent runs', async () => {
+    const bootstrap = createMainKernelBootstrap({
+      activateMigration: async ({ paths }) => join(paths.root, 'plugin-data'),
+      dataRoot: root,
+      safeStorage: safeStorage()
+    });
+    await bootstrap.start();
+
+    try {
+      const paths = new RocPaths(root);
+      const configService = new ConfigService(paths);
+      configService.initialize();
+      const secretService = new SecretService(paths, safeStorage());
+      secretService.setProviderSecret('smoke-provider', 'sk-smoke-seed-secret');
+      configService.saveSettingsSnapshot({
+        settings: configService.getSettings(),
+        permissions: configService.getPermissions(),
+        providers: [
+          {
+            id: 'smoke-provider',
+            name: 'Smoke Provider',
+            type: 'openai_compatible',
+            endpoint: 'http://127.0.0.1:65534/v1',
+            credentialRef: 'secret:smoke-provider',
+            enabled: true,
+            models: [
+              {
+                id: 'smoke-model',
+                displayName: 'Smoke Model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ],
+        defaultModelId: 'smoke-model'
+      });
+
+      await expect(bootstrap.invokeCapability<{}, AgentRuntimeStatus>('agent.status.get', {})).resolves.toMatchObject({
+        defaultModelConfigured: true
+      });
+      await expect(
+        bootstrap.invokeCapability<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', {
+          input: 'Use the configured model',
+          mode: 'chat',
+          enabledCapabilities: { mcpServers: [], skills: [] }
+        })
+      ).resolves.toMatchObject({
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model'
+      });
+    } finally {
+      await bootstrap.shutdown();
+    }
+  });
+
+  it('shares bootstrap IPC timings with plugin diagnostics samples', async () => {
+    const performanceObserverService = new PerformanceObserverService();
+    performanceObserverService.record({
+      phase: 'ipc_call',
+      label: 'roc:shell:confirm',
+      startedAtMs: 10,
+      durationMs: 4,
+      metadata: {
+        channel: 'roc:shell:confirm',
+        ok: true
+      }
+    });
+    const bootstrap = createMainKernelBootstrap({
+      activateMigration: async ({ paths }) => join(paths.root, 'plugin-data'),
+      dataRoot: root,
+      performanceObserverService,
+      safeStorage: safeStorage()
+    });
+    await bootstrap.start();
+
+    try {
+      const sample = await bootstrap.invokeCapability<{ mode: 'test'; memoryBudgetMb: number }, PerformanceSample>(
+        'diagnostics.samplePerformance',
+        {
+        mode: 'test',
+        memoryBudgetMb: 2048
+        }
+      );
+
+      expect(sample.timing.samples).toContainEqual(
+        expect.objectContaining({
+          label: 'roc:shell:confirm',
+          metadata: {
+            channel: 'roc:shell:confirm',
+            ok: true
+          }
+        })
+      );
+    } finally {
+      await bootstrap.shutdown();
+    }
   });
 });
 

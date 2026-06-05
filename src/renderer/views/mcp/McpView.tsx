@@ -1,13 +1,16 @@
 import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import type { LoadedState } from '../../loaded-state';
+import type { RocClient } from '../../shared/roc-client';
 import { sumMcpTools } from '../../utils/sum-mcp-tools';
 import { McpManagementPanel } from './McpManagementPanel';
 
 export function McpView({
+  client,
   state,
   updateLoadedState
 }: {
+  client?: RocClient;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
@@ -20,7 +23,7 @@ export function McpView({
           <Metric label="MCP 工具" note="来自服务快照" value={sumMcpTools(state.mcpServers)} />
           <Metric label="长期授权" note="均可撤销" tone="warn" value={state.mcpServers.filter((server) => server.riskLevel !== 'low').length} />
         </div>
-        <McpManagementPanel state={state} updateLoadedState={updateLoadedState} />
+        <McpManagementPanel client={client} state={state} updateLoadedState={updateLoadedState} />
       </section>
     </>
   );

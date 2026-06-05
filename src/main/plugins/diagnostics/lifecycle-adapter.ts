@@ -6,14 +6,14 @@ export type DiagnosticsLifecycleScheduler = {
 };
 
 export type DiagnosticsLifecycleAdapterOptions = {
-  getBackgroundTaskSummary: () => BackgroundTaskSummary;
+  getBackgroundTaskSummary: () => BackgroundTaskSummary | Promise<BackgroundTaskSummary>;
   scheduler: DiagnosticsLifecycleScheduler;
 };
 
 export type DiagnosticsLifecycleAdapter = {
-  getTraySummary(): TraySummary;
-  pauseBackgroundExecution(): TraySummary;
-  resumeBackgroundExecution(): TraySummary;
+  getTraySummary(): TraySummary | Promise<TraySummary>;
+  pauseBackgroundExecution(): TraySummary | Promise<TraySummary>;
+  resumeBackgroundExecution(): TraySummary | Promise<TraySummary>;
 };
 
 export function createDiagnosticsLifecycleAdapter(
@@ -21,15 +21,12 @@ export function createDiagnosticsLifecycleAdapter(
 ): DiagnosticsLifecycleAdapter {
   let backgroundPaused = false;
 
-  function getTraySummary(): TraySummary {
+  function getTraySummary(): TraySummary | Promise<TraySummary> {
     const backgroundTasks = options.getBackgroundTaskSummary();
-    return {
-      residentEnabled: true,
-      backgroundPaused,
-      backgroundTasks,
-      nextRunAt: backgroundTasks.nextRunAt,
-      updatedAt: new Date().toISOString()
-    };
+    if (backgroundTasks instanceof Promise) {
+      return backgroundTasks.then((summary) => createTraySummary(summary, backgroundPaused));
+    }
+    return createTraySummary(backgroundTasks, backgroundPaused);
   }
 
   return {
@@ -44,5 +41,15 @@ export function createDiagnosticsLifecycleAdapter(
       options.scheduler.resumeAll();
       return getTraySummary();
     }
+  };
+}
+
+function createTraySummary(backgroundTasks: BackgroundTaskSummary, backgroundPaused: boolean): TraySummary {
+  return {
+    residentEnabled: true,
+    backgroundPaused,
+    backgroundTasks,
+    nextRunAt: backgroundTasks.nextRunAt,
+    updatedAt: new Date().toISOString()
   };
 }

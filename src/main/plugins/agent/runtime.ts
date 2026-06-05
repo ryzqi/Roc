@@ -1,12 +1,15 @@
 import { createDeepAgent } from 'deepagents';
 
 import type {
+  AgentCapabilityPreview,
   AgentRuntimeStatus,
   ChatCancelRunResult,
+  ChatRunEvent,
   ChatResumeRunRequest,
   ChatResumeRunResult,
   ChatStartRunRequest,
   ChatStartRunResult,
+  EnabledCapabilities,
   SessionMessageEntry,
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
@@ -17,16 +20,27 @@ import type { RocEventBus } from '../../kernel/types';
 import type { AgentModelFactoryAdapter } from './model-factory-adapter';
 import type { AgentSessionRepository } from './session-repository';
 
+export const agentChatRunEventType = 'agent.chat.run-event';
+
+export type AgentCapabilityPreviewProvider = (input: {
+  requestedCapabilities: EnabledCapabilities;
+  runtimeStatus: AgentRuntimeStatus;
+}) => Promise<AgentCapabilityPreview>;
+
 export type AgentPluginRuntimeOptions = {
   repository: AgentSessionRepository;
   eventBus: RocEventBus;
   modelFactory: AgentModelFactoryAdapter;
+  capabilityPreviewProvider?: AgentCapabilityPreviewProvider;
   pluginId?: string;
   status?: AgentRuntimeStatus;
+  statusProvider?: () => AgentRuntimeStatus;
 };
 
 export class AgentPluginRuntime {
   private readonly activeRuns = new Set<string>();
+  private readonly pendingRuns = new Set<Promise<void>>();
+  private readonly scheduledRuns = new Set<NodeJS.Timeout>();
   private readonly pluginId: string;
 
   constructor(private readonly options: AgentPluginRuntimeOptions) {
@@ -34,10 +48,23 @@ export class AgentPluginRuntime {
   }
 
   getStatus(): AgentRuntimeStatus {
+    if (this.options.statusProvider !== undefined) {
+      return this.options.statusProvider();
+    }
     if (this.options.status !== undefined) {
       return this.options.status;
     }
     return createBlockedAgentRuntimeStatus();
+  }
+
+  async getCapabilityPreview(requestedCapabilities: EnabledCapabilities): Promise<AgentCapabilityPreview> {
+    if (this.options.capabilityPreviewProvider === undefined) {
+      throw new Error('agent_capability_preview_unavailable');
+    }
+    return await this.options.capabilityPreviewProvider({
+      requestedCapabilities,
+      runtimeStatus: this.getStatus()
+    });
   }
 
   async startRun(request: ChatStartRunRequest): Promise<ChatStartRunResult> {
@@ -46,6 +73,8 @@ export class AgentPluginRuntime {
       throw new Error('chat_input_empty');
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
+    const capabilityPreview =
+      this.options.capabilityPreviewProvider === undefined ? undefined : await this.getCapabilityPreview(request.enabledCapabilities);
     const run = this.options.repository.createTaskRun({
       enabledCapabilities: request.enabledCapabilities,
       modelId: modelHandle.modelId,
@@ -63,8 +92,34 @@ export class AgentPluginRuntime {
     };
     await this.publish('agent.run.started', {
       ...result,
-      workflowHint: request.workflowHint === undefined ? null : request.workflowHint
+      enabledCapabilities: request.enabledCapabilities,
+      userInput: input,
+      workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
+      capabilityPreview
     });
+    await this.publishChatRunEvent({
+      type: 'run_started',
+      ...result
+    });
+    const timer = setTimeout(() => {
+      this.scheduledRuns.delete(timer);
+      const pendingRun = this.executeRun({
+        enabledCapabilities: request.enabledCapabilities,
+        input,
+        modelId: modelHandle.modelId,
+        mode: request.mode,
+        providerId: modelHandle.providerId,
+        runId: run.id,
+        threadId: run.threadId,
+        workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
+        invoke: modelHandle.invoke
+      });
+      this.pendingRuns.add(pendingRun);
+      void pendingRun.finally(() => {
+        this.pendingRuns.delete(pendingRun);
+      });
+    }, 0);
+    this.scheduledRuns.add(timer);
     return result;
   }
 
@@ -76,6 +131,11 @@ export class AgentPluginRuntime {
       };
     }
     this.activeRuns.delete(input.runId);
+    this.options.repository.updateRunStatus({
+      endedAt: new Date().toISOString(),
+      runId: input.runId,
+      status: 'cancelled'
+    });
     return {
       runId: input.runId,
       cancelled: true
@@ -108,6 +168,16 @@ export class AgentPluginRuntime {
 
   searchSessionMessages(input: SessionMessageSearchRequest): SessionMessageSearchResult {
     return this.options.repository.searchSessionMessages(input);
+  }
+
+  async shutdown(): Promise<void> {
+    for (const timer of this.scheduledRuns) {
+      clearTimeout(timer);
+    }
+    this.scheduledRuns.clear();
+    if (this.pendingRuns.size > 0) {
+      await Promise.allSettled([...this.pendingRuns]);
+    }
   }
 
   async completeRun(input: {
@@ -147,6 +217,18 @@ export class AgentPluginRuntime {
       modelId: input.modelId,
       durationMs: input.durationMs,
       summary: input.summary,
+      assistantMessage: input.assistantMessage,
+      finishReason: 'stop'
+    });
+    await this.publishChatRunEvent({
+      type: 'run_completed',
+      runId: run.id,
+      threadId: run.threadId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      createdAt: run.startedAt,
+      durationMs: input.durationMs,
+      summary: input.summary,
       assistantMessage: input.assistantMessage
     });
     return { run, message, event };
@@ -160,9 +242,72 @@ export class AgentPluginRuntime {
       createdAt: new Date().toISOString()
     });
   }
+
+  private async publishChatRunEvent(payload: ChatRunEvent): Promise<void> {
+    await this.publish(agentChatRunEventType, payload);
+  }
+
+  private async executeRun(input: {
+    runId: string;
+    providerId: string;
+    modelId: string;
+    mode: ChatStartRunRequest['mode'];
+    input: string;
+    threadId: string;
+    workflowHint: ChatStartRunRequest['workflowHint'] | null;
+    enabledCapabilities: EnabledCapabilities;
+    invoke: (input: string) => Promise<string>;
+  }): Promise<void> {
+    if (!this.activeRuns.has(input.runId)) {
+      return;
+    }
+    try {
+      const startedAtMs = Date.now();
+      const assistantMessage = await input.invoke(input.input);
+      if (!this.activeRuns.has(input.runId)) {
+        return;
+      }
+      await this.completeRun({
+        runId: input.runId,
+        assistantMessage,
+        summary: assistantMessage.slice(0, 120),
+        durationMs: Date.now() - startedAtMs,
+        providerId: input.providerId,
+        modelId: input.modelId
+      });
+    } catch (error) {
+      if (!this.activeRuns.has(input.runId)) {
+        return;
+      }
+      this.activeRuns.delete(input.runId);
+      const failure = error instanceof Error ? error.message : String(error);
+      this.options.repository.updateRunStatus({
+        endedAt: new Date().toISOString(),
+        runId: input.runId,
+        status: 'failed'
+      });
+      await this.publish('agent.run.failed', {
+        runId: input.runId,
+        threadId: input.threadId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        error: failure,
+        code: 'agent_run_failed',
+        retryable: true
+      });
+      await this.publishChatRunEvent({
+        type: 'run_failed',
+        runId: input.runId,
+        threadId: input.threadId,
+        code: 'agent_run_failed',
+        message: failure,
+        retryable: true
+      });
+    }
+  }
 }
 
-function createBlockedAgentRuntimeStatus(): AgentRuntimeStatus {
+export function createBlockedAgentRuntimeStatus(): AgentRuntimeStatus {
   return {
     deepAgentsPackage: 'available',
     deepAgentsApi: {

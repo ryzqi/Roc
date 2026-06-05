@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type {
   SkillFileEntry,
@@ -40,6 +40,8 @@ export function SkillsHostView({
 
   const model = buildSkillManagementViewModel(state.skills, filter, selectedSkillId);
   const selectedSkill = selectedSkillId === null ? null : state.skills.find((skill) => skill.id === selectedSkillId) ?? null;
+  const updateLoadedStateRef = useRef(updateLoadedState);
+  updateLoadedStateRef.current = updateLoadedState;
 
   function resolveClient(): RocClient {
     return client ?? createRocClient();
@@ -193,6 +195,29 @@ export function SkillsHostView({
     setSelectedSkillId(null);
     resetBrowser();
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    const skillsClient = resolveClient();
+    void skillsClient.api.skills
+      .list()
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        const skills = unwrap<SkillSnapshot[]>('skills', result);
+        updateLoadedStateRef.current({
+          skills,
+          selectedSkills: skills.filter((item) => item.enabled && item.status === 'ready').map((item) => item.id)
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Skills state refresh failed.', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   useEffect(() => {
     if (selectedSkillId === null) {

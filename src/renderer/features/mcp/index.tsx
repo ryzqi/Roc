@@ -1,6 +1,6 @@
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
-import { McpManagementPanel } from '../../views/mcp/McpManagementPanel';
+import { McpView } from '../../views/mcp/McpView';
 
 export function McpFeature({
   client,
@@ -11,5 +11,5 @@ export function McpFeature({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
-  return <McpManagementPanel client={client} state={state} updateLoadedState={updateLoadedState} />;
+  return <McpView client={client} state={state} updateLoadedState={updateLoadedState} />;
 }

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerIpc } from '../../src/main/ipc/register-ipc';
+import type { PluginCapabilityInvoker } from '../../src/main/ipc/plugin-capability-adapter';
 import { createAppServices, type AppServices } from '../../src/main/services/app-service';
 import { ipcChannels } from '../../src/shared/ipc';
 import type { BackgroundTask, HostIntegrationStatus, Workspace } from '../../src/shared/types';
@@ -72,6 +73,27 @@ function registerWorkspaceHandlers(): void {
     }),
     syncHostSettings: () => undefined
   });
+}
+
+function registerPluginWorkspaceHandlers(invoker: PluginCapabilityInvoker): void {
+  registerIpc(services, {} as BrowserWindow, {
+    openMainPage: () => undefined,
+    closeMainWindow: () => undefined,
+    broadcastTaskUpdated: () => undefined,
+    getHostIntegrationStatus: (): HostIntegrationStatus => ({
+      startup: {
+        configuredOpenAtLogin: false,
+        effectiveOpenAtLogin: false,
+        syncError: null
+      },
+      globalHotkey: {
+        accelerator: null,
+        registered: false,
+        registrationError: null
+      }
+    }),
+    syncHostSettings: () => undefined
+  }, invoker);
 }
 
 async function invokeWorkspaceDialogHandler(): Promise<unknown> {
@@ -642,6 +664,48 @@ describe('workspace dialog IPC', () => {
         data: {
           confirmed: true,
           response: 0
+        }
+      });
+    } finally {
+      if (originalSmoke === undefined) {
+        delete process.env.ROC_SMOKE;
+      } else {
+        process.env.ROC_SMOKE = originalSmoke;
+      }
+    }
+  });
+
+  it('resolves smoke file attachment selection from plugin workspace state', async () => {
+    const originalSmoke = process.env.ROC_SMOKE;
+    process.env.ROC_SMOKE = '1';
+    electronMock.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    try {
+      registerPluginWorkspaceHandlers({
+        invokeCapability: async <TInput, TOutput>(capabilityName: string, _input: TInput): Promise<TOutput> => {
+          if (capabilityName !== 'workspace.getCurrent') {
+            throw new Error(`unexpected_capability:${capabilityName}`);
+          }
+          return {
+            id: 'workspace_1',
+            path: workspaceRoot,
+            displayName: 'workspace',
+            lastOpenedAt: '2026-06-04T00:00:00.000Z',
+            trustState: 'trusted'
+          } as TOutput;
+        }
+      });
+      const handler = electronMock.handlers.get(ipcChannels.filesSelectFromDialog);
+      if (handler === undefined) {
+        throw new Error('filesSelectFromDialog handler was not registered.');
+      }
+
+      const result = await handler({});
+
+      expect(electronMock.showOpenDialog).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        ok: true,
+        data: {
+          filePaths: [`${workspaceRoot}\\phase-three-notes.txt`]
         }
       });
     } finally {
