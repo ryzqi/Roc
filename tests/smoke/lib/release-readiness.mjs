@@ -23,9 +23,31 @@ export function buildReleaseReadinessSnapshot(input) {
   const hasCrashReporter = /\bcrashReporter\s*\.\s*start\s*\(/u.test(sourceText);
   const hasNativeClipboard = /\b(?:clipboard|clipboardApi)\s*\.\s*write/u.test(sourceText);
   const hasFileDrop = /\baddEventListener\s*\(\s*['"]drop['"]|\bonDrop\s*=|\bondrop\s*=/u.test(sourceText);
+  const hasMicrokernelRuntime =
+    /\bcreateMainKernelBootstrap\b/u.test(sourceText) &&
+    /\bnew\s+KernelRuntime\s*\(/u.test(sourceText) &&
+    /\brootDir\s*:\s*pluginDataDir\b/u.test(sourceText);
+  const hasPluginDataMigrationMarker =
+    /\bactivatePluginDataMigration\b/u.test(sourceText) &&
+    /\bwriteMigrationMarker\b/u.test(sourceText) &&
+    /\.migration-complete\.json/u.test(sourceText);
 
   return {
     identity: readReleaseIdentity(input),
+    runtime: {
+      microkernelRuntime: {
+        status: hasMicrokernelRuntime ? 'present' : 'absent',
+        evidence: hasMicrokernelRuntime
+          ? 'Main process starts KernelRuntime through createMainKernelBootstrap.'
+          : 'Main process microkernel runtime activation evidence was not included in release readiness.'
+      },
+      pluginDataMigration: {
+        status: hasPluginDataMigrationMarker ? 'present' : 'absent',
+        evidence: hasPluginDataMigrationMarker
+          ? 'Plugin data migration writes .migration-complete.json before runtime activation completes.'
+          : 'Plugin data migration completion marker evidence was not included in release readiness.'
+      }
+    },
     integrations: {
       appProtocol: {
         status: hasAppProtocol ? 'present' : 'absent',

@@ -22,6 +22,9 @@ const releaseReadiness = buildReleaseReadinessSnapshot({
     main: readFileSync(resolve('src/main/index.ts'), 'utf8'),
     windowsHost: readFileSync(resolve('src/main/windows-host-service.ts'), 'utf8'),
     nativeContextMenu: readFileSync(resolve('src/main/native-context-menu.ts'), 'utf8'),
+    mainKernelBootstrap: readFileSync(resolve('src/main/main-kernel-bootstrap.ts'), 'utf8'),
+    kernelRuntime: readFileSync(resolve('src/main/kernel/kernel-runtime.ts'), 'utf8'),
+    migration: readFileSync(resolve('src/main/infrastructure/migration/monolith-to-plugins.ts'), 'utf8'),
     renderer: readFileSync(resolve('src/renderer/App.tsx'), 'utf8')
   }
 });

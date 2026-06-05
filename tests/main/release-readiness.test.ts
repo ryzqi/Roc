@@ -12,7 +12,13 @@ describe('release readiness evidence', () => {
       sourceTexts: {
         main: readFileSync(new URL('../../src/main/index.ts', import.meta.url), 'utf8'),
         windowsHost: readFileSync(new URL('../../src/main/windows-host-service.ts', import.meta.url), 'utf8'),
-        nativeContextMenu: readFileSync(new URL('../../src/main/native-context-menu.ts', import.meta.url), 'utf8')
+        nativeContextMenu: readFileSync(new URL('../../src/main/native-context-menu.ts', import.meta.url), 'utf8'),
+        mainKernelBootstrap: readFileSync(new URL('../../src/main/main-kernel-bootstrap.ts', import.meta.url), 'utf8'),
+        kernelRuntime: readFileSync(new URL('../../src/main/kernel/kernel-runtime.ts', import.meta.url), 'utf8'),
+        migration: readFileSync(
+          new URL('../../src/main/infrastructure/migration/monolith-to-plugins.ts', import.meta.url),
+          'utf8'
+        )
       }
     });
 
@@ -65,6 +71,17 @@ describe('release readiness evidence', () => {
         evidence: 'ARIA/focus tests exist; Narrator, large font, and high contrast remain manual checks.'
       }
     });
+    expect(snapshot.runtime).toEqual({
+      microkernelRuntime: {
+        status: 'present',
+        evidence: 'Main process starts KernelRuntime through createMainKernelBootstrap.'
+      },
+      pluginDataMigration: {
+        status: 'present',
+        evidence: 'Plugin data migration writes .migration-complete.json before runtime activation completes.'
+      }
+    });
+    expect(['absent', 'manual-required']).toContain(snapshot.integrations.installerSigningUpdater.status);
   });
 
   it('does not report absent when release APIs are wired in source or config', () => {
@@ -95,6 +112,10 @@ describe('release readiness evidence', () => {
         ].join('\n'),
         windowsHost: 'app.setUserTasks([{ program: "Roc.exe" }])',
         nativeContextMenu: 'clipboardApi.writeText("copy")',
+        mainKernelBootstrap:
+          'function createMainKernelBootstrap() { return new KernelRuntime({ rootDir: pluginDataDir, activateMigration: async () => undefined }); }',
+        kernelRuntime: 'async start() { await this.options.activateMigration?.(); }',
+        migration: 'activatePluginDataMigration(); writeMigrationMarker(".migration-complete.json", {})',
         renderer: 'window.addEventListener("drop", () => undefined)'
       }
     });
@@ -113,5 +134,7 @@ describe('release readiness evidence', () => {
     expect(snapshot.integrations.crashReporter.status).toBe('present');
     expect(snapshot.integrations.nativeClipboard.status).toBe('partial');
     expect(snapshot.integrations.fileDragDrop.status).toBe('partial');
+    expect(snapshot.runtime.microkernelRuntime.status).toBe('present');
+    expect(snapshot.runtime.pluginDataMigration.status).toBe('present');
   });
 });
