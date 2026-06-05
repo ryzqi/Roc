@@ -62,11 +62,50 @@ export class SystemPromptBuilder {
   }
 
   private buildStaticBlock(): PromptBlock {
-    return { type: 'static', content: '', stability: BlockStability.STATIC, hash: '' };
+    const ROC_STATIC_SYSTEM_PROMPT = [
+      'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
+      '',
+      'Persistent memory you can edit (changes land on disk immediately, visible in next session):',
+      '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
+      '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
+      '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
+      '  /memory/workspaces/current/AGENTS.md   — workspace-specific rules (overrides global if exists)',
+      '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
+      '',
+      'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
+      '',
+      'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
+      'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
+    ].join('\n');
+
+    return {
+      type: 'static',
+      content: ROC_STATIC_SYSTEM_PROMPT,
+      stability: BlockStability.STATIC,
+      hash: this.computeHash(ROC_STATIC_SYSTEM_PROMPT)
+    };
   }
 
-  private buildWorkspaceBlock(path: string | null): PromptBlock {
-    return { type: 'workspace', content: '', stability: BlockStability.WORKSPACE, hash: '' };
+  private buildWorkspaceBlock(workspacePath: string | null): PromptBlock {
+    const sections: string[] = [];
+    if (workspacePath === null) {
+      sections.push('Workspace: not selected.');
+      sections.push('Default cwd: unavailable; ask user to select workspace before file or shell ops.');
+    } else {
+      sections.push(`Workspace: ${workspacePath}`);
+      sections.push('Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.');
+      sections.push('For Deep Agents file tools, current directory means /workspace/.');
+      sections.push('Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.');
+      sections.push('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
+      sections.push('Run file and shell ops inside workspace unless user explicitly names another allowed path.');
+    }
+    const content = sections.join('\n');
+    return {
+      type: 'workspace',
+      content,
+      stability: BlockStability.WORKSPACE,
+      hash: this.computeHash(content)
+    };
   }
 
   private buildToolsBlock(tools: ClientTool[]): PromptBlock {
