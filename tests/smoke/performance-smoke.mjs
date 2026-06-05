@@ -6,30 +6,13 @@ import { _electron as electron } from '@playwright/test';
 import { prepareArtifactDir } from './lib/artifacts.mjs';
 import { waitForAppReady } from './lib/assertions.mjs';
 import { buildNativeFeelSoftWarnings, buildNativeFeelSummary, nativeFeelScorecard } from './lib/native-feel.mjs';
+import { resolveSmokeTarget } from './lib/smoke-target.mjs';
 
 const artifactDir = prepareArtifactDir();
 const artifactPath = join(artifactDir, 'performance-smoke.json');
 const packagedExe = resolve('release/win-unpacked/Roc.exe');
-const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
-const smokeTarget =
-  preferredSmokeTarget === 'packaged'
-    ? existsSync(packagedExe)
-      ? {
-          kind: 'packaged-exe',
-          path: packagedExe,
-          executablePath: packagedExe,
-          launchArgs: []
-        }
-      : (() => {
-          throw new Error(`Packaged smoke target is unavailable: ${packagedExe}`);
-        })()
-    : {
-        kind: 'dist-main-fallback',
-        path: distMainPath,
-        executablePath: undefined,
-        launchArgs: [distMainPath]
-      };
+const smokeTarget = resolveSmokeTarget({ packagedExe, distMainPath });
 
 const dataRoot = await mkdtemp(join(tmpdir(), 'roc-performance-smoke-'));
 let app;

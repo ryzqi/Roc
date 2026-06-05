@@ -9,6 +9,7 @@ import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeP
 import { readMainPageText, seedSmokeRuntimeData } from './lib/ipc.mjs';
 import { buildNativeFeelSummary, nativeFeelScorecard, summarizeProcessMetrics } from './lib/native-feel.mjs';
 import { buildReleaseReadinessSnapshot } from './lib/release-readiness.mjs';
+import { resolveSmokeTarget } from './lib/smoke-target.mjs';
 import { clickComposerPopoverChoice, clickSmokeControl, hoverComposerPopoverContent, openChatView } from './lib/ui-actions.mjs';
 
 const artifactDir = prepareArtifactDir();
@@ -28,26 +29,8 @@ const releaseReadiness = buildReleaseReadinessSnapshot({
     renderer: readFileSync(resolve('src/renderer/App.tsx'), 'utf8')
   }
 });
-const preferredSmokeTarget = process.env.ROC_SMOKE_TARGET === 'packaged' ? 'packaged' : 'dist';
 const distMainPath = resolve('dist/main/index.js');
-const smokeTarget =
-  preferredSmokeTarget === 'packaged'
-    ? existsSync(packagedExe)
-      ? {
-          kind: 'packaged-exe',
-          path: packagedExe,
-          executablePath: packagedExe,
-          launchArgs: []
-        }
-      : (() => {
-          throw new Error(`Packaged smoke target is unavailable: ${packagedExe}`);
-        })()
-    : {
-        kind: 'dist-main-fallback',
-        path: distMainPath,
-        executablePath: undefined,
-        launchArgs: [distMainPath]
-      };
+const smokeTarget = resolveSmokeTarget({ packagedExe, distMainPath });
 
 const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
