@@ -109,18 +109,78 @@ export class SystemPromptBuilder {
   }
 
   private buildToolsBlock(tools: ClientTool[]): PromptBlock {
-    return { type: 'tools', content: '', stability: BlockStability.CAPABILITY, hash: '' };
+    if (tools.length === 0) {
+      const content = 'Available Tools: none';
+      return {
+        type: 'tools',
+        content,
+        stability: BlockStability.CAPABILITY,
+        hash: this.computeHash(content)
+      };
+    }
+    const descriptions = tools
+      .map(tool => `- ${tool.name}: ${tool.description}`)
+      .join('\n');
+    const content = `Available Tools:\n${descriptions}`;
+    return {
+      type: 'tools',
+      content,
+      stability: BlockStability.CAPABILITY,
+      hash: this.computeHash(content)
+    };
   }
 
   private buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
-    return { type: 'snapshot', content: '', stability: BlockStability.SESSION, hash: '' };
+    const { renderFrozenSnapshot } = require('../memory/snapshot');
+    const content = renderFrozenSnapshot(snapshot);
+    return {
+      type: 'snapshot',
+      content,
+      stability: BlockStability.SESSION,
+      hash: this.computeHash(content)
+    };
   }
 
   private buildCapabilityBlock(
     capabilities: ChatStartRunRequest['enabledCapabilities'],
     hint: WorkflowHint
   ): PromptBlock {
-    return { type: 'capability', content: '', stability: BlockStability.CAPABILITY, hash: '' };
+    const sections = [`Capabilities: ${createCapabilitySummary(capabilities)}`];
+    sections.push(...this.createWorkflowOverview(hint));
+    const content = sections.join('\n');
+    return {
+      type: 'capability',
+      content,
+      stability: BlockStability.CAPABILITY,
+      hash: this.computeHash(content)
+    };
+  }
+
+  private createWorkflowOverview(workflowHint: WorkflowHint): string[] {
+    if (workflowHint === 'propose_background_task') {
+      return [
+        '',
+        '本轮工作流：创建后台任务。',
+        '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task / confirm_with_user。',
+        '先调用 resolve_background_task_time 解析触发时间。',
+        '用返回的 trigger 组装 propose_background_task。',
+        'propose 仅生成草稿；schedule 才实际落地；confirm 通知用户工作完成或请求用户补充缺失时间。',
+        'One-shot：用户说"每天 9:00 检查测试失败情况"时，依次调用：',
+        '1. resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })',
+        '2. propose_background_task({ goal, trigger: resolved.trigger, workspacePath })',
+        '3. schedule_background_task({ previewId })',
+        '4. confirm_with_user({ summary })'
+      ];
+    }
+    if (workflowHint === 'background_task_change') {
+      return [
+        '',
+        '本轮工作流：修改已有后台任务。',
+        '可用工具：read_background_task / update_background_task / cancel_background_task。',
+        'update / cancel 会触发用户审批；read 用于先看清楚再改。'
+      ];
+    }
+    return [];
   }
 
   private computeHash(content: string): string {
