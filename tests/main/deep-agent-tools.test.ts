@@ -124,6 +124,36 @@ describe('deep agent tools', () => {
     );
   });
 
+  it('gives the code-review subagent a structured responseFormat schema', () => {
+    const stubTool = {
+      name: 'stub',
+      description: 'stub',
+      schema: z.object({}),
+      invoke: vi.fn(),
+      func: vi.fn()
+    } as never;
+
+    const subagents = createRunSubagents({ webReadTool: stubTool });
+    const codeReview = subagents.find((subagent) => subagent.name === 'code-review');
+
+    expect(codeReview?.responseFormat).toBeDefined();
+    const schema = codeReview?.responseFormat as z.ZodTypeAny;
+
+    // 合法结构：三个字符串数组字段
+    expect(
+      schema.safeParse({ findings: ['空指针解引用'], risks: ['并发写入未加锁'], missing_verification: ['缺少超时分支测试'] }).success
+    ).toBe(true);
+
+    // 非法结构：字段类型错误必须被拒
+    expect(schema.safeParse({ findings: 'not-an-array', risks: [], missing_verification: [] }).success).toBe(false);
+    // 缺字段必须被拒
+    expect(schema.safeParse({ findings: ['x'] }).success).toBe(false);
+
+    // research 子代理保持自由文本（无 responseFormat）
+    const research = subagents.find((subagent) => subagent.name === 'research');
+    expect(research?.responseFormat).toBeUndefined();
+  });
+
   it('normalizes the Exa search tool when the server exposes only web_search_exa', async () => {
     services.mcpService.setServerEnabled(services.mcpService.ensureExaPreset().id, true);
     mocked.getToolsMock.mockResolvedValue([

@@ -156,7 +156,12 @@ export function createRunSubagents(input: {
     systemPrompt:
       '你是 Roc 的代码审查子代理。先找 bug、回归风险和缺失验证，再给出简短结论。需要项目上下文时直接读取 /memory/。',
     tools: [],
-    skills: [...(input.codeReviewSkillSources ?? [])]
+    skills: [...(input.codeReviewSkillSources ?? [])],
+    responseFormat: z.object({
+      findings: z.array(z.string()).describe('具体的 bug、回归点或缺陷，每条一项'),
+      risks: z.array(z.string()).describe('边界条件与回归风险'),
+      missing_verification: z.array(z.string()).describe('尚缺失、应补充的验证')
+    })
   });
   subagents.push({
     name: 'research',
