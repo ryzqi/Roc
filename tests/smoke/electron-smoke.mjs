@@ -1424,7 +1424,23 @@ try {
   const renamedSmokeProviderName = 'Smoke Provider Renamed';
   await page.fill('[data-testid="provider-draft-name"]', renamedSmokeProviderName);
   await clickSmokeControl(page, '[data-testid="provider-save"]');
-  await waitForTextContent(page, '[data-testid="settings-view"]', renamedSmokeProviderName);
+  await page.waitForFunction(
+    async ({ providerId, providerName }) => {
+      const result = await window.roc.settings.get();
+      if (!result.ok) {
+        return false;
+      }
+      const provider = result.data.providers.find((entry) => entry.id === providerId);
+      const secretStored = result.data.providerSecretStatus.find((entry) => entry.providerId === providerId)?.stored === true;
+      return (
+        provider?.name === providerName &&
+        secretStored &&
+        document.querySelector('[data-testid="provider-draft-status"]') === null
+      );
+    },
+    { providerId: 'smoke-provider', providerName: renamedSmokeProviderName },
+    { timeout: 5000 }
+  );
   const smokeProviderEditState = await page.evaluate(async ({ providerId, providerName }) => {
     const result = await window.roc.settings.get();
     if (!result.ok) {

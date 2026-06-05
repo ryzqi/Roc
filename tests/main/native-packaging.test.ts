@@ -5,6 +5,7 @@ const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import
 const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
 const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
+const verifyNativePackagingScript = readFileSync(new URL('../../scripts/verify-native-packaging.mjs', import.meta.url), 'utf8');
 
 async function loadElectronVersionModule() {
   return import(new URL('../../scripts/lib/electron-version.mjs', import.meta.url).href);
@@ -205,6 +206,14 @@ describe('native packaging contract', () => {
         '--platform=win32'
       ],
       { cwd: resolve('F:/Code/Roc/node_modules/better-sqlite3') }
+    );
+  });
+
+  it('prepares workspace better-sqlite3 for Electron before standalone native packaging verification', () => {
+    expect(verifyNativePackagingScript).toContain('prepareAndVerifyWorkspaceBetterSqlite3');
+    expect(verifyNativePackagingScript).toContain('restoreBetterSqlite3ForNode');
+    expect(verifyNativePackagingScript.indexOf('prepareAndVerifyWorkspaceBetterSqlite3')).toBeLessThan(
+      verifyNativePackagingScript.indexOf('restoreBetterSqlite3ForNode')
     );
   });
 
