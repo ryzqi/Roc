@@ -19,6 +19,7 @@ import {
   ROC_PREREQUISITES
 } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
+import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import type { RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
@@ -58,6 +59,7 @@ const DEEPAGENTS_BUILT_IN_TOOL_NAMES = [
 ] as const;
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
+  ensureRocHarnessProfilesRegistered();
   const isLocalProvider = input.providerType === 'llama_cpp';
   const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolNames = (): string[] => {
