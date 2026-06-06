@@ -24,6 +24,7 @@ import { createBackend, type RocCompositeBackend } from './backend';
 import * as prompt from './prompt';
 import * as tools from './tools';
 import type { AgentExecuteAdapter, RunExecutionContext, RuntimeSubagent } from './types';
+import { SystemPromptBuilder, blocksToSystemMessage } from './prompt-builder';
 
 export type DeepAgentSession = {
   agent: ReturnType<typeof buildDeepAgent>;
@@ -95,21 +96,28 @@ export async function createDeepAgentSession(input: {
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();
-  // TODO Phase 2: 从 runtime service 调用 getOrBuildSnapshot(workspaceHash)
-  // 当前先保持原有逻辑
   const frozenSnapshot = input.memoryService.buildSnapshotForCurrentWorkspace();
+
+  // 使用新的 SystemPromptBuilder 构建分层 blocks
+  const blocks = SystemPromptBuilder.build({
+    enabledCapabilities: input.context.enabledCapabilities,
+    workspacePath: workspace?.path ?? null,
+    frozenSnapshot,
+    workflowHint: input.context.workflowHint,
+    tools: runTools.tools
+  });
+
+  // 暂时转换为 string（后续优化：让 buildDeepAgent 接受 SystemMessage）
+  // 对于 Anthropic，cache_control 会在 Middleware 中注入
+  const systemPrompt = blocks.map(b => b.content).join('\n\n');
+
   const skillSources = input.context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
   const subagents = tools.createRunSubagents({
     webReadTool: runTools.webReadTool
   });
   const agent = buildDeepAgent({
     model: input.context.modelHandle.model,
-    systemPrompt: prompt.buildSystemPrompt({
-      enabledCapabilities: input.context.enabledCapabilities,
-      workspacePath: workspace?.path ?? null,
-      frozenSnapshot,
-      workflowHint: input.context.workflowHint
-    }),
+    systemPrompt,
     backend: runtimeBackend.backend,
     store: input.store,
     memorySources: [],
