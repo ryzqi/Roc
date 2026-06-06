@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto';
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ClientTool } from '@langchain/core/tools';
 import type { FrozenSnapshot } from '../memory/snapshot';
-import type { RocPaths } from '../../paths';
-import type { WorkspaceService } from '../workspace-service';
 import { createCapabilitySummary } from './prompt';
 
 /**
@@ -39,13 +37,13 @@ export interface CacheSavings {
   tokensSaved: number;
 }
 
+/**
+ * 构建分层的系统提示块
+ * 纯函数，无状态依赖
+ */
 export class SystemPromptBuilder {
-  constructor(
-    private readonly paths: RocPaths,
-    private readonly workspaceService: WorkspaceService
-  ) {}
 
-  build(input: {
+  static build(input: {
     enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
     workspacePath: string | null;
     frozenSnapshot: FrozenSnapshot;
@@ -53,15 +51,15 @@ export class SystemPromptBuilder {
     tools: ClientTool[];
   }): PromptBlock[] {
     const blocks: PromptBlock[] = [];
-    blocks.push(this.buildStaticBlock());
-    blocks.push(this.buildWorkspaceBlock(input.workspacePath));
-    blocks.push(this.buildToolsBlock(input.tools));
-    blocks.push(this.buildSnapshotBlock(input.frozenSnapshot));
-    blocks.push(this.buildCapabilityBlock(input.enabledCapabilities, input.workflowHint));
+    blocks.push(SystemPromptBuilder.buildStaticBlock());
+    blocks.push(SystemPromptBuilder.buildWorkspaceBlock(input.workspacePath));
+    blocks.push(SystemPromptBuilder.buildToolsBlock(input.tools));
+    blocks.push(SystemPromptBuilder.buildSnapshotBlock(input.frozenSnapshot));
+    blocks.push(SystemPromptBuilder.buildCapabilityBlock(input.enabledCapabilities, input.workflowHint));
     return blocks;
   }
 
-  private buildStaticBlock(): PromptBlock {
+  private static buildStaticBlock(): PromptBlock {
     const ROC_STATIC_SYSTEM_PROMPT = [
       'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
       '',
@@ -82,11 +80,11 @@ export class SystemPromptBuilder {
       type: 'static',
       content: ROC_STATIC_SYSTEM_PROMPT,
       stability: BlockStability.STATIC,
-      hash: this.computeHash(ROC_STATIC_SYSTEM_PROMPT)
+      hash: SystemPromptBuilder.computeHash(ROC_STATIC_SYSTEM_PROMPT)
     };
   }
 
-  private buildWorkspaceBlock(workspacePath: string | null): PromptBlock {
+  private static buildWorkspaceBlock(workspacePath: string | null): PromptBlock {
     const sections: string[] = [];
     if (workspacePath === null) {
       sections.push('Workspace: not selected.');
@@ -104,18 +102,18 @@ export class SystemPromptBuilder {
       type: 'workspace',
       content,
       stability: BlockStability.WORKSPACE,
-      hash: this.computeHash(content)
+      hash: SystemPromptBuilder.computeHash(content)
     };
   }
 
-  private buildToolsBlock(tools: ClientTool[]): PromptBlock {
+  private static buildToolsBlock(tools: ClientTool[]): PromptBlock {
     if (tools.length === 0) {
       const content = 'Available Tools: none';
       return {
         type: 'tools',
         content,
         stability: BlockStability.CAPABILITY,
-        hash: this.computeHash(content)
+        hash: SystemPromptBuilder.computeHash(content)
       };
     }
     const descriptions = tools
@@ -126,37 +124,37 @@ export class SystemPromptBuilder {
       type: 'tools',
       content,
       stability: BlockStability.CAPABILITY,
-      hash: this.computeHash(content)
+      hash: SystemPromptBuilder.computeHash(content)
     };
   }
 
-  private buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
+  private static buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
     const { renderFrozenSnapshotWithPercentage } = require('../memory/snapshot');
     const content = renderFrozenSnapshotWithPercentage(snapshot);
     return {
       type: 'snapshot',
       content,
       stability: BlockStability.SESSION,
-      hash: this.computeHash(content)
+      hash: SystemPromptBuilder.computeHash(content)
     };
   }
 
-  private buildCapabilityBlock(
+  private static buildCapabilityBlock(
     capabilities: ChatStartRunRequest['enabledCapabilities'],
     hint: WorkflowHint
   ): PromptBlock {
     const sections = [`Capabilities: ${createCapabilitySummary(capabilities)}`];
-    sections.push(...this.createWorkflowOverview(hint));
+    sections.push(...SystemPromptBuilder.createWorkflowOverview(hint));
     const content = sections.join('\n');
     return {
       type: 'capability',
       content,
       stability: BlockStability.CAPABILITY,
-      hash: this.computeHash(content)
+      hash: SystemPromptBuilder.computeHash(content)
     };
   }
 
-  private createWorkflowOverview(workflowHint: WorkflowHint): string[] {
+  private static createWorkflowOverview(workflowHint: WorkflowHint): string[] {
     if (workflowHint === 'propose_background_task') {
       return [
         '',
@@ -183,7 +181,7 @@ export class SystemPromptBuilder {
     return [];
   }
 
-  private computeHash(content: string): string {
+  private static computeHash(content: string): string {
     return createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16);
   }
 }
