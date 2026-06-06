@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ClientTool } from '@langchain/core/tools';
 import type { FrozenSnapshot } from '../memory/snapshot';
+import { renderFrozenSnapshotWithPercentage } from '../memory/snapshot';
 import { createCapabilitySummary } from './prompt';
 import { SystemMessage } from '@langchain/core/messages';
 import type { PromptCachingStrategy } from '../forge-guardrails/middleware/prompt-caching';
@@ -131,7 +132,6 @@ export class SystemPromptBuilder {
   }
 
   private static buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
-    const { renderFrozenSnapshotWithPercentage } = require('../memory/snapshot');
     const content = renderFrozenSnapshotWithPercentage(snapshot);
     return {
       type: 'snapshot',
