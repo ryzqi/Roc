@@ -17,3 +17,4 @@ export * from './middleware/step-enforcement';
 export * from './middleware/filesystem-tool-errors';
 export * from './middleware/forge-tiered-compaction';
 export * from './middleware/forge-cleanup';
+export * from './middleware/prompt-caching';

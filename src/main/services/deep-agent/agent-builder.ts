@@ -16,6 +16,7 @@ import {
   createStepEnforcementMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
+  createPromptCachingMiddleware,
   ROC_PREREQUISITES
 } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -59,6 +60,11 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   };
   const guardrails = [
     rtkMiddleware,
+    createPromptCachingMiddleware({
+      enabled: true,
+      strategy: 'balanced',
+      providerType: input.providerType
+    }),
     toolRetryMiddleware({
       maxRetries: 2,
       tools: [...NETWORK_SENSITIVE_TOOLS],
