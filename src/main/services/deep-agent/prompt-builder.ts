@@ -3,6 +3,8 @@ import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ClientTool } from '@langchain/core/tools';
 import type { FrozenSnapshot } from '../memory/snapshot';
 import { createCapabilitySummary } from './prompt';
+import { SystemMessage } from '@langchain/core/messages';
+import type { PromptCachingStrategy } from '../forge-guardrails/middleware/prompt-caching';
 
 /**
  * 提示块稳定性级别，决定缓存失效边界
@@ -183,5 +185,62 @@ export class SystemPromptBuilder {
 
   private static computeHash(content: string): string {
     return createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16);
+  }
+}
+
+/**
+ * 将 PromptBlock[] 转换为 SystemMessage，根据策略注入 cache_control
+ */
+export function blocksToSystemMessage(
+  blocks: PromptBlock[],
+  strategy: PromptCachingStrategy,
+  providerType: string
+): SystemMessage {
+  // 对于 Anthropic，注入 cache_control
+  if (providerType === 'anthropic_compatible' && strategy !== 'disabled') {
+    const content = blocks.map((block) => {
+      const shouldCache = shouldCacheBlock(block.stability, strategy);
+      return {
+        type: 'text' as const,
+        text: block.content,
+        ...(shouldCache && { cache_control: { type: 'ephemeral' as const } }),
+        // 附加元信息供 Middleware 使用
+        __block_metadata: {
+          blockType: block.type,
+          stability: block.stability,
+          hash: block.hash
+        }
+      };
+    });
+    return new SystemMessage({ content });
+  }
+
+  // 对于 OpenAI 或其他，直接拼接为字符串（自动前缀缓存）
+  const content = blocks.map(b => b.content).join('\n\n');
+  return new SystemMessage({
+    content,
+    // 附加 blocks 信息供调试
+    additional_kwargs: { __blocks: blocks }
+  });
+}
+
+/**
+ * 根据稳定性和策略判断是否应该缓存
+ */
+function shouldCacheBlock(stability: BlockStability, strategy: PromptCachingStrategy): boolean {
+  switch (strategy) {
+    case 'aggressive':
+      return true;  // 所有块都缓存
+
+    case 'balanced':
+      // 跳过 REQUEST
+      return stability !== BlockStability.REQUEST;
+
+    case 'conservative':
+      // 仅缓存 STATIC
+      return stability === BlockStability.STATIC;
+
+    default:
+      return false;
   }
 }
