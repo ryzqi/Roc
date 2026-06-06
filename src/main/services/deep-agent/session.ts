@@ -25,6 +25,13 @@ import * as prompt from './prompt';
 import * as tools from './tools';
 import type { AgentExecuteAdapter, RunExecutionContext, RuntimeSubagent } from './types';
 import { SystemPromptBuilder, blocksToSystemMessage } from './prompt-builder';
+import type { FrozenSnapshot } from '../memory/snapshot';
+
+/**
+ * 会话级 snapshot 缓存（5 分钟 TTL，与 Anthropic 对齐）
+ */
+const snapshotCache = new Map<string, { snapshot: FrozenSnapshot; cachedAt: number }>();
+const SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 
 export type DeepAgentSession = {
   agent: ReturnType<typeof buildDeepAgent>;
@@ -96,7 +103,12 @@ export async function createDeepAgentSession(input: {
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();
-  const frozenSnapshot = input.memoryService.buildSnapshotForCurrentWorkspace();
+
+  // 使用会话级 snapshot 缓存
+  const workspaceHash = buildWorkspaceHash(workspace?.path ?? null);
+  const frozenSnapshot = getOrBuildSnapshot(workspaceHash, () =>
+    input.memoryService.buildSnapshotForCurrentWorkspace()
+  );
 
   // 使用新的 SystemPromptBuilder 构建分层 blocks
   const blocks = SystemPromptBuilder.build({
@@ -203,4 +215,25 @@ function buildWorkspaceHash(workspacePath: string | null): string {
     return 'no-workspace';
   }
   return createHash('sha256').update(workspacePath, 'utf8').digest('hex').slice(0, 16);
+}
+
+/**
+ * 从缓存获取或构建 snapshot（5 分钟 TTL）
+ */
+function getOrBuildSnapshot(
+  workspaceHash: string,
+  buildFn: () => FrozenSnapshot
+): FrozenSnapshot {
+  const cached = snapshotCache.get(workspaceHash);
+  const now = Date.now();
+
+  // 缓存命中且未过期
+  if (cached && now - cached.cachedAt < SNAPSHOT_TTL_MS) {
+    return cached.snapshot;
+  }
+
+  // 缓存失效，重新构建
+  const snapshot = buildFn();
+  snapshotCache.set(workspaceHash, { snapshot, cachedAt: now });
+  return snapshot;
 }
