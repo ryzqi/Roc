@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ClientTool } from '@langchain/core/tools';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import type { AppSettings } from '../../../shared/types';
@@ -94,6 +95,8 @@ export async function createDeepAgentSession(input: {
     selectedSkillIds: input.context.enabledCapabilities.skills
   });
   const workspace = input.workspaceService.getCurrentWorkspace();
+  // TODO Phase 2: 从 runtime service 调用 getOrBuildSnapshot(workspaceHash)
+  // 当前先保持原有逻辑
   const frozenSnapshot = input.memoryService.buildSnapshotForCurrentWorkspace();
   const skillSources = input.context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
   const subagents = tools.createRunSubagents({
@@ -185,4 +188,11 @@ async function createRunTools(input: {
     tools: runTools,
     webReadTool
   };
+}
+
+function buildWorkspaceHash(workspacePath: string | null): string {
+  if (workspacePath === null) {
+    return 'no-workspace';
+  }
+  return createHash('sha256').update(workspacePath, 'utf8').digest('hex').slice(0, 16);
 }
