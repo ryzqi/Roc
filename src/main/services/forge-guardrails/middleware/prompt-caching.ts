@@ -177,11 +177,19 @@ export function createPromptCachingMiddleware(options: PromptCachingOptions) {
         const systemMsg = messages.find(m => SystemMessage.isInstance(m)) as SystemMessage | undefined;
 
         if (!systemMsg) {
+          if (process.env.DEBUG === 'roc:prompt-caching') {
+            console.log('[PromptCaching] No SystemMessage found, skipping cache control injection');
+          }
           return handler(request);
         }
 
         // 暂时跳过 block 提取（Phase 4 集成时完善）
         // TODO: 从 systemMsg.content 提取 blocks，注入 cache_control
+
+        if (process.env.DEBUG === 'roc:prompt-caching') {
+          console.log('[PromptCaching] Strategy:', strategy, 'Provider:', providerType);
+          console.log('[PromptCaching] Cache control injection skipped (TODO: extract blocks)');
+        }
 
         return handler(request);
       } catch (error) {
