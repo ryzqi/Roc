@@ -140,4 +140,33 @@ export class MetricsService {
     const index = Math.ceil((sortedValues.length * percentile) / 100) - 1;
     return sortedValues[Math.max(0, index)]!;
   }
+
+  /**
+   * 记录提示缓存指标
+   */
+  recordPromptCacheMetrics(usage: {
+    input_tokens: number;
+    cache_read_tokens?: number;
+    cache_creation_tokens?: number;
+  }, labels: Record<string, string> = {}): void {
+    const cacheReadTokens = usage.cache_read_tokens ?? 0;
+    const cacheCreationTokens = usage.cache_creation_tokens ?? 0;
+    const totalPromptTokens = usage.input_tokens ?? 0;
+
+    // 记录缓存命中 token 数
+    this.recordHistogram('prompt_cache_read_tokens', cacheReadTokens, labels);
+
+    // 记录缓存创建 token 数
+    this.recordHistogram('prompt_cache_creation_tokens', cacheCreationTokens, labels);
+
+    // 记录缓存命中率
+    if (totalPromptTokens > 0) {
+      const hitRatio = cacheReadTokens / totalPromptTokens;
+      this.setGauge('prompt_cache_hit_ratio', hitRatio, labels);
+    }
+
+    // 估算节省（假设缓存命中节省 90%）
+    const tokensSaved = Math.floor(cacheReadTokens * 0.9);
+    this.recordHistogram('prompt_cache_tokens_saved', tokensSaved, labels);
+  }
 }
