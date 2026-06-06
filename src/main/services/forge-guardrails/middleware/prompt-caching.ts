@@ -141,3 +141,55 @@ export class CacheStrategyFactory {
 
 export { AnthropicStrategy, OpenAIStrategy };
 
+function isBlockBasedContent(content: unknown): boolean {
+  return Array.isArray(content) && content.every(block =>
+    typeof block === 'object' && block !== null && 'type' in block
+  );
+}
+
+function extractBlocks(content: any[]): PromptBlock[] {
+  // 从 SystemMessage.content 提取 blocks
+  return content.map(block => ({
+    type: block.blockType || 'unknown',
+    content: block.text || String(block),
+    stability: block.stability || BlockStability.REQUEST,
+    hash: block.hash || ''
+  }));
+}
+
+export function createPromptCachingMiddleware(options: PromptCachingOptions) {
+  const { enabled = true, strategy = 'balanced', providerType } = options;
+
+  if (!enabled || strategy === 'disabled') {
+    return createMiddleware({
+      name: 'PromptCaching',
+      wrapModelCall: async (request, handler) => handler(request)
+    });
+  }
+
+  const cacheStrategy = CacheStrategyFactory.create(providerType);
+
+  return createMiddleware({
+    name: 'PromptCaching',
+    wrapModelCall: async (request, handler) => {
+      try {
+        const messages = request.messages as BaseMessage[];
+        const systemMsg = messages.find(m => SystemMessage.isInstance(m)) as SystemMessage | undefined;
+
+        if (!systemMsg) {
+          return handler(request);
+        }
+
+        // 暂时跳过 block 提取（Phase 4 集成时完善）
+        // TODO: 从 systemMsg.content 提取 blocks，注入 cache_control
+
+        return handler(request);
+      } catch (error) {
+        // 降级：缓存注入失败，继续原始请求
+        console.warn('Cache control injection failed', error);
+        return handler(request);
+      }
+    }
+  });
+}
+
