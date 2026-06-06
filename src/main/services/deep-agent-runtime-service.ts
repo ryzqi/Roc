@@ -692,6 +692,19 @@ export class DeepAgentRuntimeService {
         cache_hit_ratio: promptTokens > 0 ? cacheReadTokens / promptTokens : 0
       }
     });
+
+    // 记录缓存指标
+    this.metricsService.recordPromptCacheMetrics(
+      {
+        input_tokens: promptTokens,
+        cache_read_tokens: cacheReadTokens,
+        cache_creation_tokens: usage.cacheCreationTokens
+      },
+      {
+        provider: context.modelHandle.provider.type,
+        model: context.modelHandle.modelId
+      }
+    );
   }
 
   private recordProviderTiming(
