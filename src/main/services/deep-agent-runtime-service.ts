@@ -23,6 +23,7 @@ import type { LogService } from './log-service';
 import type { ConsolidatorService } from './memory/consolidator';
 import type { PrecompactionService } from './memory/precompaction';
 import type { MemoryService } from './memory-service';
+import type { FrozenSnapshot } from './memory/snapshot';
 import type { MetricsService } from './metrics-service';
 import type { SessionArchiveService } from './memory/session-archive';
 import type { McpService } from './mcp-service';
@@ -70,6 +71,10 @@ export class DeepAgentRuntimeService {
       approval: ChatPendingApproval;
     }
   >();
+  private snapshotCache = new Map<string, {
+    snapshot: FrozenSnapshot;
+    cachedAt: number;
+  }>();
 
   constructor(
     private readonly langChainModelFactory: LangChainModelFactory,
@@ -1054,6 +1059,37 @@ export class DeepAgentRuntimeService {
       interruptId: approval.interruptId,
       payload: approval
     });
+  }
+
+  private getOrBuildSnapshot(workspaceHash: string): FrozenSnapshot {
+    const cached = this.snapshotCache.get(workspaceHash);
+    if (cached && !this.isSnapshotStale(cached)) {
+      return cached.snapshot;
+    }
+
+    const snapshot = this.memoryService.buildSnapshotForCurrentWorkspace();
+    this.snapshotCache.set(workspaceHash, {
+      snapshot,
+      cachedAt: Date.now()
+    });
+    return snapshot;
+  }
+
+  private isSnapshotStale(entry: { cachedAt: number }): boolean {
+    // 5 分钟后视为过期（与 Anthropic TTL 对齐）
+    const MAX_AGE_MS = 5 * 60 * 1000;
+    return Date.now() - entry.cachedAt > MAX_AGE_MS;
+  }
+
+  /**
+   * 手动失效快照缓存（用于工作区切换或内存文件编辑后）
+   */
+  invalidateSnapshotCache(workspaceHash: string): void {
+    this.snapshotCache.delete(workspaceHash);
+  }
+
+  clearAllSnapshotCaches(): void {
+    this.snapshotCache.clear();
   }
 }
 
