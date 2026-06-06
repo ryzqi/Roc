@@ -157,6 +157,28 @@ function extractBlocks(content: any[]): PromptBlock[] {
   }));
 }
 
+/**
+ * 从带分隔符的字符串中解析 PromptBlock[]
+ * 格式：<!-- BLOCK:type:stability:hash -->content
+ */
+function parseBlocksFromContent(content: string): PromptBlock[] {
+  const blockRegex = /<!-- BLOCK:(\w+):(\w+):(\w+) -->\n([\s\S]*?)(?=<!-- BLOCK:|\n*$)/g;
+  const blocks: PromptBlock[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = blockRegex.exec(content)) !== null) {
+    const [, type, stability, hash, blockContent] = match;
+    blocks.push({
+      type: type as PromptBlock['type'],
+      content: blockContent.trim(),
+      stability: stability as BlockStability,
+      hash
+    });
+  }
+
+  return blocks;
+}
+
 export function createPromptCachingMiddleware(options: PromptCachingOptions) {
   const { enabled = true, strategy = 'balanced', providerType } = options;
 
@@ -183,18 +205,52 @@ export function createPromptCachingMiddleware(options: PromptCachingOptions) {
           return handler(request);
         }
 
-        // 暂时跳过 block 提取（Phase 4 集成时完善）
-        // TODO: 从 systemMsg.content 提取 blocks，注入 cache_control
+        // 仅对 Anthropic 注入 cache_control
+        if (providerType !== 'anthropic_compatible') {
+          if (process.env.DEBUG === 'roc:prompt-caching') {
+            console.log('[PromptCaching] Non-Anthropic provider, skipping (auto prefix caching)');
+          }
+          return handler(request);
+        }
+
+        const content = systemMsg.content;
+        if (typeof content !== 'string') {
+          // 已经是结构化格式，不处理
+          return handler(request);
+        }
+
+        // 从分隔符提取 blocks
+        const blocks = parseBlocksFromContent(content);
+        if (blocks.length === 0) {
+          if (process.env.DEBUG === 'roc:prompt-caching') {
+            console.log('[PromptCaching] No block markers found, skipping');
+          }
+          return handler(request);
+        }
+
+        // 根据策略决定哪些 block 需要缓存
+        const breakpoints = cacheStrategy.detectBreakpoints(blocks, strategy);
 
         if (process.env.DEBUG === 'roc:prompt-caching') {
-          console.log('[PromptCaching] Strategy:', strategy, 'Provider:', providerType);
-          console.log('[PromptCaching] Cache control injection skipped (TODO: extract blocks)');
+          console.log('[PromptCaching] Strategy:', strategy, 'Breakpoints:', breakpoints);
         }
+
+        // 转换为 Anthropic 的结构化 content
+        const structuredContent = blocks.map((block, index) => ({
+          type: 'text' as const,
+          text: block.content,
+          ...(breakpoints.includes(index) && { cache_control: { type: 'ephemeral' as const } })
+        }));
+
+        // 替换 SystemMessage
+        const enhancedMsg = new SystemMessage({ content: structuredContent });
+        const msgIndex = messages.indexOf(systemMsg);
+        messages[msgIndex] = enhancedMsg;
 
         return handler(request);
       } catch (error) {
         // 降级：缓存注入失败，继续原始请求
-        console.warn('Cache control injection failed', error);
+        console.warn('[PromptCaching] Cache control injection failed', error);
         return handler(request);
       }
     }

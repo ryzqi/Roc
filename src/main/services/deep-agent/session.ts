@@ -119,9 +119,11 @@ export async function createDeepAgentSession(input: {
     tools: runTools.tools
   });
 
-  // 暂时转换为 string（后续优化：让 buildDeepAgent 接受 SystemMessage）
-  // 对于 Anthropic，cache_control 会在 Middleware 中注入
-  const systemPrompt = blocks.map(b => b.content).join('\n\n');
+  // 用特殊分隔符拼接 blocks，供 Middleware 识别边界
+  // 格式：<!-- BLOCK:type:stability:hash -->content
+  const systemPrompt = blocks
+    .map(block => `<!-- BLOCK:${block.type}:${block.stability}:${block.hash} -->\n${block.content}`)
+    .join('\n\n');
 
   const skillSources = input.context.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'];
   const subagents = tools.createRunSubagents({
