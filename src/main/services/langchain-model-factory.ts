@@ -23,6 +23,7 @@ import {
 } from '@langchain/openai';
 import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderOptions, type ProviderType } from '../../shared/types';
+import { toTypedProviderConfig, type LlamaCppParams, type NvidiaParams, type OpenAICompatibleParams } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
@@ -660,17 +661,19 @@ export class LangChainModelFactory {
     }
 
     const apiKey = this.resolveCredential(provider);
+    const typedProvider = isLangChainProviderType(provider.type) ? toTypedProviderConfig(provider) : null;
     const llamaCppSamplingProfile =
       provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, this.logService) : null;
+    const llamaCppParams = typedProvider?.type === 'llama_cpp' ? typedProvider.params : null;
     const temperature =
       provider.type === 'llama_cpp'
-        ? provider.options?.temperature ?? llamaCppSamplingProfile?.temperature
+        ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
         : provider.options?.temperature;
     const maxTokens = provider.options?.maxTokens;
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
-    const contextBudgetTokens = provider.options?.contextBudgetTokens ?? 8192;
+    const contextBudgetTokens = llamaCppParams?.contextBudgetTokens ?? provider.options?.contextBudgetTokens ?? 8192;
 
     if (provider.type === 'anthropic_compatible') {
       return this.createAnthropicModel(provider, modelId, apiKey, {
@@ -696,12 +699,12 @@ export class LangChainModelFactory {
     }
 
     const modelKwargs: Record<string, unknown> = {};
-    if (provider.type === 'nvidia') {
-      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, provider.options ?? {}, streaming));
+    if (typedProvider?.type === 'nvidia') {
+      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, typedProvider.params, streaming));
     }
-    if (provider.type === 'llama_cpp') {
+    if (typedProvider?.type === 'llama_cpp') {
       modelKwargs.cache_prompt = true;
-      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(provider.options ?? {}, llamaCppSamplingProfile));
+      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(typedProvider.params, llamaCppSamplingProfile));
     }
 
     const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
@@ -718,21 +721,22 @@ export class LangChainModelFactory {
           : undefined;
     const openAiRequestTimeoutMs =
       provider.type === 'openai_compatible' ? provider.options?.timeoutMs ?? requestTimeoutMs : requestTimeoutMs;
-    const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(provider);
-    const openAiReasoning = resolveOpenAiCompatibleReasoning(provider);
+    const openAiParams = typedProvider?.type === 'openai_compatible' ? typedProvider.params : null;
+    const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(openAiParams);
+    const openAiReasoning = openAiParams?.reasoning;
     const openAiOrganization =
-      provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
-    const openAiUseResponsesApi = provider.type === 'openai_compatible' ? provider.options?.useResponsesApi : undefined;
-    const openAiServiceTier = provider.type === 'openai_compatible' ? provider.options?.serviceTier : undefined;
-    const openAiVerbosity = provider.type === 'openai_compatible' ? provider.options?.verbosity : undefined;
-    const openAiZdrEnabled = provider.type === 'openai_compatible' ? provider.options?.zdrEnabled : undefined;
-    const openAiTopP = provider.type === 'llama_cpp' ? provider.options?.topP ?? llamaCppSamplingProfile?.topP : provider.options?.topP;
+      provider.type === 'openai_compatible' ? openAiParams?.organization?.trim() ?? '' : '';
+    const openAiUseResponsesApi = provider.type === 'openai_compatible' ? openAiParams?.useResponsesApi : undefined;
+    const openAiServiceTier = provider.type === 'openai_compatible' ? openAiParams?.serviceTier : undefined;
+    const openAiVerbosity = provider.type === 'openai_compatible' ? openAiParams?.verbosity : undefined;
+    const openAiZdrEnabled = provider.type === 'openai_compatible' ? openAiParams?.zdrEnabled : undefined;
+    const openAiTopP = provider.type === 'llama_cpp' ? llamaCppParams?.topP ?? llamaCppSamplingProfile?.topP : provider.options?.topP;
     const openAiPresencePenalty =
       provider.type === 'llama_cpp'
-        ? provider.options?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
+        ? llamaCppParams?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
         : provider.options?.presencePenalty;
-    const openAiStop = provider.type === 'openai_compatible' ? provider.options?.stop : undefined;
-    const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? provider.options?.frequencyPenalty : undefined;
+    const openAiStop = provider.type === 'openai_compatible' ? openAiParams?.stop : undefined;
+    const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? openAiParams?.frequencyPenalty : undefined;
     const openAiConfiguration =
       provider.type === 'llama_cpp' && apiKey.length === 0
         ? {
@@ -1052,10 +1056,7 @@ function resolveLlamaCppSamplingProfile(
   return applyProviderOverride(familyProfile, overrides);
 }
 
-function buildLlamaCppSamplingModelKwargs(
-  options: NonNullable<ProviderConfig['options']>,
-  profile: SamplingProfile | null
-): Record<string, unknown> {
+function buildLlamaCppSamplingModelKwargs(options: LlamaCppParams, profile: SamplingProfile | null): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
   const topK = options.topK ?? profile?.topK;
   if (typeof topK === 'number') {
@@ -1123,9 +1124,21 @@ function readNvidiaProbePayloadContent(payload: unknown): string {
     .join('');
 }
 
+function isLangChainProviderType(
+  type: ProviderType
+): type is 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'openrouter' | 'llama_cpp' {
+  return (
+    type === 'openai_compatible' ||
+    type === 'anthropic_compatible' ||
+    type === 'nvidia' ||
+    type === 'openrouter' ||
+    type === 'llama_cpp'
+  );
+}
+
 function buildNvidiaModelKwargs(
   modelId: string,
-  options: NonNullable<ProviderConfig['options']>,
+  options: NvidiaParams,
   streaming: boolean
 ): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
@@ -1267,31 +1280,22 @@ function resolveAnthropicThinking(
 }
 
 function resolveOpenAiCompatibleDefaultOptions(
-  provider: ProviderConfig
+  params: OpenAICompatibleParams | null
 ): Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean } {
-  if (provider.type !== 'openai_compatible') {
+  if (params === null) {
     return {};
   }
   const defaults: Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean } = {};
-  if (typeof provider.options?.seed === 'number') {
-    defaults.seed = provider.options.seed;
+  if (typeof params.seed === 'number') {
+    defaults.seed = params.seed;
   }
-  if (typeof provider.options?.parallelToolCalls === 'boolean') {
-    defaults.parallel_tool_calls = provider.options.parallelToolCalls;
+  if (typeof params.parallelToolCalls === 'boolean') {
+    defaults.parallel_tool_calls = params.parallelToolCalls;
   }
-  if (provider.options?.verbosity !== undefined) {
-    defaults.verbosity = provider.options.verbosity;
+  if (params.verbosity !== undefined) {
+    defaults.verbosity = params.verbosity;
   }
   return defaults;
-}
-
-function resolveOpenAiCompatibleReasoning(
-  provider: ProviderConfig
-): NonNullable<NonNullable<ProviderConfig['options']>['reasoning']> | undefined {
-  if (provider.type !== 'openai_compatible' || provider.options?.reasoning === undefined) {
-    return undefined;
-  }
-  return provider.options.reasoning;
 }
 
 function applyOpenAiCompatibleDefaultOptions(

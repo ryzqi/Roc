@@ -62,9 +62,6 @@ test_step "reasoning.css 存在" \
 test_step "tool-call.css 存在" \
     "test -f src/renderer/styles/tool-call.css"
 
-test_step "provider-adapter.ts 存在" \
-    "test -f src/main/services/deep-agent/provider-adapter.ts"
-
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "阶段 2: 代码质量检查"
@@ -85,9 +82,6 @@ test_step "JsonView 组件导出" \
 
 test_step "ToolCallView 组件导出" \
     "grep -q 'export function ToolCallView' src/renderer/chat/tool-call-view.tsx"
-
-test_step "provider-adapter 导出检查" \
-    "grep -q 'export function createModelFromProviderConfig' src/main/services/deep-agent/provider-adapter.ts"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

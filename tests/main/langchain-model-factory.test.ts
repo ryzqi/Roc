@@ -351,6 +351,65 @@ describe('LangChainModelFactory', () => {
       });
   });
 
+  it('does not apply OpenAI-only advanced params to OpenRouter models', async () => {
+    services.secretService.setProviderSecret('openrouter', 'sk-or-v1-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: '~openai/gpt-latest',
+      providers: [
+        {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          type: 'openrouter',
+          endpoint: 'https://openrouter.ai/api/v1',
+          credentialRef: 'secret:openrouter',
+          enabled: true,
+          models: [
+            {
+              id: '~openai/gpt-latest',
+              displayName: 'OpenAI GPT Latest',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            defaultHeaders: { 'x-custom': 'must-not-send' },
+            reasoning: { effort: 'high', summary: 'detailed' },
+            serviceTier: 'priority',
+            useResponsesApi: true,
+            verbosity: 'high',
+            zdrEnabled: true
+          }
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+    const chatModel = result.model as unknown as {
+      clientConfig?: { baseURL?: string; defaultHeaders?: Record<string, string> };
+      invocationParams: () => Record<string, unknown>;
+      useResponsesApi?: boolean;
+    };
+
+    expect(chatModel.clientConfig).toMatchObject({
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': 'https://github.com/roc-ai/roc',
+        'X-OpenRouter-Title': 'Roc'
+      }
+    });
+    expect(chatModel.clientConfig?.defaultHeaders).not.toHaveProperty('x-custom');
+    expect(chatModel.useResponsesApi).not.toBe(true);
+    expect(chatModel.invocationParams()).not.toMatchObject({
+      reasoning: expect.anything(),
+      service_tier: expect.anything(),
+      text: expect.anything(),
+      store: false
+    });
+  });
+
   it('resolves cheap model handle to the active handle when no explicit cheap model is configured', async () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
@@ -635,6 +694,67 @@ describe('LangChainModelFactory', () => {
       maxRetries: 0
     });
     expect((result.model as { timeout?: number }).timeout).toBe(600_000);
+  });
+
+  it('keeps llama.cpp free of OpenAI-only reasoning, organization, service tier, and response fields', async () => {
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen3.5-4b',
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: null,
+          enabled: true,
+          models: [
+            {
+              id: 'qwen3.5-4b',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            contextBudgetTokens: 4096,
+            organization: 'org_should_not_send',
+            reasoning: { effort: 'medium' },
+            serviceTier: 'flex',
+            streamUsage: true,
+            useResponsesApi: true,
+            verbosity: 'high',
+            zdrEnabled: true
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: false });
+    const chatModel = result.model as unknown as {
+      clientConfig?: { baseURL?: string; organization?: string };
+      invocationParams: () => Record<string, unknown>;
+      useResponsesApi?: boolean;
+    };
+
+    expect(result.runtime.streaming).toBe(true);
+    expect(result.runtime.contextBudgetTokens).toBe(4096);
+    expect(result.runtime.modelKwargs).toMatchObject({
+      cache_prompt: true
+    });
+    expect(chatModel.clientConfig).toMatchObject({
+      baseURL: 'http://127.0.0.1:9090/v1'
+    });
+    expect(chatModel.clientConfig?.organization).not.toBe('org_should_not_send');
+    expect(chatModel.useResponsesApi).not.toBe(true);
+    expect(chatModel.invocationParams()).not.toMatchObject({
+      reasoning: expect.anything(),
+      service_tier: expect.anything(),
+      text: expect.anything(),
+      store: false
+    });
   });
 
   it('sanitizes llama.cpp tool schemas before grammar generation', async () => {
