@@ -77,6 +77,11 @@ type GuardrailPayload = {
   toolName?: string;
 };
 
+type ApprovalDecisionPayload = {
+  interruptId: string;
+  decisions: unknown[];
+};
+
 type AssistantDraft = {
   message: ChatTranscriptMessage;
   reasoningBlock: Extract<ChatTranscriptActivityBlock, { kind: 'reasoning' }> | null;
@@ -153,6 +158,25 @@ function isGuardrailPayload(payload: unknown): payload is GuardrailPayload {
     (tier === undefined || typeof tier === 'number') &&
     (toolName === undefined || typeof toolName === 'string')
   );
+}
+
+function isApprovalPayload(payload: unknown): payload is ChatPendingApproval {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  const interruptId = Reflect.get(payload, 'interruptId');
+  const actionRequests = Reflect.get(payload, 'actionRequests');
+  const reviewConfigs = Reflect.get(payload, 'reviewConfigs');
+  return typeof interruptId === 'string' && Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
+}
+
+function isApprovalDecisionPayload(payload: unknown): payload is ApprovalDecisionPayload {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  const interruptId = Reflect.get(payload, 'interruptId');
+  const decisions = Reflect.get(payload, 'decisions');
+  return typeof interruptId === 'string' && Array.isArray(decisions);
 }
 
 function resolveActiveThreadId(selectedThreadId: string | null, chatRunState: ChatRunState): string | null {
@@ -345,10 +369,22 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
 
     if (event.type === 'guardrail_nudge' && isGuardrailPayload(event.payload)) {
       appendGuardrailBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, `guardrail-${event.runId}`);
+      continue;
+    }
+
+    if (event.type === 'approval_requested' && isApprovalPayload(event.payload)) {
+      getAssistantDraft(drafts, messages, event.runId).message.approval = event.payload;
+      continue;
+    }
+
+    if (event.type === 'approval_decision' && isApprovalDecisionPayload(event.payload)) {
+      getAssistantDraft(drafts, messages, event.runId).message.approval = null;
     }
   }
 
-  return messages.filter((message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0);
+  return messages.filter(
+    (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.approval !== null
+  );
 }
 
 function buildToolBlocksFromLiveState(toolEvents: readonly ChatRunToolState[], idPrefix: string): ChatTranscriptActivityBlock[] {

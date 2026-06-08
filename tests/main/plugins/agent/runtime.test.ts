@@ -15,11 +15,31 @@ let events: RocEventEnvelope[];
 const modelFactory: AgentModelFactoryAdapter = {
   createDefaultModelHandle: async () => ({
     invoke: async () => 'Static agent response.',
+    stream: async function* () {
+      yield new AIMessageChunk({
+        content: [
+          {
+            type: 'text',
+            text: 'Static agent response.'
+          }
+        ] as never
+      });
+    },
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
   createModelHandleByModelId: async (modelId) => ({
     invoke: async () => 'Static agent response.',
+    stream: async function* () {
+      yield new AIMessageChunk({
+        content: [
+          {
+            type: 'text',
+            text: 'Static agent response.'
+          }
+        ] as never
+      });
+    },
     modelId,
     providerId: 'openai'
   })
@@ -121,6 +141,11 @@ describe('AgentPluginRuntime', () => {
         createdAt: result.createdAt
       },
       {
+        type: 'message_delta',
+        runId: result.runId,
+        delta: 'Static agent response.'
+      },
+      {
         type: 'run_completed',
         runId: result.runId,
         threadId: result.threadId,
@@ -142,6 +167,16 @@ describe('AgentPluginRuntime', () => {
       modelFactory: {
         createDefaultModelHandle: async () => ({
           invoke: async () => deferred.promise,
+          stream: async function* () {
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'text',
+                  text: await deferred.promise
+                }
+              ] as never
+            });
+          },
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
@@ -181,6 +216,9 @@ describe('AgentPluginRuntime', () => {
       modelFactory: {
         createDefaultModelHandle: async () => ({
           invoke: async () => {
+            throw new Error('provider_unavailable');
+          },
+          stream: async function* () {
             throw new Error('provider_unavailable');
           },
           modelId: 'openai:gpt-4.1',
@@ -332,6 +370,59 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('fails the run instead of falling back to invoke when the model handle does not expose stream', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          invoke: async () => 'Legacy invoke fallback should not run.',
+          modelId: 'openai:gpt-4.1',
+          providerId: 'openai'
+        }),
+        createModelHandleByModelId: async (modelId) => ({
+          invoke: async () => 'Legacy invoke fallback should not run.',
+          modelId,
+          providerId: 'openai'
+        })
+      },
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      mode: 'chat'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: {
+          type: 'run_failed',
+          runId: result.runId,
+          threadId: result.threadId,
+          code: 'agent_run_failed',
+          message: 'agent_model_stream_unavailable',
+          retryable: true
+        }
+      })
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed',
+          runId: result.runId
+        })
+      })
+    );
+  });
+
   it('lists and searches session messages from the plugin repository', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
@@ -363,6 +454,206 @@ describe('AgentPluginRuntime', () => {
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
     );
+  });
+
+  it('replays delegated chat runtime events through the plugin event bus contract', async () => {
+    const repository = new AgentSessionRepository(db);
+    const listeners = new Set<(event: ChatRunEvent) => void>();
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => {
+          throw new Error('legacy_model_factory_should_not_be_used');
+        },
+        createModelHandleByModelId: async () => {
+          throw new Error('legacy_model_factory_should_not_be_used');
+        }
+      },
+      repository,
+      runtimeDelegate: {
+        onRunEvent: (listener) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        startRun: async (request) => {
+          const result = {
+            runId: 'chat_delegate_123',
+            mode: request.mode,
+            threadId: 'thread_delegate_123',
+            providerId: 'nvidia',
+            modelId: 'moonshotai/kimi-k2.6',
+            createdAt: '2026-06-09T00:00:00.000Z'
+          } satisfies Awaited<ReturnType<AgentPluginRuntime['startRun']>>;
+          emitDelegatedRunEvent(listeners, {
+            type: 'run_started',
+            ...result
+          });
+          setTimeout(() => {
+            emitDelegatedRunEvent(listeners, {
+              type: 'reasoning_delta',
+              runId: result.runId,
+              delta: '先读取工作区约束。'
+            });
+            emitDelegatedRunEvent(listeners, {
+              type: 'message_delta',
+              runId: result.runId,
+              delta: '先检查当前计划。'
+            });
+            emitDelegatedRunEvent(listeners, {
+              type: 'tool_event',
+              runId: result.runId,
+              event: 'start',
+              name: 'web_search',
+              data: {
+                query: 'streaming runtime plan'
+              }
+            });
+            emitDelegatedRunEvent(listeners, {
+              type: 'tool_event',
+              runId: result.runId,
+              event: 'end',
+              name: 'web_search',
+              data: {
+                hits: 3
+              }
+            });
+            emitDelegatedRunEvent(listeners, {
+              type: 'run_interrupted',
+              runId: result.runId,
+              threadId: result.threadId,
+              interruptId: 'interrupt_123',
+              payload: {
+                actionRequests: [],
+                reviewConfigs: []
+              }
+            });
+            emitDelegatedRunEvent(listeners, {
+              type: 'run_completed',
+              runId: result.runId,
+              threadId: result.threadId,
+              providerId: result.providerId,
+              modelId: result.modelId,
+              createdAt: result.createdAt,
+              durationMs: 42,
+              summary: '已完成 graph runtime 检查。',
+              assistantMessage: '已完成 graph runtime 检查。'
+            });
+          }, 0);
+          return result;
+        },
+        cancelRun: () => ({
+          runId: 'chat_delegate_123',
+          cancelled: true
+        }),
+        resumeRun: async () => ({
+          runId: 'chat_delegate_123',
+          threadId: 'thread_delegate_123',
+          resumedAt: '2026-06-09T00:01:00.000Z'
+        })
+      }
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      mode: 'chat'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(result).toMatchObject({
+      runId: 'chat_delegate_123',
+      threadId: 'thread_delegate_123',
+      providerId: 'nvidia',
+      modelId: 'moonshotai/kimi-k2.6'
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.started',
+        payload: expect.objectContaining({
+          runId: 'chat_delegate_123',
+          mode: 'chat',
+          threadId: 'thread_delegate_123'
+        })
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: 'chat_delegate_123',
+          threadId: 'thread_delegate_123',
+          type: 'reasoning_delta',
+          payload: {
+            delta: '先读取工作区约束。'
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: 'chat_delegate_123',
+          threadId: 'thread_delegate_123',
+          type: 'message_delta',
+          payload: {
+            role: 'assistant',
+            delta: '先检查当前计划。'
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: 'chat_delegate_123',
+          threadId: 'thread_delegate_123',
+          type: 'tool_call',
+          payload: {
+            name: 'web_search',
+            status: 'end',
+            output: {
+              hits: 3
+            }
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: 'chat_delegate_123',
+          threadId: 'thread_delegate_123',
+          type: 'approval_requested',
+          payload: {
+            interruptId: 'interrupt_123',
+            actionRequests: [],
+            reviewConfigs: []
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.completed',
+        payload: expect.objectContaining({
+          runId: 'chat_delegate_123',
+          assistantMessage: '已完成 graph runtime 检查。'
+        })
+      })
+    );
+    expect(runtime.listSessionMessages({ threadId: 'thread_delegate_123' })).toMatchObject([
+      {
+        content: '已完成 graph runtime 检查。',
+        role: 'assistant'
+      }
+    ]);
   });
 });
 
@@ -397,4 +688,10 @@ function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void
       resolveValue(value);
     }
   };
+}
+
+function emitDelegatedRunEvent(listeners: ReadonlySet<(event: ChatRunEvent) => void>, event: ChatRunEvent): void {
+  for (const listener of listeners) {
+    listener(event);
+  }
 }

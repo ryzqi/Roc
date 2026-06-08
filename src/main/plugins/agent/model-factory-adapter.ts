@@ -15,6 +15,7 @@ export type AgentModelHandle = {
   providerId: string;
   modelId: string;
   invoke(input: string): Promise<string>;
+  stream?(input: string): AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>;
 };
 
 export type AgentModelFactoryAdapter = {
@@ -36,7 +37,8 @@ export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapt
     return {
       providerId: handle.provider.id,
       modelId: handle.modelId,
-      invoke: async (input) => readModelResponseText(await handle.model.invoke(input))
+      invoke: async (input) => readModelResponseText(await handle.model.invoke(input)),
+      stream: async (input) => await handle.model.stream(input)
     };
   }
 
@@ -48,7 +50,8 @@ export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapt
     return {
       providerId: handle.provider.id,
       modelId: handle.modelId,
-      invoke: async (input) => readModelResponseText(await handle.model.invoke(input))
+      invoke: async (input) => readModelResponseText(await handle.model.invoke(input)),
+      stream: async (input) => await handle.model.stream(input)
     };
   }
 }

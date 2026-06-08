@@ -137,6 +137,7 @@ describe('main kernel bootstrap integration', () => {
           enabledCapabilities: { mcpServers: [], skills: [] }
         })
       ).resolves.toMatchObject({
+        runId: expect.stringMatching(/^chat_/u),
         providerId: 'smoke-provider',
         modelId: 'smoke-model'
       });

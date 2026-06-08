@@ -752,4 +752,93 @@ describe('chat transcript helpers', () => {
       }
     ]);
   });
+
+  it('rebuilds a persisted approval assistant bubble from approval_requested history events', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-12T08:30:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '请执行 git status' },
+          createdAt: '2026-05-12T08:30:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'reasoning-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'reasoning_delta',
+          payload: { delta: '先分析命令风险。' },
+          createdAt: '2026-05-12T08:30:01.000Z',
+          sequence: 2
+        },
+        {
+          id: 'approval-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'approval_requested',
+          payload: {
+            interruptId: 'interrupt-1',
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          },
+          createdAt: '2026-05-12T08:30:02.000Z',
+          sequence: 3
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-current',
+        role: 'user',
+        content: '请执行 git status',
+        reasoning: null,
+        blocks: [],
+        approval: null,
+        isStreaming: false
+      },
+      {
+        key: 'assistant-run-current',
+        role: 'assistant',
+        content: '',
+        reasoning: '先分析命令风险。',
+        blocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先分析命令风险。',
+            isStreaming: false
+          }
+        ],
+        approval: expect.objectContaining({
+          interruptId: 'interrupt-1'
+        }),
+        isStreaming: false
+      }
+    ]);
+  });
 });

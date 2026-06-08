@@ -176,6 +176,8 @@ export function listThreadMessages(input: { database: DatabaseService; threadId:
            'tool_call',
            'subagent_started',
            'subagent_completed',
+           'approval_requested',
+           'approval_decision',
            'guardrail_nudge'
          )
        ORDER BY created_at ASC, rowid ASC`

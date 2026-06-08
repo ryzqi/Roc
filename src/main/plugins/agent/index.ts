@@ -20,7 +20,7 @@ import type {
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
-import { AgentPluginRuntime, type AgentCapabilityPreviewProvider } from './runtime';
+import { AgentPluginRuntime, type AgentCapabilityPreviewProvider, type AgentPluginRuntimeDelegate } from './runtime';
 import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
@@ -145,6 +145,7 @@ export type AgentPluginOptions = {
     approvalModeProvider: () => ApprovalMode;
   };
   modelFactory?: AgentModelFactoryAdapter;
+  runtimeDelegate?: AgentPluginRuntimeDelegate;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
 };
@@ -175,6 +176,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         modelFactory,
         pluginId,
         repository: new AgentSessionRepository(db),
+        runtimeDelegate: options.runtimeDelegate,
         status: options.status,
         statusProvider: options.statusProvider
       });

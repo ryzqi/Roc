@@ -345,7 +345,7 @@ async function createWindow(): Promise<void> {
     broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event.payload, {
       include: (_window, index) => index === 0
     });
-    if (event.payload.runId.startsWith('run_')) {
+    if (event.payload.runId.startsWith('run_') && shouldBroadcastTaskRefresh(event.payload)) {
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
     }
   });
@@ -408,6 +408,16 @@ async function createWindow(): Promise<void> {
   });
 
   await kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+}
+
+function shouldBroadcastTaskRefresh(event: ChatRunEvent): boolean {
+  return (
+    event.type === 'run_started' ||
+    event.type === 'run_completed' ||
+    event.type === 'run_failed' ||
+    event.type === 'run_interrupted' ||
+    event.type === 'run_resumed'
+  );
 }
 
 function bindWindowPlacementPersistence(window: BrowserWindow, filePath: string): void {

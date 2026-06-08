@@ -666,6 +666,9 @@ export class TaskRepository {
     finishReason: string;
   }): TaskEvent | null {
     const run = this.findRun(input.runId);
+    if (run !== null && run.status === 'completed') {
+      return null;
+    }
     let mirroredAssistantEvent: TaskEvent | null = null;
     if (run !== null) {
       const now = new Date().toISOString();
@@ -732,6 +735,9 @@ export class TaskRepository {
     retryable: boolean;
   }): TaskEvent | null {
     const run = this.findRun(input.runId);
+    if (run !== null && run.status === 'failed') {
+      return null;
+    }
     let failureEvent: TaskEvent | null = null;
     const now = new Date().toISOString();
     if (run !== null) {
@@ -789,6 +795,59 @@ export class TaskRepository {
     const run = this.findRun(input.runId);
     if (run === null || run.threadId !== input.threadId) {
       return null;
+    }
+    if (input.type === 'approval_requested') {
+      let approvalEvent: TaskEvent | null = null;
+      this.db.transaction(() => {
+        this.db
+          .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+          .run('waiting_user', input.createdAt, input.threadId);
+        this.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('waiting_user', input.runId);
+        this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'agent_update',
+          payload: {
+            status: 'waiting_user'
+          },
+          createdAt: input.createdAt
+        });
+        approvalEvent = this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: input.type,
+          payload: input.payload,
+          createdAt: input.createdAt
+        });
+      })();
+      return approvalEvent;
+    }
+    if (input.type === 'approval_decision') {
+      let decisionEvent: TaskEvent | null = null;
+      this.db.transaction(() => {
+        this.db
+          .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+          .run('running', input.createdAt, input.threadId);
+        this.db.prepare('UPDATE task_runs SET status = ? WHERE id = ?').run('running', input.runId);
+        this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'agent_update',
+          payload: {
+            status: 'running',
+            resumed: true
+          },
+          createdAt: input.createdAt
+        });
+        decisionEvent = this.insertTaskEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: input.type,
+          payload: input.payload,
+          createdAt: input.createdAt
+        });
+      })();
+      return decisionEvent;
     }
     return this.insertTaskEvent({
       threadId: input.threadId,

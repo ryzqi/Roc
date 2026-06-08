@@ -419,6 +419,171 @@ describe('task plugin', () => {
     );
   });
 
+  it('mirrors subagent lifecycle events into the task snapshot contract', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    await eventBus.publish({
+      type: 'agent.run.started',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      payload: {
+        runId: 'run_subagent_1',
+        threadId: 'thread_subagent_1',
+        mode: 'task',
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        createdAt: '2026-06-04T00:00:00.000Z',
+        userInput: '先研究再总结',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:01.000Z',
+      payload: {
+        runId: 'run_subagent_1',
+        threadId: 'thread_subagent_1',
+        type: 'subagent_started',
+        payload: {
+          name: 'research',
+          summary: 'Search docs'
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:02.000Z',
+      payload: {
+        runId: 'run_subagent_1',
+        threadId: 'thread_subagent_1',
+        type: 'subagent_completed',
+        payload: {
+          name: 'research',
+          summary: 'Search docs'
+        }
+      }
+    });
+
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
+
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_subagent_1',
+        threadId: 'thread_subagent_1',
+        type: 'subagent_started',
+        payload: {
+          name: 'research',
+          summary: 'Search docs'
+        }
+      })
+    );
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_subagent_1',
+        threadId: 'thread_subagent_1',
+        type: 'subagent_completed',
+        payload: {
+          name: 'research',
+          summary: 'Search docs'
+        }
+      })
+    );
+  });
+
+  it('mirrors approval requests into the task snapshot contract and marks the thread waiting_user', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    await eventBus.publish({
+      type: 'agent.run.started',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      payload: {
+        runId: 'run_approval_1',
+        threadId: 'thread_approval_1',
+        mode: 'task',
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        createdAt: '2026-06-04T00:00:00.000Z',
+        userInput: '执行 git status',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:01.000Z',
+      payload: {
+        runId: 'run_approval_1',
+        threadId: 'thread_approval_1',
+        type: 'approval_requested',
+        payload: {
+          interruptId: 'interrupt-1',
+          actionRequests: [
+            {
+              name: 'execute',
+              args: {
+                command: 'git status'
+              }
+            }
+          ],
+          reviewConfigs: [
+            {
+              actionName: 'execute',
+              allowedDecisions: ['approve', 'reject']
+            }
+          ]
+        }
+      }
+    });
+
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
+
+    expect(snapshot.threads).toContainEqual(
+      expect.objectContaining({
+        id: 'thread_approval_1',
+        status: 'waiting_user'
+      })
+    );
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_approval_1',
+        threadId: 'thread_approval_1',
+        type: 'approval_requested',
+        payload: expect.objectContaining({
+          interruptId: 'interrupt-1',
+          actionRequests: [
+            expect.objectContaining({
+              name: 'execute',
+              args: {
+                command: 'git status'
+              }
+            })
+          ]
+        })
+      })
+    );
+  });
+
   it('mirrors agent run failures into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();

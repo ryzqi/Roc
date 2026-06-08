@@ -400,7 +400,16 @@ function readAgentTaskEventPayload(payload: unknown): {
 }
 
 function isAgentTaskEventType(value: unknown): value is TaskEvent['type'] {
-  return value === 'tool_call' || value === 'guardrail_nudge' || value === 'message_delta' || value === 'reasoning_delta';
+  return (
+    value === 'tool_call' ||
+    value === 'guardrail_nudge' ||
+    value === 'message_delta' ||
+    value === 'reasoning_delta' ||
+    value === 'subagent_started' ||
+    value === 'subagent_completed' ||
+    value === 'approval_requested' ||
+    value === 'approval_decision'
+  );
 }
 
 function readAgentRunStartedPayload(payload: unknown): {

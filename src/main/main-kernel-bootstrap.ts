@@ -25,6 +25,7 @@ import { PerformanceObserverService } from './services/performance-observer-serv
 import { RocPaths } from './services/paths';
 import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
+import { createAppServices } from './services/app-service';
 
 export type MainKernelMigrationInput = {
   paths: RocPaths;
@@ -78,10 +79,25 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const metricsService = new MetricsService();
   const modelFactory = new LangChainModelFactory(configService, secretService, logService);
   const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
+  const delegatedAgentRuntimeHost =
+    options.plugins === undefined
+      ? createAppServices(
+          options.dataRoot,
+          {
+            version: options.version === undefined ? '0.1.0' : options.version,
+            isPackaged: options.isPackaged === true,
+            getAppearance: options.getAppearance === undefined ? defaultAppearance : options.getAppearance
+          },
+          options.safeStorage,
+          options.runtimeMetricsProvider,
+          performanceObserverService
+        )
+      : null;
   const plugins =
     options.plugins ??
     createDefaultMainKernelPlugins({
       configService,
+      delegatedAgentRuntimeHost,
       modelFactory,
       paths,
       performanceObserverService,
@@ -117,12 +133,25 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     performanceObserverService,
     async start() {
       paths.ensureTree();
-      await runtime.start();
+      if (delegatedAgentRuntimeHost !== null) {
+        delegatedAgentRuntimeHost.appService.initialize();
+      }
+      try {
+        await runtime.start();
+      } catch (error) {
+        if (delegatedAgentRuntimeHost !== null) {
+          await delegatedAgentRuntimeHost.appService.shutdown();
+        }
+        throw error;
+      }
     },
     async shutdown() {
       try {
         await runtime.shutdown();
       } finally {
+        if (delegatedAgentRuntimeHost !== null) {
+          await delegatedAgentRuntimeHost.appService.shutdown();
+        }
         setLogService(null);
         await logService.close();
       }
@@ -130,6 +159,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     syncSettingsSnapshot(request) {
       void request;
       configService.reloadSettingsDocument();
+      delegatedAgentRuntimeHost?.configService.reloadSettingsDocument();
     },
     async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
       return await runtime.invokeCapability<TInput, TOutput>(name, input);
@@ -153,6 +183,7 @@ export function activateMainKernelMigration(input: MainKernelMigrationInput): st
 function createDefaultMainKernelPlugins(input: {
   paths: RocPaths;
   configService: ConfigService;
+  delegatedAgentRuntimeHost?: ReturnType<typeof createAppServices> | null;
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
@@ -163,6 +194,7 @@ function createDefaultMainKernelPlugins(input: {
   input.paths.ensureTree();
   const configService = input.configService;
   const defaultWorkspace = configService.getSettings().defaultWorkspace;
+  const delegatedAgentRuntimeHost = input.delegatedAgentRuntimeHost ?? null;
 
   return [
     createAppPlugin({
@@ -189,6 +221,21 @@ function createDefaultMainKernelPlugins(input: {
           configService.reloadSettingsDocument();
         }
       }),
+      runtimeDelegate:
+        delegatedAgentRuntimeHost === null
+          ? undefined
+          : {
+              startRun: async (request) => {
+                delegatedAgentRuntimeHost.configService.reloadSettingsDocument();
+                return await delegatedAgentRuntimeHost.deepAgentRuntimeService.startRun(request);
+              },
+              cancelRun: (runId) => delegatedAgentRuntimeHost.deepAgentRuntimeService.cancelRun(runId),
+              resumeRun: async (request) => {
+                delegatedAgentRuntimeHost.configService.reloadSettingsDocument();
+                return await delegatedAgentRuntimeHost.deepAgentRuntimeService.resumeRun(request);
+              },
+              onRunEvent: (listener) => delegatedAgentRuntimeHost.deepAgentRuntimeService.onRunEvent(listener)
+            },
       statusProvider: () => {
         configService.reloadSettingsDocument();
         return createAgentRuntimeStatus(configService);
