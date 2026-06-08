@@ -1,17 +1,23 @@
-/**
- * 供应商配置类型系统 - 基于 deepagents 设计理念重构
- *
- * 核心改进：
- * 1. 分层配置：基础配置 + 通用参数 + 供应商专属参数
- * 2. 类型安全：使用判别联合类型，避免参数混淆
- * 3. 可扩展：新增供应商只需扩展联合类型
- */
+import type {
+  AnthropicThinkingOption,
+  NvidiaToolChoice,
+  OpenAiReasoningOption,
+  OpenAiServiceTier,
+  OpenAiVerbosity,
+  ProviderConfig,
+  ProviderModel,
+  ProviderOptions,
+  ProviderSamplingProfileOverrides
+} from './settings';
 
-import type { ProviderModel, ProviderType } from './settings';
-
-// ============================================================================
-// 基础配置
-// ============================================================================
+export type {
+  AnthropicThinkingOption,
+  NvidiaToolChoice,
+  OpenAiReasoningOption,
+  OpenAiServiceTier,
+  OpenAiVerbosity,
+  ProviderSamplingProfileOverrides
+} from './settings';
 
 export type BaseProviderConfig = {
   id: string;
@@ -22,10 +28,6 @@ export type BaseProviderConfig = {
   credentialRef: string | null;
 };
 
-// ============================================================================
-// 通用参数（所有 provider 共享）
-// ============================================================================
-
 export type CommonProviderParams = {
   temperature?: number;
   maxTokens?: number;
@@ -34,78 +36,30 @@ export type CommonProviderParams = {
   defaultHeaders?: Record<string, string>;
 };
 
-// ============================================================================
-// OpenAI 专属参数
-// ============================================================================
-
-export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-export type OpenAiReasoningSummary = 'auto' | 'concise' | 'detailed';
-export type OpenAiServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority';
-export type OpenAiVerbosity = 'low' | 'medium' | 'high';
-
-export type OpenAIProviderParams = CommonProviderParams & {
-  // Sampling
+export type OpenAICompatibleParams = CommonProviderParams & {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
   stop?: string[];
-
-  // Organization
   organization?: string;
-
-  // Features
+  useResponsesApi?: boolean;
+  reasoning?: OpenAiReasoningOption;
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
   serviceTier?: OpenAiServiceTier;
   verbosity?: OpenAiVerbosity;
   zdrEnabled?: boolean;
-  useResponsesApi?: boolean;
-
-  // Reasoning (o1/o3 models)
-  reasoning?: {
-    effort?: OpenAiReasoningEffort;
-    summary?: OpenAiReasoningSummary;
-  };
 };
 
-// ============================================================================
-// Anthropic 专属参数
-// ============================================================================
-
-export type AnthropicThinkingMode = 'disabled' | 'adaptive' | 'enabled';
-
-export type AnthropicThinkingOption =
-  | { mode: 'disabled' }
-  | { mode: 'adaptive' }
-  | { mode: 'enabled'; budgetTokens: number };
-
-export type AnthropicProviderParams = CommonProviderParams & {
-  // Sampling
+export type AnthropicCompatibleParams = CommonProviderParams & {
   topK?: number;
   stopSequences?: string[];
-
-  // Extended Thinking
   thinking?: AnthropicThinkingOption;
-
-  // Beta features
   betas?: string[];
-
-  // Advanced
   invocationKwargs?: Record<string, unknown>;
 };
 
-// ============================================================================
-// NVIDIA 专属参数
-// ============================================================================
-
-export type NvidiaToolChoice =
-  | 'auto'
-  | 'required'
-  | 'none'
-  | { type: 'function'; function: { name: string } };
-
-export type NvidiaProviderParams = CommonProviderParams & {
-  // Sampling
+export type NvidiaParams = CommonProviderParams & {
   topK?: number;
   minP?: number;
   frequencyPenalty?: number;
@@ -113,65 +67,65 @@ export type NvidiaProviderParams = CommonProviderParams & {
   repetitionPenalty?: number;
   seed?: number;
   stop?: string[];
-
-  // Reasoning
   thinking?: boolean;
   includeReasoning?: boolean;
-
-  // Features
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
   toolChoice?: NvidiaToolChoice;
-
-  // Guided Generation
   guidedJson?: Record<string, unknown>;
   guidedRegex?: string;
   guidedChoice?: string[];
   guidedGrammar?: string;
-
-  // Infrastructure
   endpointOverride?: string;
 };
 
-// ============================================================================
-// 供应商配置联合类型
-// ============================================================================
+export type LlamaCppParams = CommonProviderParams & {
+  topK?: number;
+  minP?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+  samplingProfileOverrides?: ProviderSamplingProfileOverrides;
+  contextBudgetTokens?: number;
+};
+
+export type OpenRouterParams = Record<string, never>;
 
 export type ProviderConfigTyped =
   | {
       type: 'openai_compatible';
       config: BaseProviderConfig;
-      params: OpenAIProviderParams;
+      params: OpenAICompatibleParams;
     }
   | {
       type: 'anthropic_compatible';
       config: BaseProviderConfig;
-      params: AnthropicProviderParams;
+      params: AnthropicCompatibleParams;
     }
   | {
       type: 'nvidia';
       config: BaseProviderConfig;
-      params: NvidiaProviderParams;
+      params: NvidiaParams;
     }
   | {
       type: 'openrouter';
       config: BaseProviderConfig;
-      params: OpenAIProviderParams;
+      params: OpenRouterParams;
     }
   | {
       type: 'llama_cpp';
       config: BaseProviderConfig;
-      params: OpenAIProviderParams;
+      params: LlamaCppParams;
     };
 
-// ============================================================================
-// 类型守卫
-// ============================================================================
+type LegacyProviderConfig = Pick<
+  ProviderConfig,
+  'id' | 'name' | 'type' | 'enabled' | 'models' | 'endpoint' | 'credentialRef' | 'options'
+>;
 
 export function isOpenAIProvider(
   config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'openai_compatible' | 'openrouter' | 'llama_cpp' }> {
-  return config.type === 'openai_compatible' || config.type === 'openrouter' || config.type === 'llama_cpp';
+): config is Extract<ProviderConfigTyped, { type: 'openai_compatible' }> {
+  return config.type === 'openai_compatible';
 }
 
 export function isAnthropicProvider(
@@ -180,43 +134,60 @@ export function isAnthropicProvider(
   return config.type === 'anthropic_compatible';
 }
 
-export function isNvidiaProvider(
-  config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'nvidia' }> {
+export function isNvidiaProvider(config: ProviderConfigTyped): config is Extract<ProviderConfigTyped, { type: 'nvidia' }> {
   return config.type === 'nvidia';
 }
 
-// ============================================================================
-// 配置转换工具
-// ============================================================================
+export function isLlamaCppProvider(
+  config: ProviderConfigTyped
+): config is Extract<ProviderConfigTyped, { type: 'llama_cpp' }> {
+  return config.type === 'llama_cpp';
+}
 
-/**
- * 将旧的 ProviderConfig 转换为新的类型化配置
- */
-export function toTypedProviderConfig(legacy: {
-  id: string;
-  name: string;
-  type: ProviderType;
-  enabled: boolean;
-  models: ProviderModel[];
-  endpoint: string;
-  credentialRef: string | null;
-  options?: Record<string, any>;
-}): ProviderConfigTyped {
+export function isOpenRouterProvider(
+  config: ProviderConfigTyped
+): config is Extract<ProviderConfigTyped, { type: 'openrouter' }> {
+  return config.type === 'openrouter';
+}
+
+export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderConfigTyped {
   const baseConfig: BaseProviderConfig = {
     id: legacy.id,
     name: legacy.name,
     enabled: legacy.enabled,
     models: legacy.models,
     endpoint: legacy.endpoint,
-    credentialRef: legacy.credentialRef,
+    credentialRef: legacy.credentialRef
   };
-
   const opts = legacy.options ?? {};
 
   switch (legacy.type) {
-    case 'anthropic_compatible': {
-      const thinking = opts.anthropicThinking as AnthropicThinkingOption | undefined;
+    case 'openai_compatible':
+      return {
+        type: 'openai_compatible',
+        config: baseConfig,
+        params: {
+          temperature: opts.temperature,
+          maxTokens: opts.maxTokens,
+          topP: opts.topP,
+          timeoutMs: opts.timeoutMs,
+          defaultHeaders: opts.defaultHeaders,
+          frequencyPenalty: opts.frequencyPenalty,
+          presencePenalty: opts.presencePenalty,
+          seed: opts.seed,
+          stop: opts.stop,
+          organization: opts.organization,
+          useResponsesApi: opts.useResponsesApi,
+          reasoning: opts.reasoning,
+          parallelToolCalls: opts.parallelToolCalls,
+          streamUsage: opts.streamUsage,
+          serviceTier: opts.serviceTier,
+          verbosity: opts.verbosity,
+          zdrEnabled: opts.zdrEnabled
+        }
+      };
+
+    case 'anthropic_compatible':
       return {
         type: 'anthropic_compatible',
         config: baseConfig,
@@ -224,18 +195,17 @@ export function toTypedProviderConfig(legacy: {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          topK: opts.topK,
           timeoutMs: opts.timeoutMs,
           defaultHeaders: opts.defaultHeaders,
+          topK: opts.topK,
           stopSequences: opts.stop,
-          thinking,
+          thinking: opts.anthropicThinking,
           betas: opts.anthropicBetas,
-          invocationKwargs: opts.invocationKwargs,
-        },
+          invocationKwargs: opts.invocationKwargs
+        }
       };
-    }
 
-    case 'nvidia': {
+    case 'nvidia':
       return {
         type: 'nvidia',
         config: baseConfig,
@@ -243,6 +213,8 @@ export function toTypedProviderConfig(legacy: {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
+          timeoutMs: opts.timeoutMs,
+          defaultHeaders: opts.defaultHeaders,
           topK: opts.topK,
           minP: opts.minP,
           frequencyPenalty: opts.frequencyPenalty,
@@ -250,8 +222,6 @@ export function toTypedProviderConfig(legacy: {
           repetitionPenalty: opts.repetitionPenalty,
           seed: opts.seed,
           stop: opts.stop,
-          timeoutMs: opts.timeoutMs,
-          defaultHeaders: opts.defaultHeaders,
           thinking: opts.thinking,
           includeReasoning: opts.includeReasoning,
           parallelToolCalls: opts.parallelToolCalls,
@@ -261,58 +231,88 @@ export function toTypedProviderConfig(legacy: {
           guidedRegex: opts.guidedRegex,
           guidedChoice: opts.guidedChoice,
           guidedGrammar: opts.guidedGrammar,
-          endpointOverride: opts.endpointOverride,
-        },
+          endpointOverride: opts.endpointOverride
+        }
       };
-    }
 
-    case 'openai_compatible':
     case 'openrouter':
-    case 'llama_cpp':
-    default: {
       return {
-        type: legacy.type as 'openai_compatible' | 'openrouter' | 'llama_cpp',
+        type: 'openrouter',
+        config: baseConfig,
+        params: {}
+      };
+
+    case 'llama_cpp':
+      return {
+        type: 'llama_cpp',
         config: baseConfig,
         params: {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           topP: opts.topP,
-          frequencyPenalty: opts.frequencyPenalty,
-          presencePenalty: opts.presencePenalty,
-          seed: opts.seed,
-          stop: opts.stop,
           timeoutMs: opts.timeoutMs,
           defaultHeaders: opts.defaultHeaders,
-          organization: opts.organization,
-          parallelToolCalls: opts.parallelToolCalls,
-          streamUsage: opts.streamUsage,
-          serviceTier: opts.serviceTier,
-          verbosity: opts.verbosity,
-          zdrEnabled: opts.zdrEnabled,
-          useResponsesApi: opts.useResponsesApi,
-          reasoning: opts.reasoning,
-        },
+          topK: opts.topK,
+          minP: opts.minP,
+          presencePenalty: opts.presencePenalty,
+          repetitionPenalty: opts.repetitionPenalty,
+          samplingProfileOverrides: opts.samplingProfileOverrides,
+          contextBudgetTokens: opts.contextBudgetTokens
+        }
       };
-    }
+
+    case 'ollama':
+    case 'custom':
+      throw new Error(`Provider type ${legacy.type} does not support typed provider config.`);
+
+    default:
+      return assertNeverProviderType(legacy.type);
   }
 }
 
-/**
- * 将类型化配置转换回旧格式（兼容性）
- */
-export function fromTypedProviderConfig(typed: ProviderConfigTyped): {
-  id: string;
-  name: string;
-  type: ProviderType;
-  enabled: boolean;
-  models: ProviderModel[];
-  endpoint: string;
-  credentialRef: string | null;
-  options?: Record<string, any>;
-} {
+export function fromTypedProviderConfig(typed: ProviderConfigTyped): ProviderConfig {
   return {
     ...typed.config,
     type: typed.type,
-    options: typed.params as Record<string, any>,
+    options: providerOptionsFromTypedParams(typed)
   };
+}
+
+function providerOptionsFromTypedParams(typed: ProviderConfigTyped): ProviderOptions {
+  switch (typed.type) {
+    case 'openai_compatible':
+    case 'nvidia':
+      return { ...typed.params };
+
+    case 'anthropic_compatible':
+      return {
+        temperature: typed.params.temperature,
+        maxTokens: typed.params.maxTokens,
+        topP: typed.params.topP,
+        topK: typed.params.topK,
+        timeoutMs: typed.params.timeoutMs,
+        defaultHeaders: typed.params.defaultHeaders,
+        stop: typed.params.stopSequences,
+        anthropicThinking: typed.params.thinking,
+        anthropicBetas: typed.params.betas,
+        invocationKwargs: typed.params.invocationKwargs
+      };
+
+    case 'openrouter':
+      return {};
+
+    case 'llama_cpp':
+      return { ...typed.params };
+
+    default:
+      return assertNeverTypedConfig(typed);
+  }
+}
+
+function assertNeverProviderType(type: never): never {
+  throw new Error(`Unhandled provider type: ${String(type)}`);
+}
+
+function assertNeverTypedConfig(typed: never): never {
+  throw new Error(`Unhandled typed provider config: ${JSON.stringify(typed)}`);
 }

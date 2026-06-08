@@ -15,3 +15,4 @@ export * from './diagnostics';
 export * from './performance';
 export * from './metrics';
 export * from './shell';
+export * from './provider-config';
