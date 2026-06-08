@@ -183,7 +183,7 @@
   opacity: 0.92;
 }
 
-.chat-bubble-reasoning {
+.chat-bubble-activity {
   margin: 0;
   padding: 0 0 0 12px;
   border: 0;
@@ -193,7 +193,7 @@
   overflow: hidden;
 }
 
-.chat-bubble-reasoning > summary {
+.chat-bubble-activity > summary {
   list-style: none;
   display: flex;
   align-items: center;
@@ -205,13 +205,13 @@
   letter-spacing: 0;
 }
 
-.chat-bubble-reasoning > summary::-webkit-details-marker,
-.chat-bubble-reasoning > summary::marker {
+.chat-bubble-activity > summary::-webkit-details-marker,
+.chat-bubble-activity > summary::marker {
   display: none;
   content: '';
 }
 
-.chat-bubble-reasoning > summary::before {
+.chat-bubble-activity > summary::before {
   content: "›";
   display: inline-block;
   width: 12px;
@@ -220,15 +220,16 @@
   transition: transform var(--duration-fast) var(--easing-standard);
 }
 
-.chat-bubble-reasoning[open] > summary::before {
+.chat-bubble-activity[open] > summary::before {
   transform: rotate(90deg);
 }
 
-.chat-bubble-reasoning[open] > summary {
+.chat-bubble-activity[open] > summary {
   border-bottom: 0;
 }
 
-.chat-bubble-reasoning .reasoning-body {
+.chat-bubble-activity .reasoning-body,
+.chat-bubble-activity .activity-body {
   padding: 6px 0 4px;
   color: var(--muted);
   font-size: 13.5px;
@@ -236,8 +237,51 @@
   animation: reasoning-expand var(--duration-slow) var(--ease-soft);
 }
 
-.chat-bubble-reasoning .reasoning-body p {
+.chat-bubble-activity .reasoning-body p,
+.chat-bubble-activity .activity-body p {
   color: inherit;
+}
+
+.chat-bubble-reasoning {
+  border-left-color: var(--line);
+}
+
+.chat-bubble-tool {
+  border-left-color: var(--line-strong);
+}
+
+.chat-bubble-subagent,
+.chat-bubble-guardrail {
+  border-left-color: var(--line);
+}
+
+.activity-json-section {
+  display: grid;
+  gap: 4px;
+}
+
+.activity-json-section + .activity-json-section {
+  margin-top: 8px;
+}
+
+.activity-json-label {
+  color: var(--subtle);
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+  font-feature-settings: var(--font-feature-mono);
+}
+
+.activity-json-section pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--code-surface);
+  color: var(--code-text);
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 .reasoning-shimmer {

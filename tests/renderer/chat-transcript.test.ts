@@ -127,6 +127,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请整理一下当前变更',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -135,6 +136,14 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '我先检查当前变更。',
         reasoning: '先读取当前工作区和最近提交。',
+        blocks: [
+          {
+            id: 'live-run-current-reasoning',
+            kind: 'reasoning',
+            content: '先读取当前工作区和最近提交。',
+            isStreaming: true
+          }
+        ],
         approval: null,
         isStreaming: true
       }
@@ -185,6 +194,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '整理一下结果',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -193,10 +203,225 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '已经整理完成。',
         reasoning: '先归纳，再输出最终结论。',
+        blocks: [
+          {
+            id: 'live-run-current-reasoning',
+            kind: 'reasoning',
+            content: '先归纳，再输出最终结论。',
+            isStreaming: false
+          }
+        ],
         approval: null,
         isStreaming: false
       }
     ]);
+  });
+
+  it('rebuilds persisted assistant activity blocks from delta and tool events in event order', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: []
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot,
+      persistedMessages: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '请读取文件并总结' },
+          createdAt: '2026-05-09T08:20:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'reasoning-1',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'reasoning_delta',
+          payload: { delta: '先确认目标文件。' },
+          createdAt: '2026-05-09T08:20:01.000Z',
+          sequence: 2
+        },
+        {
+          id: 'tool-start',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'tool_call',
+          payload: {
+            name: 'read_file',
+            status: 'start',
+            input: { path: 'F:\\Code\\Roc\\README.md' }
+          },
+          createdAt: '2026-05-09T08:20:02.000Z',
+          sequence: 3
+        },
+        {
+          id: 'reasoning-2',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'reasoning_delta',
+          payload: { delta: '再提炼结论。' },
+          createdAt: '2026-05-09T08:20:03.000Z',
+          sequence: 4
+        },
+        {
+          id: 'tool-end',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'tool_call',
+          payload: {
+            name: 'read_file',
+            status: 'end',
+            output: { bytes: 128 }
+          },
+          createdAt: '2026-05-09T08:20:04.000Z',
+          sequence: 5
+        },
+        {
+          id: 'assistant-delta-1',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message_delta',
+          payload: { role: 'assistant', delta: '总结' },
+          createdAt: '2026-05-09T08:20:05.000Z',
+          sequence: 6
+        },
+        {
+          id: 'assistant-delta-2',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message_delta',
+          payload: { role: 'assistant', delta: '完成。' },
+          createdAt: '2026-05-09T08:20:06.000Z',
+          sequence: 7
+        }
+      ]
+    });
+
+    expect(messages).toEqual([
+      {
+        key: 'user-current',
+        role: 'user',
+        content: '请读取文件并总结',
+        reasoning: null,
+        blocks: [],
+        approval: null,
+        isStreaming: false
+      },
+      {
+        key: 'assistant-run-current',
+        role: 'assistant',
+        content: '总结完成。',
+        reasoning: '先确认目标文件。再提炼结论。',
+        blocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先确认目标文件。再提炼结论。',
+            isStreaming: false
+          },
+          {
+            id: 'tool-run-current-0',
+            kind: 'tool_call',
+            name: 'read_file',
+            status: 'end',
+            input: { path: 'F:\\Code\\Roc\\README.md' },
+            output: { bytes: 128 },
+            error: null
+          }
+        ],
+        approval: null,
+        isStreaming: false
+      }
+    ]);
+  });
+
+  it('projects live tool and subagent state into assistant activity blocks while keeping final content separate', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '搜索后总结' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        assistantMessage: '最终回答正文。',
+        reasoning: '先搜索资料。',
+        toolEvents: [
+          {
+            name: 'web_search',
+            event: 'start',
+            data: { query: 'Roc chat activity' }
+          },
+          {
+            name: 'web_search',
+            event: 'end',
+            data: { count: 3 }
+          }
+        ],
+        subagents: [
+          {
+            subagent: 'research',
+            status: 'completed',
+            summary: '搜索资料'
+          }
+        ]
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages.at(-1)).toMatchObject({
+      key: 'live-run-current',
+      role: 'assistant',
+      content: '最终回答正文。',
+      reasoning: '先搜索资料。',
+      blocks: [
+        {
+          id: 'live-run-current-reasoning',
+          kind: 'reasoning',
+          content: '先搜索资料。',
+          isStreaming: true
+        },
+        {
+          id: 'live-run-current-tool-0',
+          kind: 'tool_call',
+          name: 'web_search',
+          status: 'end',
+          input: { query: 'Roc chat activity' },
+          output: { count: 3 },
+          error: null
+        },
+        {
+          id: 'live-run-current-subagent-0',
+          kind: 'subagent',
+          name: 'research',
+          status: 'completed',
+          summary: '搜索资料'
+        }
+      ],
+      isStreaming: true
+    });
   });
 
   it('keeps the just-submitted user message visible before task snapshot refreshes', () => {
@@ -233,6 +458,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '新的用户输入',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       }
@@ -287,6 +513,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -295,6 +522,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       }
@@ -348,6 +576,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -356,6 +585,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       }
@@ -417,6 +647,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '第一轮输入',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -425,6 +656,7 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '第一轮回复',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -433,6 +665,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '第二轮输入',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       }
@@ -495,6 +728,7 @@ describe('chat transcript helpers', () => {
         role: 'user',
         content: '请执行 git status',
         reasoning: null,
+        blocks: [],
         approval: null,
         isStreaming: false
       },
@@ -503,6 +737,14 @@ describe('chat transcript helpers', () => {
         role: 'assistant',
         content: '',
         reasoning: '先分析命令风险。',
+        blocks: [
+          {
+            id: 'live-run-current-reasoning',
+            kind: 'reasoning',
+            content: '先分析命令风险。',
+            isStreaming: false
+          }
+        ],
         approval: expect.objectContaining({
           interruptId: 'interrupt-1'
         }),

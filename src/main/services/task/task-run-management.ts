@@ -166,12 +166,22 @@ export function listThreadMessages(input: { database: DatabaseService; threadId:
 
   const rows = input.database.db
     .prepare(
-      `SELECT id, thread_id, run_id, type, payload_json, created_at
+      `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
        FROM task_events
-       WHERE thread_id = ? AND type = 'message'
+       WHERE thread_id = ?
+         AND type IN (
+           'message',
+           'message_delta',
+           'reasoning_delta',
+           'tool_call',
+           'subagent_started',
+           'subagent_completed',
+           'guardrail_nudge'
+         )
        ORDER BY created_at ASC, rowid ASC`
     )
     .all(normalizedThreadId) as Array<{
+    rowid: number;
     id: string;
     thread_id: string;
     run_id: string;
@@ -186,7 +196,8 @@ export function listThreadMessages(input: { database: DatabaseService; threadId:
     runId: event.run_id,
     type: event.type,
     payload: JSON.parse(event.payload_json) as unknown,
-    createdAt: event.created_at
+    createdAt: event.created_at,
+    sequence: event.rowid
   }));
 }
 

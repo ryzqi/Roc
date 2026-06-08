@@ -698,7 +698,7 @@ export class DeepAgentRuntimeService {
       {
         input_tokens: promptTokens,
         cache_read_tokens: cacheReadTokens,
-        cache_creation_tokens: usage.cacheCreationTokens
+        cache_creation_tokens: usage.cacheCreationTokens ?? 0
       },
       {
         provider: context.modelHandle.provider.type,

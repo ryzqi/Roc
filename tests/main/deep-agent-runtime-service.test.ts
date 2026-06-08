@@ -433,6 +433,7 @@ describe('DeepAgentRuntimeService', () => {
       checkpointer: undefined,
       middleware: [
         expect.objectContaining({ name: 'RTKMiddleware' }),
+        expect.objectContaining({ name: 'PromptCaching' }),
         expect.objectContaining({ name: 'toolRetryMiddleware' }),
         expect.objectContaining({ name: 'ForgeErrorBudgetMiddleware' }),
         expect.objectContaining({ name: 'ForgeStepEnforcement' }),
@@ -1208,6 +1209,126 @@ describe('DeepAgentRuntimeService', () => {
     ).toEqual(['Final answer']);
   });
 
+  it('emits assistant text and reasoning deltas from LangChain contentBlocks without a text stream', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          contentBlocks: [
+            {
+              type: 'reasoning',
+              reasoning: 'content block thinking'
+            },
+            {
+              type: 'text',
+              text: 'Final answer from content blocks'
+            }
+          ]
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with content block text and reasoning.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['content block thinking']);
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+        .map((event) => event.delta)
+    ).toEqual(['Final answer from content blocks']);
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: 'Final answer from content blocks'
+    });
+  });
+
+  it('does not duplicate LangChain AIMessage contentBlocks that are also exposed as content', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        new AIMessage({
+          content: [
+            {
+              type: 'tool_call_chunk',
+              name: 'read_file',
+              args: '{"path":"F:\\\\Code\\\\Roc\\\\README.md"}'
+            },
+            {
+              type: 'text',
+              text: 'Final answer from a LangChain AIMessage'
+            }
+          ],
+          response_metadata: {
+            output_version: 'v1'
+          }
+        })
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with LangChain v1 content blocks.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+        .map((event) => event.delta)
+    ).toEqual(['Final answer from a LangChain AIMessage']);
+    expect(
+      events.filter((event): event is Extract<ChatRunEvent, { type: 'tool_event' }> => event.type === 'tool_event')
+    ).toEqual([
+      {
+        type: 'tool_event',
+        runId: finished.runId,
+        event: 'progress',
+        name: 'read_file',
+        data: {
+          args: '{"path":"F:\\\\Code\\\\Roc\\\\README.md"}'
+        }
+      }
+    ]);
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: 'Final answer from a LangChain AIMessage'
+    });
+  });
+
   it('emits reasoning deltas from OpenAI Responses reasoning summaries in additional kwargs', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
@@ -1594,7 +1715,7 @@ describe('DeepAgentRuntimeService', () => {
     const call = mocked.createDeepAgentMock.mock.calls.at(-1)?.[0] as { memory?: string[]; systemPrompt?: string } | undefined;
     expect(call?.memory).toEqual([]);
     expect(call?.systemPrompt).toContain('<FROZEN_SNAPSHOT>');
-    expect(call?.systemPrompt).toContain('# Runtime rules');
+    expect(call?.systemPrompt).toContain('You are Roc, a long-running personal assistant on Windows.');
   });
 
   it('passes the selected workspace root into the deep agent system prompt', async () => {
@@ -2600,6 +2721,73 @@ describe('DeepAgentRuntimeService', () => {
       name: 'web_search',
       status: 'end',
       output: rawSearchPayload
+    });
+  });
+
+  it('keeps tool call chunks out of assistant chat text while emitting live tool activity', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          contentBlocks: [
+            {
+              type: 'tool_call_chunk',
+              name: 'read_file',
+              args: '{"path":"F:\\\\Code\\\\Roc\\\\README.md"}'
+            },
+            {
+              type: 'text',
+              text: '最终回答：读取完成。'
+            }
+          ]
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: '读取文件后总结',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    const finished = await completed;
+
+    const messageText = events
+      .filter((event): event is Extract<ChatRunEvent, { type: 'message_delta' }> => event.type === 'message_delta')
+      .map((event) => event.delta)
+      .join('');
+    const toolEvents = events.filter(
+      (event): event is Extract<ChatRunEvent, { type: 'tool_event' }> => event.type === 'tool_event'
+    );
+
+    expect(messageText).toBe('最终回答：读取完成。');
+    expect(messageText).not.toContain('tool_call_chunk');
+    expect(messageText).not.toContain('read_file');
+    expect(toolEvents).toEqual([
+      {
+        type: 'tool_event',
+        runId: finished.runId,
+        event: 'progress',
+        name: 'read_file',
+        data: {
+          args: '{"path":"F:\\\\Code\\\\Roc\\\\README.md"}'
+        }
+      }
+    ]);
+    expect(finished).toMatchObject({
+      type: 'run_completed',
+      assistantMessage: '最终回答：读取完成。'
     });
   });
 

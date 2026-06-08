@@ -18,6 +18,15 @@ type ReasoningSource =
       values: string[];
     };
 
+type ContentBlockText = {
+  text: string;
+};
+
+type ToolCallChunkBlock = {
+  name: string;
+  data: Record<string, unknown>;
+};
+
 type StreamConsumerContext = {
   runId: string;
   taskRun: TaskRun | null;
@@ -72,11 +81,13 @@ export async function consumeMessageStream(input: {
       continue;
     }
 
-    const textStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
+    const standardTextStream = recordUtils.readAsyncIterable(recordUtils.readRecordValue(message, 'text'));
+    const textStream = standardTextStream ?? readContentBlockTextSource(message);
     const reasoningSource = readReasoningSource(message);
+    const toolCallChunks = readToolCallChunkBlocks(message);
     const canStreamAssistantText =
       textStream !== null &&
-      !recordUtils.isNonAssistantTextMessage(message) &&
+      (standardTextStream === null || !recordUtils.isNonAssistantTextMessage(message)) &&
       !recordUtils.isSummarizationMessage(message);
 
     const tasks: Array<Promise<void>> = [];
@@ -94,6 +105,7 @@ export async function consumeMessageStream(input: {
         })
       );
     }
+    emitToolCallChunkActivity(toolCallChunks, input.context, input.callbacks);
     if (reasoningSource !== null) {
       tasks.push(
         consumeReasoningSource({
@@ -380,6 +392,108 @@ function readReasoningFallbackValue(value: unknown): ReasoningSource | null {
     kind: 'values',
     values: [text]
   };
+}
+
+function readContentBlockTextSource(message: unknown): AsyncIterable<unknown> | null {
+  if (recordUtils.isSummarizationMessage(message) || hasSkillInstructionPath(message)) {
+    return null;
+  }
+
+  const values = readContentBlocks(message).flatMap((block) => {
+    if (!recordUtils.isRecord(block)) {
+      return [];
+    }
+    const type = readLowercaseString(recordUtils.readRecordValue(block, 'type'));
+    if (type !== 'text' || hasSkillInstructionPath(block)) {
+      return [];
+    }
+    const text = recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'text'));
+    if (text === null || recordUtils.classifyStreamedAssistantText(text) === 'non_assistant') {
+      return [];
+    }
+    return [{ text }];
+  });
+
+  if (values.length === 0) {
+    return null;
+  }
+  return createStringAsyncIterable(values.map((block) => block.text));
+}
+
+function readToolCallChunkBlocks(message: unknown): ToolCallChunkBlock[] {
+  return readContentBlocks(message).flatMap((block) => {
+    if (!recordUtils.isRecord(block)) {
+      return [];
+    }
+    const type = readLowercaseString(recordUtils.readRecordValue(block, 'type'));
+    if (type !== 'tool_call_chunk' && type !== 'server_tool_call_chunk') {
+      return [];
+    }
+
+    const name =
+      recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'name')) ??
+      recordUtils.readNonEmptyString(recordUtils.readRecordValue(block, 'tool_name')) ??
+      'unknown_tool';
+    const data = buildToolCallChunkData(block);
+    return [{ name, data }];
+  });
+}
+
+function emitToolCallChunkActivity(
+  chunks: readonly ToolCallChunkBlock[],
+  context: StreamConsumerContext,
+  callbacks: StreamConsumerCallbacks
+): void {
+  for (const chunk of chunks) {
+    callbacks.markVisibleOutput?.();
+    callbacks.emitRuntimeEvent({
+      type: 'tool_event',
+      runId: context.runId,
+      event: 'progress',
+      name: chunk.name,
+      data: chunk.data
+    });
+    callbacks.emitTodoEvent(chunk.data);
+  }
+}
+
+function buildToolCallChunkData(block: Record<string, unknown>): Record<string, unknown> {
+  const entries: Array<[string, unknown]> = [];
+  for (const key of ['id', 'args', 'input', 'index']) {
+    const value = recordUtils.readRecordValue(block, key);
+    if (value !== undefined) {
+      entries.push([key, redactUnknown(value)]);
+    }
+  }
+  return Object.fromEntries(entries);
+}
+
+function readContentBlocks(value: unknown): unknown[] {
+  if (!recordUtils.isRecord(value)) {
+    return [];
+  }
+  const contentBlocks = recordUtils.readRecordValue(value, 'contentBlocks');
+  if (Array.isArray(contentBlocks)) {
+    return contentBlocks;
+  }
+  const content = recordUtils.readRecordValue(value, 'content');
+  return Array.isArray(content) ? content : [];
+}
+
+function hasSkillInstructionPath(value: unknown): boolean {
+  if (!recordUtils.isRecord(value)) {
+    return false;
+  }
+  const path = recordUtils.readNonEmptyString(recordUtils.readRecordValue(value, 'path'));
+  if (path !== null && path.replaceAll('\\', '/').toLowerCase().endsWith('/skill.md')) {
+    return true;
+  }
+  return hasSkillInstructionPath(recordUtils.readRecordValue(value, 'additional_kwargs'));
+}
+
+function readLowercaseString(value: unknown): string | null {
+  const text = recordUtils.readNonEmptyString(value);
+  return text === null ? null : text.toLowerCase();
 }
 
 async function consumeReasoningSource(input: {

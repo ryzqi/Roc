@@ -98,6 +98,7 @@ describe('TaskService thread lifecycle', () => {
       .map((event) => (event.payload as { content: string }).content);
     const threadMessageContents = taskService
       .listThreadMessages(firstRun.threadId)
+      .filter((event) => event.type === 'message')
       .map((event) => (event.payload as { content: string }).content);
 
     expect(secondRun.threadId).toBe(firstRun.threadId);
@@ -149,6 +150,83 @@ describe('TaskService thread lifecycle', () => {
       'world'
     ]);
     expect(rows.map((row) => row.id)).toEqual(events.map((event) => event.id));
+  });
+
+  it('lists transcript activity events with insertion sequence for history reconstruction', () => {
+    const taskService = services.taskService as TaskServiceThreadLifecycleApi;
+    const run = taskService.createTaskRun({
+      userInput: '需要重建活动块',
+      modelId: 'model-alpha',
+      enabledCapabilities: emptyCapabilities
+    });
+    taskService.recordEvents([
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: '最终'
+        }
+      },
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'reasoning_delta',
+        payload: {
+          delta: '先分析。'
+        }
+      },
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'tool_call',
+        payload: {
+          name: 'read_file',
+          status: 'end',
+          output: { bytes: 128 }
+        }
+      },
+      {
+        threadId: run.threadId,
+        runId: run.id,
+        type: 'diagnostic',
+        payload: {
+          ignored: true
+        }
+      }
+    ]);
+
+    const events = taskService.listThreadMessages(run.threadId);
+
+    expect(events.map((event) => event.type)).toEqual(['message', 'message_delta', 'reasoning_delta', 'tool_call']);
+    expect(events.map((event) => event.payload)).toEqual([
+      {
+        role: 'user',
+        content: '需要重建活动块',
+        enabledCapabilities: emptyCapabilities
+      },
+      {
+        role: 'assistant',
+        delta: '最终'
+      },
+      {
+        delta: '先分析。'
+      },
+      {
+        name: 'read_file',
+        status: 'end',
+        output: { bytes: 128 }
+      }
+    ]);
+    expect(events.every((event) => typeof event.sequence === 'number')).toBe(true);
+    const sequences = events.map((event) => {
+      if (typeof event.sequence !== 'number') {
+        throw new Error('Expected listThreadMessages to expose rowid sequence.');
+      }
+      return event.sequence;
+    });
+    expect(sequences).toEqual([...sequences].sort((left, right) => left - right));
   });
 
   it('archives a thread without deleting its runs or events', () => {

@@ -3,9 +3,9 @@ import {
   AnthropicStrategy,
   OpenAIStrategy,
   CacheStrategyFactory
-} from '../../../../src/main/services/forge-guardrails/middleware/prompt-caching';
-import { BlockStability } from '../../../../src/main/services/deep-agent/prompt-builder';
-import type { PromptBlock } from '../../../../src/main/services/deep-agent/prompt-builder';
+} from '../../../../../src/main/services/forge-guardrails/middleware/prompt-caching';
+import { BlockStability } from '../../../../../src/main/services/deep-agent/prompt-builder';
+import type { PromptBlock } from '../../../../../src/main/services/deep-agent/prompt-builder';
 
 describe('AnthropicStrategy', () => {
   const strategy = new AnthropicStrategy();
@@ -14,7 +14,7 @@ describe('AnthropicStrategy', () => {
     { type: 'static', content: 'static', stability: BlockStability.STATIC, hash: 'a' },
     { type: 'workspace', content: 'workspace', stability: BlockStability.WORKSPACE, hash: 'b' },
     { type: 'tools', content: 'tools', stability: BlockStability.CAPABILITY, hash: 'c' },
-    { type: 'request', content: 'request', stability: BlockStability.REQUEST, hash: 'd' }
+    { type: 'capability', content: 'request', stability: BlockStability.REQUEST, hash: 'd' }
   ];
 
   it('aggressive 模式应标记所有块', () => {

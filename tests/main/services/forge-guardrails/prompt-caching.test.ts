@@ -14,7 +14,7 @@ describe('AnthropicStrategy', () => {
     { type: 'static', content: 'static', stability: BlockStability.STATIC, hash: 'a' },
     { type: 'workspace', content: 'workspace', stability: BlockStability.WORKSPACE, hash: 'b' },
     { type: 'tools', content: 'tools', stability: BlockStability.CAPABILITY, hash: 'c' },
-    { type: 'request', content: 'request', stability: BlockStability.REQUEST, hash: 'd' }
+    { type: 'capability', content: 'request', stability: BlockStability.REQUEST, hash: 'd' }
   ];
 
   it('aggressive 模式应标记所有块', () => {
@@ -63,7 +63,7 @@ describe('OpenAIStrategy', () => {
   it('应估算前缀 token 节省', () => {
     const mockBlocks: PromptBlock[] = [
       { type: 'static', content: 'a'.repeat(400), stability: BlockStability.STATIC, hash: 'x' }, // ~100 tokens
-      { type: 'request', content: 'req', stability: BlockStability.REQUEST, hash: 'y' }
+      { type: 'capability', content: 'req', stability: BlockStability.REQUEST, hash: 'y' }
     ];
     const usage = { input_tokens: 200 };
     const savings = strategy.estimateSavings(mockBlocks, usage);
