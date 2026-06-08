@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { AIMessageChunk } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
@@ -207,6 +208,125 @@ describe('AgentPluginRuntime', () => {
           code: 'agent_run_failed',
           message: 'provider_unavailable',
           retryable: true
+        }
+      })
+    );
+  });
+
+  it('streams reasoning and assistant deltas through renderer and task-event channels before completion', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          invoke: async () => {
+            throw new Error('invoke_should_not_be_used_when_stream_exists');
+          },
+          stream: async function* () {
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'reasoning',
+                  reasoning: '先判断用户意图。'
+                }
+              ] as never
+            });
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'text',
+                  text: '可以，先从今天金价开始。'
+                }
+              ] as never
+            });
+          },
+          modelId: 'nvidia:test-model',
+          providerId: 'nvidia'
+        }),
+        createModelHandleByModelId: async (modelId) => ({
+          invoke: async () => {
+            throw new Error('invoke_should_not_be_used_when_stream_exists');
+          },
+          stream: async function* () {
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'reasoning',
+                  reasoning: '先判断用户意图。'
+                }
+              ] as never
+            });
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'text',
+                  text: '可以，先从今天金价开始。'
+                }
+              ] as never
+            });
+          },
+          modelId,
+          providerId: 'nvidia'
+        })
+      },
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '每天晚上9点搜索今日金价，并记录到当前目录下的docx文件中。先思考，再执行。',
+      mode: 'chat'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    const chatEvents = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload));
+    expect(chatEvents).toContainEqual({
+      type: 'reasoning_delta',
+      runId: result.runId,
+      delta: '先判断用户意图。'
+    });
+    expect(chatEvents).toContainEqual({
+      type: 'message_delta',
+      runId: result.runId,
+      delta: '可以，先从今天金价开始。'
+    });
+    expect(chatEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'run_completed',
+        runId: result.runId,
+        assistantMessage: '可以，先从今天金价开始。'
+      })
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'reasoning_delta',
+          payload: {
+            delta: '先判断用户意图。'
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'message_delta',
+          payload: {
+            role: 'assistant',
+            delta: '可以，先从今天金价开始。'
+          }
         }
       })
     );

@@ -70,10 +70,10 @@ export function ChatView({
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
   const deferredReasoning = useDeferredValue(chatRun.state.reasoning);
   const activeThreadId = selectedThreadId ?? chatRun.state.threadId;
-  const latestPersistedMessageEventId =
+  const latestPersistedThreadEventId =
     activeThreadId === null
       ? null
-      : state.taskSnapshot.recentEvents.find((event) => event.threadId === activeThreadId && event.type === 'message')?.id ?? null;
+      : state.taskSnapshot.recentEvents.find((event) => event.threadId === activeThreadId)?.id ?? null;
 
   const chatTranscript = useMemo(
     () =>
@@ -137,7 +137,7 @@ export function ChatView({
       setPersistedMessages(result.data);
     }
 
-    if (activeThreadId === null || latestPersistedMessageEventId === null) {
+    if (activeThreadId === null) {
       setPersistedMessages([]);
       return;
     }
@@ -151,7 +151,7 @@ export function ChatView({
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, latestPersistedMessageEventId]);
+  }, [activeThreadId, latestPersistedThreadEventId]);
 
   useEffect(() => {
     setChatInput('');

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatView } from '../../src/renderer/chat/chat-view';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
-import type { ChatRunEvent } from '../../src/shared/types';
+import type { ChatRunEvent, TaskEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('ChatView queued task prompt', () => {
@@ -219,6 +219,105 @@ describe('ChatView queued task prompt', () => {
     expect(container.querySelector('[data-testid="chat-wait-indicator"]')).toBeNull();
   });
 
+  it('loads persisted thread messages for the selected thread even when recentEvents does not include that thread', async () => {
+    const persistedMessages: TaskEvent[] = [
+      {
+        id: 'persisted-user',
+        threadId: 'thread-historical-nvidia',
+        runId: 'run-historical-nvidia',
+        type: 'message',
+        payload: {
+          role: 'user',
+          content: '请先思考，再回答。'
+        },
+        createdAt: '2026-06-02T12:21:56.000Z'
+      },
+      {
+        id: 'persisted-reasoning',
+        threadId: 'thread-historical-nvidia',
+        runId: 'run-historical-nvidia',
+        type: 'reasoning_delta',
+        payload: {
+          delta: '先检查 NVIDIA thinking 输出。'
+        },
+        createdAt: '2026-06-02T12:21:57.000Z'
+      },
+      {
+        id: 'persisted-answer',
+        threadId: 'thread-historical-nvidia',
+        runId: 'run-historical-nvidia',
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: '最终答案'
+        },
+        createdAt: '2026-06-02T12:21:58.000Z'
+      }
+    ];
+    const getThreadMessages = vi.fn().mockResolvedValue({
+      ok: true as const,
+      data: persistedMessages
+    });
+
+    window.roc = createMockPreloadApi(
+      (handler) => {
+        runEventHandler = handler;
+        return () => {
+          if (runEventHandler === handler) {
+            runEventHandler = null;
+          }
+        };
+      },
+      {
+        getThreadMessages
+      }
+    );
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatView, {
+          chatSelectionVersion: 1,
+          client: createChatClient(),
+          queuedTaskPrompt: null,
+          onQueuedTaskPromptHandled: () => {},
+          selectedThreadId: 'thread-historical-nvidia',
+          state: createLoadedState({
+            taskSnapshot: {
+              generatedAt: '2026-06-08T00:00:00.000Z',
+              recentEvents: [],
+              counts: {
+                total: 1,
+                running: 0,
+                failed: 0,
+                pendingConfirmation: 0
+              },
+              threads: [
+                {
+                  id: 'thread-other',
+                  kind: 'chat',
+                  title: '其他线程',
+                  goal: '其他线程',
+                  status: 'completed',
+                  createdAt: '2026-06-08T00:00:00.000Z',
+                  updatedAt: '2026-06-08T00:00:00.000Z'
+                }
+              ]
+            }
+          }),
+          updateLoadedState: () => {},
+          onSubmitChatTask: async () => ({ ok: true as const })
+        })
+      );
+    });
+    await flushPromises();
+
+    expect(getThreadMessages).toHaveBeenCalledWith({ threadId: 'thread-historical-nvidia' });
+    expect(container.querySelector('[data-testid="chat-activity-reasoning"]')?.textContent).toContain(
+      '先检查 NVIDIA thinking 输出。'
+    );
+    expect(container.textContent).toContain('最终答案');
+  });
+
   function emitRunEvent(event: ChatRunEvent): void {
     if (runEventHandler === null) {
       throw new Error('Chat run event handler was not registered.');
@@ -228,7 +327,10 @@ describe('ChatView queued task prompt', () => {
 });
 
 function createMockPreloadApi(
-  onRunEvent: (handler: (event: ChatRunEvent) => void) => () => void
+  onRunEvent: (handler: (event: ChatRunEvent) => void) => () => void,
+  overrides: {
+    getThreadMessages?: RocPreloadApi['tasks']['getThreadMessages'];
+  } = {}
 ): RocPreloadApi {
   return {
     chat: {
@@ -238,7 +340,7 @@ function createMockPreloadApi(
       cancelRun: vi.fn()
     },
     tasks: {
-      getThreadMessages: vi.fn().mockResolvedValue({ ok: true as const, data: [] })
+      getThreadMessages: overrides.getThreadMessages ?? vi.fn().mockResolvedValue({ ok: true as const, data: [] })
     },
     files: {
       selectFromDialog: vi.fn()

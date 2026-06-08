@@ -339,6 +339,86 @@ describe('task plugin', () => {
     );
   });
 
+  it('mirrors streamed reasoning and message deltas into the task snapshot contract', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    await eventBus.publish({
+      type: 'agent.run.started',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      payload: {
+        runId: 'run_stream_1',
+        threadId: 'thread_stream_1',
+        mode: 'chat',
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        createdAt: '2026-06-04T00:00:00.000Z',
+        userInput: '先思考，再回答',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:01.000Z',
+      payload: {
+        runId: 'run_stream_1',
+        threadId: 'thread_stream_1',
+        type: 'reasoning_delta',
+        payload: {
+          delta: '先列出约束。'
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:02.000Z',
+      payload: {
+        runId: 'run_stream_1',
+        threadId: 'thread_stream_1',
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: '这里是最终回答。'
+        }
+      }
+    });
+
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
+
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_stream_1',
+        threadId: 'thread_stream_1',
+        type: 'reasoning_delta',
+        payload: {
+          delta: '先列出约束。'
+        }
+      })
+    );
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_stream_1',
+        threadId: 'thread_stream_1',
+        type: 'message_delta',
+        payload: {
+          role: 'assistant',
+          delta: '这里是最终回答。'
+        }
+      })
+    );
+  });
+
   it('mirrors agent run failures into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();
