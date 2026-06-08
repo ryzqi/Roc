@@ -1589,6 +1589,52 @@ describe('DeepAgentRuntimeService', () => {
     ).toEqual(['standard thinking']);
   });
 
+  it('prefers message reasoning projection over contentBlocks and legacy fallback reasoning', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['Final answer']),
+          reasoning: createAsyncIterable(['standard stream thinking']),
+          contentBlocks: [
+            {
+              type: 'reasoning',
+              text: 'content block thinking'
+            }
+          ],
+          additional_kwargs: {
+            reasoning_content: 'legacy thinking'
+          }
+        }
+      ]),
+      toolCalls: createAsyncIterable([]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+
+    await runtime.startRun({
+      input: 'Reply with the standard reasoning stream only.',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    expect(
+      events
+        .filter((event): event is Extract<ChatRunEvent, { type: 'reasoning_delta' }> => event.type === 'reasoning_delta')
+        .map((event) => event.delta)
+    ).toEqual(['standard stream thinking']);
+  });
+
   it('extracts only explicit reasoning blocks from fallback content blocks', async () => {
     mocked.streamEventsMock.mockResolvedValue({
       messages: createAsyncIterable([
@@ -2648,6 +2694,85 @@ describe('DeepAgentRuntimeService', () => {
     });
     expect(JSON.stringify(toolEvents)).not.toContain('sk-secret-value');
     expect(JSON.stringify(persistedToolError?.payload)).not.toContain('sk-secret-value');
+  });
+
+  it('emits tool progress from content block chunks and final lifecycle from stream tool calls', async () => {
+    mocked.streamEventsMock.mockResolvedValue({
+      messages: createAsyncIterable([
+        new AIMessage({
+          content: [
+            {
+              type: 'tool_call_chunk',
+              name: 'read_file',
+              args: '{"path":"README.md"',
+              index: 0
+            },
+            {
+              type: 'text',
+              text: 'Tool call queued.'
+            }
+          ]
+        })
+      ]),
+      toolCalls: createAsyncIterable([
+        {
+          name: 'read_file',
+          input: { path: 'README.md' },
+          output: Promise.resolve('file body')
+        }
+      ]),
+      subagents: createAsyncIterable([]),
+      output: Promise.resolve({})
+    });
+
+    const runtime = createRuntime();
+    const events: ChatRunEvent[] = [];
+    const completed = waitForEvent(runtime, (event) => {
+      events.push(event);
+      return event.type === 'run_completed';
+    });
+    const started = await runtime.startRun({
+      input: '读取 README。',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      }
+    });
+    await completed;
+
+    const toolEvents = events.filter(
+      (event): event is Extract<ChatRunEvent, { type: 'tool_event' }> => event.type === 'tool_event'
+    );
+
+    expect(toolEvents).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_event',
+          runId: started.runId,
+          event: 'progress',
+          name: 'read_file',
+          data: {
+            args: '{"path":"README.md"',
+            index: 0
+          }
+        },
+        {
+          type: 'tool_event',
+          runId: started.runId,
+          event: 'start',
+          name: 'read_file',
+          data: { path: 'README.md' }
+        },
+        {
+          type: 'tool_event',
+          runId: started.runId,
+          event: 'end',
+          name: 'read_file',
+          data: 'file body'
+        }
+      ])
+    );
   });
 
   it('keeps MCP tool_result payloads out of assistant chat text while preserving tool audit events', async () => {

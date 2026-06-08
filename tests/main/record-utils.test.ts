@@ -31,6 +31,22 @@ describe('record-utils reasoning helpers', () => {
     ).resolves.toBe('block thinking');
   });
 
+  it('reads reasoning from final output contentBlocks before legacy fallback fields', async () => {
+    await expect(
+      readReasoningFromMessageOutput({
+        contentBlocks: [
+          {
+            type: 'reasoning',
+            text: 'standard content block thinking'
+          }
+        ],
+        additional_kwargs: {
+          reasoning_content: 'legacy thinking'
+        }
+      })
+    ).resolves.toBe('standard content block thinking');
+  });
+
   it('ignores snake_case content block fallbacks that are no longer part of the supported contract', async () => {
     await expect(
       readReasoningFromMessageOutput({
@@ -63,6 +79,23 @@ describe('record-utils reasoning helpers', () => {
         }
       })
     ).resolves.toBe('summary onesummary two');
+  });
+
+  it('reads reasoning from final output content array after metadata fallbacks are absent', async () => {
+    await expect(
+      readReasoningFromMessageOutput({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'content array thinking'
+          },
+          {
+            type: 'text',
+            text: 'visible answer'
+          }
+        ]
+      })
+    ).resolves.toBe('content array thinking');
   });
 
   it('does not read plain text content blocks as reasoning', async () => {
