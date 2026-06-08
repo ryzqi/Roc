@@ -83,14 +83,20 @@ test_step "JsonView 组件导出" \
 test_step "ToolCallView 组件导出" \
     "grep -q 'export function ToolCallView' src/renderer/chat/tool-call-view.tsx"
 
+test_step "ReasoningBlock 组件导出" \
+    "grep -q 'export function ReasoningBlock' src/renderer/chat/reasoning/ReasoningBlock.tsx"
+
+test_step "ToolCallBlock 组件导出" \
+    "grep -q 'export function ToolCallBlock' src/renderer/chat/tool-call/ToolCallBlock.tsx"
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "阶段 3: 集成检查"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-test_step "chat-message-row 导入 ReasoningView" \
-    "grep -q \"import.*ReasoningView.*from.*reasoning-view\" src/renderer/chat/chat-message-row.tsx"
+test_step "chat-message-row 导入 ReasoningBlock" \
+    "grep -q \"import.*ReasoningBlock.*from.*reasoning/ReasoningBlock\" src/renderer/chat/chat-message-row.tsx"
 
 test_step "chat-message-row 导入 ToolCallView" \
     "grep -q \"import.*ToolCallView.*from.*tool-call-view\" src/renderer/chat/chat-message-row.tsx"

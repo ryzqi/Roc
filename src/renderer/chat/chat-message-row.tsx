@@ -12,7 +12,7 @@ import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat
 import { MarkdownView } from './markdown-view';
 import type { ChatResumeDecision } from '../../shared/types';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
-import { ReasoningView } from './reasoning-view';
+import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
 
 type ChatMessageRowProps = {
@@ -163,7 +163,7 @@ export const ChatMessageRow = memo(
 
 function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }): React.JSX.Element {
   if (block.kind === 'reasoning') {
-    return <ReasoningView content={block.content} isStreaming={block.isStreaming} />;
+    return <ReasoningBlock id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
 
   if (block.kind === 'tool_call') {
@@ -192,4 +192,3 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
     </details>
   );
 }
-

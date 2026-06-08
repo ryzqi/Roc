@@ -141,6 +141,44 @@ describe('chat message row', () => {
     expect(html).toMatch(/data-testid="chat-activity-tool"(?! open)/);
   });
 
+  it('opens tool errors by default while completed tool output stays collapsed', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-tool-error',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          blocks: [
+            {
+              id: 'tool-complete',
+              kind: 'tool_call',
+              name: 'read_file',
+              status: 'end',
+              input: { path: 'README.md' },
+              output: 'file body',
+              error: null
+            },
+            {
+              id: 'tool-error',
+              kind: 'tool_call',
+              name: 'write_file',
+              status: 'error',
+              input: { path: 'blocked.txt' },
+              output: null,
+              error: 'permission denied'
+            }
+          ],
+          approval: null,
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toMatch(/tool-call-card--end" data-testid="chat-activity-tool"(?! open)/);
+    expect(html).toMatch(/tool-call-card--error" data-testid="chat-activity-tool" open="">/);
+  });
+
   it('renders an approval card with tool details and allowed decisions', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
