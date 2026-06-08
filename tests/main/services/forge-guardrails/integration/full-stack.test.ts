@@ -88,6 +88,7 @@ describe('forge guardrails full stack', () => {
     const middleware = await buildMiddleware();
     expect(middlewareNames(middleware)).toEqual([
       'RTKMiddleware',
+      'PromptCaching',
       'toolRetryMiddleware',
       'ForgeErrorBudgetMiddleware',
       'ForgeStepEnforcement',
