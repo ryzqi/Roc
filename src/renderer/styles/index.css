@@ -2,6 +2,8 @@
 @import './base.css';
 @import './main.css';
 @import './animations.css';
+@import './reasoning.css';
+@import './tool-call.css';
 
 @font-face {
   font-family: 'Inter';

@@ -292,16 +292,33 @@ export function readReasoningTextValues(value: unknown): string[] {
   }
 
   const additionalKwargs = readRecordValue(value, 'additional_kwargs');
-  const additionalReasoningValues = readOpenAiReasoningSummaryValues(readRecordValue(additionalKwargs, 'reasoning'));
-  if (additionalReasoningValues.length > 0) {
-    return additionalReasoningValues;
-  }
 
+  // Check additional_kwargs.reasoning_content (NVIDIA, llama.cpp, OpenAI-compatible)
   const additionalReasoningContent = readNonEmptyString(readRecordValue(additionalKwargs, 'reasoning_content'));
   if (additionalReasoningContent !== null) {
     return [additionalReasoningContent];
   }
 
+  // Check additional_kwargs.reasoningContent (camelCase variant)
+  const additionalReasoningContentCamelCase = readNonEmptyString(readRecordValue(additionalKwargs, 'reasoningContent'));
+  if (additionalReasoningContentCamelCase !== null) {
+    return [additionalReasoningContentCamelCase];
+  }
+
+  // Check additional_kwargs.reasoning.summary (OpenAI reasoning format)
+  const additionalReasoningValues = readOpenAiReasoningSummaryValues(readRecordValue(additionalKwargs, 'reasoning'));
+  if (additionalReasoningValues.length > 0) {
+    return additionalReasoningValues;
+  }
+
+  // Check response_metadata.reasoning_content
+  const responseMetadata = readRecordValue(value, 'response_metadata');
+  const metadataReasoningContent = readNonEmptyString(readRecordValue(responseMetadata, 'reasoning_content'));
+  if (metadataReasoningContent !== null) {
+    return [metadataReasoningContent];
+  }
+
+  // Check direct reasoning_content field
   const directReasoningContent = readNonEmptyString(readRecordValue(value, 'reasoning_content'));
   if (directReasoningContent !== null) {
     return [directReasoningContent];

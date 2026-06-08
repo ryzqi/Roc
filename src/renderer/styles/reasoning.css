@@ -1,0 +1,225 @@
+/**
+ * 推理内容样式
+ */
+
+.chat-bubble-reasoning {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  overflow: hidden;
+}
+
+.reasoning-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.reasoning-summary:hover {
+  background: var(--surface-hover);
+}
+
+.reasoning-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.reasoning-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.reasoning-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1rem;
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.reasoning-action-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.reasoning-action-btn:active {
+  transform: scale(0.95);
+}
+
+/* Timeline */
+.reasoning-timeline {
+  padding: 1rem;
+  position: relative;
+  background: var(--surface-base);
+}
+
+.reasoning-timeline::before {
+  content: '';
+  position: absolute;
+  left: 2rem;
+  top: 1rem;
+  bottom: 1rem;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--border-default) 0%, var(--border-subtle) 100%);
+}
+
+/* Step Card */
+.reasoning-step {
+  position: relative;
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 0.5rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 6px;
+}
+
+.reasoning-step:hover {
+  background: var(--surface-hover);
+  padding-left: 1rem;
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  padding-right: 1rem;
+}
+
+.reasoning-step--selected {
+  background: var(--surface-selected);
+  box-shadow: 0 0 0 2px var(--border-focus);
+  padding-left: 1rem;
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  padding-right: 1rem;
+}
+
+/* Step Marker */
+.step-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.reasoning-step:hover .step-marker {
+  transform: scale(1.1);
+}
+
+.step-marker-icon {
+  font-size: 1rem;
+}
+
+/* Step Content */
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.step-type-label {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.step-line-number {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.step-body {
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.step-body p {
+  margin: 0.5rem 0;
+}
+
+.step-body p:first-child {
+  margin-top: 0;
+}
+
+.step-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Streaming Pulse */
+.reasoning-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+}
+
+.reasoning-pulse-icon {
+  font-size: 1.25rem;
+}
+
+.reasoning-pulse-text {
+  font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .reasoning-timeline::before {
+    left: 1.5rem;
+  }
+
+  .step-marker {
+    width: 28px;
+    height: 28px;
+  }
+
+  .step-marker-icon {
+    font-size: 0.875rem;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .chat-bubble-reasoning {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .reasoning-timeline {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .reasoning-step:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .reasoning-step--selected {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .step-marker {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+}
