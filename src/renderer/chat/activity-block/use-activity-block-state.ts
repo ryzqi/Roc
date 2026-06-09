@@ -10,14 +10,13 @@ export function useActivityBlockState(input: {
   setOpen: (open: boolean) => void;
 } {
   const [open, setOpenState] = useState(input.defaultOpen || Boolean(input.forceOpenWhileStreaming && input.isStreaming));
-  const [userChanged, setUserChanged] = useState(false);
   const wasStreamingRef = useRef(Boolean(input.isStreaming));
 
   useEffect(() => {
-    if (!userChanged && input.forceOpenWhileStreaming && input.isStreaming) {
+    if (input.forceOpenWhileStreaming && input.isStreaming && !open) {
       setOpenState(true);
     }
-  }, [input.forceOpenWhileStreaming, input.isStreaming, userChanged]);
+  }, [input.forceOpenWhileStreaming, input.isStreaming, open]);
 
   useEffect(() => {
     const wasStreaming = wasStreamingRef.current;
@@ -36,9 +35,6 @@ export function useActivityBlockState(input: {
 
   return {
     open,
-    setOpen: (nextOpen) => {
-      setUserChanged(true);
-      setOpenState(nextOpen);
-    }
+    setOpen: setOpenState
   };
 }

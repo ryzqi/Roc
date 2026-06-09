@@ -115,10 +115,47 @@ beforeEach(() => {
     });
 
     expect(queryDetails('chat-activity-reasoning').open).toBe(false);
+    expect(queryDetails('chat-activity-reasoning').textContent).toContain('正在分析。');
+    expect(queryDetails('chat-activity-reasoning').textContent).toContain('继续整理。');
     expect(queryDetails('chat-activity-tool').open).toBe(true);
   });
 
-  it('copies only the final assistant answer and updates button text after copy', async () => {
+  it('forces streaming reasoning open after a manual close attempt', async () => {
+    await act(async () => {
+      root.render(
+        <ChatMessageRow
+          message={{
+            key: 'assistant-force-open',
+            role: 'assistant',
+            content: '',
+            reasoning: null,
+            blocks: [
+              {
+                id: 'reasoning-force-open',
+                kind: 'reasoning',
+                content: '继续思考。',
+                isStreaming: true
+              }
+            ],
+            approval: null,
+            isStreaming: true
+          }}
+        />
+      );
+    });
+
+    const reasoningBlock = queryDetails('chat-activity-reasoning');
+    expect(reasoningBlock.open).toBe(true);
+
+    await act(async () => {
+      reasoningBlock.open = false;
+      reasoningBlock.dispatchEvent(new Event('toggle', { bubbles: true }));
+    });
+
+    expect(queryDetails('chat-activity-reasoning').open).toBe(true);
+  });
+
+  it('copies only the final assistant answer and updates button aria label after copy', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       value: { writeText },
@@ -141,7 +178,7 @@ beforeEach(() => {
       );
     });
 
-    const button = queryButtonByText('复制回答');
+    const button = queryButtonByLabel('复制回答');
     expect(button).not.toBeNull();
 
     await act(async () => {
@@ -150,22 +187,30 @@ beforeEach(() => {
     });
 
     expect(writeText).toHaveBeenCalledWith('正式回答');
-    expect(queryButtonByText('已复制')).not.toBeNull();
+    expect(button?.getAttribute('aria-label')).toBe('已复制回答');
   });
 });
 
 function queryDetails(testId: string): HTMLDetailsElement {
-  const element = containerRef().querySelector(`[data-testid="${testId}"]`);
+  const element = queryElementByTestId(testId);
   if (!(element instanceof HTMLDetailsElement)) {
     throw new Error(`Missing details element for ${testId}`);
   }
   return element;
 }
 
-function queryButtonByText(text: string): HTMLButtonElement | null {
+function queryButtonByLabel(label: string): HTMLButtonElement | null {
   const buttons = Array.from(containerRef().querySelectorAll('button'));
-  const match = buttons.find((button) => button.textContent?.includes(text));
+  const match = buttons.find((button) => button.getAttribute('aria-label') === label);
   return match instanceof HTMLButtonElement ? match : null;
+}
+
+function queryElementByTestId(testId: string): HTMLElement {
+  const element = containerRef().querySelector(`[data-testid="${testId}"]`);
+  if (!(element instanceof HTMLElement)) {
+    throw new Error(`Missing element for ${testId}`);
+  }
+  return element;
 }
 
 function containerRef(): HTMLDivElement {

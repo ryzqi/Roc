@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ChatMessageRow } from '../../src/renderer/chat/chat-message-row';
 
 describe('chat message row', () => {
-  it('renders reasoning as plain paragraphs without timeline or Markdown conversion', () => {
+  it('renders completed reasoning as a collapsed details block without timeline or Markdown conversion', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -20,15 +20,15 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid="chat-activity-reasoning"');
-    expect(html).toContain('推理');
-    expect(html).toContain('已完成');
+    expect(html).toMatch(/<details class="chat-bubble-reasoning" data-activity-id="assistant-1-reasoning" data-testid="chat-activity-reasoning">/);
+    expect(html).toContain('<summary><span>已思考</span></summary>');
     expect(html).not.toContain('推理 · 3 步');
     expect(html).toContain('<p>第一段</p>');
     expect(html).toContain('<p>- 列表项</p>');
     expect(html).not.toContain('<ul>');
     expect(html).not.toContain('<code class="hljs language-ts">');
     expect(html).not.toContain('step-marker');
-    expect(html).toContain('复制回答');
+    expect(html).toContain('aria-label="复制回答"');
   });
 
   it('keeps assistant reasoning, content, approval, and the streaming cursor in one assistant content block', () => {
@@ -66,7 +66,7 @@ describe('chat message row', () => {
     expect(html).toMatch(
       /data-testid="chat-assistant-content"[\s\S]*data-testid="chat-activity-reasoning"[\s\S]*<p>最终答案<\/p>[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
     );
-    expect(html).not.toContain('复制回答');
+    expect(html).not.toContain('aria-label="复制回答"');
   });
 
   it('renders reasoning and tool activity blocks separately from assistant Markdown content', () => {
@@ -111,7 +111,7 @@ describe('chat message row', () => {
     expect(html).toContain('<ul>');
   });
 
-  it('opens streaming reasoning activity by default and keeps completed tool activity collapsed', () => {
+  it('opens streaming reasoning activity by default while completed tool activity stays collapsed', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -142,7 +142,9 @@ describe('chat message row', () => {
       })
     );
 
+    expect(html).toContain('data-testid="chat-activity-reasoning"');
     expect(html).toMatch(/data-testid="chat-activity-reasoning" open="">/);
+    expect(html).toContain('<summary><span>思考中</span></summary>');
     expect(html).toMatch(/data-testid="chat-activity-tool"(?! open)/);
   });
 

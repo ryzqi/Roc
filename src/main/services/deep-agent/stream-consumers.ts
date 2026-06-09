@@ -90,34 +90,28 @@ export async function consumeMessageStream(input: {
       (standardTextStream === null || !recordUtils.isNonAssistantTextMessage(message)) &&
       !recordUtils.isSummarizationMessage(message);
 
-    const tasks: Array<Promise<void>> = [];
-    if (canStreamAssistantText) {
-      tasks.push(
-        consumeVisibleTextStream(textStream as AsyncIterable<unknown>, (delta) => {
-          input.callbacks.markVisibleOutput?.();
-          input.assistantChunks.push(delta);
-          assistantDeltaRecorder.record(delta);
-          input.callbacks.emitRuntimeEvent({
-            type: 'message_delta',
-            runId: input.context.runId,
-            delta
-          });
-        })
-      );
-    }
     emitToolCallChunkActivity(toolCallChunks, input.context, input.callbacks);
     if (reasoningSource !== null) {
-      tasks.push(
-        consumeReasoningSource({
-          source: reasoningSource,
-          context: input.context,
-          reasoningChunks: input.reasoningChunks,
-          callbacks: input.callbacks,
-          reasoningDeltaRecorder
-        })
-      );
+      await consumeReasoningSource({
+        source: reasoningSource,
+        context: input.context,
+        reasoningChunks: input.reasoningChunks,
+        callbacks: input.callbacks,
+        reasoningDeltaRecorder
+      });
     }
-    await Promise.all(tasks);
+    if (canStreamAssistantText) {
+      await consumeVisibleTextStream(textStream as AsyncIterable<unknown>, (delta) => {
+        input.callbacks.markVisibleOutput?.();
+        input.assistantChunks.push(delta);
+        assistantDeltaRecorder.record(delta);
+        input.callbacks.emitRuntimeEvent({
+          type: 'message_delta',
+          runId: input.context.runId,
+          delta
+        });
+      });
+    }
 
     if (reasoningSource === null && input.reasoningChunks.length === 0) {
       const trailingReasoning = await readReasoningFromOutput(message);

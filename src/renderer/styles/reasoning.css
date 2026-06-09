@@ -1,153 +1,109 @@
-/**
- * 推理块样式
- */
-
 .chat-bubble-reasoning {
   margin: 12px 0;
-  border: 1px solid rgba(120, 144, 184, 0.18);
-  border-radius: 10px;
-  background: rgba(245, 248, 252, 0.78);
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  background: transparent;
 }
 
-.reasoning-header {
+.chat-bubble-reasoning > summary {
   list-style: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 10px 16px;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
-  background: rgba(15, 23, 42, 0.02);
-  transition: background var(--duration-fast) var(--easing-standard);
 }
 
-.reasoning-header::-webkit-details-marker,
-.reasoning-header::marker {
+.chat-bubble-reasoning > summary::-webkit-details-marker,
+.chat-bubble-reasoning > summary::marker {
   display: none;
   content: '';
 }
 
-.reasoning-header::before {
+.chat-bubble-reasoning > summary::before {
   content: "›";
   display: inline-block;
   width: 12px;
   color: var(--subtle);
-  transform: rotate(0deg);
   transition: transform var(--duration-fast) var(--easing-standard);
 }
 
-.chat-bubble-reasoning[open] .reasoning-header::before {
+.chat-bubble-reasoning[open] > summary::before {
   transform: rotate(90deg);
 }
 
-.reasoning-header:hover {
-  background: rgba(15, 23, 42, 0.035);
-}
-
-.reasoning-label,
-.reasoning-status {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--subtle);
-  letter-spacing: 0.02em;
-}
-
-.reasoning-status {
-  margin-left: auto;
-}
-
 .reasoning-body {
-  padding: 0;
+  padding: 6px 0 4px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 
-.reasoning-content {
-  padding: 16px 20px;
-  color: var(--text);
+.reasoning-body .reasoning-content {
+  padding: 0;
+  color: var(--muted);
   font-size: 14.5px;
   line-height: 1.72;
 }
 
-.reasoning-content p {
+.reasoning-body .reasoning-content p {
   margin: 0 0 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.reasoning-content p:last-child {
+.reasoning-body .reasoning-content p:last-child {
   margin-bottom: 0;
 }
 
-.chat-answer-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 1px solid rgba(120, 144, 184, 0.12);
-}
-
 .copy-answer-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid rgba(120, 144, 184, 0.22);
-  border-radius: 8px;
+  justify-self: end;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--subtle);
   cursor: pointer;
   transition:
-    border-color var(--duration-fast) var(--easing-standard),
-    background var(--duration-fast) var(--easing-standard),
     color var(--duration-fast) var(--easing-standard),
+    background var(--duration-fast) var(--easing-standard),
     transform var(--duration-fast) var(--easing-standard);
 }
 
+.copy-answer-button--icon-only {
+  min-width: 32px;
+}
+
+.copy-answer-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .copy-answer-button:hover {
-  background: rgba(120, 144, 184, 0.08);
-  border-color: rgba(120, 144, 184, 0.32);
   color: var(--text);
+  background: transparent;
 }
 
 .copy-answer-button:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
-@media (prefers-color-scheme: dark) {
-  .chat-bubble-reasoning {
-    background: rgba(255, 255, 255, 0.03);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  }
-
-  .reasoning-header {
-    background: rgba(255, 255, 255, 0.02);
-  }
-
-  .reasoning-header:hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .copy-answer-button {
-    border-color: rgba(190, 205, 228, 0.2);
-  }
-
-  .copy-answer-button:hover {
-    background: rgba(190, 205, 228, 0.08);
-    border-color: rgba(190, 205, 228, 0.32);
-  }
+.copy-answer-button:focus-visible {
+  outline: 2px solid var(--line);
+  outline-offset: 2px;
 }
 
 @media (max-width: 640px) {
-  .reasoning-content {
-    padding: 12px 16px;
-  }
-
   .copy-answer-button {
-    width: 100%;
-    justify-content: center;
+    width: 36px;
+    height: 36px;
   }
 }
