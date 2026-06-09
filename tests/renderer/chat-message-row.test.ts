@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ChatMessageRow } from '../../src/renderer/chat/chat-message-row';
 
 describe('chat message row', () => {
-  it('renders reasoning with Markdown structure instead of a single raw paragraph', () => {
+  it('renders reasoning as plain paragraphs without timeline or Markdown conversion', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -21,10 +21,14 @@ describe('chat message row', () => {
 
     expect(html).toContain('data-testid="chat-activity-reasoning"');
     expect(html).toContain('推理');
-    expect(html).not.toContain('思考过程');
-    expect(html).toContain('<ul>');
-    expect(html).toContain('<code class="hljs language-ts">');
-    expect(html).not.toContain('<p>第一段\n\n- 列表项');
+    expect(html).toContain('已完成');
+    expect(html).not.toContain('推理 · 3 步');
+    expect(html).toContain('<p>第一段</p>');
+    expect(html).toContain('<p>- 列表项</p>');
+    expect(html).not.toContain('<ul>');
+    expect(html).not.toContain('<code class="hljs language-ts">');
+    expect(html).not.toContain('step-marker');
+    expect(html).toContain('复制回答');
   });
 
   it('keeps assistant reasoning, content, approval, and the streaming cursor in one assistant content block', () => {
@@ -62,6 +66,7 @@ describe('chat message row', () => {
     expect(html).toMatch(
       /data-testid="chat-assistant-content"[\s\S]*data-testid="chat-activity-reasoning"[\s\S]*<p>最终答案<\/p>[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
     );
+    expect(html).not.toContain('复制回答');
   });
 
   it('renders reasoning and tool activity blocks separately from assistant Markdown content', () => {

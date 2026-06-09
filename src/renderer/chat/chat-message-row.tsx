@@ -11,6 +11,7 @@ import {
 import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat-transcript';
 import { MarkdownView } from './markdown-view';
 import type { ChatResumeDecision } from '../../shared/types';
+import { CopyAnswerButton } from './CopyAnswerButton';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
@@ -140,6 +141,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
             {message.isStreaming ? (
               <span className="chat-typing-cursor" aria-hidden="true" />
             ) : null}
+            {!message.isStreaming && message.content.length > 0 ? <CopyAnswerButton content={message.content} /> : null}
           </div>
         ) : (
           <p>{message.content}</p>
