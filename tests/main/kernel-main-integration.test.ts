@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,14 +27,12 @@ afterEach(async () => {
 });
 
 describe('main kernel bootstrap integration', () => {
-  it('constructs KernelRuntime, runs migration before plugin load, and shuts kernel down', async () => {
+  it('constructs KernelRuntime, removes legacy monolith data before plugin load, and shuts kernel down', async () => {
     const calls: string[] = [];
     const plugin = createProbePlugin(calls);
+    writeFileSync(join(root, 'roc.sqlite'), 'old database', 'utf8');
+    writeMigrationMarker();
     const bootstrap = createMainKernelBootstrap({
-      activateMigration: async ({ paths }) => {
-        calls.push('migration');
-        return join(paths.root, 'plugin-data');
-      },
       dataRoot: root,
       plugins: [plugin],
       safeStorage: safeStorage()
@@ -44,7 +42,8 @@ describe('main kernel bootstrap integration', () => {
 
     await bootstrap.start();
 
-    expect(calls).toEqual(['migration', 'plugin-load']);
+    expect(calls).toEqual(['plugin-load']);
+    expect(existsSync(join(root, 'roc.sqlite'))).toBe(false);
     expect(bootstrap.runtime.getStatus()).toMatchObject({
       started: true,
       plugins: {
@@ -54,7 +53,7 @@ describe('main kernel bootstrap integration', () => {
 
     await bootstrap.shutdown();
 
-    expect(calls).toEqual(['migration', 'plugin-load', 'plugin-shutdown']);
+    expect(calls).toEqual(['plugin-load', 'plugin-shutdown']);
     expect(bootstrap.runtime.getStatus().started).toBe(false);
   });
 
@@ -88,9 +87,13 @@ describe('main kernel bootstrap integration', () => {
     expect(source).not.toContain('taskSchedulerService.handlePowerResume');
   });
 
+  it('does not keep the old app-service composition root or monolith database service', () => {
+    expect(existsSync(join(process.cwd(), 'src', 'main', 'services', 'app-service.ts'))).toBe(false);
+    expect(existsSync(join(process.cwd(), 'src', 'main', 'services', 'database-service.ts'))).toBe(false);
+  });
+
   it('reads provider settings saved after kernel startup before agent runs', async () => {
     const bootstrap = createMainKernelBootstrap({
-      activateMigration: async ({ paths }) => join(paths.root, 'plugin-data'),
       dataRoot: root,
       safeStorage: safeStorage()
     });
@@ -137,7 +140,7 @@ describe('main kernel bootstrap integration', () => {
           enabledCapabilities: { mcpServers: [], skills: [] }
         })
       ).resolves.toMatchObject({
-        runId: expect.stringMatching(/^chat_/u),
+        runId: expect.stringMatching(/^run_/u),
         providerId: 'smoke-provider',
         modelId: 'smoke-model'
       });
@@ -159,7 +162,6 @@ describe('main kernel bootstrap integration', () => {
       }
     });
     const bootstrap = createMainKernelBootstrap({
-      activateMigration: async ({ paths }) => join(paths.root, 'plugin-data'),
       dataRoot: root,
       performanceObserverService,
       safeStorage: safeStorage()
@@ -189,6 +191,23 @@ describe('main kernel bootstrap integration', () => {
     }
   });
 });
+
+function writeMigrationMarker(): void {
+  const pluginDataDir = join(root, 'plugin-data');
+  mkdirSync(pluginDataDir, { recursive: true });
+  writeFileSync(
+    join(pluginDataDir, '.migration-complete.json'),
+    `${JSON.stringify({
+      sourceDatabasePath: join(root, 'roc.sqlite'),
+      sourceChecksum: 'sha256-test',
+      pluginDatabaseChecksums: {
+        '@roc/plugin-agent': 'agent-checksum'
+      },
+      completedAt: '2026-06-09T00:00:00.000Z'
+    }, null, 2)}\n`,
+    'utf8'
+  );
+}
 
 function createProbePlugin(calls: string[]): RocPlugin {
   return {

@@ -274,7 +274,7 @@ function createBackgroundTaskCard(
     description,
     requiredInput: 'background task structured request',
     scope: 'app',
-    dependencies: ['TaskService', 'TaskSchedulerService'],
+    dependencies: ['@roc/plugin-task', 'task.scheduler'],
     sideEffects,
     requiresApproval,
     supportsLongTermGrant: false,

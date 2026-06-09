@@ -14,7 +14,7 @@ import type {
 import { RocDomainError } from '../../services/errors';
 import { MetricsService } from '../../services/metrics-service';
 import { PerformanceObserverService } from '../../services/performance-observer-service';
-import type { RuntimeMetricsProvider, RuntimeProcessMetric } from '../../services/diagnostics-service';
+import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './runtime-metrics';
 
 const emptyRuntimeMetricsProvider: RuntimeMetricsProvider = {
   getBrowserWindowCount: () => 0,

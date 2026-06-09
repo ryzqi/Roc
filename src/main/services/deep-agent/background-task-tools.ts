@@ -11,9 +11,7 @@ import type {
 import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
 import { RocDomainError } from '../errors';
 import { PreviewStore, RocToolResolutionError } from '../forge-guardrails';
-import type { TaskSchedulerService } from '../task-scheduler-service';
-import type { TaskService } from '../task-service';
-import { parseCronExpression } from '../task/cron-parser';
+import { parseCronExpression } from '../../plugins/task/cron-parser';
 
 export const manualTriggerSchema = z.strictObject({
   type: z.literal('manual').describe('触发类型：manual / once / cron。'),
@@ -55,18 +53,18 @@ export const proposeInputSchema = proposeToolInputSchema.extend({
   enabledCapabilities: enabledCapabilitiesSchema.nullable().optional()
 });
 
-const updateInputSchema = z.object({
+export const updateInputSchema = z.object({
   taskId: z.string().min(1),
   patch: proposeInputSchema.partial(),
   reason: z.string().min(1)
 });
 
-const cancelInputSchema = z.object({
+export const cancelInputSchema = z.object({
   taskId: z.string().min(1),
   reason: z.string().min(1)
 });
 
-const scheduleInputSchema = z.strictObject({
+export const scheduleInputSchema = z.strictObject({
   previewId: z.string().min(1).describe('propose_background_task 返回的 previewId。')
 });
 
@@ -77,10 +75,23 @@ export const SCHEDULE_TOOL_DESCRIPTION = [
 ].join('\n');
 
 type BackgroundTaskToolDependencies = {
-  taskService: TaskService;
-  schedulerService: TaskSchedulerService;
+  taskAdapter: BackgroundTaskToolTaskAdapter;
+  schedulerAdapter: BackgroundTaskToolSchedulerAdapter;
   enabledCapabilities?: EnabledCapabilities;
   previewStore: PreviewStore;
+};
+
+type BackgroundTaskToolTaskAdapter = {
+  createBackgroundTask(preview: BackgroundTaskPreview): { id: string; threadId: string; nextRunAt: string | null; status?: string };
+  createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview;
+  updateBackgroundTask(request: UpdateBackgroundTaskRequest): { id: string; threadId: string; nextRunAt: string | null };
+  cancelBackgroundTask(taskId: string): { id: string; threadId: string; status: string };
+};
+
+type BackgroundTaskToolSchedulerAdapter = {
+  refreshTask(task: { id: string }): void;
+  registerTask(task: { id: string }): void;
+  unregisterTask(taskId: string): void;
 };
 
 export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): Array<DynamicStructuredTool<any, any, any, string>> {
@@ -111,7 +122,7 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
       name: 'update_background_task',
       description: '提议修改已有后台任务。只返回审批预览，用户批准前不会修改任务。',
       schema: updateInputSchema,
-      func: async (rawInput) => JSON.stringify(createUpdatePayload(input.taskService, rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(createUpdatePayload(rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
       name: 'cancel_background_task',
@@ -133,8 +144,8 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
 }
 
 export function applyBackgroundTaskToolDecision(input: {
-  taskService: TaskService;
-  schedulerService: TaskSchedulerService;
+  taskAdapter: BackgroundTaskToolTaskAdapter;
+  schedulerAdapter: BackgroundTaskToolSchedulerAdapter;
   actionName: 'update_background_task' | 'cancel_background_task';
   actionArgs: unknown;
   decision: ChatResumeDecision;
@@ -150,8 +161,8 @@ export function applyBackgroundTaskToolDecision(input: {
   if (input.actionName === 'update_background_task') {
     const request = updateInputSchema.parse(actionArgs);
     validatePatch(request.patch);
-    const task = input.taskService.updateBackgroundTask(toUpdateRequest(request));
-    input.schedulerService.refreshTask(task);
+    const task = input.taskAdapter.updateBackgroundTask(toUpdateRequest(request));
+    input.schedulerAdapter.refreshTask(task);
     return {
       ok: true,
       taskId: task.id,
@@ -161,8 +172,8 @@ export function applyBackgroundTaskToolDecision(input: {
   }
 
   const request = cancelInputSchema.parse(actionArgs);
-  const task = input.taskService.cancelBackgroundTask(request.taskId);
-  input.schedulerService.unregisterTask(task.id);
+  const task = input.taskAdapter.cancelBackgroundTask(request.taskId);
+  input.schedulerAdapter.unregisterTask(task.id);
   return {
     ok: true,
     taskId: task.id,
@@ -192,8 +203,8 @@ function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput:
       toolName: 'schedule_background_task'
     });
   }
-  const task = input.taskService.createBackgroundTask(preview);
-  input.schedulerService.registerTask(task);
+  const task = input.taskAdapter.createBackgroundTask(preview);
+  input.schedulerAdapter.registerTask(task);
   return {
     ok: true,
     taskId: task.id,
@@ -202,7 +213,7 @@ function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput:
   };
 }
 
-function createUpdatePayload(taskService: TaskService, rawInput: unknown): Record<string, unknown> {
+function createUpdatePayload(rawInput: unknown): Record<string, unknown> {
   const parsed = updateInputSchema.parse(rawInput);
   validatePatch(parsed.patch);
   return {
@@ -217,7 +228,7 @@ function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unkno
   const parsed = proposeToolInputSchema.parse(rawInput);
   validateTrigger(parsed.trigger);
   validateWorkspacePath(parsed.workspacePath);
-  return input.taskService.createBackgroundTaskPreview({
+  return input.taskAdapter.createBackgroundTaskPreview({
     goal: parsed.goal,
     trigger: parsed.trigger,
     workspacePath: parsed.workspacePath,
@@ -275,6 +286,10 @@ function validatePatch(patch: Partial<z.infer<typeof proposeInputSchema>>): void
   }
 }
 
+export function validateBackgroundTaskPatch(patch: Partial<z.infer<typeof proposeInputSchema>>): void {
+  validatePatch(patch);
+}
+
 function validateTrigger(trigger: z.infer<typeof triggerSchema>): void {
   if (trigger.type === 'cron') {
     parseCronExpression(trigger.cronExpression);
@@ -293,6 +308,10 @@ function validateTrigger(trigger: z.infer<typeof triggerSchema>): void {
   }
 }
 
+export function validateBackgroundTaskTrigger(trigger: z.infer<typeof triggerSchema>): void {
+  validateTrigger(trigger);
+}
+
 function validateWorkspacePath(workspacePath: string): void {
   if (!existsSync(workspacePath)) {
     throw new RocDomainError({
@@ -303,4 +322,8 @@ function validateWorkspacePath(workspacePath: string): void {
       userAction: '请选择仍然存在的工作区路径。'
     });
   }
+}
+
+export function validateBackgroundTaskWorkspacePath(workspacePath: string): void {
+  validateWorkspacePath(workspacePath);
 }

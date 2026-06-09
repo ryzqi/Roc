@@ -14,7 +14,7 @@ export type ReleaseReadinessSnapshot = {
   };
   runtime: {
     microkernelRuntime: ReleaseReadinessIntegration;
-    pluginDataMigration: ReleaseReadinessIntegration;
+    legacyMonolithDataCleanup: ReleaseReadinessIntegration;
   };
   integrations: {
     appProtocol: ReleaseReadinessIntegration;

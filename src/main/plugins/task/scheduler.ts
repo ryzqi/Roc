@@ -1,5 +1,5 @@
 import type { BackgroundTask, ChatStartRunRequest, ChatStartRunResult, SchedulerStatus } from '../../../shared/types';
-import { computeNextRunAt } from '../../services/task/next-run-calculator';
+import { computeNextRunAt } from './next-run-calculator';
 import type { TaskRepository } from './task-repository';
 
 type TaskSchedulerOptions = {

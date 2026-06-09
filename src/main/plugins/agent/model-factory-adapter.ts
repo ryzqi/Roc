@@ -1,4 +1,4 @@
-import type { LangChainModelFactory } from '../../services/langchain-model-factory';
+import type { LangChainChatModelHandle, LangChainModelFactory } from '../../services/langchain-model-factory';
 
 const nonFinalTextBlockTypes = new Set([
   'reasoning',
@@ -15,6 +15,7 @@ export type AgentModelHandle = {
   providerId: string;
   modelId: string;
   invoke(input: string): Promise<string>;
+  langChainHandle?: LangChainChatModelHandle;
   stream?(input: string): AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>;
 };
 
@@ -38,6 +39,7 @@ export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapt
       providerId: handle.provider.id,
       modelId: handle.modelId,
       invoke: async (input) => readModelResponseText(await handle.model.invoke(input)),
+      langChainHandle: handle,
       stream: async (input) => await handle.model.stream(input)
     };
   }
@@ -51,6 +53,7 @@ export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapt
       providerId: handle.provider.id,
       modelId: handle.modelId,
       invoke: async (input) => readModelResponseText(await handle.model.invoke(input)),
+      langChainHandle: handle,
       stream: async (input) => await handle.model.stream(input)
     };
   }
@@ -63,19 +66,38 @@ export class StaticAgentModelFactoryAdapter implements AgentModelFactoryAdapter 
   ) {}
 
   createDefaultModelHandle(): Promise<AgentModelHandle> {
+    const responseText = this.responseText;
     return Promise.resolve({
       ...this.handle,
-      invoke: async () => this.responseText
+      invoke: async () => responseText,
+      stream: async function* () {
+        yield createTextStreamChunk(responseText);
+      }
     });
   }
 
   createModelHandleByModelId(modelId: string): Promise<AgentModelHandle> {
+    const responseText = this.responseText;
     return Promise.resolve({
       providerId: this.handle.providerId,
       modelId,
-      invoke: async () => this.responseText
+      invoke: async () => responseText,
+      stream: async function* () {
+        yield createTextStreamChunk(responseText);
+      }
     });
   }
+}
+
+function createTextStreamChunk(text: string): { contentBlocks: Array<{ type: 'text'; text: string }> } {
+  return {
+    contentBlocks: [
+      {
+        type: 'text',
+        text
+      }
+    ]
+  };
 }
 
 function readModelResponseText(response: unknown): string {

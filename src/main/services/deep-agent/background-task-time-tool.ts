@@ -2,7 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import type { BackgroundTaskTrigger } from '../../../shared/types';
 import { RocDomainError } from '../errors';
-import { computeNextCronRunAt } from '../task/cron-parser';
+import { computeNextCronRunAt } from '../../plugins/task/cron-parser';
 
 export const RESOLVE_BACKGROUND_TASK_TIME_TOOL_NAME = 'resolve_background_task_time';
 

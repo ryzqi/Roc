@@ -370,6 +370,275 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('uses the plugin-owned DeepAgent executor instead of raw model streaming for normal runs', async () => {
+    const repository = new AgentSessionRepository(db);
+    let executorCalledWith: ChatStartRunRequest | null = null;
+    let rawStreamCalled = false;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          executorCalledWith = input.request;
+          yield {
+            type: 'tool_event',
+            runId: input.run.id,
+            event: 'start',
+            name: 'web_read',
+            data: {
+              url: 'https://example.test'
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'message_delta',
+            runId: input.run.id,
+            delta: 'DeepAgent executor response.'
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          invoke: async () => {
+            throw new Error('raw_invoke_should_not_be_used');
+          },
+          stream: async function* () {
+            rawStreamCalled = true;
+            yield new AIMessageChunk({
+              content: [
+                {
+                  type: 'text',
+                  text: 'Raw stream response.'
+                }
+              ] as never
+            });
+          },
+          modelId: 'openai:gpt-4.1',
+          providerId: 'openai'
+        }),
+        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+      },
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: 'Use web_read to inspect the docs.',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(rawStreamCalled).toBe(false);
+    expect(executorCalledWith).toMatchObject({
+      input: 'Use web_read to inspect the docs.',
+      mode: 'task'
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: {
+          type: 'tool_event',
+          runId: result.runId,
+          event: 'start',
+          name: 'web_read',
+          data: {
+            url: 'https://example.test'
+          }
+        }
+      })
+    );
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(repository.listSessionMessages({ threadId: result.threadId! })).toMatchObject([
+      {
+        role: 'assistant',
+        content: 'DeepAgent executor response.'
+      }
+    ]);
+  });
+
+  it('keeps a DeepAgent approval interrupt waiting for user decision', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'run_interrupted',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            interruptId: 'interrupt_approval_1',
+            payload: {
+              actionRequests: [
+                {
+                  name: 'execute',
+                  args: {
+                    command: 'git status'
+                  }
+                }
+              ],
+              reviewConfigs: [
+                {
+                  actionName: 'execute',
+                  allowedDecisions: ['approve', 'reject']
+                }
+              ]
+            }
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: 'Run git status.',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('waiting_user');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'approval_requested',
+          payload: {
+            interruptId: 'interrupt_approval_1',
+            actionRequests: [
+              {
+                name: 'execute',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'execute',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(events.some((event) => event.type === 'agent.run.completed' && readPayloadRunId(event.payload) === result.runId)).toBe(false);
+    expect(events.some((event) => event.type === 'agent.run.failed' && readPayloadRunId(event.payload) === result.runId)).toBe(false);
+  });
+
+  it('resumes an interrupted DeepAgent run through the executor and records approval decision', async () => {
+    const repository = new AgentSessionRepository(db);
+    let resumePayload: unknown = null;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          if (input.resumePayload === undefined) {
+            yield {
+              type: 'run_interrupted',
+              runId: input.run.id,
+              threadId: input.run.threadId,
+              interruptId: 'interrupt_resume_1',
+              payload: {
+                actionRequests: [
+                  {
+                    name: 'execute',
+                    args: {
+                      command: 'git status'
+                    }
+                  }
+                ],
+                reviewConfigs: [
+                  {
+                    actionName: 'execute',
+                    allowedDecisions: ['approve', 'reject']
+                  }
+                ]
+              }
+            } satisfies ChatRunEvent;
+            return;
+          }
+          resumePayload = input.resumePayload;
+          yield {
+            type: 'message_delta',
+            runId: input.run.id,
+            delta: 'Approved command finished.'
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const started = await runtime.startRun({
+      ...startRequest,
+      input: 'Run git status.',
+      mode: 'task'
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+
+    const resumed = await runtime.resumeRun({
+      runId: started.runId,
+      threadId: started.threadId!,
+      interruptId: 'interrupt_resume_1',
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(resumed).toMatchObject({
+      runId: started.runId,
+      threadId: started.threadId
+    });
+    expect(resumePayload).toEqual({
+      decisions: [
+        {
+          type: 'approve'
+        }
+      ]
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: started.runId,
+          threadId: started.threadId,
+          type: 'approval_decision',
+          payload: {
+            interruptId: 'interrupt_resume_1',
+            decisions: [
+              {
+                type: 'approve'
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(repository.getRun(started.runId).status).toBe('completed');
+    expect(repository.listSessionMessages({ threadId: started.threadId! })).toMatchObject([
+      {
+        role: 'assistant',
+        content: 'Approved command finished.'
+      }
+    ]);
+  });
+
   it('fails the run instead of falling back to invoke when the model handle does not expose stream', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
@@ -456,205 +725,6 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
-  it('replays delegated chat runtime events through the plugin event bus contract', async () => {
-    const repository = new AgentSessionRepository(db);
-    const listeners = new Set<(event: ChatRunEvent) => void>();
-    const runtime = new AgentPluginRuntime({
-      eventBus,
-      modelFactory: {
-        createDefaultModelHandle: async () => {
-          throw new Error('legacy_model_factory_should_not_be_used');
-        },
-        createModelHandleByModelId: async () => {
-          throw new Error('legacy_model_factory_should_not_be_used');
-        }
-      },
-      repository,
-      runtimeDelegate: {
-        onRunEvent: (listener) => {
-          listeners.add(listener);
-          return () => {
-            listeners.delete(listener);
-          };
-        },
-        startRun: async (request) => {
-          const result = {
-            runId: 'chat_delegate_123',
-            mode: request.mode,
-            threadId: 'thread_delegate_123',
-            providerId: 'nvidia',
-            modelId: 'moonshotai/kimi-k2.6',
-            createdAt: '2026-06-09T00:00:00.000Z'
-          } satisfies Awaited<ReturnType<AgentPluginRuntime['startRun']>>;
-          emitDelegatedRunEvent(listeners, {
-            type: 'run_started',
-            ...result
-          });
-          setTimeout(() => {
-            emitDelegatedRunEvent(listeners, {
-              type: 'reasoning_delta',
-              runId: result.runId,
-              delta: '先读取工作区约束。'
-            });
-            emitDelegatedRunEvent(listeners, {
-              type: 'message_delta',
-              runId: result.runId,
-              delta: '先检查当前计划。'
-            });
-            emitDelegatedRunEvent(listeners, {
-              type: 'tool_event',
-              runId: result.runId,
-              event: 'start',
-              name: 'web_search',
-              data: {
-                query: 'streaming runtime plan'
-              }
-            });
-            emitDelegatedRunEvent(listeners, {
-              type: 'tool_event',
-              runId: result.runId,
-              event: 'end',
-              name: 'web_search',
-              data: {
-                hits: 3
-              }
-            });
-            emitDelegatedRunEvent(listeners, {
-              type: 'run_interrupted',
-              runId: result.runId,
-              threadId: result.threadId,
-              interruptId: 'interrupt_123',
-              payload: {
-                actionRequests: [],
-                reviewConfigs: []
-              }
-            });
-            emitDelegatedRunEvent(listeners, {
-              type: 'run_completed',
-              runId: result.runId,
-              threadId: result.threadId,
-              providerId: result.providerId,
-              modelId: result.modelId,
-              createdAt: result.createdAt,
-              durationMs: 42,
-              summary: '已完成 graph runtime 检查。',
-              assistantMessage: '已完成 graph runtime 检查。'
-            });
-          }, 0);
-          return result;
-        },
-        cancelRun: () => ({
-          runId: 'chat_delegate_123',
-          cancelled: true
-        }),
-        resumeRun: async () => ({
-          runId: 'chat_delegate_123',
-          threadId: 'thread_delegate_123',
-          resumedAt: '2026-06-09T00:01:00.000Z'
-        })
-      }
-    });
-
-    const result = await runtime.startRun({
-      ...startRequest,
-      mode: 'chat'
-    });
-
-    await waitForEvent(() =>
-      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
-    );
-
-    expect(result).toMatchObject({
-      runId: 'chat_delegate_123',
-      threadId: 'thread_delegate_123',
-      providerId: 'nvidia',
-      modelId: 'moonshotai/kimi-k2.6'
-    });
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.started',
-        payload: expect.objectContaining({
-          runId: 'chat_delegate_123',
-          mode: 'chat',
-          threadId: 'thread_delegate_123'
-        })
-      })
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.task-event',
-        payload: {
-          runId: 'chat_delegate_123',
-          threadId: 'thread_delegate_123',
-          type: 'reasoning_delta',
-          payload: {
-            delta: '先读取工作区约束。'
-          }
-        }
-      })
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.task-event',
-        payload: {
-          runId: 'chat_delegate_123',
-          threadId: 'thread_delegate_123',
-          type: 'message_delta',
-          payload: {
-            role: 'assistant',
-            delta: '先检查当前计划。'
-          }
-        }
-      })
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.task-event',
-        payload: {
-          runId: 'chat_delegate_123',
-          threadId: 'thread_delegate_123',
-          type: 'tool_call',
-          payload: {
-            name: 'web_search',
-            status: 'end',
-            output: {
-              hits: 3
-            }
-          }
-        }
-      })
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.task-event',
-        payload: {
-          runId: 'chat_delegate_123',
-          threadId: 'thread_delegate_123',
-          type: 'approval_requested',
-          payload: {
-            interruptId: 'interrupt_123',
-            actionRequests: [],
-            reviewConfigs: []
-          }
-        }
-      })
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.run.completed',
-        payload: expect.objectContaining({
-          runId: 'chat_delegate_123',
-          assistantMessage: '已完成 graph runtime 检查。'
-        })
-      })
-    );
-    expect(runtime.listSessionMessages({ threadId: 'thread_delegate_123' })).toMatchObject([
-      {
-        content: '已完成 graph runtime 检查。',
-        role: 'assistant'
-      }
-    ]);
-  });
 });
 
 async function waitForEvent(predicate: () => boolean): Promise<void> {
@@ -674,6 +744,14 @@ function readChatRunEvent(payload: unknown): ChatRunEvent | null {
   return payload as ChatRunEvent;
 }
 
+function readPayloadRunId(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+  const runId = Reflect.get(payload, 'runId');
+  return typeof runId === 'string' ? runId : null;
+}
+
 function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolveValue: ((value: T) => void) | null = null;
   const promise = new Promise<T>((resolve) => {
@@ -688,10 +766,4 @@ function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void
       resolveValue(value);
     }
   };
-}
-
-function emitDelegatedRunEvent(listeners: ReadonlySet<(event: ChatRunEvent) => void>, event: ChatRunEvent): void {
-  for (const listener of listeners) {
-    listener(event);
-  }
 }

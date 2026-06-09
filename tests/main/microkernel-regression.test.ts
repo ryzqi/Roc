@@ -84,7 +84,6 @@ describe('microkernel regression', () => {
             paths: {
               root,
               configDir: join(root, 'config'),
-              databasePath: join(root, 'roc.sqlite'),
               memoryDir: join(root, 'memory'),
               logsDir: join(root, 'logs'),
               diagnosticsDir: join(root, 'diagnostics'),

@@ -4,15 +4,11 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { z } from 'zod';
 import type { ChatStartRunRequest } from '../../../shared/types';
 import { RocDomainError } from '../errors';
-import { RocToolResolutionError } from '../forge-guardrails';
 import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
-import type { TaskService } from '../task-service';
 import { WebReadService, type WebReadRequest } from '../web-read-service';
 import { toWebSearchFailure } from './error-mapping';
 import type { RuntimeSubagent } from './types';
-
-export { createSessionSearchTool } from './tools/session-search-tool';
 
 export function createWebReadTool(webReadService: WebReadService): DynamicStructuredTool<any, any, any, string> {
   const schema = z.object({
@@ -41,29 +37,6 @@ export function createDeleteFileTool(fileService: FileService): DynamicStructure
     schema,
     func: async (input: { relativePath: string }) => {
       return JSON.stringify(fileService.deleteFile(input.relativePath), null, 2);
-    }
-  });
-}
-
-export function createReadBackgroundTaskTool(taskService: TaskService): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.strictObject({
-    taskId: z.string().min(1).describe('要读取的后台任务 ID。')
-  });
-  return new DynamicStructuredTool<typeof schema, { taskId: string }, { taskId: string }, string>({
-    name: 'read_background_task',
-    description: [
-      '读取一个后台任务的完整定义（goal、trigger、workspacePath、status、capabilities 等）。',
-      '在 update_background_task / cancel_background_task 之前必须先调用本工具读取目标任务。'
-    ].join('\n'),
-    schema,
-    func: async ({ taskId }) => {
-      const task = taskService.findBackgroundTask(taskId);
-      if (task === null) {
-        throw new RocToolResolutionError(`Background task with id ${taskId} does not exist.`, {
-          toolName: 'read_background_task'
-        });
-      }
-      return JSON.stringify(task, null, 2);
     }
   });
 }

@@ -1,0 +1,422 @@
+import { HumanMessage } from '@langchain/core/messages';
+import { Command, InMemoryStore, MemorySaver } from '@langchain/langgraph';
+import type { ClientTool } from '@langchain/core/tools';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+import type { ChatRunEvent, FileDeleteResult, ShellExecutionResult, TaskRun, Workspace } from '../../../shared/types';
+import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
+import type { RocCapabilityRegistry } from '../../kernel/types';
+import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
+import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
+import { createRunSubagents } from '../../services/deep-agent/tools';
+import { defaultErrorTracker, defaultStepTracker } from '../../services/forge-guardrails';
+import { defaultSettings } from '../../services/config/defaults';
+import type { WebReadRequest } from '../../services/web-read-service';
+import type { RocPaths } from '../../services/paths';
+import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
+import { cancelInputSchema, updateInputSchema, validateBackgroundTaskPatch } from '../../services/deep-agent/background-task-tools';
+import { createBackend } from '../../services/deep-agent/backend';
+import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
+import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
+import { CapacityService } from '../../services/memory/capacity';
+import { SecurityScanService } from '../../services/memory/security-scan';
+import type { AgentDeepAgentExecutor } from './runtime';
+
+export type AgentDeepAgentExecutorOptions = {
+  capabilities: RocCapabilityRegistry;
+  paths: RocPaths;
+};
+
+export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
+  const store = new InMemoryStore();
+  const checkpointer = new MemorySaver();
+  return {
+    execute: async function* (input) {
+      const handle = input.modelHandle.langChainHandle;
+      if (handle === undefined) {
+        throw new Error('agent_deep_agent_model_handle_missing');
+      }
+      const closers: Array<() => Promise<void>> = [];
+      const assistantChunks: string[] = [];
+      const reasoningChunks: string[] = [];
+      const usageAccumulator = createUsageAccumulator();
+
+      const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
+      const tools = await createExecutorTools({
+        capabilities: options.capabilities,
+        enabledCapabilities: input.request.enabledCapabilities
+      });
+      const runtimeBackend = createRuntimeBackend({
+        capabilities: options.capabilities,
+        handle,
+        paths: options.paths,
+        selectedSkillIds: input.request.enabledCapabilities.skills,
+        workspace
+      });
+      const systemPrompt = [
+        'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
+        workspace === null
+          ? 'Workspace: not selected.'
+          : `Workspace: ${workspace.path}\nDefault cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.`,
+        `Capabilities: mcp=${input.request.enabledCapabilities.mcpServers.join(',') || 'none'};skills=${input.request.enabledCapabilities.skills.join(',') || 'none'};untrusted_context_policy=external_content_reference_only`
+      ].filter((section) => section.length > 0).join('\n\n');
+      const agent = buildDeepAgent({
+        model: handle.model,
+        systemPrompt,
+        backend: runtimeBackend.backend,
+        store,
+        memorySources: [],
+        skillSources: input.request.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'],
+        subagents: createRunSubagents({
+          webReadTool: tools.webReadTool
+        }),
+        tools: tools.runTools,
+        filesystemPermissions: undefined,
+        interruptOn:
+          input.request.workflowHint === 'propose_background_task'
+            ? undefined
+            : await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities),
+        checkpointer,
+        providerType: handle.runtime.providerType,
+        workflowHint: input.request.workflowHint ?? null,
+        contextBudgetTokens: handle.runtime.contextBudgetTokens
+      });
+      const runInput =
+        input.resumePayload === undefined
+          ? createInitialState(input.request.input)
+          : new Command({
+              resume: input.resumePayload
+            });
+      const run = await agent.streamEvents(runInput as never, {
+        version: 'v3',
+        configurable: {
+          run_id: input.run.id,
+          thread_id: input.run.threadId
+        },
+        signal: input.abortSignal
+      });
+      const queuedEvents: ChatRunEvent[] = [];
+      const taskRun = input.run;
+      const callbacks = createExecutorCallbacks({
+        assistantChunks,
+        queuedEvents,
+        runId: input.run.id,
+        taskRun
+      });
+      try {
+        await Promise.all([
+          consumeToolCallStream({
+            calls: run.toolCalls as AsyncIterable<unknown>,
+            context: {
+              runId: input.run.id,
+              taskRun
+            },
+            callbacks
+          }),
+          consumeMessageStream({
+            messages: run.messages as AsyncIterable<unknown>,
+            context: {
+              runId: input.run.id,
+              taskRun
+            },
+            assistantChunks,
+            reasoningChunks,
+            usageAccumulator,
+            callbacks
+          }),
+          consumeSubagentStream({
+            subagents: run.subagents as AsyncIterable<unknown>,
+            context: {
+              runId: input.run.id,
+              taskRun
+            },
+            callbacks
+          })
+        ]);
+        if (readInterrupted(run)) {
+          queuedEvents.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
+        } else {
+          await Promise.resolve(run.output);
+        }
+      } finally {
+        await Promise.allSettled(closers.map(async (close) => close()));
+      }
+      for (const event of queuedEvents) {
+        yield event;
+      }
+    }
+  };
+}
+
+async function readInterruptPolicy(
+  capabilities: RocCapabilityRegistry,
+  enabledCapabilities: TaskRun['enabledCapabilities']
+): Promise<NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined> {
+  if (!capabilities.list().some((capability) => capability.name === 'agent.capability.preview')) {
+    return undefined;
+  }
+  const preview = await capabilities.invoke<
+    TaskRun['enabledCapabilities'],
+    { interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> }
+  >('agent.capability.preview', enabledCapabilities);
+  return preview.interruptOn;
+}
+
+function createInitialState(input: string): unknown {
+  return {
+    messages: [new HumanMessage(input)],
+    forge_error_tracker: defaultErrorTracker(),
+    forge_step_tracker: defaultStepTracker()
+  };
+}
+
+function readInterrupted(run: unknown): boolean {
+  return typeof run === 'object' && run !== null && Reflect.get(run, 'interrupted') === true;
+}
+
+function readRunInterruptedEvent(run: unknown, runId: string, threadId: string): ChatRunEvent {
+  const interrupts = typeof run === 'object' && run !== null ? Reflect.get(run, 'interrupts') : undefined;
+  const firstInterrupt = Array.isArray(interrupts) ? interrupts[0] : undefined;
+  if (typeof firstInterrupt !== 'object' || firstInterrupt === null) {
+    throw new Error('agent_interrupt_payload_missing');
+  }
+  const interruptId = Reflect.get(firstInterrupt, 'interruptId');
+  const payload = Reflect.get(firstInterrupt, 'payload');
+  if (typeof interruptId !== 'string' || typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new Error('agent_interrupt_payload_invalid');
+  }
+  return {
+    type: 'run_interrupted',
+    runId,
+    threadId,
+    interruptId,
+    payload: payload as never
+  };
+}
+
+function createExecutorCallbacks(input: {
+  assistantChunks: string[];
+  queuedEvents: ChatRunEvent[];
+  runId: string;
+  taskRun: TaskRun;
+}): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
+  return {
+    emitRuntimeEvent: (event) => {
+      input.queuedEvents.push(event);
+    },
+    emitTodoEvent: () => {},
+    recordTaskEvent: () => {}
+  };
+}
+
+async function createExecutorTools(input: {
+  capabilities: RocCapabilityRegistry;
+  enabledCapabilities: TaskRun['enabledCapabilities'];
+}): Promise<{
+  runTools: ClientTool[];
+  webReadTool: DynamicStructuredTool<any, any, any, string>;
+}> {
+  const webReadTool = createWebReadTool(input.capabilities);
+  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
+  const runTools: ClientTool[] = [
+    webReadTool,
+    createDeleteFileTool(input.capabilities),
+    createResolveBackgroundTaskTimeTool(),
+    ...createApprovalPreviewTools(),
+    createConfirmWithUserTool(),
+    ...mcpTools
+  ];
+  return {
+    runTools,
+    webReadTool
+  };
+}
+
+async function loadSelectedMcpTools(
+  capabilities: RocCapabilityRegistry,
+  enabledCapabilities: TaskRun['enabledCapabilities']
+): Promise<ClientTool[]> {
+  if (enabledCapabilities.mcpServers.length === 0) {
+    return [];
+  }
+  const tools = await capabilities.invoke<{}, unknown[]>('mcp.tools.get', {});
+  return tools.flatMap((tool): ClientTool[] => {
+    if (!isClientTool(tool)) {
+      return [];
+    }
+    const normalizedName = normalizeMcpToolName(tool.name, enabledCapabilities.mcpServers);
+    if (normalizedName === null) {
+      return [];
+    }
+    tool.name = normalizedName;
+    return [tool];
+  });
+}
+
+function isClientTool(value: unknown): value is ClientTool {
+  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'name') === 'string';
+}
+
+function normalizeMcpToolName(name: string, enabledServerIds: readonly string[]): string | null {
+  if (enabledServerIds.includes('exa-hosted') && (name === 'web_search' || name === 'web_search_exa' || name === 'web_search_advanced_exa')) {
+    return 'web_search';
+  }
+  return enabledServerIds.some((serverId) => name.startsWith(`${serverId}__`)) ? name : null;
+}
+
+function createWebReadTool(capabilities: RocCapabilityRegistry): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.object({
+    url: z.string().url(),
+    responseMode: z.enum(['markdown', 'readerlm-v2']).default('markdown'),
+    timeoutSeconds: z.number().int().min(1).max(120).default(20),
+    noCache: z.boolean().default(false)
+  });
+  return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
+    name: 'web_read',
+    description: '读取公开网页正文，返回适合继续分析的文本内容。',
+    schema,
+    func: async (request) => await capabilities.invoke<WebReadRequest, string>('web.read', request)
+  });
+}
+
+function createDeleteFileTool(capabilities: RocCapabilityRegistry): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.object({
+    relativePath: z.string().trim().min(1)
+  });
+  return new DynamicStructuredTool<typeof schema, { relativePath: string }, { relativePath: string }, string>({
+    name: 'delete_file',
+    description: '仅删除工作区内文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
+    schema,
+    func: async (request) =>
+      JSON.stringify(await capabilities.invoke<{ relativePath: string }, FileDeleteResult>('files.delete', request), null, 2)
+  });
+}
+
+function createConfirmWithUserTool(): DynamicStructuredTool<any, any, any, string> {
+  const schema = z.strictObject({
+    summary: z.string().min(1).max(1000)
+  });
+  return new DynamicStructuredTool<typeof schema, { summary: string }, { summary: string }, string>({
+    name: 'confirm_with_user',
+    description: '把刚才完成的工作总结成一句话给用户。',
+    schema,
+    func: async ({ summary }) => JSON.stringify({ ok: true, summary }, null, 2)
+  });
+}
+
+function createApprovalPreviewTools(): Array<DynamicStructuredTool<any, any, any, string>> {
+  return [
+    new DynamicStructuredTool({
+      name: PROPOSE_TOOL_NAME,
+      description: PROPOSE_TOOL_DESCRIPTION,
+      schema: z.strictObject({
+        goal: z.string().min(1),
+        trigger: z.unknown(),
+        workspacePath: z.string().min(1)
+      }),
+      func: async (rawInput) =>
+        JSON.stringify(
+          {
+            kind: PROPOSE_TOOL_NAME,
+            request: rawInput,
+            risk: 'high',
+            requiredFields: ['decision']
+          },
+          null,
+          2
+        )
+    }),
+    new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
+      name: 'update_background_task',
+      description: '提议修改已有后台任务。只返回审批预览，用户批准前不会修改任务。',
+      schema: updateInputSchema,
+      func: async (rawInput) => JSON.stringify(createUpdatePayload(rawInput), null, 2)
+    }),
+    new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
+      name: 'cancel_background_task',
+      description: '提议取消已有后台任务。只返回审批请求，用户批准前不会取消任务。',
+      schema: cancelInputSchema,
+      func: async (rawInput) =>
+        JSON.stringify(
+          {
+            kind: 'cancel_background_task',
+            request: cancelInputSchema.parse(rawInput),
+            risk: 'high',
+            requiredFields: ['decision']
+          },
+          null,
+          2
+        )
+    })
+  ];
+}
+
+function createUpdatePayload(rawInput: unknown): Record<string, unknown> {
+  const parsed = updateInputSchema.parse(rawInput);
+  validateBackgroundTaskPatch(parsed.patch);
+  return {
+    kind: 'update_background_task',
+    request: parsed,
+    risk: 'high',
+    requiredFields: ['decision']
+  };
+}
+
+function createRuntimeBackend(input: {
+  capabilities: RocCapabilityRegistry;
+  handle: LangChainChatModelHandle;
+  paths: RocPaths;
+  selectedSkillIds: readonly string[];
+  workspace: Workspace | null;
+}): ReturnType<typeof createBackend> {
+  const workspaceService = {
+    getCurrentWorkspace: () =>
+      input.workspace === null
+        ? null
+        : {
+            path: input.workspace.path,
+            label: input.workspace.displayName
+          }
+  };
+  const shellExecutionService: AgentExecuteAdapter = {
+    executeAgentCommand: async ({ command, cwd }) => {
+      const result = await input.capabilities.invoke<
+        { command: string; cwd?: string; source: 'agent' },
+        ShellExecutionResult
+      >('shell.execute', {
+        command,
+        cwd,
+        source: 'agent'
+      });
+      return {
+        command: result.command,
+        cwd: result.cwd,
+        exitCode: result.exitCode,
+        output: formatShellOutput(result),
+        truncated: false,
+        usedRtk: result.usedRtk
+      };
+    }
+  };
+  return createBackend({
+    workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
+    paths: input.paths,
+    shellExecutionService,
+    securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
+    capacity: new CapacityService(defaultSettings.memory.charLimits),
+    consolidatorService: {
+      scheduleForFile: () => {}
+    } as unknown as Parameters<typeof createBackend>[0]['consolidatorService'],
+    activeModelHandle: input.handle,
+    selectedSkillIds: input.selectedSkillIds
+  });
+}
+
+function formatShellOutput(result: ShellExecutionResult): string {
+  const output = [result.stdout, result.stderr].filter((value) => value.length > 0).join('\n');
+  if (output.length === 0) {
+    return `<no output>\n\nExit code: ${result.exitCode}`;
+  }
+  return result.exitCode === 0 ? output : `${output.trimEnd()}\n\nExit code: ${result.exitCode}`;
+}

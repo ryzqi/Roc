@@ -25,7 +25,7 @@ import {
   terminalSessionExitEventType,
   terminalSessionOutputEventType
 } from './plugins/workspace/terminal-capabilities';
-import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './services/diagnostics-service';
+import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './plugins/diagnostics/runtime-metrics';
 import { PerformanceObserverService } from './services/performance-observer-service';
 import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';

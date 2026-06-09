@@ -1,16 +1,16 @@
 import { join } from 'node:path';
 
 import type { AgentRuntimeStatus, AppStatus, SettingsSaveRequest, SystemAppearanceSnapshot } from '../shared/types';
-import type { RuntimeMetricsProvider } from './services/diagnostics-service';
 import { setLogService } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
-import { activatePluginDataMigration } from './infrastructure/migration/monolith-to-plugins';
+import { deleteLegacyMonolithData } from './infrastructure/legacy-data-cleanup';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';
 import { createAppPlugin } from './plugins/app';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
 import { createAgentPlugin } from './plugins/agent';
 import { createDiagnosticsPlugin } from './plugins/diagnostics';
+import type { RuntimeMetricsProvider } from './plugins/diagnostics/runtime-metrics';
 import { createMcpPlugin } from './plugins/mcp';
 import { createMemoryPlugin } from './plugins/memory';
 import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
@@ -25,21 +25,11 @@ import { PerformanceObserverService } from './services/performance-observer-serv
 import { RocPaths } from './services/paths';
 import { ProviderRuntimeService } from './services/provider-runtime-service';
 import { SecretService } from './services/secret-service';
-import { createAppServices } from './services/app-service';
-
-export type MainKernelMigrationInput = {
-  paths: RocPaths;
-  pluginDataDir: string;
-  sourceDatabasePath: string;
-};
-
-export type MainKernelMigrationActivator = (input: MainKernelMigrationInput) => string | Promise<string>;
 
 export type MainKernelBootstrapOptions = {
   dataRoot?: string;
   safeStorage: SafeStorageBackend;
   plugins?: readonly RocPlugin[];
-  activateMigration?: MainKernelMigrationActivator;
   performanceObserverService?: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
   version?: string;
@@ -79,25 +69,10 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const metricsService = new MetricsService();
   const modelFactory = new LangChainModelFactory(configService, secretService, logService);
   const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
-  const delegatedAgentRuntimeHost =
-    options.plugins === undefined
-      ? createAppServices(
-          options.dataRoot,
-          {
-            version: options.version === undefined ? '0.1.0' : options.version,
-            isPackaged: options.isPackaged === true,
-            getAppearance: options.getAppearance === undefined ? defaultAppearance : options.getAppearance
-          },
-          options.safeStorage,
-          options.runtimeMetricsProvider,
-          performanceObserverService
-        )
-      : null;
   const plugins =
     options.plugins ??
     createDefaultMainKernelPlugins({
       configService,
-      delegatedAgentRuntimeHost,
       modelFactory,
       paths,
       performanceObserverService,
@@ -106,17 +81,9 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       isPackaged: options.isPackaged,
       getAppearance: options.getAppearance
     });
-  const activateMigration = options.activateMigration ?? activateMainKernelMigration;
   const runtime = new KernelRuntime({
     activateMigration: async () => {
-      const activatedPluginDataDir = await activateMigration({
-        paths,
-        pluginDataDir,
-        sourceDatabasePath: paths.databasePath
-      });
-      if (activatedPluginDataDir !== pluginDataDir) {
-        throw new Error('kernel_plugin_data_root_mismatch');
-      }
+      await deleteLegacyMonolithData(paths.root);
     },
     rootDir: pluginDataDir,
     plugins,
@@ -133,25 +100,12 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     performanceObserverService,
     async start() {
       paths.ensureTree();
-      if (delegatedAgentRuntimeHost !== null) {
-        delegatedAgentRuntimeHost.appService.initialize();
-      }
-      try {
-        await runtime.start();
-      } catch (error) {
-        if (delegatedAgentRuntimeHost !== null) {
-          await delegatedAgentRuntimeHost.appService.shutdown();
-        }
-        throw error;
-      }
+      await runtime.start();
     },
     async shutdown() {
       try {
         await runtime.shutdown();
       } finally {
-        if (delegatedAgentRuntimeHost !== null) {
-          await delegatedAgentRuntimeHost.appService.shutdown();
-        }
         setLogService(null);
         await logService.close();
       }
@@ -159,7 +113,6 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     syncSettingsSnapshot(request) {
       void request;
       configService.reloadSettingsDocument();
-      delegatedAgentRuntimeHost?.configService.reloadSettingsDocument();
     },
     async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
       return await runtime.invokeCapability<TInput, TOutput>(name, input);
@@ -173,17 +126,9 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   };
 }
 
-export function activateMainKernelMigration(input: MainKernelMigrationInput): string {
-  return activatePluginDataMigration({
-    pluginDataDir: input.pluginDataDir,
-    sourceDatabasePath: input.sourceDatabasePath
-  }).pluginDataDir;
-}
-
 function createDefaultMainKernelPlugins(input: {
   paths: RocPaths;
   configService: ConfigService;
-  delegatedAgentRuntimeHost?: ReturnType<typeof createAppServices> | null;
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
@@ -194,7 +139,6 @@ function createDefaultMainKernelPlugins(input: {
   input.paths.ensureTree();
   const configService = input.configService;
   const defaultWorkspace = configService.getSettings().defaultWorkspace;
-  const delegatedAgentRuntimeHost = input.delegatedAgentRuntimeHost ?? null;
 
   return [
     createAppPlugin({
@@ -216,26 +160,14 @@ function createDefaultMainKernelPlugins(input: {
           return configService.getPermissions().mode;
         }
       },
+      deepAgentExecutor: {
+        paths: input.paths
+      },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
         beforeCreate: () => {
           configService.reloadSettingsDocument();
         }
       }),
-      runtimeDelegate:
-        delegatedAgentRuntimeHost === null
-          ? undefined
-          : {
-              startRun: async (request) => {
-                delegatedAgentRuntimeHost.configService.reloadSettingsDocument();
-                return await delegatedAgentRuntimeHost.deepAgentRuntimeService.startRun(request);
-              },
-              cancelRun: (runId) => delegatedAgentRuntimeHost.deepAgentRuntimeService.cancelRun(runId),
-              resumeRun: async (request) => {
-                delegatedAgentRuntimeHost.configService.reloadSettingsDocument();
-                return await delegatedAgentRuntimeHost.deepAgentRuntimeService.resumeRun(request);
-              },
-              onRunEvent: (listener) => delegatedAgentRuntimeHost.deepAgentRuntimeService.onRunEvent(listener)
-            },
       statusProvider: () => {
         configService.reloadSettingsDocument();
         return createAgentRuntimeStatus(configService);

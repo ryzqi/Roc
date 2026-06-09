@@ -1,24 +1,17 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAppServices, type AppServices } from '../../../src/main/services/app-service';
+import { createProviderTestServices, type ProviderTestServices } from '../provider-test-fixture';
 import { LangChainModelFactory } from '../../../src/main/services/langchain-model-factory';
 import type { ProviderConfig } from '../../../src/shared/types';
 
-let root: string;
-let services: AppServices;
+let services: ProviderTestServices;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'roc-langchain-model-factory-sampling-'));
-  services = createAppServices(root);
-  services.appService.initialize();
+  services = createProviderTestServices('roc-langchain-model-factory-sampling-');
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await services.appService.shutdown();
-  rmSync(root, { recursive: true, force: true });
+  await services.cleanup();
 });
 
 describe('LangChainModelFactory llama.cpp sampling defaults', () => {
@@ -146,7 +139,6 @@ function saveProviders(providers: ProviderConfig[]): void {
     providers
   });
 }
-
 function llamaCppProvider(input: { modelId: string; options?: ProviderConfig['options'] }): ProviderConfig {
   return {
     id: 'llama_cpp',

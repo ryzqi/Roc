@@ -1,21 +1,13 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 
-let root: string;
-let services: AppServices;
+let services: ProviderTestServices;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'roc-fixed-nvidia-provider-'));
-  services = createAppServices(root);
-  services.appService.initialize();
+  services = createProviderTestServices('roc-fixed-nvidia-provider-');
 });
-
 afterEach(async () => {
-  await services.appService.shutdown();
-  rmSync(root, { recursive: true, force: true });
+  await services.cleanup();
 });
 
 describe('fixed NVIDIA provider config', () => {

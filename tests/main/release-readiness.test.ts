@@ -15,8 +15,8 @@ describe('release readiness evidence', () => {
         nativeContextMenu: readFileSync(new URL('../../src/main/native-context-menu.ts', import.meta.url), 'utf8'),
         mainKernelBootstrap: readFileSync(new URL('../../src/main/main-kernel-bootstrap.ts', import.meta.url), 'utf8'),
         kernelRuntime: readFileSync(new URL('../../src/main/kernel/kernel-runtime.ts', import.meta.url), 'utf8'),
-        migration: readFileSync(
-          new URL('../../src/main/infrastructure/migration/monolith-to-plugins.ts', import.meta.url),
+        legacyDataCleanup: readFileSync(
+          new URL('../../src/main/infrastructure/legacy-data-cleanup.ts', import.meta.url),
           'utf8'
         )
       }
@@ -76,12 +76,18 @@ describe('release readiness evidence', () => {
         status: 'present',
         evidence: 'Main process starts KernelRuntime through createMainKernelBootstrap.'
       },
-      pluginDataMigration: {
+      legacyMonolithDataCleanup: {
         status: 'present',
-        evidence: 'Plugin data migration writes .migration-complete.json before runtime activation completes.'
+        evidence: 'Runtime deletes legacy monolith database files before plugin runtime activation.'
       }
     });
     expect(['absent', 'manual-required']).toContain(snapshot.integrations.installerSigningUpdater.status);
+  });
+
+  it('does not keep monolith-to-plugin migration source in the release tree', () => {
+    expect(() =>
+      readFileSync(new URL('../../src/main/infrastructure/migration/monolith-to-plugins.ts', import.meta.url), 'utf8')
+    ).toThrow(/ENOENT/u);
   });
 
   it('does not report absent when release APIs are wired in source or config', () => {
@@ -113,9 +119,9 @@ describe('release readiness evidence', () => {
         windowsHost: 'app.setUserTasks([{ program: "Roc.exe" }])',
         nativeContextMenu: 'clipboardApi.writeText("copy")',
         mainKernelBootstrap:
-          'function createMainKernelBootstrap() { return new KernelRuntime({ rootDir: pluginDataDir, activateMigration: async () => undefined }); }',
+          'function createMainKernelBootstrap() { return new KernelRuntime({ rootDir: pluginDataDir, activateMigration: async () => deleteLegacyMonolithData(root) }); }',
         kernelRuntime: 'async start() { await this.options.activateMigration?.(); }',
-        migration: 'activatePluginDataMigration(); writeMigrationMarker(".migration-complete.json", {})',
+        legacyDataCleanup: 'deleteLegacyMonolithData(root); const files = ["roc.sqlite", "roc.sqlite-wal", "roc.sqlite-shm"];',
         renderer: 'window.addEventListener("drop", () => undefined)'
       }
     });
@@ -135,6 +141,6 @@ describe('release readiness evidence', () => {
     expect(snapshot.integrations.nativeClipboard.status).toBe('partial');
     expect(snapshot.integrations.fileDragDrop.status).toBe('partial');
     expect(snapshot.runtime.microkernelRuntime.status).toBe('present');
-    expect(snapshot.runtime.pluginDataMigration.status).toBe('present');
+    expect(snapshot.runtime.legacyMonolithDataCleanup.status).toBe('present');
   });
 });

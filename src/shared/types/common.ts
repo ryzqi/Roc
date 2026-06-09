@@ -27,7 +27,6 @@ export type ServiceStatus = 'ready' | 'blocked' | 'degraded';
 export type RocPathsSnapshot = {
   root: string;
   configDir: string;
-  databasePath: string;
   memoryDir: string;
   logsDir: string;
   diagnosticsDir: string;

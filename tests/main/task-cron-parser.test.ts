@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeNextCronRunAt, parseCronExpression } from '../../src/main/services/task/cron-parser';
+import { computeNextCronRunAt, parseCronExpression } from '../../src/main/plugins/task/cron-parser';
 import { RocDomainError } from '../../src/main/services/errors';
 
 function localIso(year: number, month: number, day: number, hour: number, minute: number): string {

@@ -18,9 +18,11 @@ import type {
   SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
+import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
-import { AgentPluginRuntime, type AgentCapabilityPreviewProvider, type AgentPluginRuntimeDelegate } from './runtime';
+import { AgentPluginRuntime, type AgentCapabilityPreviewProvider } from './runtime';
 import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
@@ -144,8 +146,10 @@ export type AgentPluginOptions = {
   capabilityPreview?: {
     approvalModeProvider: () => ApprovalMode;
   };
+  deepAgentExecutor?: {
+    paths: RocPaths;
+  };
   modelFactory?: AgentModelFactoryAdapter;
-  runtimeDelegate?: AgentPluginRuntimeDelegate;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
 };
@@ -163,7 +167,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       loadPhase: 'critical',
       required: true,
       order: 10,
-      dependencies: options.capabilityPreview === undefined ? [] : ['@roc/plugin-mcp', '@roc/plugin-skills'],
+      dependencies: resolveDependencies(options),
       capabilities
     },
     initialize: async (context) => {
@@ -172,11 +176,17 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
+        deepAgentExecutor:
+          options.deepAgentExecutor === undefined
+            ? undefined
+            : createAgentDeepAgentExecutor({
+                capabilities: context.capabilities,
+                paths: options.deepAgentExecutor.paths
+              }),
         eventBus: context.eventBus,
         modelFactory,
         pluginId,
         repository: new AgentSessionRepository(db),
-        runtimeDelegate: options.runtimeDelegate,
         status: options.status,
         statusProvider: options.statusProvider
       });
@@ -211,6 +221,21 @@ function createCapabilityPreviewProvider(
 }
 
 export const agentPlugin = createAgentPlugin();
+
+function resolveDependencies(options: AgentPluginOptions): string[] {
+  const dependencies = new Set<string>();
+  if (options.capabilityPreview !== undefined) {
+    dependencies.add('@roc/plugin-mcp');
+    dependencies.add('@roc/plugin-skills');
+  }
+  if (options.deepAgentExecutor !== undefined) {
+    dependencies.add('@roc/plugin-mcp');
+    dependencies.add('@roc/plugin-skills');
+    dependencies.add('@roc/plugin-workspace');
+    dependencies.add('@roc/plugin-runtime-tools');
+  }
+  return [...dependencies];
+}
 
 function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPluginRuntime, options: AgentPluginOptions): void {
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());

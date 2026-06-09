@@ -1,17 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 import { RocDomainError } from '../../src/main/services/errors';
 
-let root: string;
-let services: AppServices;
+let services: ProviderTestServices;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'roc-provider-retry-'));
-  services = createAppServices(root);
-  services.appService.initialize();
+  services = createProviderTestServices('roc-provider-retry-');
   services.secretService.setProviderSecret('provider-local', 'sk-local-test-secret');
   services.configService.saveProviders({
     schemaVersion: 1,
@@ -37,11 +31,9 @@ beforeEach(() => {
     ]
   });
 });
-
 afterEach(async () => {
   vi.useRealTimers();
-  await services.appService.shutdown();
-  rmSync(root, { recursive: true, force: true });
+  await services.cleanup();
 });
 
 describe('Provider request retry behavior', () => {

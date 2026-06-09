@@ -1,0 +1,189 @@
+# Roc 新架构全迁移进度
+
+## 2026-06-09
+
+- Started active goal:全面迁移到新架构，然后完全删除旧的架构，数据等，只保留新的。
+- Checked existing workspace planning files: none found.
+- Checked git status: clean.
+- Read current architecture facts from source:
+  - `src/main/index.ts`
+  - `src/main/main-kernel-bootstrap.ts`
+  - `src/main/kernel/*`
+  - `src/main/ipc/plugin-capability-adapter.ts`
+  - `src/preload/index.ts`
+  - `src/shared/ipc.ts`
+  - `src/main/services/app-service.ts`
+  - `src/main/services/deep-agent-runtime-service.ts`
+  - `src/main/services/deep-agent/session.ts`
+  - `src/main/services/deep-agent/stream-consumers.ts`
+  - `src/renderer/app/AppShell.tsx`
+  - `src/renderer/chat-transcript.ts`
+  - `src/main/infrastructure/database-pool.ts`
+  - `src/main/infrastructure/migration/monolith-to-plugins.ts`
+- Created `task_plan.md`, `findings.md`, and `progress.md`.
+- Read tests that constrain this migration:
+  - `tests/main/legacy-chat-runtime-cleanup.test.ts`
+  - `tests/main/kernel-main-integration.test.ts`
+  - `tests/main/microkernel-regression.test.ts`
+  - `tests/main/release-readiness.test.ts`
+- Found conflicting current tests:
+  - kernel integration still expects migration activation before plugin load.
+  - release readiness still reports plugin data migration as present.
+  - legacy chat cleanup test still preserves `createAppServices` as a dependency.
+- User confirmed legacy data policy: delete old data directly from disk, with safe deletion.
+- Current status: Phase 0 in progress. No runtime source code changed yet.
+
+- Hook requested continuation: update progress, reread task_plan, continue remaining phases.
+
+- Wrote RED tests for legacy monolith data cleanup and bootstrap cleanup:
+  - `tests/main/infrastructure/legacy-data-cleanup.test.ts`
+  - `tests/main/kernel-main-integration.test.ts`
+- Observed RED:
+  - Missing `src/main/infrastructure/legacy-data-cleanup`.
+  - Bootstrap still ran `activatePluginDataMigration` against `roc.sqlite`.
+- Implemented:
+  - `src/main/infrastructure/legacy-data-cleanup.ts`
+  - `src/main/main-kernel-bootstrap.ts` now deletes legacy monolith DB files before plugin runtime activation.
+  - Removed `createAppServices` / `delegatedAgentRuntimeHost` from default bootstrap.
+  - Updated release readiness to report `legacyMonolithDataCleanup` instead of `pluginDataMigration`.
+  - Updated smoke/package tests to read `legacy-data-cleanup.ts`.
+- Verification passed:
+  - `pnpm vitest run tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/kernel-main-integration.test.ts tests/main/release-readiness.test.ts tests/main/package-scripts.test.ts`
+  - `pnpm typecheck`
+- Ran microkernel/plugin regression after cutting default delegate:
+  - Initial failure: `tests/main/microkernel-regression.test.ts` did not see assistant message for `runNow`; static model adapter exposed only `invoke` while new plugin runtime requires `stream`.
+  - Fixed `StaticAgentModelFactoryAdapter` to expose a text stream.
+- Verification passed:
+  - `pnpm vitest run tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/plugins/core-plugins.integration.test.ts tests/main/microkernel-regression.test.ts`
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/kernel-main-integration.test.ts tests/main/release-readiness.test.ts tests/main/package-scripts.test.ts tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/plugins/core-plugins.integration.test.ts tests/main/microkernel-regression.test.ts`
+- Remaining known old architecture/data references:
+  - `src/main/services/app-service.ts`
+  - `src/main/services/database-service.ts`
+  - `src/main/infrastructure/migration/monolith-to-plugins.ts`
+  - many tests still import `createAppServices`.
+  - `src/main/plugins/agent/runtime.ts` still has optional `runtimeDelegate` support and delegated-runtime tests.
+
+- Hook requested continuation again: update progress, reread task_plan, continue remaining phases.
+- Removed remaining agent delegated runtime production support:
+  - `src/main/plugins/agent/index.ts` no longer exposes `runtimeDelegate` on `AgentPluginOptions`.
+  - `src/main/plugins/agent/runtime.ts` no longer stores delegated runs, subscribes to delegated events, or branches cancel/resume/start through a legacy runtime host.
+- Verification passed:
+  - `rg -n "runtimeDelegate|AgentPluginRuntimeDelegate|delegated|DelegatedRunMetadata|startDelegatedRun|handleDelegatedRunEvent|toDelegatedChatTaskEvent" src tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts` returned no matches.
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/kernel-main-integration.test.ts tests/main/microkernel-regression.test.ts`
+- Added RED release-readiness assertion that `src/main/infrastructure/migration/monolith-to-plugins.ts` must be absent.
+- Observed RED:
+  - `pnpm vitest run tests/main/release-readiness.test.ts` failed because `monolith-to-plugins.ts` still existed.
+- Deleted obsolete monolith migration files:
+  - `src/main/infrastructure/migration/monolith-to-plugins.ts`
+  - `tests/main/migration/monolith-to-plugins.test.ts`
+  - `tests/main/migration/runtime-activation.test.ts`
+- Verification passed:
+  - `pnpm vitest run tests/main/release-readiness.test.ts tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/kernel-main-integration.test.ts`
+  - `rg -n "monolith-to-plugins|activatePluginDataMigration|migrateMonolithToPlugins" src tests scripts` now only finds the release-readiness absence assertion.
+- Added RED IPC architecture assertions:
+  - service-specific IPC files must be absent.
+  - `files-ipc.ts`, `workspace-ipc.ts`, and `shell-ipc.ts` must keep only boundary dialog/confirm handlers.
+- Observed RED:
+  - `pnpm vitest run tests/main/ipc-domain-structure.test.ts` failed because old IPC files and service-specific exports still existed.
+- Deleted obsolete service-specific IPC files and old direct IPC tests:
+  - `src/main/ipc/app-ipc.ts`
+  - `src/main/ipc/tasks-ipc.ts`
+  - `src/main/ipc/lifecycle-ipc.ts`
+  - `src/main/ipc/diagnostics-ipc.ts`
+  - `src/main/ipc/memory-ipc.ts`
+  - `src/main/ipc/mcp-ipc.ts`
+  - `src/main/ipc/skills-ipc.ts`
+  - `src/main/ipc/agent-ipc.ts`
+  - `src/main/ipc/chat-ipc.ts`
+  - `src/main/ipc/git-ipc.ts`
+  - `src/main/ipc/terminal-ipc.ts`
+  - `src/main/ipc/rtk-ipc.ts`
+  - `tests/main/memory-ipc.test.ts`
+  - `tests/main/diagnostics-ipc.test.ts`
+- Trimmed boundary IPC files:
+  - `src/main/ipc/files-ipc.ts` only exports `registerFilesDialogIpc`.
+  - `src/main/ipc/workspace-ipc.ts` only exports `registerWorkspaceDialogIpc`.
+  - `src/main/ipc/shell-ipc.ts` only exports `registerShellConfirmIpc`.
+- Verification passed:
+  - `pnpm vitest run tests/main/ipc-domain-structure.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/settings-ipc.test.ts tests/main/kernel-main-integration.test.ts`
+  - `pnpm typecheck`
+  - Old IPC grep now only finds absence assertions in `tests/main/ipc-domain-structure.test.ts`.
+- Added provider/model fixture that directly constructs `ConfigService`, `SecretService`, `LangChainModelFactory`, `ProviderRuntimeService`, `MetricsService`, and `LogService` without `createAppServices`.
+- Migrated provider/model tests off the old app-service root:
+  - `tests/main/langchain-model-factory.test.ts`
+  - `tests/main/fixed-nvidia-provider-config.test.ts`
+  - `tests/main/provider-request-retry.test.ts`
+  - `tests/main/services/langchain-model-factory.sampling.test.ts`
+- Deleted old app-service, monolith DB, old task/memory/deep-agent runtime service tests and manual scripts.
+- Moved task cron/next-run pure logic from `src/main/services/task` to `src/main/plugins/task`.
+- Deleted old service graph source files:
+  - `src/main/services/app-service.ts`
+  - `src/main/services/database-service.ts`
+  - old task/memory/deep-agent-runtime/diagnostics/health/lifecycle service files tied to monolith DB.
+- Moved runtime metrics types into `src/main/plugins/diagnostics/runtime-metrics.ts`.
+- Removed `RocPaths.databasePath`, `RocPathsSnapshot.databasePath`, and old ghost-task scripts that opened `~/.roc/roc.sqlite`.
+- Verification passed:
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/fixed-nvidia-provider-config.test.ts tests/main/provider-request-retry.test.ts tests/main/services/langchain-model-factory.sampling.test.ts`
+  - `pnpm vitest run tests/main/kernel-main-integration.test.ts tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/microkernel-regression.test.ts tests/main/task-cron-parser.test.ts tests/main/plugins/task/scheduler.test.ts`
+  - Old architecture grep for `createAppServices`, `DatabaseService`, monolith migration, runtime delegate is now limited to absence assertions and legacy-data-cleanup references; `databasePath` remains only as local plugin DB variable names in `DatabasePool`.
+- Deleted stale `docs/superpowers` plan/spec files that referenced the removed `DeepAgentRuntimeService` / app-services architecture.
+- Broad verification passed:
+  - `pnpm vitest run tests/main/plugins/core-plugins.integration.test.ts tests/main/plugins/secondary-plugins.integration.test.ts tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/task-repository.test.ts tests/main/plugins/memory/plugin.test.ts tests/main/plugins/diagnostics/plugin.test.ts tests/main/release-readiness.test.ts tests/main/package-scripts.test.ts tests/main/preload-contract.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/langchain-model-factory.test.ts tests/main/fixed-nvidia-provider-config.test.ts tests/main/provider-request-retry.test.ts tests/main/services/langchain-model-factory.sampling.test.ts`
+  - `pnpm test` passed: 185 test files, 944 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `pnpm typecheck`
+  - `git diff --check`
+  - `pnpm vitest run tests/main/fixed-nvidia-provider-config.test.ts tests/main/provider-request-retry.test.ts tests/main/services/langchain-model-factory.sampling.test.ts`
+- Final completion audit found two remaining legacy service labels and one dead old service file:
+  - `src/main/plugins/agent/capability-preview.ts` used `TaskService` / `TaskSchedulerService` as background task dependency labels.
+  - `src/main/services/agent-service.ts` was an unreferenced legacy service root duplicating plugin agent capability preview logic.
+- Cleaned final audit findings:
+  - Deleted `src/main/services/agent-service.ts`.
+  - Updated agent plugin background task dependency labels to `@roc/plugin-task` / `task.scheduler`.
+  - Renamed DeepAgent background task tool internal structural dependencies from service-shaped names to adapter-shaped names.
+- Final verification after audit cleanup passed:
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/plugins/agent/plugin.test.ts tests/main/plugins/agent/runtime.test.ts tests/main/plugins/task/plugin.test.ts tests/shared/background-task-contract.test.ts tests/types/contract-drift.test-d.ts` passed: 4 files, 32 tests.
+  - `pnpm test` passed: 185 files, 944 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `git diff --check` passed.
+  - Final old architecture grep now only finds legacy-data-cleanup/test absence assertions and local plugin DB path variable names.
+- Package/smoke verification passed:
+  - `pnpm package:dir` passed and produced `release\win-unpacked\Roc.exe`.
+  - `pnpm smoke:electron` passed against the packaged runtime.
+- Hook follow-up after completion reported `0/6 phases done` because `check-complete.ps1` recognizes only `- **Status:** complete` or `[complete]`, while `task_plan.md` used plain `Status: complete`.
+- Updated all six phase status lines in `task_plan.md` to `- **Status:** complete` without changing implementation code.
+- Review follow-up opened Phase 6 for two P1 regressions:
+  - Normal agent/task runs no longer construct the DeepAgent execution path after delegate removal.
+  - Legacy monolith DB deletion runs unconditionally, so direct upgrades from older builds can lose unmigrated data.
+- Wrote and observed RED coverage for the review regressions:
+  - agent runtime must call a plugin-owned DeepAgent executor rather than raw model streaming for normal task runs.
+  - DeepAgent approval interrupts must leave the run in `waiting_user` and publish `approval_requested`.
+  - legacy monolith cleanup must keep `roc.sqlite` when `.migration-complete.json` is missing.
+- Fixed DeepAgent execution path:
+  - Added `src/main/plugins/agent/deep-agent-executor.ts` as the plugin-owned DeepAgent runtime adapter.
+  - `createAgentPlugin` now injects the executor when default bootstrap passes `RocPaths`.
+  - Default bootstrap passes `deepAgentExecutor` and no longer restores legacy `createAppServices` or delegate.
+  - Runtime now passes the full `AgentModelHandle` into the executor, aborts active runs on cancel, maps DeepAgent events into chat/task events, and preserves approval interrupts.
+  - Runtime now stores pending DeepAgent interrupts and resumes the original run through the executor with `Command({ resume })`, recording `approval_decision` before completing resumed output.
+  - Executor builds `buildDeepAgent` with LangChain handle, backend routes, store/checkpointer, web/file/shell/MCP/skill tool surfaces, guardrail state, and interrupt policy from capability preview.
+  - Agent manifest declares only non-cyclic executor dependencies: MCP, skills, workspace, runtime-tools. Task/memory remain event/capability consumers to avoid plugin dependency cycles.
+- Fixed legacy cleanup safety:
+  - `deleteLegacyMonolithData` now checks `plugin-data/.migration-complete.json`.
+  - Missing or invalid marker returns `skippedReason: 'migration_not_verified'` and does not delete legacy DB files.
+  - Kernel integration writes a migration marker before expecting cleanup deletion.
+- Verification passed:
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/kernel-main-integration.test.ts tests/main/plugins/core-plugins.integration.test.ts tests/main/plugins/secondary-plugins.integration.test.ts tests/main/microkernel-regression.test.ts tests/main/release-readiness.test.ts tests/main/package-scripts.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/task-proposal-workflow.test.ts` passed: 11 files, 48 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `pnpm test` passed: 185 files, 948 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `pnpm package:dir` passed and produced `release\win-unpacked\Roc.exe`.
+  - `pnpm smoke:electron` passed against the packaged runtime.
+  - `git diff --check` passed.
+- Final verification after executor cleanup still passed:
+  - `pnpm typecheck`
+  - `pnpm vitest run tests/main/plugins/agent/runtime.test.ts tests/main/plugins/agent/plugin.test.ts tests/main/infrastructure/legacy-data-cleanup.test.ts tests/main/kernel-main-integration.test.ts tests/main/plugins/core-plugins.integration.test.ts tests/main/plugins/secondary-plugins.integration.test.ts tests/main/microkernel-regression.test.ts tests/main/release-readiness.test.ts tests/main/package-scripts.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/task-proposal-workflow.test.ts` passed: 11 files, 49 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `pnpm test` passed: 185 files, 949 tests. The run printed known Windows `node-pty` `AttachConsole failed` noise, but Vitest exited 0.
+  - `pnpm package:dir` passed and produced `release\win-unpacked\Roc.exe`.
+  - `pnpm smoke:electron` passed against the packaged runtime.
+  - `git diff --check` passed.

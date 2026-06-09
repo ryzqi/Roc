@@ -1,4 +1,4 @@
-import { RocDomainError } from '../errors';
+import { RocDomainError } from '../../services/errors';
 
 export type ParsedCronExpression = {
   minutes: Set<number>;
@@ -120,7 +120,7 @@ function parseRange(raw: string, field: CronField, allowSevenForSunday: boolean)
 }
 
 function parseNumber(raw: string, field: CronField, allowSevenForSunday: boolean): number {
-  if (!/^\d+$/.test(raw)) {
+  if (!/^\d+$/u.test(raw)) {
     throw invalidCron();
   }
   const value = Number.parseInt(raw, 10);
@@ -150,4 +150,3 @@ function invalidCron(): RocDomainError {
     userAction: '请使用五段标准 cron 表达式，例如 0 9 * * *。'
   });
 }
-

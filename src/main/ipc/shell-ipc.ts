@@ -4,18 +4,7 @@ import { ipcChannels } from '../../shared/ipc';
 import type { ShellConfirmationRequest } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
 import type { LogService } from '../services/log-service';
-import type { ShellExecutionService } from '../services/shell-execution-service';
 import type { TimedHandle } from './ipc-common';
-
-export function registerShellIpc(
-  timedHandle: TimedHandle,
-  mainWindow: BrowserWindow,
-  logService: Pick<LogService, 'info'>,
-  shellExecutionService: ShellExecutionService
-): void {
-  registerShellConfirmIpc(timedHandle, mainWindow, logService);
-  timedHandle(ipcChannels.shellExecute, (_event, request) => wrapIpc(() => shellExecutionService.executeAsync(request)));
-}
 
 export function registerShellConfirmIpc(
   timedHandle: TimedHandle,

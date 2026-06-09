@@ -5,7 +5,6 @@ export * as streamConsumers from './stream-consumers';
 export { buildDeepAgent, type DeepAgentBuildInput } from './agent-builder';
 export * as tools from './tools';
 export { createBackend } from './backend';
-export { createDeepAgentSession, type DeepAgentSession } from './session';
 export { redact } from './redact';
 export { DEEP_AGENT_BUILT_IN_TOOLS, RUN_EVENT_NAME } from './types';
 export type { ActiveRun, AgentExecuteAdapter, RunExecutionContext, RunFailure, RuntimeSubagent } from './types';

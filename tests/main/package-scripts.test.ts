@@ -47,7 +47,7 @@ describe('package scripts', () => {
     expect(electronSmokeScript).toContain('windowPlacementEvidence');
     expect(electronSmokeScript).toContain('phase3WebViewEvidence');
     expect(electronSmokeScript).toContain('releaseReadiness');
-    expect(electronSmokeScript).toContain('src/main/infrastructure/migration/monolith-to-plugins.ts');
+    expect(electronSmokeScript).toContain('src/main/infrastructure/legacy-data-cleanup.ts');
     expect(electronSmokeScript).toContain('src/main/kernel/kernel-runtime.ts');
     expect(releaseReadinessSmokeHelper).toContain('installerSigningUpdater');
   });

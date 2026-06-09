@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { AIMessageChunk, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
@@ -8,22 +5,17 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createAppServices, type AppServices } from '../../src/main/services/app-service';
+import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 import { LangChainModelFactory, resolveAnthropicBetas } from '../../src/main/services/langchain-model-factory';
 import type { ProviderConfig, ProviderOptions } from '../../src/shared/types';
 
-let root: string;
-let services: AppServices;
+let services: ProviderTestServices;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'roc-langchain-model-factory-'));
-  services = createAppServices(root);
-  services.appService.initialize();
+  services = createProviderTestServices('roc-langchain-model-factory-');
 });
-
 afterEach(async () => {
-  await services.appService.shutdown();
-  rmSync(root, { recursive: true, force: true });
+  await services.cleanup();
 });
 
 describe('LangChainModelFactory', () => {

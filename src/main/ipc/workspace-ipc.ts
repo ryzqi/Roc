@@ -3,22 +3,11 @@ import { dialog } from 'electron';
 import { ipcChannels } from '../../shared/ipc';
 import type { Workspace } from '../../shared/types';
 import { RocDomainError, wrapIpc } from '../services/errors';
-import type { WorkspaceService } from '../services/workspace-service';
 import type { TimedHandle } from './ipc-common';
 
 type WorkspaceSelector = {
   selectWorkspace(path: string): Promise<Workspace> | Workspace;
 };
-
-export function registerWorkspaceIpc(
-  timedHandle: TimedHandle,
-  mainWindow: BrowserWindow,
-  workspaceService: WorkspaceService
-): void {
-  timedHandle(ipcChannels.workspaceGetCurrent, () => wrapIpc(() => workspaceService.getCurrentWorkspace()));
-  timedHandle(ipcChannels.workspaceSelect, (_event, request) => wrapIpc(() => workspaceService.selectWorkspace(request.path)));
-  registerWorkspaceDialogIpc(timedHandle, mainWindow, workspaceService);
-}
 
 export function registerWorkspaceDialogIpc(
   timedHandle: TimedHandle,

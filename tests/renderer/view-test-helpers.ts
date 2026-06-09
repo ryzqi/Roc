@@ -23,7 +23,6 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       paths: {
         root: 'F:\\Code\\Roc',
         configDir: 'F:\\Code\\Roc\\.tmp',
-        databasePath: 'F:\\Code\\Roc\\.tmp\\roc.db',
         memoryDir: 'F:\\Code\\Roc\\.tmp\\memory',
         logsDir: 'F:\\Code\\Roc\\.tmp\\logs',
         diagnosticsDir: 'F:\\Code\\Roc\\.tmp\\diagnostics',

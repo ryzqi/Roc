@@ -15,4 +15,3 @@ export function computeNextRunAt(task: BackgroundTask, now: Date = new Date()): 
   }
   return computeNextCronRunAt(task.cronExpression, now);
 }
-

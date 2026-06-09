@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createAgentPlugin } from '../../../../src/main/plugins/agent';
+import { RocPaths } from '../../../../src/main/services/paths';
 
 const agentCapabilities = [
   'agent.status.get',
@@ -33,5 +34,20 @@ describe('agent plugin manifest', () => {
 
     expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-mcp', '@roc/plugin-skills']);
     expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(agentCapabilitiesWithPreview);
+  });
+
+  it('declares plugin dependencies when the DeepAgent executor is enabled', () => {
+    const plugin = createAgentPlugin({
+      deepAgentExecutor: {
+        paths: new RocPaths('F:\\Code\\Roc')
+      }
+    });
+
+    expect(plugin.manifest.dependencies).toEqual([
+      '@roc/plugin-mcp',
+      '@roc/plugin-skills',
+      '@roc/plugin-workspace',
+      '@roc/plugin-runtime-tools'
+    ]);
   });
 });
