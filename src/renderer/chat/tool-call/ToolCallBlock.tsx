@@ -12,23 +12,23 @@ type ToolCallBlockProps = {
 };
 
 const STATUS_LABEL = {
-  start: 'start',
-  progress: 'progress',
-  end: 'end',
-  error: 'error'
+  start: '开始',
+  progress: '执行中',
+  end: '成功',
+  error: '错误'
 } satisfies Record<ToolCallBlockModel['status'], string>;
 
 function ToolStatusIcon({ status }: { status: ToolCallBlockModel['status'] }): React.JSX.Element {
   if (status === 'start') {
-    return <CirclePlay aria-hidden="true" size={14} />;
+    return <CirclePlay aria-hidden="true" size={12} strokeWidth={2.5} />;
   }
   if (status === 'progress') {
-    return <LoaderCircle aria-hidden="true" size={14} />;
+    return <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.5} />;
   }
   if (status === 'end') {
-    return <CheckCircle2 aria-hidden="true" size={14} />;
+    return <CheckCircle2 aria-hidden="true" size={12} strokeWidth={2.5} />;
   }
-  return <XCircle aria-hidden="true" size={14} />;
+  return <XCircle aria-hidden="true" size={12} strokeWidth={2.5} />;
 }
 
 export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element {
