@@ -42,22 +42,27 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
 
   return (
     <ActivityBlockShell
-      className={`tool-call-card tool-call-card--${block.status}`}
+      className={`tool-call-modern tool-call-modern--${block.status}`}
       dataTestId="chat-activity-tool"
       open={hasData && open}
       onToggle={setOpen}
       header={
-        <summary>
-          <span className="tool-name">{`工具 · ${block.name} · ${STATUS_LABEL[block.status]}`}</span>
-          <span className="tool-status">{STATUS_LABEL[block.status]}</span>
-          <span className="tool-icon">
+        <summary className="tool-call-modern__header">
+          <div className="tool-call-modern__icon">
             <ToolStatusIcon status={block.status} />
-          </span>
+          </div>
+          <span className="tool-call-modern__name">{block.name}</span>
+          <div className="tool-call-modern__badge">{STATUS_LABEL[block.status]}</div>
+          {hasData ? (
+            <svg className="tool-call-modern__expand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          ) : null}
         </summary>
       }
     >
       {hasData ? (
-        <ActivityBlockBody className="tool-call-body">
+        <ActivityBlockBody className="tool-call-modern__body">
           {hasInput ? <ToolDataSection label="输入" data={block.input} /> : null}
           {hasOutput ? <ToolDataSection label="输出" data={block.output} /> : null}
           {hasError ? <ToolDataSection label="错误" data={block.error} variant="error" /> : null}
