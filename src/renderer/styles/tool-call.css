@@ -59,3 +59,57 @@
   color: var(--subtle);
   flex-shrink: 0;
 }
+
+/* 开始状态 */
+.tool-call-modern--start .tool-call-modern__icon {
+  background: #e3f2fd;
+  color: #2d477a;
+}
+
+.tool-call-modern--start .tool-call-modern__badge {
+  background: #e3f2fd;
+  color: #2d477a;
+}
+
+/* 进行中状态 */
+.tool-call-modern--progress .tool-call-modern__icon {
+  background: #fff3e0;
+  color: #8a5a17;
+}
+
+.tool-call-modern--progress .tool-call-modern__badge {
+  background: #fff3e0;
+  color: #8a5a17;
+}
+
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tool-call-modern--progress .tool-call-modern__icon svg {
+  animation: tool-spin 1s linear infinite;
+}
+
+/* 完成状态 */
+.tool-call-modern--end .tool-call-modern__icon {
+  background: #e8f5e9;
+  color: #166c4a;
+}
+
+.tool-call-modern--end .tool-call-modern__badge {
+  background: #e8f5e9;
+  color: #166c4a;
+}
+
+/* 错误状态 */
+.tool-call-modern--error .tool-call-modern__icon {
+  background: #ffebee;
+  color: #9c3a3a;
+}
+
+.tool-call-modern--error .tool-call-modern__badge {
+  background: #ffebee;
+  color: #9c3a3a;
+}
