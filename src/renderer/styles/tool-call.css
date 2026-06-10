@@ -61,25 +61,17 @@
 }
 
 /* 开始状态 */
-.tool-call-modern--start .tool-call-modern__icon {
-  background: #e3f2fd;
-  color: #2d477a;
-}
-
+.tool-call-modern--start .tool-call-modern__icon,
 .tool-call-modern--start .tool-call-modern__badge {
-  background: #e3f2fd;
-  color: #2d477a;
+  background: var(--tool-st-start-bg);
+  color: var(--tool-st-start-text);
 }
 
 /* 进行中状态 */
-.tool-call-modern--progress .tool-call-modern__icon {
-  background: #fff3e0;
-  color: #8a5a17;
-}
-
+.tool-call-modern--progress .tool-call-modern__icon,
 .tool-call-modern--progress .tool-call-modern__badge {
-  background: #fff3e0;
-  color: #8a5a17;
+  background: var(--tool-st-progress-bg);
+  color: var(--tool-st-progress-text);
 }
 
 @keyframes tool-spin {
@@ -93,25 +85,17 @@
 }
 
 /* 完成状态 */
-.tool-call-modern--end .tool-call-modern__icon {
-  background: #e8f5e9;
-  color: #166c4a;
-}
-
+.tool-call-modern--end .tool-call-modern__icon,
 .tool-call-modern--end .tool-call-modern__badge {
-  background: #e8f5e9;
-  color: #166c4a;
+  background: var(--tool-st-end-bg);
+  color: var(--tool-st-end-text);
 }
 
 /* 错误状态 */
-.tool-call-modern--error .tool-call-modern__icon {
-  background: #ffebee;
-  color: #9c3a3a;
-}
-
+.tool-call-modern--error .tool-call-modern__icon,
 .tool-call-modern--error .tool-call-modern__badge {
-  background: #ffebee;
-  color: #9c3a3a;
+  background: var(--tool-st-error-bg);
+  color: var(--tool-st-error-text);
 }
 
 /* 深色模式 */
@@ -120,44 +104,28 @@
   border-color: rgba(190, 205, 228, 0.12);
 }
 
-:root[data-theme='dark'] .tool-call-modern--start .tool-call-modern__icon {
-  background: rgba(45, 71, 122, 0.15);
-  color: #7a9bd8;
-}
-
+:root[data-theme='dark'] .tool-call-modern--start .tool-call-modern__icon,
 :root[data-theme='dark'] .tool-call-modern--start .tool-call-modern__badge {
-  background: rgba(45, 71, 122, 0.15);
-  color: #7a9bd8;
+  background: var(--tool-st-start-bg);
+  color: var(--tool-st-start-text);
 }
 
-:root[data-theme='dark'] .tool-call-modern--progress .tool-call-modern__icon {
-  background: rgba(229, 189, 108, 0.15);
-  color: #e5bd6c;
-}
-
+:root[data-theme='dark'] .tool-call-modern--progress .tool-call-modern__icon,
 :root[data-theme='dark'] .tool-call-modern--progress .tool-call-modern__badge {
-  background: rgba(229, 189, 108, 0.15);
-  color: #e5bd6c;
+  background: var(--tool-st-progress-bg);
+  color: var(--tool-st-progress-text);
 }
 
-:root[data-theme='dark'] .tool-call-modern--end .tool-call-modern__icon {
-  background: rgba(121, 210, 166, 0.15);
-  color: #79d2a6;
-}
-
+:root[data-theme='dark'] .tool-call-modern--end .tool-call-modern__icon,
 :root[data-theme='dark'] .tool-call-modern--end .tool-call-modern__badge {
-  background: rgba(121, 210, 166, 0.15);
-  color: #79d2a6;
+  background: var(--tool-st-end-bg);
+  color: var(--tool-st-end-text);
 }
 
-:root[data-theme='dark'] .tool-call-modern--error .tool-call-modern__icon {
-  background: rgba(238, 146, 146, 0.15);
-  color: #ee9292;
-}
-
+:root[data-theme='dark'] .tool-call-modern--error .tool-call-modern__icon,
 :root[data-theme='dark'] .tool-call-modern--error .tool-call-modern__badge {
-  background: rgba(238, 146, 146, 0.15);
-  color: #ee9292;
+  background: var(--tool-st-error-bg);
+  color: var(--tool-st-error-text);
 }
 
 .tool-call-modern__body {

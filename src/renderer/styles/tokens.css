@@ -40,6 +40,16 @@
   --st-warn-line: #d6c193;
   --st-bad-line: #d4adad;
 
+  /* 工具调用状态 */
+  --tool-st-start-bg: #e3f2fd;
+  --tool-st-start-text: #2d477a;
+  --tool-st-progress-bg: #fff3e0;
+  --tool-st-progress-text: #8a5a17;
+  --tool-st-end-bg: #e8f5e9;
+  --tool-st-end-text: #166c4a;
+  --tool-st-error-bg: #ffebee;
+  --tool-st-error-text: #9c3a3a;
+
   /* 圆角 */
   --r-xs: 6px;
   --r-sm: 8px;
@@ -153,6 +163,16 @@
   --st-info-line: color-mix(in srgb, var(--accent) 48%, transparent);
   --st-warn-line: rgba(229, 189, 108, 0.36);
   --st-bad-line: rgba(238, 146, 146, 0.36);
+
+  /* 工具调用状态 (深色) */
+  --tool-st-start-bg: rgba(45, 71, 122, 0.15);
+  --tool-st-start-text: #7a9bd8;
+  --tool-st-progress-bg: rgba(229, 189, 108, 0.15);
+  --tool-st-progress-text: #e5bd6c;
+  --tool-st-end-bg: rgba(121, 210, 166, 0.15);
+  --tool-st-end-text: #79d2a6;
+  --tool-st-error-bg: rgba(238, 146, 146, 0.15);
+  --tool-st-error-text: #ee9292;
   --shadow-modal: 0 18px 42px rgba(0, 0, 0, 0.34);
   --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
   --shadow-input: 0 1px 2px rgba(0, 0, 0, 0.22);
