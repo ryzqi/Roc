@@ -19,7 +19,6 @@ import type {
   TaskRun
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
-import { consumeMessageStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentSessionRepository } from './session-repository';
 
@@ -150,9 +149,7 @@ export class AgentPluginRuntime {
         modelHandle,
         run,
         threadId: run.threadId,
-        workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
-        invoke: modelHandle.invoke,
-        stream: modelHandle.stream
+        workflowHint: request.workflowHint === undefined ? null : request.workflowHint
       });
       this.pendingRuns.add(pendingRun);
       void pendingRun.finally(() => {
@@ -233,36 +230,32 @@ export class AgentPluginRuntime {
         }
       });
     }
-    if (this.options.deepAgentExecutor !== undefined) {
-      const pendingRun = this.executeRun({
-        abortSignal: abortController.signal,
-        enabledCapabilities: run.enabledCapabilities,
+    const pendingRun = this.executeRun({
+      abortSignal: abortController.signal,
+      enabledCapabilities: run.enabledCapabilities,
+      input: run.userInput,
+      mode: 'task',
+      modelHandle,
+      modelId: modelHandle.modelId,
+      providerId: modelHandle.providerId,
+      request: {
         input: run.userInput,
-        invoke: modelHandle.invoke,
         mode: 'task',
-        modelHandle,
-        modelId: modelHandle.modelId,
-        providerId: modelHandle.providerId,
-        request: {
-          input: run.userInput,
-          mode: 'task',
-          threadId: run.threadId,
-          enabledCapabilities: run.enabledCapabilities
-        },
-        resumePayload: {
-          decisions: request.decisions
-        },
-        run,
-        runId: run.id,
-        stream: modelHandle.stream,
         threadId: run.threadId,
-        workflowHint: null
-      });
-      this.pendingRuns.add(pendingRun);
-      pendingRun.finally(() => {
-        this.pendingRuns.delete(pendingRun);
-      });
-    }
+        enabledCapabilities: run.enabledCapabilities
+      },
+      resumePayload: {
+        decisions: request.decisions
+      },
+      run,
+      runId: run.id,
+      threadId: run.threadId,
+      workflowHint: null
+    });
+    this.pendingRuns.add(pendingRun);
+    pendingRun.finally(() => {
+      this.pendingRuns.delete(pendingRun);
+    });
     return result;
   }
 
@@ -367,32 +360,22 @@ export class AgentPluginRuntime {
     threadId: string;
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
     enabledCapabilities: EnabledCapabilities;
-    invoke: (input: string) => Promise<string>;
-    stream?: (input: string) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>;
   }): Promise<void> {
     if (!this.activeRuns.has(input.runId)) {
       return;
     }
     try {
       const startedAtMs = Date.now();
-      const execution =
-        this.options.deepAgentExecutor === undefined
-          ? {
-              status: 'completed' as const,
-              assistantMessage: await this.streamAssistantMessage({
-                runId: input.runId,
-                threadId: input.threadId,
-                input: input.input,
-                stream: input.stream
-              })
-            }
-          : await this.executeDeepAgentRun({
-              abortSignal: input.abortSignal,
-              modelHandle: input.modelHandle,
-              request: input.request,
-              resumePayload: input.resumePayload,
-              run: input.run
-            });
+      if (this.options.deepAgentExecutor === undefined) {
+        throw new Error('agent_deep_agent_executor_missing');
+      }
+      const execution = await this.executeDeepAgentRun({
+        abortSignal: input.abortSignal,
+        modelHandle: input.modelHandle,
+        request: input.request,
+        resumePayload: input.resumePayload,
+        run: input.run
+      });
       if (execution.status === 'interrupted') {
         return;
       }
@@ -438,66 +421,6 @@ export class AgentPluginRuntime {
         retryable: true
       });
     }
-  }
-
-  private async streamAssistantMessage(input: {
-    runId: string;
-    threadId: string;
-    input: string;
-    stream?: (input: string) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>;
-  }): Promise<string> {
-    if (input.stream === undefined) {
-      throw new Error('agent_model_stream_unavailable');
-    }
-    const run = this.options.repository.getRun(input.runId);
-    const assistantChunks: string[] = [];
-    const reasoningChunks: string[] = [];
-    const usageAccumulator = createUsageAccumulator();
-    let runtimeEventQueue = Promise.resolve();
-    let taskEventQueue = Promise.resolve();
-
-    const queueRuntimeEvent = (event: ChatRunEvent): void => {
-      runtimeEventQueue = runtimeEventQueue.then(async () => {
-        await this.publishChatRunEvent(event);
-      });
-    };
-    const queueTaskEvent = (
-      type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
-      payload: Record<string, unknown>
-    ): void => {
-      taskEventQueue = taskEventQueue.then(async () => {
-        await this.publish('agent.run.task-event', {
-          runId: input.runId,
-          threadId: input.threadId,
-          type,
-          payload
-        });
-      });
-    };
-
-    await consumeMessageStream({
-      messages: await input.stream(input.input),
-      context: {
-        runId: input.runId,
-        taskRun: run
-      },
-      assistantChunks,
-      reasoningChunks,
-      usageAccumulator,
-      callbacks: {
-        emitRuntimeEvent: queueRuntimeEvent,
-        emitTodoEvent: () => {},
-        recordTaskEvent: queueTaskEvent
-      }
-    });
-    await runtimeEventQueue;
-    await taskEventQueue;
-
-    const assistantMessage = assistantChunks.join('').trim();
-    if (assistantMessage.length === 0) {
-      throw new Error('agent_model_response_empty');
-    }
-    return assistantMessage;
   }
 
   private async executeDeepAgentRun(input: {

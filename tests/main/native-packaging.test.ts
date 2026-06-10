@@ -78,11 +78,39 @@ describe('native packaging contract', () => {
     expect(run).toHaveBeenCalledWith(
       'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
       [resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'), '--set-icon', 'F:/Code/Roc/resources/icon.ico'],
-      { cwd: 'F:/Code/Roc' }
+      { cwd: 'F:/Code/Roc', stdio: 'pipe' }
     );
     expect(terminateRunningApp).toHaveBeenCalledWith({
       packagedExecutablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe')
     });
+  });
+
+  it('retries Windows executable icon application when rcedit fails transiently', async () => {
+    const run = vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0);
+    const terminateRunningApp = vi.fn();
+    const { applyWindowsExecutableIcon } = await loadNativePackagingModule();
+
+    const result = applyWindowsExecutableIcon({
+      appOutDir: 'F:/Code/Roc/release/win-unpacked',
+      iconPath: 'F:/Code/Roc/resources/icon.ico',
+      projectRoot: 'F:/Code/Roc',
+      run,
+      platform: 'win32',
+      resolveRceditPath: () => 'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
+      terminateRunningApp
+    });
+
+    expect(result).toEqual({
+      applied: true,
+      executablePath: resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'),
+      iconPath: 'F:/Code/Roc/resources/icon.ico'
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenLastCalledWith(
+      'F:/Code/Roc/node_modules/electron-winstaller/vendor/rcedit.exe',
+      [resolve('F:/Code/Roc/release/win-unpacked/Roc.exe'), '--set-icon', 'F:/Code/Roc/resources/icon.ico'],
+      { cwd: 'F:/Code/Roc', stdio: 'pipe' }
+    );
   });
 
   it('verifies packaged Roc.exe icon pixels against resources icon on Windows', async () => {

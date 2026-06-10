@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3';
-import { AIMessageChunk } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
@@ -14,32 +13,10 @@ let events: RocEventEnvelope[];
 
 const modelFactory: AgentModelFactoryAdapter = {
   createDefaultModelHandle: async () => ({
-    invoke: async () => 'Static agent response.',
-    stream: async function* () {
-      yield new AIMessageChunk({
-        content: [
-          {
-            type: 'text',
-            text: 'Static agent response.'
-          }
-        ] as never
-      });
-    },
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
   createModelHandleByModelId: async (modelId) => ({
-    invoke: async () => 'Static agent response.',
-    stream: async function* () {
-      yield new AIMessageChunk({
-        content: [
-          {
-            type: 'text',
-            text: 'Static agent response.'
-          }
-        ] as never
-      });
-    },
     modelId,
     providerId: 'openai'
   })
@@ -76,6 +53,7 @@ describe('AgentPluginRuntime', () => {
   it('starts a task run through the plugin repository and publishes the run event', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
       eventBus,
       modelFactory,
       repository
@@ -112,6 +90,7 @@ describe('AgentPluginRuntime', () => {
   it('publishes chat run events for renderer subscribers when a plugin run starts and completes', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
       eventBus,
       modelFactory,
       repository
@@ -163,20 +142,18 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const deferred = createDeferred<string>();
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'message_delta',
+            runId: input.run.id,
+            delta: await deferred.promise
+          } satisfies ChatRunEvent;
+        }
+      },
       eventBus,
       modelFactory: {
         createDefaultModelHandle: async () => ({
-          invoke: async () => deferred.promise,
-          stream: async function* () {
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'text',
-                  text: await deferred.promise
-                }
-              ] as never
-            });
-          },
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
@@ -209,18 +186,17 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
-  it('publishes renderer failure events and marks the run failed when model invocation fails', async () => {
+  it('publishes renderer failure events and marks the run failed when the DeepAgent executor fails', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* () {
+          throw new Error('provider_unavailable');
+        }
+      },
       eventBus,
       modelFactory: {
         createDefaultModelHandle: async () => ({
-          invoke: async () => {
-            throw new Error('provider_unavailable');
-          },
-          stream: async function* () {
-            throw new Error('provider_unavailable');
-          },
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
@@ -254,55 +230,27 @@ describe('AgentPluginRuntime', () => {
   it('streams reasoning and assistant deltas through renderer and task-event channels before completion', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'reasoning_delta',
+            runId: input.run.id,
+            delta: '先判断用户意图。'
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'message_delta',
+            runId: input.run.id,
+            delta: '可以，先从今天金价开始。'
+          } satisfies ChatRunEvent;
+        }
+      },
       eventBus,
       modelFactory: {
         createDefaultModelHandle: async () => ({
-          invoke: async () => {
-            throw new Error('invoke_should_not_be_used_when_stream_exists');
-          },
-          stream: async function* () {
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'reasoning',
-                  reasoning: '先判断用户意图。'
-                }
-              ] as never
-            });
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'text',
-                  text: '可以，先从今天金价开始。'
-                }
-              ] as never
-            });
-          },
           modelId: 'nvidia:test-model',
           providerId: 'nvidia'
         }),
         createModelHandleByModelId: async (modelId) => ({
-          invoke: async () => {
-            throw new Error('invoke_should_not_be_used_when_stream_exists');
-          },
-          stream: async function* () {
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'reasoning',
-                  reasoning: '先判断用户意图。'
-                }
-              ] as never
-            });
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'text',
-                  text: '可以，先从今天金价开始。'
-                }
-              ] as never
-            });
-          },
           modelId,
           providerId: 'nvidia'
         })
@@ -373,7 +321,6 @@ describe('AgentPluginRuntime', () => {
   it('uses the plugin-owned DeepAgent executor instead of raw model streaming for normal runs', async () => {
     const repository = new AgentSessionRepository(db);
     let executorCalledWith: ChatStartRunRequest | null = null;
-    let rawStreamCalled = false;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
@@ -397,20 +344,6 @@ describe('AgentPluginRuntime', () => {
       eventBus,
       modelFactory: {
         createDefaultModelHandle: async () => ({
-          invoke: async () => {
-            throw new Error('raw_invoke_should_not_be_used');
-          },
-          stream: async function* () {
-            rawStreamCalled = true;
-            yield new AIMessageChunk({
-              content: [
-                {
-                  type: 'text',
-                  text: 'Raw stream response.'
-                }
-              ] as never
-            });
-          },
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
@@ -429,7 +362,6 @@ describe('AgentPluginRuntime', () => {
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
     );
 
-    expect(rawStreamCalled).toBe(false);
     expect(executorCalledWith).toMatchObject({
       input: 'Use web_read to inspect the docs.',
       mode: 'task'
@@ -455,6 +387,46 @@ describe('AgentPluginRuntime', () => {
         content: 'DeepAgent executor response.'
       }
     ]);
+  });
+
+  it('requires the DeepAgent executor instead of using raw model streaming', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory: {
+        createDefaultModelHandle: async () => ({
+          modelId: 'openai:gpt-4.1',
+          providerId: 'openai'
+        }),
+        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+      },
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: 'Use the agent runtime.',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: {
+          type: 'run_failed',
+          runId: result.runId,
+          threadId: result.threadId,
+          code: 'agent_run_failed',
+          message: 'agent_deep_agent_executor_missing',
+          retryable: true
+        }
+      })
+    );
   });
 
   it('keeps a DeepAgent approval interrupt waiting for user decision', async () => {
@@ -639,18 +611,17 @@ describe('AgentPluginRuntime', () => {
     ]);
   });
 
-  it('fails the run instead of falling back to invoke when the model handle does not expose stream', async () => {
+  it('runs through the DeepAgent executor when the model handle does not expose raw stream', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor('DeepAgent response without raw stream.'),
       eventBus,
       modelFactory: {
         createDefaultModelHandle: async () => ({
-          invoke: async () => 'Legacy invoke fallback should not run.',
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
         createModelHandleByModelId: async (modelId) => ({
-          invoke: async () => 'Legacy invoke fallback should not run.',
           modelId,
           providerId: 'openai'
         })
@@ -664,29 +635,17 @@ describe('AgentPluginRuntime', () => {
     });
 
     await waitForEvent(() =>
-      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
     );
 
-    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(repository.getRun(result.runId).status).toBe('completed');
     expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'agent.chat.run-event',
-        payload: {
-          type: 'run_failed',
-          runId: result.runId,
-          threadId: result.threadId,
-          code: 'agent_run_failed',
-          message: 'agent_model_stream_unavailable',
-          retryable: true
-        }
-      })
-    );
-    expect(events).not.toContainEqual(
       expect.objectContaining({
         type: 'agent.chat.run-event',
         payload: expect.objectContaining({
           type: 'run_completed',
-          runId: result.runId
+          runId: result.runId,
+          assistantMessage: 'DeepAgent response without raw stream.'
         })
       })
     );
@@ -695,6 +654,7 @@ describe('AgentPluginRuntime', () => {
   it('lists and searches session messages from the plugin repository', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
       eventBus,
       modelFactory,
       repository
@@ -726,6 +686,18 @@ describe('AgentPluginRuntime', () => {
   });
 
 });
+
+function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
+  return {
+    execute: async function* (input) {
+      yield {
+        type: 'message_delta',
+        runId: input.run.id,
+        delta: text
+      } satisfies ChatRunEvent;
+    }
+  };
+}
 
 async function waitForEvent(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 250;

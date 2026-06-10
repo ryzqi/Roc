@@ -15,6 +15,8 @@ export const betterSqlite3WorkspaceRequireBase = packageJsonPath;
 
 const probeScriptPath = resolve(projectRoot, 'scripts', 'probe-better-sqlite3.cjs');
 const electronBuilderCache = resolve(projectRoot, '.runtime', 'electron-builder-cache');
+const windowsIconApplyAttempts = 3;
+const windowsIconApplyRetryDelayMs = 250;
 const compareExecutableIconScript = String.raw`
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -81,7 +83,7 @@ export function runCommand(command, args, options = {}) {
   const result = spawnSync(useWindowsShell ? buildWindowsShellCommand(command, args) : command, useWindowsShell ? [] : args, {
     cwd: options.cwd,
     env: options.env,
-    stdio: 'inherit',
+    stdio: options.stdio ?? 'inherit',
     shell: useWindowsShell
   });
   return result.status === null ? 1 : result.status;
@@ -127,13 +129,22 @@ export function applyWindowsExecutableIcon({
   const executablePath = resolve(appOutDir, `${executableName}.exe`);
   terminateRunningApp({ packagedExecutablePath: executablePath });
   const rceditPath = resolveRceditPath({ projectRoot: targetProjectRoot });
-  const status = run(rceditPath, [executablePath, '--set-icon', iconPath], {
-    cwd: targetProjectRoot
-  });
-  if (status !== 0) {
-    throw new Error(`Failed to apply Windows executable icon to ${executablePath}.`);
+  let status = 1;
+  sleepSync(windowsIconApplyRetryDelayMs);
+  for (let attempt = 1; attempt <= windowsIconApplyAttempts; attempt += 1) {
+    const isFinalAttempt = attempt === windowsIconApplyAttempts;
+    status = run(rceditPath, [executablePath, '--set-icon', iconPath], {
+      cwd: targetProjectRoot,
+      stdio: isFinalAttempt ? 'inherit' : 'pipe'
+    });
+    if (status === 0) {
+      return { applied: true, executablePath, iconPath };
+    }
+    if (attempt < windowsIconApplyAttempts) {
+      sleepSync(windowsIconApplyRetryDelayMs);
+    }
   }
-  return { applied: true, executablePath, iconPath };
+  throw new Error(`Failed to apply Windows executable icon to ${executablePath}: rcedit exited ${status}.`);
 }
 
 export function verifyWindowsExecutableIcon({

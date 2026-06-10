@@ -96,55 +96,58 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         },
         signal: input.abortSignal
       });
-      const queuedEvents: ChatRunEvent[] = [];
+      const eventQueue = createChatRunEventQueue();
       const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
-        assistantChunks,
-        queuedEvents,
-        runId: input.run.id,
-        taskRun
+        emitRuntimeEvent: eventQueue.push
       });
-      try {
-        await Promise.all([
-          consumeToolCallStream({
-            calls: run.toolCalls as AsyncIterable<unknown>,
-            context: {
-              runId: input.run.id,
-              taskRun
-            },
-            callbacks
-          }),
-          consumeMessageStream({
-            messages: run.messages as AsyncIterable<unknown>,
-            context: {
-              runId: input.run.id,
-              taskRun
-            },
-            assistantChunks,
-            reasoningChunks,
-            usageAccumulator,
-            callbacks
-          }),
-          consumeSubagentStream({
-            subagents: run.subagents as AsyncIterable<unknown>,
-            context: {
-              runId: input.run.id,
-              taskRun
-            },
-            callbacks
-          })
-        ]);
-        if (readInterrupted(run)) {
-          queuedEvents.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
-        } else {
-          await Promise.resolve(run.output);
+      const consumeRun = (async () => {
+        try {
+          await Promise.all([
+            consumeToolCallStream({
+              calls: run.toolCalls as AsyncIterable<unknown>,
+              context: {
+                runId: input.run.id,
+                taskRun
+              },
+              callbacks
+            }),
+            consumeMessageStream({
+              messages: run.messages as AsyncIterable<unknown>,
+              context: {
+                runId: input.run.id,
+                taskRun
+              },
+              assistantChunks,
+              reasoningChunks,
+              usageAccumulator,
+              callbacks
+            }),
+            consumeSubagentStream({
+              subagents: run.subagents as AsyncIterable<unknown>,
+              context: {
+                runId: input.run.id,
+                taskRun
+              },
+              callbacks
+            })
+          ]);
+          if (readInterrupted(run)) {
+            eventQueue.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
+          } else {
+            await Promise.resolve(run.output);
+          }
+          eventQueue.close();
+        } catch (error) {
+          eventQueue.fail(error);
+        } finally {
+          await Promise.allSettled(closers.map(async (close) => close()));
         }
-      } finally {
-        await Promise.allSettled(closers.map(async (close) => close()));
-      }
-      for (const event of queuedEvents) {
+      })();
+      for await (const event of eventQueue) {
         yield event;
       }
+      await consumeRun;
     }
   };
 }
@@ -195,19 +198,102 @@ function readRunInterruptedEvent(run: unknown, runId: string, threadId: string):
   };
 }
 
-function createExecutorCallbacks(input: {
-  assistantChunks: string[];
-  queuedEvents: ChatRunEvent[];
-  runId: string;
-  taskRun: TaskRun;
-}): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
+function createExecutorCallbacks(input: { emitRuntimeEvent: (event: ChatRunEvent) => void }): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
   return {
     emitRuntimeEvent: (event) => {
-      input.queuedEvents.push(event);
+      input.emitRuntimeEvent(event);
     },
     emitTodoEvent: () => {},
     recordTaskEvent: () => {}
   };
+}
+
+function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
+  close: () => void;
+  fail: (error: unknown) => void;
+  push: (event: ChatRunEvent) => void;
+} {
+  const events: ChatRunEvent[] = [];
+  let closed = false;
+  let failure: unknown = null;
+  let waiting:
+    | {
+        resolve: (result: IteratorResult<ChatRunEvent>) => void;
+        reject: (error: unknown) => void;
+      }
+    | null = null;
+
+  const queue = {
+    push: (event: ChatRunEvent): void => {
+      if (closed || failure !== null) {
+        return;
+      }
+      if (waiting !== null) {
+        const current = waiting;
+        waiting = null;
+        current.resolve({
+          done: false,
+          value: event
+        });
+        return;
+      }
+      events.push(event);
+    },
+    close: (): void => {
+      if (closed || failure !== null) {
+        return;
+      }
+      closed = true;
+      if (waiting !== null) {
+        const current = waiting;
+        waiting = null;
+        current.resolve({
+          done: true,
+          value: undefined
+        });
+      }
+    },
+    fail: (error: unknown): void => {
+      if (closed || failure !== null) {
+        return;
+      }
+      failure = error;
+      if (waiting !== null) {
+        const current = waiting;
+        waiting = null;
+        current.reject(error);
+      }
+    },
+    [Symbol.asyncIterator](): AsyncIterator<ChatRunEvent> {
+      return {
+        next: async (): Promise<IteratorResult<ChatRunEvent>> => {
+          const event = events.shift();
+          if (event !== undefined) {
+            return {
+              done: false,
+              value: event
+            };
+          }
+          if (failure !== null) {
+            throw failure;
+          }
+          if (closed) {
+            return {
+              done: true,
+              value: undefined
+            };
+          }
+          return await new Promise<IteratorResult<ChatRunEvent>>((resolve, reject) => {
+            waiting = {
+              resolve,
+              reject
+            };
+          });
+        }
+      };
+    }
+  };
+  return queue;
 }
 
 async function createExecutorTools(input: {

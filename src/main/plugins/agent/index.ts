@@ -22,7 +22,8 @@ import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
-import { AgentPluginRuntime, type AgentCapabilityPreviewProvider } from './runtime';
+import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
+import { AgentPluginRuntime } from './runtime';
 import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
@@ -146,9 +147,7 @@ export type AgentPluginOptions = {
   capabilityPreview?: {
     approvalModeProvider: () => ApprovalMode;
   };
-  deepAgentExecutor?: {
-    paths: RocPaths;
-  };
+  deepAgentExecutor?: { paths: RocPaths } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
@@ -176,13 +175,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
-        deepAgentExecutor:
-          options.deepAgentExecutor === undefined
-            ? undefined
-            : createAgentDeepAgentExecutor({
-                capabilities: context.capabilities,
-                paths: options.deepAgentExecutor.paths
-              }),
+        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
         eventBus: context.eventBus,
         modelFactory,
         pluginId,
@@ -220,6 +213,22 @@ function createCapabilityPreviewProvider(
     });
 }
 
+function resolveDeepAgentExecutor(
+  context: RocPluginContext,
+  option: AgentPluginOptions['deepAgentExecutor']
+): AgentDeepAgentExecutor | undefined {
+  if (option === undefined) {
+    return undefined;
+  }
+  if ('execute' in option) {
+    return option;
+  }
+  return createAgentDeepAgentExecutor({
+    capabilities: context.capabilities,
+    paths: option.paths
+  });
+}
+
 export const agentPlugin = createAgentPlugin();
 
 function resolveDependencies(options: AgentPluginOptions): string[] {
@@ -228,7 +237,7 @@ function resolveDependencies(options: AgentPluginOptions): string[] {
     dependencies.add('@roc/plugin-mcp');
     dependencies.add('@roc/plugin-skills');
   }
-  if (options.deepAgentExecutor !== undefined) {
+  if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
     dependencies.add('@roc/plugin-mcp');
     dependencies.add('@roc/plugin-skills');
     dependencies.add('@roc/plugin-workspace');

@@ -1,5 +1,4 @@
-import { AIMessage } from '@langchain/core/messages';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { LangChainAgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import type {
@@ -8,89 +7,52 @@ import type {
 } from '../../../../src/main/services/langchain-model-factory';
 
 describe('LangChainAgentModelFactoryAdapter', () => {
-  it('reads final text from LangChain content blocks with NVIDIA reasoning blocks', async () => {
-    const adapter = createAdapter(
-      new AIMessage({
-        content: [
-          {
-            type: 'reasoning',
-            reasoning: 'thinking trace'
-          },
-          {
-            type: 'text',
-            text: 'Final answer.'
-          }
-        ] as never
-      })
-    );
+  it('creates default LangChain handles with streaming enabled for DeepAgent runs', async () => {
+    const handle = createLangChainHandle('nvidia:test-model');
+    const factory = createFactory(handle);
+    const adapter = new LangChainAgentModelFactoryAdapter(factory);
 
-    const handle = await adapter.createDefaultModelHandle();
+    const modelHandle = await adapter.createDefaultModelHandle();
 
-    await expect(handle.invoke('prompt')).resolves.toBe('Final answer.');
+    expect(factory.createDefaultChatModel).toHaveBeenCalledWith({ streaming: true });
+    expect(modelHandle).toEqual({
+      providerId: 'nvidia',
+      modelId: 'nvidia:test-model',
+      langChainHandle: handle
+    });
   });
 
-  it.each([
-    {
-      name: 'reasoning only',
-      response: new AIMessage({
-        content: [
-          {
-            type: 'reasoning',
-            reasoning: 'thinking trace'
-          }
-        ] as never
-      }),
-      code: 'agent_model_response_empty'
-    },
-    {
-      name: 'unknown block',
-      response: new AIMessage({
-        content: [
-          {
-            type: 'image',
-            image_url: 'https://example.test/image.png'
-          }
-        ] as never
-      }),
-      code: 'agent_model_response_invalid'
-    },
-    {
-      name: 'empty text block',
-      response: new AIMessage({
-        content: [
-          {
-            type: 'text',
-            text: '   '
-          }
-        ] as never
-      }),
-      code: 'agent_model_response_empty'
-    },
-    {
-      name: 'missing content',
-      response: {
-        role: 'assistant'
-      },
-      code: 'agent_model_response_invalid'
-    }
-  ])('keeps $name model responses failed', async ({ code, response }) => {
-    const adapter = createAdapter(response);
-    const handle = await adapter.createDefaultModelHandle();
+  it('creates selected LangChain handles with streaming enabled for DeepAgent resumes', async () => {
+    const handle = createLangChainHandle('nvidia:selected-model');
+    const factory = createFactory(handle);
+    const adapter = new LangChainAgentModelFactoryAdapter(factory);
 
-    await expect(handle.invoke('prompt')).rejects.toThrow(code);
+    const modelHandle = await adapter.createModelHandleByModelId('nvidia:selected-model');
+
+    expect(factory.createChatModelByModelId).toHaveBeenCalledWith('nvidia:selected-model', { streaming: true });
+    expect(modelHandle).toEqual({
+      providerId: 'nvidia',
+      modelId: 'nvidia:selected-model',
+      langChainHandle: handle
+    });
   });
 });
 
-function createAdapter(response: unknown): LangChainAgentModelFactoryAdapter {
-  const handle = {
+function createFactory(handle: LangChainChatModelHandle): Pick<LangChainModelFactory, 'createChatModelByModelId' | 'createDefaultChatModel'> {
+  return {
+    createChatModelByModelId: vi.fn(async () => handle),
+    createDefaultChatModel: vi.fn(async () => handle)
+  };
+}
+
+function createLangChainHandle(modelId: string): LangChainChatModelHandle {
+  return {
     provider: {
       id: 'nvidia',
       type: 'nvidia'
-    },
-    modelId: 'nvidia:test-model',
-    model: {
-      invoke: async () => response
-    },
+    } as never,
+    modelId,
+    model: {} as never,
     runtime: {
       baseUrl: 'https://integrate.api.nvidia.com/v1',
       contextBudgetTokens: 128_000,
@@ -98,10 +60,5 @@ function createAdapter(response: unknown): LangChainAgentModelFactoryAdapter {
       providerType: 'nvidia',
       streaming: true
     }
-  } as unknown as LangChainChatModelHandle;
-  const factory = {
-    createChatModelByModelId: async () => handle,
-    createDefaultChatModel: async () => handle
-  } satisfies Pick<LangChainModelFactory, 'createChatModelByModelId' | 'createDefaultChatModel'>;
-  return new LangChainAgentModelFactoryAdapter(factory);
+  };
 }

@@ -11,6 +11,7 @@ import { KernelRuntime } from '../../src/main/kernel/kernel-runtime';
 import { createAppPlugin } from '../../src/main/plugins/app';
 import { createAgentPlugin } from '../../src/main/plugins/agent';
 import { StaticAgentModelFactoryAdapter } from '../../src/main/plugins/agent/model-factory-adapter';
+import type { AgentDeepAgentExecutor } from '../../src/main/plugins/agent/runtime';
 import { createDiagnosticsPlugin } from '../../src/main/plugins/diagnostics';
 import { createMcpPlugin } from '../../src/main/plugins/mcp';
 import { createMemoryPlugin } from '../../src/main/plugins/memory';
@@ -24,6 +25,7 @@ import type {
   AppStatus,
   BackgroundTask,
   BackgroundTaskPreview,
+  ChatRunEvent,
   ChatStartRunResult,
   DiagnosticPackage,
   FileTreeResult,
@@ -121,6 +123,7 @@ describe('microkernel regression', () => {
           })
         }),
         createAgentPlugin({
+          deepAgentExecutor: createStaticDeepAgentExecutor(),
           modelFactory: new StaticAgentModelFactoryAdapter({
             providerId: 'openai',
             modelId: 'openai:gpt-4.1'
@@ -270,5 +273,17 @@ function safeStorage(): SafeStorageBackend {
     isEncryptionAvailable: () => true,
     encryptString: (plaintext) => Buffer.from(`enc:${plaintext}`, 'utf8'),
     decryptString: (encrypted) => encrypted.toString('utf8').replace(/^enc:/u, '')
+  };
+}
+
+function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
+  return {
+    execute: async function* (input) {
+      yield {
+        type: 'message_delta',
+        runId: input.run.id,
+        delta: 'Static DeepAgent response.'
+      } satisfies ChatRunEvent;
+    }
   };
 }

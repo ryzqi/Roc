@@ -8,6 +8,7 @@ import type { SafeStorageBackend } from '../../../src/main/infrastructure/secret
 import { KernelRuntime } from '../../../src/main/kernel/kernel-runtime';
 import { createAgentPlugin } from '../../../src/main/plugins/agent';
 import { StaticAgentModelFactoryAdapter } from '../../../src/main/plugins/agent/model-factory-adapter';
+import type { AgentDeepAgentExecutor } from '../../../src/main/plugins/agent/runtime';
 import { createMemoryPlugin } from '../../../src/main/plugins/memory';
 import { createTaskPlugin } from '../../../src/main/plugins/task';
 import { createWorkspacePlugin } from '../../../src/main/plugins/workspace';
@@ -40,6 +41,7 @@ describe('core plugins integration', () => {
       safeStorage: safeStorage(),
       plugins: [
         createAgentPlugin({
+          deepAgentExecutor: createStaticDeepAgentExecutor(),
           modelFactory: new StaticAgentModelFactoryAdapter({
             providerId: 'openai',
             modelId: 'openai:gpt-4.1'
@@ -130,5 +132,17 @@ function safeStorage(): SafeStorageBackend {
     isEncryptionAvailable: () => true,
     encryptString: (plaintext) => Buffer.from(`enc:${plaintext}`, 'utf8'),
     decryptString: (encrypted) => encrypted.toString('utf8').replace(/^enc:/u, '')
+  };
+}
+
+function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
+  return {
+    execute: async function* (input) {
+      yield {
+        type: 'message_delta',
+        runId: input.run.id,
+        delta: 'Static DeepAgent response.'
+      };
+    }
   };
 }
