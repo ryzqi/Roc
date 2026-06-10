@@ -41,8 +41,10 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
           };
         }
 
-        const content = readVisibleText(last.content);
-        if (toolCalls.length === 0 && content.trim().length === 0) {
+        const contentBlocks = readContentBlocks(last);
+        const visibleText = extractVisibleText(contentBlocks);
+        const hasReasoning = containsReasoningBlock(contentBlocks);
+        if (toolCalls.length === 0 && visibleText.trim().length === 0) {
           const sourceId = last.id === undefined ? 'empty-response' : last.id;
           const nudge = new HumanMessage({
             id: createForgeMessageId('retry-nudge', sourceId),
@@ -55,14 +57,14 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
           };
         }
 
-        if (toolCalls.length === 0 && content.trim().length > 0) {
+        if (toolCalls.length === 0 && visibleText.trim().length > 0 && !hasReasoning) {
           if (isFinalTextAfterConfirmTool(messages)) {
             return undefined;
           }
-          const sourceId = last.id === undefined ? `content-${hashText(content)}` : last.id;
+          const sourceId = last.id === undefined ? `content-${hashText(visibleText)}` : last.id;
           const nudge = new HumanMessage({
             id: createForgeMessageId('retry-nudge', sourceId),
-            content: retryNudge(content)
+            content: retryNudge(visibleText)
           });
           tagForgeMessage(nudge, 'forge:retry_nudge');
           return {
@@ -93,14 +95,23 @@ function hashText(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function readVisibleText(content: unknown): string {
+function readContentBlocks(message: AIMessage): unknown[] {
+  const blocks = message.contentBlocks;
+  if (Array.isArray(blocks)) {
+    return blocks;
+  }
+  const content = message.content;
   if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  if (Array.isArray(content)) {
     return content;
   }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
+  return [];
+}
+
+function extractVisibleText(blocks: unknown[]): string {
+  return blocks
     .map((block) => {
       if (typeof block === 'string') {
         return block;
@@ -109,11 +120,25 @@ function readVisibleText(content: unknown): string {
         return '';
       }
       const type = Reflect.get(block, 'type');
-      if (typeof type === 'string' && type !== 'text') {
-        return '';
+      if (type === 'text') {
+        const text = Reflect.get(block, 'text');
+        return typeof text === 'string' ? text : '';
       }
-      const text = Reflect.get(block, 'text');
-      return typeof text === 'string' ? text : '';
+      if (type === 'reasoning') {
+        const reasoning = Reflect.get(block, 'reasoning');
+        return typeof reasoning === 'string' ? reasoning : '';
+      }
+      return '';
     })
     .join('');
+}
+
+function containsReasoningBlock(blocks: unknown[]): boolean {
+  return blocks.some((block) => {
+    if (typeof block !== 'object' || block === null) {
+      return false;
+    }
+    const type = Reflect.get(block, 'type');
+    return type === 'reasoning';
+  });
 }

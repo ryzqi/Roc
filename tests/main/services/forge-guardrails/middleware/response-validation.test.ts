@@ -128,6 +128,83 @@ describe('ForgeResponseValidation', () => {
     expect(update).toBeUndefined();
   });
 
+  it('allows reasoning blocks as valid content', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-reasoning',
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: '让我分析一下这个问题...'
+          }
+        ]
+      })
+    ]);
+
+    expect(update).toBeUndefined();
+  });
+
+  it('requires tool call when outputting text without reasoning', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-bare-text',
+        content: [
+          {
+            type: 'text',
+            text: '我可以直接回答。'
+          }
+        ]
+      })
+    ]);
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.messages).toHaveLength(1);
+    const nudge = update?.messages?.[0] as HumanMessage;
+    expect(String(nudge.content)).toContain('不是合法的工具调用');
+  });
+
+  it('allows text output when accompanied by reasoning', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-mixed',
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: '思考中...'
+          },
+          {
+            type: 'text',
+            text: '答案是42。'
+          }
+        ]
+      })
+    ]);
+
+    expect(update).toBeUndefined();
+  });
+
+  it('normalizes Anthropic thinking blocks to reasoning via contentBlocks', async () => {
+    const message = new AIMessage({
+      id: 'ai-anthropic-thinking',
+      content: [
+        {
+          type: 'thinking',
+          thinking: 'Let me analyze this...',
+          signature: 'WaUjzkyp...'
+        },
+        {
+          type: 'text',
+          text: 'The answer is 42.'
+        }
+      ],
+      response_metadata: { model_provider: 'anthropic' }
+    });
+
+    const update = await runAfterModel([message]);
+
+    expect(update).toBeUndefined();
+  });
+
   it('leaves synthetic respond messages unchanged', async () => {
     const message = tagForgeMessage(
       new AIMessage({
