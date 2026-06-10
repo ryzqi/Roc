@@ -113,3 +113,49 @@
   background: #ffebee;
   color: #9c3a3a;
 }
+
+/* 深色模式 */
+:root[data-theme='dark'] .tool-call-modern {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(190, 205, 228, 0.12);
+}
+
+:root[data-theme='dark'] .tool-call-modern--start .tool-call-modern__icon {
+  background: rgba(45, 71, 122, 0.15);
+  color: #7a9bd8;
+}
+
+:root[data-theme='dark'] .tool-call-modern--start .tool-call-modern__badge {
+  background: rgba(45, 71, 122, 0.15);
+  color: #7a9bd8;
+}
+
+:root[data-theme='dark'] .tool-call-modern--progress .tool-call-modern__icon {
+  background: rgba(229, 189, 108, 0.15);
+  color: #e5bd6c;
+}
+
+:root[data-theme='dark'] .tool-call-modern--progress .tool-call-modern__badge {
+  background: rgba(229, 189, 108, 0.15);
+  color: #e5bd6c;
+}
+
+:root[data-theme='dark'] .tool-call-modern--end .tool-call-modern__icon {
+  background: rgba(121, 210, 166, 0.15);
+  color: #79d2a6;
+}
+
+:root[data-theme='dark'] .tool-call-modern--end .tool-call-modern__badge {
+  background: rgba(121, 210, 166, 0.15);
+  color: #79d2a6;
+}
+
+:root[data-theme='dark'] .tool-call-modern--error .tool-call-modern__icon {
+  background: rgba(238, 146, 146, 0.15);
+  color: #ee9292;
+}
+
+:root[data-theme='dark'] .tool-call-modern--error .tool-call-modern__badge {
+  background: rgba(238, 146, 146, 0.15);
+  color: #ee9292;
+}
