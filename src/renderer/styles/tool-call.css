@@ -159,3 +159,29 @@
   background: rgba(238, 146, 146, 0.15);
   color: #ee9292;
 }
+
+.tool-call-modern__body {
+  border-top: 1px solid rgba(120, 144, 184, 0.14);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+:root[data-theme='dark'] .tool-call-modern__body {
+  border-top-color: rgba(190, 205, 228, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.tool-call-modern[open] .tool-call-modern__body {
+  animation: tool-expand 200ms var(--easing-standard);
+}
+
+@keyframes tool-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
