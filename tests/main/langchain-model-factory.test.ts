@@ -999,6 +999,191 @@ describe('LangChainModelFactory', () => {
     expect(requests[0]).not.toHaveProperty('stream_options');
   });
 
+  it('passes OpenAI-compatible modelKwargs into ChatOpenAI runtime and requests', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            modelKwargs: {
+              chat_template_kwargs: {
+                enable_thinking: true
+              },
+              extra_body: {
+                trace: 'roc'
+              }
+            }
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<Record<string, unknown>> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as Record<string, unknown>);
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([new HumanMessage('Hi')]);
+
+    expect(result.runtime.providerType).toBe('openai_compatible');
+    expect(result.runtime.modelKwargs).toEqual({
+      chat_template_kwargs: {
+        enable_thinking: true
+      },
+      extra_body: {
+        trace: 'roc'
+      }
+    });
+    expect(requests[0]).toMatchObject({
+      chat_template_kwargs: {
+        enable_thinking: true
+      },
+      extra_body: {
+        trace: 'roc'
+      }
+    });
+  });
+
+  it('passes nested OpenAI-compatible thinking settings through explicit modelKwargs', async () => {
+    services.secretService.setProviderSecret('openai-thinking-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'thinking-local',
+      providers: [
+        {
+          id: 'openai-thinking-local',
+          name: 'OpenAI Thinking Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-thinking-local',
+          enabled: true,
+          models: [
+            {
+              id: 'thinking-local',
+              displayName: 'Thinking Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            modelKwargs: {
+              chat_template_kwargs: {
+                enable_thinking: true
+              }
+            }
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect(result.runtime.providerType).toBe('openai_compatible');
+    expect(result.runtime.modelKwargs).toEqual({
+      chat_template_kwargs: {
+        enable_thinking: true
+      }
+    });
+  });
+
+  it('does not map OpenAI-compatible thinking into chat template kwargs', async () => {
+    services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'qwen-local',
+      providers: [
+        {
+          id: 'openai-local',
+          name: 'OpenAI Local',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local',
+          enabled: true,
+          models: [
+            {
+              id: 'qwen-local',
+              displayName: 'Qwen Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ],
+          options: {
+            thinking: true
+          } as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect(result.runtime.providerType).toBe('openai_compatible');
+    expect(result.runtime.modelKwargs).toEqual({});
+  });
+
+  it('uses empty modelKwargs for OpenAI-compatible providers without explicit modelKwargs', async () => {
+    services.secretService.setProviderSecret('openai-local-empty', 'sk-openai-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'empty-local',
+      providers: [
+        {
+          id: 'openai-local-empty',
+          name: 'OpenAI Local Empty',
+          type: 'openai_compatible',
+          endpoint: 'http://127.0.0.1:9090/v1',
+          credentialRef: 'secret:openai-local-empty',
+          enabled: true,
+          models: [
+            {
+              id: 'empty-local',
+              displayName: 'Empty Local',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+
+    expect(result.runtime.providerType).toBe('openai_compatible');
+    expect(result.runtime.modelKwargs).toEqual({});
+  });
+
   it('maps OpenAI responses-api provider settings into ChatOpenAI response invocation params', async () => {
     services.secretService.setProviderSecret('openai-responses', 'sk-openai-test');
     services.configService.saveProviders({

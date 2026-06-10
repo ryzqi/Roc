@@ -643,6 +643,18 @@ export function ProvidersSection({
                       value={draft.defaultHeaders}
                     />
                   </label>
+                  {openAiCompatibleDraft ? (
+                    <label className="field field--full">
+                      <span>model_kwargs（JSON 对象）</span>
+                      <textarea
+                        data-testid="provider-draft-model-kwargs"
+                        onChange={(event) => onUpdateDraft({ modelKwargs: event.currentTarget.value })}
+                        placeholder='{ "chat_template_kwargs": { "enable_thinking": true } }'
+                        rows={4}
+                        value={draft.modelKwargs}
+                      />
+                    </label>
+                  ) : null}
                 </div>
               </details>
             </>

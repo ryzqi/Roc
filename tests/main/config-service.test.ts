@@ -838,6 +838,11 @@ describe('ConfigService unified settings document', () => {
             zdrEnabled: true,
             defaultHeaders: {
               'x-client': 'roc'
+            },
+            modelKwargs: {
+              chat_template_kwargs: {
+                enable_thinking: true
+              }
             }
           } as ProviderConfig['options']
         },
@@ -902,6 +907,11 @@ describe('ConfigService unified settings document', () => {
             zdrEnabled: true,
             defaultHeaders: {
               'x-client': 'roc'
+            },
+            modelKwargs: {
+              chat_template_kwargs: {
+                enable_thinking: true
+              }
             }
           }
         }),
@@ -945,7 +955,12 @@ describe('ConfigService unified settings document', () => {
               serviceTier: 'priority',
               timeoutMs: 15_000,
               verbosity: 'medium',
-              zdrEnabled: true
+              zdrEnabled: true,
+              modelKwargs: {
+                chat_template_kwargs: {
+                  enable_thinking: true
+                }
+              }
             })
           }),
           expect.objectContaining({

@@ -65,6 +65,7 @@ export type ProviderDraft = {
   verbosity: 'unset' | OpenAiVerbosity;
   zdrEnabled: 'unset' | 'true' | 'false';
   defaultHeaders: string;
+  modelKwargs: string;
   anthropicThinkingMode: 'unset' | 'disabled' | 'adaptive' | 'enabled';
   anthropicThinkingBudgetTokens: string;
   toolChoice: 'unset' | 'auto' | 'required' | 'none' | 'function';
@@ -118,6 +119,7 @@ type ProviderAdvancedDraftFields = Pick<
   | 'verbosity'
   | 'zdrEnabled'
   | 'defaultHeaders'
+  | 'modelKwargs'
   | 'anthropicThinkingMode'
   | 'anthropicThinkingBudgetTokens'
   | 'toolChoice'
@@ -151,6 +153,7 @@ function defaultProviderAdvancedFields(): ProviderAdvancedDraftFields {
     verbosity: 'unset',
     zdrEnabled: 'unset',
     defaultHeaders: '',
+    modelKwargs: '',
     anthropicThinkingMode: 'unset',
     anthropicThinkingBudgetTokens: '',
     toolChoice: 'unset',
@@ -298,7 +301,8 @@ function createOpenAiCompatibleAdvancedFields(provider?: ProviderConfig): Provid
     timeoutMs: typeof options?.timeoutMs === 'number' ? String(options.timeoutMs) : '',
     verbosity: openAiVerbosityDraftValue(options?.verbosity),
     zdrEnabled: booleanDraftValue(options?.zdrEnabled),
-    defaultHeaders: options?.defaultHeaders === undefined ? '' : JSON.stringify(options.defaultHeaders, null, 2)
+    defaultHeaders: options?.defaultHeaders === undefined ? '' : JSON.stringify(options.defaultHeaders, null, 2),
+    modelKwargs: options?.modelKwargs === undefined ? '' : JSON.stringify(options.modelKwargs, null, 2)
   };
 }
 
@@ -712,6 +716,8 @@ function buildProviderOptionsFromDraft(draft: ProviderDraft): ProviderConfig['op
     if (zdrEnabled !== undefined) options.zdrEnabled = zdrEnabled;
     const defaultHeaders = parseOptionalStringRecord(draft.defaultHeaders, 'default_headers');
     if (defaultHeaders !== undefined) options.defaultHeaders = defaultHeaders;
+    const modelKwargs = parseOptionalJsonObject(draft.modelKwargs, 'model_kwargs');
+    if (modelKwargs !== undefined) options.modelKwargs = modelKwargs;
   }
   if (draft.type === 'anthropic_compatible') {
     const topP = parseOptionalNumber(draft.topP, 'top_p');

@@ -140,6 +140,7 @@ export type ProviderOptions = {
   verbosity?: OpenAiVerbosity;
   zdrEnabled?: boolean;
   defaultHeaders?: Record<string, string>;
+  modelKwargs?: Record<string, unknown>;
   anthropicThinking?: AnthropicThinkingOption;
   toolChoice?: NvidiaToolChoice;
   guidedJson?: Record<string, unknown>;

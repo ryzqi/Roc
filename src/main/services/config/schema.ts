@@ -145,6 +145,7 @@ export const ProviderOptionsSchema = z
     verbosity: OpenAiVerbositySchema.optional(),
     zdrEnabled: z.boolean().optional(),
     defaultHeaders: z.record(z.string(), z.string()).optional(),
+    modelKwargs: z.record(z.string(), z.unknown()).optional(),
     anthropicThinking: AnthropicThinkingSchema.optional(),
     toolChoice: NvidiaToolChoiceSchema.optional(),
     guidedJson: z.record(z.string(), z.unknown()).optional(),

@@ -699,6 +699,9 @@ export class LangChainModelFactory {
     }
 
     const modelKwargs: Record<string, unknown> = {};
+    if (typedProvider?.type === 'openai_compatible') {
+      Object.assign(modelKwargs, typedProvider.params.modelKwargs);
+    }
     if (typedProvider?.type === 'nvidia') {
       Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, typedProvider.params, streaming));
     }

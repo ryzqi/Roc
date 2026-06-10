@@ -300,6 +300,7 @@ describe('providers section', () => {
     expect(html).toContain('data-testid="provider-draft-verbosity"');
     expect(html).toContain('data-testid="provider-draft-zdr-enabled"');
     expect(html).toContain('data-testid="provider-draft-default-headers"');
+    expect(html).toContain('data-testid="provider-draft-model-kwargs"');
     expect(html).not.toContain('data-testid="provider-draft-top-k"');
     expect(html).not.toContain('data-testid="provider-draft-anthropic-thinking-mode"');
     expect(html).not.toContain('data-testid="provider-draft-anthropic-thinking-budget-tokens"');

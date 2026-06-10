@@ -48,7 +48,12 @@ describe('typed provider config helpers', () => {
         verbosity: 'high',
         zdrEnabled: true,
         useResponsesApi: true,
-        reasoning: { effort: 'medium', summary: 'concise' }
+        reasoning: { effort: 'medium', summary: 'concise' },
+        modelKwargs: {
+          chat_template_kwargs: {
+            enable_thinking: true
+          }
+        }
       }
     });
 
@@ -119,15 +124,43 @@ describe('typed provider config helpers', () => {
         guidedRegex: '^ok$',
         guidedChoice: ['ok'],
         guidedGrammar: 'root ::= "ok"',
-        endpointOverride: 'https://integrate.api.nvidia.com/v1'
+        endpointOverride: 'https://integrate.api.nvidia.com/v1',
+        modelKwargs: {
+          chat_template_kwargs: {
+            enable_thinking: true
+          }
+        }
       }
     });
 
     const typed = toTypedProviderConfig(legacy);
 
     expect(typed.type).toBe('nvidia');
-    expect(typed.params).toEqual(legacy.options);
-    expect(fromTypedProviderConfig(typed)).toEqual(legacy);
+    expect(typed.params).toEqual({
+      temperature: 0.4,
+      maxTokens: 2048,
+      topP: 0.7,
+      topK: 20,
+      minP: 0.05,
+      frequencyPenalty: 0.1,
+      presencePenalty: 0.2,
+      repetitionPenalty: 1.1,
+      seed: 7,
+      stop: ['</tool>'],
+      timeoutMs: 60_000,
+      defaultHeaders: { 'x-provider': 'nvidia' },
+      thinking: true,
+      includeReasoning: false,
+      parallelToolCalls: true,
+      streamUsage: true,
+      toolChoice: 'auto',
+      guidedJson: { type: 'object' },
+      guidedRegex: '^ok$',
+      guidedChoice: ['ok'],
+      guidedGrammar: 'root ::= "ok"',
+      endpointOverride: 'https://integrate.api.nvidia.com/v1'
+    });
+    expect(fromTypedProviderConfig(typed).options).not.toHaveProperty('modelKwargs');
   });
 
   it('uses empty OpenRouter params and discards advanced options on typed write-back', () => {

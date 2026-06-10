@@ -117,6 +117,7 @@ function defaultNvidiaDraftFields() {
     verbosity: 'unset',
     zdrEnabled: 'unset',
     defaultHeaders: '',
+    modelKwargs: '',
     anthropicThinkingMode: 'unset',
     anthropicThinkingBudgetTokens: '',
     toolChoice: 'unset',
@@ -720,6 +721,11 @@ describe('settings model helpers', () => {
         defaultHeaders: {
           'x-client': 'roc',
           'x-trace': 'trace-1'
+        },
+        modelKwargs: {
+          chat_template_kwargs: {
+            enable_thinking: true
+          }
         }
       } as ProviderConfig['options']
     };
@@ -744,12 +750,43 @@ describe('settings model helpers', () => {
       timeoutMs: '45000',
       verbosity: 'low',
       zdrEnabled: 'true',
+      modelKwargs: JSON.stringify(
+        {
+          chat_template_kwargs: {
+            enable_thinking: true
+          }
+        },
+        null,
+        2
+      ),
       anthropicThinkingMode: 'unset',
       anthropicThinkingBudgetTokens: ''
     });
     expect(draft.defaultHeaders).toContain('"x-client": "roc"');
 
     expect(buildProviderConfigFromDraft(draft)).toEqual(provider);
+  });
+
+  it('builds OpenAI-compatible modelKwargs from JSON draft text', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('openai_compatible'),
+      name: 'OpenAI Thinking Local',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      modelsText: 'thinking-local | Thinking Local',
+      modelKwargs: JSON.stringify({
+        chat_template_kwargs: {
+          enable_thinking: true
+        }
+      })
+    };
+
+    expect(buildProviderConfigFromDraft(draft).options).toEqual({
+      modelKwargs: {
+        chat_template_kwargs: {
+          enable_thinking: true
+        }
+      }
+    });
   });
 
   it('round-trips explicit OpenAI-compatible reasoning none through draft and ProviderConfig', () => {
@@ -898,6 +935,16 @@ describe('settings model helpers', () => {
         defaultHeaders: '{not-json}'
       })
     ).toThrow('default_headers 必须是合法 JSON 对象。');
+
+    expect(() =>
+      buildProviderConfigFromDraft({
+        ...createProviderDraft('openai_compatible'),
+        name: 'Broken OpenAI Model Kwargs',
+        endpoint: 'https://openai.example.test/v1',
+        modelsText: 'gpt-test | GPT Test',
+        modelKwargs: '[]'
+      })
+    ).toThrow('model_kwargs 必须是合法 JSON 对象。');
 
     expect(() =>
       buildProviderConfigFromDraft({

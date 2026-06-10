@@ -4,7 +4,7 @@
  * 测试三个供应商的思考功能：
  * 1. NVIDIA供应商 - moonshotai/kimi-k2.6
  * 2. llama.cpp - Qwen3.5-4B-UD-Q5_K_XL.gguf
- * 3. OpenAI兼容 - agnes供应商的 agnes-2.0-flash
+ * 3. OpenAI兼容 - 通过 modelKwargs 统一配置思考参数
  */
 
 import { ChatOpenAI } from '@langchain/openai';
@@ -184,14 +184,16 @@ async function testLlamaCppQwen(): Promise<TestResult> {
 }
 
 /**
- * 测试 OpenAI 兼容 - Agnes 2.0 Flash
+ * 测试 OpenAI 兼容 - 统一 modelKwargs 配置
  */
-async function testAgnesFlash(): Promise<TestResult> {
-  console.log('\n=== 测试 3: Agnes 2.0 Flash ===\n');
+async function testOpenAiCompatibleModelKwargs(): Promise<TestResult> {
+  console.log('\n=== 测试 3: OpenAI-compatible modelKwargs ===\n');
+
+  const modelId = process.env.OPENAI_COMPAT_MODEL ?? 'thinking-compatible-model';
 
   const result: TestResult = {
     provider: 'openai_compatible',
-    modelId: 'agnes-2.0-flash',
+    modelId,
     success: false,
     hasReasoning: false,
     reasoningContent: null,
@@ -201,29 +203,29 @@ async function testAgnesFlash(): Promise<TestResult> {
 
   try {
     // 从环境变量获取配置
-    const apiKey = process.env.AGNES_API_KEY;
-    const baseURL = process.env.AGNES_BASE_URL;
+    const apiKey = process.env.OPENAI_COMPAT_API_KEY;
+    const baseURL = process.env.OPENAI_COMPAT_BASE_URL;
 
     if (!apiKey) {
-      throw new Error('AGNES_API_KEY 环境变量未设置');
+      throw new Error('OPENAI_COMPAT_API_KEY 环境变量未设置');
     }
     if (!baseURL) {
-      throw new Error('AGNES_BASE_URL 环境变量未设置');
+      throw new Error('OPENAI_COMPAT_BASE_URL 环境变量未设置');
     }
 
     // 创建模型实例
     const model = new ChatOpenAI({
-      model: 'agnes-2.0-flash',
+      model: modelId,
       apiKey,
       configuration: {
         baseURL
       },
       streaming: false,
-      // Agnes 支持 reasoning 参数
-      reasoning: {
-        type: 'enabled',
-        effort: 'medium'  // 可选: low, medium, high
-      } as any
+      modelKwargs: {
+        chat_template_kwargs: {
+          enable_thinking: true
+        }
+      }
     });
 
     console.log('发送请求到:', baseURL);
@@ -279,7 +281,7 @@ async function main() {
   // 执行三个测试
   results.push(await testNvidiaKimi());
   results.push(await testLlamaCppQwen());
-  results.push(await testAgnesFlash());
+  results.push(await testOpenAiCompatibleModelKwargs());
 
   // 输出汇总报告
   console.log('\n\n========================================');

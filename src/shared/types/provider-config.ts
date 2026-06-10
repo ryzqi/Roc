@@ -49,6 +49,7 @@ export type OpenAICompatibleParams = CommonProviderParams & {
   serviceTier?: OpenAiServiceTier;
   verbosity?: OpenAiVerbosity;
   zdrEnabled?: boolean;
+  modelKwargs?: Record<string, unknown>;
 };
 
 export type AnthropicCompatibleParams = CommonProviderParams & {
@@ -183,7 +184,8 @@ export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderCon
           streamUsage: opts.streamUsage,
           serviceTier: opts.serviceTier,
           verbosity: opts.verbosity,
-          zdrEnabled: opts.zdrEnabled
+          zdrEnabled: opts.zdrEnabled,
+          modelKwargs: opts.modelKwargs
         }
       };
 
