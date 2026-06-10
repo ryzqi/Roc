@@ -172,13 +172,13 @@
 }
 
 .tool-call-modern[open] .tool-call-modern__body {
-  animation: tool-expand 200ms var(--easing-standard);
+  animation: tool-expand var(--duration-base) var(--easing-standard);
 }
 
 @keyframes tool-expand {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;
