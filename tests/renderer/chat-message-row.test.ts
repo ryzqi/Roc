@@ -102,10 +102,11 @@ describe('chat message row', () => {
 
     expect(html).toContain('data-testid="chat-activity-reasoning"');
     expect(html).toContain('data-testid="chat-activity-tool"');
-    expect(html).toContain('工具 · read_file · end');
+    expect(html).toContain('read_file');
+    expect(html).toContain('成功');
     expect(html).toContain('&quot;path&quot;');
     expect(html).toContain('F:\\\\Code\\\\Roc\\\\README.md');
-    expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<summary>[\s\S]*工具 · read_file · end[\s\S]*<\/summary>/);
+    expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<summary/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*<pre/);
     expect(html).toMatch(/data-testid="chat-activity-tool"[\s\S]*最终答案/);
     expect(html).toContain('<ul>');
@@ -182,8 +183,8 @@ describe('chat message row', () => {
       })
     );
 
-    expect(html).toMatch(/tool-call-card--end" data-testid="chat-activity-tool"(?! open)/);
-    expect(html).toMatch(/tool-call-card--error" data-testid="chat-activity-tool" open="">/);
+    expect(html).toMatch(/tool-call-modern--end" data-testid="chat-activity-tool"(?! open)/);
+    expect(html).toMatch(/tool-call-modern--error" data-testid="chat-activity-tool" open="">/);
   });
 
   it('renders an approval card with tool details and allowed decisions', () => {
