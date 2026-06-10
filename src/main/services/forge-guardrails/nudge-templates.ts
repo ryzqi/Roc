@@ -2,6 +2,10 @@ export function retryNudge(_rawResponse: string): string {
   return ['你上一条回复不是合法的工具调用。', '在当前回合中必须用工具调用回应，不要输出自由文本。', '请重新生成一条合法的工具调用。'].join('\n');
 }
 
+export function emptyResponseNudge(): string {
+  return ['你上一条回复没有可见文本，也没有工具调用。', '当前回合不能空回复。', '如果任务已完成，请调用 confirm_with_user 总结结果；否则请继续调用下一步工具。'].join('\n');
+}
+
 export function unknownToolNudge(toolName: string, availableTools: readonly string[]): string {
   return [`工具 ${toolName} 不存在。`, `当前可用工具：${availableTools.join('、')}。`, '请从上述工具中选择一个调用。'].join('\n');
 }

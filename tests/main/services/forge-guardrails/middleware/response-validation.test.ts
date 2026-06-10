@@ -41,6 +41,29 @@ describe('ForgeResponseValidation', () => {
     expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
   });
 
+  it('turns empty assistant output after tool work into a retry nudge and jumps back to the model', async () => {
+    const update = await runAfterModel([
+      new ToolMessage({
+        id: 'tool-write',
+        tool_call_id: 'call-write',
+        name: 'write_file',
+        content: 'Successfully wrote to /workspace/hello.docx',
+        status: 'success'
+      }),
+      new AIMessage({
+        id: 'ai-empty',
+        content: ''
+      })
+    ]);
+
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.messages).toHaveLength(1);
+    const nudge = update?.messages?.[0] as HumanMessage;
+    expect(nudge).toBeInstanceOf(HumanMessage);
+    expect(String(nudge.content)).toContain('没有可见文本');
+    expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
+  });
+
   it('allows final assistant text after confirm_with_user has returned', async () => {
     const update = await runAfterModel([
       new ToolMessage({

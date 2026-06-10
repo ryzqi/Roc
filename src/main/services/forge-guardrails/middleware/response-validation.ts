@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
-import { retryNudge, unknownToolNudge } from '../nudge-templates';
+import { emptyResponseNudge, retryNudge, unknownToolNudge } from '../nudge-templates';
 import { createForgeMessageId, readForgeMessageTag, tagForgeMessage } from '../message-tags';
 
 export function createResponseValidationMiddleware(opts: { knownToolNames: () => string[] }) {
@@ -41,7 +41,20 @@ export function createResponseValidationMiddleware(opts: { knownToolNames: () =>
           };
         }
 
-        const content = typeof last.content === 'string' ? last.content : '';
+        const content = readVisibleText(last.content);
+        if (toolCalls.length === 0 && content.trim().length === 0) {
+          const sourceId = last.id === undefined ? 'empty-response' : last.id;
+          const nudge = new HumanMessage({
+            id: createForgeMessageId('retry-nudge', sourceId),
+            content: emptyResponseNudge()
+          });
+          tagForgeMessage(nudge, 'forge:retry_nudge');
+          return {
+            messages: [nudge],
+            jumpTo: 'model' as const
+          };
+        }
+
         if (toolCalls.length === 0 && content.trim().length > 0) {
           if (isFinalTextAfterConfirmTool(messages)) {
             return undefined;
@@ -78,4 +91,29 @@ function hashText(value: string): string {
     hash = Math.imul(hash, 33) ^ value.charCodeAt(index);
   }
   return (hash >>> 0).toString(36);
+}
+
+function readVisibleText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .map((block) => {
+      if (typeof block === 'string') {
+        return block;
+      }
+      if (typeof block !== 'object' || block === null) {
+        return '';
+      }
+      const type = Reflect.get(block, 'type');
+      if (typeof type === 'string' && type !== 'text') {
+        return '';
+      }
+      const text = Reflect.get(block, 'text');
+      return typeof text === 'string' ? text : '';
+    })
+    .join('');
 }

@@ -1,28 +1,11 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
-import type { ShellExecutionDecision, ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
+import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
 import { parseRtkArgs } from '../../rtk-integration';
-import { RocDomainError } from './errors';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { WorkspaceService } from './workspace-service';
 import { redact } from './deep-agent/redact';
 
-const readOnlyCommands = new Set(['dir', 'ls', 'pwd', 'git status', 'git diff', 'rg', 'type', 'cat']);
-const highRiskCommandPrefixes = [
-  'remove-item',
-  'rm',
-  'del',
-  'erase',
-  'move-item',
-  'ren',
-  'rename-item',
-  'set-itemproperty',
-  'reg',
-  'git push',
-  'git reset',
-  'git clean',
-  'git checkout'
-];
 const powershellUtf8Prefix =
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
 const maxPersistedAgentOutputChars = 4096;
@@ -46,53 +29,8 @@ export class ShellExecutionService {
     private readonly taskService: ShellTaskEventRecorder
   ) {}
 
-  evaluate(request: ShellExecutionRequest): ShellExecutionDecision {
-    const normalizedCommand = this.normalizeCommand(request.command);
-    const cwd = this.resolveCwd(request);
-    if (!this.workspaceService.isPathInsideCurrentWorkspace(cwd)) {
-      return {
-        status: 'requires_confirmation',
-        reason: 'workspace_outside',
-        riskLevel: 'high',
-        normalizedCommand
-      };
-    }
-    const commandSegments = this.splitCommandSegments(normalizedCommand);
-    if (commandSegments.some((segment) => this.isHighRiskCommand(segment)) || this.hasRedirection(normalizedCommand)) {
-      return {
-        status: 'requires_confirmation',
-        reason: 'high_risk_command',
-        riskLevel: 'high',
-        normalizedCommand
-      };
-    }
-    if (!commandSegments.every((segment) => this.isReadOnlyCommand(segment))) {
-      return {
-        status: 'requires_confirmation',
-        reason: 'unknown_command',
-        riskLevel: 'medium',
-        normalizedCommand
-      };
-    }
-    return {
-      status: 'allowed',
-      riskLevel: 'low',
-      normalizedCommand
-    };
-  }
-
   execute(request: ShellExecutionRequest): ShellExecutionResult {
-    const decision = this.evaluate(request);
-    if (decision.status !== 'allowed') {
-      throw new RocDomainError({
-        code: 'command_requires_confirmation',
-        message: '命令需要确认，未执行。',
-        category: 'permission',
-        retryable: false,
-        userAction: '请在任务确认卡片中查看命令、作用目录和风险原因后再决定是否执行。'
-      });
-    }
-
+    const normalizedCommand = this.normalizeCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
     const execution =
@@ -101,7 +39,7 @@ export class ShellExecutionService {
         : this.executeTerminalCommand(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
-      normalizedCommand: decision.normalizedCommand,
+      normalizedCommand,
       cwd,
       stdout: execution.stdout,
       stderr: execution.stderr,
@@ -133,17 +71,7 @@ export class ShellExecutionService {
   }
 
   async executeAsync(request: ShellExecutionRequest): Promise<ShellExecutionResult> {
-    const decision = this.evaluate(request);
-    if (decision.status !== 'allowed') {
-      throw new RocDomainError({
-        code: 'command_requires_confirmation',
-        message: '命令需要确认，未执行。',
-        category: 'permission',
-        retryable: false,
-        userAction: '请在任务确认卡片中查看命令、作用目录和风险原因后再决定是否执行。'
-      });
-    }
-
+    const normalizedCommand = this.normalizeCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
     const execution =
@@ -152,7 +80,7 @@ export class ShellExecutionService {
         : await this.executeTerminalCommandAsync(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
-      normalizedCommand: decision.normalizedCommand,
+      normalizedCommand,
       cwd,
       stdout: execution.stdout,
       stderr: execution.stderr,
@@ -276,7 +204,6 @@ export class ShellExecutionService {
   private runAgentCommand(command: string, cwd: string): ExecutedShellCommand {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
-      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -287,7 +214,6 @@ export class ShellExecutionService {
 
     const rtkArgs = this.resolveRtkArgs(command);
     if (rtkArgs === null) {
-      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -306,7 +232,6 @@ export class ShellExecutionService {
   private async runAgentCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
-      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
         ...fallback,
@@ -317,7 +242,6 @@ export class ShellExecutionService {
 
     const rtkArgs = this.resolveRtkArgs(command);
     if (rtkArgs === null) {
-      this.assertRawAgentFallbackAllowed(command, cwd);
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
         ...fallback,
@@ -340,24 +264,6 @@ export class ShellExecutionService {
       usedRtk: false,
       bypassReason: 'user_terminal_raw_output'
     };
-  }
-
-  private assertRawAgentFallbackAllowed(command: string, cwd: string): void {
-    const decision = this.evaluate({
-      command,
-      cwd,
-      source: 'agent'
-    });
-    if (decision.status === 'allowed') {
-      return;
-    }
-    throw new RocDomainError({
-      code: 'command_requires_confirmation',
-      message: '命令需要确认，未执行。',
-      category: 'permission',
-      retryable: false,
-      userAction: '请在任务确认卡片中查看命令、作用目录和风险原因后再决定是否执行。'
-    });
   }
 
   private async executeTerminalCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
@@ -497,30 +403,6 @@ export class ShellExecutionService {
 
   private normalizeCommand(command: string): string {
     return command.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
-  }
-
-  private isReadOnlyCommand(normalizedCommand: string): boolean {
-    for (const command of readOnlyCommands) {
-      if (normalizedCommand === command || normalizedCommand.startsWith(`${command} `)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private isHighRiskCommand(normalizedCommand: string): boolean {
-    return highRiskCommandPrefixes.some((prefix) => normalizedCommand.startsWith(prefix));
-  }
-
-  private splitCommandSegments(normalizedCommand: string): string[] {
-    return normalizedCommand
-      .split(/[|;&]/)
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
-  }
-
-  private hasRedirection(normalizedCommand: string): boolean {
-    return /(^|\s)\d?>{1,2}(\s|&|$)/.test(normalizedCommand);
   }
 
   private resolveRtkArgs(command: string): string[] | null {

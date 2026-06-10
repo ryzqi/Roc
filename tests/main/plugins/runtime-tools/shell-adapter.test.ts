@@ -26,8 +26,8 @@ afterEach(() => {
 });
 
 describe('runtime tools shell adapter', () => {
-  it('keeps current shell execution, confirmation, and risk behavior', async () => {
-    const capabilities = await initializePlugin();
+  it('keeps current shell execution and confirmation behavior while executing high-risk agent commands', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke('shell.execute', {
       command: 'dir',
@@ -51,27 +51,78 @@ describe('runtime tools shell adapter', () => {
       bypassReason: 'user_terminal_raw_output'
     });
     expect(confirmation).toEqual({ confirmed: true, response: 0 });
-    await expect(
-      capabilities.invoke('shell.execute', {
-        command: 'Remove-Item notes.txt',
-        cwd: workspaceRoot,
-        source: 'agent'
-      })
-    ).rejects.toMatchObject({
-      code: 'command_requires_confirmation'
+    const highRiskResult = await capabilities.invoke('shell.execute', {
+      command: 'Remove-Item notes.txt',
+      cwd: workspaceRoot,
+      source: 'agent'
     });
+
+    expect(highRiskResult).toMatchObject({
+      command: 'Remove-Item notes.txt',
+      normalizedCommand: 'remove-item notes.txt',
+      cwd: workspaceRoot,
+      stdout: 'notes.txt\n',
+      stderr: '',
+      exitCode: 0,
+      usedRtk: false,
+      bypassReason: 'command_not_supported'
+    });
+    expect(commandCalls).toHaveLength(2);
+    expect(commandCalls[1]).toMatchObject({
+      file: 'powershell.exe',
+      cwd: workspaceRoot
+    });
+    expect(commandCalls[1].args.join(' ')).toContain('Remove-Item notes.txt');
+  });
+
+  it('executes unsupported agent commands through raw PowerShell fallback', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke('shell.execute', {
+      command: 'Write-Output unknown',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'Write-Output unknown',
+      normalizedCommand: 'write-output unknown',
+      cwd: workspaceRoot,
+      stdout: 'notes.txt\n',
+      stderr: '',
+      exitCode: 0,
+      usedRtk: false,
+      bypassReason: 'command_not_supported'
+    });
+    expect(commandCalls).toHaveLength(1);
+    expect(commandCalls[0]).toMatchObject({
+      file: 'powershell.exe',
+      cwd: workspaceRoot
+    });
+    expect(commandCalls[0].args.join(' ')).toContain('Write-Output unknown');
   });
 });
 
-async function initializePlugin(): Promise<CapabilityRegistry> {
+type CommandCall = {
+  file: string;
+  args: string[];
+  cwd: string;
+  extraEnv: Record<string, string>;
+};
+
+async function initializePlugin(): Promise<{ capabilities: CapabilityRegistry; commandCalls: CommandCall[] }> {
+  const commandCalls: CommandCall[] = [];
   const plugin = createRuntimeToolsPlugin({
     rootDir: root,
     workspacePath: workspaceRoot,
-    commandExecutor: () => ({
-      stdout: 'notes.txt\n',
-      stderr: '',
-      exitCode: 0
-    }),
+    commandExecutor: (file, args, cwd, extraEnv) => {
+      commandCalls.push({ file, args, cwd, extraEnv });
+      return {
+        stdout: 'notes.txt\n',
+        stderr: '',
+        exitCode: 0
+      };
+    },
     confirmShellRequest: async () => ({ confirmed: true, response: 0 })
   });
   const capabilities = new CapabilityRegistry();
@@ -79,7 +130,7 @@ async function initializePlugin(): Promise<CapabilityRegistry> {
     capabilities.declare(plugin.manifest.id, descriptor);
   }
   await plugin.initialize(createContext(capabilities));
-  return capabilities;
+  return { capabilities, commandCalls };
 }
 
 function createContext(capabilities: CapabilityRegistry): RocPluginContext {

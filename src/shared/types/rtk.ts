@@ -1,8 +1,7 @@
 export type RtkBypassReason =
   | 'rtk_binary_missing'
   | 'user_terminal_raw_output'
-  | 'command_not_supported'
-  | 'command_requires_confirmation';
+  | 'command_not_supported';
 
 export type RtkStatus = {
   enabledForAgentCommands: boolean;
@@ -14,7 +13,6 @@ export type RtkStatus = {
 };
 
 export type ShellCommandSource = 'agent' | 'terminal';
-export type ShellCommandRisk = 'low' | 'medium' | 'high';
 
 export type ShellExecutionRequest = {
   command: string;
@@ -23,19 +21,6 @@ export type ShellExecutionRequest = {
   threadId?: string;
   runId?: string;
 };
-
-export type ShellExecutionDecision =
-  | {
-      status: 'allowed';
-      riskLevel: 'low';
-      normalizedCommand: string;
-    }
-  | {
-      status: 'requires_confirmation';
-      reason: 'workspace_outside' | 'high_risk_command' | 'unknown_command';
-      riskLevel: Exclude<ShellCommandRisk, 'low'>;
-      normalizedCommand: string;
-    };
 
 export type ShellExecutionResult = {
   command: string;

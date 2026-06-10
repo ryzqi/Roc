@@ -17,6 +17,7 @@ import type { RocPaths } from '../../services/paths';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
 import { cancelInputSchema, updateInputSchema, validateBackgroundTaskPatch } from '../../services/deep-agent/background-task-tools';
 import { createBackend } from '../../services/deep-agent/backend';
+import * as recordUtils from '../../services/deep-agent/record-utils';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
@@ -135,7 +136,16 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           if (readInterrupted(run)) {
             eventQueue.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
           } else {
-            await Promise.resolve(run.output);
+            const output = await Promise.resolve(run.output);
+            const finalAssistantText = readFinalAssistantText(output);
+            if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
+              assistantChunks.push(finalAssistantText);
+              eventQueue.push({
+                type: 'message_delta',
+                runId: input.run.id,
+                delta: finalAssistantText
+              });
+            }
           }
           eventQueue.close();
         } catch (error) {
@@ -196,6 +206,81 @@ function readRunInterruptedEvent(run: unknown, runId: string, threadId: string):
     interruptId,
     payload: payload as never
   };
+}
+
+function readFinalAssistantText(output: unknown): string | null {
+  if (!recordUtils.isRecord(output)) {
+    return null;
+  }
+  const messages = recordUtils.readRecordValue(output, 'messages');
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage === undefined) {
+    return null;
+  }
+  return readAssistantMessageText(lastMessage);
+}
+
+function readAssistantMessageText(message: unknown): string | null {
+  if (!recordUtils.isRecord(message) || !isAssistantMessage(message)) {
+    return null;
+  }
+  if (recordUtils.isNonAssistantTextMessage(message) || recordUtils.isSummarizationMessage(message)) {
+    return null;
+  }
+  const text =
+    readContentText(recordUtils.readRecordValue(message, 'content')) ??
+    readContentText(recordUtils.readRecordValue(message, 'contentBlocks'));
+  if (text === null) {
+    return null;
+  }
+  const trimmed = text.trim();
+  if (recordUtils.classifyStreamedAssistantText(trimmed) !== 'assistant') {
+    return null;
+  }
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function isAssistantMessage(message: Record<string, unknown>): boolean {
+  const role = readLowercaseString(recordUtils.readRecordValue(message, 'role'));
+  if (role !== null) {
+    return role === 'assistant' || role === 'ai';
+  }
+  const type = readLowercaseString(recordUtils.readRecordValue(message, 'type'));
+  return type === 'assistant' || type === 'ai' || type === 'aimessage';
+}
+
+function readContentText(content: unknown): string | null {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return null;
+  }
+  const text = content
+    .map((block) => {
+      if (typeof block === 'string') {
+        return block;
+      }
+      if (!recordUtils.isRecord(block)) {
+        return '';
+      }
+      const type = readLowercaseString(recordUtils.readRecordValue(block, 'type'));
+      if (type !== null && type !== 'text') {
+        return '';
+      }
+      const text = recordUtils.readRecordValue(block, 'text');
+      return typeof text === 'string' ? text : '';
+    })
+    .join('');
+  return text.length === 0 ? null : text;
+}
+
+function readLowercaseString(value: unknown): string | null {
+  const text = recordUtils.readNonEmptyString(value);
+  return text === null ? null : text.toLowerCase();
 }
 
 function createExecutorCallbacks(input: { emitRuntimeEvent: (event: ChatRunEvent) => void }): Parameters<typeof consumeMessageStream>[0]['callbacks'] {

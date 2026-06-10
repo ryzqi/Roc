@@ -499,10 +499,10 @@ export class AgentPluginRuntime {
         });
       }
     }
-    const assistantMessage = assistantChunks.join('').trim();
-    if (assistantMessage.length === 0) {
+    if (assistantChunks.join('').trim().length === 0) {
       throw new Error('agent_model_response_empty');
     }
+    const assistantMessage = assistantChunks.join('').trim();
     return {
       status: 'completed',
       assistantMessage

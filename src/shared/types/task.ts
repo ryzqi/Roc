@@ -1,5 +1,4 @@
 import type { EnabledCapabilities } from './agent';
-import type { ShellCommandRisk } from './rtk';
 
 export type TaskStatus =
   | 'draft'
@@ -125,6 +124,8 @@ export type BackgroundTaskTrigger =
       nextRunAt: string;
     };
 
+export type BackgroundTaskRisk = 'low' | 'medium' | 'high';
+
 export type BackgroundTaskPreviewRequest = {
   goal: string;
   trigger: BackgroundTaskTrigger;
@@ -140,7 +141,7 @@ export type BackgroundTaskPreview = BackgroundTaskPreviewRequest & {
   scheduled: boolean;
   nextRunAt: string | null;
   cronExpression: string | null;
-  riskLevel: ShellCommandRisk;
+  riskLevel: BackgroundTaskRisk;
   requiresConfirmation: boolean;
   enabledCapabilities: EnabledCapabilities | null;
 };
@@ -161,7 +162,7 @@ export type BackgroundTask = {
   forbiddenActions: string[];
   failurePolicy: 'pause_and_report';
   notificationPolicy: 'failures_and_confirmations';
-  riskLevel: ShellCommandRisk;
+  riskLevel: BackgroundTaskRisk;
   requiresConfirmation: boolean;
   lastRunAt: string | null;
   lastRunStatus: 'success' | 'failed' | 'cancelled' | null;
@@ -181,7 +182,7 @@ export type ActiveTaskItem = {
   trigger: BackgroundTaskTrigger | null;
   nextRunAt: string | null;
   lastRunAt: string | null;
-  riskLevel: ShellCommandRisk;
+  riskLevel: BackgroundTaskRisk;
   workspacePath: string | null;
   createdAt: string;
   updatedAt: string;

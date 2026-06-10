@@ -227,6 +227,50 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('fails loudly with agent_model_response_empty when the DeepAgent executor returns no visible text', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* () {
+          return;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: {
+          type: 'run_failed',
+          runId: result.runId,
+          threadId: result.threadId,
+          code: 'agent_run_failed',
+          message: 'agent_model_response_empty',
+          retryable: true
+        }
+      })
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed'
+        })
+      })
+    );
+    expect(repository.listSessionMessages({ threadId: result.threadId! })).toEqual([]);
+  });
+
   it('streams reasoning and assistant deltas through renderer and task-event channels before completion', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
