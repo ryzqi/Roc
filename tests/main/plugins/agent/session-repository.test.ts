@@ -41,10 +41,15 @@ describe('AgentSessionRepository', () => {
       userInput: 'Summarize this workspace'
     });
     const event = repository.recordEvent({
-      payload: { delta: 'Working' },
+      payload: {
+        kind: 'text',
+        blockId: `text-${run.id}`,
+        phase: 'delta',
+        text: 'Working'
+      },
       runId: run.id,
       threadId: run.threadId,
-      type: 'message_delta'
+      type: 'assistant_block'
     });
     const message = repository.recordSessionMessage({
       content: 'Compaction note',
@@ -75,7 +80,12 @@ describe('AgentSessionRepository', () => {
       thread_id: run.threadId
     });
     expect(rawRow('task_events', event.id)).toMatchObject({
-      payload_json: JSON.stringify({ delta: 'Working' }),
+      payload_json: JSON.stringify({
+        kind: 'text',
+        blockId: `text-${run.id}`,
+        phase: 'delta',
+        text: 'Working'
+      }),
       run_id: run.id,
       thread_id: run.threadId
     });

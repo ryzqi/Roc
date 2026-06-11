@@ -57,41 +57,11 @@ describe('workspace refresh helpers', () => {
   });
 
   it('refreshes only for confirmed workspace-mutating tool completions', () => {
-    const deleteEvent: ChatRunEvent = {
-      type: 'tool_event',
-      runId: 'run-delete',
-      event: 'end',
-      name: 'delete_file',
-      data: { relativePath: 'notes.md' }
-    };
-    const writeFileEvent: ChatRunEvent = {
-      type: 'tool_event',
-      runId: 'run-write',
-      event: 'end',
-      name: 'write_file',
-      data: { relativePath: 'notes.md' }
-    };
-    const readOnlyExecuteEvent: ChatRunEvent = {
-      type: 'tool_event',
-      runId: 'run-execute',
-      event: 'end',
-      name: 'execute',
-      data: { command: 'git status' }
-    };
-    const mutatingExecuteEvent: ChatRunEvent = {
-      type: 'tool_event',
-      runId: 'run-execute-write',
-      event: 'end',
-      name: 'execute',
-      data: { command: 'Remove-Item notes.md' }
-    };
-    const webSearchEvent: ChatRunEvent = {
-      type: 'tool_event',
-      runId: 'run-web-search',
-      event: 'end',
-      name: 'web_search',
-      data: { query: 'roc renderer' }
-    };
+    const deleteEvent = toolEndEvent('run-delete', 'delete_file', { relativePath: 'notes.md' });
+    const writeFileEvent = toolEndEvent('run-write', 'write_file', { relativePath: 'notes.md' });
+    const readOnlyExecuteEvent = toolEndEvent('run-execute', 'execute', { command: 'git status' });
+    const mutatingExecuteEvent = toolEndEvent('run-execute-write', 'execute', { command: 'Remove-Item notes.md' });
+    const webSearchEvent = toolEndEvent('run-web-search', 'web_search', { query: 'roc renderer' });
 
     expect(shouldRefreshWorkspaceForRunEvent(deleteEvent)).toBe(true);
     expect(shouldRefreshWorkspaceForRunEvent(writeFileEvent)).toBe(true);
@@ -115,13 +85,7 @@ describe('workspace refresh helpers', () => {
       onError: vi.fn()
     });
 
-    controller.handleRunEvent({
-      type: 'tool_event',
-      runId: 'run-delete',
-      event: 'end',
-      name: 'delete_file',
-      data: { relativePath: 'notes.md' }
-    });
+    controller.handleRunEvent(toolEndEvent('run-delete', 'delete_file', { relativePath: 'notes.md' }));
 
     await vi.advanceTimersByTimeAsync(150);
     await Promise.resolve();
@@ -148,13 +112,7 @@ describe('workspace refresh helpers', () => {
       onError: vi.fn()
     });
 
-    controller.handleRunEvent({
-      type: 'tool_event',
-      runId: 'run-search',
-      event: 'end',
-      name: 'web_search',
-      data: { query: 'roc renderer' }
-    });
+    controller.handleRunEvent(toolEndEvent('run-search', 'web_search', { query: 'roc renderer' }));
 
     await vi.runAllTimersAsync();
 
@@ -189,13 +147,7 @@ describe('workspace refresh helpers', () => {
       throw new Error('run event listener was not registered');
     }
 
-    listener({
-      type: 'tool_event',
-      runId: 'run-delete',
-      event: 'end',
-      name: 'delete_file',
-      data: { relativePath: 'notes.md' }
-    });
+    listener(toolEndEvent('run-delete', 'delete_file', { relativePath: 'notes.md' }));
     subscription.updateSnapshot({
       workspace,
       previewRelativePath: 'after-delete.md',
@@ -258,13 +210,7 @@ describe('workspace refresh helpers', () => {
       throw new Error('run event listener was not registered');
     }
 
-    runEventListener({
-      type: 'tool_event',
-      runId: 'run-delete',
-      event: 'end',
-      name: 'delete_file',
-      data: { relativePath: 'docs/spec.pdf' }
-    });
+    runEventListener(toolEndEvent('run-delete', 'delete_file', { relativePath: 'docs/spec.pdf' }));
 
     await vi.advanceTimersByTimeAsync(150);
     await Promise.resolve();
@@ -289,3 +235,19 @@ describe('workspace refresh helpers', () => {
     subscription.dispose();
   });
 });
+
+function toolEndEvent(runId: string, name: string, input: unknown): ChatRunEvent {
+  return {
+    type: 'assistant_block',
+    runId,
+    block: {
+      kind: 'tool_call',
+      blockId: `tool-${runId}`,
+      callId: `call-${runId}`,
+      name,
+      phase: 'end',
+      input,
+      output: input
+    }
+  };
+}

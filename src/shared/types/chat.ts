@@ -12,6 +12,30 @@ export type ChatTodoItem = {
 
 export type ChatToolEventStatus = 'start' | 'progress' | 'end' | 'error';
 
+export type ChatAssistantBlock =
+  | {
+      kind: 'text';
+      blockId: string;
+      phase: 'delta' | 'end';
+      text?: string;
+    }
+  | {
+      kind: 'reasoning';
+      blockId: string;
+      phase: 'delta' | 'end';
+      text?: string;
+    }
+  | {
+      kind: 'tool_call';
+      blockId: string;
+      callId: string;
+      name: string;
+      phase: ChatToolEventStatus;
+      input?: unknown;
+      output?: unknown;
+      error?: unknown;
+    };
+
 export type ChatApprovalRequest = HITLRequest;
 
 export type ChatPendingApproval = HITLRequest & {
@@ -44,14 +68,9 @@ export type ChatRunEvent =
       createdAt: string;
     }
   | {
-      type: 'message_delta';
+      type: 'assistant_block';
       runId: string;
-      delta: string;
-    }
-  | {
-      type: 'reasoning_delta';
-      runId: string;
-      delta: string;
+      block: ChatAssistantBlock;
     }
   | {
       type: 'run_interrupted';
@@ -65,13 +84,6 @@ export type ChatRunEvent =
       runId: string;
       threadId: string | null;
       interruptId: string;
-    }
-  | {
-      type: 'tool_event';
-      runId: string;
-      event: ChatToolEventStatus;
-      name: string;
-      data: unknown;
     }
   | {
       type: 'todo_event';

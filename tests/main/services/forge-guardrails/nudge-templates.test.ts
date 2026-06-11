@@ -2,28 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   contextWarning,
   prerequisiteNudge,
-  retryNudge,
-  stepNudge,
-  unknownToolNudge
+  stepNudge
 } from '../../../../src/main/services/forge-guardrails/nudge-templates';
 
 describe('forge nudge templates', () => {
-  it('returns stable retry nudge text', () => {
-    expect(retryNudge('hello')).toMatchInlineSnapshot(`
-      "你上一条回复不是合法的工具调用。
-      在当前回合中必须用工具调用回应，不要输出自由文本。
-      请重新生成一条合法的工具调用。"
-    `);
-  });
-
-  it('lists unknown tool alternatives', () => {
-    expect(unknownToolNudge('bad_tool', ['read_file', 'edit_file'])).toMatchInlineSnapshot(`
-      "工具 bad_tool 不存在。
-      当前可用工具：read_file、edit_file。
-      请从上述工具中选择一个调用。"
-    `);
-  });
-
   it('escalates step nudges by tier', () => {
     const tier1 = stepNudge('confirm_with_user', ['schedule_background_task'], 1);
     const tier2 = stepNudge('confirm_with_user', ['schedule_background_task'], 2);

@@ -1,4 +1,4 @@
-import type { TaskEvent, TaskDetail } from '../../../shared/types';
+import type { ChatAssistantBlock, TaskEvent, TaskDetail } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
 
 export type TaskRunOutputStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed';
@@ -48,17 +48,15 @@ export function buildTaskRunOutput(input: {
     liveRun.runId === runId &&
     (liveRun.status === 'running' || liveRun.status === 'waiting_user')
   ) {
+    const liveReasoning = readLiveReasoning(liveRun);
+    const liveTools = readLiveTools(liveRun);
     return {
       ...persisted,
       runId: liveRun.runId,
       status: liveRun.status,
       assistantMessage: liveRun.assistantMessage.length === 0 ? persisted.assistantMessage : liveRun.assistantMessage,
-      reasoning: liveRun.reasoning.length === 0 ? persisted.reasoning : liveRun.reasoning,
-      tools: liveRun.toolEvents.map((event) => ({
-        name: event.name,
-        status: event.event,
-        data: event.data
-      })),
+      reasoning: liveReasoning.length === 0 ? persisted.reasoning : liveReasoning,
+      tools: liveTools.length === 0 ? persisted.tools : liveTools,
       subagents: liveRun.subagents.map((subagent) => ({
         name: subagent.subagent,
         status: subagent.status,
@@ -81,28 +79,30 @@ function buildPersistedOutput(
   let reasoning = '';
   let error: string | null = null;
   const tools: TaskRunOutput['tools'] = [];
+  const assistantToolBlockIndexes = new Map<string, number>();
   const subagents: TaskRunOutput['subagents'] = [];
   const guardrails: TaskRunOutput['guardrails'] = [];
 
   for (const event of events) {
-    if (event.type === 'message_delta') {
-      const delta = readAssistantDelta(event.payload);
-      if (delta !== null) {
-        assistantDelta += delta;
-      }
-      continue;
-    }
-    if (event.type === 'reasoning_delta') {
-      const delta = readReasoningDelta(event.payload);
-      if (delta !== null) {
-        reasoning += delta;
-      }
-      continue;
-    }
     if (event.type === 'message') {
       const content = readAssistantMessage(event.payload);
       if (content !== null) {
         assistantMessage = content;
+      }
+      continue;
+    }
+    if (event.type === 'assistant_block') {
+      const block = readAssistantBlock(event.payload);
+      if (block !== null) {
+        if (block.kind === 'text' && typeof block.text === 'string') {
+          assistantDelta += block.text;
+        }
+        if (block.kind === 'reasoning' && typeof block.text === 'string') {
+          reasoning += block.text;
+        }
+        if (block.kind === 'tool_call') {
+          applyToolBlock(tools, assistantToolBlockIndexes, block);
+        }
       }
       continue;
     }
@@ -162,23 +162,6 @@ function normalizeTaskRunStatus(status: string | null): TaskRunOutputStatus {
   return 'idle';
 }
 
-function readAssistantDelta(payload: unknown): string | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  if (payload.role !== 'assistant') {
-    return null;
-  }
-  return typeof payload.delta === 'string' ? payload.delta : null;
-}
-
-function readReasoningDelta(payload: unknown): string | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return typeof payload.delta === 'string' ? payload.delta : null;
-}
-
 function readAssistantMessage(payload: unknown): string | null {
   if (!isRecord(payload)) {
     return null;
@@ -187,6 +170,94 @@ function readAssistantMessage(payload: unknown): string | null {
     return null;
   }
   return typeof payload.content === 'string' ? payload.content : null;
+}
+
+function readAssistantBlock(payload: unknown): ChatAssistantBlock | null {
+  if (!isRecord(payload) || typeof payload.blockId !== 'string') {
+    return null;
+  }
+  if (payload.kind === 'text' || payload.kind === 'reasoning') {
+    if ((payload.phase !== 'delta' && payload.phase !== 'end') || ('text' in payload && typeof payload.text !== 'string')) {
+      return null;
+    }
+    return payload as ChatAssistantBlock;
+  }
+  if (
+    payload.kind !== 'tool_call' ||
+    typeof payload.callId !== 'string' ||
+    typeof payload.name !== 'string' ||
+    !isToolPhase(payload.phase)
+  ) {
+    return null;
+  }
+  return payload as ChatAssistantBlock;
+}
+
+function isToolPhase(value: unknown): value is Extract<ChatAssistantBlock, { kind: 'tool_call' }>['phase'] {
+  return value === 'start' || value === 'progress' || value === 'end' || value === 'error';
+}
+
+function readToolBlock(block: Extract<ChatAssistantBlock, { kind: 'tool_call' }>): { name: string; status: string; data: unknown } {
+  if (block.phase === 'error' && 'error' in block) {
+    return {
+      name: block.name,
+      status: block.phase,
+      data: block.error
+    };
+  }
+  if (block.phase === 'end' && 'output' in block) {
+    return {
+      name: block.name,
+      status: block.phase,
+      data: block.output
+    };
+  }
+  if ('input' in block) {
+    return {
+      name: block.name,
+      status: block.phase,
+      data: block.input
+    };
+  }
+  return {
+    name: block.name,
+    status: block.phase,
+    data: null
+  };
+}
+
+function applyToolBlock(
+  tools: TaskRunOutput['tools'],
+  indexes: Map<string, number>,
+  block: Extract<ChatAssistantBlock, { kind: 'tool_call' }>
+): void {
+  const tool = readToolBlock(block);
+  const existingIndex = indexes.get(block.blockId);
+  if (existingIndex === undefined) {
+    indexes.set(block.blockId, tools.length);
+    tools.push(tool);
+    return;
+  }
+  tools[existingIndex] = tool;
+}
+
+function readLiveReasoning(liveRun: ChatRunState): string {
+  return liveRun.activityBlocks.flatMap((block) => (block.kind === 'reasoning' ? [block.content] : [])).join('');
+}
+
+function readLiveTools(liveRun: ChatRunState): TaskRunOutput['tools'] {
+  return liveRun.activityBlocks.flatMap((block) => {
+    if (block.kind !== 'tool_call') {
+      return [];
+    }
+    if (block.output !== null && block.output !== undefined) {
+      return [{ name: block.name, status: block.status, data: block.output }];
+    }
+    if (block.error !== null && block.error !== undefined) {
+      return [{ name: block.name, status: block.status, data: block.error }];
+    }
+    return [{ name: block.name, status: block.status, data: block.input }];
+  });
 }
 
 function readToolCall(payload: unknown): { name: string; status: string; data: unknown } | null {

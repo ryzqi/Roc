@@ -1,4 +1,4 @@
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { Command, InMemoryStore, MemorySaver } from '@langchain/langgraph';
 import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
@@ -24,10 +24,26 @@ import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { AgentDeepAgentExecutor } from './runtime';
 
+type FinalToolMessageBlock =
+  | {
+      callId: string;
+      name: string;
+      phase: 'end';
+      output: unknown;
+    }
+  | {
+      callId: string;
+      name: string;
+      phase: 'error';
+      error: unknown;
+    };
+
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
   paths: RocPaths;
 };
+
+const finalToolMessageNames = new Set(['write_file', 'edit_file']);
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
   const store = new InMemoryStore();
@@ -141,11 +157,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
               assistantChunks.push(finalAssistantText);
               eventQueue.push({
-                type: 'message_delta',
+                type: 'assistant_block',
                 runId: input.run.id,
-                delta: finalAssistantText
+                block: {
+                  kind: 'text',
+                  blockId: `text-${input.run.id}`,
+                  phase: 'delta',
+                  text: finalAssistantText
+                }
               });
             }
+            readFinalToolBlockEvents(output, input.run.id).forEach((event) => eventQueue.push(event));
           }
           eventQueue.close();
         } catch (error) {
@@ -221,6 +243,138 @@ function readFinalAssistantText(output: unknown): string | null {
     return null;
   }
   return readAssistantMessageText(lastMessage);
+}
+
+function readFinalToolBlockEvents(output: unknown, runId: string): ChatRunEvent[] {
+  if (!recordUtils.isRecord(output)) {
+    return [];
+  }
+  const messages = recordUtils.readRecordValue(output, 'messages');
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages.flatMap((message): ChatRunEvent[] => {
+    const toolMessage = readFinalToolMessage(message);
+    if (toolMessage === null) {
+      return [];
+    }
+    return [
+      {
+        type: 'assistant_block',
+        runId,
+        block: {
+          kind: 'tool_call',
+          blockId: `tool-${toolMessage.callId}`,
+          callId: toolMessage.callId,
+          name: toolMessage.name,
+          phase: toolMessage.phase,
+          ...(toolMessage.phase === 'end'
+            ? { output: toolMessage.output }
+            : { error: toolMessage.error })
+        }
+      }
+    ];
+  });
+}
+
+function readFinalToolMessage(message: unknown): FinalToolMessageBlock | null {
+  if (!isToolMessageLike(message)) {
+    return null;
+  }
+  const callId = readToolMessageCallId(message);
+  if (callId === null) {
+    return null;
+  }
+  const name = readToolMessageName(message);
+  if (name === null || !finalToolMessageNames.has(name)) {
+    return null;
+  }
+  const output = readToolMessageOutput(message);
+  if (readToolMessageStatus(message) === 'error') {
+    return {
+      callId,
+      name,
+      phase: 'error',
+      error: output
+    };
+  }
+  return {
+    callId,
+    name,
+    phase: 'end',
+    output
+  };
+}
+
+function isToolMessageLike(message: unknown): boolean {
+  if (ToolMessage.isInstance(message)) {
+    return true;
+  }
+  if (!recordUtils.isRecord(message)) {
+    return false;
+  }
+  const role = readLowercaseString(recordUtils.readRecordValue(message, 'role'));
+  if (role !== null) {
+    return role === 'tool';
+  }
+  const type = readLowercaseString(recordUtils.readRecordValue(message, 'type'));
+  return type === 'tool' || type === 'toolmessage';
+}
+
+function readToolMessageCallId(message: unknown): string | null {
+  if (ToolMessage.isInstance(message)) {
+    return message.tool_call_id;
+  }
+  if (!recordUtils.isRecord(message)) {
+    return null;
+  }
+  const snakeCase = recordUtils.readNonEmptyString(recordUtils.readRecordValue(message, 'tool_call_id'));
+  if (snakeCase !== null) {
+    return snakeCase;
+  }
+  return recordUtils.readNonEmptyString(recordUtils.readRecordValue(message, 'toolCallId'));
+}
+
+function readToolMessageName(message: unknown): string | null {
+  if (ToolMessage.isInstance(message)) {
+    return message.name === undefined ? null : message.name;
+  }
+  if (!recordUtils.isRecord(message)) {
+    return null;
+  }
+  return recordUtils.readNonEmptyString(recordUtils.readRecordValue(message, 'name'));
+}
+
+function readToolMessageStatus(message: unknown): 'success' | 'error' | null {
+  const status = ToolMessage.isInstance(message)
+    ? message.status
+    : recordUtils.isRecord(message)
+      ? readLowercaseString(recordUtils.readRecordValue(message, 'status'))
+      : null;
+  return status === 'success' || status === 'error' ? status : null;
+}
+
+function readToolMessageOutput(message: unknown): unknown {
+  if (ToolMessage.isInstance(message)) {
+    return readToolContentValue(message.content);
+  }
+  if (!recordUtils.isRecord(message)) {
+    return null;
+  }
+  return readToolContentValue(recordUtils.readRecordValue(message, 'content'));
+}
+
+function readToolContentValue(content: unknown): unknown {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    const summary = recordUtils.readMessageContentSummary({ content });
+    if (summary.hasVisibleText) {
+      return summary.visibleText;
+    }
+  }
+  return content;
 }
 
 function readAssistantMessageText(message: unknown): string | null {

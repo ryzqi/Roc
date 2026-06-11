@@ -1,10 +1,23 @@
-import type { ChatPendingApproval, ChatRunEvent, ChatRunMode, ChatTodoItem } from '../shared/types';
+import type { ChatAssistantBlock, ChatPendingApproval, ChatRunEvent, ChatRunMode, ChatTodoItem } from '../shared/types';
 
-export type ChatRunToolState = {
-  name: string;
-  event: 'start' | 'progress' | 'end' | 'error';
-  data: unknown;
-};
+export type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
+
+export type ChatRunActivityBlock =
+  | {
+      id: string;
+      kind: 'reasoning';
+      content: string;
+    }
+  | {
+      id: string;
+      kind: 'tool_call';
+      callId: string;
+      name: string;
+      status: ChatRunToolStatus;
+      input: unknown;
+      output: unknown;
+      error: unknown;
+    };
 
 export type ChatRunSubagentState = {
   subagent: string;
@@ -21,7 +34,7 @@ export type ChatRunState = {
   createdAt: string | null;
   status: 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed';
   assistantMessage: string;
-  reasoning: string;
+  activityBlocks: ChatRunActivityBlock[];
   durationMs: number | null;
   summary: string | null;
   errorCode: string | null;
@@ -29,7 +42,6 @@ export type ChatRunState = {
   retryable: boolean;
   pendingApprovals: ChatPendingApproval[];
   resumeBusy: boolean;
-  toolEvents: ChatRunToolState[];
   todos: ChatTodoItem[];
   subagents: ChatRunSubagentState[];
 };
@@ -44,7 +56,7 @@ export function createEmptyChatRunState(): ChatRunState {
     createdAt: null,
     status: 'idle',
     assistantMessage: '',
-    reasoning: '',
+    activityBlocks: [],
     durationMs: null,
     summary: null,
     errorCode: null,
@@ -52,7 +64,6 @@ export function createEmptyChatRunState(): ChatRunState {
     retryable: false,
     pendingApprovals: [],
     resumeBusy: false,
-    toolEvents: [],
     todos: [],
     subagents: []
   };
@@ -69,7 +80,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       createdAt: event.createdAt,
       status: 'running',
       assistantMessage: '',
-      reasoning: '',
+      activityBlocks: [],
       durationMs: null,
       summary: null,
       errorCode: null,
@@ -77,7 +88,6 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       retryable: false,
       pendingApprovals: [],
       resumeBusy: false,
-      toolEvents: [],
       todos: [],
       subagents: []
     };
@@ -87,25 +97,8 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     return state;
   }
 
-  if (event.type === 'message_delta') {
-    return {
-      ...state,
-      assistantMessage: `${state.assistantMessage}${event.delta}`
-    };
-  }
-
-  if (event.type === 'reasoning_delta') {
-    return {
-      ...state,
-      reasoning: `${state.reasoning}${event.delta}`
-    };
-  }
-
-  if (event.type === 'tool_event') {
-    return {
-      ...state,
-      toolEvents: [...state.toolEvents, { name: event.name, event: event.event, data: event.data }]
-    };
+  if (event.type === 'assistant_block') {
+    return applyAssistantBlock(state, event.block);
   }
 
   if (event.type === 'todo_event') {
@@ -180,4 +173,84 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   return state;
+}
+
+function applyAssistantBlock(state: ChatRunState, block: ChatAssistantBlock): ChatRunState {
+  if (block.kind === 'text') {
+    if (typeof block.text !== 'string') {
+      return state;
+    }
+    return {
+      ...state,
+      assistantMessage: `${state.assistantMessage}${block.text}`
+    };
+  }
+  if (block.kind === 'reasoning') {
+    return {
+      ...state,
+      activityBlocks: appendReasoningBlock(state.activityBlocks, block)
+    };
+  }
+  return {
+    ...state,
+    activityBlocks: applyToolBlock(state.activityBlocks, block)
+  };
+}
+
+function appendReasoningBlock(
+  blocks: readonly ChatRunActivityBlock[],
+  block: Extract<ChatAssistantBlock, { kind: 'reasoning' }>
+): ChatRunActivityBlock[] {
+  if (typeof block.text !== 'string') {
+    return [...blocks];
+  }
+  const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'reasoning' }> => item.kind === 'reasoning' && item.id === block.blockId);
+  if (existing === undefined) {
+    return [
+      ...blocks,
+      {
+        id: block.blockId,
+        kind: 'reasoning',
+        content: block.text
+      }
+    ];
+  }
+  return blocks.map((item) =>
+    item === existing
+      ? {
+          ...item,
+          content: `${item.content}${block.text}`
+        }
+      : item
+  );
+}
+
+function applyToolBlock(
+  blocks: readonly ChatRunActivityBlock[],
+  block: Extract<ChatAssistantBlock, { kind: 'tool_call' }>
+): ChatRunActivityBlock[] {
+  const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'tool_call' }> => item.kind === 'tool_call' && item.id === block.blockId);
+  const nextBlock: Extract<ChatRunActivityBlock, { kind: 'tool_call' }> = {
+    id: block.blockId,
+    kind: 'tool_call',
+    callId: block.callId,
+    name: block.name,
+    status: block.phase,
+    input: existing === undefined ? null : existing.input,
+    output: existing === undefined ? null : existing.output,
+    error: existing === undefined ? null : existing.error
+  };
+  if ('input' in block) {
+    nextBlock.input = block.input;
+  }
+  if ('output' in block) {
+    nextBlock.output = block.output;
+  }
+  if ('error' in block) {
+    nextBlock.error = block.error;
+  }
+  if (existing === undefined) {
+    return [...blocks, nextBlock];
+  }
+  return blocks.map((item) => (item === existing ? nextBlock : item));
 }

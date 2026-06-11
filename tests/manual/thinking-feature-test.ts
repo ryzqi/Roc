@@ -308,7 +308,7 @@ async function main() {
   console.log('========================================\n');
 
   console.log('根据代码分析，前端渲染逻辑：');
-  console.log('1. 从 reasoning_delta 事件累积思考内容');
+  console.log('1. 从 assistant_block reasoning 块累积思考内容');
   console.log('2. 在 ChatMessageRow 组件中渲染为 reasoning block');
   console.log('3. 使用 <details> 元素展示，带折叠功能');
   console.log('4. 标签显示："推理 · N 步"');

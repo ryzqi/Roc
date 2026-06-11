@@ -39,7 +39,7 @@ function createIdleRunState(): ChatRunState {
     createdAt: null,
     status: 'idle',
     assistantMessage: '',
-    reasoning: '',
+    activityBlocks: [],
     durationMs: null,
     summary: null,
     errorCode: null,
@@ -47,7 +47,6 @@ function createIdleRunState(): ChatRunState {
     retryable: false,
     pendingApprovals: [],
     resumeBusy: false,
-    toolEvents: [],
     todos: [],
     subagents: []
   };
@@ -114,7 +113,13 @@ describe('chat transcript helpers', () => {
         threadId: 'thread-current',
         status: 'running',
         assistantMessage: '我先检查当前变更。',
-        reasoning: '先读取当前工作区和最近提交。'
+        activityBlocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先读取当前工作区和最近提交。'
+          }
+        ]
       },
       pendingUserInput: null,
       selectedThreadId: null,
@@ -138,7 +143,7 @@ describe('chat transcript helpers', () => {
         reasoning: '先读取当前工作区和最近提交。',
         blocks: [
           {
-            id: 'live-run-current-reasoning',
+            id: 'reasoning-run-current',
             kind: 'reasoning',
             content: '先读取当前工作区和最近提交。',
             isStreaming: true
@@ -181,7 +186,13 @@ describe('chat transcript helpers', () => {
         threadId: 'thread-current',
         status: 'completed',
         assistantMessage: '已经整理完成。',
-        reasoning: '先归纳，再输出最终结论。'
+        activityBlocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先归纳，再输出最终结论。'
+          }
+        ]
       },
       pendingUserInput: null,
       selectedThreadId: 'thread-current',
@@ -205,7 +216,7 @@ describe('chat transcript helpers', () => {
         reasoning: '先归纳，再输出最终结论。',
         blocks: [
           {
-            id: 'live-run-current-reasoning',
+            id: 'reasoning-run-current',
             kind: 'reasoning',
             content: '先归纳，再输出最终结论。',
             isStreaming: false
@@ -243,8 +254,13 @@ describe('chat transcript helpers', () => {
           id: 'reasoning-1',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'reasoning_delta',
-          payload: { delta: '先确认目标文件。' },
+          type: 'assistant_block',
+          payload: {
+            kind: 'reasoning',
+            blockId: 'reasoning-run-current',
+            phase: 'delta',
+            text: '先确认目标文件。'
+          },
           createdAt: '2026-05-09T08:20:01.000Z',
           sequence: 2
         },
@@ -252,10 +268,13 @@ describe('chat transcript helpers', () => {
           id: 'tool-start',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'tool_call',
+          type: 'assistant_block',
           payload: {
+            kind: 'tool_call',
+            blockId: 'tool-run-current-read',
+            callId: 'call-run-current-read',
             name: 'read_file',
-            status: 'start',
+            phase: 'start',
             input: { path: 'F:\\Code\\Roc\\README.md' }
           },
           createdAt: '2026-05-09T08:20:02.000Z',
@@ -265,8 +284,13 @@ describe('chat transcript helpers', () => {
           id: 'reasoning-2',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'reasoning_delta',
-          payload: { delta: '再提炼结论。' },
+          type: 'assistant_block',
+          payload: {
+            kind: 'reasoning',
+            blockId: 'reasoning-run-current',
+            phase: 'delta',
+            text: '再提炼结论。'
+          },
           createdAt: '2026-05-09T08:20:03.000Z',
           sequence: 4
         },
@@ -274,10 +298,13 @@ describe('chat transcript helpers', () => {
           id: 'tool-end',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'tool_call',
+          type: 'assistant_block',
           payload: {
+            kind: 'tool_call',
+            blockId: 'tool-run-current-read',
+            callId: 'call-run-current-read',
             name: 'read_file',
-            status: 'end',
+            phase: 'end',
             output: { bytes: 128 }
           },
           createdAt: '2026-05-09T08:20:04.000Z',
@@ -287,8 +314,13 @@ describe('chat transcript helpers', () => {
           id: 'assistant-delta-1',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'message_delta',
-          payload: { role: 'assistant', delta: '总结' },
+          type: 'assistant_block',
+          payload: {
+            kind: 'text',
+            blockId: 'text-run-current',
+            phase: 'delta',
+            text: '总结'
+          },
           createdAt: '2026-05-09T08:20:05.000Z',
           sequence: 6
         },
@@ -296,8 +328,13 @@ describe('chat transcript helpers', () => {
           id: 'assistant-delta-2',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'message_delta',
-          payload: { role: 'assistant', delta: '完成。' },
+          type: 'assistant_block',
+          payload: {
+            kind: 'text',
+            blockId: 'text-run-current',
+            phase: 'delta',
+            text: '完成。'
+          },
           createdAt: '2026-05-09T08:20:06.000Z',
           sequence: 7
         }
@@ -327,7 +364,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           },
           {
-            id: 'tool-run-current-0',
+            id: 'tool-run-current-read',
             kind: 'tool_call',
             name: 'read_file',
             status: 'end',
@@ -365,17 +402,21 @@ describe('chat transcript helpers', () => {
         threadId: 'thread-current',
         status: 'running',
         assistantMessage: '最终回答正文。',
-        reasoning: '先搜索资料。',
-        toolEvents: [
+        activityBlocks: [
           {
-            name: 'web_search',
-            event: 'start',
-            data: { query: 'Roc chat activity' }
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先搜索资料。'
           },
           {
+            id: 'tool-run-current-search',
+            kind: 'tool_call',
+            callId: 'call-run-current-search',
             name: 'web_search',
-            event: 'end',
-            data: { count: 3 }
+            status: 'end',
+            input: { query: 'Roc chat activity' },
+            output: { count: 3 },
+            error: null
           }
         ],
         subagents: [
@@ -398,13 +439,13 @@ describe('chat transcript helpers', () => {
       reasoning: '先搜索资料。',
       blocks: [
         {
-          id: 'live-run-current-reasoning',
+          id: 'reasoning-run-current',
           kind: 'reasoning',
           content: '先搜索资料。',
           isStreaming: true
         },
         {
-          id: 'live-run-current-tool-0',
+          id: 'tool-run-current-search',
           kind: 'tool_call',
           name: 'web_search',
           status: 'end',
@@ -563,7 +604,13 @@ describe('chat transcript helpers', () => {
         threadId: 'thread-current',
         status: 'running',
         assistantMessage: '这是别的线程的实时输出',
-        reasoning: '别的线程推理'
+        activityBlocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '别的线程推理'
+          }
+        ]
       },
       pendingUserInput: null,
       selectedThreadId: 'thread-older',
@@ -695,7 +742,13 @@ describe('chat transcript helpers', () => {
         threadId: 'thread-current',
         status: 'waiting_user',
         assistantMessage: '',
-        reasoning: '先分析命令风险。',
+        activityBlocks: [
+          {
+            id: 'reasoning-run-current',
+            kind: 'reasoning',
+            content: '先分析命令风险。'
+          }
+        ],
         pendingApprovals: [
           {
             interruptId: 'interrupt-1',
@@ -739,7 +792,7 @@ describe('chat transcript helpers', () => {
         reasoning: '先分析命令风险。',
         blocks: [
           {
-            id: 'live-run-current-reasoning',
+            id: 'reasoning-run-current',
             kind: 'reasoning',
             content: '先分析命令风险。',
             isStreaming: false
@@ -770,8 +823,13 @@ describe('chat transcript helpers', () => {
           id: 'reasoning-current',
           threadId: 'thread-current',
           runId: 'run-current',
-          type: 'reasoning_delta',
-          payload: { delta: '先分析命令风险。' },
+          type: 'assistant_block',
+          payload: {
+            kind: 'reasoning',
+            blockId: 'reasoning-run-current',
+            phase: 'delta',
+            text: '先分析命令风险。'
+          },
           createdAt: '2026-05-12T08:30:01.000Z',
           sequence: 2
         },

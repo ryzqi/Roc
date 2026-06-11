@@ -4,6 +4,7 @@ import type { HITLResponse } from 'langchain';
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
+  ChatAssistantBlock,
   ChatApprovalRequest,
   ChatCancelRunResult,
   ChatRunEvent,
@@ -431,6 +432,7 @@ export class AgentPluginRuntime {
     abortSignal: AbortSignal;
   }): Promise<DeepAgentExecutionResult> {
     const assistantChunks: string[] = [];
+    const successfulToolBlockIds = new Set<string>();
     for await (const event of await this.options.deepAgentExecutor!.execute(input)) {
       if (!this.activeRuns.has(input.run.id)) {
         return {
@@ -450,40 +452,16 @@ export class AgentPluginRuntime {
           status: 'interrupted'
         };
       }
-      if (event.type === 'message_delta') {
-        assistantChunks.push(event.delta);
+      if (event.type === 'assistant_block') {
+        if (event.block.kind === 'text' && typeof event.block.text === 'string') {
+          assistantChunks.push(event.block.text);
+        }
+        updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
         await this.publish('agent.run.task-event', {
           runId: input.run.id,
           threadId: input.run.threadId,
-          type: 'message_delta',
-          payload: {
-            role: 'assistant',
-            delta: event.delta
-          }
-        });
-        continue;
-      }
-      if (event.type === 'reasoning_delta') {
-        await this.publish('agent.run.task-event', {
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          type: 'reasoning_delta',
-          payload: {
-            delta: event.delta
-          }
-        });
-        continue;
-      }
-      if (event.type === 'tool_event') {
-        await this.publish('agent.run.task-event', {
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          type: 'tool_call',
-          payload: {
-            name: event.name,
-            status: event.event,
-            data: event.data
-          }
+          type: 'assistant_block',
+          payload: event.block
         });
         continue;
       }
@@ -499,10 +477,10 @@ export class AgentPluginRuntime {
         });
       }
     }
-    if (assistantChunks.join('').trim().length === 0) {
+    const assistantMessage = assistantChunks.join('').trim();
+    if (assistantMessage.length === 0 && successfulToolBlockIds.size === 0) {
       throw new Error('agent_model_response_empty');
     }
-    const assistantMessage = assistantChunks.join('').trim();
     return {
       status: 'completed',
       assistantMessage
@@ -532,6 +510,19 @@ export class AgentPluginRuntime {
         ...input.payload
       }
     });
+  }
+}
+
+function updateSuccessfulToolBlocks(successfulToolBlockIds: Set<string>, block: ChatAssistantBlock): void {
+  if (block.kind !== 'tool_call') {
+    return;
+  }
+  if (block.phase === 'end') {
+    successfulToolBlockIds.add(block.blockId);
+    return;
+  }
+  if (block.phase === 'error') {
+    successfulToolBlockIds.delete(block.blockId);
   }
 }
 

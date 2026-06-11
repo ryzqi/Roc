@@ -74,9 +74,12 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
         id: 'event-reasoning',
         threadId: 'thread-1',
         runId: 'run-1',
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         payload: {
-          delta: '先整理变更'
+          kind: 'reasoning',
+          blockId: 'reasoning-run-1',
+          phase: 'delta',
+          text: '先整理变更'
         },
         createdAt: '2026-05-16T07:04:30.000Z'
       },
@@ -156,7 +159,13 @@ describe('TaskDetailDrawer', () => {
           threadId: 'thread-1',
           status: 'running',
           assistantMessage: '实时输出',
-          reasoning: '实时推理'
+          activityBlocks: [
+            {
+              id: 'reasoning-run-1',
+              kind: 'reasoning',
+              content: '实时推理'
+            }
+          ]
         }
       })
     );

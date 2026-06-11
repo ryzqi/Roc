@@ -1,25 +1,14 @@
-import { AIMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import {
   defaultErrorTracker,
   defaultStepTracker,
   readForgeMessageTag,
-  ROC_PREREQUISITES
+  ROC_PREREQUISITES,
+  tagForgeMessage
 } from '../../../../../src/main/services/forge-guardrails';
 import { createForgeCleanupMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/forge-cleanup';
-import { createResponseValidationMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/response-validation';
 import { createStepEnforcementMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/step-enforcement';
-
-async function runResponseValidation(messages: BaseMessage[]): Promise<BaseMessage[]> {
-  const middleware = createResponseValidationMiddleware({ knownToolNames: () => ['get_weather'] });
-  const afterModel = middleware.afterModel;
-  if (typeof afterModel !== 'object' || afterModel === null || typeof afterModel.hook !== 'function') {
-    throw new Error('Expected response validation middleware to expose object-form afterModel hook.');
-  }
-
-  const update = (await afterModel.hook({ messages } as never, {} as never)) as { messages?: BaseMessage[] } | undefined;
-  return update?.messages ?? [];
-}
 
 async function runStepEnforcement(messages: BaseMessage[]): Promise<BaseMessage[]> {
   const middleware = createStepEnforcementMiddleware({
@@ -57,38 +46,33 @@ function cleanupIds(messages: BaseMessage[]): string[] {
 }
 
 describe('ForgeCleanupMiddleware', () => {
-  it('removes retry nudges produced by response validation', async () => {
-    const [nudge] = await runResponseValidation([
-      new AIMessage({
-        id: 'ai-bare',
-        content: 'I can answer directly.'
-      })
-    ]);
+  it('removes legacy retry nudges', () => {
+    const nudge = tagForgeMessage(
+      new HumanMessage({
+        id: 'forge-retry-nudge-ai-bare',
+        content: 'retry'
+      }),
+      'forge:retry_nudge'
+    );
 
-    expect(nudge?.id).toBe('forge-retry-nudge-ai-bare');
-    expect(readForgeMessageTag(nudge!)).toBe('forge:retry_nudge');
-    expect(cleanupIds([nudge!])).toEqual(['forge-retry-nudge-ai-bare']);
+    expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
+    expect(cleanupIds([nudge])).toEqual(['forge-retry-nudge-ai-bare']);
   });
 
-  it('removes unknown-tool nudges produced by response validation', async () => {
-    const [nudge] = await runResponseValidation([
-      new AIMessage({
-        id: 'ai-unknown',
-        content: '',
-        tool_calls: [
-          {
-            name: 'missing_tool',
-            args: { city: 'Paris' },
-            id: 'call-missing',
-            type: 'tool_call'
-          }
-        ]
-      })
-    ]);
+  it('removes legacy unknown-tool nudges', () => {
+    const nudge = tagForgeMessage(
+      new ToolMessage({
+        id: 'forge-unknown-tool-nudge-call-missing',
+        tool_call_id: 'call-missing',
+        name: 'missing_tool',
+        content: 'unknown tool',
+        status: 'error'
+      }),
+      'forge:unknown_tool_nudge'
+    );
 
-    expect(nudge?.id).toBe('forge-unknown-tool-nudge-call-missing');
-    expect(readForgeMessageTag(nudge!)).toBe('forge:unknown_tool_nudge');
-    expect(cleanupIds([nudge!])).toEqual(['forge-unknown-tool-nudge-call-missing']);
+    expect(readForgeMessageTag(nudge)).toBe('forge:unknown_tool_nudge');
+    expect(cleanupIds([nudge])).toEqual(['forge-unknown-tool-nudge-call-missing']);
   });
 
   it('removes step nudges produced by step enforcement', async () => {

@@ -82,9 +82,14 @@ describe('chat view', () => {
         createdAt: '2026-05-20T00:00:00.000Z'
       },
       ...Array.from({ length: 100 }, (_, index) => ({
-        type: 'message_delta' as const,
+        type: 'assistant_block' as const,
         runId: 'run_perf',
-        delta: String(index % 10)
+        block: {
+          kind: 'text' as const,
+          blockId: 'text-run_perf',
+          phase: 'delta' as const,
+          text: String(index % 10)
+        }
       }))
     ];
 

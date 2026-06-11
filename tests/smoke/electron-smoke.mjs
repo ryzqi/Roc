@@ -339,7 +339,7 @@ try {
           const detail = await unwrap(await window.roc.tasks.getTaskDetail({ taskId: task.id }), 'manual task detail');
           const hasOutput = detail.recentEvents.some((event) =>
             event.runId === runNow.runId &&
-            (event.type === 'message' || event.type === 'message_delta' || event.type === 'reasoning_delta')
+            (event.type === 'message' || event.type === 'assistant_block')
           );
           if (hasOutput) {
             window.clearTimeout(timeout);
@@ -2646,7 +2646,7 @@ try {
     manualRunNowStartsRealRun:
       manualRunNowEvidence.returnedRealRunId &&
       manualRunNowEvidence.runId.startsWith('run_') &&
-      manualRunNowEvidence.outputEventTypes.some((type) => type === 'message' || type === 'message_delta') &&
+      manualRunNowEvidence.outputEventTypes.some((type) => type === 'message' || type === 'assistant_block') &&
       typeof manualRunOutputText === 'string' &&
       manualRunOutputText.includes('运行输出'),
     traySummaryVisible:

@@ -373,9 +373,12 @@ describe('task plugin', () => {
       payload: {
         runId: 'run_stream_1',
         threadId: 'thread_stream_1',
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         payload: {
-          delta: '先列出约束。'
+          kind: 'reasoning',
+          blockId: 'reasoning-run_stream_1',
+          phase: 'delta',
+          text: '先列出约束。'
         }
       }
     });
@@ -386,10 +389,12 @@ describe('task plugin', () => {
       payload: {
         runId: 'run_stream_1',
         threadId: 'thread_stream_1',
-        type: 'message_delta',
+        type: 'assistant_block',
         payload: {
-          role: 'assistant',
-          delta: '这里是最终回答。'
+          kind: 'text',
+          blockId: 'text-run_stream_1',
+          phase: 'delta',
+          text: '这里是最终回答。'
         }
       }
     });
@@ -400,9 +405,12 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: 'run_stream_1',
         threadId: 'thread_stream_1',
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         payload: {
-          delta: '先列出约束。'
+          kind: 'reasoning',
+          blockId: 'reasoning-run_stream_1',
+          phase: 'delta',
+          text: '先列出约束。'
         }
       })
     );
@@ -410,10 +418,12 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: 'run_stream_1',
         threadId: 'thread_stream_1',
-        type: 'message_delta',
+        type: 'assistant_block',
         payload: {
-          role: 'assistant',
-          delta: '这里是最终回答。'
+          kind: 'text',
+          blockId: 'text-run_stream_1',
+          phase: 'delta',
+          text: '这里是最终回答。'
         }
       })
     );

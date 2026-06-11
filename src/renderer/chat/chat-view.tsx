@@ -68,7 +68,7 @@ export function ChatView({
   const queuedTaskPromptInFlightRef = useRef<string | null>(null);
 
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
-  const deferredReasoning = useDeferredValue(chatRun.state.reasoning);
+  const deferredActivityBlocks = useDeferredValue(chatRun.state.activityBlocks);
   const activeThreadId = selectedThreadId ?? chatRun.state.threadId;
   const latestPersistedThreadEventId =
     activeThreadId === null
@@ -86,7 +86,7 @@ export function ChatView({
         chatRunState: {
           ...chatRun.state,
           assistantMessage: deferredAssistantMessage,
-          reasoning: deferredReasoning
+          activityBlocks: deferredActivityBlocks
         },
         pendingUserInput,
         persistedMessages,
@@ -96,7 +96,7 @@ export function ChatView({
     [
       chatRun.state,
       deferredAssistantMessage,
-      deferredReasoning,
+      deferredActivityBlocks,
       pendingUserInput,
       persistedMessages,
       selectedThreadId,
@@ -235,12 +235,12 @@ export function ChatView({
     }
   }
 
-  const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredReasoning.length}`;
+  const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredActivityBlocks.length}`;
   const showEmptyState = chatTranscript.length === 0;
   const isAwaitingFirstByte =
     chatRun.state.status === 'running' &&
     deferredAssistantMessage.length === 0 &&
-    deferredReasoning.length === 0;
+    deferredActivityBlocks.length === 0;
 
   return (
     <section className="canvas-stage chat-stage" data-testid="chat-view">

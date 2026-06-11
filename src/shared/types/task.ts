@@ -30,8 +30,7 @@ export type TaskEvent = {
   runId: string;
   type:
     | 'message'
-    | 'message_delta'
-    | 'reasoning_delta'
+    | 'assistant_block'
     | 'agent_update'
     | 'plan'
     | 'tool_call'

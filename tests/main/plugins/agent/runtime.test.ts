@@ -120,9 +120,14 @@ describe('AgentPluginRuntime', () => {
         createdAt: result.createdAt
       },
       {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: result.runId,
-        delta: 'Static agent response.'
+        block: {
+          kind: 'text',
+          blockId: `text-${result.runId}`,
+          phase: 'delta',
+          text: 'Static agent response.'
+        }
       },
       {
         type: 'run_completed',
@@ -144,11 +149,7 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          yield {
-            type: 'message_delta',
-            runId: input.run.id,
-            delta: await deferred.promise
-          } satisfies ChatRunEvent;
+          yield createTextBlock(input.run.id, await deferred.promise);
         }
       },
       eventBus,
@@ -271,21 +272,143 @@ describe('AgentPluginRuntime', () => {
     expect(repository.listSessionMessages({ threadId: result.threadId! })).toEqual([]);
   });
 
-  it('streams reasoning and assistant deltas through renderer and task-event channels before completion', async () => {
+  it('completes a run when a tool block succeeds without final assistant text', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
           yield {
-            type: 'reasoning_delta',
+            type: 'assistant_block',
             runId: input.run.id,
-            delta: '先判断用户意图。'
+            block: {
+              kind: 'tool_call',
+              blockId: 'tool-call-write',
+              callId: 'call-write',
+              name: 'write_file',
+              phase: 'start',
+              input: {
+                file_path: '/workspace/hello.txt'
+              }
+            }
           } satisfies ChatRunEvent;
           yield {
-            type: 'message_delta',
+            type: 'assistant_block',
             runId: input.run.id,
-            delta: '可以，先从今天金价开始。'
+            block: {
+              kind: 'tool_call',
+              blockId: 'tool-call-write',
+              callId: 'call-write',
+              name: 'write_file',
+              phase: 'end',
+              output: 'Successfully wrote to /workspace/hello.txt'
+            }
           } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '创建 hello.txt',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed',
+          runId: result.runId,
+          assistantMessage: ''
+        })
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'assistant_block',
+          payload: {
+            kind: 'tool_call',
+            blockId: 'tool-call-write',
+            callId: 'call-write',
+            name: 'write_file',
+            phase: 'end',
+            output: 'Successfully wrote to /workspace/hello.txt'
+          }
+        }
+      })
+    );
+  });
+
+  it('does not complete when a later tool error overrides an earlier tool end without final assistant text', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-call-write',
+            callId: 'call-write',
+            name: 'write_file',
+            phase: 'end',
+            output: {
+              command: 'internal'
+            }
+          });
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-call-write',
+            callId: 'call-write',
+            name: 'write_file',
+            phase: 'error',
+            error: 'Permission denied.'
+          });
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '创建 hello.txt',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed'
+        })
+      })
+    );
+  });
+
+  it('streams reasoning and assistant deltas through renderer and task-event channels before completion', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield createReasoningBlock(input.run.id, '先判断用户意图。');
+          yield createTextBlock(input.run.id, '可以，先从今天金价开始。');
         }
       },
       eventBus,
@@ -316,14 +439,24 @@ describe('AgentPluginRuntime', () => {
       .filter((event) => event.type === 'agent.chat.run-event')
       .map((event) => readChatRunEvent(event.payload));
     expect(chatEvents).toContainEqual({
-      type: 'reasoning_delta',
+      type: 'assistant_block',
       runId: result.runId,
-      delta: '先判断用户意图。'
+      block: {
+        kind: 'reasoning',
+        blockId: `reasoning-${result.runId}`,
+        phase: 'delta',
+        text: '先判断用户意图。'
+      }
     });
     expect(chatEvents).toContainEqual({
-      type: 'message_delta',
+      type: 'assistant_block',
       runId: result.runId,
-      delta: '可以，先从今天金价开始。'
+      block: {
+        kind: 'text',
+        blockId: `text-${result.runId}`,
+        phase: 'delta',
+        text: '可以，先从今天金价开始。'
+      }
     });
     expect(chatEvents).toContainEqual(
       expect.objectContaining({
@@ -339,9 +472,12 @@ describe('AgentPluginRuntime', () => {
         payload: {
           runId: result.runId,
           threadId: result.threadId,
-          type: 'reasoning_delta',
+          type: 'assistant_block',
           payload: {
-            delta: '先判断用户意图。'
+            kind: 'reasoning',
+            blockId: `reasoning-${result.runId}`,
+            phase: 'delta',
+            text: '先判断用户意图。'
           }
         }
       })
@@ -352,10 +488,12 @@ describe('AgentPluginRuntime', () => {
         payload: {
           runId: result.runId,
           threadId: result.threadId,
-          type: 'message_delta',
+          type: 'assistant_block',
           payload: {
-            role: 'assistant',
-            delta: '可以，先从今天金价开始。'
+            kind: 'text',
+            blockId: `text-${result.runId}`,
+            phase: 'delta',
+            text: '可以，先从今天金价开始。'
           }
         }
       })
@@ -369,20 +507,17 @@ describe('AgentPluginRuntime', () => {
       deepAgentExecutor: {
         execute: async function* (input) {
           executorCalledWith = input.request;
-          yield {
-            type: 'tool_event',
-            runId: input.run.id,
-            event: 'start',
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-call-web-read',
+            callId: 'call-web-read',
             name: 'web_read',
-            data: {
+            phase: 'start',
+            input: {
               url: 'https://example.test'
             }
-          } satisfies ChatRunEvent;
-          yield {
-            type: 'message_delta',
-            runId: input.run.id,
-            delta: 'DeepAgent executor response.'
-          } satisfies ChatRunEvent;
+          });
+          yield createTextBlock(input.run.id, 'DeepAgent executor response.');
         }
       },
       eventBus,
@@ -414,12 +549,17 @@ describe('AgentPluginRuntime', () => {
       expect.objectContaining({
         type: 'agent.chat.run-event',
         payload: {
-          type: 'tool_event',
+          type: 'assistant_block',
           runId: result.runId,
-          event: 'start',
-          name: 'web_read',
-          data: {
-            url: 'https://example.test'
+          block: {
+            kind: 'tool_call',
+            blockId: 'tool-call-web-read',
+            callId: 'call-web-read',
+            name: 'web_read',
+            phase: 'start',
+            input: {
+              url: 'https://example.test'
+            }
           }
         }
       })
@@ -581,11 +721,7 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           resumePayload = input.resumePayload;
-          yield {
-            type: 'message_delta',
-            runId: input.run.id,
-            delta: 'Approved command finished.'
-          } satisfies ChatRunEvent;
+          yield createTextBlock(input.run.id, 'Approved command finished.');
         }
       },
       eventBus,
@@ -734,12 +870,42 @@ describe('AgentPluginRuntime', () => {
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
     execute: async function* (input) {
-      yield {
-        type: 'message_delta',
-        runId: input.run.id,
-        delta: text
-      } satisfies ChatRunEvent;
+      yield createTextBlock(input.run.id, text);
     }
+  };
+}
+
+function createTextBlock(runId: string, text: string): ChatRunEvent {
+  return {
+    type: 'assistant_block',
+    runId,
+    block: {
+      kind: 'text',
+      blockId: `text-${runId}`,
+      phase: 'delta',
+      text
+    }
+  };
+}
+
+function createReasoningBlock(runId: string, text: string): ChatRunEvent {
+  return {
+    type: 'assistant_block',
+    runId,
+    block: {
+      kind: 'reasoning',
+      blockId: `reasoning-${runId}`,
+      phase: 'delta',
+      text
+    }
+  };
+}
+
+function createToolBlock(runId: string, block: Extract<ChatRunEvent, { type: 'assistant_block' }>['block']): ChatRunEvent {
+  return {
+    type: 'assistant_block',
+    runId,
+    block
   };
 }
 

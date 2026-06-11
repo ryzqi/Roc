@@ -280,9 +280,14 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
   return {
     execute: async function* (input) {
       yield {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: input.run.id,
-        delta: 'Static DeepAgent response.'
+        block: {
+          kind: 'text',
+          blockId: `text-${input.run.id}`,
+          phase: 'delta',
+          text: 'Static DeepAgent response.'
+        }
       } satisfies ChatRunEvent;
     }
   };

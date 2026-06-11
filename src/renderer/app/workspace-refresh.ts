@@ -49,20 +49,24 @@ export type WorkspaceRefreshSnapshot = {
 };
 
 export function shouldRefreshWorkspaceForRunEvent(event: ChatRunEvent): boolean {
-  if (event.type !== 'tool_event' || event.event !== 'end') {
+  if (event.type !== 'assistant_block' || event.block.kind !== 'tool_call' || event.block.phase !== 'end') {
     return false;
   }
-  if (workspaceMutationToolNames.has(event.name)) {
+  if (workspaceMutationToolNames.has(event.block.name)) {
     return true;
   }
-  if (event.name !== 'execute') {
+  if (event.block.name !== 'execute') {
     return false;
   }
-  const command = readExecuteCommand(event.data);
-  if (command === null) {
+  const outputCommand = readExecuteCommand(event.block.output);
+  if (outputCommand !== null) {
+    return isMutatingExecuteCommand(outputCommand);
+  }
+  const inputCommand = readExecuteCommand(event.block.input);
+  if (inputCommand === null) {
     return false;
   }
-  return isMutatingExecuteCommand(command);
+  return isMutatingExecuteCommand(inputCommand);
 }
 
 export function createWorkspaceRefreshController(input: {

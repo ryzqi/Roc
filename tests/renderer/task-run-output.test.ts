@@ -71,34 +71,42 @@ function createDetail(): TaskDetail {
         createdAt: '2026-05-16T07:00:10.000Z'
       },
       {
-        id: 'event-message-delta',
+        id: 'event-message-block',
         threadId: 'thread-1',
         runId: 'run-1',
-        type: 'message_delta',
+        type: 'assistant_block',
         payload: {
-          role: 'assistant',
-          delta: '部分答案'
+          kind: 'text',
+          blockId: 'text-run-1',
+          phase: 'delta',
+          text: '部分答案'
         },
         createdAt: '2026-05-16T07:04:10.000Z'
       },
       {
-        id: 'event-reasoning-delta',
+        id: 'event-reasoning-block',
         threadId: 'thread-1',
         runId: 'run-1',
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         payload: {
-          delta: '第一步推理'
+          kind: 'reasoning',
+          blockId: 'reasoning-run-1',
+          phase: 'delta',
+          text: '第一步推理'
         },
         createdAt: '2026-05-16T07:04:20.000Z'
       },
       {
-        id: 'event-tool-call',
+        id: 'event-tool-block',
         threadId: 'thread-1',
         runId: 'run-1',
-        type: 'tool_call',
+        type: 'assistant_block',
         payload: {
+          kind: 'tool_call',
+          blockId: 'tool-run-1-execute-agent',
+          callId: 'call-run-1-execute-agent',
           name: 'execute_agent',
-          status: 'end',
+          phase: 'end',
           output: '命令已完成'
         },
         createdAt: '2026-05-16T07:04:30.000Z'
@@ -178,12 +186,21 @@ function createLiveRun(): ChatRunState {
     createdAt: '2026-05-16T07:04:00.000Z',
     status: 'running',
     assistantMessage: '正在流式输出',
-    reasoning: '实时推理',
-    toolEvents: [
+    activityBlocks: [
       {
+        id: 'reasoning-run-1',
+        kind: 'reasoning',
+        content: '实时推理'
+      },
+      {
+        id: 'tool-run-1-execute-agent',
+        kind: 'tool_call',
+        callId: 'call-run-1-execute-agent',
         name: 'execute_agent',
-        event: 'progress',
-        data: '仍在执行'
+        status: 'progress',
+        input: '仍在执行',
+        output: null,
+        error: null
       }
     ],
     subagents: [
@@ -245,6 +262,98 @@ describe('buildTaskRunOutput', () => {
         name: 'planner',
         status: 'completed',
         summary: '整理计划'
+      }
+    ]);
+  });
+
+  it('merges persisted assistant tool blocks by blockId', () => {
+    const detail = createDetail();
+    detail.recentEvents.push(
+      {
+        id: 'event-tool-write-start',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'assistant_block',
+        payload: {
+          kind: 'tool_call',
+          blockId: 'tool-call-write',
+          callId: 'call-write',
+          name: 'write_file',
+          phase: 'start',
+          input: {
+            file_path: '/workspace/hello.txt'
+          }
+        },
+        createdAt: '2026-05-16T07:04:31.000Z'
+      },
+      {
+        id: 'event-tool-write-end',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'assistant_block',
+        payload: {
+          kind: 'tool_call',
+          blockId: 'tool-call-write',
+          callId: 'call-write',
+          name: 'write_file',
+          phase: 'end',
+          output: 'Successfully wrote to /workspace/hello.txt'
+        },
+        createdAt: '2026-05-16T07:04:32.000Z'
+      }
+    );
+
+    const output = buildTaskRunOutput({
+      detail,
+      liveRun: null
+    });
+    if (output === null) {
+      throw new Error('Expected task run output.');
+    }
+
+    expect(output.tools.filter((tool) => tool.name === 'write_file')).toEqual([
+      {
+        name: 'write_file',
+        status: 'end',
+        data: 'Successfully wrote to /workspace/hello.txt'
+      }
+    ]);
+  });
+
+  it('uses error data for persisted failed assistant tool blocks', () => {
+    const detail = createDetail();
+    detail.recentEvents.push({
+      id: 'event-tool-write-error',
+      threadId: 'thread-1',
+      runId: 'run-1',
+      type: 'assistant_block',
+      payload: {
+        kind: 'tool_call',
+        blockId: 'tool-call-write-error',
+        callId: 'call-write-error',
+        name: 'write_file',
+        phase: 'error',
+        input: {
+          file_path: '/workspace/hello.txt'
+        },
+        error: 'Permission denied.'
+      },
+      createdAt: '2026-05-16T07:04:31.000Z'
+    });
+
+    const output = buildTaskRunOutput({
+      detail,
+      liveRun: null
+    });
+    if (output === null) {
+      throw new Error('Expected task run output.');
+    }
+
+    expect(output.tools.filter((tool) => tool.name === 'write_file')).toEqual([
+      {
+        name: 'write_file',
+        status: 'error',
+        data: 'Permission denied.'
       }
     ]);
   });

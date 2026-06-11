@@ -11,7 +11,6 @@ import {
   createForgeCleanupMiddleware,
   createErrorBudgetMiddleware,
   createRescueParsingMiddleware,
-  createResponseValidationMiddleware,
   createStepEnforcementMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
@@ -74,7 +73,6 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       budgetTokens: input.contextBudgetTokens
     }),
     createRescueParsingMiddleware({ availableTools: knownToolNames }),
-    createResponseValidationMiddleware({ knownToolNames }),
     createToolResolutionMiddleware(),
     createForgeCleanupMiddleware()
   ];

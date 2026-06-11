@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { markForgeNudgeInternal, tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
 import {
   consumeMessageStream,
+  consumeToolCallStream,
   createUsageAccumulator
 } from '../../../../src/main/services/deep-agent/stream-consumers';
 
@@ -110,14 +111,41 @@ describe('consumeMessageStream', () => {
   });
 });
 
+describe('consumeToolCallStream', () => {
+  it('does not emit a synthetic tool block when DeepAgents omits callId', async () => {
+    const callbacks = createCallbacks([]);
+
+    await consumeToolCallStream({
+      calls: createSingleMessageStream({
+        name: 'write_file',
+        input: {
+          file_path: '/workspace/hello.txt'
+        },
+        output: 'Successfully wrote to /workspace/hello.txt'
+      }),
+      context: {
+        runId: 'run-missing-call-id',
+        taskRun: null
+      },
+      callbacks
+    });
+
+    expect(callbacks.emitRuntimeEvent).not.toHaveBeenCalled();
+    expect(callbacks.emitTodoEvent).not.toHaveBeenCalled();
+  });
+});
+
 function createCallbacks(outputOrder: string[]) {
   return {
-    emitRuntimeEvent: vi.fn((event: { type: string; delta?: string }) => {
-      if (event.type === 'reasoning_delta' && typeof event.delta === 'string') {
-        outputOrder.push(`reasoning:${event.delta}`);
+    emitRuntimeEvent: vi.fn((event: { type: string; block?: { kind: string; text?: string } }) => {
+      if (event.type !== 'assistant_block' || event.block === undefined || typeof event.block.text !== 'string') {
+        return;
       }
-      if (event.type === 'message_delta' && typeof event.delta === 'string') {
-        outputOrder.push(`message:${event.delta}`);
+      if (event.block.kind === 'reasoning') {
+        outputOrder.push(`reasoning:${event.block.text}`);
+      }
+      if (event.block.kind === 'text') {
+        outputOrder.push(`message:${event.block.text}`);
       }
     }),
     emitTodoEvent: vi.fn(),

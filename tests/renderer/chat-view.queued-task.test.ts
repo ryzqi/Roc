@@ -210,9 +210,14 @@ describe('ChatView queued task prompt', () => {
 
     await act(async () => {
       emitRunEvent({
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'run_waiting_first_byte',
-        delta: '首字节'
+        block: {
+          kind: 'text',
+          blockId: 'text-run_waiting_first_byte',
+          phase: 'delta',
+          text: '首字节'
+        }
       });
     });
 
@@ -236,9 +241,12 @@ describe('ChatView queued task prompt', () => {
         id: 'persisted-reasoning',
         threadId: 'thread-historical-nvidia',
         runId: 'run-historical-nvidia',
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         payload: {
-          delta: '先检查 NVIDIA thinking 输出。'
+          kind: 'reasoning',
+          blockId: 'reasoning-run-historical-nvidia',
+          phase: 'delta',
+          text: '先检查 NVIDIA thinking 输出。'
         },
         createdAt: '2026-06-02T12:21:57.000Z'
       },
@@ -246,10 +254,12 @@ describe('ChatView queued task prompt', () => {
         id: 'persisted-answer',
         threadId: 'thread-historical-nvidia',
         runId: 'run-historical-nvidia',
-        type: 'message_delta',
+        type: 'assistant_block',
         payload: {
-          role: 'assistant',
-          delta: '最终答案'
+          kind: 'text',
+          blockId: 'text-run-historical-nvidia',
+          phase: 'delta',
+          text: '最终答案'
         },
         createdAt: '2026-06-02T12:21:58.000Z'
       }

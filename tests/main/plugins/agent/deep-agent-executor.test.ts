@@ -1,4 +1,4 @@
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
@@ -84,9 +84,14 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(firstEvent).toEqual({
       done: false,
       value: {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'run-streaming',
-        delta: '实时回答'
+        block: {
+          kind: 'text',
+          blockId: 'text-run-streaming',
+          phase: 'delta',
+          text: '实时回答'
+        }
       }
     });
   });
@@ -130,9 +135,14 @@ describe('createAgentDeepAgentExecutor', () => {
 
     expect(events).toEqual([
       {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'run-streaming',
-        delta: '最终回答'
+        block: {
+          kind: 'text',
+          blockId: 'text-run-streaming',
+          phase: 'delta',
+          text: '最终回答'
+        }
       }
     ]);
   });
@@ -180,9 +190,14 @@ describe('createAgentDeepAgentExecutor', () => {
 
     expect(events).toEqual([
       {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'run-streaming',
-        delta: '实例回答'
+        block: {
+          kind: 'text',
+          blockId: 'text-run-streaming',
+          phase: 'delta',
+          text: '实例回答'
+        }
       }
     ]);
   });
@@ -315,9 +330,14 @@ describe('createAgentDeepAgentExecutor', () => {
 
     expect(events).toEqual([
       {
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         runId: 'run-streaming',
-        delta: '已完成文件写入。'
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-run-streaming',
+          phase: 'delta',
+          text: '已完成文件写入。'
+        }
       }
     ]);
   });
@@ -334,6 +354,7 @@ describe('createAgentDeepAgentExecutor', () => {
         subagents: createAsyncIterable([]),
         toolCalls: createAsyncIterable([
           {
+            callId: 'call-write',
             name: 'write_file',
             input: {
               file_path: '/workspace/hello.docx'
@@ -363,13 +384,177 @@ describe('createAgentDeepAgentExecutor', () => {
     }));
 
     expect(events).toContainEqual({
-      type: 'tool_event',
+      type: 'assistant_block',
       runId: 'run-streaming',
-      event: 'end',
-      name: 'write_file',
-      data: 'Successfully wrote to /workspace/hello.docx'
+      block: {
+        kind: 'tool_call',
+        blockId: 'tool-call-write',
+        callId: 'call-write',
+        name: 'write_file',
+        phase: 'end',
+        input: {
+          file_path: '/workspace/hello.docx'
+        },
+        output: 'Successfully wrote to /workspace/hello.docx'
+      }
     });
-    expect(events.some((event) => event.type === 'message_delta')).toBe(false);
+    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'text')).toBe(false);
+  });
+
+  it('uses final ToolMessage content for tool block output when present', async () => {
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents: vi.fn(async () => ({
+        interrupted: false,
+        messages: createAsyncIterable([]),
+        output: {
+          messages: [
+            new ToolMessage({
+              content: 'Successfully wrote to /workspace/hello.docx',
+              name: 'write_file',
+              tool_call_id: 'call-write'
+            })
+          ]
+        },
+        subagents: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([
+          {
+            callId: 'call-write',
+            name: 'write_file',
+            input: {
+              file_path: '/workspace/hello.docx'
+            },
+            output: {
+              command: 'internal'
+            }
+          }
+        ])
+      }))
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    const events = await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '创建一个 docx 文件，里面写你好世界',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    expect(events).toContainEqual({
+      type: 'assistant_block',
+      runId: 'run-streaming',
+      block: {
+        kind: 'tool_call',
+        blockId: 'tool-call-write',
+        callId: 'call-write',
+        name: 'write_file',
+        phase: 'end',
+        output: 'Successfully wrote to /workspace/hello.docx'
+      }
+    });
+  });
+
+  it('does not emit a final tool block when ToolMessage has no name', async () => {
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents: vi.fn(async () => ({
+        interrupted: false,
+        messages: createAsyncIterable([]),
+        output: {
+          messages: [
+            new ToolMessage({
+              content: 'Updated todo list.',
+              tool_call_id: 'call-todos'
+            })
+          ]
+        },
+        subagents: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([])
+      }))
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    const events = await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '更新 todo',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'tool_call')).toBe(false);
+  });
+
+  it('emits an error block for final file ToolMessage with error status', async () => {
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents: vi.fn(async () => ({
+        interrupted: false,
+        messages: createAsyncIterable([]),
+        output: {
+          messages: [
+            new ToolMessage({
+              content: 'Permission denied.',
+              name: 'write_file',
+              status: 'error',
+              tool_call_id: 'call-write'
+            })
+          ]
+        },
+        subagents: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([])
+      }))
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    const events = await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '创建 hello.txt',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    expect(events).toContainEqual({
+      type: 'assistant_block',
+      runId: 'run-streaming',
+      block: {
+        kind: 'tool_call',
+        blockId: 'tool-call-write',
+        callId: 'call-write',
+        name: 'write_file',
+        phase: 'error',
+        error: 'Permission denied.'
+      }
+    });
   });
 });
 

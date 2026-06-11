@@ -21,9 +21,14 @@ function createRunStartedEvent(): ChatRunEvent {
 
 function createDeltaEvent(delta: string): ChatRunEvent {
   return {
-    type: 'message_delta',
+    type: 'assistant_block',
     runId: 'chat_test',
-    delta
+    block: {
+      kind: 'text',
+      blockId: 'text-chat_test',
+      phase: 'delta',
+      text: delta
+    }
   };
 }
 
@@ -56,21 +61,36 @@ describe('applyChatRunEventBatch', () => {
         summary: 'Search docs'
       },
       {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'chat_test',
-        delta: 'A'
+        block: {
+          kind: 'text',
+          blockId: 'text-chat_test',
+          phase: 'delta',
+          text: 'A'
+        }
       },
       {
-        type: 'tool_event',
+        type: 'assistant_block',
         runId: 'chat_test',
-        event: 'start',
-        name: 'web_search',
-        data: { query: 'roc' }
+        block: {
+          kind: 'tool_call',
+          blockId: 'tool-web-search',
+          callId: 'call-web-search',
+          name: 'web_search',
+          phase: 'start',
+          input: { query: 'roc' }
+        }
       },
       {
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         runId: 'chat_test',
-        delta: 'R'
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-chat_test',
+          phase: 'delta',
+          text: 'R'
+        }
       },
       {
         type: 'subagent_event',
@@ -80,21 +100,30 @@ describe('applyChatRunEventBatch', () => {
         summary: 'Search docs'
       },
       {
-        type: 'tool_event',
+        type: 'assistant_block',
         runId: 'chat_test',
-        event: 'end',
-        name: 'web_search',
-        data: 'done'
+        block: {
+          kind: 'tool_call',
+          blockId: 'tool-web-search',
+          callId: 'call-web-search',
+          name: 'web_search',
+          phase: 'end',
+          output: 'done'
+        }
       },
       {
-        type: 'message_delta',
+        type: 'assistant_block',
         runId: 'chat_test',
-        delta: 'B'
+        block: {
+          kind: 'text',
+          blockId: 'text-chat_test',
+          phase: 'delta',
+          text: 'B'
+        }
       }
     ]);
 
     expect(next.assistantMessage).toBe('AB');
-    expect(next.reasoning).toBe('R');
     expect(next.subagents).toEqual([
       {
         subagent: 'research',
@@ -102,16 +131,21 @@ describe('applyChatRunEventBatch', () => {
         summary: 'Search docs'
       }
     ]);
-    expect(next.toolEvents).toEqual([
+    expect(next.activityBlocks).toEqual([
       {
+        id: 'tool-web-search',
+        kind: 'tool_call',
+        callId: 'call-web-search',
         name: 'web_search',
-        event: 'start',
-        data: { query: 'roc' }
+        status: 'end',
+        input: { query: 'roc' },
+        output: 'done',
+        error: null
       },
       {
-        name: 'web_search',
-        event: 'end',
-        data: 'done'
+        id: 'reasoning-chat_test',
+        kind: 'reasoning',
+        content: 'R'
       }
     ]);
   });
@@ -149,18 +183,28 @@ describe('isTerminalChatRunEvent', () => {
     expect(isTerminalChatRunEvent(createDeltaEvent('hello'))).toBe(false);
     expect(
       isTerminalChatRunEvent({
-        type: 'reasoning_delta',
+        type: 'assistant_block',
         runId: 'chat_test',
-        delta: 'thinking'
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-chat_test',
+          phase: 'delta',
+          text: 'thinking'
+        }
       })
     ).toBe(false);
     expect(
       isTerminalChatRunEvent({
-        type: 'tool_event',
+        type: 'assistant_block',
         runId: 'chat_test',
-        event: 'start',
-        name: 'web_read',
-        data: null
+        block: {
+          kind: 'tool_call',
+          blockId: 'tool-web-read',
+          callId: 'call-web-read',
+          name: 'web_read',
+          phase: 'start',
+          input: null
+        }
       })
     ).toBe(false);
   });

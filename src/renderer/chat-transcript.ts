@@ -1,5 +1,5 @@
-import type { ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
-import type { ChatRunState, ChatRunSubagentState, ChatRunToolState } from './chat-run-state';
+import type { ChatAssistantBlock, ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
+import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentState } from './chat-run-state';
 
 export type ChatTranscriptActivityBlock =
   | {
@@ -12,7 +12,7 @@ export type ChatTranscriptActivityBlock =
       id: string;
       kind: 'tool_call';
       name: string;
-      status: ChatRunToolState['event'];
+      status: Extract<ChatRunActivityBlock, { kind: 'tool_call' }>['status'];
       input: unknown;
       output: unknown;
       error: unknown;
@@ -46,23 +46,6 @@ export type ChatTranscriptMessage = {
 type MessagePayload = {
   role: 'user' | 'assistant';
   content: string;
-};
-
-type MessageDeltaPayload = {
-  role?: 'assistant';
-  delta: string;
-};
-
-type ReasoningDeltaPayload = {
-  delta: string;
-};
-
-type ToolCallPayload = {
-  name: string;
-  status: ChatRunToolState['event'];
-  input?: unknown;
-  output?: unknown;
-  error?: unknown;
 };
 
 type SubagentPayload = {
@@ -107,32 +90,30 @@ function isMessageTaskEvent(event: TaskEvent, threadId: string): event is Messag
   return event.threadId === threadId && event.type === 'message' && isMessagePayload(event.payload);
 }
 
-function isMessageDeltaPayload(payload: unknown): payload is MessageDeltaPayload {
+function isAssistantBlockPayload(payload: unknown): payload is ChatAssistantBlock {
   if (typeof payload !== 'object' || payload === null) {
     return false;
   }
-  const role = Reflect.get(payload, 'role');
-  const delta = Reflect.get(payload, 'delta');
-  return (role === undefined || role === 'assistant') && typeof delta === 'string';
-}
-
-function isReasoningDeltaPayload(payload: unknown): payload is ReasoningDeltaPayload {
-  if (typeof payload !== 'object' || payload === null) {
+  const kind = Reflect.get(payload, 'kind');
+  const blockId = Reflect.get(payload, 'blockId');
+  const phase = Reflect.get(payload, 'phase');
+  if (typeof blockId !== 'string') {
     return false;
   }
-  return typeof Reflect.get(payload, 'delta') === 'string';
-}
-
-function isToolCallPayload(payload: unknown): payload is ToolCallPayload {
-  if (typeof payload !== 'object' || payload === null) {
+  if (kind === 'text' || kind === 'reasoning') {
+    const text = Reflect.get(payload, 'text');
+    return (phase === 'delta' || phase === 'end') && (text === undefined || typeof text === 'string');
+  }
+  if (kind !== 'tool_call') {
     return false;
   }
+  const callId = Reflect.get(payload, 'callId');
   const name = Reflect.get(payload, 'name');
-  const status = Reflect.get(payload, 'status');
-  return (
-    typeof name === 'string' &&
-    (status === 'start' || status === 'progress' || status === 'end' || status === 'error')
-  );
+  return typeof callId === 'string' && typeof name === 'string' && isToolPhase(phase);
+}
+
+function isToolPhase(value: unknown): value is Extract<ChatRunActivityBlock, { kind: 'tool_call' }>['status'] {
+  return value === 'start' || value === 'progress' || value === 'end' || value === 'error';
 }
 
 function isSubagentPayload(payload: unknown): payload is SubagentPayload {
@@ -239,11 +220,27 @@ function getAssistantDraft(
   return draft;
 }
 
-function appendReasoningBlock(draft: AssistantDraft, delta: string, isStreaming: boolean): void {
+function applyAssistantBlock(draft: AssistantDraft, block: ChatAssistantBlock, isStreaming: boolean): void {
+  if (block.kind === 'text') {
+    if (typeof block.text === 'string') {
+      draft.message.content += block.text;
+    }
+    return;
+  }
+  if (block.kind === 'reasoning') {
+    if (typeof block.text === 'string') {
+      appendReasoningBlock(draft, block.blockId, block.text, isStreaming);
+    }
+    return;
+  }
+  applyToolCallBlock(draft, block);
+}
+
+function appendReasoningBlock(draft: AssistantDraft, blockId: string, delta: string, isStreaming: boolean): void {
   draft.message.reasoning = `${draft.message.reasoning ?? ''}${delta}`;
   if (draft.reasoningBlock === null) {
     draft.reasoningBlock = {
-      id: `reasoning-${draft.message.key.replace(/^assistant-/, '')}`,
+      id: blockId,
       kind: 'reasoning',
       content: '',
       isStreaming
@@ -254,28 +251,27 @@ function appendReasoningBlock(draft: AssistantDraft, delta: string, isStreaming:
   draft.reasoningBlock.isStreaming = isStreaming;
 }
 
-function applyToolCallBlock(draft: AssistantDraft, payload: ToolCallPayload, idPrefix: string): void {
-  const activeTool =
-    payload.status === 'start'
-      ? null
-      : [...draft.toolBlocks].reverse().find((block) => block.name === payload.name && block.status !== 'end' && block.status !== 'error') ?? null;
+function applyToolCallBlock(draft: AssistantDraft, payload: Extract<ChatAssistantBlock, { kind: 'tool_call' }>): void {
+  const activeTool = draft.toolBlocks.find((block) => block.id === payload.blockId);
   const block =
-    activeTool ??
-    ({
-      id: `${idPrefix}-${draft.toolBlocks.length}`,
-      kind: 'tool_call',
-      name: payload.name,
-      status: payload.status,
-      input: null,
-      output: null,
-      error: null
-    } satisfies Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>);
+    activeTool === undefined
+      ? ({
+          id: payload.blockId,
+          kind: 'tool_call',
+          name: payload.name,
+          status: payload.phase,
+          input: null,
+          output: null,
+          error: null
+        } satisfies Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>)
+      : activeTool;
 
-  if (activeTool === null) {
+  if (activeTool === undefined) {
     draft.toolBlocks.push(block);
     draft.message.blocks.push(block);
   }
-  block.status = payload.status;
+  block.status = payload.phase;
+  block.name = payload.name;
   if ('input' in payload) {
     block.input = payload.input;
   }
@@ -341,19 +337,8 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
       continue;
     }
 
-    if (event.type === 'message_delta' && isMessageDeltaPayload(event.payload)) {
-      const draft = getAssistantDraft(drafts, messages, event.runId);
-      draft.message.content += event.payload.delta;
-      continue;
-    }
-
-    if (event.type === 'reasoning_delta' && isReasoningDeltaPayload(event.payload)) {
-      appendReasoningBlock(getAssistantDraft(drafts, messages, event.runId), event.payload.delta, false);
-      continue;
-    }
-
-    if (event.type === 'tool_call' && isToolCallPayload(event.payload)) {
-      applyToolCallBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, `tool-${event.runId}`);
+    if (event.type === 'assistant_block' && isAssistantBlockPayload(event.payload)) {
+      applyAssistantBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, false);
       continue;
     }
 
@@ -387,52 +372,27 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
   );
 }
 
-function buildToolBlocksFromLiveState(toolEvents: readonly ChatRunToolState[], idPrefix: string): ChatTranscriptActivityBlock[] {
-  const blocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>> = [];
-  for (const event of toolEvents) {
-    const activeTool =
-      event.event === 'start'
-        ? null
-        : [...blocks].reverse().find((block) => block.name === event.name && block.status !== 'end' && block.status !== 'error') ?? null;
-    const block =
-      activeTool ??
-      ({
-        id: `${idPrefix}-tool-${blocks.length}`,
-        kind: 'tool_call',
-        name: event.name,
-        status: event.event,
-        input: null,
-        output: null,
-        error: null
-      } satisfies Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>);
-
-    if (activeTool === null) {
-      blocks.push(block);
-    }
-    block.status = event.event;
-    if (event.event === 'end') {
-      block.output = event.data;
-    } else if (event.event === 'error') {
-      block.error = event.data;
-    } else {
-      block.input = event.data;
-    }
-  }
-  return blocks;
-}
-
 function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActivityBlock[] {
-  const idPrefix = `live-${chatRunState.runId ?? 'assistant'}`;
-  const blocks: ChatTranscriptActivityBlock[] = [];
-  if (chatRunState.reasoning.length > 0) {
-    blocks.push({
-      id: `${idPrefix}-reasoning`,
-      kind: 'reasoning',
-      content: chatRunState.reasoning,
-      isStreaming: chatRunState.status === 'running'
-    });
-  }
-  blocks.push(...buildToolBlocksFromLiveState(chatRunState.toolEvents, idPrefix));
+  const idPrefix = chatRunState.runId === null ? 'live-assistant' : `live-${chatRunState.runId}`;
+  const blocks: ChatTranscriptActivityBlock[] = chatRunState.activityBlocks.map((block) => {
+    if (block.kind === 'reasoning') {
+      return {
+        id: block.id,
+        kind: 'reasoning',
+        content: block.content,
+        isStreaming: chatRunState.status === 'running'
+      };
+    }
+    return {
+      id: block.id,
+      kind: 'tool_call',
+      name: block.name,
+      status: block.status,
+      input: block.input,
+      output: block.output,
+      error: block.error
+    };
+  });
   chatRunState.subagents.forEach((subagent, index) => {
     blocks.push({
       id: `${idPrefix}-subagent-${index}`,
@@ -443,6 +403,10 @@ function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActi
     });
   });
   return blocks;
+}
+
+function readReasoningFromBlocks(blocks: readonly ChatTranscriptActivityBlock[]): string {
+  return blocks.flatMap((block) => (block.kind === 'reasoning' ? [block.content] : [])).join('');
 }
 
 export function buildChatTranscript(input: {
@@ -492,8 +456,8 @@ export function buildChatTranscript(input: {
   }
 
   const liveContent = input.chatRunState.assistantMessage;
-  const liveReasoning = input.chatRunState.reasoning;
   const liveBlocks = buildLiveActivityBlocks(input.chatRunState);
+  const liveReasoning = readReasoningFromBlocks(liveBlocks);
   const lastAssistantIndex = [...messages].reverse().findIndex((message) => message.role === 'assistant');
   const assistantIndex = lastAssistantIndex === -1 ? -1 : messages.length - 1 - lastAssistantIndex;
   const matchesPersistedAssistant =
@@ -514,7 +478,6 @@ export function buildChatTranscript(input: {
 
   if (
     liveContent.length === 0 &&
-    liveReasoning.length === 0 &&
     liveBlocks.length === 0 &&
     input.chatRunState.pendingApprovals.length === 0
   ) {

@@ -43,12 +43,10 @@ type StreamConsumerCallbacks = {
   markVisibleOutput?: () => void;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
   recordTaskEvent: (
-    type: 'message_delta' | 'reasoning_delta' | 'tool_call' | 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
+    type: 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
     payload: Record<string, unknown>
   ) => void;
 };
-
-const maxPersistedAssistantDeltaChars = 512;
 
 export type ProviderUsageAccumulator = {
   promptTokens: number | null;
@@ -76,8 +74,6 @@ export async function consumeMessageStream(input: {
   usageAccumulator: ProviderUsageAccumulator;
   callbacks: StreamConsumerCallbacks;
 }): Promise<void> {
-  const assistantDeltaRecorder = createAssistantDeltaRecorder(input.context, input.callbacks);
-  const reasoningDeltaRecorder = createReasoningDeltaRecorder(input.context, input.callbacks);
   for await (const message of input.messages) {
     updateUsageAccumulator(input.usageAccumulator, message);
     const guardrailNudge = readGuardrailNudgePayload(message);
@@ -104,19 +100,22 @@ export async function consumeMessageStream(input: {
         source: reasoningSource,
         context: input.context,
         reasoningChunks: input.reasoningChunks,
-        callbacks: input.callbacks,
-        reasoningDeltaRecorder
+        callbacks: input.callbacks
       });
     }
     if (canStreamAssistantText) {
       await consumeVisibleTextStream(textStream as AsyncIterable<unknown>, (delta) => {
         input.callbacks.markVisibleOutput?.();
         input.assistantChunks.push(delta);
-        assistantDeltaRecorder.record(delta);
         input.callbacks.emitRuntimeEvent({
-          type: 'message_delta',
+          type: 'assistant_block',
           runId: input.context.runId,
-          delta
+          block: {
+            kind: 'text',
+            blockId: `text-${input.context.runId}`,
+            phase: 'delta',
+            text: delta
+          }
         });
       });
     }
@@ -127,88 +126,20 @@ export async function consumeMessageStream(input: {
         await consumeVisibleTextStream(createStringAsyncIterable([trailingReasoning]), (delta) => {
           input.callbacks.markVisibleOutput?.();
           input.reasoningChunks.push(delta);
-          reasoningDeltaRecorder.record(delta);
           input.callbacks.emitRuntimeEvent({
-            type: 'reasoning_delta',
+            type: 'assistant_block',
             runId: input.context.runId,
-            delta
+            block: {
+              kind: 'reasoning',
+              blockId: `reasoning-${input.context.runId}`,
+              phase: 'delta',
+              text: delta
+            }
           });
         });
       }
     }
   }
-  assistantDeltaRecorder.flush();
-  reasoningDeltaRecorder.flush();
-}
-
-function createBoundedTaskDeltaRecorder(
-  context: StreamConsumerContext,
-  callbacks: StreamConsumerCallbacks,
-  type: 'message_delta' | 'reasoning_delta',
-  buildPayload: (delta: string) => Record<string, unknown>
-): {
-  record: (delta: string) => void;
-  flush: () => void;
-} {
-  let pendingDelta = '';
-
-  function recordChunk(delta: string): void {
-    callbacks.recordTaskEvent(type, buildPayload(delta));
-  }
-
-  function flushCompleteChunks(): void {
-    while (pendingDelta.length >= maxPersistedAssistantDeltaChars) {
-      recordChunk(pendingDelta.slice(0, maxPersistedAssistantDeltaChars));
-      pendingDelta = pendingDelta.slice(maxPersistedAssistantDeltaChars);
-    }
-  }
-
-  function flush(): void {
-    if (context.taskRun === null || pendingDelta.length === 0) {
-      pendingDelta = '';
-      return;
-    }
-    recordChunk(pendingDelta);
-    pendingDelta = '';
-  }
-
-  return {
-    record: (delta) => {
-      if (context.taskRun === null) {
-        return;
-      }
-      pendingDelta += delta;
-      if (pendingDelta.length >= maxPersistedAssistantDeltaChars) {
-        flushCompleteChunks();
-      }
-    },
-    flush
-  };
-}
-
-function createAssistantDeltaRecorder(
-  context: StreamConsumerContext,
-  callbacks: StreamConsumerCallbacks
-): {
-  record: (delta: string) => void;
-  flush: () => void;
-} {
-  return createBoundedTaskDeltaRecorder(context, callbacks, 'message_delta', (delta) => ({
-    role: 'assistant',
-    delta
-  }));
-}
-
-function createReasoningDeltaRecorder(
-  context: StreamConsumerContext,
-  callbacks: StreamConsumerCallbacks
-): {
-  record: (delta: string) => void;
-  flush: () => void;
-} {
-  return createBoundedTaskDeltaRecorder(context, callbacks, 'reasoning_delta', (delta) => ({
-    delta
-  }));
 }
 
 export async function consumeToolCallStream(input: {
@@ -218,61 +149,61 @@ export async function consumeToolCallStream(input: {
 }): Promise<void> {
   for await (const call of input.calls) {
     const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
+    const callId = readToolCallId(call);
+    if (callId === null) {
+      continue;
+    }
     const rawCallInput = await Promise.resolve(recordUtils.readRecordValue(call, 'input'));
     const callInput = redactUnknown(rawCallInput);
     input.callbacks.markVisibleOutput?.();
     input.callbacks.emitRuntimeEvent({
-      type: 'tool_event',
+      type: 'assistant_block',
       runId: input.context.runId,
-      event: 'start',
-      name,
-      data: callInput
-    });
-    if (input.context.taskRun !== null) {
-      input.callbacks.recordTaskEvent('tool_call', {
+      block: {
+        kind: 'tool_call',
+        blockId: `tool-${callId}`,
+        callId,
         name,
-        status: 'start',
+        phase: 'start',
         input: callInput
-      });
-    }
+      }
+    });
     input.callbacks.emitTodoEvent(callInput);
 
     try {
       const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
       input.callbacks.markVisibleOutput?.();
       input.callbacks.emitRuntimeEvent({
-        type: 'tool_event',
+        type: 'assistant_block',
         runId: input.context.runId,
-        event: 'end',
-        name,
-        data: output
-      });
-      if (input.context.taskRun !== null) {
-        input.callbacks.recordTaskEvent('tool_call', {
+        block: {
+          kind: 'tool_call',
+          blockId: `tool-${callId}`,
+          callId,
           name,
-          status: 'end',
+          phase: 'end',
+          input: callInput,
           output
-        });
-      }
+        }
+      });
       input.callbacks.recordSessionToolCall?.(name, callInput, output);
       input.callbacks.emitTodoEvent(output);
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : 'Tool 执行失败。');
       input.callbacks.markVisibleOutput?.();
       input.callbacks.emitRuntimeEvent({
-        type: 'tool_event',
+        type: 'assistant_block',
         runId: input.context.runId,
-        event: 'error',
-        name,
-        data: message
-      });
-      if (input.context.taskRun !== null) {
-        input.callbacks.recordTaskEvent('tool_call', {
+        block: {
+          kind: 'tool_call',
+          blockId: `tool-${callId}`,
+          callId,
           name,
-          status: 'error',
+          phase: 'error',
+          input: callInput,
           error: message
-        });
-      }
+        }
+      });
       input.callbacks.recordSessionToolCall?.(name, callInput, { error: message });
     }
   }
@@ -446,17 +377,43 @@ function emitToolCallChunkActivity(
   context: StreamConsumerContext,
   callbacks: StreamConsumerCallbacks
 ): void {
-  for (const chunk of chunks) {
+  chunks.forEach((chunk, index) => {
+    const chunkId = readToolChunkId(chunk, index);
     callbacks.markVisibleOutput?.();
     callbacks.emitRuntimeEvent({
-      type: 'tool_event',
+      type: 'assistant_block',
       runId: context.runId,
-      event: 'progress',
-      name: chunk.name,
-      data: chunk.data
+      block: {
+        kind: 'tool_call',
+        blockId: `tool-${chunkId}`,
+        callId: chunkId,
+        name: chunk.name,
+        phase: 'progress',
+        input: chunk.data
+      }
     });
     callbacks.emitTodoEvent(chunk.data);
+  });
+}
+
+function readToolCallId(call: unknown): string | null {
+  const callId = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'callId'));
+  if (callId !== null) {
+    return callId;
   }
+  const id = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'id'));
+  if (id !== null) {
+    return id;
+  }
+  return null;
+}
+
+function readToolChunkId(chunk: ToolCallChunkBlock, index: number): string {
+  const id = recordUtils.readNonEmptyString(recordUtils.readRecordValue(chunk.data, 'id'));
+  if (id !== null) {
+    return id;
+  }
+  return `chunk-${index}`;
 }
 
 function buildToolCallChunkData(block: Record<string, unknown>): Record<string, unknown> {
@@ -503,18 +460,19 @@ async function consumeReasoningSource(input: {
   context: StreamConsumerContext;
   reasoningChunks: string[];
   callbacks: StreamConsumerCallbacks;
-  reasoningDeltaRecorder: {
-    record: (delta: string) => void;
-  };
 }): Promise<void> {
   const onDelta = (delta: string) => {
     input.callbacks.markVisibleOutput?.();
     input.reasoningChunks.push(delta);
-    input.reasoningDeltaRecorder.record(delta);
     input.callbacks.emitRuntimeEvent({
-      type: 'reasoning_delta',
+      type: 'assistant_block',
       runId: input.context.runId,
-      delta
+      block: {
+        kind: 'reasoning',
+        blockId: `reasoning-${input.context.runId}`,
+        phase: 'delta',
+        text: delta
+      }
     });
   };
 
