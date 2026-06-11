@@ -3,6 +3,7 @@ import type { ChatRunEvent, GuardrailNudgePayload, TaskRun } from '../../../shar
 import {
   FORGE_TRANSIENT_TYPES,
   readForgeMessageTag,
+  readForgeNudgeVisibility,
   type ForgeMessageType
 } from '../forge-guardrails';
 import * as recordUtils from './record-utils';
@@ -25,6 +26,10 @@ type ContentBlockText = {
 type ToolCallChunkBlock = {
   name: string;
   data: Record<string, unknown>;
+};
+
+type StreamGuardrailNudgePayload = GuardrailNudgePayload & {
+  visibility: 'internal' | 'visible';
 };
 
 type StreamConsumerContext = {
@@ -77,7 +82,10 @@ export async function consumeMessageStream(input: {
     updateUsageAccumulator(input.usageAccumulator, message);
     const guardrailNudge = readGuardrailNudgePayload(message);
     if (guardrailNudge !== null) {
-      input.callbacks.recordTaskEvent('guardrail_nudge', guardrailNudge);
+      const { visibility, ...payload } = guardrailNudge;
+      if (visibility === 'visible') {
+        input.callbacks.recordTaskEvent('guardrail_nudge', payload);
+      }
       continue;
     }
 
@@ -578,7 +586,7 @@ function readNonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
-function readGuardrailNudgePayload(message: unknown): GuardrailNudgePayload | null {
+function readGuardrailNudgePayload(message: unknown): StreamGuardrailNudgePayload | null {
   if (!BaseMessage.isInstance(message)) {
     return null;
   }
@@ -602,7 +610,10 @@ function readGuardrailNudgePayload(message: unknown): GuardrailNudgePayload | nu
       payload.toolName = message.name;
     }
   }
-  return payload;
+  return {
+    ...payload,
+    visibility: readForgeNudgeVisibility(message)
+  };
 }
 
 function isGuardrailNudgeTag(tag: ForgeMessageType): boolean {

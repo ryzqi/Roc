@@ -230,13 +230,11 @@ function readAssistantMessageText(message: unknown): string | null {
   if (recordUtils.isNonAssistantTextMessage(message) || recordUtils.isSummarizationMessage(message)) {
     return null;
   }
-  const text =
-    readContentText(recordUtils.readRecordValue(message, 'content')) ??
-    readContentText(recordUtils.readRecordValue(message, 'contentBlocks'));
-  if (text === null) {
+  const contentSummary = recordUtils.readMessageContentSummary(message);
+  if (!contentSummary.hasVisibleText) {
     return null;
   }
-  const trimmed = text.trim();
+  const trimmed = contentSummary.visibleText.trim();
   if (recordUtils.classifyStreamedAssistantText(trimmed) !== 'assistant') {
     return null;
   }
@@ -250,32 +248,6 @@ function isAssistantMessage(message: Record<string, unknown>): boolean {
   }
   const type = readLowercaseString(recordUtils.readRecordValue(message, 'type'));
   return type === 'assistant' || type === 'ai' || type === 'aimessage';
-}
-
-function readContentText(content: unknown): string | null {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return null;
-  }
-  const text = content
-    .map((block) => {
-      if (typeof block === 'string') {
-        return block;
-      }
-      if (!recordUtils.isRecord(block)) {
-        return '';
-      }
-      const type = readLowercaseString(recordUtils.readRecordValue(block, 'type'));
-      if (type !== null && type !== 'text') {
-        return '';
-      }
-      const text = recordUtils.readRecordValue(block, 'text');
-      return typeof text === 'string' ? text : '';
-    })
-    .join('');
-  return text.length === 0 ? null : text;
 }
 
 function readLowercaseString(value: unknown): string | null {

@@ -11,7 +11,6 @@ import {
   createForgeCleanupMiddleware,
   createErrorBudgetMiddleware,
   createRescueParsingMiddleware,
-  createRespondToolInjectionMiddleware,
   createResponseValidationMiddleware,
   createStepEnforcementMiddleware,
   createFilesystemToolErrorMiddleware,
@@ -49,14 +48,9 @@ const NETWORK_SENSITIVE_TOOLS = [
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();
-  const isLocalProvider = input.providerType === 'llama_cpp';
   const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolNames = (): string[] => {
-    const names = [...input.tools.map((tool) => tool.name), ...DEEP_AGENT_BUILT_IN_TOOLS];
-    if (isLocalProvider) {
-      names.push('respond');
-    }
-    return names;
+    return [...input.tools.map((tool) => tool.name), ...DEEP_AGENT_BUILT_IN_TOOLS];
   };
   const guardrails = [
     rtkMiddleware,
@@ -76,7 +70,6 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       prerequisitesConfig: ROC_PREREQUISITES
     }),
     createFilesystemToolErrorMiddleware(),
-    createRespondToolInjectionMiddleware({ enabled: isLocalProvider }),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens
     }),

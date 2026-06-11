@@ -178,7 +178,7 @@ class ForgeDropReasoningTextEdit implements ContextEdit {
         params.messages.splice(index, 1);
         continue;
       }
-      if (AIMessage.isInstance(message) && hasNoToolCalls(message) && tag !== 'forge:respond_synthetic') {
+      if (AIMessage.isInstance(message) && hasNoToolCalls(message)) {
         params.messages.splice(index, 1);
       }
     }

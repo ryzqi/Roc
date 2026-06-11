@@ -13,7 +13,6 @@
 - `rescue-parser.ts` — 4 种野生格式解析
 - `sampling-defaults.ts` — 采样默认值
 - `prerequisites-config.ts` — prereq + workflow 配置
-- `respond-tool.ts` — 合成 respond ClientTool
 - `preview-store.ts` — propose preview session-scoped 缓存
 - `workflow-resolver.ts` — workflowHint -> WorkflowSpec
 - `middleware/*` — 7 个 LangChain middleware

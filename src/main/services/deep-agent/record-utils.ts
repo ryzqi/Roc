@@ -1,5 +1,11 @@
 import type { ChatTodoItem } from '../../../shared/types';
 
+export type MessageContentSummary = {
+  hasReasoning: boolean;
+  hasVisibleText: boolean;
+  visibleText: string;
+};
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -97,6 +103,19 @@ export function classifyStreamedAssistantText(text: string): StreamedAssistantTe
   return 'assistant';
 }
 
+export function readMessageContentSummary(value: unknown): MessageContentSummary {
+  const visibleText = readVisibleTextValues(value).join('');
+  return {
+    hasReasoning: readReasoningTextValues(value).join('').trim().length > 0,
+    hasVisibleText: visibleText.trim().length > 0,
+    visibleText
+  };
+}
+
+function readVisibleTextValues(value: unknown): string[] {
+  return readPreferredContentBlocks(value).flatMap((block) => readVisibleTextBlock(block));
+}
+
 function hasNonAssistantMessageType(value: Record<string, unknown>): boolean {
   const role = readLowercaseString(readRecordValue(value, 'role'));
   if (role !== null && NON_ASSISTANT_MESSAGE_TYPES.has(role)) {
@@ -144,6 +163,41 @@ function appendArrayValues(target: unknown[], value: unknown): void {
     return;
   }
   target.push(...value);
+}
+
+function readPreferredContentBlocks(value: unknown): unknown[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const contentBlocks = readRecordValue(value, 'contentBlocks');
+  if (Array.isArray(contentBlocks)) {
+    return contentBlocks;
+  }
+
+  const content = readRecordValue(value, 'content');
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  if (Array.isArray(content)) {
+    return content;
+  }
+  return [];
+}
+
+function readVisibleTextBlock(block: unknown): string[] {
+  if (typeof block === 'string') {
+    return [block];
+  }
+  if (!isRecord(block)) {
+    return [];
+  }
+  const type = readLowercaseString(readRecordValue(block, 'type'));
+  if (type !== null && type !== 'text') {
+    return [];
+  }
+  const text = readRecordValue(block, 'text');
+  return typeof text === 'string' ? [text] : [];
 }
 
 function isNonAssistantContentBlock(block: unknown): boolean {

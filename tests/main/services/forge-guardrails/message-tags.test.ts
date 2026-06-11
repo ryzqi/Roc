@@ -32,8 +32,7 @@ describe('forge message tags', () => {
 
     const persistentTypes: ForgeMessageType[] = [
       'forge:reasoning',
-      'forge:tool_resolution',
-      'forge:respond_synthetic'
+      'forge:tool_resolution'
     ];
     for (const type of persistentTypes) {
       expect(isForgeTransientMessage(tagForgeMessage(new HumanMessage('x'), type))).toBe(false);
@@ -72,7 +71,6 @@ describe('forge message tags', () => {
       'forge:prerequisite_nudge': 1,
       'forge:context_warning': 1,
       'forge:tool_resolution': 2,
-      'forge:respond_synthetic': 3,
       'forge:reasoning': 4
     });
   });

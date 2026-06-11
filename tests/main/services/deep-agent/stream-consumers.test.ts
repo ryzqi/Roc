@@ -1,5 +1,7 @@
+import { HumanMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
 
+import { markForgeNudgeInternal, tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
 import {
   consumeMessageStream,
   createUsageAccumulator
@@ -78,6 +80,34 @@ describe('consumeMessageStream', () => {
 
     expect(outputOrder).toEqual(['message:只有答案内容']);
   });
+
+  it('suppresses internal retry nudges from user-visible task output', async () => {
+    const outputOrder: string[] = [];
+    const callbacks = createCallbacks(outputOrder);
+    const nudge = markForgeNudgeInternal(
+      tagForgeMessage(
+        new HumanMessage({
+          content: '你上一条回复没有可见文本，也没有工具调用。'
+        }),
+        'forge:retry_nudge'
+      )
+    );
+
+    await consumeMessageStream({
+      messages: createSingleMessageStream(nudge),
+      context: {
+        runId: 'run-internal-nudge',
+        taskRun: null
+      },
+      assistantChunks: [],
+      reasoningChunks: [],
+      usageAccumulator: createUsageAccumulator(),
+      callbacks
+    });
+
+    expect(outputOrder).toEqual([]);
+    expect(callbacks.recordTaskEvent).not.toHaveBeenCalled();
+  });
 });
 
 function createCallbacks(outputOrder: string[]) {
@@ -95,10 +125,7 @@ function createCallbacks(outputOrder: string[]) {
   };
 }
 
-async function* createSingleMessageStream(message: {
-  reasoning?: AsyncIterable<unknown>;
-  text?: AsyncIterable<unknown> | null;
-}): AsyncGenerator<unknown> {
+async function* createSingleMessageStream(message: unknown): AsyncGenerator<unknown> {
   yield message;
 }
 

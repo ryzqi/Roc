@@ -3,11 +3,45 @@ import {
   classifyStreamedAssistantText,
   isNonAssistantTextMessage,
   isSummarizationMessage,
+  readMessageContentSummary,
   readReasoningBlockText,
   readReasoningFromMessageOutput
 } from '../../src/main/services/deep-agent/record-utils';
 
 describe('record-utils reasoning helpers', () => {
+  it('separates visible assistant text from reasoning blocks', () => {
+    expect(
+      readMessageContentSummary({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: '先分析。'
+          },
+          {
+            type: 'text',
+            text: '最终回答。'
+          }
+        ]
+      })
+    ).toEqual({
+      hasReasoning: true,
+      hasVisibleText: true,
+      visibleText: '最终回答。'
+    });
+  });
+
+  it('treats string content as visible assistant text without reasoning', () => {
+    expect(
+      readMessageContentSummary({
+        content: '直接回答。'
+      })
+    ).toEqual({
+      hasReasoning: false,
+      hasVisibleText: true,
+      visibleText: '直接回答。'
+    });
+  });
+
   it('reads reasoning_content from message output additional_kwargs', async () => {
     await expect(
       readReasoningFromMessageOutput({

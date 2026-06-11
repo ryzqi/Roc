@@ -93,7 +93,6 @@ describe('forge guardrails full stack', () => {
       'ForgeErrorBudgetMiddleware',
       'ForgeStepEnforcement',
       'ForgeFilesystemToolErrorMiddleware',
-      'ForgeRespondToolInjection',
       'ContextEditingMiddleware',
       'ForgeRescueParsingMiddleware',
       'ForgeResponseValidation',

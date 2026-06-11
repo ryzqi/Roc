@@ -103,19 +103,6 @@ function reasoningText(id: string, iterationIndex: number): AIMessage {
   );
 }
 
-function respondSynthetic(id: string, iterationIndex: number): AIMessage {
-  return tagForgeMessage(
-    mark(
-      new AIMessage({
-        id,
-        content: 'visible response'
-      }),
-      iterationIndex
-    ),
-    'forge:respond_synthetic'
-  );
-}
-
 function toolCallAi(id: string, iterationIndex: number): AIMessage {
   return mark(
     new AIMessage({
@@ -244,14 +231,6 @@ describe('ForgeTieredCompaction', () => {
     await applyTieredCompaction(messages, 850);
 
     expect(ids(messages)).toEqual(['system', 'user', 'soft-error', 'recent-anchor']);
-  });
-
-  it('keeps synthetic respond messages when dropping failed text responses', async () => {
-    const messages = [...headers(), assistantText('old-text', 1), respondSynthetic('respond', 1), toolCallAi('recent-anchor', 5)];
-
-    await applyTieredCompaction(messages, 980);
-
-    expect(ids(messages)).toEqual(['system', 'user', 'respond', 'recent-anchor']);
   });
 
   it('does not compact when no message carries an iteration index', async () => {

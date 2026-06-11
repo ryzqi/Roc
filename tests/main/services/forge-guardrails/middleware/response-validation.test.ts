@@ -2,7 +2,7 @@ import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import {
   readForgeMessageTag,
-  tagForgeMessage
+  readForgeNudgeVisibility
 } from '../../../../../src/main/services/forge-guardrails';
 import { createResponseValidationMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/response-validation';
 
@@ -128,7 +128,7 @@ describe('ForgeResponseValidation', () => {
     expect(update).toBeUndefined();
   });
 
-  it('allows reasoning blocks as valid content', async () => {
+  it('nudges a reasoning-only turn internally and jumps back to the model', async () => {
     const update = await runAfterModel([
       new AIMessage({
         id: 'ai-reasoning',
@@ -141,7 +141,34 @@ describe('ForgeResponseValidation', () => {
       })
     ]);
 
-    expect(update).toBeUndefined();
+    expect(update?.jumpTo).toBe('model');
+    expect(update?.messages).toHaveLength(1);
+    const nudge = update?.messages?.[0] as HumanMessage;
+    expect(nudge).toBeInstanceOf(HumanMessage);
+    expect(String(nudge.content)).toContain('没有可见文本');
+    expect(readForgeNudgeVisibility(nudge)).toBe('internal');
+    expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
+  });
+
+  it('reproduces the docx run: a thinking-only turn must be retried, not accepted as final', async () => {
+    const update = await runAfterModel([
+      new AIMessage({
+        id: 'ai-docx-thinking',
+        content: [
+          {
+            type: 'reasoning',
+            reasoning:
+              'The user wants me to create a .docx file containing 你好世界. I should use the docx skill for this task. Let me first read the docx skill instructions.'
+          }
+        ]
+      })
+    ]);
+
+    expect(update?.jumpTo).toBe('model');
+    const nudge = update?.messages?.[0] as HumanMessage;
+    expect(nudge).toBeInstanceOf(HumanMessage);
+    expect(readForgeNudgeVisibility(nudge)).toBe('internal');
+    expect(readForgeMessageTag(nudge)).toBe('forge:retry_nudge');
   });
 
   it('requires tool call when outputting text without reasoning', async () => {
@@ -199,20 +226,6 @@ describe('ForgeResponseValidation', () => {
       ],
       response_metadata: { model_provider: 'anthropic' }
     });
-
-    const update = await runAfterModel([message]);
-
-    expect(update).toBeUndefined();
-  });
-
-  it('leaves synthetic respond messages unchanged', async () => {
-    const message = tagForgeMessage(
-      new AIMessage({
-        id: 'ai-respond',
-        content: '完成'
-      }),
-      'forge:respond_synthetic'
-    );
 
     const update = await runAfterModel([message]);
 
