@@ -62,7 +62,7 @@ export type TaskEvent = {
 };
 
 export type GuardrailNudgePayload = {
-  nudgeKind: 'retry' | 'unknown_tool' | 'step' | 'prerequisite' | 'tool_resolution' | 'context_warning';
+  nudgeKind: 'retry' | 'unknown_tool' | 'tool_resolution' | 'context_warning';
   tier?: number;
   content: string;
   toolCallId?: string;

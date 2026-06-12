@@ -15,13 +15,11 @@ export class RocToolResolutionError extends Error {
 }
 
 /**
- * 八条 forge 护栏耗尽时使用的错误代码命名空间。
+ * forge 护栏耗尽时使用的错误代码命名空间。
  */
 export const FORGE_EXHAUSTED_CODES = {
   retries: 'forge_retries_exhausted',
-  toolErrors: 'forge_tool_errors_exhausted',
-  stepEnforcement: 'forge_step_enforcement_exhausted',
-  prerequisite: 'forge_prerequisite_exhausted'
+  toolErrors: 'forge_tool_errors_exhausted'
 } as const;
 
 export type ForgeExhaustedCode = (typeof FORGE_EXHAUSTED_CODES)[keyof typeof FORGE_EXHAUSTED_CODES];

@@ -12,6 +12,8 @@ const mocked = vi.hoisted(() => ({
   createBackend: vi.fn()
 }));
 
+const REMOVED_STEP_TRACKER_FIELD = ['forge', 'step', 'tracker'].join('_');
+
 vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
   buildDeepAgent: mocked.buildDeepAgent
 }));
@@ -95,6 +97,58 @@ describe('createAgentDeepAgentExecutor', () => {
         }
       }
     });
+  });
+
+  it('starts new DeepAgent runs without forge step tracker state', async () => {
+    const streamEvents = vi.fn(async () => ({
+      interrupted: false,
+      messages: createAsyncIterable([]),
+      output: {
+        messages: []
+      },
+      subagents: createAsyncIterable([]),
+      toolCalls: createAsyncIterable([])
+    }));
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '解释 Agnes 响应',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    const streamEventCalls = streamEvents.mock.calls as unknown as Array<[unknown]>;
+    const runInput = streamEventCalls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(runInput).toMatchObject({
+      forge_error_tracker: {
+        consecutiveRetries: 0,
+        consecutiveToolErrors: 0,
+        maxRetries: 3,
+        maxToolErrors: 2
+      }
+    });
+    expect(Object.keys((runInput?.forge_error_tracker ?? {}) as Record<string, unknown>).sort()).toEqual([
+      'consecutiveRetries',
+      'consecutiveToolErrors',
+      'maxRetries',
+      'maxToolErrors'
+    ]);
+    expect(Reflect.has(runInput ?? {}, REMOVED_STEP_TRACKER_FIELD)).toBe(false);
   });
 
   it('yields the final assistant output when the provider does not stream message text', async () => {

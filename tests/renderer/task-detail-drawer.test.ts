@@ -89,9 +89,9 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
         runId: 'run-1',
         type: 'guardrail_nudge',
         payload: {
-          nudgeKind: 'step',
+          nudgeKind: 'retry',
           tier: 1,
-          content: '请先完成 schedule_background_task。',
+          content: '请重新给出有效工具调用。',
           toolName: 'confirm_with_user'
         },
         createdAt: '2026-05-16T07:04:40.000Z'

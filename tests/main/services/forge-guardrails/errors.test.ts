@@ -21,9 +21,7 @@ describe('forge guardrails errors', () => {
 
   it('defines only forge exhausted error codes', () => {
     expect(Object.values(FORGE_EXHAUSTED_CODES).sort()).toEqual([
-      'forge_prerequisite_exhausted',
       'forge_retries_exhausted',
-      'forge_step_enforcement_exhausted',
       'forge_tool_errors_exhausted'
     ]);
     for (const code of Object.values(FORGE_EXHAUSTED_CODES)) {

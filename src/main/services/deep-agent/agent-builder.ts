@@ -11,12 +11,11 @@ import {
   createForgeTieredCompactionMiddleware,
   createForgeCleanupMiddleware,
   createErrorBudgetMiddleware,
+  createForgeIterationTrackingMiddleware,
   createRescueParsingMiddleware,
-  createStepEnforcementMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
-  createPromptCachingMiddleware,
-  ROC_PREREQUISITES
+  createPromptCachingMiddleware
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -66,10 +65,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       backoffFactor: 1.5
     }),
     createErrorBudgetMiddleware(),
-    createStepEnforcementMiddleware({
-      resolveWorkflowFromContext: () => input.workflowHint,
-      prerequisitesConfig: ROC_PREREQUISITES
-    }),
+    createForgeIterationTrackingMiddleware(),
     createFilesystemToolErrorMiddleware(),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens

@@ -51,9 +51,7 @@ describe('ForgeErrorBudgetMiddleware', () => {
         consecutiveRetries: 0,
         consecutiveToolErrors: 0,
         maxRetries: 5,
-        maxToolErrors: 4,
-        maxPrematureAttempts: 3,
-        maxPrereqViolations: 2
+        maxToolErrors: 4
       }
     });
     expect(sticky).toBeUndefined();

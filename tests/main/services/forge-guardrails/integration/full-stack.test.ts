@@ -7,7 +7,6 @@ import type { RocCompositeBackend } from '../../../../../src/main/services/deep-
 import type { DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
 import {
   defaultErrorTracker,
-  defaultStepTracker,
   markIterationOnMessage,
   tagForgeMessage
 } from '../../../../../src/main/services/forge-guardrails';
@@ -33,6 +32,7 @@ type MiddlewareDescriptor = {
     hook: (state: { messages: BaseMessage[] }, runtime: unknown) => unknown | Promise<unknown>;
   };
   beforeAgent?: (state: unknown, runtime: unknown) => unknown;
+  beforeModel?: (state: { messages: BaseMessage[] }, runtime: unknown) => unknown;
   name: string;
   wrapToolCall?: (request: unknown, handler: (request: unknown) => Promise<unknown>) => Promise<unknown>;
 };
@@ -84,90 +84,23 @@ function middlewareNames(middleware: MiddlewareDescriptor[]): string[] {
 }
 
 describe('forge guardrails full stack', () => {
-  it('跨护栏 rescue 后的工具调用会进入 step tracker 累加', async () => {
+  it('wires guardrails without step enforcement and keeps iteration tracking before compaction', async () => {
     const middleware = await buildMiddleware();
     expect(middlewareNames(middleware)).toEqual([
       'RTKMiddleware',
       'PromptCaching',
       'toolRetryMiddleware',
       'ForgeErrorBudgetMiddleware',
-      'ForgeStepEnforcement',
+      'ForgeIterationTrackingMiddleware',
       'ForgeFilesystemToolErrorMiddleware',
       'ContextEditingMiddleware',
       'ForgeRescueParsingMiddleware',
       'ForgeToolResolutionMiddleware',
       'ForgeCleanupMiddleware'
     ]);
-
-    const step = byName(middleware, 'ForgeStepEnforcement');
-    const rescue = byName(middleware, 'ForgeRescueParsingMiddleware');
-    if (typeof step.beforeAgent !== 'function' || typeof step.wrapToolCall !== 'function') {
-      throw new Error('Expected step enforcement middleware hooks.');
-    }
-    if (typeof rescue.afterModel !== 'function') {
-      throw new Error('Expected rescue parsing afterModel hook.');
-    }
-
-    const initialized = step.beforeAgent({ messages: [] }, {}) as { forge_step_tracker: ReturnType<typeof defaultStepTracker> };
-    const rescued = (await rescue.afterModel(
-      {
-        messages: [
-          new HumanMessage('创建后台任务'),
-          new AIMessage({
-            id: 'ai-mistral',
-            content:
-              '[TOOL_CALLS]propose_background_task{"goal":"每天抓新闻","trigger":{"type":"manual","description":"手动"},"workspacePath":"F:\\\\Code\\\\Roc"}'
-          })
-        ]
-      },
-      {}
-    )) as { messages: BaseMessage[] };
-    const rebuilt = rescued.messages[1] as AIMessage;
-    const toolCall = rebuilt.tool_calls?.[0];
-    if (toolCall === undefined) {
-      throw new Error('Expected rescue parsing to rebuild a tool call.');
-    }
-
-    const result = await step.wrapToolCall(
-      {
-        toolCall,
-        state: {
-          forge_step_tracker: initialized.forge_step_tracker
-        }
-      },
-      async () =>
-        new ToolMessage({
-          id: 'tool-propose',
-          tool_call_id: toolCall.id ?? 'call-propose',
-          name: toolCall.name,
-          content: '{"previewId":"preview-1"}',
-          status: 'success'
-        })
-    );
-
-    expect(result).toBeInstanceOf(Command);
-    expect((result as Command).update).toMatchObject({
-      forge_step_tracker: {
-        executedTools: {
-          propose_background_task: [
-            {
-              goal: '每天抓新闻',
-              workspacePath: 'F:\\Code\\Roc'
-            }
-          ]
-        }
-      }
-    });
   });
 
-  it('TieredCompact 后 step_tracker 与 error_tracker 不丢', async () => {
-    const stepTracker = {
-      ...defaultStepTracker(),
-      executedTools: {
-        propose_background_task: [{ goal: 'X' }]
-      },
-      iterationIndex: 5
-    };
+  it('TieredCompact 后 error_tracker 不丢', async () => {
     const errorTracker = {
       ...defaultErrorTracker(),
       consecutiveToolErrors: 1
@@ -201,43 +134,10 @@ describe('forge guardrails full stack', () => {
     }
 
     expect(messages.map((message) => message.id)).toEqual(['user', 'recent-anchor']);
-    expect(stepTracker).toEqual({
-      ...defaultStepTracker(),
-      executedTools: {
-        propose_background_task: [{ goal: 'X' }]
-      },
-      iterationIndex: 5
-    });
     expect(errorTracker).toEqual({
       ...defaultErrorTracker(),
       consecutiveToolErrors: 1
     });
-  });
-
-  it('HITL resume 后 workflow sticky 续跑', async () => {
-    const middleware = await buildMiddleware({ workflowHint: null });
-    const step = byName(middleware, 'ForgeStepEnforcement');
-    if (typeof step.beforeAgent !== 'function') {
-      throw new Error('Expected step enforcement beforeAgent hook.');
-    }
-
-    const update = step.beforeAgent(
-      {
-        messages: [],
-        forge_step_tracker: {
-          ...defaultStepTracker(),
-          executedTools: {
-            propose_background_task: [{ goal: 'X' }]
-          },
-          requiredSteps: ['propose_background_task', 'schedule_background_task'],
-          terminalTools: ['confirm_with_user'],
-          iterationIndex: 4
-        }
-      },
-      {}
-    );
-
-    expect(update).toBeUndefined();
   });
 
   it('网络瞬时错误不消耗 forge error budget', async () => {

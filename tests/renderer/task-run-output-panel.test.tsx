@@ -16,9 +16,9 @@ describe('TaskRunOutputPanel', () => {
       subagents: [],
       guardrails: [
         {
-          nudgeKind: 'step',
+          nudgeKind: 'retry',
           tier: 2,
-          content: '必须调用 schedule_background_task 后再结束。',
+          content: '请重新给出有效工具调用。',
           toolName: 'confirm_with_user',
           toolCallId: 'call-confirm'
         }
@@ -29,8 +29,8 @@ describe('TaskRunOutputPanel', () => {
     const html = renderToStaticMarkup(React.createElement(TaskRunOutputPanel, { output }));
 
     expect(html).toContain('run-event--guardrail');
-    expect(html).toContain('[护栏: step]');
-    expect(html).toContain('必须调用 schedule_background_task 后再结束。');
+    expect(html).toContain('[护栏: retry]');
+    expect(html).toContain('请重新给出有效工具调用。');
     expect(html).toContain('confirm_with_user');
   });
 });

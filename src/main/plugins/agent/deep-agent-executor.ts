@@ -10,7 +10,7 @@ import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
 import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
 import { createRunSubagents } from '../../services/deep-agent/tools';
-import { defaultErrorTracker, defaultStepTracker, readForgeMessageTag } from '../../services/forge-guardrails';
+import { defaultErrorTracker, readForgeMessageTag } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
@@ -199,8 +199,7 @@ async function readInterruptPolicy(
 function createInitialState(input: string): unknown {
   return {
     messages: [new HumanMessage(input)],
-    forge_error_tracker: defaultErrorTracker(),
-    forge_step_tracker: defaultStepTracker()
+    forge_error_tracker: defaultErrorTracker()
   };
 }
 

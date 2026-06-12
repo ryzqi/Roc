@@ -1,18 +1,3 @@
-export function stepNudge(attemptedTerminal: string, pendingSteps: readonly string[], tier: 1 | 2 | 3): string {
-  const steps = pendingSteps.join('、');
-  if (tier === 1) {
-    return [`还不能调用 ${attemptedTerminal}。`, `必须先完成这些步骤：${steps}。`, '请立即调用其中之一。'].join('\n');
-  }
-  if (tier === 2) {
-    return [`必须立刻调用以下工具之一：${steps}。请选择一个。`].join('\n');
-  }
-  return [`停止。必须调用以下工具之一：${steps}。`, `不要调用 ${attemptedTerminal}。`, '下一条回复必须是上述工具之一的调用。'].join('\n');
-}
-
-export function prerequisiteNudge(toolName: string, missingPrereqs: readonly string[]): string {
-  return [`还不能调用 ${toolName}。`, `必须先调用：${missingPrereqs.join('、')}。`, '请立即调用前置工具。'].join('\n');
-}
-
 export function contextWarning(tokens: number, budget: number): string | null {
   if (budget <= 0) {
     return null;

@@ -117,9 +117,9 @@ function createDetail(): TaskDetail {
         runId: 'run-1',
         type: 'guardrail_nudge',
         payload: {
-          nudgeKind: 'step',
+          nudgeKind: 'retry',
           tier: 2,
-          content: '必须调用 schedule_background_task 后再结束。',
+          content: '请重新给出有效工具调用。',
           toolName: 'confirm_with_user',
           toolCallId: 'call-confirm'
         },
@@ -245,9 +245,9 @@ describe('buildTaskRunOutput', () => {
     ]);
     expect(output.guardrails).toEqual([
       {
-        nudgeKind: 'step',
+        nudgeKind: 'retry',
         tier: 2,
-        content: '必须调用 schedule_background_task 后再结束。',
+        content: '请重新给出有效工具调用。',
         toolName: 'confirm_with_user',
         toolCallId: 'call-confirm'
       }

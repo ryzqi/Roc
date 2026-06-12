@@ -31,6 +31,7 @@ describe('AppShell', () => {
       observe(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    Element.prototype.scrollTo = vi.fn();
   });
 
   afterEach(async () => {

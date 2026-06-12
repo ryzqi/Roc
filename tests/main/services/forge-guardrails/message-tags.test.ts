@@ -9,6 +9,9 @@ import {
   type ForgeMessageType
 } from '../../../../src/main/services/forge-guardrails/message-tags';
 
+const REMOVED_STEP_TAG = ['forge', 'step_nudge'].join(':');
+const REMOVED_PREREQUISITE_TAG = ['forge', 'prerequisite_nudge'].join(':');
+
 describe('forge message tags', () => {
   it('writes and reads forge message tags through additional_kwargs', () => {
     const message = new HumanMessage('x');
@@ -23,6 +26,14 @@ describe('forge message tags', () => {
 
     const invalid = new HumanMessage({ content: 'x', additional_kwargs: { forge_message_type: 'invalid' } });
     expect(readForgeMessageTag(invalid)).toBeNull();
+    expect(
+      readForgeMessageTag(new HumanMessage({ content: 'x', additional_kwargs: { forge_message_type: REMOVED_STEP_TAG } }))
+    ).toBeNull();
+    expect(
+      readForgeMessageTag(
+        new HumanMessage({ content: 'x', additional_kwargs: { forge_message_type: REMOVED_PREREQUISITE_TAG } })
+      )
+    ).toBeNull();
   });
 
   it('classifies only transient nudge tags as cross-turn filtered', () => {
@@ -67,8 +78,6 @@ describe('forge message tags', () => {
     expect(FORGE_COMPACTION_PRIORITY).toEqual({
       'forge:retry_nudge': 1,
       'forge:unknown_tool_nudge': 1,
-      'forge:step_nudge': 1,
-      'forge:prerequisite_nudge': 1,
       'forge:context_warning': 1,
       'forge:tool_resolution': 2,
       'forge:reasoning': 4

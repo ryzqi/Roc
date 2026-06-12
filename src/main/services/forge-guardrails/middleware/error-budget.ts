@@ -27,9 +27,7 @@ export function createErrorBudgetMiddleware(opts: { maxRetries?: number; maxTool
           consecutiveRetries: 0,
           consecutiveToolErrors: 0,
           maxRetries,
-          maxToolErrors,
-          maxPrematureAttempts: 3,
-          maxPrereqViolations: 2
+          maxToolErrors
         }
       };
     },

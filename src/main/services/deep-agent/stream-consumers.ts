@@ -585,12 +585,6 @@ function forgeTagToNudgeKind(tag: ForgeMessageType): GuardrailNudgePayload['nudg
   if (tag === 'forge:unknown_tool_nudge') {
     return 'unknown_tool';
   }
-  if (tag === 'forge:step_nudge') {
-    return 'step';
-  }
-  if (tag === 'forge:prerequisite_nudge') {
-    return 'prerequisite';
-  }
   if (tag === 'forge:tool_resolution') {
     return 'tool_resolution';
   }

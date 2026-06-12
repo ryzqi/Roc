@@ -9,10 +9,8 @@
 - `errors.ts` — RocToolResolutionError
 - `message-tags.ts` — forge_message_type 标签
 - `state-schema.ts` — LangGraph state schema
-- `nudge-templates.ts` — nudge 文案
+- `nudge-templates.ts` — context warning 文案
 - `rescue-parser.ts` — 4 种野生格式解析
 - `sampling-defaults.ts` — 采样默认值
-- `prerequisites-config.ts` — prereq + workflow 配置
 - `preview-store.ts` — propose preview session-scoped 缓存
-- `workflow-resolver.ts` — workflowHint -> WorkflowSpec
-- `middleware/*` — 7 个 LangChain middleware
+- `middleware/*` — LangChain middleware：错误预算、iteration 标记、文件工具错误、tiered compaction、rescue parsing、tool resolution、cleanup、prompt caching
