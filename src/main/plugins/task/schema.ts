@@ -77,6 +77,9 @@ export function applyTaskPluginSchema(db: DatabaseConnection): void {
     CREATE INDEX IF NOT EXISTS idx_task_plugin_background_tasks_updated
     ON background_tasks(updated_at DESC);
 
+    CREATE INDEX IF NOT EXISTS idx_task_plugin_events_thread_created
+    ON task_events(thread_id, created_at ASC);
+
     CREATE INDEX IF NOT EXISTS idx_task_plugin_scheduled_task_runs_task_status
     ON scheduled_task_runs(background_task_id, status, scheduled_at DESC);
   `);

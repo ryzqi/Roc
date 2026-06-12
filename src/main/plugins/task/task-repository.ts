@@ -635,7 +635,7 @@ export class TaskRepository {
 
   listThreadMessages(threadId: string): TaskEvent[] {
     this.requireActiveThread(threadId);
-    return this.listRecentEventsForThread(threadId, 100);
+    return this.listEventsForThread(threadId);
   }
 
   openBackgroundTaskInChat(taskId: string): { threadId: string } {
@@ -1047,6 +1047,18 @@ export class TaskRepository {
          LIMIT ?`
       )
       .all(threadId, limit) as Array<TaskEventRow & { rowid: number }>;
+    return rows.map(mapTaskEvent);
+  }
+
+  private listEventsForThread(threadId: string): TaskEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rowid, id, thread_id, run_id, type, payload_json, created_at
+         FROM task_events
+         WHERE thread_id = ?
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(threadId) as Array<TaskEventRow & { rowid: number }>;
     return rows.map(mapTaskEvent);
   }
 
