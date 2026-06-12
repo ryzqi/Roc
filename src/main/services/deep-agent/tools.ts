@@ -41,25 +41,6 @@ export function createDeleteFileTool(fileService: FileService): DynamicStructure
   });
 }
 
-export function createConfirmWithUserTool(): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.strictObject({
-    summary: z
-      .string()
-      .min(1)
-      .max(1000)
-      .describe('用面向用户的语气总结刚才做了什么、任务的关键参数与下一步预期。')
-  });
-  return new DynamicStructuredTool<typeof schema, { summary: string }, { summary: string }, string>({
-    name: 'confirm_with_user',
-    description: [
-      '在创建后台任务的最后一步调用，把刚才完成的工作总结成一句话给用户。',
-      '这是工作流的终止信号；调用之后本轮 agent run 结束。'
-    ].join('\n'),
-    schema,
-    func: async ({ summary }) => JSON.stringify({ ok: true, summary }, null, 2)
-  });
-}
-
 export async function createWebSearchTool(input: {
   mcpService: McpService;
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];

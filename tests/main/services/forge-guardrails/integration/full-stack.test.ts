@@ -57,7 +57,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     memorySources: [],
     skillSources: [],
     subagents: [],
-    tools: [fakeTool('propose_background_task'), fakeTool('schedule_background_task'), fakeTool('confirm_with_user')],
+    tools: [fakeTool('propose_background_task'), fakeTool('schedule_background_task')],
     filesystemPermissions: undefined,
     interruptOn: undefined,
     checkpointer: undefined,

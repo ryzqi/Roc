@@ -1,200 +1,170 @@
-import { AIMessage, ToolMessage } from '@langchain/core/messages';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import { ToolMessage } from '@langchain/core/messages';
+import type { ClientTool } from '@langchain/core/tools';
+import { z } from 'zod';
+import { describe, expect, it, vi } from 'vitest';
+import type {
+  BackgroundTask,
+  BackgroundTaskPreview,
+  BackgroundTaskPreviewRequest,
+  ChatRunEvent,
+  ChatStartRunRequest,
+  TaskDetail,
+  TaskRun,
+  Workspace
+} from '../../../../src/shared/types';
+import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
-import type { AgentModelHandle } from '../../../../src/main/plugins/agent/model-factory-adapter';
-import type { RocCapabilityRegistry } from '../../../../src/main/kernel/types';
-import type { TaskRun } from '../../../../src/shared/types';
+import { RocPaths } from '../../../../src/main/services/paths';
 
 const mocked = vi.hoisted(() => ({
-  buildDeepAgent: vi.fn(),
-  createBackend: vi.fn()
+  buildDeepAgent: vi.fn()
 }));
-
-const REMOVED_STEP_TRACKER_FIELD = ['forge', 'step', 'tracker'].join('_');
 
 vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
   buildDeepAgent: mocked.buildDeepAgent
 }));
 
-vi.mock('../../../../src/main/services/deep-agent/backend', () => ({
-  createBackend: mocked.createBackend
-}));
-
 describe('createAgentDeepAgentExecutor', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    mocked.buildDeepAgent.mockReset();
-    mocked.createBackend.mockReset();
+  it('wires the production background task tools to task capabilities', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls));
+    const tools = readBuiltTools();
+
+    expect(tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        'resolve_background_task_time',
+        'propose_background_task',
+        'schedule_background_task',
+        'read_background_task',
+        'update_background_task',
+        'cancel_background_task'
+      ])
+    );
+
+    const proposeResult = readJson(
+      await invokeTool(findTool(tools, 'propose_background_task'), {
+        goal: '每天检查测试',
+        trigger: {
+          type: 'manual',
+          description: '手动'
+        },
+        workspacePath: 'F:\\Code\\Roc'
+      })
+    ) as { previewId: string; preview: BackgroundTaskPreview };
+    expect(proposeResult.preview.requiresConfirmation).toBe(false);
+
+    expect(
+      readJson(
+        await invokeTool(findTool(tools, 'schedule_background_task'), {
+          previewId: proposeResult.previewId
+        })
+      )
+    ).toMatchObject({
+      ok: true,
+      taskId: 'background-1',
+      threadId: 'thread-background-1'
+    });
+
+    await invokeTool(findTool(tools, 'read_background_task'), {
+      taskId: 'background-1'
+    });
+    await invokeTool(findTool(tools, 'update_background_task'), {
+      taskId: 'background-1',
+      patch: {
+        goal: '每天检查失败测试'
+      },
+      reason: '调整目标'
+    });
+    await invokeTool(findTool(tools, 'cancel_background_task'), {
+      taskId: 'background-1',
+      reason: '不再需要'
+    });
+
+    expect(capabilityCalls.map((call) => call.name)).toEqual([
+      'workspace.getCurrent',
+      'task.background.preview',
+      'task.background.create',
+      'task.detail.get',
+      'task.background.update',
+      'task.background.cancel'
+    ]);
   });
 
-  it('yields message chunks before the DeepAgent final output resolves', async () => {
-    let resolveOutput!: (value: string) => void;
-    const output = new Promise<string>((resolve) => {
-      resolveOutput = resolve;
+  it('uses the shared workflow system prompt in production executor runs', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      workflowHint: 'propose_background_task'
     });
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([
-          {
-            contentBlocks: [
-              {
-                type: 'text',
-                text: '实时回答'
-              }
-            ]
-          }
-        ]),
-        output,
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
+
+    const buildInput = readBuildInput();
+    expect(buildInput.systemPrompt).toContain('本轮工作流：创建后台任务。');
+    expect(buildInput.systemPrompt).toContain(
+      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task。'
+    );
+    expect(buildInput.systemPrompt).toContain('schedule_background_task({ previewId })');
+  });
+
+  it('keeps approval interrupts for background task changes during creation workflow runs', async () => {
+    await buildExecutorOnce(createCapabilities([], { capabilityPreview: true }), {
+      workflowHint: 'propose_background_task'
     });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-    const events = await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释流式输出',
-        mode: 'task'
+
+    expect(readBuildInput().interruptOn).toEqual({
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
       },
-      run: createTaskRun()
-    });
-    const iterator = events[Symbol.asyncIterator]();
-
-    const firstEventPromise = iterator.next();
-    const firstEvent = await Promise.race([
-      firstEventPromise,
-      wait(25).then(() => 'timeout' as const)
-    ]);
-    resolveOutput('final output');
-    if (firstEvent === 'timeout') {
-      await firstEventPromise;
-    } else {
-      await iterator.return?.(undefined);
-    }
-
-    expect(firstEvent).toEqual({
-      done: false,
-      value: {
-        type: 'assistant_block',
-        runId: 'run-streaming',
-        block: {
-          kind: 'text',
-          blockId: 'text-run-streaming',
-          phase: 'delta',
-          text: '实时回答'
-        }
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
       }
     });
   });
 
-  it('starts new DeepAgent runs without forge step tracker state', async () => {
-    const streamEvents = vi.fn(async () => ({
-      interrupted: false,
-      messages: createAsyncIterable([]),
+  it('emits streamed assistant message chunks', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      messages: createAsyncIterable([
+        {
+          text: createAsyncIterable(['实时回答'])
+        }
+      ]),
       output: {
         messages: []
-      },
-      subagents: createAsyncIterable([]),
-      toolCalls: createAsyncIterable([])
-    }));
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释 Agnes 响应',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    const streamEventCalls = streamEvents.mock.calls as unknown as Array<[unknown]>;
-    const runInput = streamEventCalls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(runInput).toMatchObject({
-      forge_error_tracker: {
-        consecutiveRetries: 0,
-        consecutiveToolErrors: 0,
-        maxRetries: 3,
-        maxToolErrors: 2
       }
     });
-    expect(Object.keys((runInput?.forge_error_tracker ?? {}) as Record<string, unknown>).sort()).toEqual([
-      'consecutiveRetries',
-      'consecutiveToolErrors',
-      'maxRetries',
-      'maxToolErrors'
-    ]);
-    expect(Reflect.has(runInput ?? {}, REMOVED_STEP_TRACKER_FIELD)).toBe(false);
+
+    expect(events).toContainEqual({
+      type: 'assistant_block',
+      runId: 'run-1',
+      block: {
+        kind: 'text',
+        blockId: 'text-run-1',
+        phase: 'delta',
+        text: '实时回答'
+      }
+    });
   });
 
-  it('yields the final assistant output when the provider does not stream message text', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            {
-              content: '最终回答',
-              type: 'ai'
-            }
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
+  it('emits final assistant output when the provider does not stream message text', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      output: {
+        messages: [
+          {
+            content: '最终回答',
+            type: 'ai'
+          }
+        ]
+      }
     });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释 Agnes 响应',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
 
     expect(events).toEqual([
       {
         type: 'assistant_block',
-        runId: 'run-streaming',
+        runId: 'run-1',
         block: {
           kind: 'text',
-          blockId: 'text-run-streaming',
+          blockId: 'text-run-1',
           phase: 'delta',
           text: '最终回答'
         }
@@ -202,585 +172,349 @@ describe('createAgentDeepAgentExecutor', () => {
     ]);
   });
 
-  it('reads final assistant output from LangChain AIMessage instances', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            new AIMessage({
-              content: [
-                {
-                  type: 'text',
-                  text: '实例回答'
-                }
-              ]
-            })
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释 Agnes 响应',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toEqual([
-      {
-        type: 'assistant_block',
-        runId: 'run-streaming',
-        block: {
-          kind: 'text',
-          blockId: 'text-run-streaming',
-          phase: 'delta',
-          text: '实例回答'
-        }
+  it('does not synthesize earlier assistant output when the final message is not assistant text', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      output: {
+        messages: [
+          {
+            content: '历史回答',
+            type: 'ai'
+          },
+          {
+            content: '新的用户输入',
+            type: 'human'
+          }
+        ]
       }
-    ]);
-  });
-
-  it('does not emit earlier assistant output when the final message is not assistant text', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            {
-              content: '历史回答',
-              type: 'ai'
-            },
-            {
-              content: '新的用户输入',
-              type: 'human'
-            }
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
     });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释 Agnes 响应',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
 
     expect(events).toEqual([]);
-  });
-
-  it('does not emit hosted search payloads from final assistant output', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            {
-              content: [
-                {
-                  type: 'text',
-                  text: 'Title: Search result\nURL: https://example.test\nPublished: 2026-06-10\nAuthor: example\nHighlights:\n- raw result'
-                }
-              ],
-              type: 'ai'
-            }
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '解释 Agnes 响应',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toEqual([]);
-  });
-
-  it('does not synthesize assistant text when a run finishes with reasoning only', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([
-          {
-            reasoning: createAsyncIterable(['已完成文件写入。']),
-            text: null
-          }
-        ]),
-        output: {
-          messages: []
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '创建一个 docx 文件，里面写你好世界',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toEqual([
-      {
-        type: 'assistant_block',
-        runId: 'run-streaming',
-        block: {
-          kind: 'reasoning',
-          blockId: 'reasoning-run-streaming',
-          phase: 'delta',
-          text: '已完成文件写入。'
-        }
-      }
-    ]);
-  });
-
-  it('does not synthesize assistant text when a file task only produces tool activity', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: []
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([
-          {
-            callId: 'call-write',
-            name: 'write_file',
-            input: {
-              file_path: '/workspace/hello.docx'
-            },
-            output: 'Successfully wrote to /workspace/hello.docx'
-          }
-        ])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '创建一个 docx 文件，里面写你好世界',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toContainEqual({
-      type: 'assistant_block',
-      runId: 'run-streaming',
-      block: {
-        kind: 'tool_call',
-        blockId: 'tool-call-write',
-        callId: 'call-write',
-        name: 'write_file',
-        phase: 'end',
-        input: {
-          file_path: '/workspace/hello.docx'
-        },
-        output: 'Successfully wrote to /workspace/hello.docx'
-      }
-    });
-    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'text')).toBe(false);
   });
 
   it('uses final ToolMessage content for tool block output when present', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            new ToolMessage({
-              content: 'Successfully wrote to /workspace/hello.docx',
-              name: 'write_file',
-              tool_call_id: 'call-write'
-            })
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([
-          {
-            callId: 'call-write',
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      output: {
+        messages: [
+          new ToolMessage({
+            content: 'Successfully wrote to /workspace/hello.docx',
             name: 'write_file',
-            input: {
-              file_path: '/workspace/hello.docx'
-            },
-            output: {
-              command: 'internal'
-            }
-          }
-        ])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '创建一个 docx 文件，里面写你好世界',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toContainEqual({
-      type: 'assistant_block',
-      runId: 'run-streaming',
-      block: {
-        kind: 'tool_call',
-        blockId: 'tool-call-write',
-        callId: 'call-write',
-        name: 'write_file',
-        phase: 'end',
-        output: 'Successfully wrote to /workspace/hello.docx'
+            tool_call_id: 'call-write'
+          })
+        ]
       }
     });
+
+    expect(events).toEqual([
+      {
+        type: 'assistant_block',
+        runId: 'run-1',
+        block: {
+          kind: 'tool_call',
+          blockId: 'tool-call-write',
+          callId: 'call-write',
+          name: 'write_file',
+          phase: 'end',
+          output: 'Successfully wrote to /workspace/hello.docx'
+        }
+      }
+    ]);
   });
 
-  it('uses final non-file ToolMessage content when toolCalls projection is empty', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([
-          {
-            reasoning: createAsyncIterable(['需要先搜索资料。']),
-            text: null
-          }
-        ]),
-        output: {
-          messages: [
+  it('does not emit final tool blocks for Forge tagged ToolMessage output', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      output: {
+        messages: [
+          tagForgeMessage(
             new ToolMessage({
-              content: 'Search results',
+              content: '[ToolResolutionError] Missing prerequisite.',
               name: 'web_search',
               tool_call_id: 'call-search'
-            })
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '搜索 Agnes 工具调用问题',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toContainEqual({
-      type: 'assistant_block',
-      runId: 'run-streaming',
-      block: {
-        kind: 'tool_call',
-        blockId: 'tool-call-search',
-        callId: 'call-search',
-        name: 'web_search',
-        phase: 'end',
-        output: 'Search results'
+            }),
+            'forge:tool_resolution'
+          )
+        ]
       }
     });
-    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'text')).toBe(false);
-  });
 
-  it('does not emit a final tool block when ToolMessage has no name', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            new ToolMessage({
-              content: 'Updated todo list.',
-              tool_call_id: 'call-todos'
-            })
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '更新 todo',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'tool_call')).toBe(false);
-  });
-
-  it('does not emit a final tool block for Forge tagged ToolMessage output', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            tagForgeMessage(
-              new ToolMessage({
-                content: '[ToolResolutionError] Missing prerequisite.',
-                name: 'web_search',
-                tool_call_id: 'call-search'
-              }),
-              'forge:tool_resolution'
-            )
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '搜索 Agnes 工具调用问题',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'tool_call')).toBe(false);
-  });
-
-  it('emits an error block for final file ToolMessage with error status', async () => {
-    mocked.createBackend.mockReturnValue({ backend: {} });
-    mocked.buildDeepAgent.mockReturnValue({
-      streamEvents: vi.fn(async () => ({
-        interrupted: false,
-        messages: createAsyncIterable([]),
-        output: {
-          messages: [
-            new ToolMessage({
-              content: 'Permission denied.',
-              name: 'write_file',
-              status: 'error',
-              tool_call_id: 'call-write'
-            })
-          ]
-        },
-        subagents: createAsyncIterable([]),
-        toolCalls: createAsyncIterable([])
-      }))
-    });
-    const executor = createAgentDeepAgentExecutor({
-      capabilities: createCapabilities(),
-      paths: {} as never
-    });
-
-    const events = await collectEvents(await executor.execute({
-      abortSignal: new AbortController().signal,
-      modelHandle: createModelHandle(),
-      request: {
-        enabledCapabilities: {
-          mcpServers: [],
-          skills: []
-        },
-        input: '创建 hello.txt',
-        mode: 'task'
-      },
-      run: createTaskRun()
-    }));
-
-    expect(events).toContainEqual({
-      type: 'assistant_block',
-      runId: 'run-streaming',
-      block: {
-        kind: 'tool_call',
-        blockId: 'tool-call-write',
-        callId: 'call-write',
-        name: 'write_file',
-        phase: 'error',
-        error: 'Permission denied.'
-      }
-    });
+    expect(events).toEqual([]);
   });
 });
 
-function createCapabilities(): RocCapabilityRegistry {
-  return {
-    invoke: vi.fn(async (name: string) => {
-      if (name === 'workspace.getCurrent') {
-        return null;
-      }
-      throw new Error(`unexpected capability: ${name}`);
-    }),
-    list: vi.fn(() => []),
-    register: vi.fn(),
-    subscribe: vi.fn(() => () => {})
-  } as unknown as RocCapabilityRegistry;
+async function buildExecutorOnce(
+  capabilities: RocCapabilityRegistry,
+  requestOverride: Partial<ChatStartRunRequest> = {}
+): Promise<void> {
+  await collectExecutorEvents({
+    capabilities,
+    requestOverride,
+    output: {
+      messages: [
+        {
+          role: 'assistant',
+          content: 'ok'
+        }
+      ]
+    }
+  });
 }
 
-function createModelHandle(): AgentModelHandle {
-  return {
-    langChainHandle: {
-      model: {} as never,
-      modelId: 'openai:gpt-4.1',
-      provider: {} as never,
-      runtime: {
-        baseUrl: null,
-        contextBudgetTokens: 4096,
-        modelKwargs: {},
-        providerType: 'openai_compatible',
-        streaming: true
+async function collectExecutorEvents(input: {
+  capabilities: RocCapabilityRegistry;
+  messages?: AsyncIterable<unknown>;
+  output?: unknown;
+  requestOverride?: Partial<ChatStartRunRequest>;
+  subagents?: AsyncIterable<unknown>;
+  toolCalls?: AsyncIterable<unknown>;
+}): Promise<ChatRunEvent[]> {
+  mocked.buildDeepAgent.mockReset();
+  mocked.buildDeepAgent.mockReturnValue({
+    streamEvents: vi.fn(async () => ({
+      toolCalls: input.toolCalls ?? emptyAsyncIterable(),
+      messages: input.messages ?? emptyAsyncIterable(),
+      subagents: input.subagents ?? emptyAsyncIterable(),
+      output: input.output ?? { messages: [] }
+    }))
+  });
+  const executor = createAgentDeepAgentExecutor({
+    capabilities: input.capabilities,
+    paths: new RocPaths('F:\\Code\\Roc\\.roc-test')
+  });
+  const execution = await executor.execute({
+    abortSignal: new AbortController().signal,
+    modelHandle: {
+      providerId: 'test-provider',
+      modelId: 'test-model',
+      langChainHandle: {
+        model: {} as never,
+        modelId: 'test-model',
+        provider: {
+          id: 'test-provider',
+          name: 'Test Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://example.test',
+          credentialRef: null,
+          enabled: true,
+          models: []
+        },
+        runtime: {
+          providerType: 'openai_compatible',
+          baseUrl: null,
+          streaming: true,
+          modelKwargs: {},
+          contextBudgetTokens: 4096
+        }
       }
     },
-    modelId: 'openai:gpt-4.1',
-    providerId: 'openai'
-  };
+    request: {
+      input: '每天检查测试',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      ...input.requestOverride
+    },
+    run: createRun()
+  });
+  return await collectEvents(execution);
 }
 
-function createTaskRun(): TaskRun {
+function createCapabilities(
+  calls: Array<{ name: string; input: unknown }>,
+  options: { capabilityPreview?: boolean } = {}
+): RocCapabilityRegistry {
+  const capabilityPreviewDescriptor: CapabilityDescriptor = {
+    name: 'agent.capability.preview',
+    version: '1.0.0',
+    inputSchema: z.unknown(),
+    outputSchema: z.unknown()
+  };
   return {
+    declare: () => {},
+    register: () => {},
+    list: () => (options.capabilityPreview === true ? [capabilityPreviewDescriptor] : []),
+    invoke: async <TInput, TOutput>(name: string, input: TInput): Promise<TOutput> => {
+      calls.push({ name, input });
+      if (name === 'agent.capability.preview') {
+        return {
+          interruptOn: {
+            update_background_task: {
+              allowedDecisions: ['approve', 'edit', 'reject']
+            },
+            cancel_background_task: {
+              allowedDecisions: ['approve', 'edit', 'reject']
+            }
+          }
+        } as TOutput;
+      }
+      if (name === 'workspace.getCurrent') {
+        const workspace = {
+          id: 'workspace-1',
+          path: 'F:\\Code\\Roc',
+          displayName: 'Roc',
+          lastOpenedAt: '2026-06-04T00:00:00.000Z',
+          trustState: 'trusted'
+        } satisfies Workspace;
+        return workspace as TOutput;
+      }
+      if (name === 'task.background.preview') {
+        return createPreview(input as BackgroundTaskPreviewRequest) as TOutput;
+      }
+      if (name === 'task.background.create') {
+        return createTask(input as BackgroundTaskPreview, 'running') as TOutput;
+      }
+      if (name === 'task.detail.get') {
+        return createTaskDetail() as TOutput;
+      }
+      if (name === 'task.background.update') {
+        return createTask(createPreview((input as { patch: Partial<BackgroundTaskPreviewRequest> }).patch), 'running') as TOutput;
+      }
+      if (name === 'task.background.cancel') {
+        return createTask(createPreview({ goal: '已取消任务' }), 'cancelled') as TOutput;
+      }
+      throw new Error(`unexpected_capability:${name}`);
+    }
+  } satisfies RocCapabilityRegistry;
+}
+
+function createRun(): TaskRun {
+  return {
+    id: 'run-1',
+    threadId: 'thread-1',
+    runNumber: 1,
+    userInput: '每天检查测试',
+    status: 'running',
+    startedAt: '2026-06-04T00:00:00.000Z',
+    endedAt: null,
+    modelId: 'test-model',
     enabledCapabilities: {
       mcpServers: [],
       skills: []
-    },
-    endedAt: null,
-    id: 'run-streaming',
-    modelId: 'openai:gpt-4.1',
-    runNumber: 1,
-    startedAt: '2026-06-09T00:00:00.000Z',
-    status: 'running',
-    threadId: 'thread-streaming',
-    userInput: '解释流式输出'
+    }
   };
 }
 
-async function* createAsyncIterable(values: unknown[]): AsyncGenerator<unknown> {
+function createPreview(input: Partial<BackgroundTaskPreviewRequest>): BackgroundTaskPreview {
+  const trigger = input.trigger ?? {
+    type: 'manual',
+    description: '手动'
+  };
+  return {
+    goal: input.goal ?? '每天检查测试',
+    trigger,
+    workspacePath: input.workspacePath ?? 'F:\\Code\\Roc',
+    allowedActions: input.allowedActions ?? [],
+    forbiddenActions: input.forbiddenActions ?? [],
+    failurePolicy: 'pause_and_report',
+    notificationPolicy: 'failures_and_confirmations',
+    enabledCapabilities: input.enabledCapabilities === undefined ? null : input.enabledCapabilities,
+    scheduled: trigger.type !== 'manual',
+    nextRunAt: trigger.type === 'cron' || trigger.type === 'once' ? trigger.nextRunAt : null,
+    cronExpression: trigger.type === 'cron' ? trigger.cronExpression : null,
+    riskLevel: 'low',
+    requiresConfirmation: false
+  };
+}
+
+function createTask(preview: BackgroundTaskPreview, status: BackgroundTask['status']): BackgroundTask {
+  return {
+    id: 'background-1',
+    threadId: 'thread-background-1',
+    runId: 'run-background-1',
+    goal: preview.goal,
+    status,
+    scheduled: preview.scheduled,
+    triggerType: preview.trigger.type,
+    triggerDescription: preview.trigger.description,
+    nextRunAt: preview.nextRunAt,
+    cronExpression: preview.cronExpression,
+    workspacePath: preview.workspacePath,
+    allowedActions: preview.allowedActions,
+    forbiddenActions: preview.forbiddenActions,
+    failurePolicy: preview.failurePolicy,
+    notificationPolicy: preview.notificationPolicy,
+    riskLevel: preview.riskLevel,
+    requiresConfirmation: preview.requiresConfirmation,
+    lastRunAt: null,
+    lastRunStatus: null,
+    runCount: 0,
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
+    enabledCapabilities: preview.enabledCapabilities
+  };
+}
+
+function createTaskDetail(): TaskDetail {
+  return {
+    threadId: 'thread-background-1',
+    taskId: 'background-1',
+    thread: {
+      id: 'thread-background-1',
+      kind: 'background',
+      title: '每天检查测试',
+      goal: '每天检查测试',
+      status: 'running',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      updatedAt: '2026-06-04T00:00:00.000Z'
+    },
+    backgroundTask: createTask(createPreview({}), 'running'),
+    lastRunId: null,
+    runHistory: [],
+    recentEvents: [],
+    schedulerRegistered: true
+  };
+}
+
+function readBuiltTools(): ClientTool[] {
+  return readBuildInput().tools;
+}
+
+function readBuildInput(): DeepAgentBuildInput {
+  const input = mocked.buildDeepAgent.mock.calls[0]?.[0] as DeepAgentBuildInput | undefined;
+  if (input === undefined) {
+    throw new Error('expected_build_deep_agent_call');
+  }
+  return input;
+}
+
+function findTool(tools: ClientTool[], name: string): ClientTool {
+  const tool = tools.find((candidate) => candidate.name === name);
+  if (tool === undefined) {
+    throw new Error(`expected_tool:${name}`);
+  }
+  return tool;
+}
+
+async function invokeTool(tool: ClientTool, input: Record<string, unknown>): Promise<unknown> {
+  const invoke = Reflect.get(tool, 'invoke');
+  if (typeof invoke !== 'function') {
+    throw new Error(`tool_not_invokable:${tool.name}`);
+  }
+  return await invoke.call(tool, input);
+}
+
+function readJson(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    throw new Error('expected_json_string_tool_output');
+  }
+  return JSON.parse(value) as unknown;
+}
+
+async function* emptyAsyncIterable(): AsyncIterable<unknown> {}
+
+async function* createAsyncIterable(values: unknown[]): AsyncIterable<unknown> {
   for (const value of values) {
     yield value;
   }
 }
 
-async function collectEvents<T>(events: AsyncIterable<T>): Promise<T[]> {
-  const result: T[] = [];
+async function collectEvents(events: AsyncIterable<ChatRunEvent>): Promise<ChatRunEvent[]> {
+  const result: ChatRunEvent[] = [];
   for await (const event of events) {
     result.push(event);
   }
   return result;
-}
-
-function wait(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
 }

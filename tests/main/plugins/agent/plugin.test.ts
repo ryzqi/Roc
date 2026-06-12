@@ -49,5 +49,6 @@ describe('agent plugin manifest', () => {
       '@roc/plugin-workspace',
       '@roc/plugin-runtime-tools'
     ]);
+    expect(Reflect.get(plugin.manifest, 'capabilityDependencies')).toEqual(['@roc/plugin-task']);
   });
 });

@@ -81,9 +81,6 @@ export function buildAgentCapabilityPreview(input: {
     createBackgroundTaskCard('schedule_background_task', '把后台任务 preview 实际创建并加入调度。', false, [
       'background_task_create'
     ]),
-    createBackgroundTaskCard('confirm_with_user', '总结后台任务创建结果并结束本轮。', false, [
-      'user_confirmation_message'
-    ]),
     createBackgroundTaskCard('read_background_task', '读取已有后台任务定义。', false, ['background_task_read']),
     createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', true, [
       'background_task_change_request'
@@ -310,7 +307,7 @@ function createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[
       allowedDecisions: [...backgroundTaskAllowedDecisions]
     },
     cancel_background_task: {
-      allowedDecisions: ['approve', 'reject']
+      allowedDecisions: [...backgroundTaskAllowedDecisions]
     }
   };
   if (approvalMode === 'fully_automatic') {

@@ -63,7 +63,17 @@ type DeepAgentExecutionResult =
 type PendingInterrupt = {
   interruptId: string;
   payload: ChatApprovalRequest;
+  workflowHint: ChatStartRunRequest['workflowHint'] | null;
 };
+
+const backgroundTaskToolNames = new Set([
+  'resolve_background_task_time',
+  'propose_background_task',
+  'schedule_background_task',
+  'read_background_task',
+  'update_background_task',
+  'cancel_background_task'
+]);
 
 export class AgentPluginRuntime {
   private readonly activeRuns = new Set<string>();
@@ -243,7 +253,8 @@ export class AgentPluginRuntime {
         input: run.userInput,
         mode: 'task',
         threadId: run.threadId,
-        enabledCapabilities: run.enabledCapabilities
+        enabledCapabilities: run.enabledCapabilities,
+        workflowHint: pendingInterrupt.workflowHint
       },
       resumePayload: {
         decisions: request.decisions
@@ -251,7 +262,7 @@ export class AgentPluginRuntime {
       run,
       runId: run.id,
       threadId: run.threadId,
-      workflowHint: null
+      workflowHint: pendingInterrupt.workflowHint
     });
     this.pendingRuns.add(pendingRun);
     pendingRun.finally(() => {
@@ -446,7 +457,8 @@ export class AgentPluginRuntime {
           interruptId: event.interruptId,
           payload: event.payload,
           runId: input.run.id,
-          threadId: input.run.threadId
+          threadId: input.run.threadId,
+          workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
         });
         return {
           status: 'interrupted'
@@ -457,11 +469,12 @@ export class AgentPluginRuntime {
           assistantChunks.push(event.block.text);
         }
         updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
+        const taskEvent = createTaskEventFromAssistantBlock(event.block);
         await this.publish('agent.run.task-event', {
           runId: input.run.id,
           threadId: input.run.threadId,
-          type: 'assistant_block',
-          payload: event.block
+          type: taskEvent.type,
+          payload: taskEvent.payload
         });
         continue;
       }
@@ -492,6 +505,7 @@ export class AgentPluginRuntime {
     threadId: string;
     interruptId: string;
     payload: ChatApprovalRequest;
+    workflowHint: ChatStartRunRequest['workflowHint'] | null;
   }): Promise<void> {
     this.options.repository.updateRunStatus({
       runId: input.runId,
@@ -499,7 +513,8 @@ export class AgentPluginRuntime {
     });
     this.pendingInterrupts.set(input.runId, {
       interruptId: input.interruptId,
-      payload: input.payload
+      payload: input.payload,
+      workflowHint: input.workflowHint
     });
     await this.publish('agent.run.task-event', {
       runId: input.runId,
@@ -511,6 +526,32 @@ export class AgentPluginRuntime {
       }
     });
   }
+}
+
+function createTaskEventFromAssistantBlock(block: ChatAssistantBlock): Pick<TaskEvent, 'type' | 'payload'> {
+  if (block.kind !== 'tool_call' || !backgroundTaskToolNames.has(block.name)) {
+    return {
+      type: 'assistant_block',
+      payload: block
+    };
+  }
+  const payload: Record<string, unknown> = {
+    name: block.name,
+    status: block.phase
+  };
+  if ('input' in block) {
+    payload.input = block.input;
+  }
+  if ('output' in block) {
+    payload.output = block.output;
+  }
+  if ('error' in block) {
+    payload.error = block.error;
+  }
+  return {
+    type: 'tool_call',
+    payload
+  };
 }
 
 function updateSuccessfulToolBlocks(successfulToolBlockIds: Set<string>, block: ChatAssistantBlock): void {

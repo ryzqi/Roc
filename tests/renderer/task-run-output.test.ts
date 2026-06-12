@@ -120,8 +120,8 @@ function createDetail(): TaskDetail {
           nudgeKind: 'retry',
           tier: 2,
           content: '请重新给出有效工具调用。',
-          toolName: 'confirm_with_user',
-          toolCallId: 'call-confirm'
+          toolName: 'write_file',
+          toolCallId: 'call-write'
         },
         createdAt: '2026-05-16T07:04:32.000Z'
       },
@@ -248,8 +248,8 @@ describe('buildTaskRunOutput', () => {
         nudgeKind: 'retry',
         tier: 2,
         content: '请重新给出有效工具调用。',
-        toolName: 'confirm_with_user',
-        toolCallId: 'call-confirm'
+        toolName: 'write_file',
+        toolCallId: 'call-write'
       }
     ]);
     expect(output.subagents).toEqual([

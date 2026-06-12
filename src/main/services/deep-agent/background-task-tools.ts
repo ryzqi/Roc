@@ -6,6 +6,7 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatResumeDecision,
   EnabledCapabilities,
+  TaskDetail,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
 import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
@@ -64,6 +65,10 @@ export const cancelInputSchema = z.object({
   reason: z.string().min(1)
 });
 
+export const readInputSchema = z.strictObject({
+  taskId: z.string().min(1)
+});
+
 export const scheduleInputSchema = z.strictObject({
   previewId: z.string().min(1).describe('propose_background_task 返回的 previewId。')
 });
@@ -81,11 +86,14 @@ type BackgroundTaskToolDependencies = {
   previewStore: PreviewStore;
 };
 
+type Awaitable<T> = T | Promise<T>;
+
 type BackgroundTaskToolTaskAdapter = {
-  createBackgroundTask(preview: BackgroundTaskPreview): { id: string; threadId: string; nextRunAt: string | null; status?: string };
-  createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): BackgroundTaskPreview;
-  updateBackgroundTask(request: UpdateBackgroundTaskRequest): { id: string; threadId: string; nextRunAt: string | null };
-  cancelBackgroundTask(taskId: string): { id: string; threadId: string; status: string };
+  createBackgroundTask(preview: BackgroundTaskPreview): Awaitable<{ id: string; threadId: string; nextRunAt: string | null; status?: string }>;
+  createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): Awaitable<BackgroundTaskPreview>;
+  readBackgroundTask(taskId: string): Awaitable<TaskDetail>;
+  updateBackgroundTask(request: UpdateBackgroundTaskRequest): Awaitable<{ id: string; threadId: string; nextRunAt: string | null }>;
+  cancelBackgroundTask(taskId: string): Awaitable<{ id: string; threadId: string; status: string }>;
 };
 
 type BackgroundTaskToolSchedulerAdapter = {
@@ -105,7 +113,7 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
       name: PROPOSE_TOOL_NAME,
       description: PROPOSE_TOOL_DESCRIPTION,
       schema: proposeToolInputSchema,
-      func: async (rawInput) => JSON.stringify(createBackgroundTaskPreview(input, rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(await createBackgroundTaskPreview(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<
       typeof scheduleInputSchema,
@@ -116,40 +124,36 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
       name: 'schedule_background_task',
       description: SCHEDULE_TOOL_DESCRIPTION,
       schema: scheduleInputSchema,
-      func: async (rawInput) => JSON.stringify(scheduleBackgroundTask(input, rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(await scheduleBackgroundTask(input, rawInput), null, 2)
+    }),
+    new DynamicStructuredTool<typeof readInputSchema, z.infer<typeof readInputSchema>, z.infer<typeof readInputSchema>, string>({
+      name: 'read_background_task',
+      description: '读取已有后台任务定义、状态和最近运行信息。',
+      schema: readInputSchema,
+      func: async (rawInput) => JSON.stringify(await readBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
       name: 'update_background_task',
-      description: '提议修改已有后台任务。只返回审批预览，用户批准前不会修改任务。',
+      description: '修改已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
       schema: updateInputSchema,
-      func: async (rawInput) => JSON.stringify(createUpdatePayload(rawInput), null, 2)
+      func: async (rawInput) => JSON.stringify(await updateBackgroundTask(input, rawInput), null, 2)
     }),
     new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
       name: 'cancel_background_task',
-      description: '提议取消已有后台任务。只返回审批请求，用户批准前不会取消任务。',
+      description: '取消已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
       schema: cancelInputSchema,
-      func: async (rawInput) =>
-        JSON.stringify(
-          {
-            kind: 'cancel_background_task',
-            request: cancelInputSchema.parse(rawInput),
-            risk: 'high',
-            requiredFields: ['decision']
-          },
-          null,
-          2
-        )
+      func: async (rawInput) => JSON.stringify(await cancelBackgroundTask(input, rawInput), null, 2)
     })
   ];
 }
 
-export function applyBackgroundTaskToolDecision(input: {
+export async function applyBackgroundTaskToolDecision(input: {
   taskAdapter: BackgroundTaskToolTaskAdapter;
   schedulerAdapter: BackgroundTaskToolSchedulerAdapter;
   actionName: 'update_background_task' | 'cancel_background_task';
   actionArgs: unknown;
   decision: ChatResumeDecision;
-}): Record<string, unknown> {
+}): Promise<Record<string, unknown>> {
   if (input.decision.type === 'reject') {
     return {
       ok: false,
@@ -161,7 +165,7 @@ export function applyBackgroundTaskToolDecision(input: {
   if (input.actionName === 'update_background_task') {
     const request = updateInputSchema.parse(actionArgs);
     validatePatch(request.patch);
-    const task = input.taskAdapter.updateBackgroundTask(toUpdateRequest(request));
+    const task = await input.taskAdapter.updateBackgroundTask(toUpdateRequest(request));
     input.schedulerAdapter.refreshTask(task);
     return {
       ok: true,
@@ -172,7 +176,7 @@ export function applyBackgroundTaskToolDecision(input: {
   }
 
   const request = cancelInputSchema.parse(actionArgs);
-  const task = input.taskAdapter.cancelBackgroundTask(request.taskId);
+  const task = await input.taskAdapter.cancelBackgroundTask(request.taskId);
   input.schedulerAdapter.unregisterTask(task.id);
   return {
     ok: true,
@@ -182,9 +186,9 @@ export function applyBackgroundTaskToolDecision(input: {
   };
 }
 
-function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
+async function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
   const preview = {
-    ...normalizePreview(input, rawInput),
+    ...(await normalizePreview(input, rawInput)),
     requiresConfirmation: false
   };
   const previewId = input.previewStore.generatePreviewId();
@@ -195,7 +199,7 @@ function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawI
   };
 }
 
-function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Record<string, unknown> {
+async function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
   const { previewId } = scheduleInputSchema.parse(rawInput);
   const preview = input.previewStore.take(previewId);
   if (preview === null) {
@@ -203,7 +207,7 @@ function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput:
       toolName: 'schedule_background_task'
     });
   }
-  const task = input.taskAdapter.createBackgroundTask(preview);
+  const task = await input.taskAdapter.createBackgroundTask(preview);
   input.schedulerAdapter.registerTask(task);
   return {
     ok: true,
@@ -213,22 +217,51 @@ function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput:
   };
 }
 
-function createUpdatePayload(rawInput: unknown): Record<string, unknown> {
-  const parsed = updateInputSchema.parse(rawInput);
-  validatePatch(parsed.patch);
+async function readBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
+  const { taskId } = readInputSchema.parse(rawInput);
+  const detail = await input.taskAdapter.readBackgroundTask(taskId);
+  if (detail.backgroundTask === null) {
+    throw new RocToolResolutionError(`Background task ${taskId} does not exist.`, {
+      toolName: 'read_background_task'
+    });
+  }
   return {
-    kind: 'update_background_task',
-    request: parsed,
-    risk: 'high',
-    requiredFields: ['decision']
+    ok: true,
+    taskId,
+    detail
   };
 }
 
-function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unknown): BackgroundTaskPreview {
+async function updateBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
+  const request = updateInputSchema.parse(rawInput);
+  validatePatch(request.patch);
+  const task = await input.taskAdapter.updateBackgroundTask(toUpdateRequest(request));
+  input.schedulerAdapter.refreshTask(task);
+  return {
+    ok: true,
+    taskId: task.id,
+    threadId: task.threadId,
+    scheduledNextRunAt: task.nextRunAt
+  };
+}
+
+async function cancelBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
+  const request = cancelInputSchema.parse(rawInput);
+  const task = await input.taskAdapter.cancelBackgroundTask(request.taskId);
+  input.schedulerAdapter.unregisterTask(task.id);
+  return {
+    ok: true,
+    taskId: task.id,
+    threadId: task.threadId,
+    status: task.status
+  };
+}
+
+async function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<BackgroundTaskPreview> {
   const parsed = proposeToolInputSchema.parse(rawInput);
   validateTrigger(parsed.trigger);
   validateWorkspacePath(parsed.workspacePath);
-  return input.taskAdapter.createBackgroundTaskPreview({
+  return await input.taskAdapter.createBackgroundTaskPreview({
     goal: parsed.goal,
     trigger: parsed.trigger,
     workspacePath: parsed.workspacePath,

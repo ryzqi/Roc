@@ -188,4 +188,44 @@ describe('PluginLoader', () => {
 
     await expect(createLoader().load([provider, consumer])).rejects.toThrow(/capability_dependency_not_declared/u);
   });
+
+  it('allows runtime capability dependencies without forcing plugin load order', async () => {
+    const calls: string[] = [];
+    const descriptor: CapabilityDescriptor<z.infer<typeof inputSchema>, z.infer<typeof outputSchema>> = {
+      name: 'beta.echo',
+      version: '1.0.0',
+      inputSchema,
+      outputSchema
+    };
+    const runtimeInvoker: { current: (() => Promise<void>) | null } = { current: null };
+    const alpha = createPlugin(
+      createManifest({ id: '@roc/plugin-alpha', capabilityDependencies: ['@roc/plugin-beta'], order: 1 }),
+      async (context) => {
+        calls.push('alpha');
+        runtimeInvoker.current = async () => {
+          const output = await context.capabilities.invoke<{ value: string }, { echoed: string }>('beta.echo', {
+            value: 'hello'
+          });
+          calls.push(output.echoed);
+        };
+      }
+    );
+    const beta = createPlugin(
+      createManifest({ id: '@roc/plugin-beta', dependencies: ['@roc/plugin-alpha'], capabilities: [descriptor], order: 2 }),
+      async (context) => {
+        calls.push('beta');
+        context.capabilities.register('@roc/plugin-beta', descriptor, async (input) => ({
+          echoed: (input as { value: string }).value
+        }));
+      }
+    );
+
+    await createLoader().load([beta, alpha]);
+    if (runtimeInvoker.current === null) {
+      throw new Error('expected_runtime_invoker');
+    }
+    await runtimeInvoker.current();
+
+    expect(calls).toEqual(['alpha', 'beta', 'hello']);
+  });
 });

@@ -39,12 +39,7 @@ export type DeepAgentBuildInput = {
   contextBudgetTokens: number | undefined;
 };
 
-const NETWORK_SENSITIVE_TOOLS = [
-  'web_read',
-  'schedule_background_task',
-  'update_background_task',
-  'cancel_background_task'
-] as const;
+const NETWORK_SENSITIVE_TOOLS = ['web_read'] as const;
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();

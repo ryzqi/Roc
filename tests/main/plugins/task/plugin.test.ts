@@ -931,7 +931,7 @@ describe('task plugin', () => {
     });
   });
 
-  it('creates a proposal background task from agent task workflow events', async () => {
+  it('does not auto-create proposal background tasks from agent.run.started', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();
     const capabilities = new CapabilityRegistry();
@@ -961,29 +961,22 @@ describe('task plugin', () => {
       }
     });
 
-    const { activeTasks, snapshot } = await waitForProposalSnapshot(capabilities, '每天 09:00 检查测试失败');
+    const activeTasks = await capabilities.invoke<{}, ActiveTaskItem[]>('task.active.list', {});
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
 
-    expect(activeTasks).toContainEqual(
+    expect(activeTasks).not.toContainEqual(
       expect.objectContaining({
-        goal: '每天 09:00 检查测试失败',
-        trigger: expect.objectContaining({
-          type: 'cron',
-          cronExpression: '0 9 * * *'
-        })
+        goal: '每天 09:00 检查测试失败'
       })
     );
-    expect(snapshot.recentEvents).toContainEqual(
+    expect(snapshot.recentEvents).not.toContainEqual(
       expect.objectContaining({
-        type: 'background_task_created',
-        payload: expect.objectContaining({
-          goal: '每天 09:00 检查测试失败'
-        })
+        type: 'background_task_created'
       })
     );
-    expect(new Set(readToolCallStatuses(snapshot, 'resolve_background_task_time'))).toEqual(new Set(['start', 'end']));
-    expect(new Set(readToolCallStatuses(snapshot, 'propose_background_task'))).toEqual(new Set(['start', 'end']));
-    expect(new Set(readToolCallStatuses(snapshot, 'schedule_background_task'))).toEqual(new Set(['start', 'end']));
-    expect(new Set(readToolCallStatuses(snapshot, 'confirm_with_user'))).toEqual(new Set(['start', 'end']));
+    expect(readToolCallStatuses(snapshot, 'resolve_background_task_time')).toEqual([]);
+    expect(readToolCallStatuses(snapshot, 'propose_background_task')).toEqual([]);
+    expect(readToolCallStatuses(snapshot, 'schedule_background_task')).toEqual([]);
   });
 
   it('excludes background tasks whose thread was archived from the active list', async () => {
@@ -1091,43 +1084,6 @@ function registerAgentRunStart(
       ...result
     };
   });
-}
-
-async function waitForProposalSnapshot(
-  capabilities: CapabilityRegistry,
-  expectedGoal: string
-): Promise<{ activeTasks: ActiveTaskItem[]; snapshot: TaskSnapshot }> {
-  const deadline = Date.now() + 500;
-  while (true) {
-    const activeTasks = await capabilities.invoke<{}, ActiveTaskItem[]>('task.active.list', {});
-    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
-    const taskCreated = activeTasks.some((item) => item.kind === 'background' && item.goal === expectedGoal);
-    const toolCallsRecorded =
-      hasToolCallStatuses(snapshot, 'resolve_background_task_time') &&
-      hasToolCallStatuses(snapshot, 'propose_background_task') &&
-      hasToolCallStatuses(snapshot, 'schedule_background_task') &&
-      hasToolCallStatuses(snapshot, 'confirm_with_user');
-    if (taskCreated && toolCallsRecorded) {
-      return { activeTasks, snapshot };
-    }
-    if (Date.now() > deadline) {
-      throw new Error(
-        `expected_task_proposal_workflow_not_recorded:${JSON.stringify({
-          activeTaskGoals: activeTasks.map((item) => item.goal),
-          events: snapshot.recentEvents.map((event) => ({
-            type: event.type,
-            payload: event.payload
-          }))
-        })}`
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
-
-function hasToolCallStatuses(snapshot: TaskSnapshot, name: string): boolean {
-  const statuses = new Set(readToolCallStatuses(snapshot, name));
-  return statuses.has('start') && statuses.has('end');
 }
 
 function readToolCallStatuses(snapshot: TaskSnapshot, name: string): string[] {

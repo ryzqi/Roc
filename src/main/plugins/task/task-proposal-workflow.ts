@@ -9,10 +9,7 @@ import type {
   Workspace
 } from '../../../shared/types';
 import type { RocPluginContext } from '../../kernel/types';
-import {
-  resolveBackgroundTaskTime,
-  type ResolveBackgroundTaskTimeResult
-} from '../../services/deep-agent/background-task-time-tool';
+import { resolveBackgroundTaskTime } from '../../services/deep-agent/background-task-time-tool';
 
 export type TaskProposalWorkflowInput = {
   runId: string;
@@ -64,7 +61,11 @@ async function runTaskProposalWorkflow(input: {
     resolveBackgroundTaskTime({ text: description })
   );
   if (timeResult.status !== 'resolved') {
-    return confirmClarification(input.input, timeResult);
+    const summary = timeResult.clarificationQuestion;
+    return {
+      assistantMessage: summary,
+      summary
+    };
   }
 
   const previewRequest: BackgroundTaskPreviewRequest = {
@@ -102,25 +103,6 @@ async function runTaskProposalWorkflow(input: {
     };
   });
   const summary = `后台任务已创建：${task.task.goal}`;
-  await recordTool(input.input, 'confirm_with_user', { summary }, async () => ({
-    confirmed: true,
-    summary
-  }));
-  return {
-    assistantMessage: summary,
-    summary
-  };
-}
-
-async function confirmClarification(
-  input: TaskProposalWorkflowInput,
-  timeResult: Extract<ResolveBackgroundTaskTimeResult, { status: 'needs_clarification' }>
-): Promise<TaskProposalWorkflowResult> {
-  const summary = timeResult.clarificationQuestion;
-  await recordTool(input, 'confirm_with_user', { summary }, async () => ({
-    confirmed: true,
-    summary
-  }));
   return {
     assistantMessage: summary,
     summary

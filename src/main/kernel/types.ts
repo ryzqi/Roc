@@ -24,6 +24,7 @@ export type RocPluginManifest = {
   readonly required: boolean;
   readonly order: number;
   readonly dependencies: readonly string[];
+  readonly capabilityDependencies?: readonly string[];
   readonly capabilities: readonly CapabilityDescriptor[];
 };
 

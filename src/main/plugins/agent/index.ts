@@ -157,6 +157,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
   let runtime: AgentPluginRuntime | null = null;
   const capabilities =
     options.capabilityPreview === undefined ? baseAgentCapabilityDescriptors : agentCapabilityDescriptors;
+  const capabilityDependencies = resolveCapabilityDependencies(options);
   return {
     manifest: {
       id: pluginId,
@@ -167,6 +168,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       required: true,
       order: 10,
       dependencies: resolveDependencies(options),
+      ...(capabilityDependencies.length === 0 ? {} : { capabilityDependencies }),
       capabilities
     },
     initialize: async (context) => {
@@ -244,6 +246,13 @@ function resolveDependencies(options: AgentPluginOptions): string[] {
     dependencies.add('@roc/plugin-runtime-tools');
   }
   return [...dependencies];
+}
+
+function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
+  if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
+    return ['@roc/plugin-task'];
+  }
+  return [];
 }
 
 function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPluginRuntime, options: AgentPluginOptions): void {

@@ -23,7 +23,6 @@ import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginConte
 import { TaskScheduler } from './scheduler';
 import { applyTaskPluginSchema } from './schema';
 import { TaskRepository } from './task-repository';
-import { createTaskProposalWorkflow } from './task-proposal-workflow';
 
 const pluginId = '@roc/plugin-task';
 const capabilityVersion = '1.0.0';
@@ -88,35 +87,12 @@ export function createTaskPlugin(): RocPlugin {
       });
       scheduler.start();
       registerTaskCapabilities(context, repository, scheduler);
-      const taskProposalWorkflow = createTaskProposalWorkflow(context);
       unsubscribeAgentRunStarted = context.eventBus.subscribe('agent.run.started', async (event) => {
         const payload = readAgentRunStartedPayload(event.payload);
         if (payload === null) {
           return;
         }
         repository.recordAgentRunStarted(payload);
-        if (payload.mode !== 'task' || payload.workflowHint !== 'propose_background_task') {
-          return;
-        }
-        await taskProposalWorkflow({
-          enabledCapabilities: payload.enabledCapabilities,
-          input: payload.userInput,
-          recordTaskEvent: async (type, taskPayload) => {
-            await context.eventBus.publish({
-              type: 'agent.run.task-event',
-              source: pluginId,
-              payload: {
-                runId: payload.runId,
-                threadId: payload.threadId,
-                type,
-                payload: taskPayload
-              },
-              createdAt: new Date().toISOString()
-            });
-          },
-          runId: payload.runId,
-          threadId: payload.threadId
-        });
       });
       unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', (event) => {
         const payload = readAgentRunCompletedPayload(event.payload);

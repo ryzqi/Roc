@@ -351,6 +351,87 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('records background task tool blocks as task tool_call events', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-call-schedule',
+            callId: 'call-schedule',
+            name: 'schedule_background_task',
+            phase: 'start',
+            input: {
+              previewId: 'preview-1'
+            }
+          });
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-call-schedule',
+            callId: 'call-schedule',
+            name: 'schedule_background_task',
+            phase: 'end',
+            output: {
+              ok: true,
+              taskId: 'background-1'
+            }
+          });
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '每天 09:00 检查测试',
+      mode: 'task',
+      workflowHint: 'propose_background_task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'tool_call',
+          payload: {
+            name: 'schedule_background_task',
+            status: 'start',
+            input: {
+              previewId: 'preview-1'
+            }
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'tool_call',
+          payload: {
+            name: 'schedule_background_task',
+            status: 'end',
+            output: {
+              ok: true,
+              taskId: 'background-1'
+            }
+          }
+        }
+      })
+    );
+  });
+
   it('does not complete when a later tool error overrides an earlier tool end without final assistant text', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
@@ -692,6 +773,7 @@ describe('AgentPluginRuntime', () => {
   it('resumes an interrupted DeepAgent run through the executor and records approval decision', async () => {
     const repository = new AgentSessionRepository(db);
     let resumePayload: unknown = null;
+    let resumedWorkflowHint: unknown = null;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
@@ -721,6 +803,7 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           resumePayload = input.resumePayload;
+          resumedWorkflowHint = input.request.workflowHint;
           yield createTextBlock(input.run.id, 'Approved command finished.');
         }
       },
@@ -732,7 +815,8 @@ describe('AgentPluginRuntime', () => {
     const started = await runtime.startRun({
       ...startRequest,
       input: 'Run git status.',
-      mode: 'task'
+      mode: 'task',
+      workflowHint: 'propose_background_task'
     });
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
@@ -764,6 +848,7 @@ describe('AgentPluginRuntime', () => {
         }
       ]
     });
+    expect(resumedWorkflowHint).toBe('propose_background_task');
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'agent.run.task-event',

@@ -4,23 +4,35 @@ import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 
-import type { ChatRunEvent, FileDeleteResult, ShellExecutionResult, TaskRun, Workspace } from '../../../shared/types';
-import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
+import type {
+  BackgroundTask,
+  BackgroundTaskPreview,
+  BackgroundTaskPreviewRequest,
+  ChatRunEvent,
+  FileDeleteResult,
+  ShellExecutionResult,
+  TaskDetail,
+  TaskRun,
+  UpdateBackgroundTaskRequest,
+  Workspace
+} from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
 import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
 import { createRunSubagents } from '../../services/deep-agent/tools';
-import { defaultErrorTracker, readForgeMessageTag } from '../../services/forge-guardrails';
+import { defaultErrorTracker, PreviewStore, readForgeMessageTag } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
-import { cancelInputSchema, updateInputSchema, validateBackgroundTaskPatch } from '../../services/deep-agent/background-task-tools';
+import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createBackend } from '../../services/deep-agent/backend';
+import { buildSystemPrompt } from '../../services/deep-agent/prompt';
 import * as recordUtils from '../../services/deep-agent/record-utils';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
+import type { FrozenSnapshot } from '../../services/memory/snapshot';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { AgentDeepAgentExecutor } from './runtime';
 
@@ -69,13 +81,12 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         selectedSkillIds: input.request.enabledCapabilities.skills,
         workspace
       });
-      const systemPrompt = [
-        'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
-        workspace === null
-          ? 'Workspace: not selected.'
-          : `Workspace: ${workspace.path}\nDefault cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.`,
-        `Capabilities: mcp=${input.request.enabledCapabilities.mcpServers.join(',') || 'none'};skills=${input.request.enabledCapabilities.skills.join(',') || 'none'};untrusted_context_policy=external_content_reference_only`
-      ].filter((section) => section.length > 0).join('\n\n');
+      const systemPrompt = buildSystemPrompt({
+        enabledCapabilities: input.request.enabledCapabilities,
+        workspacePath: workspace === null ? null : workspace.path,
+        frozenSnapshot: disabledSnapshot(),
+        workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
+      });
       const agent = buildDeepAgent({
         model: handle.model,
         systemPrompt,
@@ -88,10 +99,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         }),
         tools: tools.runTools,
         filesystemPermissions: undefined,
-        interruptOn:
-          input.request.workflowHint === 'propose_background_task'
-            ? undefined
-            : await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities),
+        interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities),
         checkpointer,
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
@@ -520,12 +528,32 @@ async function createExecutorTools(input: {
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
+  const backgroundTaskTools = createBackgroundTaskTools({
+    enabledCapabilities: input.enabledCapabilities,
+    previewStore: new PreviewStore(),
+    taskAdapter: {
+      createBackgroundTaskPreview: async (request) =>
+        await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
+      createBackgroundTask: async (preview) =>
+        await input.capabilities.invoke<BackgroundTaskPreview, BackgroundTask>('task.background.create', preview),
+      readBackgroundTask: async (taskId) =>
+        await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
+      updateBackgroundTask: async (request) =>
+        await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
+      cancelBackgroundTask: async (taskId) =>
+        await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
+    },
+    schedulerAdapter: {
+      refreshTask: () => {},
+      registerTask: () => {},
+      unregisterTask: () => {}
+    }
+  });
   const runTools: ClientTool[] = [
     webReadTool,
     createDeleteFileTool(input.capabilities),
     createResolveBackgroundTaskTimeTool(),
-    ...createApprovalPreviewTools(),
-    createConfirmWithUserTool(),
+    ...backgroundTaskTools,
     ...mcpTools
   ];
   return {
@@ -594,76 +622,6 @@ function createDeleteFileTool(capabilities: RocCapabilityRegistry): DynamicStruc
   });
 }
 
-function createConfirmWithUserTool(): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.strictObject({
-    summary: z.string().min(1).max(1000)
-  });
-  return new DynamicStructuredTool<typeof schema, { summary: string }, { summary: string }, string>({
-    name: 'confirm_with_user',
-    description: '把刚才完成的工作总结成一句话给用户。',
-    schema,
-    func: async ({ summary }) => JSON.stringify({ ok: true, summary }, null, 2)
-  });
-}
-
-function createApprovalPreviewTools(): Array<DynamicStructuredTool<any, any, any, string>> {
-  return [
-    new DynamicStructuredTool({
-      name: PROPOSE_TOOL_NAME,
-      description: PROPOSE_TOOL_DESCRIPTION,
-      schema: z.strictObject({
-        goal: z.string().min(1),
-        trigger: z.unknown(),
-        workspacePath: z.string().min(1)
-      }),
-      func: async (rawInput) =>
-        JSON.stringify(
-          {
-            kind: PROPOSE_TOOL_NAME,
-            request: rawInput,
-            risk: 'high',
-            requiredFields: ['decision']
-          },
-          null,
-          2
-        )
-    }),
-    new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
-      name: 'update_background_task',
-      description: '提议修改已有后台任务。只返回审批预览，用户批准前不会修改任务。',
-      schema: updateInputSchema,
-      func: async (rawInput) => JSON.stringify(createUpdatePayload(rawInput), null, 2)
-    }),
-    new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
-      name: 'cancel_background_task',
-      description: '提议取消已有后台任务。只返回审批请求，用户批准前不会取消任务。',
-      schema: cancelInputSchema,
-      func: async (rawInput) =>
-        JSON.stringify(
-          {
-            kind: 'cancel_background_task',
-            request: cancelInputSchema.parse(rawInput),
-            risk: 'high',
-            requiredFields: ['decision']
-          },
-          null,
-          2
-        )
-    })
-  ];
-}
-
-function createUpdatePayload(rawInput: unknown): Record<string, unknown> {
-  const parsed = updateInputSchema.parse(rawInput);
-  validateBackgroundTaskPatch(parsed.patch);
-  return {
-    kind: 'update_background_task',
-    request: parsed,
-    risk: 'high',
-    requiredFields: ['decision']
-  };
-}
-
 function createRuntimeBackend(input: {
   capabilities: RocCapabilityRegistry;
   handle: LangChainChatModelHandle;
@@ -712,6 +670,41 @@ function createRuntimeBackend(input: {
     activeModelHandle: input.handle,
     selectedSkillIds: input.selectedSkillIds
   });
+}
+
+function disabledSnapshot(): FrozenSnapshot {
+  return {
+    user: {
+      kind: 'user',
+      filename: 'USER.md',
+      content: '',
+      charCount: 0,
+      charLimit: 1375,
+      source: 'global',
+      enabled: false
+    },
+    agents: {
+      kind: 'agents',
+      filename: 'AGENTS.md',
+      content: '',
+      charCount: 0,
+      charLimit: 800,
+      source: 'global',
+      enabled: false
+    },
+    memory: {
+      kind: 'memory',
+      filename: 'MEMORY.md',
+      content: '',
+      charCount: 0,
+      charLimit: 2200,
+      source: 'global',
+      enabled: false
+    },
+    totalChars: 0,
+    totalLimit: 4375,
+    globallyEnabled: false
+  };
 }
 
 function formatShellOutput(result: ShellExecutionResult): string {

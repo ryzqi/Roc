@@ -46,9 +46,7 @@ describe('task proposal workflow', () => {
       ['propose_background_task', 'start'],
       ['propose_background_task', 'end'],
       ['schedule_background_task', 'start'],
-      ['schedule_background_task', 'end'],
-      ['confirm_with_user', 'start'],
-      ['confirm_with_user', 'end']
+      ['schedule_background_task', 'end']
     ]);
     expect(result).toEqual({
       assistantMessage: '后台任务已创建：每天 09:00 检查测试失败',

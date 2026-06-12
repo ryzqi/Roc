@@ -19,8 +19,8 @@ describe('TaskRunOutputPanel', () => {
           nudgeKind: 'retry',
           tier: 2,
           content: '请重新给出有效工具调用。',
-          toolName: 'confirm_with_user',
-          toolCallId: 'call-confirm'
+          toolName: 'write_file',
+          toolCallId: 'call-write'
         }
       ],
       error: null
@@ -31,6 +31,6 @@ describe('TaskRunOutputPanel', () => {
     expect(html).toContain('run-event--guardrail');
     expect(html).toContain('[护栏: retry]');
     expect(html).toContain('请重新给出有效工具调用。');
-    expect(html).toContain('confirm_with_user');
+    expect(html).toContain('write_file');
   });
 });

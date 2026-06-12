@@ -427,8 +427,7 @@ try {
         return (
           Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
-          Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
-          Reflect.get(item.payload, 'name') === 'confirm_with_user'
+          Reflect.get(item.payload, 'name') === 'schedule_background_task'
         );
       });
       const hasToolCall = (name, status) =>
@@ -439,9 +438,7 @@ try {
         hasToolCall('propose_background_task', 'start') &&
         hasToolCall('propose_background_task', 'end') &&
         hasToolCall('schedule_background_task', 'start') &&
-        hasToolCall('schedule_background_task', 'end') &&
-        hasToolCall('confirm_with_user', 'start') &&
-        hasToolCall('confirm_with_user', 'end')
+        hasToolCall('schedule_background_task', 'end')
       );
     },
     null,
@@ -477,9 +474,19 @@ try {
         return (
           Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
-          Reflect.get(item.payload, 'name') === 'schedule_background_task' ||
-          Reflect.get(item.payload, 'name') === 'confirm_with_user'
+          Reflect.get(item.payload, 'name') === 'schedule_background_task'
         );
+      });
+      const toolCallErrors = toolCalls.flatMap((item) => {
+        if (typeof item.payload !== 'object' || item.payload === null || Reflect.get(item.payload, 'status') !== 'error') {
+          return [];
+        }
+        return [
+          {
+            name: Reflect.get(item.payload, 'name'),
+            error: Reflect.get(item.payload, 'error')
+          }
+        ];
       });
       const hasToolCall = (name, status) =>
         toolCalls.some((item) => Reflect.get(item.payload, 'name') === name && Reflect.get(item.payload, 'status') === status);
@@ -494,10 +501,9 @@ try {
         hasProposeToolCallEnd: hasToolCall('propose_background_task', 'end'),
         hasScheduleToolCallStart: hasToolCall('schedule_background_task', 'start'),
         hasScheduleToolCallEnd: hasToolCall('schedule_background_task', 'end'),
-        hasConfirmToolCallStart: hasToolCall('confirm_with_user', 'start'),
-        hasConfirmToolCallEnd: hasToolCall('confirm_with_user', 'end'),
         nextRunAt: task?.nextRunAt ?? null,
         schemaFailureCount: schemaFailures.length,
+        toolCallErrors,
         triggerType: task?.trigger.type ?? null,
         expectedCronExpression,
         expectedNextRunAt
@@ -2640,8 +2646,6 @@ try {
       taskProposalEvidence.hasProposeToolCallEnd &&
       taskProposalEvidence.hasScheduleToolCallStart &&
       taskProposalEvidence.hasScheduleToolCallEnd &&
-      taskProposalEvidence.hasConfirmToolCallStart &&
-      taskProposalEvidence.hasConfirmToolCallEnd &&
       taskProposalEvidence.schemaFailureCount === 0,
     manualRunNowStartsRealRun:
       manualRunNowEvidence.returnedRealRunId &&
@@ -3261,6 +3265,32 @@ try {
       manualRunNowEvidence,
       manualRunOutputText,
       taskProposalEvidence,
+      smokeProviderRequests: smokeProvider.requests.map((request) => ({
+        url: request.url,
+        stream: request.body?.stream ?? null,
+        toolNames: Array.isArray(request.body?.tools)
+          ? request.body.tools.flatMap((tool) => {
+              if (tool === null || typeof tool !== 'object') {
+                return [];
+              }
+              if (typeof tool.name === 'string') {
+                return [tool.name];
+              }
+              if (tool.function !== null && typeof tool.function === 'object' && typeof tool.function.name === 'string') {
+                return [tool.function.name];
+              }
+              return [];
+            })
+          : [],
+        lastMessageRole: Array.isArray(request.body?.messages) ? request.body.messages.at(-1)?.role ?? null : null,
+        lastToolCallId: Array.isArray(request.body?.messages)
+          ? request.body.messages
+              .flatMap((message) =>
+                message !== null && typeof message === 'object' && message.role === 'tool' ? [message.tool_call_id ?? null] : []
+              )
+              .at(-1) ?? null
+          : null
+      })),
       providerSettingsEvidence,
       materialEvidence,
       windowPlacementEvidence,

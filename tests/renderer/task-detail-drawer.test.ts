@@ -92,7 +92,7 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
           nudgeKind: 'retry',
           tier: 1,
           content: '请重新给出有效工具调用。',
-          toolName: 'confirm_with_user'
+          toolName: 'write_file'
         },
         createdAt: '2026-05-16T07:04:40.000Z'
       },

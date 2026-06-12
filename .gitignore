@@ -9,6 +9,8 @@ coverage/
 *.log
 docs/*
 !docs/superpowers/
+!docs/release/
+!docs/release/release-candidate-checklist.md
 .claude/
 .superpowers/
 .codegraph/
