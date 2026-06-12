@@ -35,6 +35,42 @@ describe('ForgeRescueParsingMiddleware', () => {
     expect(rebuilt.additional_kwargs.forge_rescue).toEqual({ strategy: 'mistral_bracket' });
   });
 
+  it('rescues v1 content-block text without carrying output_version onto string tool-call messages', async () => {
+    const last = new AIMessage({
+      id: 'ai-v1-mistral',
+      content: [
+        {
+          type: 'text',
+          text: '[TOOL_CALLS]get_weather{"city":"NYC"}'
+        }
+      ],
+      response_metadata: {
+        model_provider: 'openai',
+        output_version: 'v1'
+      }
+    });
+
+    const update = await runAfterModel([new HumanMessage('weather'), last]);
+
+    expect(update?.messages).toHaveLength(2);
+    expect(update?.messages?.[0]).toBeInstanceOf(RemoveMessage);
+    const rebuilt = update?.messages?.[1] as AIMessage;
+    expect(rebuilt.id).toBe('ai-v1-mistral');
+    expect(rebuilt.content).toBe('');
+    expect(rebuilt.response_metadata).toEqual({
+      model_provider: 'openai'
+    });
+    expect(rebuilt.tool_calls).toEqual([
+      {
+        name: 'get_weather',
+        args: { city: 'NYC' },
+        id: 'call_rescued_ai-v1-mistral_0',
+        type: 'tool_call'
+      }
+    ]);
+    expect(rebuilt.additional_kwargs.forge_rescue).toEqual({ strategy: 'mistral_bracket' });
+  });
+
   it('does not change plain text that cannot be rescued', async () => {
     const update = await runAfterModel([
       new AIMessage({

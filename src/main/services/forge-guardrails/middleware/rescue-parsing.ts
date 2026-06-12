@@ -54,7 +54,7 @@ export function createRescueParsingMiddleware(opts: { availableTools: () => Resc
           type: 'tool_call' as const
         })),
         additional_kwargs,
-        response_metadata: last.response_metadata,
+        response_metadata: stripOutputVersion(last.response_metadata),
         usage_metadata: last.usage_metadata
       });
 
@@ -84,4 +84,9 @@ function extractTextFromBlocks(content: BaseMessage['content']): string {
     }
   }
   return chunks.join('\n');
+}
+
+function stripOutputVersion(responseMetadata: AIMessage['response_metadata']): AIMessage['response_metadata'] {
+  const { output_version: _outputVersion, ...rest } = responseMetadata as Record<string, unknown>;
+  return rest;
 }
