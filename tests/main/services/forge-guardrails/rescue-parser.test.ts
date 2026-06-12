@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rescueToolCall } from '../../../../src/main/services/forge-guardrails/rescue-parser';
+import { rescueToolCall, type RescueToolCandidate } from '../../../../src/main/services/forge-guardrails/rescue-parser';
 
 describe('forge rescue parser', () => {
   it.each([
@@ -118,6 +118,44 @@ describe('forge rescue parser', () => {
     expect(rescueToolCall('<think>thinking only</think>', ['x'])).toEqual({
       strategy: null,
       reasoningText: 'thinking only',
+      toolCalls: []
+    });
+  });
+
+  it('rescues bare argument JSON only when exactly one candidate accepts the args', () => {
+    const candidates: RescueToolCandidate[] = [
+      {
+        name: 'internet_search',
+        acceptsBareArgs: (args) => typeof args.query === 'string'
+      },
+      {
+        name: 'web_read',
+        acceptsBareArgs: (args) => typeof args.url === 'string'
+      }
+    ];
+
+    expect(rescueToolCall('{"query":"agnes"}', candidates)).toEqual({
+      strategy: 'bare_args_json',
+      reasoningText: null,
+      toolCalls: [{ tool: 'internet_search', args: { query: 'agnes' } }]
+    });
+  });
+
+  it('does not rescue bare argument JSON when candidates are ambiguous', () => {
+    const candidates: RescueToolCandidate[] = [
+      {
+        name: 'first_search',
+        acceptsBareArgs: (args) => typeof args.query === 'string'
+      },
+      {
+        name: 'second_search',
+        acceptsBareArgs: (args) => typeof args.query === 'string'
+      }
+    ];
+
+    expect(rescueToolCall('{"query":"agnes"}', candidates)).toEqual({
+      strategy: null,
+      reasoningText: null,
       toolCalls: []
     });
   });

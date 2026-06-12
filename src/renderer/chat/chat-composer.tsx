@@ -2,7 +2,7 @@ import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import type { Dispatch, SetStateAction } from 'react';
 import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
-import { applySettingsSnapshot, buildSettingsSaveRequest, setDefaultModelInSettingsSaveRequest } from '../settings-model';
+import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
 
@@ -382,8 +382,10 @@ export function ChatComposer({
                               model.id
                             )
                           )
-                          .then((result) => {
-                            updateLoadedState(applySettingsSnapshot(unwrap<SettingsSnapshot>('settings save', result)));
+                          .then(async (result) => {
+                            updateLoadedState(
+                              await buildSettingsStateUpdate(client, unwrap<SettingsSnapshot>('settings save', result))
+                            );
                           });
                       }}
                     >

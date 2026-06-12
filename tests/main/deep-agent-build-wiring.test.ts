@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AIMessage } from '@langchain/core/messages';
+import { tool } from '@langchain/core/tools';
 import { createDeepAgent } from 'deepagents';
+import { z } from 'zod';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
 
@@ -13,6 +16,11 @@ vi.mock('../../src/main/services/deep-agent/harness-profiles', () => ({
 }));
 
 describe('buildDeepAgent harness profile wiring', () => {
+  beforeEach(() => {
+    vi.mocked(createDeepAgent).mockClear();
+    vi.mocked(ensureRocHarnessProfilesRegistered).mockClear();
+  });
+
   it('registers Roc harness profiles before assembling the agent', () => {
     const input = {
       model: {} as unknown,
@@ -35,5 +43,67 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     expect(ensureRocHarnessProfilesRegistered).toHaveBeenCalledTimes(1);
     expect(createDeepAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {
+    const internetSearchSchema = z.object({
+      query: z.string()
+    });
+    const input = {
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [
+        tool(async ({ query }: z.infer<typeof internetSearchSchema>) => `result:${query}`, {
+          name: 'internet_search',
+          description: 'Search the internet.',
+          schema: internetSearchSchema
+        })
+      ],
+      filesystemPermissions: undefined,
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: 'default',
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0] as
+      | { middleware?: unknown[] }
+      | undefined;
+    const rescue = createDeepAgentInput?.middleware?.find((middleware) => Reflect.get(middleware as object, 'name') === 'ForgeRescueParsingMiddleware') as
+      | { afterModel?: (state: unknown, runtime: unknown) => Promise<{ messages?: unknown[] } | undefined> | { messages?: unknown[] } | undefined }
+      | undefined;
+    if (typeof rescue?.afterModel !== 'function') {
+      throw new Error('Expected ForgeRescueParsingMiddleware to be passed into createDeepAgent.');
+    }
+
+    const update = await rescue.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-bare-args',
+            content: '{"query":"agnes"}'
+          })
+        ]
+      },
+      {}
+    );
+    const rebuilt = update?.messages?.[1] as AIMessage;
+
+    expect(rebuilt.tool_calls).toEqual([
+      {
+        name: 'internet_search',
+        args: { query: 'agnes' },
+        id: 'call_rescued_ai-bare-args_0',
+        type: 'tool_call'
+      }
+    ]);
   });
 });

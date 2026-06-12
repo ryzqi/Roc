@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
-import React, { act } from 'react';
+import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatFeature } from '../../../src/renderer/features/chat';
 import { createChatFeatureActions } from '../../../src/renderer/features/chat/use-chat-feature';
+import type { LoadedState } from '../../../src/renderer/loaded-state';
 import type { RocClient } from '../../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../../src/shared/ipc';
+import type { AgentRuntimeStatus, ProviderConfig, SettingsSnapshot } from '../../../src/shared/types';
 import { createLoadedState } from '../view-test-helpers';
 
 describe('chat feature actions', () => {
@@ -136,9 +138,68 @@ describe('ChatFeature', () => {
     expect(client.api.tasks.getThreadMessages).toHaveBeenCalledWith({ threadId: 'thread-current' });
     expect(container.textContent).toContain('完整回复');
   });
+
+  it('clears the blocked chat prompt after selecting a default model from the composer', async () => {
+    const provider = createProvider();
+    const blockedState = createLoadedState({
+      providers: [provider],
+      defaultModelId: null,
+      agent: createAgentRuntimeStatus('blocked_until_provider_configured', null, null)
+    });
+    const savedSnapshot = createSettingsSnapshot(blockedState, provider.models[0]!.id);
+    const client = createChatClient({
+      agentStatus: createAgentRuntimeStatus('ready', provider.id, provider.models[0]!.id),
+      settingsSnapshot: savedSnapshot
+    });
+
+    await act(async () => {
+      root.render(
+        <ChatFeatureHarness
+          client={client}
+          initialState={blockedState}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-testid="chat-blocked"]')?.textContent).toBe('需要先配置默认模型');
+
+    const modelTrigger = container.querySelector('[data-testid="chat-model-trigger"]');
+    expect(modelTrigger).toBeInstanceOf(HTMLElement);
+    await act(async () => {
+      modelTrigger!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+
+    const modelChoice = Array.from(container.querySelectorAll<HTMLButtonElement>('.composer-choice')).find(
+      (button) => button.textContent?.includes(provider.models[0]!.id)
+    );
+    expect(modelChoice).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      modelChoice!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.agent.getStatus).toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="chat-blocked"]')).toBeNull();
+  });
 });
 
-function createChatClient(): RocClient {
+function ChatFeatureHarness({ client, initialState }: { client: RocClient; initialState: LoadedState }): React.JSX.Element {
+  const [state, setState] = useState(initialState);
+  return (
+    <ChatFeature
+      chatSelectionVersion={1}
+      client={client}
+      onQueuedTaskPromptHandled={() => {}}
+      onSubmitChatTask={async () => ({ ok: true as const })}
+      queuedTaskPrompt={null}
+      selectedThreadId={null}
+      state={state}
+      updateLoadedState={(partial) => setState((current) => ({ ...current, ...partial }))}
+    />
+  );
+}
+
+function createChatClient(input: { agentStatus?: AgentRuntimeStatus; settingsSnapshot?: SettingsSnapshot } = {}): RocClient {
   const api = {
     chat: {
       startRun: vi.fn().mockResolvedValue({
@@ -173,9 +234,71 @@ function createChatClient(): RocClient {
     },
     files: {
       selectFromDialog: vi.fn()
+    },
+    settings: {
+      save: vi.fn().mockResolvedValue({ ok: true, data: input.settingsSnapshot })
+    },
+    agent: {
+      getStatus: vi.fn().mockResolvedValue({ ok: true, data: input.agentStatus })
     }
   } as unknown as RocPreloadApi;
   return { api };
+}
+
+function createProvider(): ProviderConfig {
+  return {
+    id: 'provider-1',
+    name: 'Provider 1',
+    type: 'openai_compatible',
+    endpoint: 'https://example.test/v1',
+    credentialRef: 'secret:provider-1',
+    enabled: true,
+    models: [
+      {
+        id: 'model-1',
+        displayName: 'Model 1',
+        enabled: true,
+        supportsStreaming: true,
+        supportsToolCalls: true
+      }
+    ]
+  };
+}
+
+function createSettingsSnapshot(state: LoadedState, defaultModelId: string | null): SettingsSnapshot {
+  return {
+    settings: state.settings,
+    providers: state.providers,
+    defaultModelId,
+    providerSecretStatus: state.providerSecretStatus,
+    permissions: state.permissions,
+    mcpServers: state.mcpServers,
+    skills: state.skills,
+    hostIntegration: state.hostIntegration
+  };
+}
+
+function createAgentRuntimeStatus(
+  execution: AgentRuntimeStatus['execution'],
+  providerId: string | null,
+  modelId: string | null
+): AgentRuntimeStatus {
+  const ready = execution === 'ready';
+  return {
+    deepAgentsPackage: 'available',
+    deepAgentsApi: {
+      createDeepAgent: true
+    },
+    defaultModelConfigured: ready,
+    defaultModelState: {
+      status: ready ? 'ready' : 'missing',
+      modelId,
+      providerId,
+      reason: ready ? '默认模型可用。' : '未配置默认模型。'
+    },
+    memoryAccess: 'store_backend',
+    execution
+  };
 }
 
 async function flushPromises(): Promise<void> {

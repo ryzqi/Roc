@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import { SettingsView } from '../../src/renderer/settings';
-import type { SettingsSnapshot } from '../../src/shared/types';
+import type { AgentRuntimeStatus, SettingsSnapshot } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('SettingsView provider save', () => {
@@ -94,9 +94,79 @@ describe('SettingsView provider save', () => {
       credentialRef: null
     });
   });
+
+  it('refreshes agent runtime after selecting a default model in settings', async () => {
+    const modelId = 'Qwen3.5-4B-UD-Q5_K_XL.gguf';
+    const snapshot = buildSettingsSnapshot({ defaultModelId: null });
+    const agentStatus = createReadyAgentStatus('llama_cpp', modelId);
+    const save = vi.fn(async (request: unknown) => ({
+      ok: true as const,
+      data: {
+        ...snapshot,
+        defaultModelId: (request as { defaultModelId: string | null }).defaultModelId
+      }
+    }));
+    const getStatus = vi.fn(async () => ({ ok: true as const, data: agentStatus }));
+    const updateLoadedState = vi.fn();
+    const client: RocClient = {
+      api: {
+        settings: {
+          get: vi.fn(async () => ({ ok: true as const, data: snapshot })),
+          save,
+          testProvider: vi.fn(),
+          setProviderSecret: vi.fn(),
+          clearProviderSecret: vi.fn()
+        },
+        agent: {
+          getStatus
+        }
+      }
+    } as unknown as RocClient;
+
+    await act(async () => {
+      root.render(
+        React.createElement(SettingsView, {
+          client,
+          onNavigate: () => {},
+          state: {
+            settings: snapshot.settings,
+            providers: snapshot.providers,
+            defaultModelId: snapshot.defaultModelId,
+            providerSecretStatus: snapshot.providerSecretStatus,
+            permissions: snapshot.permissions,
+            mcpServers: snapshot.mcpServers,
+            skills: snapshot.skills,
+            hostIntegration: snapshot.hostIntegration,
+            providerTestStatus: null
+          },
+          updateLoadedState
+        })
+      );
+    });
+
+    await act(async () => {
+      queryByTestId('settings-section-default-model')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      queryByTestId(`default-model-${modelId}`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: modelId }));
+    expect(getStatus).toHaveBeenCalled();
+    expect(updateLoadedState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultModelId: modelId,
+        agent: agentStatus,
+        agentCapabilityPreview: null
+      })
+    );
+  });
 });
 
-function buildSettingsSnapshot(): SettingsSnapshot {
+function buildSettingsSnapshot(input: { defaultModelId?: string | null } = {}): SettingsSnapshot {
+  const defaultModelId =
+    input.defaultModelId === undefined ? 'Qwen3.5-4B-UD-Q5_K_XL.gguf' : input.defaultModelId;
   const state = createLoadedState({
     providers: [
       {
@@ -117,7 +187,7 @@ function buildSettingsSnapshot(): SettingsSnapshot {
         ]
       }
     ],
-    defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+    defaultModelId,
     providerSecretStatus: [{ providerId: 'llama_cpp', stored: true }]
   });
 
@@ -130,6 +200,24 @@ function buildSettingsSnapshot(): SettingsSnapshot {
     mcpServers: state.mcpServers,
     skills: state.skills,
     hostIntegration: state.hostIntegration
+  };
+}
+
+function createReadyAgentStatus(providerId: string, modelId: string): AgentRuntimeStatus {
+  return {
+    deepAgentsPackage: 'available',
+    deepAgentsApi: {
+      createDeepAgent: true
+    },
+    defaultModelConfigured: true,
+    defaultModelState: {
+      status: 'ready',
+      modelId,
+      providerId,
+      reason: '默认模型可用。'
+    },
+    memoryAccess: 'store_backend',
+    execution: 'ready'
   };
 }
 
@@ -151,4 +239,10 @@ function containerRef(): HTMLDivElement {
   const element = document.body.querySelector('div');
   expect(element).not.toBeNull();
   return element as HTMLDivElement;
+}
+
+async function flushPromises(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }

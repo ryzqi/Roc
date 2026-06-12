@@ -10,7 +10,7 @@ import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
 import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
 import { createRunSubagents } from '../../services/deep-agent/tools';
-import { defaultErrorTracker, defaultStepTracker } from '../../services/forge-guardrails';
+import { defaultErrorTracker, defaultStepTracker, readForgeMessageTag } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
@@ -42,8 +42,6 @@ export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
   paths: RocPaths;
 };
-
-const finalToolMessageNames = new Set(['write_file', 'edit_file']);
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
   const store = new InMemoryStore();
@@ -281,12 +279,15 @@ function readFinalToolMessage(message: unknown): FinalToolMessageBlock | null {
   if (!isToolMessageLike(message)) {
     return null;
   }
+  if (isForgeTaggedToolMessage(message)) {
+    return null;
+  }
   const callId = readToolMessageCallId(message);
   if (callId === null) {
     return null;
   }
   const name = readToolMessageName(message);
-  if (name === null || !finalToolMessageNames.has(name)) {
+  if (name === null) {
     return null;
   }
   const output = readToolMessageOutput(message);
@@ -304,6 +305,10 @@ function readFinalToolMessage(message: unknown): FinalToolMessageBlock | null {
     phase: 'end',
     output
   };
+}
+
+function isForgeTaggedToolMessage(message: unknown): boolean {
+  return ToolMessage.isInstance(message) && readForgeMessageTag(message) !== null;
 }
 
 function isToolMessageLike(message: unknown): boolean {

@@ -1,13 +1,13 @@
 import { AIMessage, RemoveMessage, type BaseMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
-import { rescueToolCall } from '../rescue-parser';
+import { rescueToolCall, rescueToolCallBlocks, type RescueToolCandidate } from '../rescue-parser';
 
 type TextBlock = {
   type?: string;
   text?: unknown;
 };
 
-export function createRescueParsingMiddleware(opts: { availableTools: () => string[] }) {
+export function createRescueParsingMiddleware(opts: { availableTools: () => RescueToolCandidate[] }) {
   return createMiddleware({
     name: 'ForgeRescueParsingMiddleware',
     afterModel: (state) => {
@@ -26,12 +26,12 @@ export function createRescueParsingMiddleware(opts: { availableTools: () => stri
         return undefined;
       }
 
-      const content = typeof last.content === 'string' ? last.content : extractTextFromBlocks(last.content);
-      if (content.trim().length === 0) {
-        return undefined;
-      }
-
-      const result = rescueToolCall(content, opts.availableTools());
+      const availableTools = opts.availableTools();
+      const blockResult = rescueToolCallBlocks(last.content, availableTools);
+      const result =
+        blockResult.toolCalls.length > 0
+          ? blockResult
+          : rescueToolCall(typeof last.content === 'string' ? last.content : extractTextFromBlocks(last.content), availableTools);
       if (result.toolCalls.length === 0) {
         return undefined;
       }
@@ -50,7 +50,7 @@ export function createRescueParsingMiddleware(opts: { availableTools: () => stri
         tool_calls: result.toolCalls.map((toolCall, index) => ({
           name: toolCall.tool,
           args: toolCall.args,
-          id: `call_rescued_${last.id}_${index}`,
+          id: toolCall.id ?? `call_rescued_${last.id}_${index}`,
           type: 'tool_call' as const
         })),
         additional_kwargs,

@@ -36,6 +36,11 @@ import {
   nvidiaThinkingParameterName,
   resolveNvidiaModelFamily
 } from './nvidia-model-family';
+import {
+  normalizeOpenAiStreamingChunks,
+  readProviderReasoningFromMessage,
+  stripProviderReasoningDelta
+} from './openai-stream-normalization';
 import { providerRequestTimeoutMs } from './provider-request-retry';
 import type { SecretService } from './secret-service';
 import type { LogService } from './log-service';
@@ -73,11 +78,19 @@ class ReasoningAwareChatOpenAI extends ChatOpenAI {
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatModelStreamEvent> {
     yield* convertChunksToEvents(
-      normalizeOpenAiReasoningChunks(this._streamResponseChunks(messages, options, runManager)),
+      this._streamResponseChunks(messages, options, runManager),
       {
         signal: options.signal
       }
     );
+  }
+
+  override async *_streamResponseChunks(
+    messages: BaseMessage[],
+    options: this['ParsedCallOptions'],
+    runManager?: CallbackManagerForLLMRun
+  ): AsyncGenerator<ChatGenerationChunk> {
+    yield* normalizeOpenAiStreamingChunks(super._streamResponseChunks(messages, options, runManager));
   }
 
   protected cloneWithFields(): ReasoningAwareChatOpenAI {
@@ -753,7 +766,10 @@ export class LangChainModelFactory {
             ...(openAiOrganization.length === 0 ? {} : { organization: openAiOrganization }),
             ...(defaultHeaders === undefined ? {} : { defaultHeaders })
           };
-    const OpenAiChatModelClass = provider.type === 'llama_cpp' ? LlamaCppCompatibleChatOpenAI : ReasoningAwareChatOpenAI;
+    const OpenAiChatModelClass =
+      provider.type === 'llama_cpp'
+        ? LlamaCppCompatibleChatOpenAI
+        : ReasoningAwareChatOpenAI;
     const chatModelFields: ChatOpenAIFields = {
       model: modelId,
       apiKey: apiKeyForChatModel,
@@ -1401,98 +1417,4 @@ function createFetchWithoutAuthorization(): typeof fetch {
     }
     return await globalThis.fetch(input, nextInit);
   };
-}
-
-async function* normalizeOpenAiReasoningChunks(
-  chunks: AsyncIterable<ChatGenerationChunk>
-): AsyncGenerator<ChatGenerationChunk> {
-  for await (const chunk of chunks) {
-    const reasoningText = readProviderReasoningDelta(chunk.message);
-    if (reasoningText === null || typeof chunk.message.content !== 'string' || hasExplicitReasoningBlocks(chunk.message.content)) {
-      yield chunk;
-      continue;
-    }
-
-    yield new ChatGenerationChunk({
-      message: new AIMessageChunk({
-        id: chunk.message.id,
-        content: [
-          {
-            type: 'reasoning',
-            index: 1,
-            reasoning: reasoningText
-          }
-        ]
-      }),
-      text: '',
-      generationInfo: {}
-    });
-
-    yield new ChatGenerationChunk({
-      message: new AIMessageChunk({
-        id: chunk.message.id,
-        content: chunk.message.content,
-        name: chunk.message.name,
-        additional_kwargs: stripProviderReasoningDelta(chunk.message.additional_kwargs),
-        response_metadata: chunk.message.response_metadata
-      }),
-      text: chunk.text,
-      generationInfo: chunk.generationInfo
-    });
-  }
-}
-
-function readProviderReasoningDelta(message: ChatGenerationChunk['message']): string | null {
-  return readProviderReasoningFromMessage(message);
-}
-
-function readProviderReasoningFromMessage(message: Pick<BaseMessage, 'additional_kwargs' | 'response_metadata'>): string | null {
-  const additionalKwargs = message.additional_kwargs;
-  const reasoningFromAdditionalKwargs = readProviderReasoningFromRecord(additionalKwargs);
-  if (reasoningFromAdditionalKwargs !== null) {
-    return reasoningFromAdditionalKwargs;
-  }
-  return readProviderReasoningFromRecord(message.response_metadata);
-}
-
-function readProviderReasoningFromRecord(value: unknown): string | null {
-  if (value === null || value === undefined || typeof value !== 'object') {
-    return null;
-  }
-
-  const reasoningContent = (value as Record<string, unknown>).reasoning_content;
-  if (typeof reasoningContent === 'string' && reasoningContent.length > 0) {
-    return reasoningContent;
-  }
-
-  const camelCaseReasoningContent = (value as Record<string, unknown>).reasoningContent;
-  if (typeof camelCaseReasoningContent === 'string' && camelCaseReasoningContent.length > 0) {
-    return camelCaseReasoningContent;
-  }
-
-  return null;
-}
-
-function stripProviderReasoningDelta(additionalKwargs: unknown): Record<string, unknown> {
-  if (additionalKwargs === null || additionalKwargs === undefined || typeof additionalKwargs !== 'object') {
-    return {};
-  }
-
-  const { reasoning_content: _reasoningContent, reasoningContent: _camelCaseReasoningContent, ...rest } =
-    additionalKwargs as Record<string, unknown>;
-  return rest;
-}
-
-function hasExplicitReasoningBlocks(content: unknown): boolean {
-  if (!Array.isArray(content)) {
-    return false;
-  }
-
-  return content.some((item) => {
-    if (item === null || typeof item !== 'object') {
-      return false;
-    }
-    const type = item.type;
-    return type === 'reasoning' || type === 'reasoning_content' || type === 'thinking';
-  });
 }

@@ -80,4 +80,79 @@ describe('ForgeRescueParsingMiddleware', () => {
     });
     expect(rebuilt.additional_kwargs.forge_reasoning_text).toBe('thinking');
   });
+
+  it('rescues bare argument JSON through schema-validated candidates', async () => {
+    const middleware = createRescueParsingMiddleware({
+      availableTools: () => [
+        {
+          name: 'internet_search',
+          acceptsBareArgs: (args) => typeof args.query === 'string'
+        }
+      ]
+    });
+    if (typeof middleware.afterModel !== 'function') {
+      throw new Error('Expected rescue parsing middleware to expose afterModel.');
+    }
+
+    const update = await middleware.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-bare-args',
+            content: '{"query":"agnes"}'
+          })
+        ]
+      } as never,
+      {} as never
+    );
+
+    const rebuilt = update?.messages?.[1] as AIMessage;
+    expect(rebuilt.tool_calls).toEqual([
+      {
+        name: 'internet_search',
+        args: { query: 'agnes' },
+        id: 'call_rescued_ai-bare-args_0',
+        type: 'tool_call'
+      }
+    ]);
+    expect(rebuilt.additional_kwargs.forge_rescue).toEqual({ strategy: 'bare_args_json' });
+  });
+
+  it('rescues tool-call shaped content blocks into structured tool calls', async () => {
+    const middleware = createRescueParsingMiddleware({ availableTools: () => ['internet_search'] });
+    if (typeof middleware.afterModel !== 'function') {
+      throw new Error('Expected rescue parsing middleware to expose afterModel.');
+    }
+
+    const update = await middleware.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-content-block-tool',
+            content: [
+              {
+                type: 'text',
+                text: '\n\n',
+                id: 'call-agnes-content-block',
+                name: 'internet_search',
+                args: '{"query":"agnes"}'
+              }
+            ]
+          })
+        ]
+      } as never,
+      {} as never
+    );
+
+    const rebuilt = update?.messages?.[1] as AIMessage;
+    expect(rebuilt.tool_calls).toEqual([
+      {
+        name: 'internet_search',
+        args: { query: 'agnes' },
+        id: 'call-agnes-content-block',
+        type: 'tool_call'
+      }
+    ]);
+    expect(rebuilt.additional_kwargs.forge_rescue).toEqual({ strategy: 'content_block_tool' });
+  });
 });

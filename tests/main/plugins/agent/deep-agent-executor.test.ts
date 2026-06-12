@@ -2,6 +2,7 @@ import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import { tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
 import type { AgentModelHandle } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import type { RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import type { TaskRun } from '../../../../src/shared/types';
@@ -464,6 +465,64 @@ describe('createAgentDeepAgentExecutor', () => {
     });
   });
 
+  it('uses final non-file ToolMessage content when toolCalls projection is empty', async () => {
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents: vi.fn(async () => ({
+        interrupted: false,
+        messages: createAsyncIterable([
+          {
+            reasoning: createAsyncIterable(['需要先搜索资料。']),
+            text: null
+          }
+        ]),
+        output: {
+          messages: [
+            new ToolMessage({
+              content: 'Search results',
+              name: 'web_search',
+              tool_call_id: 'call-search'
+            })
+          ]
+        },
+        subagents: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([])
+      }))
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    const events = await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '搜索 Agnes 工具调用问题',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    expect(events).toContainEqual({
+      type: 'assistant_block',
+      runId: 'run-streaming',
+      block: {
+        kind: 'tool_call',
+        blockId: 'tool-call-search',
+        callId: 'call-search',
+        name: 'web_search',
+        phase: 'end',
+        output: 'Search results'
+      }
+    });
+    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'text')).toBe(false);
+  });
+
   it('does not emit a final tool block when ToolMessage has no name', async () => {
     mocked.createBackend.mockReturnValue({ backend: {} });
     mocked.buildDeepAgent.mockReturnValue({
@@ -496,6 +555,50 @@ describe('createAgentDeepAgentExecutor', () => {
           skills: []
         },
         input: '更新 todo',
+        mode: 'task'
+      },
+      run: createTaskRun()
+    }));
+
+    expect(events.some((event) => event.type === 'assistant_block' && event.block.kind === 'tool_call')).toBe(false);
+  });
+
+  it('does not emit a final tool block for Forge tagged ToolMessage output', async () => {
+    mocked.createBackend.mockReturnValue({ backend: {} });
+    mocked.buildDeepAgent.mockReturnValue({
+      streamEvents: vi.fn(async () => ({
+        interrupted: false,
+        messages: createAsyncIterable([]),
+        output: {
+          messages: [
+            tagForgeMessage(
+              new ToolMessage({
+                content: '[ToolResolutionError] Missing prerequisite.',
+                name: 'web_search',
+                tool_call_id: 'call-search'
+              }),
+              'forge:tool_resolution'
+            )
+          ]
+        },
+        subagents: createAsyncIterable([]),
+        toolCalls: createAsyncIterable([])
+      }))
+    });
+    const executor = createAgentDeepAgentExecutor({
+      capabilities: createCapabilities(),
+      paths: {} as never
+    });
+
+    const events = await collectEvents(await executor.execute({
+      abortSignal: new AbortController().signal,
+      modelHandle: createModelHandle(),
+      request: {
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        },
+        input: '搜索 Agnes 工具调用问题',
         mode: 'task'
       },
       run: createTaskRun()

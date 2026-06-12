@@ -14,6 +14,7 @@ import {
   applySettingsSnapshot,
   assertProviderCreateIdAvailable,
   buildProviderConfigFromDraft,
+  buildSettingsStateUpdate,
   createProviderDraft,
   deleteProviderFromSettingsSaveRequest,
   setDefaultModelInSettingsSaveRequest,
@@ -25,6 +26,7 @@ import {
   type ProviderDraft,
   type SettingsSectionId
 } from '../settings-model';
+import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
@@ -49,7 +51,7 @@ export type SettingsViewState = {
   providerTestStatus: ProviderTestResult | null;
 };
 
-export type SettingsViewUpdate = (partial: Partial<LoadedSettingsState>) => void;
+export type SettingsViewUpdate = (partial: Partial<LoadedState>) => void;
 
 export function SettingsView({
   client,
@@ -196,13 +198,14 @@ export function SettingsView({
 
   const setDefaultModel = useCallback(
     async (modelId: string | null): Promise<void> => {
+      const settingsClient = resolveClient();
       const saved = unwrap<SettingsSnapshot>(
         'settings save',
-        await resolveClient().api.settings.save(
+        await settingsClient.api.settings.save(
           setDefaultModelInSettingsSaveRequest(buildBaseSaveRequest(), modelId)
         )
       );
-      updateLoadedState(applySettingsSnapshot(saved));
+      updateLoadedState(await buildSettingsStateUpdate(settingsClient, saved));
     },
     [buildBaseSaveRequest, client, updateLoadedState]
   );

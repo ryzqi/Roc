@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeStatus,
   AppSettings,
   HostIntegrationStatus,
   McpServerSnapshot,
@@ -10,6 +11,9 @@ import type {
   SettingsSnapshot,
   SkillSnapshot
 } from '../../shared/types';
+import type { LoadedState } from '../loaded-state';
+import { unwrap } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
 
 export type LoadedSettingsState = {
   settings: AppSettings;
@@ -36,6 +40,14 @@ export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSetting
     hostIntegration: snapshot.hostIntegration,
     providerTestStatus: null,
     mcpTestStatus: null
+  };
+}
+
+export async function buildSettingsStateUpdate(client: RocClient, snapshot: SettingsSnapshot): Promise<Partial<LoadedState>> {
+  return {
+    ...applySettingsSnapshot(snapshot),
+    agent: unwrap<AgentRuntimeStatus>('agent status', await client.api.agent.getStatus()),
+    agentCapabilityPreview: null
   };
 }
 

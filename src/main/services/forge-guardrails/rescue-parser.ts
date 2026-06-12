@@ -1,6 +1,20 @@
+export type RescueToolCandidate =
+  | string
+  | {
+      name: string;
+      acceptsBareArgs?: (args: Record<string, unknown>) => boolean;
+    };
+
 export type RescueResult = {
-  toolCalls: Array<{ tool: string; args: Record<string, unknown> }>;
-  strategy: 'json_fence' | 'rehearsal' | 'qwen_xml' | 'mistral_bracket' | null;
+  toolCalls: Array<{ tool: string; args: Record<string, unknown>; id?: string }>;
+  strategy:
+    | 'json_fence'
+    | 'rehearsal'
+    | 'qwen_xml'
+    | 'mistral_bracket'
+    | 'bare_args_json'
+    | 'content_block_tool'
+    | null;
   reasoningText: string | null;
 };
 
@@ -10,7 +24,14 @@ const QWEN_FUNCTION_RE = /<function=([^>\s]+)>([\s\S]*?)<\/function>/g;
 const QWEN_PARAMETER_RE = /<parameter=([^>\s]+)>([\s\S]*?)(?:<\/parameter>|(?=<parameter=)|(?=<\/function>)|$)/g;
 const MISTRAL_BRACKET_RE = /\[TOOL_CALLS\](\w+)\s*(?=\{)/g;
 
-export function rescueToolCall(text: string, availableTools: readonly string[]): RescueResult {
+type NormalizedRescueToolCandidate = {
+  name: string;
+  acceptsBareArgs?: (args: Record<string, unknown>) => boolean;
+};
+
+export function rescueToolCall(text: string, availableTools: readonly RescueToolCandidate[]): RescueResult {
+  const toolCandidates = normalizeToolCandidates(availableTools);
+  const toolNames = toolCandidates.map((candidate) => candidate.name);
   const reasoningChunks: string[] = [];
   const cleaned = text
     .replace(THINK_TAG_RE, (match) => {
@@ -25,27 +46,74 @@ export function rescueToolCall(text: string, availableTools: readonly string[]):
     return { toolCalls: [], strategy: null, reasoningText };
   }
 
-  const jsonResults = extractJsonToolCalls(cleaned, availableTools);
+  const jsonResults = extractJsonToolCalls(cleaned, toolNames);
   if (jsonResults.length > 0) {
     return { toolCalls: jsonResults, strategy: 'json_fence', reasoningText };
   }
 
-  const rehearsalResults = extractRehearsalToolCalls(cleaned, availableTools);
+  const rehearsalResults = extractRehearsalToolCalls(cleaned, toolNames);
   if (rehearsalResults.length > 0) {
     return { toolCalls: rehearsalResults, strategy: 'rehearsal', reasoningText };
   }
 
-  const qwenResults = extractQwenXmlToolCalls(cleaned, availableTools);
+  const qwenResults = extractQwenXmlToolCalls(cleaned, toolNames);
   if (qwenResults.length > 0) {
     return { toolCalls: qwenResults, strategy: 'qwen_xml', reasoningText };
   }
 
-  const mistralResults = extractMistralBracketToolCalls(cleaned, availableTools);
+  const mistralResults = extractMistralBracketToolCalls(cleaned, toolNames);
   if (mistralResults.length > 0) {
     return { toolCalls: mistralResults, strategy: 'mistral_bracket', reasoningText };
   }
 
+  const bareArgsResult = extractBareArgumentToolCall(cleaned, toolCandidates);
+  if (bareArgsResult !== null) {
+    return { toolCalls: [bareArgsResult], strategy: 'bare_args_json', reasoningText };
+  }
+
   return { toolCalls: [], strategy: null, reasoningText };
+}
+
+export function rescueToolCallBlocks(content: unknown, availableTools: readonly RescueToolCandidate[]): RescueResult {
+  if (!Array.isArray(content)) {
+    return { toolCalls: [], strategy: null, reasoningText: null };
+  }
+
+  const toolNames = normalizeToolCandidates(availableTools).map((candidate) => candidate.name);
+  const toolCalls: RescueResult['toolCalls'] = [];
+  for (const block of content) {
+    if (!isRecord(block)) {
+      continue;
+    }
+    const toolName = readNonEmptyString(block.name);
+    if (toolName === null || !toolNames.includes(toolName)) {
+      continue;
+    }
+    const args = parseToolArgs(block.args ?? block.arguments ?? block.input);
+    if (args === null) {
+      continue;
+    }
+    const id = readNonEmptyString(block.id);
+    toolCalls.push({
+      tool: toolName,
+      args,
+      ...(id === null ? {} : { id })
+    });
+  }
+
+  if (toolCalls.length === 0) {
+    return { toolCalls: [], strategy: null, reasoningText: null };
+  }
+  return { toolCalls, strategy: 'content_block_tool', reasoningText: null };
+}
+
+function normalizeToolCandidates(availableTools: readonly RescueToolCandidate[]): NormalizedRescueToolCandidate[] {
+  return availableTools.map((candidate) => {
+    if (typeof candidate === 'string') {
+      return { name: candidate };
+    }
+    return candidate;
+  });
 }
 
 function stripThinkTagWrapper(raw: string): string {
@@ -129,6 +197,64 @@ function tryParseToolCall(json: string, availableTools: readonly string[]): { to
     return null;
   }
   return { tool: toolName, args: argsRaw as Record<string, unknown> };
+}
+
+function parseToolArgs(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  return isRecord(parsed) ? parsed : null;
+}
+
+function extractBareArgumentToolCall(
+  text: string,
+  candidates: readonly NormalizedRescueToolCandidate[]
+): { tool: string; args: Record<string, unknown> } | null {
+  const stripped = stripJsonFence(text).trim();
+  if (stripped.length === 0 || stripped[0] !== '{') {
+    return null;
+  }
+  const end = findMatchingBrace(stripped, 0);
+  if (end !== stripped.length - 1) {
+    return null;
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(stripped);
+  } catch {
+    return null;
+  }
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return null;
+  }
+
+  const args = data as Record<string, unknown>;
+  if (typeof args.tool === 'string' || typeof args.name === 'string' || isRecord(args.args) || isRecord(args.arguments)) {
+    return null;
+  }
+
+  const matches = candidates.filter((candidate) => candidate.acceptsBareArgs?.(args) === true);
+  if (matches.length !== 1) {
+    return null;
+  }
+  return {
+    tool: matches[0]!.name,
+    args
+  };
+}
+
+function stripJsonFence(text: string): string {
+  return text.replace(/```(?:json)?\s*\n?/g, '').replace(/```/g, '');
 }
 
 function extractRehearsalToolCalls(text: string, availableTools: readonly string[]): Array<{ tool: string; args: Record<string, unknown> }> {
@@ -221,4 +347,12 @@ function extractMistralBracketToolCalls(text: string, availableTools: readonly s
     }
   }
   return found;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
