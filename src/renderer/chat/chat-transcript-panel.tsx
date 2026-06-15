@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ChatTranscriptMessage } from '../chat-transcript';
+import { ChatMessageRow } from './chat-message-row';
 import { resolveMotionTransition, scrollBottomFade, scrollBottomTransition } from '../animations';
 import type { ChatResumeDecision } from '../../shared/types';
-import { ChatTranscriptVirtualList } from './chat-transcript-virtual-list';
 
 type ChatTranscriptPanelProps = {
   messages: ChatTranscriptMessage[];
@@ -115,7 +115,9 @@ export function ChatTranscriptPanel({
   return (
     <>
       <div className="chat-transcript" data-testid="chat-transcript">
-        <ChatTranscriptVirtualList messages={messages} onApprovalDecision={onApprovalDecision} />
+        {messages.map((message) => (
+          <ChatMessageRow key={message.key} message={message} onApprovalDecision={onApprovalDecision} />
+        ))}
       </div>
       <AnimatePresence>
         {isAtBottom ? null : (
