@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import {
   applyChatRunEvent,
   createEmptyChatRunState,
@@ -11,11 +11,65 @@ export function applyChatRunEventBatch(state: ChatRunState, events: ChatRunEvent
   if (events.length === 0) {
     return state;
   }
-  return events.reduce(applyChatRunEvent, state);
+  return coalesceChatRunEvents(events).reduce(applyChatRunEvent, state);
+}
+
+export function coalesceChatRunEvents(events: readonly ChatRunEvent[]): ChatRunEvent[] {
+  const result: ChatRunEvent[] = [];
+  for (const event of events) {
+    const previous = result[result.length - 1];
+    if (previous !== undefined && canMergeChatRunEvents(previous, event)) {
+      result[result.length - 1] = mergeChatRunEvents(previous, event);
+      continue;
+    }
+    result.push(event);
+  }
+  return result;
 }
 
 export function isTerminalChatRunEvent(event: ChatRunEvent): boolean {
   return event.type === 'run_started' || event.type === 'run_completed' || event.type === 'run_failed';
+}
+
+function canMergeChatRunEvents(left: ChatRunEvent, right: ChatRunEvent): boolean {
+  if (left.type !== 'assistant_block' || right.type !== 'assistant_block') {
+    return false;
+  }
+  if (left.runId !== right.runId || left.block.kind !== right.block.kind) {
+    return false;
+  }
+  if (left.block.kind !== 'text' && left.block.kind !== 'reasoning') {
+    return false;
+  }
+  if (right.block.kind !== 'text' && right.block.kind !== 'reasoning') {
+    return false;
+  }
+  return left.block.blockId === right.block.blockId;
+}
+
+function mergeChatRunEvents(left: ChatRunEvent, right: ChatRunEvent): ChatRunEvent {
+  if (left.type !== 'assistant_block' || right.type !== 'assistant_block') {
+    return right;
+  }
+  if (left.block.kind === 'text' && right.block.kind === 'text') {
+    return {
+      ...right,
+      block: {
+        ...right.block,
+        text: `${left.block.text}${right.block.text}`
+      }
+    };
+  }
+  if (left.block.kind === 'reasoning' && right.block.kind === 'reasoning') {
+    return {
+      ...right,
+      block: {
+        ...right.block,
+        text: `${left.block.text}${right.block.text}`
+      }
+    };
+  }
+  return right;
 }
 
 type PendingChatRunEventsRef = {
@@ -54,12 +108,14 @@ export function useChatRun(client: RocClient): ChatRunController {
   useEffect(() => {
     function flush(): void {
       rafHandleRef.current = null;
-      const buffered = pendingEventsRef.current;
+      const buffered = coalesceChatRunEvents(pendingEventsRef.current);
       if (buffered.length === 0) {
         return;
       }
       pendingEventsRef.current = [];
-      setState((current) => applyChatRunEventBatch(current, buffered));
+      startTransition(() => {
+        setState((current) => applyChatRunEventBatch(current, buffered));
+      });
     }
 
     const unsubscribe = client.api.chat.onRunEvent((event) => {
