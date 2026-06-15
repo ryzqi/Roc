@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyChatRunEventBatch,
   clearPendingChatRunEvents,
+  coalesceChatRunEvents,
   isTerminalChatRunEvent
 } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
@@ -33,6 +34,74 @@ function createDeltaEvent(delta: string): ChatRunEvent {
 }
 
 describe('applyChatRunEventBatch', () => {
+  it('coalesces same-frame text and reasoning deltas before reducing state', () => {
+    const events: ChatRunEvent[] = [
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'text',
+          blockId: 'text-chat_test',
+          phase: 'delta',
+          text: 'Hel'
+        }
+      },
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'text',
+          blockId: 'text-chat_test',
+          phase: 'delta',
+          text: 'lo'
+        }
+      },
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-chat_test',
+          phase: 'delta',
+          text: '思'
+        }
+      },
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-chat_test',
+          phase: 'delta',
+          text: '考'
+        }
+      }
+    ];
+
+    expect(coalesceChatRunEvents(events)).toEqual([
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'text',
+          blockId: 'text-chat_test',
+          phase: 'delta',
+          text: 'Hello'
+        }
+      },
+      {
+        type: 'assistant_block',
+        runId: 'chat_test',
+        block: {
+          kind: 'reasoning',
+          blockId: 'reasoning-chat_test',
+          phase: 'delta',
+          text: '思考'
+        }
+      }
+    ]);
+  });
+
   it('reduces a hundred message deltas into a single concatenated assistant message', () => {
     const initial = applyChatRunEventBatch(createEmptyChatRunState(), [createRunStartedEvent()]);
     const tokens = Array.from({ length: 100 }, (_, index) => `token-${index} `);

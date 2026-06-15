@@ -2,8 +2,20 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ChatMessageRow } from '../../src/renderer/chat/chat-message-row';
+import { StreamingMarkdownView } from '../../src/renderer/chat/streaming-markdown-view';
 
 describe('chat message row', () => {
+  it('uses a streaming Markdown boundary while assistant content is flowing', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(StreamingMarkdownView, {
+        text: '**hi**',
+        isStreaming: true
+      })
+    );
+
+    expect(html).toContain('data-testid="streaming-markdown"');
+  });
+
   it('renders completed reasoning as a collapsed details block without timeline or Markdown conversion', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
