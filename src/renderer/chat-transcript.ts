@@ -317,7 +317,7 @@ function appendGuardrailBlock(draft: AssistantDraft, payload: GuardrailPayload, 
   });
 }
 
-function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
+export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
   const messages: ChatTranscriptMessage[] = [];
   const drafts = new Map<string, AssistantDraft>();
 
@@ -409,6 +409,87 @@ function readReasoningFromBlocks(blocks: readonly ChatTranscriptActivityBlock[])
   return blocks.flatMap((block) => (block.kind === 'reasoning' ? [block.content] : [])).join('');
 }
 
+function createPendingUserMessage(content: string): ChatTranscriptMessage {
+  return {
+    key: 'pending-user-message',
+    role: 'user',
+    content,
+    reasoning: null,
+    blocks: [],
+    approval: null,
+    isStreaming: false
+  };
+}
+
+function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMessage | null {
+  const liveContent = chatRunState.assistantMessage;
+  const liveBlocks = buildLiveActivityBlocks(chatRunState);
+  const liveReasoning = readReasoningFromBlocks(liveBlocks);
+
+  if (liveContent.length === 0 && liveBlocks.length === 0 && chatRunState.pendingApprovals.length === 0) {
+    return null;
+  }
+
+  return {
+    key: `live-${chatRunState.runId ?? 'assistant'}`,
+    role: 'assistant',
+    content: liveContent,
+    reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+    blocks: liveBlocks,
+    approval: chatRunState.pendingApprovals[0] ?? null,
+    isStreaming: chatRunState.status === 'running'
+  };
+}
+
+export function appendLiveTranscriptMessages(input: {
+  chatRunState: ChatRunState;
+  pendingUserInput: string | null;
+  persistedMessages: ChatTranscriptMessage[];
+  selectedThreadId: string | null;
+}): ChatTranscriptMessage[] {
+  const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
+  if (activeThreadId === null) {
+    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput)];
+  }
+
+  const messages = input.persistedMessages.slice();
+  if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
+    messages.push(createPendingUserMessage(input.pendingUserInput));
+  }
+
+  if (input.chatRunState.threadId !== activeThreadId) {
+    return messages;
+  }
+
+  const lastAssistantIndex = [...messages].reverse().findIndex((message) => message.role === 'assistant');
+  const assistantIndex = lastAssistantIndex === -1 ? -1 : messages.length - 1 - lastAssistantIndex;
+  if (assistantIndex !== -1) {
+    const liveContent = input.chatRunState.assistantMessage;
+    const liveBlocks = buildLiveActivityBlocks(input.chatRunState);
+    const liveReasoning = readReasoningFromBlocks(liveBlocks);
+    const matchesPersistedAssistant =
+      messages[assistantIndex].content === liveContent &&
+      input.chatRunState.status !== 'running';
+
+    if (matchesPersistedAssistant) {
+      messages[assistantIndex] = {
+        ...messages[assistantIndex],
+        reasoning: liveReasoning.length === 0 ? null : liveReasoning,
+        blocks: liveBlocks.length === 0 ? messages[assistantIndex].blocks : liveBlocks,
+        approval: input.chatRunState.pendingApprovals[0] ?? null,
+        isStreaming: false
+      };
+      return messages;
+    }
+  }
+
+  const liveMessage = buildLiveAssistantMessage(input.chatRunState);
+  if (liveMessage !== null) {
+    messages.push(liveMessage);
+  }
+  return messages;
+}
+
 export function buildChatTranscript(input: {
   promotedThreadIds: Set<string>;
   chatRunState: ChatRunState;
@@ -419,19 +500,7 @@ export function buildChatTranscript(input: {
 }): ChatTranscriptMessage[] {
   const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
   if (activeThreadId === null) {
-    return input.pendingUserInput === null
-      ? []
-      : [
-          {
-            key: 'pending-user-message',
-            role: 'user',
-            content: input.pendingUserInput,
-            reasoning: null,
-            blocks: [],
-            approval: null,
-            isStreaming: false
-          }
-      ];
+    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput)];
   }
 
   const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;
@@ -439,59 +508,11 @@ export function buildChatTranscript(input: {
   if (input.promotedThreadIds.has(activeThreadId) && input.chatRunState.threadId !== activeThreadId) {
     return messages;
   }
-  if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
-    messages.push({
-      key: 'pending-user-message',
-      role: 'user',
-      content: input.pendingUserInput,
-      reasoning: null,
-      blocks: [],
-      approval: null,
-      isStreaming: false
-    });
-  }
 
-  if (input.chatRunState.threadId !== activeThreadId) {
-    return messages;
-  }
-
-  const liveContent = input.chatRunState.assistantMessage;
-  const liveBlocks = buildLiveActivityBlocks(input.chatRunState);
-  const liveReasoning = readReasoningFromBlocks(liveBlocks);
-  const lastAssistantIndex = [...messages].reverse().findIndex((message) => message.role === 'assistant');
-  const assistantIndex = lastAssistantIndex === -1 ? -1 : messages.length - 1 - lastAssistantIndex;
-  const matchesPersistedAssistant =
-    assistantIndex !== -1 &&
-    messages[assistantIndex].content === liveContent &&
-    input.chatRunState.status !== 'running';
-
-  if (matchesPersistedAssistant) {
-    messages[assistantIndex] = {
-      ...messages[assistantIndex],
-      reasoning: liveReasoning.length === 0 ? null : liveReasoning,
-      blocks: liveBlocks.length === 0 ? messages[assistantIndex].blocks : liveBlocks,
-      approval: input.chatRunState.pendingApprovals[0] ?? null,
-      isStreaming: false
-    };
-    return messages;
-  }
-
-  if (
-    liveContent.length === 0 &&
-    liveBlocks.length === 0 &&
-    input.chatRunState.pendingApprovals.length === 0
-  ) {
-    return messages;
-  }
-
-  messages.push({
-    key: `live-${input.chatRunState.runId ?? 'assistant'}`,
-    role: 'assistant',
-    content: liveContent,
-    reasoning: liveReasoning.length === 0 ? null : liveReasoning,
-    blocks: liveBlocks,
-    approval: input.chatRunState.pendingApprovals[0] ?? null,
-    isStreaming: input.chatRunState.status === 'running'
+  return appendLiveTranscriptMessages({
+    chatRunState: input.chatRunState,
+    pendingUserInput: input.pendingUserInput,
+    persistedMessages: messages,
+    selectedThreadId: input.selectedThreadId
   });
-  return messages;
 }

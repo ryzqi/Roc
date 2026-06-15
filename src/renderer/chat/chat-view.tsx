@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import type { LoadedState } from '../loaded-state';
-import { buildChatTranscript } from '../chat-transcript';
+import { appendLiveTranscriptMessages, buildPersistedTranscriptMessages } from '../chat-transcript';
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
@@ -75,33 +75,51 @@ export function ChatView({
       ? null
       : state.taskSnapshot.recentEvents.find((event) => event.threadId === activeThreadId)?.id ?? null;
 
+  const persistedTranscript = useMemo(
+    () =>
+      activeThreadId === null
+        ? []
+        : buildPersistedTranscriptMessages(persistedMessages, activeThreadId),
+    [
+      activeThreadId,
+      persistedMessages,
+    ]
+  );
+
   const chatTranscript = useMemo(
     () =>
-      buildChatTranscript({
-        promotedThreadIds: new Set(
-          state.activeTasks
-            .filter((item) => item.kind === 'background')
-            .map((item) => item.threadId)
-        ),
+      appendLiveTranscriptMessages({
         chatRunState: {
           ...chatRun.state,
           assistantMessage: deferredAssistantMessage,
           activityBlocks: deferredActivityBlocks
         },
         pendingUserInput,
-        persistedMessages,
-        selectedThreadId,
-        taskSnapshot: state.taskSnapshot
+        persistedMessages: persistedTranscript,
+        selectedThreadId
       }),
     [
-      chatRun.state,
+      chatRun.state.runId,
+      chatRun.state.mode,
+      chatRun.state.threadId,
+      chatRun.state.providerId,
+      chatRun.state.modelId,
+      chatRun.state.createdAt,
+      chatRun.state.status,
+      chatRun.state.durationMs,
+      chatRun.state.summary,
+      chatRun.state.errorCode,
+      chatRun.state.errorMessage,
+      chatRun.state.retryable,
+      chatRun.state.pendingApprovals,
+      chatRun.state.resumeBusy,
+      chatRun.state.todos,
+      chatRun.state.subagents,
       deferredAssistantMessage,
       deferredActivityBlocks,
       pendingUserInput,
-      persistedMessages,
-      selectedThreadId,
-      state.activeTasks,
-      state.taskSnapshot
+      persistedTranscript,
+      selectedThreadId
     ]
   );
 

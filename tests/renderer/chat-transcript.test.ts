@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
-import { buildChatTranscript } from '../../src/renderer/chat-transcript';
+import { appendLiveTranscriptMessages, buildChatTranscript } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -53,6 +53,40 @@ function createIdleRunState(): ChatRunState {
 }
 
 describe('chat transcript helpers', () => {
+  it('keeps persisted message object references stable while appending live output', () => {
+    const persistedMessage = {
+      key: 'user-current',
+      role: 'user' as const,
+      content: '请总结当前变更',
+      reasoning: null,
+      blocks: [],
+      approval: null,
+      isStreaming: false
+    };
+
+    const messages = appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        assistantMessage: '正在总结'
+      },
+      pendingUserInput: null,
+      persistedMessages: [persistedMessage],
+      promotedThreadIds: new Set(),
+      selectedThreadId: 'thread-current'
+    });
+
+    expect(messages[0]).toBe(persistedMessage);
+    expect(messages.at(-1)).toMatchObject({
+      key: 'live-run-current',
+      role: 'assistant',
+      content: '正在总结',
+      isStreaming: true
+    });
+  });
+
   it('shows an empty new conversation when no thread is selected and no run is active', () => {
     const snapshot = createSnapshot({
       threads: [createThread('thread-older', '历史任务', '2026-05-09T08:10:00.000Z')],
