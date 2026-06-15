@@ -81,7 +81,7 @@ describe('chat view', () => {
         modelId: 'model',
         createdAt: '2026-05-20T00:00:00.000Z'
       },
-      ...Array.from({ length: 100 }, (_, index) => ({
+      ...Array.from({ length: 5000 }, (_, index) => ({
         type: 'assistant_block' as const,
         runId: 'run_perf',
         block: {
@@ -96,8 +96,8 @@ describe('chat view', () => {
     const next = applyChatRunEventBatch(state, events);
 
     expect(next.runId).toBe('run_perf');
-    expect(next.assistantMessage).toHaveLength(100);
-    expect(next.assistantMessage).toBe('0123456789'.repeat(10));
+    expect(next.assistantMessage).toHaveLength(5000);
+    expect(next.assistantMessage).toBe('0123456789'.repeat(500));
   });
 
   it('keeps streaming auto-follow scroll instant in the hot path', () => {
