@@ -35,7 +35,7 @@ describe('task feature actions', () => {
     expect(client.api.tasks.runBackgroundNow).toHaveBeenCalledWith('task-1');
     expect(client.api.tasks.openInChat).toHaveBeenCalledWith({ taskId: 'task-1' });
     expect(client.api.tasks.deleteBackgroundTask).toHaveBeenCalledWith('task-1');
-    expect(navigateToChat).toHaveBeenCalledWith('thread-opened', 'background_task_change');
+    expect(navigateToChat).toHaveBeenCalledWith('thread-opened', 'background_task_change', 'workbench');
   });
 });
 

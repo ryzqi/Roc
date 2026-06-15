@@ -109,13 +109,20 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('schedule_background_task({ previewId })');
   });
 
-  it('does not rely on ordinary capability preview for background task interrupts', async () => {
+  it('adds background task change interrupts inside workbench background task workflows', async () => {
     await buildExecutorOnce(createCapabilities([], { capabilityPreview: true }), {
-      workflowHint: 'propose_background_task',
+      workflowHint: 'background_task_change',
       taskSource: 'workbench'
     });
 
-    expect(readBuildInput().interruptOn).toEqual({});
+    expect(readBuildInput().interruptOn).toEqual({
+      update_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      },
+      cancel_background_task: {
+        allowedDecisions: ['approve', 'edit', 'reject']
+      }
+    });
   });
 
   it('does not expose background task tools in ordinary chat runs', async () => {

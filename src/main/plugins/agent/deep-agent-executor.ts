@@ -102,7 +102,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         }),
         tools: tools.runTools,
         filesystemPermissions: undefined,
-        interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities),
+        interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
         checkpointer,
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
@@ -195,16 +195,40 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
 
 async function readInterruptPolicy(
   capabilities: RocCapabilityRegistry,
-  enabledCapabilities: TaskRun['enabledCapabilities']
+  enabledCapabilities: TaskRun['enabledCapabilities'],
+  request: ChatStartRunRequest
 ): Promise<NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined> {
+  const backgroundTaskInterrupts = createBackgroundTaskInterruptPolicy(request);
   if (!capabilities.list().some((capability) => capability.name === 'agent.capability.preview')) {
-    return undefined;
+    return backgroundTaskInterrupts;
   }
   const preview = await capabilities.invoke<
     TaskRun['enabledCapabilities'],
     { interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> }
   >('agent.capability.preview', enabledCapabilities);
-  return preview.interruptOn;
+  if (backgroundTaskInterrupts === undefined) {
+    return preview.interruptOn;
+  }
+  return {
+    ...preview.interruptOn,
+    ...backgroundTaskInterrupts
+  };
+}
+
+function createBackgroundTaskInterruptPolicy(
+  request: ChatStartRunRequest
+): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
+  if (!isBackgroundTaskWorkflow(request) || request.taskSource !== 'workbench') {
+    return undefined;
+  }
+  return {
+    update_background_task: {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    },
+    cancel_background_task: {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    }
+  };
 }
 
 function createInitialState(input: string): unknown {

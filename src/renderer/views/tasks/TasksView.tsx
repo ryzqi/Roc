@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ActiveTaskItem, WorkflowHint } from '../../../shared/types';
+import type { ActiveTaskItem, ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
 import { EmptyState } from '../../components/EmptyState';
 import { PageHeading } from '../../components/PageHeading';
@@ -33,7 +33,7 @@ export function TasksView({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   liveTaskRun: ChatRunState | null;
-  onNavigateToThread: (threadId: string, workflowHint?: WorkflowHint) => void;
+  onNavigateToThread: (threadId: string, workflowHint?: WorkflowHint, taskSource?: ChatStartRunRequest['taskSource']) => void;
   onSelectedTaskIdChange: (taskId: string | null | undefined) => void;
   onSubmitTaskPrompt: (payload: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
 }): React.JSX.Element {

@@ -3,6 +3,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AgentCapabilityPreview,
   AppStatus,
+  ChatStartRunRequest,
   TaskSnapshot,
   WorkflowHint,
   WindowStateSnapshot,
@@ -85,6 +86,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<QueuedTaskPrompt | null>(null);
   const [pendingWorkflowHint, setPendingWorkflowHint] = useState<WorkflowHint>(null);
+  const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
@@ -230,6 +232,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setActiveView('chat');
     setSelectedThreadId(null);
     setPendingWorkflowHint(null);
+    setPendingTaskSource(null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
@@ -238,14 +241,16 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setActiveView('chat');
     setSelectedThreadId(threadId);
     setPendingWorkflowHint(null);
+    setPendingTaskSource(null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
-  const navigateToTaskThread = useCallback((threadId: string, workflowHint?: WorkflowHint): void => {
+  const navigateToTaskThread = useCallback((threadId: string, workflowHint?: WorkflowHint, taskSource?: ChatStartRunRequest['taskSource']): void => {
     setActiveView('chat');
     setSelectedThreadId(threadId);
     setPendingWorkflowHint(workflowHint ?? null);
+    setPendingTaskSource(taskSource ?? null);
     setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
@@ -281,6 +286,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const startTaskRun = useCallback(
     async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
       const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
+      const taskSource = payload.taskSource === undefined ? pendingTaskSource : payload.taskSource;
       const result = await chatFeature.startRun({
         input: payload.input,
         mode: 'task',
@@ -290,9 +296,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           skills: currentSelectedSkills
         },
         workflowHint: workflowHint ?? null,
-        taskSource: payload.taskSource ?? null
+        taskSource: taskSource ?? null
       });
       setPendingWorkflowHint(null);
+      setPendingTaskSource(null);
       if (!result.ok) {
         return { ok: false, error: result.error.message };
       }
@@ -303,12 +310,13 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       setHistoryContextMenu(null);
       return { ok: true };
     },
-    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingWorkflowHint, selectedThreadId]
+    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingTaskSource, pendingWorkflowHint, selectedThreadId]
   );
 
   const queueTaskPrompt = useCallback(async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
     setSelectedThreadId(null);
     setPendingWorkflowHint(null);
+    setPendingTaskSource(null);
     setQueuedTaskPrompt(payload);
     setActiveView('chat');
     setWorkbenchVisible(false);
