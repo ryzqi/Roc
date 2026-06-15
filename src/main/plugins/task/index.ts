@@ -22,6 +22,7 @@ import type {
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { TaskScheduler } from './scheduler';
 import { applyTaskPluginSchema } from './schema';
+import { createTaskProposalWorkflow } from './task-proposal-workflow';
 import { TaskRepository } from './task-repository';
 
 const pluginId = '@roc/plugin-task';
@@ -93,6 +94,34 @@ export function createTaskPlugin(): RocPlugin {
           return;
         }
         repository.recordAgentRunStarted(payload);
+        if (payload.workflowHint === 'propose_background_task') {
+          const workflow = createTaskProposalWorkflow(context);
+          const result = await workflow({
+            runId: payload.runId,
+            threadId: payload.threadId,
+            input: payload.userInput,
+            enabledCapabilities: payload.enabledCapabilities,
+            recordTaskEvent: async (type, eventPayload) => {
+              repository.recordAgentTaskEvent({
+                runId: payload.runId,
+                threadId: payload.threadId,
+                type,
+                payload: eventPayload,
+                createdAt: new Date().toISOString()
+              });
+            }
+          });
+          repository.recordAgentRunCompleted({
+            runId: payload.runId,
+            threadId: payload.threadId,
+            assistantMessage: result.assistantMessage,
+            providerId: payload.providerId,
+            modelId: payload.modelId,
+            durationMs: 0,
+            summary: result.summary,
+            finishReason: 'stop'
+          });
+        }
       });
       unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', (event) => {
         const payload = readAgentRunCompletedPayload(event.payload);

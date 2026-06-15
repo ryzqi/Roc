@@ -176,14 +176,10 @@ describe('deep agent prompt', () => {
     });
 
     expect(prompt).toContain('本轮工作流：创建后台任务。');
-    expect(prompt).toContain(
-      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task。'
-    );
-    expect(prompt).toContain('先调用 resolve_background_task_time 解析触发时间。');
-    expect(prompt).toContain('resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })');
-    expect(prompt).toContain('propose_background_task({ goal, trigger: resolved.trigger, workspacePath })');
-    expect(prompt).toContain('schedule_background_task({ previewId })');
-    expect(prompt).not.toContain('4. ');
+    expect(prompt).toContain('harness 会解析时间、创建 preview 并完成 schedule；不要手工串联 resolve/propose/schedule 工具。');
+    expect(prompt).toContain('若用户缺少可解析的触发时间，直接请求用户补充明确时间。');
+    expect(prompt).not.toContain('resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })');
+    expect(prompt).not.toContain('schedule_background_task({ previewId })');
     expect(prompt).not.toContain('buildTaskProposalPrompt');
   });
 

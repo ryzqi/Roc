@@ -20,6 +20,7 @@ import {
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
+import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
@@ -59,6 +60,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       tools: [...NETWORK_SENSITIVE_TOOLS],
       backoffFactor: 1.5
     }),
+    createToolProtocolMiddleware(),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
     createFilesystemToolErrorMiddleware(),

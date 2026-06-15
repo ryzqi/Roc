@@ -988,7 +988,7 @@ describe('task plugin', () => {
     );
   });
 
-  it('does not auto-create proposal background tasks from agent.run.started', async () => {
+  it('creates proposal background tasks deterministically from agent.run.started', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();
     const capabilities = new CapabilityRegistry();
@@ -1021,19 +1021,19 @@ describe('task plugin', () => {
     const activeTasks = await capabilities.invoke<{}, ActiveTaskItem[]>('task.active.list', {});
     const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
 
-    expect(activeTasks).not.toContainEqual(
+    expect(activeTasks).toContainEqual(
       expect.objectContaining({
         goal: '每天 09:00 检查测试失败'
       })
     );
-    expect(snapshot.recentEvents).not.toContainEqual(
+    expect(snapshot.recentEvents).toContainEqual(
       expect.objectContaining({
         type: 'background_task_created'
       })
     );
-    expect(readToolCallStatuses(snapshot, 'resolve_background_task_time')).toEqual([]);
-    expect(readToolCallStatuses(snapshot, 'propose_background_task')).toEqual([]);
-    expect(readToolCallStatuses(snapshot, 'schedule_background_task')).toEqual([]);
+    expect(readToolCallStatuses(snapshot, 'resolve_background_task_time').sort()).toEqual(['end', 'start']);
+    expect(readToolCallStatuses(snapshot, 'propose_background_task').sort()).toEqual(['end', 'start']);
+    expect(readToolCallStatuses(snapshot, 'schedule_background_task').sort()).toEqual(['end', 'start']);
   });
 
   it('excludes background tasks whose thread was archived from the active list', async () => {

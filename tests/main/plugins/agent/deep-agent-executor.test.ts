@@ -27,7 +27,7 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 }));
 
 describe('createAgentDeepAgentExecutor', () => {
-  it('wires the production background task tools to task capabilities', async () => {
+  it('does not expose proposal handoff tools during deterministic background task creation runs', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
       workflowHint: 'propose_background_task',
@@ -35,40 +35,21 @@ describe('createAgentDeepAgentExecutor', () => {
     });
     const tools = readBuiltTools();
 
-    expect(tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining([
-        'resolve_background_task_time',
-        'propose_background_task',
-        'schedule_background_task',
-        'read_background_task',
-        'update_background_task',
-        'cancel_background_task'
-      ])
+    expect(tools.map((tool) => tool.name)).not.toEqual(
+      expect.arrayContaining(['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'])
     );
+    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
+  });
 
-    const proposeResult = readJson(
-      await invokeTool(findTool(tools, 'propose_background_task'), {
-        goal: '每天检查测试',
-        trigger: {
-          type: 'manual',
-          description: '手动'
-        },
-        workspacePath: 'F:\\Code\\Roc'
-      })
-    ) as { previewId: string; preview: BackgroundTaskPreview };
-    expect(proposeResult.preview.requiresConfirmation).toBe(false);
-
-    expect(
-      readJson(
-        await invokeTool(findTool(tools, 'schedule_background_task'), {
-          previewId: proposeResult.previewId
-        })
-      )
-    ).toMatchObject({
-      ok: true,
-      taskId: 'background-1',
-      threadId: 'thread-background-1'
+  it('wires background task change tools to task capabilities', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      workflowHint: 'background_task_change',
+      taskSource: 'workbench'
     });
+    const tools = readBuiltTools();
+
+    expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_background_task', 'update_background_task', 'cancel_background_task']));
 
     await invokeTool(findTool(tools, 'read_background_task'), {
       taskId: 'background-1'
@@ -87,8 +68,6 @@ describe('createAgentDeepAgentExecutor', () => {
 
     expect(capabilityCalls.map((call) => call.name)).toEqual([
       'workspace.getCurrent',
-      'task.background.preview',
-      'task.background.create',
       'task.detail.get',
       'task.background.update',
       'task.background.cancel'
@@ -103,10 +82,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const buildInput = readBuildInput();
     expect(buildInput.systemPrompt).toContain('本轮工作流：创建后台任务。');
-    expect(buildInput.systemPrompt).toContain(
-      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task。'
-    );
-    expect(buildInput.systemPrompt).toContain('schedule_background_task({ previewId })');
+    expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');
   });
 
   it('adds background task change interrupts inside workbench background task workflows', async () => {

@@ -90,6 +90,7 @@ describe('forge guardrails full stack', () => {
       'RTKMiddleware',
       'PromptCaching',
       'toolRetryMiddleware',
+      'RocToolProtocolMiddleware',
       'ForgeErrorBudgetMiddleware',
       'ForgeIterationTrackingMiddleware',
       'ForgeFilesystemToolErrorMiddleware',

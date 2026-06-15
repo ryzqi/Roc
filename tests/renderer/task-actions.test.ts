@@ -38,7 +38,7 @@ describe('createTaskActions', () => {
     await Promise.resolve();
 
     expect(openInChat).toHaveBeenCalledWith({ taskId: 'task-2' });
-    expect(navigateToChat).toHaveBeenCalledWith('thread-2', 'background_task_change');
+    expect(navigateToChat).toHaveBeenCalledWith('thread-2', 'background_task_change', 'workbench');
     expect(refreshTaskSurface).not.toHaveBeenCalled();
   });
 

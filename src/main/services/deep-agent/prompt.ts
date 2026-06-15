@@ -45,14 +45,8 @@ function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
     return [
       '',
       '本轮工作流：创建后台任务。',
-      '可用工具：resolve_background_task_time / propose_background_task / schedule_background_task。',
-      '先调用 resolve_background_task_time 解析触发时间。',
-      '用返回的 trigger 组装 propose_background_task。',
-      'propose 仅生成草稿；schedule 才实际落地；缺少触发时间时直接请求用户补充。',
-      'One-shot：用户说“每天 9:00 检查测试失败情况”时，依次调用：',
-      '1. resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })',
-      '2. propose_background_task({ goal, trigger: resolved.trigger, workspacePath })',
-      '3. schedule_background_task({ previewId })'
+      'harness 会解析时间、创建 preview 并完成 schedule；不要手工串联 resolve/propose/schedule 工具。',
+      '若用户缺少可解析的触发时间，直接请求用户补充明确时间。'
     ];
   }
 

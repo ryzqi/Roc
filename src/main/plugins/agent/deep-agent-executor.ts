@@ -25,7 +25,6 @@ import { defaultErrorTracker, PreviewStore, readForgeMessageTag } from '../../se
 import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
-import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createBackend } from '../../services/deep-agent/backend';
 import { buildSystemPrompt } from '../../services/deep-agent/prompt';
@@ -75,7 +74,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         enabledCapabilities: input.request.enabledCapabilities,
-        includeBackgroundTaskTools: isBackgroundTaskWorkflow(input.request)
+        backgroundTaskToolMode: readBackgroundTaskToolMode(input.request)
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
@@ -555,7 +554,7 @@ function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
 async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   enabledCapabilities: TaskRun['enabledCapabilities'];
-  includeBackgroundTaskTools: boolean;
+  backgroundTaskToolMode: 'change' | null;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
@@ -567,10 +566,11 @@ async function createExecutorTools(input: {
     createDeleteFileTool(input.capabilities),
     ...mcpTools
   ];
-  if (input.includeBackgroundTaskTools) {
-    runTools.splice(2, 0, createResolveBackgroundTaskTimeTool(), ...createBackgroundTaskTools({
+  if (input.backgroundTaskToolMode !== null) {
+    runTools.splice(2, 0, ...createBackgroundTaskTools({
       enabledCapabilities: input.enabledCapabilities,
       previewStore: new PreviewStore(),
+      toolMode: input.backgroundTaskToolMode,
       taskAdapter: {
         createBackgroundTaskPreview: async (request) =>
           await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
@@ -619,6 +619,10 @@ async function loadSelectedMcpTools(
 
 function isBackgroundTaskWorkflow(request: ChatStartRunRequest): boolean {
   return request.workflowHint === 'propose_background_task' || request.workflowHint === 'background_task_change';
+}
+
+function readBackgroundTaskToolMode(request: ChatStartRunRequest): 'change' | null {
+  return request.workflowHint === 'background_task_change' ? 'change' : null;
 }
 
 function requireWorkbenchSourceForBackgroundTaskWorkflow(request: ChatStartRunRequest): void {
