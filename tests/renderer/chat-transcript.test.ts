@@ -74,7 +74,6 @@ describe('chat transcript helpers', () => {
       },
       pendingUserInput: null,
       persistedMessages: [persistedMessage],
-      promotedThreadIds: new Set(),
       selectedThreadId: 'thread-current'
     });
 

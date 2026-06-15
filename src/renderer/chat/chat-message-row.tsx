@@ -191,7 +191,7 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
     <details className="chat-bubble-activity chat-bubble-guardrail" data-testid="chat-activity-guardrail">
       <summary>{`Guardrail · ${block.nudgeKind}`}</summary>
       <div className="activity-body">
-        <StreamingMarkdownView text={block.content} isStreaming={block.isStreaming} />
+        <StreamingMarkdownView text={block.content} isStreaming={false} />
       </div>
     </details>
   );
