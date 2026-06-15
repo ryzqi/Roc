@@ -145,6 +145,85 @@ describe('createAgentDeepAgentExecutor', () => {
     });
   });
 
+  it('yields streamed assistant text before reasoning and final output finish', async () => {
+    const reasoning = createControlledAsyncStream<string>();
+    const text = createControlledAsyncStream<string>();
+    const output = createDeferred<unknown>();
+    const execution = await startExecutorExecution({
+      capabilities: createCapabilities([]),
+      messages: createAsyncIterable([
+        {
+          reasoning: reasoning.iterable,
+          text: text.iterable
+        }
+      ]),
+      output: output.promise
+    });
+    const iterator = execution[Symbol.asyncIterator]();
+    const firstRead = iterator.next();
+
+    try {
+      await reasoning.waitForRead();
+      text.push('实时回答第一段');
+
+      const event = await readIteratorValue(firstRead, 'streamed_text_before_final_output');
+
+      expect(event).toEqual({
+        type: 'assistant_block',
+        runId: 'run-1',
+        block: {
+          kind: 'text',
+          blockId: 'text-run-1',
+          phase: 'delta',
+          text: '实时回答第一段'
+        }
+      });
+    } finally {
+      text.close();
+      reasoning.close();
+      output.resolve({ messages: [] });
+      await firstRead.catch(() => undefined);
+      await waitForPromise(drainIterator(iterator), 'executor_drain');
+    }
+  });
+
+  it('drains buffered assistant events without array shift reindexing', async () => {
+    const chunks = Array.from({ length: 128 }, (_, index) => `实时片段${index}`);
+    const originalShift = Array.prototype.shift;
+    Object.defineProperty(Array.prototype, 'shift', {
+      configurable: true,
+      value: function <T>(this: T[]): T | undefined {
+        if (isChatRunEventBuffer(this)) {
+          throw new Error('chat_run_event_queue_shift_used');
+        }
+        return Reflect.apply(originalShift, this, []) as T | undefined;
+      }
+    });
+
+    try {
+      const events = await collectExecutorEvents({
+        capabilities: createCapabilities([]),
+        messages: createAsyncIterable([
+          {
+            text: createAsyncIterable(chunks)
+          }
+        ]),
+        output: {
+          messages: []
+        }
+      });
+
+      expect(
+        events.map((event) => (event.type === 'assistant_block' && event.block.kind === 'text' ? event.block.text : null))
+      ).toEqual(chunks);
+    } finally {
+      Object.defineProperty(Array.prototype, 'shift', {
+        configurable: true,
+        value: originalShift
+      });
+    }
+  });
+
   it('emits final assistant output when the provider does not stream message text', async () => {
     const events = await collectExecutorEvents({
       capabilities: createCapabilities([]),
@@ -243,6 +322,15 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 });
 
+interface ExecutorEventsInput {
+  capabilities: RocCapabilityRegistry;
+  messages?: AsyncIterable<unknown>;
+  output?: unknown;
+  requestOverride?: Partial<ChatStartRunRequest>;
+  subagents?: AsyncIterable<unknown>;
+  toolCalls?: AsyncIterable<unknown>;
+}
+
 async function buildExecutorOnce(
   capabilities: RocCapabilityRegistry,
   requestOverride: Partial<ChatStartRunRequest> = {}
@@ -261,14 +349,11 @@ async function buildExecutorOnce(
   });
 }
 
-async function collectExecutorEvents(input: {
-  capabilities: RocCapabilityRegistry;
-  messages?: AsyncIterable<unknown>;
-  output?: unknown;
-  requestOverride?: Partial<ChatStartRunRequest>;
-  subagents?: AsyncIterable<unknown>;
-  toolCalls?: AsyncIterable<unknown>;
-}): Promise<ChatRunEvent[]> {
+async function collectExecutorEvents(input: ExecutorEventsInput): Promise<ChatRunEvent[]> {
+  return await collectEvents(await startExecutorExecution(input));
+}
+
+async function startExecutorExecution(input: ExecutorEventsInput): Promise<AsyncIterable<ChatRunEvent>> {
   mocked.buildDeepAgent.mockReset();
   mocked.buildDeepAgent.mockReturnValue({
     streamEvents: vi.fn(async () => ({
@@ -319,7 +404,7 @@ async function collectExecutorEvents(input: {
     },
     run: createRun()
   });
-  return await collectEvents(execution);
+  return execution;
 }
 
 function createCapabilities(
@@ -511,10 +596,145 @@ async function* createAsyncIterable(values: unknown[]): AsyncIterable<unknown> {
   }
 }
 
+type ControlledAsyncStream<T> = {
+  close: () => void;
+  iterable: AsyncIterable<T>;
+  push: (value: T) => void;
+  waitForRead: () => Promise<void>;
+};
+
+function createControlledAsyncStream<T>(): ControlledAsyncStream<T> {
+  const values: T[] = [];
+  const pendingReads: Array<(result: IteratorResult<T>) => void> = [];
+  const readWaiters: Array<() => void> = [];
+  let closed = false;
+  let readCount = 0;
+  let observedReadCount = 0;
+
+  const notifyRead = () => {
+    readCount += 1;
+    const waiters = readWaiters.splice(0);
+    waiters.forEach((resolve) => resolve());
+  };
+
+  return {
+    close: () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      const reads = pendingReads.splice(0);
+      reads.forEach((resolve) => resolve({ done: true, value: undefined }));
+    },
+    iterable: {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          notifyRead();
+          if (values.length > 0) {
+            return Promise.resolve({ done: false, value: values.shift() as T });
+          }
+          if (closed) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          return new Promise<IteratorResult<T>>((resolve) => {
+            pendingReads.push(resolve);
+          });
+        }
+      })
+    },
+    push: (value) => {
+      if (closed) {
+        throw new Error('controlled_stream_closed');
+      }
+      const read = pendingReads.shift();
+      if (read === undefined) {
+        values.push(value);
+        return;
+      }
+      read({ done: false, value });
+    },
+    waitForRead: async () => {
+      if (readCount > observedReadCount) {
+        observedReadCount = readCount;
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        readWaiters.push(() => {
+          observedReadCount = readCount;
+          resolve();
+        });
+      });
+    }
+  };
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  if (resolve === null) {
+    throw new Error('deferred_resolve_missing');
+  }
+  return {
+    promise,
+    resolve
+  };
+}
+
 async function collectEvents(events: AsyncIterable<ChatRunEvent>): Promise<ChatRunEvent[]> {
   const result: ChatRunEvent[] = [];
   for await (const event of events) {
     result.push(event);
   }
   return result;
+}
+
+async function readIteratorValue<T>(read: Promise<IteratorResult<T>>, label: string): Promise<T> {
+  const result = await waitForPromise(read, label);
+  if (result.done === true) {
+    throw new Error(`expected_iterator_value:${label}`);
+  }
+  return result.value;
+}
+
+async function waitForPromise<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`timed_out:${label}`)), 100);
+      })
+    ]);
+  } finally {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+async function drainIterator<T>(iterator: AsyncIterator<T>): Promise<void> {
+  while (true) {
+    const result = await iterator.next();
+    if (result.done === true) {
+      return;
+    }
+  }
+}
+
+function isChatRunEventBuffer(value: readonly unknown[]): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  const first = value[0];
+  if (typeof first !== 'object' || first === null || !('type' in first)) {
+    return false;
+  }
+  return first.type === 'assistant_block';
 }

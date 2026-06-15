@@ -95,29 +95,37 @@ export async function consumeMessageStream(input: {
       !recordUtils.isSummarizationMessage(message);
 
     emitToolCallChunkActivity(toolCallChunks, input.context, input.callbacks);
+    const projectionTasks: Array<Promise<void>> = [];
     if (reasoningSource !== null) {
-      await consumeReasoningSource({
-        source: reasoningSource,
-        context: input.context,
-        reasoningChunks: input.reasoningChunks,
-        callbacks: input.callbacks
-      });
+      projectionTasks.push(
+        consumeReasoningSource({
+          source: reasoningSource,
+          context: input.context,
+          reasoningChunks: input.reasoningChunks,
+          callbacks: input.callbacks
+        })
+      );
     }
-    if (canStreamAssistantText) {
-      await consumeVisibleTextStream(textStream as AsyncIterable<unknown>, (delta) => {
-        input.callbacks.markVisibleOutput?.();
-        input.assistantChunks.push(delta);
-        input.callbacks.emitRuntimeEvent({
-          type: 'assistant_block',
-          runId: input.context.runId,
-          block: {
-            kind: 'text',
-            blockId: `text-${input.context.runId}`,
-            phase: 'delta',
-            text: delta
-          }
-        });
-      });
+    if (canStreamAssistantText && textStream !== null) {
+      projectionTasks.push(
+        consumeVisibleTextStream(textStream, (delta) => {
+          input.callbacks.markVisibleOutput?.();
+          input.assistantChunks.push(delta);
+          input.callbacks.emitRuntimeEvent({
+            type: 'assistant_block',
+            runId: input.context.runId,
+            block: {
+              kind: 'text',
+              blockId: `text-${input.context.runId}`,
+              phase: 'delta',
+              text: delta
+            }
+          });
+        })
+      );
+    }
+    if (projectionTasks.length > 0) {
+      await Promise.all(projectionTasks);
     }
 
     if (reasoningSource === null && input.reasoningChunks.length === 0) {

@@ -9,22 +9,18 @@ import {
 } from '../../../../src/main/services/deep-agent/stream-consumers';
 
 describe('consumeMessageStream', () => {
-  it('streams all reasoning before answer text even when answer chunks are ready earlier', async () => {
+  it('streams answer text while reasoning remains open', async () => {
     const outputOrder: string[] = [];
+    const reasoning = createControlledAsyncStream<string>();
+    const text = createControlledAsyncStream<string>();
 
-    await consumeMessageStream({
+    const consume = consumeMessageStream({
       messages: createSingleMessageStream({
-        reasoning: createDelayedStringStream([
-          { delayMs: 10, value: '推理第一段' },
-          { delayMs: 10, value: '推理第二段' }
-        ]),
-        text: createDelayedStringStream([
-          { delayMs: 0, value: '答案第一段' },
-          { delayMs: 0, value: '答案第二段' }
-        ])
+        reasoning: reasoning.iterable,
+        text: text.iterable
       }),
       context: {
-        runId: 'run-serial-order',
+        runId: 'run-concurrent-text',
         taskRun: null
       },
       assistantChunks: [],
@@ -33,12 +29,22 @@ describe('consumeMessageStream', () => {
       callbacks: createCallbacks(outputOrder)
     });
 
-    expect(outputOrder).toEqual([
-      'reasoning:推理第一段',
-      'reasoning:推理第二段',
-      'message:答案第一段',
-      'message:答案第二段'
-    ]);
+    try {
+      await reasoning.waitForRead();
+      text.push('答案第一段');
+      await waitForOutput(outputOrder, 'message:答案第一段');
+
+      expect(outputOrder).toEqual(['message:答案第一段']);
+
+      reasoning.push('推理第一段');
+      await waitForOutput(outputOrder, 'reasoning:推理第一段');
+
+      expect(outputOrder).toEqual(['message:答案第一段', 'reasoning:推理第一段']);
+    } finally {
+      text.close();
+      reasoning.close();
+      await consume;
+    }
   });
 
   it('streams reasoning-only messages without requiring assistant text', async () => {
@@ -172,4 +178,90 @@ function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });
+}
+
+function waitForOutput(outputOrder: readonly string[], expected: string): Promise<void> {
+  return waitForCondition(() => outputOrder.includes(expected), `expected_output:${expected}`);
+}
+
+async function waitForCondition(predicate: () => boolean, failureMessage: string): Promise<void> {
+  const deadline = Date.now() + 100;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(failureMessage);
+    }
+    await wait(1);
+  }
+}
+
+type ControlledAsyncStream<T> = {
+  close: () => void;
+  iterable: AsyncIterable<T>;
+  push: (value: T) => void;
+  waitForRead: () => Promise<void>;
+};
+
+function createControlledAsyncStream<T>(): ControlledAsyncStream<T> {
+  const values: T[] = [];
+  const pendingReads: Array<(result: IteratorResult<T>) => void> = [];
+  const readWaiters: Array<() => void> = [];
+  let closed = false;
+  let readCount = 0;
+  let observedReadCount = 0;
+
+  const notifyRead = () => {
+    readCount += 1;
+    const waiters = readWaiters.splice(0);
+    waiters.forEach((resolve) => resolve());
+  };
+
+  return {
+    close: () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      const reads = pendingReads.splice(0);
+      reads.forEach((resolve) => resolve({ done: true, value: undefined }));
+    },
+    iterable: {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          notifyRead();
+          if (values.length > 0) {
+            return Promise.resolve({ done: false, value: values.shift() as T });
+          }
+          if (closed) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          return new Promise<IteratorResult<T>>((resolve) => {
+            pendingReads.push(resolve);
+          });
+        }
+      })
+    },
+    push: (value) => {
+      if (closed) {
+        throw new Error('controlled_stream_closed');
+      }
+      const read = pendingReads.shift();
+      if (read === undefined) {
+        values.push(value);
+        return;
+      }
+      read({ done: false, value });
+    },
+    waitForRead: async () => {
+      if (readCount > observedReadCount) {
+        observedReadCount = readCount;
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        readWaiters.push(() => {
+          observedReadCount = readCount;
+          resolve();
+        });
+      });
+    }
+  };
 }

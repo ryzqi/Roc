@@ -437,6 +437,7 @@ function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
   push: (event: ChatRunEvent) => void;
 } {
   const events: ChatRunEvent[] = [];
+  let nextEventIndex = 0;
   let closed = false;
   let failure: unknown = null;
   let waiting:
@@ -490,8 +491,13 @@ function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
     [Symbol.asyncIterator](): AsyncIterator<ChatRunEvent> {
       return {
         next: async (): Promise<IteratorResult<ChatRunEvent>> => {
-          const event = events.shift();
-          if (event !== undefined) {
+          if (nextEventIndex < events.length) {
+            const event = events[nextEventIndex];
+            nextEventIndex += 1;
+            if (nextEventIndex === events.length) {
+              events.length = 0;
+              nextEventIndex = 0;
+            }
             return {
               done: false,
               value: event
