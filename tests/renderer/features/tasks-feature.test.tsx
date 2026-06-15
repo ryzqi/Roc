@@ -106,6 +106,7 @@ describe('TasksFeature', () => {
     expect(onSubmitTaskPrompt).toHaveBeenCalledWith({
       input: '每天晚上总结新闻',
       workflowHint: 'propose_background_task',
+      taskSource: 'workbench',
       workspacePath: 'F:\\Code\\Roc'
     });
   });

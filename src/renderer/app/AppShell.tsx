@@ -289,7 +289,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           mcpServers: currentSelectedMcpServers,
           skills: currentSelectedSkills
         },
-        workflowHint: workflowHint ?? null
+        workflowHint: workflowHint ?? null,
+        taskSource: payload.taskSource ?? null
       });
       setPendingWorkflowHint(null);
       if (!result.ok) {

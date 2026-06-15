@@ -109,6 +109,7 @@ describe('TasksView interactions', () => {
     expect(onSubmitTaskPrompt).toHaveBeenCalledWith({
       input: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
       workflowHint: 'propose_background_task',
+      taskSource: 'workbench',
       workspacePath: 'F:\\Code\\Roc'
     });
     expect(preload.chat.startRun).not.toHaveBeenCalled();

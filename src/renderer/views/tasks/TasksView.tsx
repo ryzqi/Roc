@@ -16,6 +16,7 @@ import { useTaskActions } from './use-task-actions';
 export type TaskPromptSubmission = {
   input: string;
   workflowHint: WorkflowHint;
+  taskSource: 'workbench';
   workspacePath: string;
 };
 
@@ -79,6 +80,7 @@ export function TasksView({
     return await onSubmitTaskPrompt({
       input: description,
       workflowHint: 'propose_background_task',
+      taskSource: 'workbench',
       workspacePath
     });
   }
@@ -106,7 +108,7 @@ export function TasksView({
                 </button>
               }
             />
-            <p className="muted">在聊天里告诉我“帮我创建一个定时任务”，或点击右上角“新建任务”。</p>
+            <p className="muted">点击右上角“新建任务”开始创建后台任务。</p>
           </div>
         ) : (
           <div className="task-workbench-layout">

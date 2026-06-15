@@ -210,7 +210,7 @@ describe('TasksView', () => {
     expect(html).toContain('class="task-empty-shell"');
     expect(html).toContain('class="canvas-stage stage-grid task-command-center"');
     expect(html).not.toContain('class="task-summary-band"');
-    expect(html).toContain('帮我创建一个定时任务');
+    expect(html).toContain('点击右上角“新建任务”开始创建后台任务。');
     expect(html).toContain('新建任务');
     expect(html).not.toContain('data-testid="task-create-dialog-panel"');
     expect(html).not.toContain('data-testid="task-create-dialog-backdrop"');
