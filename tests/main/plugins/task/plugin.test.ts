@@ -895,7 +895,7 @@ describe('task plugin', () => {
       throw new Error('expected_background_task_detail');
     }
 
-    expect(startRequests).toContainEqual(expect.objectContaining({ threadId: task.threadId }));
+    expect(startRequests).toContainEqual(expect.objectContaining({ taskSource: 'workbench', threadId: task.threadId }));
     expect(detailWhileRunning.backgroundTask.lastRunStatus).toBeNull();
     expect(detailWhileRunning.runHistory[0]).toMatchObject({
       id: runNow.runId,
@@ -929,6 +929,63 @@ describe('task plugin', () => {
       threadId: task.threadId,
       status: 'completed'
     });
+  });
+
+  it('pauses background tasks after failed agent runs and records the failure status', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    const startRequests: ChatStartRunRequest[] = [];
+    registerAgentRunStart(capabilities, eventBus, startRequests);
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
+    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+
+    const runNow = await capabilities.invoke<{ id: string }, { taskId: string; runId: string }>('task.background.runNow', {
+      id: task.id
+    });
+    await eventBus.publish({
+      type: 'agent.run.failed',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:02.000Z',
+      payload: {
+        runId: runNow.runId,
+        threadId: task.threadId,
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        error: 'provider_unavailable',
+        code: 'agent_run_failed',
+        retryable: true
+      }
+    });
+
+    const detailAfterFailure = await capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId: task.id });
+    if (detailAfterFailure.backgroundTask === null) {
+      throw new Error('expected_background_task_detail');
+    }
+
+    expect(startRequests).toContainEqual(expect.objectContaining({ taskSource: 'workbench', threadId: task.threadId }));
+    expect(detailAfterFailure.backgroundTask.status).toBe('paused');
+    expect(detailAfterFailure.backgroundTask.lastRunStatus).toBe('failed');
+    expect(detailAfterFailure.runHistory[0]).toMatchObject({
+      id: runNow.runId,
+      threadId: task.threadId,
+      status: 'failed'
+    });
+    expect(detailAfterFailure.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: runNow.runId,
+        threadId: task.threadId,
+        type: 'background_task_paused',
+        payload: {
+          taskId: task.id,
+          status: 'paused'
+        }
+      })
+    );
   });
 
   it('does not auto-create proposal background tasks from agent.run.started', async () => {

@@ -63,6 +63,7 @@ type DeepAgentExecutionResult =
 type PendingInterrupt = {
   interruptId: string;
   payload: ChatApprovalRequest;
+  taskSource: ChatStartRunRequest['taskSource'] | null;
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
 };
 
@@ -254,6 +255,7 @@ export class AgentPluginRuntime {
         mode: 'task',
         threadId: run.threadId,
         enabledCapabilities: run.enabledCapabilities,
+        taskSource: pendingInterrupt.taskSource,
         workflowHint: pendingInterrupt.workflowHint
       },
       resumePayload: {
@@ -458,6 +460,7 @@ export class AgentPluginRuntime {
           payload: event.payload,
           runId: input.run.id,
           threadId: input.run.threadId,
+          taskSource: input.request.taskSource === undefined ? null : input.request.taskSource,
           workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
         });
         return {
@@ -505,6 +508,7 @@ export class AgentPluginRuntime {
     threadId: string;
     interruptId: string;
     payload: ChatApprovalRequest;
+    taskSource: ChatStartRunRequest['taskSource'] | null;
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
   }): Promise<void> {
     this.options.repository.updateRunStatus({
@@ -514,6 +518,7 @@ export class AgentPluginRuntime {
     this.pendingInterrupts.set(input.runId, {
       interruptId: input.interruptId,
       payload: input.payload,
+      taskSource: input.taskSource,
       workflowHint: input.workflowHint
     });
     await this.publish('agent.run.task-event', {

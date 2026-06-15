@@ -85,11 +85,11 @@ describe('TasksView', () => {
             }
           ],
           schedulerStatus: {
-            running: true,
+            running: false,
             registeredTaskCount: 1,
             nextFireAt: '2026-05-16T08:00:00.000Z',
-            recentSkippedCount: 0,
-            lastError: null
+            recentSkippedCount: 2,
+            lastError: 'provider_unavailable'
           },
           traySummary: {
             residentEnabled: true,
@@ -134,8 +134,10 @@ describe('TasksView', () => {
     expect(html).toContain('下次运行');
     expect(html).toContain('最近运行');
     expect(html).toContain('计划中');
-    expect(html).toContain('调度器运行中');
+    expect(html).toContain('调度器未运行');
     expect(html).toContain('注册 1');
+    expect(html).toContain('跳过 2');
+    expect(html).toContain('provider_unavailable');
     expect(html).toContain('详情');
     expect(html).toContain('最近调度');
     expect(html).toContain('调度器');

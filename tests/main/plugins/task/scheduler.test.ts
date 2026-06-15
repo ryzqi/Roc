@@ -99,6 +99,7 @@ describe('TaskScheduler', () => {
       expect.objectContaining({
         input: task.goal,
         mode: 'task',
+        taskSource: 'workbench',
         threadId: task.threadId
       })
     ]);

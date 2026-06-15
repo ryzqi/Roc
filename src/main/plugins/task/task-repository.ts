@@ -764,7 +764,7 @@ export class TaskRepository {
 
     const task = this.findBackgroundTaskByRunId(input.runId);
     if (task !== null) {
-      this.updateBackgroundTaskLastRunStatus(task.id, 'failed');
+      this.pauseBackgroundTaskAfterRunFailure(task.id, now);
     }
     if (task !== null && (run === null || task.threadId !== run.threadId)) {
       return this.insertTaskEvent({
@@ -1080,6 +1080,27 @@ export class TaskRepository {
       new Date().toISOString(),
       taskId
     );
+  }
+
+  private pauseBackgroundTaskAfterRunFailure(taskId: string, now: string): void {
+    const task = this.requireBackgroundTask(taskId);
+    this.db
+      .transaction(() => {
+        this.db
+          .prepare('UPDATE background_tasks SET status = ?, last_run_status = ?, updated_at = ? WHERE id = ?')
+          .run('paused', 'failed', now, task.id);
+        this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('paused', now, task.threadId);
+        this.insertTaskEvent({
+          threadId: task.threadId,
+          runId: task.runId,
+          type: 'background_task_paused',
+          payload: {
+            taskId: task.id,
+            status: 'paused'
+          },
+          createdAt: now
+        });
+      })();
   }
 
   private readThreads(): TaskSnapshot['threads'] {

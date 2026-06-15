@@ -9,6 +9,7 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
+  ChatStartRunRequest,
   FileDeleteResult,
   ShellExecutionResult,
   TaskDetail,
@@ -70,9 +71,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const usageAccumulator = createUsageAccumulator();
 
       const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
+      requireWorkbenchSourceForBackgroundTaskWorkflow(input.request);
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
-        enabledCapabilities: input.request.enabledCapabilities
+        enabledCapabilities: input.request.enabledCapabilities,
+        includeBackgroundTaskTools: isBackgroundTaskWorkflow(input.request)
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
@@ -528,40 +531,41 @@ function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
 async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   enabledCapabilities: TaskRun['enabledCapabilities'];
+  includeBackgroundTaskTools: boolean;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
-  const backgroundTaskTools = createBackgroundTaskTools({
-    enabledCapabilities: input.enabledCapabilities,
-    previewStore: new PreviewStore(),
-    taskAdapter: {
-      createBackgroundTaskPreview: async (request) =>
-        await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
-      createBackgroundTask: async (preview) =>
-        await input.capabilities.invoke<BackgroundTaskPreview, BackgroundTask>('task.background.create', preview),
-      readBackgroundTask: async (taskId) =>
-        await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
-      updateBackgroundTask: async (request) =>
-        await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
-      cancelBackgroundTask: async (taskId) =>
-        await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
-    },
-    schedulerAdapter: {
-      refreshTask: () => {},
-      registerTask: () => {},
-      unregisterTask: () => {}
-    }
-  });
   const runTools: ClientTool[] = [
     webReadTool,
     createDeleteFileTool(input.capabilities),
-    createResolveBackgroundTaskTimeTool(),
-    ...backgroundTaskTools,
     ...mcpTools
   ];
+  if (input.includeBackgroundTaskTools) {
+    runTools.splice(2, 0, createResolveBackgroundTaskTimeTool(), ...createBackgroundTaskTools({
+      enabledCapabilities: input.enabledCapabilities,
+      previewStore: new PreviewStore(),
+      taskAdapter: {
+        createBackgroundTaskPreview: async (request) =>
+          await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
+        createBackgroundTask: async (preview) =>
+          await input.capabilities.invoke<BackgroundTaskPreview, BackgroundTask>('task.background.create', preview),
+        readBackgroundTask: async (taskId) =>
+          await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
+        updateBackgroundTask: async (request) =>
+          await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
+        cancelBackgroundTask: async (taskId) =>
+          await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
+      },
+      schedulerAdapter: {
+        refreshTask: () => {},
+        registerTask: () => {},
+        unregisterTask: () => {}
+      }
+    }));
+  }
   return {
     runTools,
     webReadTool
@@ -587,6 +591,19 @@ async function loadSelectedMcpTools(
     tool.name = normalizedName;
     return [tool];
   });
+}
+
+function isBackgroundTaskWorkflow(request: ChatStartRunRequest): boolean {
+  return request.workflowHint === 'propose_background_task' || request.workflowHint === 'background_task_change';
+}
+
+function requireWorkbenchSourceForBackgroundTaskWorkflow(request: ChatStartRunRequest): void {
+  if (!isBackgroundTaskWorkflow(request)) {
+    return;
+  }
+  if (request.taskSource !== 'workbench') {
+    throw new Error('background_task_workbench_source_required');
+  }
 }
 
 function isClientTool(value: unknown): value is ClientTool {

@@ -16,7 +16,6 @@ import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
 
 const deleteFileAllowedDecisions: ReadonlyArray<InterruptDecisionType> = ['approve', 'edit', 'reject'];
 const mcpAllowedDecisions: ReadonlyArray<InterruptDecisionType> = ['approve', 'reject'];
-const backgroundTaskAllowedDecisions: ReadonlyArray<InterruptDecisionType> = ['approve', 'edit', 'reject'];
 
 export function buildAgentCapabilityPreview(input: {
   approvalMode: ApprovalMode;
@@ -72,22 +71,6 @@ export function buildAgentCapabilityPreview(input: {
     createExecuteCard(),
     createWebReadCard(),
     createDeleteFileCard(input.approvalMode),
-    createBackgroundTaskCard('resolve_background_task_time', '解析后台任务触发时间，不创建任务。', false, [
-      'background_task_time_resolution'
-    ]),
-    createBackgroundTaskCard('propose_background_task', '生成后台任务 preview，不实际创建。', false, [
-      'background_task_preview'
-    ]),
-    createBackgroundTaskCard('schedule_background_task', '把后台任务 preview 实际创建并加入调度。', false, [
-      'background_task_create'
-    ]),
-    createBackgroundTaskCard('read_background_task', '读取已有后台任务定义。', false, ['background_task_read']),
-    createBackgroundTaskCard('update_background_task', '提议修改已有后台任务。', true, [
-      'background_task_change_request'
-    ]),
-    createBackgroundTaskCard('cancel_background_task', '提议取消已有后台任务。', true, [
-      'background_task_change_request'
-    ]),
     ...selectedMcpCards
   ];
 
@@ -258,30 +241,6 @@ function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
   };
 }
 
-function createBackgroundTaskCard(
-  name: string,
-  description: string,
-  requiresApproval: boolean,
-  sideEffects: string[]
-): AgentCapabilityCard {
-  return {
-    id: `builtin:${name}`,
-    name,
-    capabilityType: 'terminal_tool',
-    description,
-    requiredInput: 'background task structured request',
-    scope: 'app',
-    dependencies: ['@roc/plugin-task', 'task.scheduler'],
-    sideEffects,
-    requiresApproval,
-    supportsLongTermGrant: false,
-    revokeGrantHint: requiresApproval ? '后台任务修改和取消始终需要本次审批。' : '后台任务工具由 Roc 内置提供，不创建长期授权。',
-    riskLevel: 'high',
-    auditCategory: 'background_task',
-    untrustedContext: false
-  };
-}
-
 function createSubagents(): AgentSubagentPreview[] {
   return [
     {
@@ -302,14 +261,7 @@ function createSubagents(): AgentSubagentPreview[] {
 }
 
 function createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): AgentInterruptPolicy {
-  const policy: AgentInterruptPolicy = {
-    update_background_task: {
-      allowedDecisions: [...backgroundTaskAllowedDecisions]
-    },
-    cancel_background_task: {
-      allowedDecisions: [...backgroundTaskAllowedDecisions]
-    }
-  };
+  const policy: AgentInterruptPolicy = {};
   if (approvalMode === 'fully_automatic') {
     return policy;
   }

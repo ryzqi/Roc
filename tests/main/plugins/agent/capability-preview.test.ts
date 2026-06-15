@@ -3,7 +3,7 @@ import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/
 import type { AgentRuntimeStatus } from '../../../../src/shared/types';
 
 describe('agent capability preview', () => {
-  it('allows editing cancel_background_task approvals', () => {
+  it('does not show background task tools in ordinary agent capability preview', () => {
     const preview = buildAgentCapabilityPreview({
       approvalMode: 'default',
       mcpServers: [],
@@ -15,9 +15,18 @@ describe('agent capability preview', () => {
       skills: []
     });
 
-    expect(preview.interruptOn.cancel_background_task).toEqual({
-      allowedDecisions: ['approve', 'edit', 'reject']
-    });
+    expect(preview.toolCards.map((card) => card.name)).not.toEqual(
+      expect.arrayContaining([
+        'resolve_background_task_time',
+        'propose_background_task',
+        'schedule_background_task',
+        'read_background_task',
+        'update_background_task',
+        'cancel_background_task'
+      ])
+    );
+    expect(preview.interruptOn.update_background_task).toBeUndefined();
+    expect(preview.interruptOn.cancel_background_task).toBeUndefined();
   });
 });
 

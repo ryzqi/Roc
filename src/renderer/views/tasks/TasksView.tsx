@@ -140,6 +140,8 @@ export function TasksView({
                     调度器{state.schedulerStatus.running ? '运行中' : '未运行'}
                   </span>
                   <small>{formatSchedulerMeta(state.schedulerStatus.registeredTaskCount, state.schedulerStatus.nextFireAt)}</small>
+                  <small>跳过 {state.schedulerStatus.recentSkippedCount}</small>
+                  {state.schedulerStatus.lastError === null ? null : <small className="task-table-error">{state.schedulerStatus.lastError}</small>}
                 </div>
               </div>
               <div className="task-table-columns" aria-hidden="true">

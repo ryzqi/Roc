@@ -36,6 +36,7 @@ export function TaskDetailDrawer({
     detail,
     liveRun
   });
+  const recentFailure = readRecentFailure(detail);
 
   if (item === null) {
     return (
@@ -92,6 +93,7 @@ export function TaskDetailDrawer({
             tag={scheduledRuns[0]?.status ?? '空'}
             tone={scheduledRuns[0] === undefined ? 'warn' : scheduledRuns[0].status === 'failed' || scheduledRuns[0].status === 'skipped' ? 'warn' : 'ok'}
           />
+          {recentFailure === null ? null : <Row title="最近失败" sub={recentFailure} tag="failed" tone="warn" />}
         </div>
       ) : null}
       {activeTab === 'overview' && runOutput !== null ? <TaskRunOutputPanel output={runOutput} compact /> : null}
@@ -221,4 +223,21 @@ function formatEventTag(payload: unknown): string {
     return status;
   }
   return 'event';
+}
+
+function readRecentFailure(detail: TaskDetail | null): string | null {
+  if (detail === null) {
+    return null;
+  }
+  for (const event of detail.recentEvents) {
+    if (event.type !== 'agent_update' || typeof event.payload !== 'object' || event.payload === null) {
+      continue;
+    }
+    const status = Reflect.get(event.payload, 'status');
+    const error = Reflect.get(event.payload, 'error');
+    if (status === 'failed' && typeof error === 'string' && error.length > 0) {
+      return error;
+    }
+  }
+  return null;
 }

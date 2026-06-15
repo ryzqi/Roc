@@ -773,6 +773,7 @@ describe('AgentPluginRuntime', () => {
   it('resumes an interrupted DeepAgent run through the executor and records approval decision', async () => {
     const repository = new AgentSessionRepository(db);
     let resumePayload: unknown = null;
+    let resumedTaskSource: unknown = null;
     let resumedWorkflowHint: unknown = null;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
@@ -803,6 +804,7 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           resumePayload = input.resumePayload;
+          resumedTaskSource = input.request.taskSource;
           resumedWorkflowHint = input.request.workflowHint;
           yield createTextBlock(input.run.id, 'Approved command finished.');
         }
@@ -816,7 +818,8 @@ describe('AgentPluginRuntime', () => {
       ...startRequest,
       input: 'Run git status.',
       mode: 'task',
-      workflowHint: 'propose_background_task'
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
     });
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
@@ -848,6 +851,7 @@ describe('AgentPluginRuntime', () => {
         }
       ]
     });
+    expect(resumedTaskSource).toBe('workbench');
     expect(resumedWorkflowHint).toBe('propose_background_task');
     expect(events).toContainEqual(
       expect.objectContaining({

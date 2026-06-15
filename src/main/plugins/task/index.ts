@@ -173,6 +173,7 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     const startResult = await context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', {
       input: task.goal,
       mode: 'task',
+      taskSource: 'workbench',
       threadId: task.threadId,
       enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities
     });

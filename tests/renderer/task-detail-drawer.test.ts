@@ -106,6 +106,21 @@ function createDetail(status: ActiveTaskItem['status']): TaskDetail {
           content: '已经整理完成'
         },
         createdAt: '2026-05-16T07:05:00.000Z'
+      },
+      {
+        id: 'event-failure',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        type: 'agent_update',
+        payload: {
+          status: 'failed',
+          providerId: 'smoke-provider',
+          modelId: 'smoke-model',
+          code: 'agent_run_failed',
+          error: 'provider_unavailable',
+          retryable: true
+        },
+        createdAt: '2026-05-16T07:05:01.000Z'
       }
     ]
   };
@@ -133,6 +148,8 @@ describe('TaskDetailDrawer', () => {
     expect(html).toContain('运行输出');
     expect(html).toContain('已经整理完成');
     expect(html).toContain('先整理变更');
+    expect(html).toContain('最近失败');
+    expect(html).toContain('provider_unavailable');
     expect(html).toContain('复制 ID');
     expect(html).toContain('打开聊天');
     expect(html).toContain('每小时检查一次');

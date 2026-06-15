@@ -29,7 +29,10 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 describe('createAgentDeepAgentExecutor', () => {
   it('wires the production background task tools to task capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
-    await buildExecutorOnce(createCapabilities(capabilityCalls));
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
     const tools = readBuiltTools();
 
     expect(tools.map((tool) => tool.name)).toEqual(
@@ -94,7 +97,8 @@ describe('createAgentDeepAgentExecutor', () => {
 
   it('uses the shared workflow system prompt in production executor runs', async () => {
     await buildExecutorOnce(createCapabilities([]), {
-      workflowHint: 'propose_background_task'
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
     });
 
     const buildInput = readBuildInput();
@@ -105,19 +109,41 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('schedule_background_task({ previewId })');
   });
 
-  it('keeps approval interrupts for background task changes during creation workflow runs', async () => {
+  it('does not rely on ordinary capability preview for background task interrupts', async () => {
     await buildExecutorOnce(createCapabilities([], { capabilityPreview: true }), {
-      workflowHint: 'propose_background_task'
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
     });
 
-    expect(readBuildInput().interruptOn).toEqual({
-      update_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      },
-      cancel_background_task: {
-        allowedDecisions: ['approve', 'edit', 'reject']
-      }
+    expect(readBuildInput().interruptOn).toEqual({});
+  });
+
+  it('does not expose background task tools in ordinary chat runs', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
     });
+
+    expect(readBuiltTools().map((tool) => tool.name)).not.toEqual(
+      expect.arrayContaining([
+        'resolve_background_task_time',
+        'propose_background_task',
+        'schedule_background_task',
+        'read_background_task',
+        'update_background_task',
+        'cancel_background_task'
+      ])
+    );
+  });
+
+  it('rejects background task workflow hints without workbench source', async () => {
+    await expect(
+      buildExecutorOnce(createCapabilities([]), {
+        workflowHint: 'propose_background_task',
+        taskSource: null
+      })
+    ).rejects.toThrow('background_task_workbench_source_required');
   });
 
   it('emits streamed assistant message chunks', async () => {
@@ -425,14 +451,7 @@ function createCapabilities(
       calls.push({ name, input });
       if (name === 'agent.capability.preview') {
         return {
-          interruptOn: {
-            update_background_task: {
-              allowedDecisions: ['approve', 'edit', 'reject']
-            },
-            cancel_background_task: {
-              allowedDecisions: ['approve', 'edit', 'reject']
-            }
-          }
+          interruptOn: {}
         } as TOutput;
       }
       if (name === 'workspace.getCurrent') {

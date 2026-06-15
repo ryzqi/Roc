@@ -146,6 +146,7 @@ export class TaskScheduler {
       const result = await this.options.startRun({
         input: task.goal,
         mode: 'task',
+        taskSource: 'workbench',
         threadId: task.threadId,
         enabledCapabilities: task.enabledCapabilities ?? emptyCapabilities
       });
