@@ -84,6 +84,44 @@ describe('ChatView queued task prompt', () => {
     expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
   });
 
+  it('submits ordinary chat input without taskSource', async () => {
+    const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatView, {
+          chatSelectionVersion: 1,
+          client: createChatClient(),
+          queuedTaskPrompt: null,
+          onQueuedTaskPromptHandled: () => {},
+          selectedThreadId: null,
+          state: createLoadedState({}),
+          updateLoadedState: () => {},
+          onSubmitChatTask
+        })
+      );
+    });
+
+    const input = container.querySelector('[data-testid="chat-input"]');
+    if (!(input instanceof HTMLTextAreaElement)) {
+      throw new Error('Chat input was not rendered.');
+    }
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+      if (setter === undefined) {
+        throw new Error('Chat input value setter was not available.');
+      }
+      setter.call(input, '  普通聊天输入  ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    await flushPromises();
+
+    expect(onSubmitChatTask).toHaveBeenCalledWith({ input: '普通聊天输入' });
+  });
+
   it('submits the same queued prompt again after it has been handled', async () => {
     const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
     const onQueuedTaskPromptHandled = vi.fn();
