@@ -63,7 +63,8 @@ describe('ChatView queued task prompt', () => {
           client: createChatClient(),
           queuedTaskPrompt: {
             input: '请调用 propose_background_task 创建任务',
-            workflowHint: 'propose_background_task'
+            workflowHint: 'propose_background_task',
+            taskSource: 'workbench'
           },
           onQueuedTaskPromptHandled,
           selectedThreadId: null,
@@ -77,7 +78,8 @@ describe('ChatView queued task prompt', () => {
 
     expect(onSubmitChatTask).toHaveBeenCalledWith({
       input: '请调用 propose_background_task 创建任务',
-      workflowHint: 'propose_background_task'
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
     });
     expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
   });

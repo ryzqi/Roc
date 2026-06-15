@@ -129,6 +129,7 @@ export type ChatStartRunRequest = {
   enabledCapabilities: EnabledCapabilities;
   threadId?: string | null;
   workflowHint?: WorkflowHint;
+  taskSource?: 'workbench' | null;
 };
 
 export type ChatStartRunResult = {

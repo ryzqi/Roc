@@ -199,7 +199,8 @@ export function ChatView({
     setSubmitting(true);
     void onSubmitChatTask({
       input: queuedTaskPrompt.input,
-      workflowHint: queuedTaskPrompt.workflowHint
+      workflowHint: queuedTaskPrompt.workflowHint,
+      taskSource: queuedTaskPrompt.taskSource ?? null
     })
       .then((result) => {
         if (result.ok) {
@@ -307,5 +308,5 @@ export function ChatView({
 }
 
 function buildQueuedTaskPromptKey(prompt: QueuedTaskPrompt): string {
-  return `${prompt.workflowHint ?? 'none'}\0${prompt.input}`;
+  return `${prompt.workflowHint ?? 'none'}\0${prompt.taskSource ?? 'none'}\0${prompt.input}`;
 }
