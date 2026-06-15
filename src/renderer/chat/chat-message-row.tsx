@@ -9,12 +9,12 @@ import {
   userBubbleEnter
 } from '../animations';
 import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat-transcript';
-import { MarkdownView } from './markdown-view';
 import type { ChatResumeDecision } from '../../shared/types';
 import { CopyAnswerButton } from './CopyAnswerButton';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
+import { StreamingMarkdownView } from './streaming-markdown-view';
 
 type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
@@ -61,7 +61,9 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
             {activityBlocks.map((block) => (
               <ChatActivityBlockView key={block.id} block={block} />
             ))}
-            {message.content.length === 0 ? null : <MarkdownView text={message.content} />}
+            {message.content.length === 0 ? null : (
+              <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
+            )}
             {approval !== null && isTaskApproval(approval) ? (
               <TaskApprovalCard approval={approval} onApprovalDecision={onApprovalDecision} />
             ) : approval === null ? null : (
@@ -189,7 +191,7 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
     <details className="chat-bubble-activity chat-bubble-guardrail" data-testid="chat-activity-guardrail">
       <summary>{`Guardrail · ${block.nudgeKind}`}</summary>
       <div className="activity-body">
-        <MarkdownView text={block.content} />
+        <StreamingMarkdownView text={block.content} isStreaming={block.isStreaming} />
       </div>
     </details>
   );

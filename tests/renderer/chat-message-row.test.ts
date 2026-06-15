@@ -76,7 +76,7 @@ describe('chat message row', () => {
 
     expect(html).toContain('data-testid="chat-assistant-content"');
     expect(html).toMatch(
-      /data-testid="chat-assistant-content"[\s\S]*data-testid="chat-activity-reasoning"[\s\S]*<p>最终答案<\/p>[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
+      /data-testid="chat-assistant-content"[\s\S]*data-testid="chat-activity-reasoning"[\s\S]*data-testid="streaming-markdown"[\s\S]*data-testid="chat-approval-card"[\s\S]*class="chat-typing-cursor"/
     );
     expect(html).not.toContain('aria-label="复制回答"');
   });
