@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildSystemPrompt, createCapabilitySummary } from '../../src/main/services/deep-agent/prompt';
+import {
+  BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW,
+  buildSystemPrompt,
+  createCapabilitySummary
+} from '../../src/main/services/deep-agent/prompt';
 import type { FrozenSnapshot } from '../../src/main/services/memory/snapshot';
 
 describe('deep agent prompt', () => {
@@ -179,9 +183,22 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('你负责解析用户目标和触发时间，并通过 propose_background_task 创建 preview，再通过 schedule_background_task 落地。');
     expect(prompt).toContain('创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。');
     expect(prompt).toContain('中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。');
+    expect(prompt).toContain('cron trigger 使用五段 cronExpression；nextRunAt 必须是 UTC ISO 字符串。');
     expect(prompt).toContain('如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。');
     expect(prompt).not.toContain('harness 会解析时间');
     expect(prompt).not.toContain('resolve_background_task_time');
+  });
+
+  it('exports the canonical background task creation workflow overview', () => {
+    expect(BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW).toEqual([
+      '',
+      '本轮工作流：创建后台任务。',
+      '你负责解析用户目标和触发时间，并通过 propose_background_task 创建 preview，再通过 schedule_background_task 落地。',
+      '创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。',
+      '中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。',
+      'cron trigger 使用五段 cronExpression；nextRunAt 必须是 UTC ISO 字符串。',
+      '如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。'
+    ]);
   });
 
   it('adds a background-task-change workflow overview without hard prerequisite ordering', () => {

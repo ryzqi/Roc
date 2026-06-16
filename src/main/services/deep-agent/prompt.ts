@@ -21,6 +21,16 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
 ].join('\n');
 
+export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
+  '',
+  '本轮工作流：创建后台任务。',
+  '你负责解析用户目标和触发时间，并通过 propose_background_task 创建 preview，再通过 schedule_background_task 落地。',
+  '创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。',
+  '中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。',
+  'cron trigger 使用五段 cronExpression；nextRunAt 必须是 UTC ISO 字符串。',
+  '如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。'
+] as const;
+
 export function buildSystemPrompt(input: {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
@@ -42,15 +52,7 @@ export function buildSystemPrompt(input: {
 
 function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
   if (workflowHint === 'propose_background_task') {
-    return [
-      '',
-      '本轮工作流：创建后台任务。',
-      '你负责解析用户目标和触发时间，并通过 propose_background_task 创建 preview，再通过 schedule_background_task 落地。',
-      '创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。',
-      '中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。',
-      'cron trigger 使用五段 cronExpression；nextRunAt 必须是 UTC ISO 字符串。',
-      '如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。'
-    ];
+    return [...BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW];
   }
 
   if (workflowHint === 'background_task_change') {

@@ -102,7 +102,18 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('nextRunAt');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('只填写 goal、trigger、workspacePath');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
+    expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('无法确定触发方式时使用 manual');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();
+  });
+
+  it('proposal prompt only allows manual when the user explicitly requests no schedule', () => {
+    const prompt = buildTaskProposalPrompt({
+      description: '有需要时手动运行一次',
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    expect(prompt).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
+    expect(prompt).not.toContain('无法确定触发方式时，使用 manual。');
   });
 
   it('golden: example JSON key sets are stable', () => {
