@@ -167,7 +167,7 @@ describe('deep agent prompt', () => {
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
   });
 
-  it('adds a propose-background-task workflow overview with time resolution one-shot', () => {
+  it('adds a propose-background-task workflow overview for DeepAgents creation', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
@@ -176,11 +176,12 @@ describe('deep agent prompt', () => {
     });
 
     expect(prompt).toContain('本轮工作流：创建后台任务。');
-    expect(prompt).toContain('harness 会解析时间、创建 preview 并完成 schedule；不要手工串联 resolve/propose/schedule 工具。');
-    expect(prompt).toContain('若用户缺少可解析的触发时间，直接请求用户补充明确时间。');
-    expect(prompt).not.toContain('resolve_background_task_time({ text: "每天 9:00 检查测试失败情况" })');
-    expect(prompt).not.toContain('schedule_background_task({ previewId })');
-    expect(prompt).not.toContain('buildTaskProposalPrompt');
+    expect(prompt).toContain('你负责解析用户目标和触发时间，并通过 propose_background_task 创建 preview，再通过 schedule_background_task 落地。');
+    expect(prompt).toContain('创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。');
+    expect(prompt).toContain('中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。');
+    expect(prompt).toContain('如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。');
+    expect(prompt).not.toContain('harness 会解析时间');
+    expect(prompt).not.toContain('resolve_background_task_time');
   });
 
   it('adds a background-task-change workflow overview without hard prerequisite ordering', () => {
