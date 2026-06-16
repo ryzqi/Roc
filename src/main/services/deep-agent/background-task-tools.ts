@@ -36,6 +36,28 @@ export const triggerSchema = z
   .discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema])
   .describe('触发类型：manual / once / cron。');
 
+export const modelManualTriggerSchema = z.strictObject({
+  type: z.literal('manual').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。')
+});
+
+export const modelOnceTriggerSchema = z.strictObject({
+  type: z.literal('once').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。'),
+  nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
+});
+
+export const modelCronTriggerSchema = z.strictObject({
+  type: z.literal('cron').describe('触发类型：manual / once / cron。'),
+  description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。'),
+  cronExpression: z.string().min(1).describe('五段 cron，按本机时区执行，例如 50 21 * * *。'),
+  nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
+});
+
+export const modelTriggerSchema = z
+  .discriminatedUnion('type', [modelManualTriggerSchema, modelOnceTriggerSchema, modelCronTriggerSchema])
+  .describe('触发类型：manual / once / cron。');
+
 export const enabledCapabilitiesSchema = z.object({
   mcpServers: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([])
@@ -43,11 +65,17 @@ export const enabledCapabilitiesSchema = z.object({
 
 export const proposeToolInputSchema = z.strictObject({
   goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
+  trigger: modelTriggerSchema,
+  workspacePath: z.string().min(1).optional().describe('兼容旧模型输出；实际后台任务 workspacePath 始终由 runtime 注入。')
+});
+
+export const fullProposeInputSchema = z.strictObject({
+  goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
   trigger: triggerSchema,
   workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。')
 });
 
-export const proposeInputSchema = proposeToolInputSchema.extend({
+export const proposeInputSchema = fullProposeInputSchema.extend({
   allowedActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
   forbiddenActions: z.array(z.string()).default([]).describe('动作边界字符串数组，可为空。'),
   notificationPolicy: z.literal('failures_and_confirmations').default('failures_and_confirmations'),
@@ -84,6 +112,7 @@ type BackgroundTaskToolDependencies = {
   schedulerAdapter: BackgroundTaskToolSchedulerAdapter;
   enabledCapabilities?: EnabledCapabilities;
   previewStore: PreviewStore;
+  runtimeWorkspacePath: string | null;
   toolMode?: 'all' | 'change';
 };
 
@@ -267,18 +296,73 @@ async function cancelBackgroundTask(input: BackgroundTaskToolDependencies, rawIn
 
 async function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<BackgroundTaskPreview> {
   const parsed = proposeToolInputSchema.parse(rawInput);
-  validateTrigger(parsed.trigger);
-  validateWorkspacePath(parsed.workspacePath);
-  return await input.taskAdapter.createBackgroundTaskPreview({
+  if (input.runtimeWorkspacePath === null) {
+    throw new RocDomainError({
+      code: 'background_task_workspace_required',
+      message: '创建后台任务需要先选择工作区。',
+      category: 'validation',
+      retryable: true,
+      userAction: '请先选择一个工作区，再创建后台任务。'
+    });
+  }
+  const request: BackgroundTaskPreviewRequest = {
     goal: parsed.goal,
-    trigger: parsed.trigger,
-    workspacePath: parsed.workspacePath,
+    trigger: normalizeTriggerForPreview(parsed.trigger),
+    workspacePath: input.runtimeWorkspacePath,
     allowedActions: [],
     forbiddenActions: [],
     failurePolicy: 'pause_and_report',
     notificationPolicy: 'failures_and_confirmations',
     enabledCapabilities: input.enabledCapabilities === undefined ? null : input.enabledCapabilities
-  });
+  };
+  validateTrigger(request.trigger);
+  validateWorkspacePath(request.workspacePath);
+  return await input.taskAdapter.createBackgroundTaskPreview(request);
+}
+
+function normalizeTriggerForPreview(trigger: z.infer<typeof modelTriggerSchema>): z.infer<typeof triggerSchema> {
+  if (trigger.type === 'manual') {
+    return {
+      type: 'manual',
+      description: readTriggerDescription(trigger.description, '手动触发')
+    };
+  }
+  if (trigger.type === 'once') {
+    return {
+      type: 'once',
+      description: readTriggerDescription(trigger.description, `在 ${trigger.nextRunAt} 触发`),
+      nextRunAt: trigger.nextRunAt
+    };
+  }
+  return {
+    type: 'cron',
+    description: readTriggerDescription(trigger.description, describeCronTrigger(trigger.cronExpression)),
+    cronExpression: trigger.cronExpression,
+    nextRunAt: trigger.nextRunAt
+  };
+}
+
+function readTriggerDescription(value: string | undefined, fallback: string): string {
+  if (value === undefined) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function describeCronTrigger(cronExpression: string): string {
+  const fields = cronExpression.trim().split(/\s+/u);
+  if (fields.length !== 5) {
+    return `按 cron ${cronExpression} 触发`;
+  }
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields;
+  if (/^\d+$/u.test(minute) && /^\d+$/u.test(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    return `每天 ${hour.padStart(2, '0')}:${minute.padStart(2, '0')} 触发`;
+  }
+  if (/^\d+$/u.test(minute) && /^\d+$/u.test(hour) && dayOfMonth === '*' && month === '*' && dayOfWeek !== '*') {
+    return `每周 ${dayOfWeek} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')} 触发`;
+  }
+  return `按 cron ${cronExpression} 触发`;
 }
 
 function readApprovedActionArgs(
