@@ -4,7 +4,26 @@ type ProposeInput = Omit<BackgroundTaskPreviewRequest, 'failurePolicy'> & {
   enabledCapabilities?: BackgroundTaskPreviewRequest['enabledCapabilities'];
 };
 
-type MinimalProposeToolInput = Pick<BackgroundTaskPreviewRequest, 'goal' | 'trigger' | 'workspacePath'>;
+type MinimalProposeToolInput = {
+  goal: string;
+  trigger:
+    | {
+        type: 'manual';
+        description?: string;
+      }
+    | {
+        type: 'once';
+        description?: string;
+        nextRunAt: string;
+      }
+    | {
+        type: 'cron';
+        description?: string;
+        cronExpression: string;
+        nextRunAt: string;
+      };
+  workspacePath?: string;
+};
 
 type DeepPartial<T> = T extends Array<infer Item>
   ? Array<DeepPartial<Item>>
@@ -52,11 +71,9 @@ export function minimalProposeToolInput(overrides: DeepPartial<MinimalProposeToo
       goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
       trigger: {
         type: 'cron',
-        description: '每天晚上 7:40 触发',
         cronExpression: '40 19 * * *',
         nextRunAt: '2026-05-26T11:40:00.000Z'
-      },
-      workspacePath: 'F:\\Code\\Roc'
+      }
     },
     overrides
   );

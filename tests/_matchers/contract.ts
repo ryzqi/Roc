@@ -15,6 +15,11 @@ function readIssues(input: unknown): ZodError['issues'] {
   return result.success ? [] : result.error.issues;
 }
 
+function readToolIssues(input: unknown): ZodError['issues'] {
+  const result = proposeToolInputSchema.safeParse(input);
+  return result.success ? [] : result.error.issues;
+}
+
 function formatPath(path: readonly PropertyKey[]): string {
   return path.map(String).join('.');
 }
@@ -49,6 +54,18 @@ expect.extend({
       message: () => `expected input to be accepted by propose schema, got:\n${formatIssues(input)}`
     };
   },
+  toBeAcceptedByProposeToolSchema(input: unknown) {
+    const result = proposeToolInputSchema.safeParse(input);
+    return {
+      pass: result.success,
+      message: () =>
+        `expected input to be accepted by model-visible propose schema, got:\n${
+          result.success
+            ? 'no Zod issues'
+            : result.error.issues.map((issue) => `${formatPath(issue.path) || '<root>'}: ${issue.message}`).join('\n')
+        }`
+    };
+  },
   toBeRejectedByProposeSchemaAtPath(input: unknown, expectedPath: string) {
     const pass = hasIssueAtPath(input, expectedPath);
     return {
@@ -57,8 +74,7 @@ expect.extend({
     };
   },
   toBeRejectedByProposeToolSchemaAtPath(input: unknown, expectedPath: string) {
-    const result = proposeToolInputSchema.safeParse(input);
-    const issues = result.success ? [] : result.error.issues;
+    const issues = readToolIssues(input);
     const pass = issues.some((issue) => {
       const actualPath = formatPath(issue.path);
       return (
@@ -100,6 +116,7 @@ expect.extend({
 declare module 'vitest' {
   interface Assertion<T = any> {
     toBeAcceptedByProposeSchema(): T;
+    toBeAcceptedByProposeToolSchema(): T;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): T;
     toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): T;
     toContainCanonicalExample(): T;
@@ -108,6 +125,7 @@ declare module 'vitest' {
 
   interface AsymmetricMatchersContaining {
     toBeAcceptedByProposeSchema(): unknown;
+    toBeAcceptedByProposeToolSchema(): unknown;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): unknown;
     toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): unknown;
     toContainCanonicalExample(): unknown;

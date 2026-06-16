@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fc from 'fast-check';
 import { MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE } from '../../src/shared/background-task-tool-contract';
-import { invalidProposeInput, validProposeInput } from '../_factories/background-task';
+import { invalidProposeInput, minimalProposeToolInput, validProposeInput } from '../_factories/background-task';
 
 describe('background task propose schema', () => {
   beforeEach(() => {
@@ -48,6 +48,31 @@ describe('background task propose schema', () => {
     it('parses without throwing', () => {
       expect(input).toBeAcceptedByProposeSchema();
     });
+  });
+
+  it('model-visible schema accepts cron input without workspacePath or trigger.description', () => {
+    expect(
+      minimalProposeToolInput({
+        trigger: {
+          type: 'cron',
+          cronExpression: '0 13 * * *',
+          nextRunAt: '2026-06-17T05:00:00.000Z'
+        }
+      })
+    ).toBeAcceptedByProposeToolSchema();
+  });
+
+  it('model-visible schema accepts but ignores legacy workspacePath from the model', () => {
+    expect(
+      minimalProposeToolInput({
+        workspacePath: '/workspace/',
+        trigger: {
+          type: 'cron',
+          cronExpression: '0 13 * * *',
+          nextRunAt: '2026-06-17T05:00:00.000Z'
+        }
+      })
+    ).toBeAcceptedByProposeToolSchema();
   });
 
   describe.each([
