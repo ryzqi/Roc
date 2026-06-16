@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { ToolMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { z } from 'zod';
@@ -26,6 +27,8 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
   buildDeepAgent: mocked.buildDeepAgent
 }));
 
+const workspacePath = process.cwd();
+
 describe('createAgentDeepAgentExecutor', () => {
   it('wires background task creation tools during workbench proposal runs', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
@@ -37,7 +40,9 @@ describe('createAgentDeepAgentExecutor', () => {
     const toolNames = tools.map((tool) => tool.name);
 
     expect(toolNames).toEqual(expect.arrayContaining(['propose_background_task', 'schedule_background_task', 'read_background_task']));
-    expect(toolNames).not.toEqual(expect.arrayContaining(['resolve_background_task_time', 'update_background_task', 'cancel_background_task']));
+    expect(toolNames).not.toContain('resolve_background_task_time');
+    expect(toolNames).not.toContain('update_background_task');
+    expect(toolNames).not.toContain('cancel_background_task');
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
   });
 
@@ -57,7 +62,7 @@ describe('createAgentDeepAgentExecutor', () => {
         cronExpression: '0 21 * * *',
         nextRunAt: '2026-06-16T13:00:00.000Z'
       },
-      workspacePath: 'F:\\Code\\Roc'
+      workspacePath
     });
     const previewJson = readJson(previewOutput) as { previewId: string };
 
@@ -144,16 +149,14 @@ describe('createAgentDeepAgentExecutor', () => {
       taskSource: null
     });
 
-    expect(readBuiltTools().map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining([
-        'resolve_background_task_time',
-        'propose_background_task',
-        'schedule_background_task',
-        'read_background_task',
-        'update_background_task',
-        'cancel_background_task'
-      ])
-    );
+    const toolNames = readBuiltTools().map((tool) => tool.name);
+
+    expect(toolNames).not.toContain('resolve_background_task_time');
+    expect(toolNames).not.toContain('propose_background_task');
+    expect(toolNames).not.toContain('schedule_background_task');
+    expect(toolNames).not.toContain('read_background_task');
+    expect(toolNames).not.toContain('update_background_task');
+    expect(toolNames).not.toContain('cancel_background_task');
   });
 
   it('rejects background task workflow hints without workbench source', async () => {
@@ -410,7 +413,7 @@ async function startExecutorExecution(input: ExecutorEventsInput): Promise<Async
   });
   const executor = createAgentDeepAgentExecutor({
     capabilities: input.capabilities,
-    paths: new RocPaths('F:\\Code\\Roc\\.roc-test')
+    paths: new RocPaths(join(workspacePath, '.roc-test'))
   });
   const execution = await executor.execute({
     abortSignal: new AbortController().signal,
@@ -476,7 +479,7 @@ function createCapabilities(
       if (name === 'workspace.getCurrent') {
         const workspace = {
           id: 'workspace-1',
-          path: 'F:\\Code\\Roc',
+          path: workspacePath,
           displayName: 'Roc',
           lastOpenedAt: '2026-06-04T00:00:00.000Z',
           trustState: 'trusted'
@@ -528,7 +531,7 @@ function createPreview(input: Partial<BackgroundTaskPreviewRequest>): Background
   return {
     goal: input.goal ?? '每天检查测试',
     trigger,
-    workspacePath: input.workspacePath ?? 'F:\\Code\\Roc',
+    workspacePath: input.workspacePath ?? workspacePath,
     allowedActions: input.allowedActions ?? [],
     forbiddenActions: input.forbiddenActions ?? [],
     failurePolicy: 'pause_and_report',
