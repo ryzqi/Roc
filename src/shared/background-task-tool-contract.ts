@@ -6,7 +6,7 @@ export const PROPOSE_REQUIRED_KEYS = ['goal', 'trigger', 'workspacePath'] as con
 
 export const PROPOSE_OPTIONAL_KEYS = ['allowedActions', 'forbiddenActions', 'notificationPolicy'] as const;
 
-export const PROPOSE_MODEL_KEYS = ['goal', 'trigger', 'workspacePath'] as const;
+export const PROPOSE_MODEL_KEYS = ['goal', 'trigger'] as const;
 
 export const PROPOSE_RUNTIME_DEFAULTS = {
   allowedActions: [] as string[],
@@ -28,23 +28,27 @@ export const MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE = {
   goal: '每天晚上 7:40 抓取 AI 最新新闻，并将结果写入当前工作目录下的 docx 文件',
   trigger: {
     type: 'cron',
-    description: '每天晚上 7:40 触发',
     cronExpression: '40 19 * * *',
     nextRunAt: '2026-05-26T11:40:00.000Z'
-  },
-  workspacePath: 'F:\\Code\\Roc'
+  }
 } as const;
 
 export const BACKGROUND_TASK_PROPOSE_EXAMPLE = {
   ...MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE,
+  trigger: {
+    ...MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE.trigger,
+    description: '每天晚上 7:40 触发'
+  },
+  workspacePath: 'F:\\Code\\Roc',
   ...PROPOSE_RUNTIME_DEFAULTS
 } as const satisfies Omit<BackgroundTaskPreviewRequest, 'failurePolicy' | 'enabledCapabilities'>;
 
 export const PROPOSE_TOOL_DESCRIPTION = [
   '为后台或定时任务生成 preview（草稿），但不实际创建。',
-  '只填写 goal、trigger、workspacePath。',
+  '模型只填写 goal 和 trigger；workspacePath 由 runtime 注入。',
   '不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy。',
   'trigger.type 只能是 manual、once 或 cron。',
+  'trigger.description 可省略；runtime 会补齐展示说明。',
   'cron trigger 使用五段 cronExpression 和 UTC ISO nextRunAt。',
   '只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。',
   '本工具返回 previewId 与 preview 内容；要实际创建任务，必须随后调用 schedule_background_task(previewId)。'
@@ -60,6 +64,7 @@ export function buildTaskProposalPrompt(input: { description: string; workspaceP
     '只提交一次 tool call，不要输出普通文本。',
     '创建任务不是预览任务，不要请求批准。',
     `当前工作区：${input.workspacePath}`,
+    '新 DeepAgents 创建流中 workspacePath 由 runtime 注入；本兼容 prompt 中的 workspacePath 只用于旧调用形状。',
     'trigger.type 只能是 manual、once 或 cron。',
     '仅使用以下三种 JSON 形状之一：',
     '',

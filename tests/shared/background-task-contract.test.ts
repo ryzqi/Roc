@@ -19,10 +19,9 @@ describe('background task shared tool contract', () => {
   }
 
   it('minimal canonical example only exposes model-authored keys', () => {
-    expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE).sort()).toEqual(['goal', 'trigger', 'workspacePath']);
+    expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE).sort()).toEqual(['goal', 'trigger']);
     expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE.trigger).sort()).toEqual([
       'cronExpression',
-      'description',
       'nextRunAt',
       'type'
     ]);
@@ -100,9 +99,11 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('cronExpression');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('nextRunAt');
-    expect(PROPOSE_TOOL_DESCRIPTION).toContain('只填写 goal、trigger、workspacePath');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('模型只填写 goal 和 trigger；workspacePath 由 runtime 注入。');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.description 可省略；runtime 会补齐展示说明。');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
+    expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('只填写 goal、trigger、workspacePath');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('无法确定触发方式时使用 manual');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();
   });

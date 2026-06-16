@@ -28,6 +28,8 @@ export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   '创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。',
   '中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。',
   'cron trigger 使用五段 cronExpression；nextRunAt 必须是 UTC ISO 字符串。',
+  'propose_background_task 参数中不要填写 workspacePath；后台任务 workspacePath 由 runtime 注入当前 Windows 工作区路径。',
+  'Deep Agents 文件工具使用 /workspace/...；不要把 /workspace/ 当作后台任务 workspacePath。',
   '如果触发时间仍不确定，直接请求用户补充明确时间，不要调用 propose_background_task。'
 ] as const;
 
