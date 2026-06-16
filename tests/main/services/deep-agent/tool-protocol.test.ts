@@ -10,6 +10,7 @@ describe('deep agent tool protocol', () => {
   it('keeps background task tool schemas pure JSON Schema without preprocess transforms', () => {
     const tools = createBackgroundTaskTools({
       previewStore: new PreviewStore(),
+      runtimeWorkspacePath: process.cwd(),
       taskAdapter: {
         createBackgroundTaskPreview: async (request) =>
           ({
