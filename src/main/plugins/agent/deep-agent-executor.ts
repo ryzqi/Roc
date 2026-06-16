@@ -554,7 +554,7 @@ function createChatRunEventQueue(): AsyncIterable<ChatRunEvent> & {
 async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   enabledCapabilities: TaskRun['enabledCapabilities'];
-  backgroundTaskToolMode: 'change' | null;
+  backgroundTaskToolMode: 'all' | 'change' | null;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
@@ -621,8 +621,14 @@ function isBackgroundTaskWorkflow(request: ChatStartRunRequest): boolean {
   return request.workflowHint === 'propose_background_task' || request.workflowHint === 'background_task_change';
 }
 
-function readBackgroundTaskToolMode(request: ChatStartRunRequest): 'change' | null {
-  return request.workflowHint === 'background_task_change' ? 'change' : null;
+function readBackgroundTaskToolMode(request: ChatStartRunRequest): 'all' | 'change' | null {
+  if (request.workflowHint === 'propose_background_task') {
+    return 'all';
+  }
+  if (request.workflowHint === 'background_task_change') {
+    return 'change';
+  }
+  return null;
 }
 
 function requireWorkbenchSourceForBackgroundTaskWorkflow(request: ChatStartRunRequest): void {

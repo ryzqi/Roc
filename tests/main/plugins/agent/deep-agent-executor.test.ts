@@ -27,7 +27,21 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 }));
 
 describe('createAgentDeepAgentExecutor', () => {
-  it('does not expose proposal handoff tools during deterministic background task creation runs', async () => {
+  it('wires background task creation tools during workbench proposal runs', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+    const tools = readBuiltTools();
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(expect.arrayContaining(['propose_background_task', 'schedule_background_task', 'read_background_task']));
+    expect(toolNames).not.toEqual(expect.arrayContaining(['resolve_background_task_time', 'update_background_task', 'cancel_background_task']));
+    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
+  });
+
+  it('routes proposal tools to task preview and create capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
       workflowHint: 'propose_background_task',
@@ -35,10 +49,32 @@ describe('createAgentDeepAgentExecutor', () => {
     });
     const tools = readBuiltTools();
 
-    expect(tools.map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining(['resolve_background_task_time', 'propose_background_task', 'schedule_background_task'])
-    );
-    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
+    const previewOutput = await invokeTool(findTool(tools, 'propose_background_task'), {
+      goal: '每天晚上9点创建 docx 文件，里面写你好世界',
+      trigger: {
+        type: 'cron',
+        description: '每天 21:00',
+        cronExpression: '0 21 * * *',
+        nextRunAt: '2026-06-16T13:00:00.000Z'
+      },
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    const previewJson = readJson(previewOutput) as { previewId: string };
+
+    const scheduleOutput = await invokeTool(findTool(tools, 'schedule_background_task'), {
+      previewId: previewJson.previewId
+    });
+
+    expect(readJson(scheduleOutput)).toMatchObject({
+      ok: true,
+      taskId: 'background-1',
+      threadId: 'thread-background-1'
+    });
+    expect(capabilityCalls.map((call) => call.name)).toEqual([
+      'workspace.getCurrent',
+      'task.background.preview',
+      'task.background.create'
+    ]);
   });
 
   it('wires background task change tools to task capabilities', async () => {

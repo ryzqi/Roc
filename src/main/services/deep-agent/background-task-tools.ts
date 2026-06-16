@@ -104,30 +104,7 @@ type BackgroundTaskToolSchedulerAdapter = {
 };
 
 export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): Array<DynamicStructuredTool<any, any, any, string>> {
-  const changeTools = [
-    new DynamicStructuredTool<typeof readInputSchema, z.infer<typeof readInputSchema>, z.infer<typeof readInputSchema>, string>({
-      name: 'read_background_task',
-      description: '读取已有后台任务定义、状态和最近运行信息。',
-      schema: readInputSchema,
-      func: async (rawInput) => JSON.stringify(await readBackgroundTask(input, rawInput), null, 2)
-    }),
-    new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
-      name: 'update_background_task',
-      description: '修改已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
-      schema: updateInputSchema,
-      func: async (rawInput) => JSON.stringify(await updateBackgroundTask(input, rawInput), null, 2)
-    }),
-    new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
-      name: 'cancel_background_task',
-      description: '取消已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
-      schema: cancelInputSchema,
-      func: async (rawInput) => JSON.stringify(await cancelBackgroundTask(input, rawInput), null, 2)
-    })
-  ];
-  if (input.toolMode === 'change') {
-    return changeTools;
-  }
-  return [
+  const creationTools = [
     new DynamicStructuredTool<
       typeof proposeToolInputSchema,
       z.infer<typeof proposeToolInputSchema>,
@@ -150,8 +127,32 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
       schema: scheduleInputSchema,
       func: async (rawInput) => JSON.stringify(await scheduleBackgroundTask(input, rawInput), null, 2)
     }),
-    ...changeTools
+    new DynamicStructuredTool<typeof readInputSchema, z.infer<typeof readInputSchema>, z.infer<typeof readInputSchema>, string>({
+      name: 'read_background_task',
+      description: '读取已有后台任务定义、状态和最近运行信息。',
+      schema: readInputSchema,
+      func: async (rawInput) => JSON.stringify(await readBackgroundTask(input, rawInput), null, 2)
+    })
   ];
+  const changeTools = [
+    creationTools[2],
+    new DynamicStructuredTool<typeof updateInputSchema, z.infer<typeof updateInputSchema>, z.infer<typeof updateInputSchema>, string>({
+      name: 'update_background_task',
+      description: '修改已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
+      schema: updateInputSchema,
+      func: async (rawInput) => JSON.stringify(await updateBackgroundTask(input, rawInput), null, 2)
+    }),
+    new DynamicStructuredTool<typeof cancelInputSchema, z.infer<typeof cancelInputSchema>, z.infer<typeof cancelInputSchema>, string>({
+      name: 'cancel_background_task',
+      description: '取消已有后台任务；本工具由 HITL 在执行前审批，审批通过或编辑后才会执行。',
+      schema: cancelInputSchema,
+      func: async (rawInput) => JSON.stringify(await cancelBackgroundTask(input, rawInput), null, 2)
+    })
+  ];
+  if (input.toolMode === 'change') {
+    return changeTools;
+  }
+  return creationTools;
 }
 
 export async function applyBackgroundTaskToolDecision(input: {
