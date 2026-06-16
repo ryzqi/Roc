@@ -135,6 +135,9 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const buildInput = readBuildInput();
     expect(buildInput.systemPrompt).toContain('本轮工作流：创建后台任务。');
+    expect(buildInput.systemPrompt).toContain('Default cwd for shell commands: selected Roc workspace root.');
+    expect(buildInput.systemPrompt).toContain('Use /workspace/ only for Deep Agents file tools.');
+    expect(buildInput.systemPrompt).not.toContain('current directory means /workspace/.');
     expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');
   });
 

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createRuntimeToolsPlugin } from '../../../../src/main/plugins/runtime-tools';
+import type { ShellExecutionResult } from '../../../../src/shared/types';
 
 let root: string;
 let workspaceRoot: string;
@@ -100,6 +101,41 @@ describe('runtime tools shell adapter', () => {
       cwd: workspaceRoot
     });
     expect(commandCalls[0].args.join(' ')).toContain('Write-Output unknown');
+  });
+
+  it('rejects agent shell commands that mention the Deep Agents /workspace route', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'rtk read /workspace/package.json',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'rtk read /workspace/package.json',
+      normalizedCommand: 'rtk read /workspace/package.json',
+      cwd: workspaceRoot,
+      stdout: '',
+      exitCode: 1,
+      usedRtk: false,
+      bypassReason: 'virtual_workspace_path'
+    });
+    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
+    expect(commandCalls).toHaveLength(0);
+  });
+
+  it('keeps the /workspace route rejection scoped to agent shell commands', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    await capabilities.invoke('shell.execute', {
+      command: 'Write-Output /workspace/package.json',
+      cwd: workspaceRoot,
+      source: 'terminal'
+    });
+
+    expect(commandCalls).toHaveLength(1);
+    expect(commandCalls[0].args.join(' ')).toContain('Write-Output /workspace/package.json');
   });
 });
 

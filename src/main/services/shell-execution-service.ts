@@ -35,7 +35,7 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? this.runAgentCommand(request.command, cwd)
+        ? (this.rejectVirtualWorkspaceCwd(request.command, cwd) ?? this.runAgentCommand(request.command, cwd))
         : this.executeTerminalCommand(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
@@ -76,7 +76,7 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? await this.runAgentCommandAsync(request.command, cwd)
+        ? (this.rejectVirtualWorkspaceCwd(request.command, cwd) ?? (await this.runAgentCommandAsync(request.command, cwd)))
         : await this.executeTerminalCommandAsync(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
@@ -123,6 +123,35 @@ export class ShellExecutionService {
     bypassReason?: ShellExecutionResult['bypassReason'];
   } {
     const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
+    const workspaceRouteViolation = this.rejectVirtualWorkspaceCwd(input.command, cwd);
+    if (workspaceRouteViolation !== null) {
+      if (input.threadId !== undefined && input.runId !== undefined) {
+        this.taskService.recordEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'agent_execute',
+          payload: this.buildAgentExecutePayload({
+            command: input.command,
+            cwd,
+            exitCode: workspaceRouteViolation.exitCode,
+            durationMs: 0,
+            usedRtk: false,
+            bypassReason: workspaceRouteViolation.bypassReason,
+            output: workspaceRouteViolation.stderr
+          })
+        });
+      }
+
+      return {
+        command: input.command,
+        cwd,
+        output: workspaceRouteViolation.stderr,
+        exitCode: workspaceRouteViolation.exitCode,
+        truncated: false,
+        usedRtk: false,
+        bypassReason: workspaceRouteViolation.bypassReason
+      };
+    }
     const startedAt = Date.now();
     const execution = this.runAgentCommand(input.command, cwd);
     const output = this.combineOutput(execution.stdout, execution.stderr);
@@ -169,6 +198,35 @@ export class ShellExecutionService {
     }
   > {
     const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
+    const workspaceRouteViolation = this.rejectVirtualWorkspaceCwd(input.command, cwd);
+    if (workspaceRouteViolation !== null) {
+      if (input.threadId !== undefined && input.runId !== undefined) {
+        this.taskService.recordEvent({
+          threadId: input.threadId,
+          runId: input.runId,
+          type: 'agent_execute',
+          payload: this.buildAgentExecutePayload({
+            command: input.command,
+            cwd,
+            exitCode: workspaceRouteViolation.exitCode,
+            durationMs: 0,
+            usedRtk: false,
+            bypassReason: workspaceRouteViolation.bypassReason,
+            output: workspaceRouteViolation.stderr
+          })
+        });
+      }
+
+      return {
+        command: input.command,
+        cwd,
+        output: workspaceRouteViolation.stderr,
+        exitCode: workspaceRouteViolation.exitCode,
+        truncated: false,
+        usedRtk: false,
+        bypassReason: workspaceRouteViolation.bypassReason
+      };
+    }
     const startedAt = Date.now();
     const execution = await this.runAgentCommandAsync(input.command, cwd);
     const output = this.combineOutput(execution.stdout, execution.stderr);
@@ -422,6 +480,24 @@ export class ShellExecutionService {
       return command.trim().split(/\s+/);
     }
     return null;
+  }
+
+  private rejectVirtualWorkspaceCwd(command: string, cwd: string): ExecutedShellCommand | null {
+    if (!this.containsVirtualWorkspacePath(command)) {
+      return null;
+    }
+
+    return {
+      stdout: '',
+      exitCode: 1,
+      stderr: `Error: /workspace is a Deep Agents file-tool route, not a shell directory. Use the selected workspace root on Windows: ${cwd}`,
+      usedRtk: false,
+      bypassReason: 'virtual_workspace_path'
+    };
+  }
+
+  private containsVirtualWorkspacePath(command: string): boolean {
+    return /(?:"\/workspace(?:\/|$)[^"]*"|'\/workspace(?:\/|$)[^']*'|(?:^|[\s;&|])\/workspace(?:\/|$)\S*)/i.test(command);
   }
 
   private toText(value: Buffer | string | undefined): string {

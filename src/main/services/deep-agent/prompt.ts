@@ -73,8 +73,8 @@ function createWorkspaceBoundary(workspacePath: string | null): string[] {
   }
   return [
     `Workspace: ${workspacePath}`,
-    'Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.',
-    'For Deep Agents file tools, current directory means /workspace/.',
+    'Default cwd for shell commands: selected Roc workspace root.',
+    'Use /workspace/ only for Deep Agents file tools.',
     'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.',
     'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
     'Run file and shell ops inside workspace unless user explicitly names another allowed path.'

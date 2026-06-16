@@ -44,8 +44,9 @@ describe('deep agent prompt', () => {
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
     );
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
-    expect(prompt).toContain('Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.');
-    expect(prompt).toContain('For Deep Agents file tools, current directory means /workspace/.');
+    expect(prompt).toContain('Default cwd for shell commands: selected Roc workspace root.');
+    expect(prompt).toContain('Use /workspace/ only for Deep Agents file tools.');
+    expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(
       'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.'
     );
@@ -83,8 +84,8 @@ describe('deep agent prompt', () => {
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).',
       'Workspace: F:\\Code\\Roc',
-      'Default cwd: selected Roc workspace root; use /workspace/ for Deep Agents file tools.',
-      'For Deep Agents file tools, current directory means /workspace/.',
+      'Default cwd for shell commands: selected Roc workspace root.',
+      'Use /workspace/ only for Deep Agents file tools.',
       'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.',
       'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
       'Run file and shell ops inside workspace unless user explicitly names another allowed path.',
