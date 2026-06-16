@@ -38,11 +38,15 @@ function readSseToolCallNameAndArgs(body: string): { name: string; args: unknown
   throw new Error(`No tool call found in SSE body: ${body}`);
 }
 
-type SmokeRequestBody = {
+type SmokeMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
+interface SmokeRequestBody {
   stream: true;
   tools: Array<{ type: 'function'; function: { name: string } }>;
-  messages: Array<{ role: string; content: string }>;
-};
+  messages: SmokeMessage[];
+}
 
 const fixedNow = new Date('2026-06-16T10:15:30.000Z');
 
