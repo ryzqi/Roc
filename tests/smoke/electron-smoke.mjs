@@ -425,7 +425,6 @@ try {
           return false;
         }
         return (
-          Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
           Reflect.get(item.payload, 'name') === 'schedule_background_task'
         );
@@ -433,8 +432,6 @@ try {
       const hasToolCall = (name, status) =>
         toolCalls.some((item) => Reflect.get(item.payload, 'name') === name && Reflect.get(item.payload, 'status') === status);
       return (
-        hasToolCall('resolve_background_task_time', 'start') &&
-        hasToolCall('resolve_background_task_time', 'end') &&
         hasToolCall('propose_background_task', 'start') &&
         hasToolCall('propose_background_task', 'end') &&
         hasToolCall('schedule_background_task', 'start') &&
@@ -472,7 +469,6 @@ try {
           return false;
         }
         return (
-          Reflect.get(item.payload, 'name') === 'resolve_background_task_time' ||
           Reflect.get(item.payload, 'name') === 'propose_background_task' ||
           Reflect.get(item.payload, 'name') === 'schedule_background_task'
         );
@@ -495,8 +491,6 @@ try {
         createdEventPayload: createdEvent?.payload ?? null,
         cronExpression: task?.trigger.type === 'cron' ? task.trigger.cronExpression : null,
         hasCreatedEvent: createdEvent !== undefined,
-        hasTimeResolutionToolCallStart: hasToolCall('resolve_background_task_time', 'start'),
-        hasTimeResolutionToolCallEnd: hasToolCall('resolve_background_task_time', 'end'),
         hasProposeToolCallStart: hasToolCall('propose_background_task', 'start'),
         hasProposeToolCallEnd: hasToolCall('propose_background_task', 'end'),
         hasScheduleToolCallStart: hasToolCall('schedule_background_task', 'start'),
@@ -2640,8 +2634,6 @@ try {
       taskProposalEvidence.cronExpression === naturalLanguageTaskCronExpression &&
       taskProposalEvidence.nextRunAt === taskProposalEvidence.expectedNextRunAt &&
       taskProposalEvidence.hasCreatedEvent &&
-      taskProposalEvidence.hasTimeResolutionToolCallStart &&
-      taskProposalEvidence.hasTimeResolutionToolCallEnd &&
       taskProposalEvidence.hasProposeToolCallStart &&
       taskProposalEvidence.hasProposeToolCallEnd &&
       taskProposalEvidence.hasScheduleToolCallStart &&
