@@ -432,6 +432,98 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('runs workbench proposal requests through DeepAgents instead of completing before execution', async () => {
+    const repository = new AgentSessionRepository(db);
+    const seenInputs: ChatStartRunRequest[] = [];
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          seenInputs.push(input.request);
+          yield {
+            type: 'assistant_block',
+            runId: input.run.id,
+            block: {
+              kind: 'tool_call',
+              blockId: 'tool-call-propose',
+              callId: 'call-propose',
+              name: 'propose_background_task',
+              phase: 'start',
+              input: {
+                goal: '每天晚上9点创建 docx 文件，里面写你好世界',
+                trigger: {
+                  type: 'cron',
+                  description: '每天 21:00',
+                  cronExpression: '0 21 * * *',
+                  nextRunAt: '2026-06-16T13:00:00.000Z'
+                },
+                workspacePath: 'F:\\Code\\Roc'
+              }
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'assistant_block',
+            runId: input.run.id,
+            block: {
+              kind: 'tool_call',
+              blockId: 'tool-call-schedule',
+              callId: 'call-schedule',
+              name: 'schedule_background_task',
+              phase: 'end',
+              output: {
+                ok: true,
+                taskId: 'background-1'
+              }
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'assistant_block',
+            runId: input.run.id,
+            block: {
+              kind: 'text',
+              blockId: 'text-final',
+              phase: 'delta',
+              text: '后台任务已创建。'
+            }
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '每天晚上9点创建 docx 文件，里面写你好世界',
+      mode: 'task',
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(seenInputs).toHaveLength(1);
+    expect(seenInputs[0]).toMatchObject({
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: expect.objectContaining({
+          runId: result.runId,
+          type: 'tool_call',
+          payload: expect.objectContaining({
+            name: 'propose_background_task',
+            status: 'start'
+          })
+        })
+      })
+    );
+  });
+
   it('does not complete when a later tool error overrides an earlier tool end without final assistant text', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({

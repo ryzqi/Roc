@@ -82,6 +82,18 @@ describe('createAgentDeepAgentExecutor', () => {
     ]);
   });
 
+  it('keeps the DeepAgents backend available during workbench proposal runs', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+
+    const buildInput = readBuildInput();
+
+    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/agents/', '/memory/']));
+    expect(buildInput.filesystemPermissions).toBeUndefined();
+  });
+
   it('wires background task change tools to task capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
