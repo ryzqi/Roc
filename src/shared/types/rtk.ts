@@ -2,7 +2,8 @@ export type RtkBypassReason =
   | 'rtk_binary_missing'
   | 'user_terminal_raw_output'
   | 'command_not_supported'
-  | 'virtual_workspace_path';
+  | 'virtual_workspace_path'
+  | 'windows_shell_alias';
 
 export type RtkStatus = {
   enabledForAgentCommands: boolean;

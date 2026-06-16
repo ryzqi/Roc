@@ -107,14 +107,14 @@ describe('runtime tools shell adapter', () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'rtk read /workspace/package.json',
+      command: 'rtk ls /workspace',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'rtk read /workspace/package.json',
-      normalizedCommand: 'rtk read /workspace/package.json',
+      command: 'rtk ls /workspace',
+      normalizedCommand: 'rtk ls /workspace',
       cwd: workspaceRoot,
       stdout: '',
       exitCode: 1,
@@ -123,6 +123,60 @@ describe('runtime tools shell adapter', () => {
     });
     expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
     expect(commandCalls).toHaveLength(0);
+  });
+
+  it('uses raw PowerShell for Windows shell aliases that RTK cannot execute directly', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'ls',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'ls',
+      normalizedCommand: 'ls',
+      cwd: workspaceRoot,
+      stdout: 'notes.txt\n',
+      stderr: '',
+      exitCode: 0,
+      usedRtk: false,
+      bypassReason: 'windows_shell_alias'
+    });
+    expect(commandCalls).toHaveLength(1);
+    expect(commandCalls[0]).toMatchObject({
+      file: 'powershell.exe',
+      cwd: workspaceRoot
+    });
+    expect(commandCalls[0].args.join(' ')).toContain('ls');
+  });
+
+  it('routes supported agent commands through the bundled RTK binary', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'git status',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'git status',
+      normalizedCommand: 'git status',
+      cwd: workspaceRoot,
+      stdout: 'notes.txt\n',
+      stderr: '',
+      exitCode: 0,
+      usedRtk: true
+    });
+    expect(result.bypassReason).toBeUndefined();
+    expect(commandCalls).toHaveLength(1);
+    expect(commandCalls[0]).toMatchObject({
+      file: expect.stringContaining('rtk.exe'),
+      args: ['git', 'status'],
+      cwd: workspaceRoot
+    });
   });
 
   it('keeps the /workspace route rejection scoped to agent shell commands', async () => {

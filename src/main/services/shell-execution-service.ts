@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
-import { parseRtkArgs } from '../../rtk-integration';
+import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../rtk-integration';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { WorkspaceService } from './workspace-service';
 import { redact } from './deep-agent/redact';
@@ -17,6 +17,16 @@ type ExecutedShellCommand = {
   usedRtk: boolean;
   bypassReason?: ShellExecutionResult['bypassReason'];
 };
+
+type RtkRoutingDecision =
+  | {
+      kind: 'rtk';
+      args: string[];
+    }
+  | {
+      kind: 'fallback';
+      bypassReason: ShellExecutionResult['bypassReason'];
+    };
 
 export type ShellTaskEventRecorder = {
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): unknown;
@@ -270,17 +280,17 @@ export class ShellExecutionService {
       };
     }
 
-    const rtkArgs = this.resolveRtkArgs(command);
-    if (rtkArgs === null) {
+    const rtkRoute = this.resolveRtkRoute(command);
+    if (rtkRoute.kind === 'fallback') {
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
         usedRtk: false,
-        bypassReason: 'command_not_supported'
+        bypassReason: rtkRoute.bypassReason
       };
     }
 
-    const execution = this.executeRtk(rtkArgs, cwd, rtk);
+    const execution = this.executeRtk(rtkRoute.args, cwd, rtk);
     return {
       ...execution,
       usedRtk: true
@@ -298,17 +308,17 @@ export class ShellExecutionService {
       };
     }
 
-    const rtkArgs = this.resolveRtkArgs(command);
-    if (rtkArgs === null) {
+    const rtkRoute = await this.resolveRtkRouteAsync(command, rtk);
+    if (rtkRoute.kind === 'fallback') {
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
         ...fallback,
         usedRtk: false,
-        bypassReason: 'command_not_supported'
+        bypassReason: rtkRoute.bypassReason
       };
     }
 
-    const execution = await this.executeRtkAsync(rtkArgs, cwd, rtk);
+    const execution = await this.executeRtkAsync(rtkRoute.args, cwd, rtk);
     return {
       ...execution,
       usedRtk: true
@@ -463,23 +473,72 @@ export class ShellExecutionService {
     return command.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
   }
 
-  private resolveRtkArgs(command: string): string[] | null {
-    const middlewareRewrittenArgs = parseRtkArgs(command.trim());
-    if (middlewareRewrittenArgs !== null) {
-      return middlewareRewrittenArgs;
+  private resolveRtkRoute(command: string): RtkRoutingDecision {
+    const explicitRtkArgs = parseRtkArgs(command.trim());
+    if (explicitRtkArgs !== null) {
+      return this.resolveExplicitRtkRoute(explicitRtkArgs);
     }
 
     const normalized = this.normalizeCommand(command);
     if (normalized === 'ls' || normalized.startsWith('ls ')) {
-      return ['ls', ...command.trim().split(/\s+/).slice(1)];
+      return {
+        kind: 'fallback',
+        bypassReason: 'windows_shell_alias'
+      };
     }
     if (normalized === 'git status' || normalized.startsWith('git status ')) {
-      return command.trim().split(/\s+/);
+      return {
+        kind: 'rtk',
+        args: command.trim().split(/\s+/)
+      };
     }
     if (normalized === 'git diff' || normalized.startsWith('git diff ')) {
-      return command.trim().split(/\s+/);
+      return {
+        kind: 'rtk',
+        args: command.trim().split(/\s+/)
+      };
     }
-    return null;
+    return {
+      kind: 'fallback',
+      bypassReason: 'command_not_supported'
+    };
+  }
+
+  private async resolveRtkRouteAsync(command: string, metadata: RtkExecutionMetadata): Promise<RtkRoutingDecision> {
+    const explicitRtkArgs = parseRtkArgs(command.trim());
+    if (explicitRtkArgs !== null) {
+      return this.resolveExplicitRtkRoute(explicitRtkArgs);
+    }
+
+    const normalized = this.normalizeCommand(command);
+    if (normalized === 'ls' || normalized.startsWith('ls ')) {
+      return {
+        kind: 'fallback',
+        bypassReason: 'windows_shell_alias'
+      };
+    }
+
+    const rewritten = await new CommandRewriter(metadata.binaryPath).rewrite(command);
+    if (rewritten.rtkArgs === null || isWindowsRtkDeniedSubcommand(rewritten.rtkArgs)) {
+      return this.resolveRtkRoute(command);
+    }
+    return {
+      kind: 'rtk',
+      args: rewritten.rtkArgs
+    };
+  }
+
+  private resolveExplicitRtkRoute(args: string[]): RtkRoutingDecision {
+    if (isWindowsRtkDeniedSubcommand(args)) {
+      return {
+        kind: 'fallback',
+        bypassReason: 'windows_shell_alias'
+      };
+    }
+    return {
+      kind: 'rtk',
+      args
+    };
   }
 
   private rejectVirtualWorkspaceCwd(command: string, cwd: string): ExecutedShellCommand | null {

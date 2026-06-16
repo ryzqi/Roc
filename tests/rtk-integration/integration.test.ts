@@ -1,8 +1,24 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { CommandRewriter, RTKBinaryManager, createRTKMiddleware } from '../../src/rtk-integration';
 
+const execFileAsync = promisify(execFile);
+
 describe('RTK integration', () => {
+  it('bundles the expected RTK Windows release', async () => {
+    const manager = new RTKBinaryManager();
+    const binaryPath = manager.getRTKBinaryPath();
+    if (binaryPath === null || !manager.isRTKAvailable()) {
+      throw new Error('Expected bundled RTK binary to be available for current platform.');
+    }
+
+    const { stdout } = await execFileAsync(binaryPath, ['--version'], { windowsHide: true });
+
+    expect(stdout.trim()).toBe('rtk 0.42.4');
+  });
+
   it('uses the bundled RTK binary to rewrite supported commands', async () => {
     const manager = new RTKBinaryManager();
     const binaryPath = manager.getRTKBinaryPath();

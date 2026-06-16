@@ -96,6 +96,8 @@ export class SystemPromptBuilder {
       sections.push(`Workspace: ${workspacePath}`);
       sections.push('Default cwd for shell commands: selected Roc workspace root.');
       sections.push('Use /workspace/ only for Deep Agents file tools.');
+      sections.push('Use the Windows workspace root for shell paths; never run rtk ls /workspace.');
+      sections.push('For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.');
       sections.push('Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.');
       sections.push('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
       sections.push('Run file and shell ops inside workspace unless user explicitly names another allowed path.');

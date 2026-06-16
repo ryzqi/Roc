@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CommandRewriter, parseRtkArgs } from '../../src/rtk-integration/rewriter';
+import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../src/rtk-integration/rewriter';
 
 describe('CommandRewriter', () => {
   it('returns rewritten RTK command and parsed RTK args', async () => {
@@ -66,5 +66,11 @@ describe('CommandRewriter', () => {
       rtkArgs: null,
       exitCode: 2
     });
+  });
+
+  it('identifies Windows shell aliases that must not be routed to RTK', () => {
+    expect(isWindowsRtkDeniedSubcommand(['ls'])).toBe(true);
+    expect(isWindowsRtkDeniedSubcommand(['ls', '.'])).toBe(true);
+    expect(isWindowsRtkDeniedSubcommand(['git', 'status'])).toBe(false);
   });
 });

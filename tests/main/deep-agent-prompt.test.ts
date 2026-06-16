@@ -46,6 +46,8 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain('Default cwd for shell commands: selected Roc workspace root.');
     expect(prompt).toContain('Use /workspace/ only for Deep Agents file tools.');
+    expect(prompt).toContain('Use the Windows workspace root for shell paths; never run rtk ls /workspace.');
+    expect(prompt).toContain('For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.');
     expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(
       'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.'
@@ -86,6 +88,8 @@ describe('deep agent prompt', () => {
       'Workspace: F:\\Code\\Roc',
       'Default cwd for shell commands: selected Roc workspace root.',
       'Use /workspace/ only for Deep Agents file tools.',
+      'Use the Windows workspace root for shell paths; never run rtk ls /workspace.',
+      'For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.',
       'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.',
       'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
       'Run file and shell ops inside workspace unless user explicitly names another allowed path.',
