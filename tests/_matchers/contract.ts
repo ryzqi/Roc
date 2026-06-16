@@ -93,14 +93,6 @@ expect.extend({
         }`
     };
   },
-  toContainCanonicalExample(text: string) {
-    const requiredFragments = ['"goal"', '"trigger"', '"workspacePath"', '"type": "cron"', '"cronExpression"', '"nextRunAt"'];
-    const missing = requiredFragments.filter((fragment) => !text.includes(fragment));
-    return {
-      pass: missing.length === 0,
-      message: () => `expected prompt to contain canonical example fragments, missing: ${missing.join(', ')}`
-    };
-  },
   toReferenceForbiddenField(text: string) {
     const matches = FORBIDDEN_FIELD_PATTERNS.filter((pattern) => pattern.test(text)).map((pattern) => pattern.source);
     return {
@@ -119,7 +111,6 @@ declare module 'vitest' {
     toBeAcceptedByProposeToolSchema(): T;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): T;
     toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): T;
-    toContainCanonicalExample(): T;
     toReferenceForbiddenField(): T;
   }
 
@@ -128,7 +119,6 @@ declare module 'vitest' {
     toBeAcceptedByProposeToolSchema(): unknown;
     toBeRejectedByProposeSchemaAtPath(expectedPath: string): unknown;
     toBeRejectedByProposeToolSchemaAtPath(expectedPath: string): unknown;
-    toContainCanonicalExample(): unknown;
     toReferenceForbiddenField(): unknown;
   }
 }

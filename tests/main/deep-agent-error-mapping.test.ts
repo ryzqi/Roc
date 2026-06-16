@@ -21,7 +21,7 @@ describe('deep agent error mapping', () => {
       message: '任务工具参数不符合 schema：propose_background_task 的输入不符合工具契约。',
       retryable: true,
       suggestion:
-        'propose_background_task 只填写 goal、trigger、workspacePath；allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 由 runtime 设置。'
+        'propose_background_task 模型只填写 goal 和 trigger；workspacePath、allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 由 runtime 设置。'
     });
   });
 
@@ -33,7 +33,9 @@ describe('deep agent error mapping', () => {
       expect(failure.diagnostic?.toolName).toBe('propose_background_task');
       expect(failure.diagnostic?.schemaPath).toBe(schemaPath);
       expect(failure.diagnostic?.badKeys ?? []).toEqual(badKeys);
-      expect(failure.suggestion).toContain('只填写 goal、trigger、workspacePath');
+      expect(failure.suggestion).toContain('模型只填写 goal 和 trigger');
+      expect(failure.suggestion).toContain('workspacePath');
+      expect(failure.suggestion).toContain('由 runtime 设置');
     }
   );
 
@@ -49,7 +51,9 @@ describe('deep agent error mapping', () => {
         badKeys: ['notificationPolicy']
       })
     );
-    expect(failure.suggestion).toContain('只填写 goal、trigger、workspacePath');
+    expect(failure.suggestion).toContain('模型只填写 goal 和 trigger');
+    expect(failure.suggestion).toContain('workspacePath');
+    expect(failure.suggestion).toContain('由 runtime 设置');
   });
 
   it('does not attach propose_background_task suggestions to other tool schema failures', () => {
