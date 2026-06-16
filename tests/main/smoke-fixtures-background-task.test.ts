@@ -44,6 +44,8 @@ type SmokeRequestBody = {
   messages: Array<{ role: string; content: string }>;
 };
 
+const fixedNow = new Date('2026-06-16T10:15:30.000Z');
+
 describe('smoke provider background task proposal flow', () => {
   const providers: Array<{ close: () => Promise<void> }> = [];
 
@@ -52,11 +54,11 @@ describe('smoke provider background task proposal flow', () => {
   });
 
   it('starts with propose_background_task and sends a cron trigger directly', async () => {
-    const provider = await startSmokeProvider();
-    providers.push(provider);
     const hour = 19;
     const minute = 40;
     const goal = `每天 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} 抓取 AI 新闻并写入 docx`;
+    const provider = await startSmokeProvider({ now: fixedNow, taskProposalGoal: goal });
+    providers.push(provider);
     const response = await fetch(`${provider.endpoint}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -89,10 +91,50 @@ describe('smoke provider background task proposal flow', () => {
           type: 'cron',
           description: `每天 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
           cronExpression: `${minute} ${hour} * * *`,
-          nextRunAt: nextDailyRunAtUtc(hour, minute)
+          nextRunAt: nextDailyRunAtUtc(hour, minute, fixedNow)
         },
         workspacePath: 'F:\\Code\\Roc'
       }
     });
+  });
+
+  it('returns final text that reflects the propose to schedule flow', async () => {
+    const goal = '每天 19:40 抓取 AI 新闻并写入 docx';
+    const provider = await startSmokeProvider({ now: fixedNow, taskProposalGoal: goal });
+    providers.push(provider);
+    const response = await fetch(`${provider.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'text/event-stream'
+      },
+      body: JSON.stringify({
+        stream: true,
+        tools: [
+          { type: 'function', function: { name: 'propose_background_task' } },
+          { type: 'function', function: { name: 'schedule_background_task' } }
+        ],
+        messages: [
+          { role: 'system', content: '本轮工作流：创建后台任务。' },
+          { role: 'system', content: 'Workspace: F:\\Code\\Roc' },
+          { role: 'user', content: goal },
+          {
+            role: 'tool',
+            tool_call_id: 'call_smoke_propose_background_task',
+            content: JSON.stringify({ previewId: 'preview-1' })
+          },
+          {
+            role: 'tool',
+            tool_call_id: 'call_smoke_schedule_background_task',
+            content: JSON.stringify({ taskId: 'task-1' })
+          }
+        ]
+      } satisfies SmokeRequestBody)
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain(`Smoke Provider 已通过 propose / schedule 完成后台任务创建：${goal}。`);
+    expect(body).not.toContain('time / propose / schedule');
   });
 });

@@ -166,8 +166,21 @@ function readTaskProposalGoal(value) {
   return value;
 }
 
+function readFixtureNow(value) {
+  if (value === undefined) {
+    return new Date();
+  }
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error('Smoke provider now must be a valid Date.');
+    }
+    return new Date(value.getTime());
+  }
+  throw new Error('Smoke provider now must be a Date instance.');
+}
+
 function buildSmokeTaskProposalFinalText(taskProposalGoal) {
-  return `Smoke Provider 已通过 time / propose / schedule 完成后台任务创建：${taskProposalGoal}。`;
+  return `Smoke Provider 已通过 propose / schedule 完成后台任务创建：${taskProposalGoal}。`;
 }
 
 function readLastUserText(messages, taskProposalGoal) {
@@ -249,7 +262,7 @@ function nextDailyRunAtUtc(hour, minute, now = new Date()) {
   return candidate.toISOString();
 }
 
-function buildSmokeCronTrigger(taskProposalGoal) {
+function buildSmokeCronTrigger(taskProposalGoal, now) {
   const match = smokeTaskProposalClockPattern.exec(taskProposalGoal);
   if (match === null) {
     throw new Error(`Smoke provider could not derive cron trigger from task proposal goal: ${taskProposalGoal}`);
@@ -263,7 +276,7 @@ function buildSmokeCronTrigger(taskProposalGoal) {
     type: 'cron',
     description: `每天 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
     cronExpression: `${minute} ${hour} * * *`,
-    nextRunAt: nextDailyRunAtUtc(hour, minute)
+    nextRunAt: nextDailyRunAtUtc(hour, minute, now)
   };
 }
 
@@ -340,7 +353,7 @@ function writeStreamingToolCallResponse(response, toolCall) {
   response.end('data: [DONE]\n\n');
 }
 
-function writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoal) {
+function writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoal, now) {
   const workspacePath = readWorkspacePathFromMessages(parsedBody?.messages);
   if (workspacePath === null || workspacePath.length === 0) {
     throw new Error('Smoke provider could not resolve workspacePath from task proposal prompt.');
@@ -348,7 +361,7 @@ function writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoa
   writeStreamingToolCallResponse(response, {
     id: 'call_smoke_propose_background_task',
     name: 'propose_background_task',
-    args: buildSmokeTaskProposal(workspacePath, buildSmokeCronTrigger(taskProposalGoal), taskProposalGoal)
+    args: buildSmokeTaskProposal(workspacePath, buildSmokeCronTrigger(taskProposalGoal, now), taskProposalGoal)
   });
 }
 
@@ -368,6 +381,7 @@ function writeTaskScheduleToolCallResponse(response, parsedBody) {
 
 export async function startSmokeProvider(input = {}) {
   const taskProposalGoal = readTaskProposalGoal(input.taskProposalGoal);
+  const now = readFixtureNow(input.now);
   const smokeTaskProposalFinalText = buildSmokeTaskProposalFinalText(taskProposalGoal);
   const requests = [];
   const server = createServer((request, response) => {
@@ -389,7 +403,7 @@ export async function startSmokeProvider(input = {}) {
           isTaskProposalRequest(parsedBody, taskProposalGoal) &&
           readToolResultJson(parsedBody?.messages, 'call_smoke_propose_background_task') === null
         ) {
-          writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoal);
+          writeTaskProposalToolCallResponse(response, parsedBody, taskProposalGoal, now);
           return;
         }
         if (
