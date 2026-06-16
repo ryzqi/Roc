@@ -55,14 +55,12 @@ describe('createAgentDeepAgentExecutor', () => {
     const tools = readBuiltTools();
 
     const previewOutput = await invokeTool(findTool(tools, 'propose_background_task'), {
-      goal: '每天晚上9点创建 docx 文件，里面写你好世界',
+      goal: '每天中午一点创建 docx 文件，里面写你好世界',
       trigger: {
         type: 'cron',
-        description: '每天 21:00',
-        cronExpression: '0 21 * * *',
-        nextRunAt: '2026-06-16T13:00:00.000Z'
-      },
-      workspacePath
+        cronExpression: '0 13 * * *',
+        nextRunAt: '2026-06-17T05:00:00.000Z'
+      }
     });
     const previewJson = readJson(previewOutput) as { previewId: string };
 
@@ -80,6 +78,59 @@ describe('createAgentDeepAgentExecutor', () => {
       'task.background.preview',
       'task.background.create'
     ]);
+    const previewCall = capabilityCalls.find((call) => call.name === 'task.background.preview');
+    expect(previewCall?.input).toMatchObject({
+      goal: '每天中午一点创建 docx 文件，里面写你好世界',
+      trigger: {
+        type: 'cron',
+        description: '每天 13:00 触发',
+        cronExpression: '0 13 * * *',
+        nextRunAt: '2026-06-17T05:00:00.000Z'
+      },
+      workspacePath
+    });
+  });
+
+  it('uses runtime workspace path instead of model-supplied workspacePath', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+
+    const output = await invokeTool(findTool(readBuiltTools(), 'propose_background_task'), {
+      goal: '每天中午一点创建 docx 文件，里面写你好世界',
+      trigger: {
+        type: 'cron',
+        cronExpression: '0 13 * * *',
+        nextRunAt: '2026-06-17T05:00:00.000Z'
+      },
+      workspacePath: '/workspace/'
+    });
+
+    const parsed = readJson(output) as { preview: BackgroundTaskPreview };
+    expect(parsed.preview.workspacePath).toBe(workspacePath);
+    expect(capabilityCalls.find((call) => call.name === 'task.background.preview')?.input).toMatchObject({
+      workspacePath
+    });
+  });
+
+  it('rejects background task propose when no workspace is selected', async () => {
+    await buildExecutorOnce(createCapabilities([], { workspace: null }), {
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+
+    await expect(
+      invokeTool(findTool(readBuiltTools(), 'propose_background_task'), {
+        goal: '每天中午一点创建 docx 文件，里面写你好世界',
+        trigger: {
+          type: 'cron',
+          cronExpression: '0 13 * * *',
+          nextRunAt: '2026-06-17T05:00:00.000Z'
+        }
+      })
+    ).rejects.toThrow('创建后台任务需要先选择工作区');
   });
 
   it('keeps the DeepAgents backend available during workbench proposal runs', async () => {
@@ -476,7 +527,7 @@ async function startExecutorExecution(input: ExecutorEventsInput): Promise<Async
 
 function createCapabilities(
   calls: Array<{ name: string; input: unknown }>,
-  options: { capabilityPreview?: boolean } = {}
+  options: { capabilityPreview?: boolean; workspace?: Workspace | null } = {}
 ): RocCapabilityRegistry {
   const capabilityPreviewDescriptor: CapabilityDescriptor = {
     name: 'agent.capability.preview',
@@ -496,6 +547,9 @@ function createCapabilities(
         } as TOutput;
       }
       if (name === 'workspace.getCurrent') {
+        if ('workspace' in options) {
+          return options.workspace as TOutput;
+        }
         const workspace = {
           id: 'workspace-1',
           path: workspacePath,

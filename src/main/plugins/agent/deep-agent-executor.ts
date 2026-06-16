@@ -74,7 +74,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         enabledCapabilities: input.request.enabledCapabilities,
-        backgroundTaskToolMode: readBackgroundTaskToolMode(input.request)
+        backgroundTaskToolMode: readBackgroundTaskToolMode(input.request),
+        runtimeWorkspacePath: workspace === null ? null : workspace.path
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
@@ -555,6 +556,7 @@ async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   enabledCapabilities: TaskRun['enabledCapabilities'];
   backgroundTaskToolMode: 'all' | 'change' | null;
+  runtimeWorkspacePath: string | null;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
@@ -570,6 +572,7 @@ async function createExecutorTools(input: {
     runTools.splice(2, 0, ...createBackgroundTaskTools({
       enabledCapabilities: input.enabledCapabilities,
       previewStore: new PreviewStore(),
+      runtimeWorkspacePath: input.runtimeWorkspacePath,
       toolMode: input.backgroundTaskToolMode,
       taskAdapter: {
         createBackgroundTaskPreview: async (request) =>
