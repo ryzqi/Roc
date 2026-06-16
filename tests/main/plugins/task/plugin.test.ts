@@ -988,7 +988,7 @@ describe('task plugin', () => {
     );
   });
 
-  it('creates proposal background tasks deterministically from agent.run.started', async () => {
+  it('records proposal run starts without creating background tasks deterministically', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();
     const capabilities = new CapabilityRegistry();
@@ -1009,7 +1009,7 @@ describe('task plugin', () => {
         providerId: 'smoke-provider',
         modelId: 'smoke-model',
         createdAt: '2026-06-04T00:00:00.000Z',
-        userInput: '每天 09:00 检查测试失败，使用当前工作区。',
+        userInput: '每天晚上9点创建 docx 文件，里面写你好世界。',
         workflowHint: 'propose_background_task',
         enabledCapabilities: {
           mcpServers: [],
@@ -1021,19 +1021,21 @@ describe('task plugin', () => {
     const activeTasks = await capabilities.invoke<{}, ActiveTaskItem[]>('task.active.list', {});
     const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
 
-    expect(activeTasks).toContainEqual(
-      expect.objectContaining({
-        goal: '每天 09:00 检查测试失败'
-      })
-    );
+    expect(activeTasks).toEqual([]);
     expect(snapshot.recentEvents).toContainEqual(
       expect.objectContaining({
-        type: 'background_task_created'
+        runId: 'run_task_proposal',
+        threadId: 'thread_task_proposal',
+        type: 'message',
+        payload: expect.objectContaining({
+          role: 'user',
+          content: '每天晚上9点创建 docx 文件，里面写你好世界。'
+        })
       })
     );
-    expect(readToolCallStatuses(snapshot, 'resolve_background_task_time').sort()).toEqual(['end', 'start']);
-    expect(readToolCallStatuses(snapshot, 'propose_background_task').sort()).toEqual(['end', 'start']);
-    expect(readToolCallStatuses(snapshot, 'schedule_background_task').sort()).toEqual(['end', 'start']);
+    expect(readToolCallStatuses(snapshot, 'resolve_background_task_time')).toEqual([]);
+    expect(readToolCallStatuses(snapshot, 'propose_background_task')).toEqual([]);
+    expect(readToolCallStatuses(snapshot, 'schedule_background_task')).toEqual([]);
   });
 
   it('excludes background tasks whose thread was archived from the active list', async () => {
