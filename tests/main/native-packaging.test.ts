@@ -5,6 +5,7 @@ const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import
 const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
 const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
+const packageDirScript = readFileSync(new URL('../../scripts/package-dir.mjs', import.meta.url), 'utf8');
 const verifyNativePackagingScript = readFileSync(new URL('../../scripts/verify-native-packaging.mjs', import.meta.url), 'utf8');
 
 async function loadElectronVersionModule() {
@@ -22,12 +23,15 @@ describe('native packaging contract', () => {
     expect(getElectronVersion()).toBe(packageJson.devDependencies.electron);
   });
 
-  it('registers builder hooks for native prepare, packaged verify, and restore', () => {
+  it('registers builder hooks for native prepare and packaged verify only', () => {
     expect(electronBuilderConfig).toContain('beforePack: ./scripts/builder-hooks/before-pack.mjs');
     expect(electronBuilderConfig).toContain('afterPack: ./scripts/builder-hooks/after-pack.mjs');
-    expect(electronBuilderConfig).toContain(
-      'afterAllArtifactBuild: ./scripts/builder-hooks/after-all-artifact-build.mjs'
-    );
+    expect(electronBuilderConfig).not.toContain('afterAllArtifactBuild');
+  });
+
+  it('restores workspace better-sqlite3 after the package-dir command exits', () => {
+    expect(packageDirScript).toContain('finally');
+    expect(packageDirScript).toContain('restoreBetterSqlite3ForNode({');
   });
 
   it('terminates running packaged app processes before direct electron-builder output cleanup', () => {

@@ -34,7 +34,6 @@ asarUnpack:
   - node_modules/node-pty/**
 beforePack: ./scripts/builder-hooks/before-pack.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
-afterAllArtifactBuild: ./scripts/builder-hooks/after-all-artifact-build.mjs
 win:
   icon: resources/icon.ico
   executableName: Roc

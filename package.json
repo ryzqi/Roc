@@ -2,6 +2,7 @@
   "name": "roc",
   "version": "0.1.0",
   "description": "Roc",
+  "author": "ryz",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
