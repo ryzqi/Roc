@@ -201,7 +201,6 @@ function createMockPreloadApi(): RocPreloadApi {
       createBackgroundTaskPreview: vi.fn(),
       createBackgroundTask: vi.fn(),
       cancelBackgroundTask: vi.fn(),
-      openInChat: vi.fn(),
       pauseBackgroundTask: vi.fn(),
       resumeBackgroundTask: vi.fn(),
       runBackgroundNow: vi.fn(),

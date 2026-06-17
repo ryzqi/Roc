@@ -14,11 +14,9 @@ const SYSTEM_HISTORY_THREAD_TITLES = new Set([
   '任务工作台记录'
 ]);
 
-export function buildHistoryItems(threads: TaskThread[], promotedThreadIds: Iterable<string>): HistorySidebarItem[] {
-  const backgroundThreadIds = new Set(promotedThreadIds);
+export function buildHistoryItems(threads: TaskThread[], _promotedThreadIds: Iterable<string>): HistorySidebarItem[] {
   return threads
-    .filter((thread) => !backgroundThreadIds.has(thread.id))
-    .filter((thread) => !isActivePromotedThread(thread))
+    .filter((thread) => thread.kind === 'chat')
     .filter((thread) => !SYSTEM_HISTORY_THREAD_TITLES.has(thread.title))
     .map((thread) => ({
       id: thread.id,
@@ -26,13 +24,6 @@ export function buildHistoryItems(threads: TaskThread[], promotedThreadIds: Iter
       meta: formatBeijingDateTime(thread.updatedAt),
       icon: 'history'
     }));
-}
-
-function isActivePromotedThread(thread: TaskThread): boolean {
-  return (
-    thread.kind === 'background' &&
-    ['running', 'waiting_user', 'waiting_next_turn', 'paused', 'pending_confirmation'].includes(thread.status)
-  );
 }
 
 export function filterHistoryItems(items: HistorySidebarItem[], query: string): HistorySidebarItem[] {

@@ -124,9 +124,7 @@ describe('ChatFeature', () => {
         <ChatFeature
           chatSelectionVersion={1}
           client={client}
-          onQueuedTaskPromptHandled={() => {}}
           onSubmitChatTask={async () => ({ ok: true as const })}
-          queuedTaskPrompt={null}
           selectedThreadId="thread-current"
           state={state}
           updateLoadedState={() => {}}
@@ -189,9 +187,7 @@ function ChatFeatureHarness({ client, initialState }: { client: RocClient; initi
     <ChatFeature
       chatSelectionVersion={1}
       client={client}
-      onQueuedTaskPromptHandled={() => {}}
       onSubmitChatTask={async () => ({ ok: true as const })}
-      queuedTaskPrompt={null}
       selectedThreadId={null}
       state={state}
       updateLoadedState={(partial) => setState((current) => ({ ...current, ...partial }))}

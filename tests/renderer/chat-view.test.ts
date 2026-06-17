@@ -43,8 +43,6 @@ describe('chat view', () => {
       React.createElement(ChatView, {
         chatSelectionVersion: 1,
         client: createChatClient(),
-        queuedTaskPrompt: null,
-        onQueuedTaskPromptHandled: () => {},
         selectedThreadId: null,
         state: createLoadedState({}),
         updateLoadedState: () => {},

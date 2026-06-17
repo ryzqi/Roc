@@ -1,4 +1,4 @@
-import type { ActiveTaskItem, ChatStartRunRequest, TaskSnapshot, WorkflowHint } from '../../../shared/types';
+import type { ActiveTaskItem, TaskSnapshot } from '../../../shared/types';
 import type { LoadedState } from '../../loaded-state';
 import { unwrap } from '../../loaded-state';
 import { loadTaskSurfaceData } from '../../app/data-loading';
@@ -8,7 +8,6 @@ import { createRocClient } from '../../shared/roc-client';
 export type TaskActions = {
   cancelTask: (item: ActiveTaskItem) => void;
   deleteTask: (item: ActiveTaskItem) => void;
-  openInChat: (item: ActiveTaskItem) => void;
   pauseTask: (item: ActiveTaskItem) => void;
   resumeTask: (item: ActiveTaskItem) => void;
   runNow: (item: ActiveTaskItem) => void;
@@ -17,7 +16,6 @@ export type TaskActions = {
 export function createTaskActions(input: {
   client?: RocClient;
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
-  navigateToChat: (threadId: string, workflowHint?: WorkflowHint, taskSource?: ChatStartRunRequest['taskSource']) => void;
 }): TaskActions {
   function requireTaskId(item: ActiveTaskItem): string | null {
     return item.taskId;
@@ -43,20 +41,6 @@ export function createTaskActions(input: {
       }
       const client = resolveClient();
       void client.api.tasks.deleteBackgroundTask(taskId).then(async () => input.refreshTaskSurface(null));
-    },
-    openInChat: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        input.navigateToChat(item.threadId);
-        return;
-      }
-      const client = resolveClient();
-      void client.api.tasks.openInChat({ taskId }).then((result) => {
-        if (!result.ok) {
-          return;
-        }
-        input.navigateToChat(result.data.threadId, 'background_task_change', 'workbench');
-      });
     },
     pauseTask: (item) => {
       const taskId = requireTaskId(item);
@@ -94,7 +78,6 @@ export function useTaskActions(
   client: RocClient | undefined,
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   input?: {
-  navigateToChat?: (threadId: string, workflowHint?: WorkflowHint, taskSource?: ChatStartRunRequest['taskSource']) => void;
     selectedTaskId?: string | null;
   }
 ): TaskActions {
@@ -110,9 +93,6 @@ export function useTaskActions(
         taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
         ...taskSurfaceData
       });
-    },
-    navigateToChat: (threadId, workflowHint, taskSource) => {
-      input?.navigateToChat?.(threadId, workflowHint, taskSource);
     }
   });
 }

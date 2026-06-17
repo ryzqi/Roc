@@ -8,7 +8,7 @@ import type { RocPreloadApi } from '../../src/shared/ipc';
 import type { ChatRunEvent, TaskEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
-describe('ChatView queued task prompt', () => {
+describe('ChatView task boundary', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
   let runEventHandler: ((event: ChatRunEvent) => void) | null;
@@ -52,38 +52,6 @@ describe('ChatView queued task prompt', () => {
     vi.unstubAllGlobals();
   });
 
-  it('submits the queued task prompt after the chat run subscription is mounted', async () => {
-    const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
-    const onQueuedTaskPromptHandled = vi.fn();
-
-    await act(async () => {
-      root.render(
-        React.createElement(ChatView, {
-          chatSelectionVersion: 1,
-          client: createChatClient(),
-          queuedTaskPrompt: {
-            input: '请调用 propose_background_task 创建任务',
-            workflowHint: 'propose_background_task',
-            taskSource: 'workbench'
-          },
-          onQueuedTaskPromptHandled,
-          selectedThreadId: null,
-          state: createLoadedState({}),
-          updateLoadedState: () => {},
-          onSubmitChatTask
-        })
-      );
-    });
-    await flushPromises();
-
-    expect(onSubmitChatTask).toHaveBeenCalledWith({
-      input: '请调用 propose_background_task 创建任务',
-      workflowHint: 'propose_background_task',
-      taskSource: 'workbench'
-    });
-    expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
-  });
-
   it('submits ordinary chat input without taskSource', async () => {
     const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
 
@@ -92,8 +60,6 @@ describe('ChatView queued task prompt', () => {
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
           client: createChatClient(),
-          queuedTaskPrompt: null,
-          onQueuedTaskPromptHandled: () => {},
           selectedThreadId: null,
           state: createLoadedState({}),
           updateLoadedState: () => {},
@@ -122,104 +88,12 @@ describe('ChatView queued task prompt', () => {
     expect(onSubmitChatTask).toHaveBeenCalledWith({ input: '普通聊天输入' });
   });
 
-  it('submits the same queued prompt again after it has been handled', async () => {
-    const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: true as const });
-    const onQueuedTaskPromptHandled = vi.fn();
-    const state = createLoadedState({});
-
-    await act(async () => {
-      root.render(
-        React.createElement(ChatView, {
-          chatSelectionVersion: 1,
-          client: createChatClient(),
-          queuedTaskPrompt: {
-            input: '重复任务提议',
-            workflowHint: 'propose_background_task'
-          },
-          onQueuedTaskPromptHandled,
-          selectedThreadId: null,
-          state,
-          updateLoadedState: () => {},
-          onSubmitChatTask
-        })
-      );
-    });
-    await flushPromises();
-
-    await act(async () => {
-      root.render(
-        React.createElement(ChatView, {
-          chatSelectionVersion: 1,
-          client: createChatClient(),
-          queuedTaskPrompt: null,
-          onQueuedTaskPromptHandled,
-          selectedThreadId: null,
-          state,
-          updateLoadedState: () => {},
-          onSubmitChatTask
-        })
-      );
-    });
-
-    await act(async () => {
-      root.render(
-        React.createElement(ChatView, {
-          chatSelectionVersion: 2,
-          client: createChatClient(),
-          queuedTaskPrompt: {
-            input: '重复任务提议',
-            workflowHint: 'propose_background_task'
-          },
-          onQueuedTaskPromptHandled,
-          selectedThreadId: null,
-          state,
-          updateLoadedState: () => {},
-          onSubmitChatTask
-        })
-      );
-    });
-    await flushPromises();
-
-    expect(onSubmitChatTask).toHaveBeenCalledTimes(2);
-    expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(2);
-  });
-
-  it('marks a failed queued prompt as handled after surfacing the error', async () => {
-    const onSubmitChatTask = vi.fn().mockResolvedValue({ ok: false as const, error: '默认模型未配置。' });
-    const onQueuedTaskPromptHandled = vi.fn();
-
-    await act(async () => {
-      root.render(
-        React.createElement(ChatView, {
-          chatSelectionVersion: 1,
-          client: createChatClient(),
-          queuedTaskPrompt: {
-            input: '失败的任务提议',
-            workflowHint: 'propose_background_task'
-          },
-          onQueuedTaskPromptHandled,
-          selectedThreadId: null,
-          state: createLoadedState({}),
-          updateLoadedState: () => {},
-          onSubmitChatTask
-        })
-      );
-    });
-    await flushPromises();
-
-    expect(onSubmitChatTask).toHaveBeenCalledTimes(1);
-    expect(onQueuedTaskPromptHandled).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-testid="chat-error"]')?.textContent).toBe('默认模型未配置。');
-  });
-
   it('shows only the thinking spinner immediately while awaiting the first response byte', async () => {
     await act(async () => {
       root.render(
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
           client: createChatClient(),
-          queuedTaskPrompt: null,
-          onQueuedTaskPromptHandled: () => {},
           selectedThreadId: null,
           state: createLoadedState({}),
           updateLoadedState: () => {},
@@ -328,8 +202,6 @@ describe('ChatView queued task prompt', () => {
         React.createElement(ChatView, {
           chatSelectionVersion: 1,
           client: createChatClient(),
-          queuedTaskPrompt: null,
-          onQueuedTaskPromptHandled: () => {},
           selectedThreadId: 'thread-historical-nvidia',
           state: createLoadedState({
             taskSnapshot: {

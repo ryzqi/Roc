@@ -7,39 +7,12 @@ describe('createTaskActions', () => {
     vi.unstubAllGlobals();
   });
 
-  it('opens the returned task thread in chat after openInChat succeeds', async () => {
-    const navigateToChat = vi.fn();
-    const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
-    const openInChat = vi.fn().mockResolvedValue({
-      ok: true,
-      data: {
-        threadId: 'thread-2'
-      }
-    });
-    vi.stubGlobal('window', {
-      roc: {
-        tasks: {
-          openInChat,
-          cancelBackgroundTask: vi.fn(),
-          pauseBackgroundTask: vi.fn(),
-          resumeBackgroundTask: vi.fn(),
-          runBackgroundNow: vi.fn()
-        }
-      }
-    });
-
+  it('does not expose openInChat from task actions anymore', () => {
     const actions = createTaskActions({
-      navigateToChat,
-      refreshTaskSurface
+      refreshTaskSurface: vi.fn().mockResolvedValue(undefined)
     });
 
-    actions.openInChat(createBackgroundItem({ taskId: 'task-2', threadId: 'thread-1' }));
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(openInChat).toHaveBeenCalledWith({ taskId: 'task-2' });
-    expect(navigateToChat).toHaveBeenCalledWith('thread-2', 'background_task_change', 'workbench');
-    expect(refreshTaskSurface).not.toHaveBeenCalled();
+    expect('openInChat' in actions).toBe(false);
   });
 
   it('refreshes the task surface after runNow succeeds', async () => {
@@ -54,7 +27,6 @@ describe('createTaskActions', () => {
     vi.stubGlobal('window', {
       roc: {
         tasks: {
-          openInChat: vi.fn(),
           cancelBackgroundTask: vi.fn(),
           pauseBackgroundTask: vi.fn(),
           resumeBackgroundTask: vi.fn(),
@@ -64,7 +36,6 @@ describe('createTaskActions', () => {
     });
 
     const actions = createTaskActions({
-      navigateToChat: vi.fn(),
       refreshTaskSurface
     });
 
@@ -87,7 +58,6 @@ describe('createTaskActions', () => {
     vi.stubGlobal('window', {
       roc: {
         tasks: {
-          openInChat: vi.fn(),
           cancelBackgroundTask: vi.fn(),
           pauseBackgroundTask: vi.fn(),
           resumeBackgroundTask: vi.fn(),
@@ -97,7 +67,6 @@ describe('createTaskActions', () => {
     });
 
     const actions = createTaskActions({
-      navigateToChat: vi.fn(),
       refreshTaskSurface
     });
 

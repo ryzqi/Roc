@@ -13,10 +13,8 @@ describe('task feature actions', () => {
   it('runs task mutations through the RocClient api', async () => {
     const client = createTasksClient();
     const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
-    const navigateToChat = vi.fn();
     const actions = createTaskFeatureActions({
       client,
-      navigateToChat,
       refreshTaskSurface
     });
     const item = createBackgroundItem({ taskId: 'task-1', threadId: 'thread-1' });
@@ -25,7 +23,6 @@ describe('task feature actions', () => {
     actions.resumeTask(item);
     actions.cancelTask(item);
     actions.runNow(item);
-    actions.openInChat(item);
     actions.deleteTask(item);
     await flushPromises();
 
@@ -33,9 +30,7 @@ describe('task feature actions', () => {
     expect(client.api.tasks.resumeBackgroundTask).toHaveBeenCalledWith('task-1');
     expect(client.api.tasks.cancelBackgroundTask).toHaveBeenCalledWith('task-1');
     expect(client.api.tasks.runBackgroundNow).toHaveBeenCalledWith('task-1');
-    expect(client.api.tasks.openInChat).toHaveBeenCalledWith({ taskId: 'task-1' });
     expect(client.api.tasks.deleteBackgroundTask).toHaveBeenCalledWith('task-1');
-    expect(navigateToChat).toHaveBeenCalledWith('thread-opened', 'background_task_change', 'workbench');
   });
 });
 
@@ -163,7 +158,6 @@ function createTasksClient(): RocClient {
       resumeBackgroundTask: vi.fn().mockResolvedValue({ ok: true, data: createBackgroundTask('task-1') }),
       cancelBackgroundTask: vi.fn().mockResolvedValue({ ok: true, data: createBackgroundTask('task-1') }),
       runBackgroundNow: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'task-1', runId: 'run-1' } }),
-      openInChat: vi.fn().mockResolvedValue({ ok: true, data: { threadId: 'thread-opened' } }),
       deleteBackgroundTask: vi.fn().mockResolvedValue({ ok: true, data: { deleted: true, taskId: 'task-1' } }),
       getSnapshot: vi.fn().mockResolvedValue({ ok: true, data: state.taskSnapshot }),
       getActiveTasks: vi.fn().mockResolvedValue({ ok: true, data: [] }),

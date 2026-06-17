@@ -139,8 +139,6 @@ export function ViewContent({
       chatSelectionVersion={chatSelectionVersion}
       client={client}
       onSubmitChatTask={onSubmitChatTask}
-      queuedTaskPrompt={null}
-      onQueuedTaskPromptHandled={() => {}}
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}

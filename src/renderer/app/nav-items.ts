@@ -30,7 +30,7 @@ export function buildWorkspaceNavItems(state: LoadedState): NavItem[] {
   const taskCounts = countTaskNavMeta(state.activeTasks);
   return [
     {
-      id: 'tasks',
+      id: 'tasks-board',
       label: '任务工作台',
       meta: `${taskCounts.activeCount} 活跃 · ${taskCounts.pendingApprovalCount} 待确认 · ${taskCounts.scheduledCount} 定时`,
       icon: 'clipboard'

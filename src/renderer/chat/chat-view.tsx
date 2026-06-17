@@ -6,7 +6,7 @@ import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
 import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
-import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from './task-run-payload';
+import type { ChatTaskSubmitPayload } from './task-run-payload';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -25,8 +25,6 @@ function ChatWaitingIndicator({ visible }: { visible: boolean }): React.JSX.Elem
 export type ChatViewProps = {
   chatSelectionVersion: number;
   client: RocClient;
-  queuedTaskPrompt: QueuedTaskPrompt | null;
-  onQueuedTaskPromptHandled: () => void;
   selectedThreadId: string | null;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -50,8 +48,6 @@ export function buildChatResumeRunRequest(input: {
 export function ChatView({
   chatSelectionVersion,
   client,
-  queuedTaskPrompt,
-  onQueuedTaskPromptHandled,
   selectedThreadId,
   state,
   updateLoadedState,
@@ -65,7 +61,6 @@ export function ChatView({
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
   const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
-  const queuedTaskPromptInFlightRef = useRef<string | null>(null);
 
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
   const deferredActivityBlocks = useDeferredValue(chatRun.state.activityBlocks);
@@ -183,41 +178,6 @@ export function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatSelectionVersion]);
 
-  useEffect(() => {
-    if (queuedTaskPrompt === null) {
-      return;
-    }
-    if (state.agent.execution !== 'ready') {
-      return;
-    }
-    const queuedTaskPromptKey = buildQueuedTaskPromptKey(queuedTaskPrompt);
-    if (queuedTaskPromptInFlightRef.current === queuedTaskPromptKey) {
-      return;
-    }
-
-    queuedTaskPromptInFlightRef.current = queuedTaskPromptKey;
-    setSubmitting(true);
-    void onSubmitChatTask({
-      input: queuedTaskPrompt.input,
-      workflowHint: queuedTaskPrompt.workflowHint,
-      taskSource: queuedTaskPrompt.taskSource ?? null
-    })
-      .then((result) => {
-        if (result.ok) {
-          setPendingUserInput(queuedTaskPrompt.input);
-          queuedTaskPromptInFlightRef.current = null;
-          onQueuedTaskPromptHandled();
-        } else {
-          chatRun.setError(result.error);
-          queuedTaskPromptInFlightRef.current = null;
-          onQueuedTaskPromptHandled();
-        }
-      })
-      .finally(() => {
-        setSubmitting(false);
-      });
-  }, [onQueuedTaskPromptHandled, onSubmitChatTask, queuedTaskPrompt, state.agent.execution]);
-
   async function submitCurrentInput(): Promise<void> {
     const trimmedInput = chatInput.trim();
     const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
@@ -305,8 +265,4 @@ export function ChatView({
       </div>
     </section>
   );
-}
-
-function buildQueuedTaskPromptKey(prompt: QueuedTaskPrompt): string {
-  return `${prompt.workflowHint ?? 'none'}\0${prompt.taskSource ?? 'none'}\0${prompt.input}`;
 }

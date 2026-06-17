@@ -23,8 +23,15 @@ describe('history sidebar helpers', () => {
       createThread('current-thread', '当前主会话'),
       createThread('memory-thread', '记忆整理裁决'),
       createThread('task-thread', '任务工作台记录'),
-      createThread('background-thread', '后台定时任务')
-    ], ['background-thread']);
+      createThread('background-completed', '后台已完成任务', {
+        kind: 'background',
+        status: 'completed'
+      }),
+      createThread('background-running', '后台运行任务', {
+        kind: 'background',
+        status: 'running'
+      })
+    ], []);
 
     expect(items).toEqual([
       {
@@ -73,7 +80,7 @@ describe('history sidebar helpers', () => {
     expect(filterHistoryItems(items, '   ')).toEqual(items);
   });
 
-  it('long_running thread 即使活跃也按 chat 处理（不再过滤）', () => {
+  it('excludes non-chat threads even when they look like old long-running history', () => {
     const longRunningThread = {
       id: 'long-running-active',
       kind: 'long_running',
@@ -91,13 +98,6 @@ describe('history sidebar helpers', () => {
       })
     ], []);
 
-    expect(items).toEqual([
-      {
-        id: 'long-running-active',
-        label: '残留长任务',
-        meta: '2026-05-08 23:30',
-        icon: 'history'
-      }
-    ]);
+    expect(items).toEqual([]);
   });
 });
