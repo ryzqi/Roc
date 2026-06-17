@@ -17,6 +17,7 @@ import type {
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
   TaskEvent,
+  TaskKind,
   TaskRun
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
@@ -119,6 +120,7 @@ export class AgentPluginRuntime {
     const run = this.options.repository.createTaskRun({
       enabledCapabilities: request.enabledCapabilities,
       modelId: modelHandle.modelId,
+      threadKind: resolveNewRunThreadKind(request),
       threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
       userInput: input
     });
@@ -557,6 +559,13 @@ function createTaskEventFromAssistantBlock(block: ChatAssistantBlock): Pick<Task
     type: 'tool_call',
     payload
   };
+}
+
+function resolveNewRunThreadKind(request: ChatStartRunRequest): TaskKind {
+  if (request.mode === 'task' && request.taskSource === 'workbench') {
+    return 'background';
+  }
+  return 'chat';
 }
 
 function updateSuccessfulToolBlocks(successfulToolBlockIds: Set<string>, block: ChatAssistantBlock): void {

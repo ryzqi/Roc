@@ -7,7 +7,7 @@ import type { AppBootstrap } from '../../src/renderer/app/use-app-bootstrap';
 import type { LoadedState } from '../../src/renderer/loaded-state';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
-import type { ActiveTaskItem, TaskDetail, TaskStatus } from '../../src/shared/types';
+import type { ActiveTaskItem, ChatRunEvent, TaskDetail, TaskStatus } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('AppShell', () => {
@@ -42,6 +42,7 @@ describe('AppShell', () => {
     });
     container.remove();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('renders navigation, window controls, selected view, and settings trigger', async () => {
@@ -154,6 +155,119 @@ describe('AppShell', () => {
     }));
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
+  });
+
+  it('does not report missing task detail while the workbench task creation run is still active', async () => {
+    vi.useFakeTimers();
+    const client = createShellClient();
+    vi.mocked(client.api.chat.startRun).mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run-created',
+        mode: 'task',
+        threadId: 'run-thread',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    });
+    vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [] });
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    const trigger = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '新建任务');
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setTextareaValue('task-create-description', '每天晚上总结新闻');
+    await act(async () => {
+      queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('创建任务后未找到对应的任务详情。');
+    expect(container.textContent).toContain('提交中');
+  });
+
+  it('waits for the created task to surface after the workbench creation run completes', async () => {
+    vi.useFakeTimers();
+    const client = createShellClient();
+    const createdTask = createActiveTask({ taskId: 'task-created', threadId: 'thread-created', goal: '每天晚上总结新闻' });
+    let runEventListener: ((event: ChatRunEvent) => void) | null = null;
+    let activeTaskRequestCount = 0;
+    vi.mocked(client.api.chat.onRunEvent).mockImplementation((listener) => {
+      runEventListener = listener;
+      return () => {
+        runEventListener = null;
+      };
+    });
+    vi.mocked(client.api.chat.startRun).mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run-created',
+        mode: 'task',
+        threadId: 'run-thread',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    });
+    vi.mocked(client.api.tasks.getActiveTasks).mockImplementation(async () => {
+      activeTaskRequestCount += 1;
+      if (activeTaskRequestCount === 3) {
+        if (runEventListener === null) {
+          throw new Error('missing_run_event_listener');
+        }
+        runEventListener({
+          type: 'run_completed',
+          runId: 'run-created',
+          threadId: 'run-thread',
+          providerId: 'provider-openai',
+          modelId: 'gpt-test',
+          createdAt: '2026-05-21T00:00:00.000Z',
+          durationMs: 120,
+          summary: '已创建后台任务。',
+          assistantMessage: '已创建后台任务。'
+        });
+        return { ok: true, data: [] };
+      }
+      return { ok: true, data: activeTaskRequestCount >= 4 ? [createdTask] : [] };
+    });
+    vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: createTaskDetail(createdTask) });
+    vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    const trigger = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '新建任务');
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setTextareaValue('task-create-description', '每天晚上总结新闻');
+    await act(async () => {
+      queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('任务创建流程已结束，但没有创建后台任务。');
   });
 
   it('starts ordinary chat submissions as chat runs', async () => {

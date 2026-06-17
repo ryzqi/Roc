@@ -10,11 +10,12 @@ import type {
   ChatStartRunRequest,
   ChatStartRunResult,
   EnabledCapabilities,
+  SchedulerStatus,
+  ScheduledTaskRun,
   TaskDeleteThreadRequest,
   TaskDetail,
   TaskEvent,
-  SchedulerStatus,
-  ScheduledTaskRun,
+  TaskKind,
   TaskSnapshot,
   TaskUpdateEvent,
   UpdateBackgroundTaskRequest
@@ -91,7 +92,10 @@ export function createTaskPlugin(): RocPlugin {
         if (payload === null) {
           return;
         }
-        repository.recordAgentRunStarted(payload);
+        repository.recordAgentRunStarted({
+          ...payload,
+          threadKind: resolveAgentRunThreadKind(payload)
+        });
       });
       unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', (event) => {
         const payload = readAgentRunCompletedPayload(event.payload);
@@ -432,6 +436,16 @@ function readAgentRunStartedPayload(payload: unknown): {
     ...(capabilityPreview === undefined ? {} : { capabilityPreview }),
     createdAt
   };
+}
+
+function resolveAgentRunThreadKind(input: {
+  mode: ChatStartRunRequest['mode'];
+  workflowHint: ChatStartRunRequest['workflowHint'] | null;
+}): TaskKind {
+  if (input.mode === 'task' && input.workflowHint !== null) {
+    return 'background';
+  }
+  return 'chat';
 }
 
 function isChatRunMode(value: unknown): value is ChatStartRunRequest['mode'] {

@@ -9,6 +9,7 @@ import type {
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
   TaskEvent,
+  TaskKind,
   TaskRun,
   TaskStatus
 } from '../../../shared/types';
@@ -56,6 +57,7 @@ export class AgentSessionRepository {
     userInput: string;
     modelId: string;
     enabledCapabilities: EnabledCapabilities;
+    threadKind: TaskKind;
     threadId?: string;
   }): TaskRun {
     const now = new Date().toISOString();
@@ -75,7 +77,7 @@ export class AgentSessionRepository {
               `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
-            .run(threadId, 'chat', input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now);
+            .run(threadId, input.threadKind, input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now);
         } else {
           this.db
             .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')

@@ -87,6 +87,29 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('stores workbench background task proposal runs outside chat history', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      taskSource: 'workbench',
+      workflowHint: 'propose_background_task'
+    });
+
+    const thread = db.prepare('SELECT kind FROM task_threads WHERE id = ?').get(result.threadId) as { kind: string } | undefined;
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.runId === result.runId && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(thread).toEqual({ kind: 'background' });
+  });
+
   it('publishes chat run events for renderer subscribers when a plugin run starts and completes', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({

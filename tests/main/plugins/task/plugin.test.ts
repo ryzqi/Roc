@@ -1021,6 +1021,12 @@ describe('task plugin', () => {
     const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
 
     expect(activeTasks).toEqual([]);
+    expect(snapshot.threads).toContainEqual(
+      expect.objectContaining({
+        id: 'thread_task_proposal',
+        kind: 'background'
+      })
+    );
     expect(snapshot.recentEvents).toContainEqual(
       expect.objectContaining({
         runId: 'run_task_proposal',

@@ -17,6 +17,7 @@ import type {
   TaskDeleteThreadResult,
   TaskDetail,
   TaskEvent,
+  TaskKind,
   TaskRun,
   TaskSnapshot,
   TaskStatus,
@@ -442,6 +443,7 @@ export class TaskRepository {
     providerId: string;
     modelId: string;
     enabledCapabilities: EnabledCapabilities;
+    threadKind: TaskKind;
     capabilityPreview?: AgentCapabilityPreview;
     createdAt: string;
   }): TaskRun {
@@ -462,7 +464,7 @@ export class TaskRepository {
               `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
-            .run(input.threadId, 'chat', title, input.userInput, 'running', input.createdAt, input.createdAt);
+            .run(input.threadId, input.threadKind, title, input.userInput, 'running', input.createdAt, input.createdAt);
         } else {
           this.db
             .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')

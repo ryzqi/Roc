@@ -38,6 +38,7 @@ describe('AgentSessionRepository', () => {
     const run = repository.createTaskRun({
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
       userInput: 'Summarize this workspace'
     });
     const event = repository.recordEvent({
