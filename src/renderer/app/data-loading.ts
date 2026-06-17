@@ -143,9 +143,7 @@ export async function loadTaskSurfaceData(selectedTaskId?: string | null, client
       ? firstBackgroundTaskId
       : selectedTaskId === null
         ? null
-        : activeTasks.some((task) => task.taskId === selectedTaskId)
-          ? selectedTaskId
-          : firstBackgroundTaskId;
+        : selectedTaskId;
   const [taskDetailResult, scheduledRunsResult] =
     primaryTaskId === null
       ? [null, null]

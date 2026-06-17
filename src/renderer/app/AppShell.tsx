@@ -57,6 +57,7 @@ import { applySystemAppearance } from '../system-appearance';
 import { sanitizeTestId } from '../utils/sanitize-test-id';
 import { ViewContent } from '../views/ViewContent';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
+import type { TaskDetailApprovalRequest } from '../views/tasks/TaskDetailView';
 import type { TaskPromptSubmission } from '../views/tasks/TasksView';
 import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
@@ -361,9 +362,23 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       if (!result.ok) {
         return result;
       }
+      const taskSurfaceData = await loadTaskSurfaceData(taskId, client);
+      setState((current) => (current === null ? current : { ...current, ...taskSurfaceData }));
       return { ok: true };
     },
-    [startTaskRun]
+    [client, setState, startTaskRun]
+  );
+
+  const resumeTaskApprovalFromDetail = useCallback(
+    async (request: TaskDetailApprovalRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const result = await chatFeature.resumeRun(request);
+      if (!result.ok) {
+        return { ok: false, error: result.error.message };
+      }
+      await refreshTaskState();
+      return { ok: true };
+    },
+    [chatFeature, refreshTaskState]
   );
 
   const deleteHistoryThread = useCallback(
@@ -656,6 +671,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
               memoryLoadState={memoryLoadState}
               onOpenTaskDetail={openTaskDetail}
+              onTaskApprovalDecision={resumeTaskApprovalFromDetail}
               onBackToTaskBoard={returnToTaskBoard}
               operationsLoadState={operationsLoadState}
               onQueueTaskPrompt={createTaskFromWorkbench}

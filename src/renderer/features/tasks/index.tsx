@@ -1,7 +1,7 @@
 import type { ChatRunState } from '../../chat-run-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
-import { TaskDetailView } from '../../views/tasks/TaskDetailView';
+import { TaskDetailView, type TaskDetailApprovalRequest } from '../../views/tasks/TaskDetailView';
 import { TasksView, type TaskPromptSubmission } from '../../views/tasks/TasksView';
 
 export type TaskBoardUiState = {
@@ -38,6 +38,7 @@ export function TasksBoardFeature(props: {
 export function TaskDetailFeature(props: {
   client: RocClient;
   liveTaskRun: ChatRunState | null;
+  onApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToBoard: () => void;
   onSubmitTaskInput: (payload: { input: string; taskId: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
   state: LoadedState;

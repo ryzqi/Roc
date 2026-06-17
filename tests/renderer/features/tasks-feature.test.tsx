@@ -140,6 +140,7 @@ describe('TasksFeature', () => {
         <TaskDetailFeature
           client={createTasksClient()}
           liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
           onBackToBoard={() => {}}
           onSubmitTaskInput={vi.fn()}
           state={createLoadedState({})}

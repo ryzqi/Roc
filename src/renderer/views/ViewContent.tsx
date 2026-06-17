@@ -12,6 +12,7 @@ import { SkillsFeature } from '../features/skills';
 import type { TaskBoardUiState } from '../features/tasks';
 import { TaskDetailFeature, TasksBoardFeature } from '../features/tasks';
 import { WorkspaceFeature } from '../features/workspace';
+import type { TaskDetailApprovalRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
@@ -25,6 +26,7 @@ export function ViewContent({
   liveTaskRun,
   memoryLoadState,
   onOpenTaskDetail,
+  onTaskApprovalDecision,
   onBackToTaskBoard,
   operationsLoadState,
   onQueueTaskPrompt,
@@ -46,6 +48,7 @@ export function ViewContent({
   liveTaskRun: ChatRunState | null;
   memoryLoadState: LazyLoadState;
   onOpenTaskDetail: (taskId: string, boardUiState: TaskBoardUiState) => void;
+  onTaskApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToTaskBoard: () => void;
   operationsLoadState: LazyLoadState;
   onQueueTaskPrompt: (prompt: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -98,6 +101,7 @@ export function ViewContent({
       <TaskDetailFeature
         client={client}
         liveTaskRun={liveTaskRun}
+        onApprovalDecision={onTaskApprovalDecision}
         onBackToBoard={onBackToTaskBoard}
         onSubmitTaskInput={onSubmitTaskDetailInput}
         state={state}
