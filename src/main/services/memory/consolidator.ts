@@ -23,6 +23,8 @@ const SYSTEM_PROMPT_TEMPLATE = (targetChars: number) => `You are a memory consol
 2. Removing entries explicitly superseded by newer ones
 3. Keeping every distinct fact, preference, or rule
 4. Preserving the original structure (headings, bullet style)
+5. Preserve distinct hard facts even when wording can be shortened.
+6. Never invent facts, dates, paths, commands, or preferences.
 
 Target: <= ${targetChars} characters total.
 Output ONLY the new markdown content. No explanation, no fences, no preface.`;

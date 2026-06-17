@@ -39,8 +39,9 @@ describe('createAgentDeepAgentExecutor', () => {
     const tools = readBuiltTools();
     const toolNames = tools.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(expect.arrayContaining(['propose_background_task', 'schedule_background_task', 'read_background_task']));
-    expect(toolNames).not.toContain('resolve_background_task_time');
+    expect(toolNames).toEqual(
+      expect.arrayContaining(['resolve_background_task_time', 'propose_background_task', 'schedule_background_task', 'read_background_task'])
+    );
     expect(toolNames).not.toContain('update_background_task');
     expect(toolNames).not.toContain('cancel_background_task');
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);

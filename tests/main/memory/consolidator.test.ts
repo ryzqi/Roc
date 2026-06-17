@@ -82,11 +82,15 @@ describe('ConsolidatorService', () => {
     writeFileSync(file, 'x'.repeat(2300));
     const metricsService = new MetricsService();
     const logService = createLogServiceMock();
-    const svc = makeService(async ({ activeHandle: handle }) => {
+    let capturedSystemPrompt = '';
+    const svc = makeService(async ({ activeHandle: handle, systemPrompt }) => {
       expect(handle).toBe(activeHandle);
+      capturedSystemPrompt = systemPrompt;
       return 'compressed result line 1\ncompressed line 2';
     }, {}, metricsService, logService);
     await svc.runForFile(file, 'memory', activeHandle);
+    expect(capturedSystemPrompt).toContain('Never invent facts, dates, paths, commands, or preferences.');
+    expect(capturedSystemPrompt).toContain('Preserve distinct hard facts even when wording can be shortened.');
     expect(readFileSync(file, 'utf8')).toContain('compressed result');
     expect(readdirSync(backupDir).some((f) => f.startsWith('MEMORY.md.') && f.endsWith('.md'))).toBe(true);
     expect(metricsService.query({ name: 'memory.consolidation.success', labels: { kind: 'memory' } })).toHaveLength(1);

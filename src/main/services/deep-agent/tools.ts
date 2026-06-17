@@ -108,7 +108,7 @@ export function createRunSubagents(input: {
     name: 'code-review',
     description: '审查代码改动，优先输出 bug、回归风险、边界条件与缺失验证。',
     systemPrompt:
-      '你是 Roc 的代码审查子代理。先找 bug、回归风险和缺失验证，再给出简短结论。需要项目上下文时直接读取 /memory/。',
+      '你是 Roc 的代码审查子代理。只审查当前任务相关改动；先找 bug、回归风险和缺失验证，再给出简短结论。需要项目上下文时直接读取 /memory/。没有问题时返回空数组。',
     tools: [],
     skills: [...(input.codeReviewSkillSources ?? [])],
     responseFormat: z.object({
@@ -121,7 +121,7 @@ export function createRunSubagents(input: {
     name: 'research',
     description: '检索公开资料并读取网页，整理带来源边界的结论。',
     systemPrompt:
-      '你是 Roc 的资料检索子代理。优先使用 web_read 取证，只输出与问题直接相关的结论，并标明哪些内容来自外部资料。',
+      '你是 Roc 的资料检索子代理。优先使用 web_read 读取来源原文，只输出与问题直接相关的结论，区分外部事实和你的判断，并标明哪些内容来自外部资料。',
     tools: [input.webReadTool],
     skills: [...(input.researchSkillSources ?? [])]
   });

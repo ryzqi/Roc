@@ -216,7 +216,7 @@ function resolveDayRelative(text: string, now: Date, reference: TimeReference): 
 }
 
 function resolveDaily(text: string, now: Date, reference: TimeReference): ResolveBackgroundTaskTimeResult | null {
-  const match = /每天\s*(\d{1,2}:\d{2})/u.exec(text);
+  const match = /每天\s*(?:早上|上午|中午|下午|晚上)?\s*(\d{1,2}:\d{2})/u.exec(text);
   if (match === null || match[1] === undefined) {
     return null;
   }

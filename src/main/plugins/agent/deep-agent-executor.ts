@@ -26,6 +26,7 @@ import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
+import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
 import { createBackend } from '../../services/deep-agent/backend';
 import { buildSystemPrompt } from '../../services/deep-agent/prompt';
 import * as recordUtils from '../../services/deep-agent/record-utils';
@@ -569,7 +570,7 @@ async function createExecutorTools(input: {
     ...mcpTools
   ];
   if (input.backgroundTaskToolMode !== null) {
-    runTools.splice(2, 0, ...createBackgroundTaskTools({
+    const backgroundTaskTools = createBackgroundTaskTools({
       enabledCapabilities: input.enabledCapabilities,
       previewStore: new PreviewStore(),
       runtimeWorkspacePath: input.runtimeWorkspacePath,
@@ -591,7 +592,12 @@ async function createExecutorTools(input: {
         registerTask: () => {},
         unregisterTask: () => {}
       }
-    }));
+    });
+    if (input.backgroundTaskToolMode === 'all') {
+      runTools.splice(2, 0, createResolveBackgroundTaskTimeTool(), ...backgroundTaskTools);
+    } else {
+      runTools.splice(2, 0, ...backgroundTaskTools);
+    }
   }
   return {
     runTools,

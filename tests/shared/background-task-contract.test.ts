@@ -86,6 +86,7 @@ describe('background task shared tool contract', () => {
     });
     expect(prompt).not.toReferenceForbiddenField();
     expect(prompt).toContain('不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
+    expect(prompt).toContain('不要把 runtime-only 字段写入 JSON 形状。');
     for (const line of readJsonShapeLines(prompt)) {
       for (const field of FORBIDDEN_MODEL_TOP_LEVEL_KEYS) {
         expect(line).not.toContain(`"${field}"`);
@@ -102,6 +103,7 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('模型只填写 goal 和 trigger；workspacePath 由 runtime 注入。');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.description 可省略；runtime 会补齐展示说明。');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('不要填写 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
+    expect(PROPOSE_TOOL_DESCRIPTION).toContain('缺少明确时间时不要改用 manual；应请求澄清。');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('只填写 goal、trigger、workspacePath');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('无法确定触发方式时使用 manual');

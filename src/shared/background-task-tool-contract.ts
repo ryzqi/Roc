@@ -50,6 +50,7 @@ export const PROPOSE_TOOL_DESCRIPTION = [
   'trigger.type 只能是 manual、once 或 cron。',
   'trigger.description 可省略；runtime 会补齐展示说明。',
   'cron trigger 使用五段 cronExpression 和 UTC ISO nextRunAt。',
+  '缺少明确时间时不要改用 manual；应请求澄清。',
   '只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。',
   '本工具返回 previewId 与 preview 内容；要实际创建任务，必须随后调用 schedule_background_task(previewId)。'
 ].join('\n');
@@ -76,6 +77,7 @@ export function buildTaskProposalPrompt(input: { description: string; workspaceP
     '',
     'cronExpression 按本机时区执行；nextRunAt 必须是 UTC ISO，含 T 与 Z。',
     '不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy；runtime 会自动设置默认值。',
+    '不要把 runtime-only 字段写入 JSON 形状。',
     '只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。',
     '',
     '用户描述：',

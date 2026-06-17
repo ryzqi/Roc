@@ -65,6 +65,9 @@ export class SystemPromptBuilder {
   private static buildStaticBlock(): PromptBlock {
     const ROC_STATIC_SYSTEM_PROMPT = [
       'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
+      'Before changing files, inspect the relevant source, tests, and configuration.',
+      'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
+      'For code or configuration changes, run direct verification before claiming completion.',
       '',
       'Persistent memory you can edit (changes land on disk immediately, visible in next session):',
       '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
@@ -167,7 +170,9 @@ export class SystemPromptBuilder {
         '',
         '本轮工作流：修改已有后台任务。',
         '可用工具：read_background_task / update_background_task / cancel_background_task。',
-        'update / cancel 会触发用户审批；read 用于先看清楚再改。'
+        'update / cancel 会触发用户审批；read 用于先看清楚再改。',
+        '如果缺少 taskId、当前状态或触发规则，先调用 read_background_task；信息已经明确时可以直接 update 或 cancel。',
+        'update patch 只包含用户明确要求改变的字段；不要猜测未提及配置。'
       ];
     }
     return [];

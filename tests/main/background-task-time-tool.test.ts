@@ -72,6 +72,25 @@ describe('background task time resolver', () => {
     });
   });
 
+  it('resolves daily noon HH:mm wording into a cron trigger with nextRunAt', () => {
+    const result = resolveBackgroundTaskTime({
+      text: '每天中午 13:00 在工作区创建一个 docx 文件',
+      now: referenceDate,
+      timeZone: 'Asia/Shanghai'
+    });
+
+    expect(result).toMatchObject({
+      status: 'resolved',
+      trigger: {
+        type: 'cron',
+        description: '每天 13:00',
+        cronExpression: '0 13 * * *',
+        nextRunAt: localIso(2026, 6, 2, 13, 0)
+      },
+      confidence: 'high'
+    });
+  });
+
   it('resolves weekly Chinese weekday into a cron trigger', () => {
     const result = resolveBackgroundTaskTime({
       text: '每周一 08:30 汇总待办',
