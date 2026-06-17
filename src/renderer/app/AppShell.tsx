@@ -327,7 +327,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingTaskSource, pendingWorkflowHint, selectedThreadId]
   );
 
-  const submitTaskPromptFromTaskSurface = useCallback(
+  const createTaskFromWorkbench = useCallback(
     async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
       const result = await startTaskRun({
         input: payload.input,
@@ -337,9 +337,17 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       if (!result.ok) {
         return result;
       }
+      const latestTaskSurface = await loadTaskSurfaceData(undefined, client);
+      setState((current) => (current === null ? current : { ...current, ...latestTaskSurface }));
+      const detailTargetTaskId =
+        latestTaskSurface.activeTasks.find((item) => item.threadId === result.threadId)?.taskId ?? null;
+      if (detailTargetTaskId === null) {
+        return { ok: false, error: '创建任务后未找到对应的任务详情。' };
+      }
+      openTaskDetail(detailTargetTaskId, taskBoardUiState);
       return { ok: true };
     },
-    [startTaskRun]
+    [client, openTaskDetail, setState, startTaskRun, taskBoardUiState]
   );
 
   const submitTaskDetailInput = useCallback(
@@ -650,7 +658,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               onOpenTaskDetail={openTaskDetail}
               onBackToTaskBoard={returnToTaskBoard}
               operationsLoadState={operationsLoadState}
-              onQueueTaskPrompt={submitTaskPromptFromTaskSurface}
+              onQueueTaskPrompt={createTaskFromWorkbench}
               onSelectWorkspace={selectWorkspaceFromDialog}
               onSubmitChatTask={startTaskRun}
               onSubmitTaskDetailInput={submitTaskDetailInput}
