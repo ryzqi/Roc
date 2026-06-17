@@ -4,9 +4,10 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../../src/renderer/app/AppShell';
 import type { AppBootstrap } from '../../src/renderer/app/use-app-bootstrap';
+import type { LoadedState } from '../../src/renderer/loaded-state';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
-import type { ActiveTaskItem, TaskDetail } from '../../src/shared/types';
+import type { ActiveTaskItem, TaskDetail, TaskStatus } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('AppShell', () => {
@@ -154,15 +155,105 @@ describe('AppShell', () => {
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
   });
+
+  it('starts ordinary chat submissions as chat runs', async () => {
+    const client = createShellClient();
+    vi.mocked(client.api.chat.startRun).mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run-chat',
+        mode: 'chat',
+        threadId: 'thread-chat',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    });
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    setTextareaValue('chat-input', '普通聊天输入');
+    await act(async () => {
+      queryButton('chat-task-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.chat.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      input: '普通聊天输入',
+      mode: 'chat',
+      threadId: null,
+      workflowHint: null,
+      taskSource: null
+    }));
+  });
+
+  it('continues task detail follow-up in the task background thread', async () => {
+    const client = createShellClient();
+    const waitingTask = createActiveTask({
+      taskId: 'task-waiting',
+      threadId: 'thread-background',
+      goal: '等待补充输入',
+      status: 'waiting_user'
+    });
+    const taskDetail = createTaskDetail(waitingTask);
+    vi.mocked(client.api.chat.startRun).mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run-followup',
+        mode: 'task',
+        threadId: 'thread-background',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    });
+    vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [waitingTask] });
+    vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: taskDetail });
+    vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(
+        <AppShell
+          bootstrap={createBootstrap({
+            activeTasks: [waitingTask],
+            taskDetail
+          })}
+          client={client}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-board-card-task-waiting').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setTextareaValue('task-detail-followup-input', '继续处理这个任务');
+    await act(async () => {
+      queryButton('task-detail-followup-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.chat.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      input: '继续处理这个任务',
+      mode: 'task',
+      threadId: 'thread-background',
+      workflowHint: 'background_task_change',
+      taskSource: 'workbench'
+    }));
+  });
 });
 
-function createBootstrap(): AppBootstrap {
+function createBootstrap(statePartial: Partial<LoadedState> = {}): AppBootstrap {
   return {
     error: null,
     setError: vi.fn(),
     setState: vi.fn(),
     setWindowState: vi.fn(),
-    state: createLoadedState({}),
+    state: createLoadedState(statePartial),
     windowState: {
       maximized: false,
       minimized: false,
@@ -220,14 +311,14 @@ function createShellClient(): RocClient {
   return { api };
 }
 
-function createActiveTask(partial: { taskId: string; threadId: string; goal: string }): ActiveTaskItem {
+function createActiveTask(partial: { taskId: string; threadId: string; goal: string; status?: TaskStatus }): ActiveTaskItem {
   return {
     kind: 'background',
     threadId: partial.threadId,
     taskId: partial.taskId,
     title: partial.goal,
     goal: partial.goal,
-    status: 'running',
+    status: partial.status === undefined ? 'running' : partial.status,
     trigger: null,
     nextRunAt: null,
     lastRunAt: null,

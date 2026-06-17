@@ -6,7 +6,7 @@ import { TaskDetailFeature, TasksBoardFeature } from '../../../src/renderer/feat
 import { createTaskFeatureActions } from '../../../src/renderer/features/tasks/use-task-feature';
 import type { RocClient } from '../../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../../src/shared/ipc';
-import type { ActiveTaskItem } from '../../../src/shared/types';
+import type { ActiveTaskItem, TaskDetail } from '../../../src/shared/types';
 import { createLoadedState } from '../view-test-helpers';
 
 describe('task feature actions', () => {
@@ -52,6 +52,7 @@ describe('TasksFeature', () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn()
     });
+    Element.prototype.scrollTo = vi.fn();
   });
 
   afterEach(async () => {
@@ -147,6 +148,33 @@ describe('TasksFeature', () => {
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
   });
+
+  it('wires standalone task detail controls to task-domain actions', async () => {
+    const client = createTasksClient();
+    const task = createBackgroundItem({ taskId: 'task-1', threadId: 'thread-1', status: 'running' });
+
+    await act(async () => {
+      root.render(
+        <TaskDetailFeature
+          client={client}
+          liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({ taskDetail: createTaskDetail(task) })}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-detail-action-pause').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.tasks.pauseBackgroundTask).toHaveBeenCalledWith('task-1');
+  });
 });
 
 function createTasksClient(): RocClient {
@@ -161,8 +189,8 @@ function createTasksClient(): RocClient {
       getSnapshot: vi.fn().mockResolvedValue({ ok: true, data: state.taskSnapshot }),
       getActiveTasks: vi.fn().mockResolvedValue({ ok: true, data: [] }),
       getSchedulerStatus: vi.fn().mockResolvedValue({ ok: true, data: state.schedulerStatus }),
-      getTaskDetail: vi.fn(),
-      listScheduledRuns: vi.fn()
+      getTaskDetail: vi.fn().mockResolvedValue({ ok: true, data: null }),
+      listScheduledRuns: vi.fn().mockResolvedValue({ ok: true, data: [] })
     },
     lifecycle: {
       getTraySummary: vi.fn().mockResolvedValue({ ok: true, data: state.traySummary })
@@ -195,6 +223,51 @@ function createBackgroundTask(id: string): Record<string, unknown> {
     id,
     goal: '后台任务',
     status: 'running'
+  };
+}
+
+function createTaskDetail(task: ActiveTaskItem): TaskDetail {
+  return {
+    threadId: task.threadId,
+    taskId: task.taskId,
+    lastRunId: 'run-1',
+    schedulerRegistered: true,
+    thread: {
+      id: task.threadId,
+      kind: 'background',
+      title: task.title,
+      goal: task.goal,
+      status: task.status,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    },
+    backgroundTask: {
+      id: task.taskId,
+      threadId: task.threadId,
+      runId: 'run-1',
+      goal: task.goal,
+      status: task.status,
+      scheduled: true,
+      triggerType: 'manual',
+      triggerDescription: '手动触发',
+      nextRunAt: null,
+      cronExpression: null,
+      workspacePath: task.workspacePath === null ? 'F:\\Code\\Roc' : task.workspacePath,
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      riskLevel: task.riskLevel,
+      requiresConfirmation: false,
+      lastRunAt: task.lastRunAt,
+      lastRunStatus: null,
+      runCount: 0,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      enabledCapabilities: null
+    },
+    runHistory: [],
+    recentEvents: []
   };
 }
 

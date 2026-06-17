@@ -677,6 +677,12 @@
   resize: vertical;
 }
 
+.task-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .empty-state p,
 .muted {
   margin: 0;

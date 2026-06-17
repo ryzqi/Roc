@@ -12,7 +12,7 @@ import { SkillsFeature } from '../features/skills';
 import type { TaskBoardUiState } from '../features/tasks';
 import { TaskDetailFeature, TasksBoardFeature } from '../features/tasks';
 import { WorkspaceFeature } from '../features/workspace';
-import type { TaskDetailApprovalRequest } from './tasks/TaskDetailView';
+import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
@@ -54,7 +54,7 @@ export function ViewContent({
   onQueueTaskPrompt: (prompt: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
-  onSubmitTaskDetailInput: (payload: { input: string; taskId: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitTaskDetailInput: (payload: TaskDetailInputRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onTaskSurfaceSelectionChange: (taskId: string | null | undefined) => void;
   selectedTaskDetailId: string | null;
   selectedThreadId: string | null;

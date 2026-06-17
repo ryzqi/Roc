@@ -1,8 +1,9 @@
 import type { ChatRunState } from '../../chat-run-state';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
-import { TaskDetailView, type TaskDetailApprovalRequest } from '../../views/tasks/TaskDetailView';
+import { TaskDetailView, type TaskDetailApprovalRequest, type TaskDetailInputRequest } from '../../views/tasks/TaskDetailView';
 import { TasksView, type TaskPromptSubmission } from '../../views/tasks/TasksView';
+import { useTaskFeature } from './use-task-feature';
 
 export type TaskBoardUiState = {
   railId: 'all' | 'todo' | 'running' | 'paused' | 'done';
@@ -40,10 +41,15 @@ export function TaskDetailFeature(props: {
   liveTaskRun: ChatRunState | null;
   onApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToBoard: () => void;
-  onSubmitTaskInput: (payload: { input: string; taskId: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitTaskInput: (payload: TaskDetailInputRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   state: LoadedState;
   taskId: string;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
-  return <TaskDetailView {...props} />;
+  const taskActions = useTaskFeature({
+    client: props.client,
+    selectedTaskId: props.taskId,
+    updateLoadedState: props.updateLoadedState
+  });
+  return <TaskDetailView {...props} taskActions={taskActions} />;
 }

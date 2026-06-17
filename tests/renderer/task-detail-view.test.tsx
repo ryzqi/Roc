@@ -65,6 +65,7 @@ describe('TaskDetailView', () => {
               ]
             })
           })}
+          taskActions={createTaskActionsMock()}
           taskId="task-1"
           updateLoadedState={() => {}}
         />
@@ -100,6 +101,7 @@ describe('TaskDetailView', () => {
               }
             })
           })}
+          taskActions={createTaskActionsMock()}
           taskId="task-1"
           updateLoadedState={() => {}}
         />
@@ -112,7 +114,140 @@ describe('TaskDetailView', () => {
     });
     await flushPromises();
 
-    expect(onSubmitTaskInput).toHaveBeenCalledWith({ input: '继续处理', taskId: 'task-1' });
+    expect(onSubmitTaskInput).toHaveBeenCalledWith({ input: '继续处理', taskId: 'task-1', threadId: 'thread-1' });
+  });
+
+  it('renders task-domain controls and invokes task actions for the detail task', async () => {
+    const taskActions = {
+      cancelTask: vi.fn(),
+      deleteTask: vi.fn(),
+      pauseTask: vi.fn(),
+      resumeTask: vi.fn(),
+      runNow: vi.fn()
+    };
+    const detail = createTaskDetail({
+      backgroundTask: {
+        id: 'task-1',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        goal: '整理工作区变更',
+        status: 'running',
+        scheduled: true,
+        triggerType: 'manual',
+        triggerDescription: '手动触发',
+        nextRunAt: null,
+        cronExpression: null,
+        workspacePath: 'F:\\Code\\Roc',
+        allowedActions: [],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations',
+        riskLevel: 'low',
+        requiresConfirmation: false,
+        lastRunAt: null,
+        lastRunStatus: null,
+        runCount: 0,
+        createdAt: '2026-05-16T07:00:00.000Z',
+        updatedAt: '2026-05-16T07:05:00.000Z',
+        enabledCapabilities: null
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <TaskDetailView
+          client={{ api: window.roc } as never}
+          liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({ taskDetail: detail })}
+          taskActions={taskActions}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-detail-action-pause').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      queryButton('task-detail-action-run-now').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      queryButton('task-detail-action-cancel').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      queryButton('task-detail-action-delete').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(taskActions.pauseTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
+    expect(taskActions.runNow).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
+    expect(taskActions.cancelTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
+    expect(taskActions.deleteTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
+  });
+
+  it('renders resume action for paused tasks', async () => {
+    const taskActions = {
+      cancelTask: vi.fn(),
+      deleteTask: vi.fn(),
+      pauseTask: vi.fn(),
+      resumeTask: vi.fn(),
+      runNow: vi.fn()
+    };
+    const detail = createTaskDetail({
+      thread: {
+        id: 'thread-1',
+        kind: 'background',
+        title: '暂停任务',
+        goal: '暂停任务',
+        status: 'paused',
+        createdAt: '2026-05-16T07:00:00.000Z',
+        updatedAt: '2026-05-16T07:05:00.000Z'
+      },
+      backgroundTask: {
+        id: 'task-1',
+        threadId: 'thread-1',
+        runId: 'run-1',
+        goal: '暂停任务',
+        status: 'paused',
+        scheduled: true,
+        triggerType: 'manual',
+        triggerDescription: '手动触发',
+        nextRunAt: null,
+        cronExpression: null,
+        workspacePath: 'F:\\Code\\Roc',
+        allowedActions: [],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations',
+        riskLevel: 'low',
+        requiresConfirmation: false,
+        lastRunAt: null,
+        lastRunStatus: null,
+        runCount: 0,
+        createdAt: '2026-05-16T07:00:00.000Z',
+        updatedAt: '2026-05-16T07:05:00.000Z',
+        enabledCapabilities: null
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <TaskDetailView
+          client={{ api: window.roc } as never}
+          liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({ taskDetail: detail })}
+          taskActions={taskActions}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-detail-action-resume').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(taskActions.resumeTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
   });
 });
 
@@ -136,6 +271,16 @@ function createTaskDetail(partial: Partial<NonNullable<ReturnType<typeof createL
     recentEvents: [],
     ...partial
   } as NonNullable<ReturnType<typeof createLoadedState>['taskDetail']>;
+}
+
+function createTaskActionsMock() {
+  return {
+    cancelTask: vi.fn(),
+    deleteTask: vi.fn(),
+    pauseTask: vi.fn(),
+    resumeTask: vi.fn(),
+    runNow: vi.fn()
+  };
 }
 
 function queryButton(testId: string): HTMLButtonElement {

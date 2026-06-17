@@ -57,7 +57,7 @@ import { applySystemAppearance } from '../system-appearance';
 import { sanitizeTestId } from '../utils/sanitize-test-id';
 import { ViewContent } from '../views/ViewContent';
 import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
-import type { TaskDetailApprovalRequest } from '../views/tasks/TaskDetailView';
+import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from '../views/tasks/TaskDetailView';
 import type { TaskPromptSubmission } from '../views/tasks/TasksView';
 import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
@@ -73,6 +73,10 @@ type HistoryContextMenuState = {
   threadId: string;
   x: number;
   y: number;
+};
+
+type TaskRunStartOptions = {
+  threadId: string | null;
 };
 
 const taskCreationSurfacePollLimit = 120;
@@ -301,20 +305,51 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     });
   }, [chatSidebarCollapsed]);
 
-  const startTaskRun = useCallback(
-    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true; threadId: string } | { ok: false; error: string }> => {
-      const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
-      const taskSource = payload.taskSource === undefined ? pendingTaskSource : payload.taskSource;
+  const startChatRun = useCallback(
+    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
       const result = await chatFeature.startRun({
         input: payload.input,
-        mode: 'task',
+        mode: 'chat',
         threadId: selectedThreadId,
         enabledCapabilities: {
           mcpServers: currentSelectedMcpServers,
           skills: currentSelectedSkills
         },
-        workflowHint: workflowHint ?? null,
-        taskSource: taskSource ?? null
+        workflowHint: null,
+        taskSource: null
+      });
+      setPendingWorkflowHint(null);
+      setPendingTaskSource(null);
+      if (!result.ok) {
+        return { ok: false, error: result.error.message };
+      }
+      if (result.data.threadId === null) {
+        return { ok: false, error: '聊天运行没有返回可打开的会话。' };
+      }
+      setSelectedThreadId(result.data.threadId);
+      setHistoryContextMenu(null);
+      return { ok: true };
+    },
+    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
+  );
+
+  const startTaskRun = useCallback(
+    async (payload: ChatTaskSubmitPayload, options?: TaskRunStartOptions): Promise<{ ok: true; threadId: string } | { ok: false; error: string }> => {
+      const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
+      const taskSource = payload.taskSource === undefined ? pendingTaskSource : payload.taskSource;
+      const threadId = options === undefined ? selectedThreadId : options.threadId;
+      const requestWorkflowHint = workflowHint === undefined ? null : workflowHint;
+      const requestTaskSource = taskSource === undefined ? null : taskSource;
+      const result = await chatFeature.startRun({
+        input: payload.input,
+        mode: 'task',
+        threadId,
+        enabledCapabilities: {
+          mcpServers: currentSelectedMcpServers,
+          skills: currentSelectedSkills
+        },
+        workflowHint: requestWorkflowHint,
+        taskSource: requestTaskSource
       });
       setPendingWorkflowHint(null);
       setPendingTaskSource(null);
@@ -324,7 +359,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       if (result.data.threadId === null) {
         return { ok: false, error: '任务运行没有返回可打开的会话。' };
       }
-      setSelectedThreadId(result.data.threadId);
       setHistoryContextMenu(null);
       return { ok: true, threadId: result.data.threadId };
     },
@@ -362,13 +396,13 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   );
 
   const submitTaskDetailInput = useCallback(
-    async ({ input, taskId }: { input: string; taskId: string }): Promise<{ ok: true } | { ok: false; error: string }> => {
+    async ({ input, taskId, threadId }: TaskDetailInputRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
       setSelectedTaskSurfaceTaskId(taskId);
       const result = await startTaskRun({
         input,
         workflowHint: 'background_task_change',
         taskSource: 'workbench'
-      });
+      }, { threadId });
       if (!result.ok) {
         return result;
       }
@@ -686,7 +720,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               operationsLoadState={operationsLoadState}
               onQueueTaskPrompt={createTaskFromWorkbench}
               onSelectWorkspace={selectWorkspaceFromDialog}
-              onSubmitChatTask={startTaskRun}
+              onSubmitChatTask={startChatRun}
               onSubmitTaskDetailInput={submitTaskDetailInput}
               onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
               selectedTaskDetailId={activeTaskDetailId}

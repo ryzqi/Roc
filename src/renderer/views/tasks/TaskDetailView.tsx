@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ChatResumeDecision } from '../../../shared/types';
+import type { ActiveTaskItem, ChatResumeDecision } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
 import { buildPersistedTranscriptMessages } from '../../chat-transcript';
 import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import type { TaskActions } from './use-task-actions';
 
 export type TaskDetailApprovalRequest = {
   runId: string;
@@ -13,20 +14,28 @@ export type TaskDetailApprovalRequest = {
   decisions: ChatResumeDecision[];
 };
 
+export type TaskDetailInputRequest = {
+  input: string;
+  taskId: string;
+  threadId: string;
+};
+
 export function TaskDetailView({
   liveTaskRun,
   onApprovalDecision,
   onBackToBoard,
   onSubmitTaskInput,
   state,
+  taskActions,
   taskId
 }: {
   client: RocClient;
   liveTaskRun: ChatRunState | null;
   onApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToBoard: () => void;
-  onSubmitTaskInput: (payload: { input: string; taskId: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitTaskInput: (payload: TaskDetailInputRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   state: LoadedState;
+  taskActions: TaskActions;
   taskId: string;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
@@ -55,7 +64,8 @@ export function TaskDetailView({
     );
   }
 
-  const waitingUser = detail.thread.status === 'waiting_user';
+  const loadedDetail = detail;
+  const waitingUser = loadedDetail.thread.status === 'waiting_user';
   const liveSignal = `${liveTaskRun?.runId ?? ''}|${transcript.length}`;
 
   async function submitFollowup(): Promise<void> {
@@ -64,7 +74,7 @@ export function TaskDetailView({
       setInlineError('请输入继续任务的内容。');
       return;
     }
-    const result = await onSubmitTaskInput({ input, taskId });
+    const result = await onSubmitTaskInput({ input, taskId, threadId: loadedDetail.threadId });
     if (result.ok) {
       setFollowupInput('');
       setInlineError(null);
@@ -80,8 +90,8 @@ export function TaskDetailView({
           返回任务工作台
         </button>
         <div className="page-copy">
-          <h1 className="page-title mini">{detail.thread.title}</h1>
-          <p className="page-meta">{detail.thread.status}</p>
+          <h1 className="page-title mini">{loadedDetail.thread.title}</h1>
+          <p className="page-meta">{loadedDetail.thread.status}</p>
         </div>
       </div>
       <div className="task-detail-page-body" ref={transcriptScrollRef}>
@@ -90,13 +100,13 @@ export function TaskDetailView({
           liveSignal={liveSignal}
           scrollContainerRef={transcriptScrollRef}
           onApprovalDecision={(interruptId, decisions) => {
-            if (detail.lastRunId === null) {
+            if (loadedDetail.lastRunId === null) {
               setInlineError('当前没有可恢复的审批运行。');
               return;
             }
             void onApprovalDecision({
-              runId: detail.lastRunId,
-              threadId: detail.threadId,
+              runId: loadedDetail.lastRunId,
+              threadId: loadedDetail.threadId,
               interruptId,
               decisions
             }).then((result) => {
@@ -126,8 +136,71 @@ export function TaskDetailView({
             </button>
           </form>
         ) : null}
+        {loadedDetail.backgroundTask === null ? null : (
+          <TaskActionControls item={createTaskActionItem(loadedDetail)} taskActions={taskActions} />
+        )}
         {inlineError === null ? null : <span className="inline-warning">{inlineError}</span>}
       </div>
     </section>
   );
+}
+
+function TaskActionControls({
+  item,
+  taskActions
+}: {
+  item: ActiveTaskItem;
+  taskActions: TaskActions;
+}): React.JSX.Element {
+  const terminal = item.status === 'cancelled' || item.status === 'completed' || item.status === 'archived';
+  const paused = item.status === 'paused';
+
+  return (
+    <div className="task-detail-actions" data-testid="task-detail-actions">
+      {terminal ? null : paused ? (
+        <button className="action-button" data-testid="task-detail-action-resume" type="button" onClick={() => taskActions.resumeTask(item)}>
+          恢复
+        </button>
+      ) : (
+        <button className="action-button" data-testid="task-detail-action-pause" type="button" onClick={() => taskActions.pauseTask(item)}>
+          暂停
+        </button>
+      )}
+      {terminal ? null : (
+        <>
+          <button className="action-button" data-testid="task-detail-action-run-now" type="button" onClick={() => taskActions.runNow(item)}>
+            立即运行
+          </button>
+          <button className="action-button" data-testid="task-detail-action-cancel" type="button" onClick={() => taskActions.cancelTask(item)}>
+            取消任务
+          </button>
+        </>
+      )}
+      <button className="action-button" data-testid="task-detail-action-delete" type="button" onClick={() => taskActions.deleteTask(item)}>
+        删除
+      </button>
+    </div>
+  );
+}
+
+function createTaskActionItem(detail: NonNullable<LoadedState['taskDetail']>): ActiveTaskItem {
+  const task = detail.backgroundTask;
+  if (task === null) {
+    throw new Error('task_detail_background_task_missing');
+  }
+  return {
+    kind: 'background',
+    threadId: task.threadId,
+    taskId: task.id,
+    title: detail.thread.title,
+    goal: task.goal,
+    status: task.status,
+    trigger: null,
+    nextRunAt: task.nextRunAt,
+    lastRunAt: task.lastRunAt,
+    riskLevel: task.riskLevel,
+    workspacePath: task.workspacePath,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
+  };
 }
