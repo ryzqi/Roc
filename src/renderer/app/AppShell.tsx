@@ -342,6 +342,22 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     [startTaskRun]
   );
 
+  const submitTaskDetailInput = useCallback(
+    async ({ input, taskId }: { input: string; taskId: string }): Promise<{ ok: true } | { ok: false; error: string }> => {
+      setSelectedTaskSurfaceTaskId(taskId);
+      const result = await startTaskRun({
+        input,
+        workflowHint: 'background_task_change',
+        taskSource: 'workbench'
+      });
+      if (!result.ok) {
+        return result;
+      }
+      return { ok: true };
+    },
+    [startTaskRun]
+  );
+
   const deleteHistoryThread = useCallback(
     async (threadId: string): Promise<void> => {
       setHistoryContextMenu(null);
@@ -631,16 +647,19 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               client={client}
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
               memoryLoadState={memoryLoadState}
-              onNavigateToTaskThread={(taskId) => openTaskDetail(taskId)}
+              onOpenTaskDetail={openTaskDetail}
+              onBackToTaskBoard={returnToTaskBoard}
               operationsLoadState={operationsLoadState}
               onQueueTaskPrompt={submitTaskPromptFromTaskSurface}
-              queuedTaskPrompt={null}
-              onQueuedTaskPromptHandled={() => {}}
               onSelectWorkspace={selectWorkspaceFromDialog}
               onSubmitChatTask={startTaskRun}
+              onSubmitTaskDetailInput={submitTaskDetailInput}
               onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
+              selectedTaskDetailId={activeTaskDetailId}
               selectedThreadId={selectedThreadId}
               state={state}
+              taskBoardUiState={taskBoardUiState}
+              onTaskBoardUiStateChange={setTaskBoardUiState}
               updateLoadedState={(partial) =>
                 setState((current) => (current === null ? current : { ...current, ...partial }))
               }

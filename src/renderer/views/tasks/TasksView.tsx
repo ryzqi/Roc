@@ -89,7 +89,7 @@ export function TasksView({
     <>
       <PageHeading
         title="任务"
-        meta={buildTopMeta('tasks', state)}
+        meta={buildTopMeta('tasks-board', state)}
         flags={
           <button className="action-button" type="button" onClick={() => setCreateDialogOpen(true)}>
             新建任务

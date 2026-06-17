@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TasksFeature } from '../../../src/renderer/features/tasks';
+import { TaskDetailFeature, TasksBoardFeature } from '../../../src/renderer/features/tasks';
 import { createTaskFeatureActions } from '../../../src/renderer/features/tasks/use-task-feature';
 import type { RocClient } from '../../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../../src/shared/ipc';
@@ -72,12 +72,12 @@ describe('TasksFeature', () => {
 
     await act(async () => {
       root.render(
-        <TasksFeature
+        <TasksBoardFeature
           client={createTasksClient()}
           liveTaskRun={null}
-          onNavigateToThread={() => {}}
+          onCreateTask={onSubmitTaskPrompt}
+          onOpenTaskDetail={() => {}}
           onSelectedTaskIdChange={() => {}}
-          onSubmitTaskPrompt={onSubmitTaskPrompt}
           state={createLoadedState({
             activeTasks: [],
             workspace: {
@@ -89,6 +89,8 @@ describe('TasksFeature', () => {
             }
           })}
           updateLoadedState={() => {}}
+          boardUiState={{ railId: 'all', scrollTop: 0 }}
+          onBoardUiStateChange={() => {}}
         />
       );
     });
@@ -109,6 +111,46 @@ describe('TasksFeature', () => {
       taskSource: 'workbench',
       workspacePath: 'F:\\Code\\Roc'
     });
+  });
+
+  it('renders the kanban board without a task detail drawer', async () => {
+    await act(async () => {
+      root.render(
+        <TasksBoardFeature
+          client={createTasksClient()}
+          liveTaskRun={null}
+          onCreateTask={vi.fn()}
+          onOpenTaskDetail={() => {}}
+          onSelectedTaskIdChange={() => {}}
+          state={createLoadedState({ activeTasks: [] })}
+          updateLoadedState={() => {}}
+          boardUiState={{ railId: 'all', scrollTop: 0 }}
+          onBoardUiStateChange={() => {}}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-detail-drawer"]')).toBeNull();
+  });
+
+  it('renders the standalone task detail page', async () => {
+    await act(async () => {
+      root.render(
+        <TaskDetailFeature
+          client={createTasksClient()}
+          liveTaskRun={null}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({})}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
+    expect(container.textContent).toContain('返回任务工作台');
   });
 });
 

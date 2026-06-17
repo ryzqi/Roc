@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import type { ChatRunState } from '../chat-run-state';
-import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from '../chat/task-run-payload';
+import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -9,10 +9,10 @@ import { DiagnosticsFeature } from '../features/diagnostics';
 import { MemoryFeature } from '../features/memory';
 import { McpFeature } from '../features/mcp';
 import { SkillsFeature } from '../features/skills';
-import { TasksFeature } from '../features/tasks';
+import type { TaskBoardUiState } from '../features/tasks';
+import { TaskDetailFeature, TasksBoardFeature } from '../features/tasks';
 import { WorkspaceFeature } from '../features/workspace';
 import type { TaskPromptSubmission } from './tasks/TasksView';
-import type { WorkflowHint } from '../../shared/types';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
@@ -24,16 +24,19 @@ export function ViewContent({
   client,
   liveTaskRun,
   memoryLoadState,
-  onNavigateToTaskThread,
+  onOpenTaskDetail,
+  onBackToTaskBoard,
   operationsLoadState,
   onQueueTaskPrompt,
-  queuedTaskPrompt,
-  onQueuedTaskPromptHandled,
   onSelectWorkspace,
   onSubmitChatTask,
+  onSubmitTaskDetailInput,
   onTaskSurfaceSelectionChange,
+  selectedTaskDetailId,
   selectedThreadId,
   state,
+  taskBoardUiState,
+  onTaskBoardUiStateChange,
   updateLoadedState,
   workspaceLoadState
 }: {
@@ -42,16 +45,19 @@ export function ViewContent({
   client: RocClient;
   liveTaskRun: ChatRunState | null;
   memoryLoadState: LazyLoadState;
-  onNavigateToTaskThread: (threadId: string, workflowHint?: WorkflowHint) => void;
+  onOpenTaskDetail: (taskId: string, boardUiState: TaskBoardUiState) => void;
+  onBackToTaskBoard: () => void;
   operationsLoadState: LazyLoadState;
   onQueueTaskPrompt: (prompt: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
-  queuedTaskPrompt: QueuedTaskPrompt | null;
-  onQueuedTaskPromptHandled: () => void;
   onSelectWorkspace: () => Promise<void>;
   onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSubmitTaskDetailInput: (payload: { input: string; taskId: string }) => Promise<{ ok: true } | { ok: false; error: string }>;
   onTaskSurfaceSelectionChange: (taskId: string | null | undefined) => void;
+  selectedTaskDetailId: string | null;
   selectedThreadId: string | null;
   state: LoadedState;
+  taskBoardUiState: TaskBoardUiState;
+  onTaskBoardUiStateChange: (state: TaskBoardUiState) => void;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   workspaceLoadState: LazyLoadState;
 }): React.JSX.Element {
@@ -59,15 +65,43 @@ export function ViewContent({
     return <Suspense fallback={<div className="boot">Roc 正在加载视图</div>}>{node}</Suspense>;
   }
 
-  if (activeView === 'tasks') {
+  if (activeView === 'tasks-board') {
     return (
-      <TasksFeature
+      <TasksBoardFeature
         client={client}
         liveTaskRun={liveTaskRun}
-        onNavigateToThread={onNavigateToTaskThread}
+        onCreateTask={onQueueTaskPrompt}
+        onOpenTaskDetail={onOpenTaskDetail}
         onSelectedTaskIdChange={onTaskSurfaceSelectionChange}
-        onSubmitTaskPrompt={onQueueTaskPrompt}
         state={state}
+        updateLoadedState={updateLoadedState}
+        boardUiState={taskBoardUiState}
+        onBoardUiStateChange={onTaskBoardUiStateChange}
+      />
+    );
+  }
+  if (activeView === 'task-detail') {
+    if (selectedTaskDetailId === null) {
+      return (
+        <section className="canvas-stage task-detail-page" data-testid="task-detail-view">
+          <button className="action-button" type="button" onClick={onBackToTaskBoard}>
+            返回任务工作台
+          </button>
+          <div className="section-empty-state">
+            <strong>任务不存在</strong>
+            <p>当前任务不存在或已经删除。</p>
+          </div>
+        </section>
+      );
+    }
+    return (
+      <TaskDetailFeature
+        client={client}
+        liveTaskRun={liveTaskRun}
+        onBackToBoard={onBackToTaskBoard}
+        onSubmitTaskInput={onSubmitTaskDetailInput}
+        state={state}
+        taskId={selectedTaskDetailId}
         updateLoadedState={updateLoadedState}
       />
     );
@@ -101,8 +135,8 @@ export function ViewContent({
       chatSelectionVersion={chatSelectionVersion}
       client={client}
       onSubmitChatTask={onSubmitChatTask}
-      queuedTaskPrompt={queuedTaskPrompt}
-      onQueuedTaskPromptHandled={onQueuedTaskPromptHandled}
+      queuedTaskPrompt={null}
+      onQueuedTaskPromptHandled={() => {}}
       selectedThreadId={selectedThreadId}
       state={state}
       updateLoadedState={updateLoadedState}
