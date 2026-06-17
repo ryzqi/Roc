@@ -45,9 +45,11 @@ describe('TasksView interactions', () => {
           }),
           updateLoadedState: () => {},
           liveTaskRun: null,
-          onNavigateToThread: () => {},
+          onOpenTaskDetail: () => {},
           onSelectedTaskIdChange: () => {},
-          onSubmitTaskPrompt: async () => ({ ok: true as const })
+          onSubmitTaskPrompt: async () => ({ ok: true as const }),
+          boardUiState: { railId: 'all', scrollTop: 0 },
+          onBoardUiStateChange: () => {}
         })
       );
     });
@@ -64,7 +66,7 @@ describe('TasksView interactions', () => {
     expect(container.querySelector('[data-testid="task-create-dialog-panel"]')).not.toBeNull();
   });
 
-  it('submits the new task description through a task chat run', async () => {
+  it('submits the new task description through the existing task prompt contract and stays in the task domain', async () => {
     const preload = createMockPreloadApi();
     window.roc = preload;
     const onSubmitTaskPrompt = vi.fn().mockResolvedValue({ ok: true as const });
@@ -86,9 +88,11 @@ describe('TasksView interactions', () => {
           }),
           updateLoadedState: () => {},
           liveTaskRun: null,
-          onNavigateToThread: () => {},
+          onOpenTaskDetail: () => {},
           onSelectedTaskIdChange: () => {},
-          onSubmitTaskPrompt
+          onSubmitTaskPrompt,
+          boardUiState: { railId: 'all', scrollTop: 0 },
+          onBoardUiStateChange: () => {}
         })
       );
     });
@@ -118,138 +122,64 @@ describe('TasksView interactions', () => {
     expect(container.querySelector('[data-testid="task-create-dialog-panel"]')).toBeNull();
   });
 
-  it('deletes a cancelled background task from the detail drawer and reloads the task surface', async () => {
-    const preload = createMockPreloadApi();
-    window.roc = preload;
-    const updateLoadedState = vi.fn();
-
+  it('renders four kanban columns and no left task rail', async () => {
     await act(async () => {
       root.render(
         React.createElement(TasksView, {
           state: createLoadedState({
             activeTasks: [
-              {
-                kind: 'background',
-                threadId: 'thread-cancelled',
-                taskId: 'background-cancelled',
-                title: '已取消的新闻任务',
-                goal: '已取消的新闻任务',
-                status: 'cancelled',
-                trigger: null,
-                nextRunAt: null,
-                lastRunAt: null,
-                riskLevel: 'low',
-                workspacePath: 'F:\\Code\\Roc',
-                createdAt: '2026-05-20T00:00:00.000Z',
-                updatedAt: '2026-05-20T00:00:00.000Z'
-              }
-            ],
-            taskSnapshot: {
-              generatedAt: '2026-05-20T00:00:00.000Z',
-              recentEvents: [],
-              counts: {
-                total: 1,
-                running: 0,
-                failed: 0,
-                pendingConfirmation: 0
-              },
-              threads: []
-            }
+              createActiveTask({ taskId: 'pending-1', threadId: 'thread-pending-1', goal: '等待审批', status: 'pending_confirmation' }),
+              createActiveTask({ taskId: 'running-1', threadId: 'thread-running-1', goal: '执行中', status: 'running' }),
+              createActiveTask({ taskId: 'paused-1', threadId: 'thread-paused-1', goal: '暂停中', status: 'paused' }),
+              createActiveTask({ taskId: 'done-1', threadId: 'thread-done-1', goal: '已完成', status: 'completed' })
+            ]
           }),
-          updateLoadedState,
+          updateLoadedState: () => {},
           liveTaskRun: null,
-          onNavigateToThread: () => {},
+          onOpenTaskDetail: () => {},
           onSelectedTaskIdChange: () => {},
-          onSubmitTaskPrompt: async () => ({ ok: true as const })
+          onSubmitTaskPrompt: async () => ({ ok: true as const }),
+          boardUiState: { railId: 'all', scrollTop: 0 },
+          onBoardUiStateChange: () => {}
         })
       );
     });
 
-    expect(container.querySelector('[data-testid="task-row-background-cancelled"]')).not.toBeNull();
-    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '删除任务');
-    expect(deleteButton).not.toBeUndefined();
-
-    await act(async () => {
-      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await flushPromises();
-
-    expect(preload.tasks.deleteBackgroundTask).toHaveBeenCalledWith('background-cancelled');
-    expect(preload.tasks.getSnapshot).toHaveBeenCalled();
-    expect(preload.tasks.getActiveTasks).toHaveBeenCalled();
-    expect(updateLoadedState).toHaveBeenCalledWith(
-      expect.objectContaining({
-        activeTasks: []
-      })
-    );
+    expect(container.querySelector('[data-testid="task-status-rail"]')).toBeNull();
+    expect(container.querySelector('[data-testid="task-board-column-待处理"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-board-column-进行中"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-board-column-已暂停"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-board-column-已结束"]')).not.toBeNull();
   });
 
-  it('filters tasks from the status rail and keeps paused tasks reachable after status changes', async () => {
-    const runningTask = createActiveTask({
-      taskId: 'background-running',
-      threadId: 'thread-running',
-      goal: '运行任务',
-      status: 'running'
-    });
-    const scheduledTask = createActiveTask({
-      taskId: 'background-scheduled',
-      threadId: 'thread-scheduled',
-      goal: '计划任务',
-      status: 'running',
-      nextRunAt: '2026-05-22T01:00:00.000Z'
-    });
-    const pausedTask = createActiveTask({
-      taskId: 'background-paused',
-      threadId: 'thread-paused',
-      goal: '暂停任务',
-      status: 'paused'
-    });
-    const baseProps = {
-      updateLoadedState: () => {},
-      liveTaskRun: null,
-      onNavigateToThread: () => {},
-      onSelectedTaskIdChange: () => {},
-      onSubmitTaskPrompt: async () => ({ ok: true as const })
-    };
+  it('opens task detail when a kanban card is clicked', async () => {
+    const onOpenTaskDetail = vi.fn();
 
     await act(async () => {
       root.render(
         React.createElement(TasksView, {
-          ...baseProps,
           state: createLoadedState({
-            activeTasks: [runningTask, scheduledTask, pausedTask]
-          })
+            activeTasks: [createActiveTask({ taskId: 'running-1', threadId: 'thread-running-1', goal: '执行中', status: 'running' })]
+          }),
+          updateLoadedState: () => {},
+          liveTaskRun: null,
+          onOpenTaskDetail,
+          onSelectedTaskIdChange: () => {},
+          onSubmitTaskPrompt: async () => ({ ok: true as const }),
+          boardUiState: { railId: 'all', scrollTop: 0 },
+          onBoardUiStateChange: () => {}
         })
       );
     });
 
-    await clickRailButton(container, '计划中');
-    expect(taskTableTitle(container)).toBe('计划中任务');
-    expect(container.querySelector('[data-testid="task-row-background-scheduled"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="task-row-background-running"]')).toBeNull();
-
-    await clickRailButton(container, '已暂停');
-    expect(taskTableTitle(container)).toBe('已暂停任务');
-    expect(container.querySelector('[data-testid="task-row-background-paused"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="task-row-background-scheduled"]')).toBeNull();
-
-    await clickRailButton(container, '运行中');
-    expect(container.querySelector('[data-testid="task-row-background-running"]')).not.toBeNull();
+    const card = container.querySelector('[data-testid="task-board-card-running-1"]');
+    expect(card).not.toBeNull();
 
     await act(async () => {
-      root.render(
-        React.createElement(TasksView, {
-          ...baseProps,
-          state: createLoadedState({
-            activeTasks: [{ ...runningTask, status: 'paused' }]
-          })
-        })
-      );
+      card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.querySelector('[data-testid="task-row-background-running"]')).toBeNull();
-    expect(container.textContent).toContain('当前筛选没有任务');
-    expect(railButtonText(container, '已暂停')).toContain('1');
+    expect(onOpenTaskDetail).toHaveBeenCalledWith('running-1', { railId: 'all', scrollTop: 0 });
   });
 });
 
@@ -358,28 +288,4 @@ function createActiveTask(input: {
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z'
   };
-}
-
-async function clickRailButton(container: HTMLElement, label: string): Promise<void> {
-  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="task-status-rail"] button')).find((item) =>
-    item.textContent?.includes(label)
-  );
-  expect(button).not.toBeUndefined();
-  await act(async () => {
-    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-}
-
-function railButtonText(container: HTMLElement, label: string): string {
-  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="task-status-rail"] button')).find((item) =>
-    item.textContent?.includes(label)
-  );
-  expect(button).not.toBeUndefined();
-  return button?.textContent ?? '';
-}
-
-function taskTableTitle(container: HTMLElement): string {
-  const title = container.querySelector('.task-table-head .section-title');
-  expect(title).not.toBeNull();
-  return title?.textContent ?? '';
 }

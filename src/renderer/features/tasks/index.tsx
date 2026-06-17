@@ -21,17 +21,17 @@ export function TasksBoardFeature(props: {
   onBoardUiStateChange: (state: TaskBoardUiState) => void;
 }): React.JSX.Element {
   return (
-    <div data-testid="tasks-board-view">
-      <TasksView
-        client={props.client}
-        liveTaskRun={props.liveTaskRun}
-        onNavigateToThread={(threadId) => props.onOpenTaskDetail(threadId, props.boardUiState)}
-        onSelectedTaskIdChange={props.onSelectedTaskIdChange}
-        onSubmitTaskPrompt={props.onCreateTask}
-        state={props.state}
-        updateLoadedState={props.updateLoadedState}
-      />
-    </div>
+    <TasksView
+      client={props.client}
+      liveTaskRun={props.liveTaskRun}
+      onOpenTaskDetail={props.onOpenTaskDetail}
+      onSelectedTaskIdChange={props.onSelectedTaskIdChange}
+      onSubmitTaskPrompt={props.onCreateTask}
+      state={props.state}
+      updateLoadedState={props.updateLoadedState}
+      boardUiState={props.boardUiState}
+      onBoardUiStateChange={props.onBoardUiStateChange}
+    />
   );
 }
 
