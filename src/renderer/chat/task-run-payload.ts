@@ -5,10 +5,3 @@ export type ChatTaskSubmitPayload = {
   workflowHint?: WorkflowHint;
   taskSource?: 'workbench' | null;
 };
-
-export type QueuedTaskPrompt = {
-  input: string;
-  workflowHint: WorkflowHint;
-  taskSource?: 'workbench' | null;
-  workspacePath?: string;
-};

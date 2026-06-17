@@ -69,6 +69,31 @@ describe('AppShell', () => {
 
     expect(client.api.tasks.onUpdated).toHaveBeenCalledTimes(1);
   });
+
+  it('opens the task workbench entry as the board page instead of chat', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+    window.history.replaceState(null, '', '/?page=tasks-board');
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    expect(container.textContent).toContain('任务工作台');
+    expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="chat-view"]')).toBeNull();
+  });
+
+  it('does not keep queued task prompt state in the task workbench flow', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    expect(container.textContent).not.toContain('请调用 propose_background_task 创建任务');
+  });
 });
 
 function createBootstrap(): AppBootstrap {

@@ -56,7 +56,7 @@ import { getStartupLoadIntent } from '../startup-load-policy';
 import { applySystemAppearance } from '../system-appearance';
 import { sanitizeTestId } from '../utils/sanitize-test-id';
 import { ViewContent } from '../views/ViewContent';
-import type { ChatTaskSubmitPayload, QueuedTaskPrompt } from '../chat/task-run-payload';
+import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
 import type { TaskPromptSubmission } from '../views/tasks/TasksView';
 import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
@@ -82,9 +82,16 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
+  const [activeTaskDetailId, setActiveTaskDetailId] = useState<string | null>(null);
+  const [taskBoardUiState, setTaskBoardUiState] = useState<{
+    railId: 'all' | 'todo' | 'running' | 'paused' | 'done';
+    scrollTop: number;
+  }>({
+    railId: 'all',
+    scrollTop: 0
+  });
   const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
-  const [queuedTaskPrompt, setQueuedTaskPrompt] = useState<QueuedTaskPrompt | null>(null);
   const [pendingWorkflowHint, setPendingWorkflowHint] = useState<WorkflowHint>(null);
   const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
@@ -246,13 +253,20 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
-  const navigateToTaskThread = useCallback((threadId: string, workflowHint?: WorkflowHint, taskSource?: ChatStartRunRequest['taskSource']): void => {
-    setActiveView('chat');
-    setSelectedThreadId(threadId);
-    setPendingWorkflowHint(workflowHint ?? null);
-    setPendingTaskSource(taskSource ?? null);
+  const openTaskDetail = useCallback((taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }): void => {
+    if (boardUiState !== undefined) {
+      setTaskBoardUiState(boardUiState);
+    }
+    setSelectedTaskSurfaceTaskId(taskId);
+    setActiveTaskDetailId(taskId);
+    setActiveView('task-detail');
     setHistoryContextMenu(null);
-    setChatSelectionVersion((current) => current + 1);
+  }, []);
+
+  const returnToTaskBoard = useCallback((): void => {
+    setActiveTaskDetailId(null);
+    setActiveView('tasks-board');
+    setHistoryContextMenu(null);
   }, []);
 
   const toggleChatSidebar = useCallback((): void => {
@@ -284,7 +298,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [chatSidebarCollapsed]);
 
   const startTaskRun = useCallback(
-    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
+    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true; threadId: string } | { ok: false; error: string }> => {
       const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
       const taskSource = payload.taskSource === undefined ? pendingTaskSource : payload.taskSource;
       const result = await chatFeature.startRun({
@@ -308,26 +322,25 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       }
       setSelectedThreadId(result.data.threadId);
       setHistoryContextMenu(null);
-      return { ok: true };
+      return { ok: true, threadId: result.data.threadId };
     },
     [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingTaskSource, pendingWorkflowHint, selectedThreadId]
   );
 
-  const queueTaskPrompt = useCallback(async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
-    setSelectedThreadId(null);
-    setPendingWorkflowHint(null);
-    setPendingTaskSource(null);
-    setQueuedTaskPrompt(payload);
-    setActiveView('chat');
-    setWorkbenchVisible(false);
-    setHistoryContextMenu(null);
-    setChatSelectionVersion((current) => current + 1);
-    return { ok: true };
-  }, []);
-
-  const handleQueuedTaskPromptHandled = useCallback((): void => {
-    setQueuedTaskPrompt(null);
-  }, []);
+  const submitTaskPromptFromTaskSurface = useCallback(
+    async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const result = await startTaskRun({
+        input: payload.input,
+        workflowHint: payload.workflowHint,
+        taskSource: payload.taskSource
+      });
+      if (!result.ok) {
+        return result;
+      }
+      return { ok: true };
+    },
+    [startTaskRun]
+  );
 
   const deleteHistoryThread = useCallback(
     async (threadId: string): Promise<void> => {
@@ -618,11 +631,11 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               client={client}
               liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
               memoryLoadState={memoryLoadState}
-              onNavigateToTaskThread={navigateToTaskThread}
+              onNavigateToTaskThread={(taskId) => openTaskDetail(taskId)}
               operationsLoadState={operationsLoadState}
-              onQueueTaskPrompt={queueTaskPrompt}
-              queuedTaskPrompt={queuedTaskPrompt}
-              onQueuedTaskPromptHandled={handleQueuedTaskPromptHandled}
+              onQueueTaskPrompt={submitTaskPromptFromTaskSurface}
+              queuedTaskPrompt={null}
+              onQueuedTaskPromptHandled={() => {}}
               onSelectWorkspace={selectWorkspaceFromDialog}
               onSubmitChatTask={startTaskRun}
               onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
