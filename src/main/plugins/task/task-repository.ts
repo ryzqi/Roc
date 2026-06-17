@@ -25,7 +25,7 @@ import type {
 } from '../../../shared/types';
 import { RocDomainError } from '../../services/errors';
 
-type BackgroundTaskRow = {
+type BackgroundTaskRecord = {
   id: string;
   thread_id: string;
   run_id: string;
@@ -254,7 +254,7 @@ export class TaskRepository {
          FROM background_tasks
          WHERE id = ?`
       )
-      .get(id) as BackgroundTaskRow | undefined;
+      .get(id) as BackgroundTaskRecord | undefined;
     if (row === undefined) {
       return null;
     }
@@ -272,7 +272,7 @@ export class TaskRepository {
          FROM background_tasks
          WHERE run_id = ?`
       )
-      .get(runId) as BackgroundTaskRow | undefined;
+      .get(runId) as BackgroundTaskRecord | undefined;
     if (row === undefined) {
       return null;
     }
@@ -290,7 +290,7 @@ export class TaskRepository {
          FROM background_tasks
          ORDER BY updated_at DESC`
       )
-      .all() as BackgroundTaskRow[];
+      .all() as BackgroundTaskRecord[];
     return rows.map(mapBackgroundTask);
   }
 
@@ -327,7 +327,7 @@ export class TaskRepository {
            )
          ORDER BY next_run_at ASC, updated_at DESC`
       )
-      .all() as BackgroundTaskRow[];
+      .all() as BackgroundTaskRecord[];
     return rows.map(mapBackgroundTask);
   }
 
@@ -574,7 +574,7 @@ export class TaskRepository {
            )
          ORDER BY updated_at DESC`
       )
-      .all() as BackgroundTaskRow[];
+      .all() as BackgroundTaskRecord[];
     return rows.map(mapBackgroundTask);
   }
 
@@ -636,23 +636,6 @@ export class TaskRepository {
   listThreadMessages(threadId: string): TaskEvent[] {
     this.requireActiveThread(threadId);
     return this.listEventsForThread(threadId);
-  }
-
-  openBackgroundTaskInChat(taskId: string): { threadId: string } {
-    const task = this.requireBackgroundTask(taskId);
-    this.insertTaskEvent({
-      threadId: task.threadId,
-      runId: task.runId,
-      type: 'message',
-      payload: {
-        role: 'system',
-        content: `[系统] 用户准备修改后台任务 ${task.id}。`
-      },
-      createdAt: new Date().toISOString()
-    });
-    return {
-      threadId: task.threadId
-    };
   }
 
   recordAgentRunCompleted(input: {
@@ -1128,7 +1111,7 @@ export class TaskRepository {
   }
 }
 
-function mapBackgroundTask(row: BackgroundTaskRow): BackgroundTask {
+function mapBackgroundTask(row: BackgroundTaskRecord): BackgroundTask {
   return {
     id: row.id,
     threadId: row.thread_id,

@@ -37,8 +37,7 @@ const taskCapabilities = [
   'task.thread.delete',
   'task.active.list',
   'task.detail.get',
-  'task.scheduledRuns.list',
-  'task.background.openInChat'
+  'task.scheduledRuns.list'
 ];
 
 let db: Database.Database;

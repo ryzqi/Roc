@@ -21,7 +21,7 @@ describe('chat feature actions', () => {
       input: '整理当前变更',
       mode: 'task',
       threadId: 'thread-1',
-      workflowHint: 'propose_background_task'
+      workflowHint: null
     });
     await actions.resumeRun({
       decisions: [{ type: 'approve' }],
@@ -37,7 +37,7 @@ describe('chat feature actions', () => {
       input: '整理当前变更',
       mode: 'task',
       threadId: 'thread-1',
-      workflowHint: 'propose_background_task'
+      workflowHint: null
     });
     expect(client.api.chat.resumeRun).toHaveBeenCalledWith({
       decisions: [{ type: 'approve' }],

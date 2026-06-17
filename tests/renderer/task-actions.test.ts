@@ -7,12 +7,12 @@ describe('createTaskActions', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not expose openInChat from task actions anymore', () => {
+  it('exposes only task-domain mutation actions', () => {
     const actions = createTaskActions({
       refreshTaskSurface: vi.fn().mockResolvedValue(undefined)
     });
 
-    expect('openInChat' in actions).toBe(false);
+    expect(Object.keys(actions).sort()).toEqual(['cancelTask', 'deleteTask', 'pauseTask', 'resumeTask', 'runNow']);
   });
 
   it('refreshes the task surface after runNow succeeds', async () => {

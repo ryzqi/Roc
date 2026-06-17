@@ -300,10 +300,9 @@ try {
   await page.reload();
   await waitForAppReady(page, 'after-runtime-seed', artifactDir);
   await page.waitForSelector('[data-testid="chat-input"]', { timeout: 5000 });
-  await page.click('[data-testid="nav-tasks"]');
-  await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="task-status-rail"]', { timeout: 5000 });
-  await page.waitForSelector('[data-testid="task-table"]', { timeout: 5000 });
+  await page.click('[data-testid="nav-tasks-board"]');
+  await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
+  await waitForTextContent(page, '[data-testid="tasks-board-view"]', backgroundTaskGoal, 15000);
   const manualRunNowEvidence = await page.evaluate(async (workspacePath) => {
     async function unwrap(result, label) {
       if (!result.ok) {
@@ -364,16 +363,15 @@ try {
   }, workspaceRoot);
   await page.reload();
   await waitForAppReady(page, 'after-manual-run-now', artifactDir);
-  await page.click('[data-testid="nav-tasks"]');
-  await page.waitForSelector('[data-testid="tasks-view"]', { timeout: 5000 });
-  await page.locator(`[data-testid="task-row-${manualRunNowEvidence.taskId}"]`).click();
-  await page.getByRole('button', { name: '运行输出' }).waitFor({ timeout: 10000 });
-  await page.getByTestId('task-run-output').waitFor({ timeout: 10000 });
-  const manualRunOutputText = await page.textContent('[data-testid="task-run-output"]');
-  const taskText = await page.textContent('[data-testid="tasks-view"]');
-  if (taskText === null) {
-    throw new Error('Smoke could not read tasks view text.');
-  }
+  await page.click('[data-testid="nav-tasks-board"]');
+  await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
+  await page.locator(`[data-testid="task-board-card-${manualRunNowEvidence.taskId}"]`).click();
+  await page.waitForSelector('[data-testid="task-detail-view"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="chat-transcript"]', { timeout: 10000 });
+  const manualRunDetailText = await page.textContent('[data-testid="task-detail-view"]');
+  const manualRunTranscriptText = await page.textContent('[data-testid="chat-transcript"]');
+  await page.getByRole('button', { name: '返回任务工作台' }).click();
+  await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
   const backgroundTaskApiEvidence = await page.evaluate(async () => {
     const tray = await window.roc.lifecycle.getTraySummary();
     const snapshot = await window.roc.tasks.getSnapshot();
@@ -405,7 +403,48 @@ try {
     `${naturalLanguageTaskGoal}，使用当前工作区。`
   );
   await page.click('[data-testid="task-create-submit"]');
+  const taskCreateOutcomeHandle = await page.waitForFunction(
+    () => {
+      if (document.querySelector('[data-testid="task-detail-view"]') !== null) {
+        return { kind: 'detail' };
+      }
+      const error = document.querySelector('[data-testid="task-create-error"]')?.textContent;
+      if (typeof error === 'string' && error.trim().length > 0) {
+        return { kind: 'error', text: error.trim() };
+      }
+      return null;
+    },
+    null,
+    { timeout: 30000 }
+  );
+  const taskCreateOutcome = await taskCreateOutcomeHandle.jsonValue();
+  if (taskCreateOutcome.kind === 'error') {
+    const taskCreateDebug = await page.evaluate(async () => {
+      const activeTasks = await window.roc.tasks.getActiveTasks();
+      const snapshot = await window.roc.tasks.getSnapshot();
+      return {
+        activeTasks: activeTasks.ok
+          ? activeTasks.data.map((item) => ({
+              taskId: item.taskId,
+              threadId: item.threadId,
+              goal: item.goal,
+              status: item.status
+            }))
+          : activeTasks.error.message,
+        recentEvents: snapshot.ok
+          ? snapshot.data.recentEvents.slice(-12).map((item) => ({
+              type: item.type,
+              taskId: item.taskId,
+              threadId: item.threadId,
+              payload: item.payload
+            }))
+          : snapshot.error.message
+      };
+    });
+    throw new Error(`Task create failed in smoke: ${taskCreateOutcome.text}\n${JSON.stringify(taskCreateDebug, null, 2)}`);
+  }
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { state: 'detached', timeout: 5000 });
+  const createdTaskDetailText = await page.textContent('[data-testid="task-detail-view"]');
   await page.waitForFunction(
     async (expectedGoal) => {
       const activeTasks = await window.roc.tasks.getActiveTasks();
@@ -414,6 +453,12 @@ try {
     naturalLanguageTaskGoal,
     { timeout: 15000 }
   );
+  await page.getByRole('button', { name: '返回任务工作台' }).click();
+  await page.waitForSelector('[data-testid="tasks-board-view"]', { timeout: 5000 });
+  const taskText = await page.textContent('[data-testid="tasks-board-view"]');
+  if (taskText === null) {
+    throw new Error('Smoke could not read task board text.');
+  }
   await page.waitForFunction(
     async () => {
       const snapshot = await window.roc.tasks.getSnapshot();
@@ -2630,6 +2675,8 @@ try {
       backgroundTaskApiEvidence.hasCreatedEvent,
     naturalLanguageTaskCreated:
       taskProposalEvidence.activeTaskGoal === naturalLanguageTaskGoal &&
+      typeof createdTaskDetailText === 'string' &&
+      createdTaskDetailText.includes(naturalLanguageTaskGoal) &&
       taskProposalEvidence.triggerType === 'cron' &&
       taskProposalEvidence.cronExpression === naturalLanguageTaskCronExpression &&
       taskProposalEvidence.nextRunAt === taskProposalEvidence.expectedNextRunAt &&
@@ -2643,11 +2690,15 @@ try {
       manualRunNowEvidence.returnedRealRunId &&
       manualRunNowEvidence.runId.startsWith('run_') &&
       manualRunNowEvidence.outputEventTypes.some((type) => type === 'message' || type === 'assistant_block') &&
-      typeof manualRunOutputText === 'string' &&
-      manualRunOutputText.includes('运行输出'),
+      typeof manualRunDetailText === 'string' &&
+      manualRunDetailText.includes('Smoke manual run-now diagnostic task') &&
+      typeof manualRunTranscriptText === 'string' &&
+      manualRunTranscriptText.trim().length > 0,
     traySummaryVisible:
-      taskText.includes('全部任务') &&
-      taskText.includes('调度器') &&
+      taskText.includes('待处理') &&
+      taskText.includes('进行中') &&
+      taskText.includes('已暂停') &&
+      taskText.includes('已结束') &&
       backgroundTaskApiEvidence.schedulerStatus.running &&
       backgroundTaskApiEvidence.tray.backgroundTasks.total > 0 &&
       backgroundTaskApiEvidence.hasCreatedEvent,
@@ -3045,7 +3096,7 @@ try {
       boundary.taskKeys.includes('cancelBackgroundTask') &&
       boundary.taskKeys.includes('getActiveTasks') &&
       boundary.taskKeys.includes('getSchedulerStatus') &&
-      boundary.taskKeys.includes('openInChat'),
+      !boundary.taskKeys.includes(['open', 'In', 'Chat'].join('')),
     lifecycleApiExpanded:
       boundary.lifecycleKeys.includes('getTraySummary') &&
       boundary.lifecycleKeys.includes('pauseBackgroundExecution') &&
@@ -3255,7 +3306,9 @@ try {
       chatResultLayoutEvidence,
       skillLayoutEvidence,
       manualRunNowEvidence,
-      manualRunOutputText,
+      manualRunDetailText,
+      manualRunTranscriptText,
+      createdTaskDetailText,
       taskProposalEvidence,
       smokeProviderRequests: smokeProvider.requests.map((request) => ({
         url: request.url,

@@ -75,6 +75,9 @@ type HistoryContextMenuState = {
   y: number;
 };
 
+const taskCreationSurfacePollLimit = 120;
+const taskCreationSurfacePollDelayMs = 250;
+
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
   const { error, setError, setState, setWindowState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
@@ -330,6 +333,15 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
   const createTaskFromWorkbench = useCallback(
     async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const existingActiveTasksResult = await client.api.tasks.getActiveTasks();
+      if (!existingActiveTasksResult.ok) {
+        return { ok: false, error: existingActiveTasksResult.error.message };
+      }
+      const existingTaskIds = new Set(
+        existingActiveTasksResult.data
+          .map((task) => task.taskId)
+          .filter((taskId): taskId is string => taskId !== null)
+      );
       const result = await startTaskRun({
         input: payload.input,
         workflowHint: payload.workflowHint,
@@ -338,14 +350,12 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       if (!result.ok) {
         return result;
       }
-      const latestTaskSurface = await loadTaskSurfaceData(undefined, client);
-      setState((current) => (current === null ? current : { ...current, ...latestTaskSurface }));
-      const detailTargetTaskId =
-        latestTaskSurface.activeTasks.find((item) => item.threadId === result.threadId)?.taskId ?? null;
-      if (detailTargetTaskId === null) {
-        return { ok: false, error: '创建任务后未找到对应的任务详情。' };
+      const createdTaskSurface = await loadTaskSurfaceForCreatedThread(client, result.threadId, existingTaskIds);
+      if (!createdTaskSurface.ok) {
+        return { ok: false, error: createdTaskSurface.error };
       }
-      openTaskDetail(detailTargetTaskId, taskBoardUiState);
+      setState((current) => (current === null ? current : { ...current, ...createdTaskSurface.data }));
+      openTaskDetail(createdTaskSurface.taskId, taskBoardUiState);
       return { ok: true };
     },
     [client, openTaskDetail, setState, startTaskRun, taskBoardUiState]
@@ -917,4 +927,51 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       ) : null}
     </div>
   );
+}
+
+async function loadTaskSurfaceForCreatedThread(
+  client: RocClient,
+  threadId: string,
+  existingTaskIds: ReadonlySet<string>
+): Promise<{ ok: true; taskId: string; data: TaskSurfaceData } | { ok: false; error: string }> {
+  for (let attempt = 0; attempt < taskCreationSurfacePollLimit; attempt += 1) {
+    const surface = await loadTaskSurfaceData(undefined, client);
+    const createdTask = findCreatedTaskSurfaceItem(surface.activeTasks, threadId, existingTaskIds);
+    if (createdTask !== null) {
+      return {
+        ok: true,
+        taskId: createdTask.taskId,
+        data: await loadTaskSurfaceData(createdTask.taskId, client)
+      };
+    }
+    if (attempt + 1 < taskCreationSurfacePollLimit) {
+      await waitForTaskCreationSurfacePoll();
+    }
+  }
+
+  return { ok: false, error: '创建任务后未找到对应的任务详情。' };
+}
+
+function findCreatedTaskSurfaceItem(
+  activeTasks: TaskSurfaceData['activeTasks'],
+  threadId: string,
+  existingTaskIds: ReadonlySet<string>
+): TaskSurfaceData['activeTasks'][number] | null {
+  const matchingThreadTask = activeTasks.find((item) => item.threadId === threadId);
+  if (matchingThreadTask !== undefined) {
+    return matchingThreadTask;
+  }
+
+  const newTasks = activeTasks.filter((item) => !existingTaskIds.has(item.taskId));
+  if (newTasks.length === 1) {
+    return newTasks[0];
+  }
+
+  return null;
+}
+
+async function waitForTaskCreationSurfacePoll(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, taskCreationSurfacePollDelayMs);
+  });
 }

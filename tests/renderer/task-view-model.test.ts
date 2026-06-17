@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveTaskItem } from '../../src/shared/types';
-import {
-  buildTaskViewModel,
-  countTaskNavMeta,
-  filterTaskItems,
-  resolveTaskDisplayStatus
-} from '../../src/renderer/views/tasks/task-view-model';
-import { createLoadedState } from './view-test-helpers';
+import { countTaskNavMeta } from '../../src/renderer/views/tasks/task-view-model';
 
 function task(input: Partial<ActiveTaskItem> & Pick<ActiveTaskItem, 'threadId' | 'title' | 'status'>): ActiveTaskItem {
   const {
@@ -23,167 +17,21 @@ function task(input: Partial<ActiveTaskItem> & Pick<ActiveTaskItem, 'threadId' |
     threadId,
     taskId: `background-${threadId}`,
     title,
-    goal: goal ?? title,
+    goal: goal === undefined ? title : goal,
     status,
     trigger: null,
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
     workspacePath: null,
-    createdAt: createdAt ?? '2026-05-20T00:00:00.000Z',
-    updatedAt: updatedAt ?? '2026-05-20T00:00:00.000Z',
+    createdAt: createdAt === undefined ? '2026-05-20T00:00:00.000Z' : createdAt,
+    updatedAt: updatedAt === undefined ? '2026-05-20T00:00:00.000Z' : updatedAt,
     ...rest
   };
 }
 
-describe('task workbench view model', () => {
-  it('builds rail counts while keeping the main task list unique', () => {
-    const state = createLoadedState({
-      activeTasks: [
-        task({ threadId: 'pending', title: '等待审批', status: 'pending_confirmation' }),
-        task({ threadId: 'running', title: '正在运行', status: 'running' }),
-        task({
-          kind: 'background',
-          threadId: 'scheduled',
-          taskId: 'background-scheduled',
-          title: '计划任务',
-          status: 'running',
-          trigger: {
-            type: 'cron',
-            description: '每天 09:00',
-            cronExpression: '0 9 * * *',
-            nextRunAt: '2026-05-22T01:00:00.000Z'
-          },
-          nextRunAt: '2026-05-22T01:00:00.000Z',
-          lastRunAt: null
-        }),
-        task({ threadId: 'paused', title: '已暂停', status: 'paused' }),
-        task({ threadId: 'failed', title: '已失败', status: 'failed' }),
-        task({
-          threadId: 'recent-completed',
-          title: '最近完成',
-          status: 'completed',
-          updatedAt: '2026-05-18T00:00:00.000Z'
-        }),
-        task({
-          threadId: 'old-completed',
-          title: '旧完成',
-          status: 'completed',
-          updatedAt: '2026-05-01T00:00:00.000Z'
-        })
-      ]
-    });
-
-    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
-
-    expect(model.allItems.map((item) => item.threadId)).toEqual([
-      'pending',
-      'running',
-      'scheduled',
-      'paused',
-      'failed',
-      'recent-completed',
-      'old-completed'
-    ]);
-    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
-      ['all', 7],
-      ['running', 1],
-      ['scheduled', 1],
-      ['pending_confirmation', 1],
-      ['paused', 1],
-      ['failed', 1],
-      ['terminal', 2]
-    ]);
-    expect(model.allItems.filter((item) => item.threadId === 'scheduled')).toHaveLength(1);
-  });
-
-  it('keeps cancelled terminal tasks visible so task counts cannot render an empty list', () => {
-    const state = createLoadedState({
-      activeTasks: [
-        task({ threadId: 'cancelled-1', title: '已取消任务一', status: 'cancelled' }),
-        task({ threadId: 'cancelled-2', title: '已取消任务二', status: 'cancelled' }),
-        task({ threadId: 'cancelled-3', title: '已取消任务三', status: 'cancelled' })
-      ],
-      taskSnapshot: {
-        generatedAt: '2026-05-21T00:00:00.000Z',
-        recentEvents: [],
-        counts: {
-          total: 3,
-          running: 0,
-          failed: 0,
-          pendingConfirmation: 0
-        },
-        threads: []
-      }
-    });
-
-    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
-
-    expect(model.allItems).toHaveLength(3);
-    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
-      ['all', 3],
-      ['running', 0],
-      ['scheduled', 0],
-      ['pending_confirmation', 0],
-      ['paused', 0],
-      ['failed', 0],
-      ['terminal', 3]
-    ]);
-  });
-
-  it('keeps one item per background task id', () => {
-    const state = createLoadedState({
-      activeTasks: [
-        task({
-          threadId: 'thread-first',
-          taskId: 'background-same',
-          title: '后台任务一',
-          status: 'running'
-        }),
-        task({
-          threadId: 'thread-second',
-          taskId: 'background-same',
-          title: '后台任务二',
-          status: 'running'
-        })
-      ]
-    });
-
-    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
-
-    expect(model.allItems).toEqual([
-      expect.objectContaining({
-        kind: 'background',
-        threadId: 'thread-first',
-        taskId: 'background-same'
-      })
-    ]);
-  });
-
-  it('keeps different background task ids even if a thread id repeats', () => {
-    const state = createLoadedState({
-      activeTasks: [
-        task({
-          threadId: 'same-thread',
-          taskId: 'background-first',
-          title: '后台任务一',
-          status: 'running'
-        }),
-        task({
-          threadId: 'same-thread',
-          taskId: 'background-second',
-          title: '后台任务二',
-          status: 'running'
-        })
-      ]
-    });
-
-    const model = buildTaskViewModel(state, '2026-05-21T00:00:00.000Z');
-
-    expect(model.allItems.map((item) => item.taskId)).toEqual(['background-first', 'background-second']);
-  });
-
-  it('counts nav metadata from active task statuses and scheduled definitions', () => {
+describe('task nav metadata', () => {
+  it('counts active, pending approval, and scheduled task metadata for navigation', () => {
     const counts = countTaskNavMeta([
       task({ threadId: 'pending', title: '等待审批', status: 'pending_confirmation' }),
       task({ threadId: 'paused', title: '已暂停', status: 'paused' }),
@@ -199,6 +47,13 @@ describe('task workbench view model', () => {
         },
         nextRunAt: '2026-05-22T01:00:00.000Z',
         lastRunAt: null
+      }),
+      task({
+        threadId: 'completed',
+        title: '已完成',
+        status: 'completed',
+        nextRunAt: '2026-05-23T01:00:00.000Z',
+        lastRunAt: '2026-05-22T01:00:00.000Z'
       })
     ]);
 
@@ -207,34 +62,5 @@ describe('task workbench view model', () => {
       pendingApprovalCount: 1,
       scheduledCount: 1
     });
-  });
-
-  it('shows recurring background tasks waiting for their next run as scheduled after a previous run fired', () => {
-    const recurring = task({
-      threadId: 'recurring',
-      title: '周期检查',
-      status: 'running',
-      trigger: {
-        type: 'cron',
-        description: '每小时',
-        cronExpression: '0 * * * *',
-        nextRunAt: '2026-05-22T02:00:00.000Z'
-      },
-      nextRunAt: '2026-05-22T02:00:00.000Z',
-      lastRunAt: '2026-05-22T01:00:00.000Z'
-    });
-    const model = buildTaskViewModel(createLoadedState({ activeTasks: [recurring] }), '2026-05-22T01:05:00.000Z');
-
-    expect(model.railItems.map((item) => [item.id, item.count])).toEqual([
-      ['all', 1],
-      ['running', 0],
-      ['scheduled', 1],
-      ['pending_confirmation', 0],
-      ['paused', 0],
-      ['failed', 0],
-      ['terminal', 0]
-    ]);
-    expect(filterTaskItems(model.allItems, 'scheduled')).toEqual([recurring]);
-    expect(resolveTaskDisplayStatus(recurring)).toBe('计划中');
   });
 });

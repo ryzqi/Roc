@@ -62,7 +62,6 @@ export const pluginCapabilityMappings = [
   mapping('tasks', 'tasks.cancelBackgroundTask', ipcChannels.tasksCancelBackgroundTask, 'task.background.cancel', idInput('id')),
   mapping('tasks', 'tasks.deleteBackgroundTask', ipcChannels.tasksDeleteBackgroundTask, 'task.background.delete', idInput('id')),
   mapping('tasks', 'tasks.updateBackgroundTask', ipcChannels.tasksUpdateBackgroundTask, 'task.background.update', firstArg),
-  mapping('tasks', 'tasks.openInChat', ipcChannels.tasksOpenInChat, 'task.background.openInChat', firstArg),
   mapping('tasks', 'tasks.getSchedulerStatus', ipcChannels.tasksGetSchedulerStatus, 'task.scheduler.status', emptyInput),
   mapping('lifecycle', 'lifecycle.getTraySummary', ipcChannels.lifecycleGetTraySummary, 'lifecycle.getTraySummary', emptyInput),
   mapping(

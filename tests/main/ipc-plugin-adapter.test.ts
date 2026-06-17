@@ -124,7 +124,6 @@ function requiredMappings(): Array<{
     { preloadMethod: 'tasks.getTaskDetail', capabilityName: 'task.detail.get', args: [request], expectedInput: request },
     { preloadMethod: 'tasks.listScheduledRuns', capabilityName: 'task.scheduledRuns.list', args: [request], expectedInput: request },
     { preloadMethod: 'tasks.updateBackgroundTask', capabilityName: 'task.background.update', args: [request], expectedInput: request },
-    { preloadMethod: 'tasks.openInChat', capabilityName: 'task.background.openInChat', args: [request], expectedInput: request },
     { preloadMethod: 'tasks.getSchedulerStatus', capabilityName: 'task.scheduler.status', args: [], expectedInput: {} },
     { preloadMethod: 'git.status', capabilityName: 'git.status', args: [], expectedInput: {} },
     { preloadMethod: 'git.diffStat', capabilityName: 'git.diffStat', args: [], expectedInput: {} },

@@ -142,7 +142,6 @@ export type RocPreloadApi = {
     runBackgroundNow: (id: string) => Promise<IpcResult<{ taskId: string; runId: string }>>;
     deleteBackgroundTask: (id: string) => Promise<IpcResult<{ deleted: true; taskId: string }>>;
     updateBackgroundTask: (request: UpdateBackgroundTaskRequest) => Promise<IpcResult<BackgroundTask>>;
-    openInChat: (request: { taskId: string }) => Promise<IpcResult<{ threadId: string }>>;
     getSchedulerStatus: () => Promise<IpcResult<SchedulerStatus>>;
     onUpdated: (callback: (event: TaskUpdateEvent | null) => void) => () => void;
   };

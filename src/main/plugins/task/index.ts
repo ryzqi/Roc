@@ -56,8 +56,7 @@ export const taskCapabilityDescriptors = [
   descriptor('task.thread.delete', z.object({ threadId: z.string() }), z.object({ deleted: z.literal(true), threadId: z.string() })),
   descriptor('task.active.list', z.object({}), z.array(z.custom<ActiveTaskItem>())),
   descriptor('task.detail.get', z.object({ taskId: z.string() }), z.custom<TaskDetail>()),
-  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().optional() }), z.array(z.custom<ScheduledTaskRun>())),
-  descriptor('task.background.openInChat', z.object({ taskId: z.string() }), z.object({ threadId: z.string() }))
+  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().optional() }), z.array(z.custom<ScheduledTaskRun>()))
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export function createTaskPlugin(): RocPlugin {
@@ -244,9 +243,6 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
   );
   context.capabilities.register(pluginId, taskCapabilityDescriptors[19], async (input) =>
     repository.listScheduledRuns(input as { taskId: string; limit?: number })
-  );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[20], async (input) =>
-    repository.openBackgroundTaskInChat((input as { taskId: string }).taskId)
   );
 }
 

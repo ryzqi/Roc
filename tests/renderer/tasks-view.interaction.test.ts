@@ -145,7 +145,6 @@ describe('TasksView interactions', () => {
       );
     });
 
-    expect(container.querySelector('[data-testid="task-status-rail"]')).toBeNull();
     expect(container.querySelector('[data-testid="task-board-column-待处理"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="task-board-column-进行中"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="task-board-column-已暂停"]')).not.toBeNull();

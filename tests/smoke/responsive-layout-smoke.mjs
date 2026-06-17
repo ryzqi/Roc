@@ -31,69 +31,66 @@ const taskWorkbenchMarkup = `
               <button class="action-button" type="button">新建任务</button>
             </div>
           </div>
-          <section class="canvas-stage stage-grid task-command-center" data-testid="tasks-view">
-            <div class="task-workbench-layout">
-              <nav class="task-status-rail" data-testid="task-status-rail">
-                <button class="task-rail-item task-rail-item--active" type="button"><span>全部</span><strong>1</strong></button>
-                <button class="task-rail-item" type="button"><span>运行中</span><strong>1</strong></button>
-                <button class="task-rail-item" type="button"><span>计划中</span><strong>1</strong></button>
-                <button class="task-rail-item" type="button"><span>待确认</span><strong>0</strong></button>
-                <button class="task-rail-item" type="button"><span>已暂停</span><strong>0</strong></button>
-              </nav>
-              <section class="task-table-panel" data-testid="task-table">
-                <div class="task-table-head">
-                  <div>
-                    <h2 class="section-title">全部任务</h2>
-                    <p>按最近更新排序 · 同一任务只出现一次</p>
-                  </div>
-                  <div class="task-table-status">
-                    <span class="status-pill info"><span>1</span></span>
-                    <span class="pill ok">调度器运行中</span>
-                    <small>注册 1 · 下次 2026-05-22T01:00:00.000Z</small>
-                  </div>
-                </div>
-                <div class="task-table-rows">
-                  <button class="task-row task-row--selected" type="button">
-                    <span class="task-row-copy">
-                      <span class="task-row-title">窄屏任务布局回归检查：确认任务表格和详情抽屉在窗口缩小时不会互相覆盖</span>
-                      <span class="task-row-meta">定时 · medium · F:\\Code\\Roc</span>
-                    </span>
-                    <span class="pill info">计划中</span>
-                    <span class="task-row-time"><span class="task-row-time-label">下次运行</span>2026-05-22T01:00:00.000Z</span>
-                    <span class="task-row-time"><span class="task-row-time-label">最近运行</span>无</span>
+          <section class="canvas-stage stage-grid task-board-page" data-testid="tasks-board-view">
+            <div class="task-board-grid" data-testid="task-board-grid">
+              <section class="task-board-column" data-testid="task-board-column-todo">
+                <header class="task-board-column-head">
+                  <h2 class="section-title">待处理</h2>
+                  <span class="status-pill info"><span>1</span></span>
+                </header>
+                <div class="task-board-column-list">
+                  <button class="task-board-card" data-testid="task-board-card-long" type="button">
+                    <span class="task-board-card-title">窄屏任务布局回归检查：确认看板卡片和详情页在窗口缩小时不会互相覆盖</span>
+                    <span class="task-board-card-meta">pending_confirmation</span>
+                    <span class="task-board-card-meta">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap</span>
                   </button>
                 </div>
               </section>
-              <aside class="task-detail-drawer" data-testid="task-detail-drawer">
-                <div class="section-head">
-                  <h2 class="section-title">任务详情</h2>
-                  <span class="status-pill info"><span>running</span></span>
-                </div>
-                <div class="task-detail-tabs" role="tablist" aria-label="任务详情">
-                  <button type="button">概览</button>
-                  <button type="button">运行输出</button>
-                  <button type="button">运行历史</button>
-                  <button type="button">事件流</button>
-                  <button type="button">设置</button>
-                </div>
-                <div class="list-rows">
-                  <div class="row">
-                    <div class="row-copy">
-                      <div class="row-title">工作区</div>
-                      <div class="row-sub">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\not\\move\\other\\controls</div>
+              <section class="task-board-column" data-testid="task-board-column-running">
+                <header class="task-board-column-head">
+                  <h2 class="section-title">进行中</h2>
+                  <span class="status-pill info"><span>0</span></span>
+                </header>
+                <div class="task-board-column-list"></div>
+              </section>
+              <section class="task-board-column" data-testid="task-board-column-paused">
+                <header class="task-board-column-head">
+                  <h2 class="section-title">已暂停</h2>
+                  <span class="status-pill info"><span>0</span></span>
+                </header>
+                <div class="task-board-column-list"></div>
+              </section>
+              <section class="task-board-column" data-testid="task-board-column-done">
+                <header class="task-board-column-head">
+                  <h2 class="section-title">已结束</h2>
+                  <span class="status-pill info"><span>0</span></span>
+                </header>
+                <div class="task-board-column-list"></div>
+              </section>
+            </div>
+          </section>
+          <section class="canvas-stage task-detail-page" data-testid="task-detail-view">
+            <div class="task-detail-page-head">
+              <button class="action-button" type="button">返回任务工作台</button>
+              <div class="page-copy">
+                <h1 class="page-title mini">窄屏任务布局回归检查</h1>
+                <p class="page-meta">waiting_user</p>
+              </div>
+            </div>
+            <div class="task-detail-page-body" data-testid="task-detail-page-body">
+              <div class="chat-transcript" data-testid="chat-transcript">
+                <div class="chat-message-row chat-message-row--assistant" data-testid="chat-message-assistant">
+                  <article class="chat-bubble chat-bubble--assistant">
+                    <div class="chat-assistant-content" data-testid="chat-assistant-content">
+                      <p>任务详情页转录内容保持在任务域内。</p>
                     </div>
-                    <span class="pill info">background-task-id-with-a-long-generated-identifier</span>
-                  </div>
+                  </article>
                 </div>
-                <div class="action-strip">
-                  <button type="button">让 AI 修改</button>
-                  <button type="button">立即运行</button>
-                  <button type="button">暂停</button>
-                  <button type="button">取消</button>
-                  <button type="button">打开聊天</button>
-                  <button type="button">复制 ID</button>
-                </div>
-              </aside>
+              </div>
+              <form class="task-detail-followup" data-testid="task-detail-followup">
+                <textarea data-testid="task-detail-followup-input">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap\\inside\\followup</textarea>
+                <button class="action-button" type="submit">继续任务</button>
+              </form>
             </div>
           </section>
         </div>
@@ -268,23 +265,28 @@ try {
     { key: 'workspace', selector: '.workspace' },
     { key: 'sidebar', selector: '.sidebar' },
     { key: 'canvas', selector: '.canvas' },
-    { key: 'tasksView', selector: '[data-testid="tasks-view"]' },
-    { key: 'rail', selector: '[data-testid="task-status-rail"]' },
-    { key: 'table', selector: '[data-testid="task-table"]' },
-    { key: 'drawer', selector: '[data-testid="task-detail-drawer"]' },
-    { key: 'drawerRow', selector: '[data-testid="task-detail-drawer"] .row' },
-    { key: 'drawerSub', selector: '[data-testid="task-detail-drawer"] .row-sub' },
-    { key: 'drawerPill', selector: '[data-testid="task-detail-drawer"] .pill' }
+    { key: 'taskBoard', selector: '[data-testid="tasks-board-view"]' },
+    { key: 'boardGrid', selector: '[data-testid="task-board-grid"]' },
+    { key: 'todoColumn', selector: '[data-testid="task-board-column-todo"]' },
+    { key: 'runningColumn', selector: '[data-testid="task-board-column-running"]' },
+    { key: 'taskCard', selector: '[data-testid="task-board-card-long"]' },
+    { key: 'taskCardTitle', selector: '[data-testid="task-board-card-long"] .task-board-card-title' },
+    { key: 'taskDetail', selector: '[data-testid="task-detail-view"]' },
+    { key: 'taskDetailBody', selector: '[data-testid="task-detail-page-body"]' },
+    { key: 'taskFollowup', selector: '[data-testid="task-detail-followup"]' },
+    { key: 'taskFollowupInput', selector: '[data-testid="task-detail-followup-input"]' }
   ]);
 
-  assertCondition(evidence.tasksView.left <= 16, 'Narrow task view must not stay offset by a fixed sidebar', evidence);
-  assertCondition(evidence.tasksView.width >= 600, 'Narrow task view must keep enough width for stacked content', evidence);
-  assertCondition(evidence.rail.bottom <= evidence.table.top, 'Status rail and table must stack without overlap', evidence);
-  assertCondition(evidence.table.bottom <= evidence.drawer.top, 'Task table and detail drawer must stack without overlap', evidence);
-  assertCondition(evidence.drawer.right <= evidence.windowWidth, 'Task detail drawer must stay inside the viewport', evidence);
-  assertCondition(evidence.drawerRow.scrollWidth <= evidence.drawerRow.clientWidth + 1, 'Detail row must not be widened by long tags', evidence);
-  assertCondition(evidence.drawerSub.scrollWidth <= evidence.drawerSub.clientWidth + 1, 'Detail row subtext must wrap instead of overflowing', evidence);
-  assertCondition(evidence.drawerPill.scrollWidth <= evidence.drawerPill.clientWidth + 1, 'Detail row pill must wrap or shrink inside the drawer', evidence);
+  assertCondition(evidence.taskBoard.left <= 16, 'Narrow task board must not stay offset by a fixed sidebar', evidence);
+  assertCondition(evidence.taskBoard.width >= 600, 'Narrow task board must keep enough width for stacked content', evidence);
+  assertCondition(evidence.boardGrid.gridTemplateColumns.trim().split(/\s+/).length === 1, 'Narrow task board columns must collapse to one column', evidence);
+  assertCondition(evidence.todoColumn.bottom <= evidence.runningColumn.top, 'Task board columns must stack without overlap', evidence);
+  assertCondition(evidence.taskCardTitle.scrollWidth <= evidence.taskCardTitle.clientWidth + 1, 'Task board card title must wrap instead of overflowing', evidence);
+  assertCondition(evidence.taskCard.right <= evidence.windowWidth, 'Task board card must stay inside the viewport', evidence);
+  assertCondition(evidence.taskBoard.bottom <= evidence.taskDetail.top, 'Task board and detail page fixtures must stack without overlap', evidence);
+  assertCondition(evidence.taskDetail.right <= evidence.windowWidth, 'Task detail page must stay inside the viewport', evidence);
+  assertCondition(evidence.taskDetailBody.gridTemplateColumns.trim().split(/\s+/).length === 1, 'Narrow task detail body must stay one column', evidence);
+  assertCondition(evidence.taskFollowupInput.scrollWidth <= evidence.taskFollowupInput.clientWidth + 1, 'Task detail follow-up input must stay inside the detail page', evidence);
 
   const narrowChatViewportWidth = 1160;
   await page.setViewportSize({ width: narrowChatViewportWidth, height: 720 });

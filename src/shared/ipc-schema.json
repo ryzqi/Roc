@@ -24,7 +24,6 @@
     { "key": "tasksRunBackgroundNow", "channel": "roc:tasks:run-background-now" },
     { "key": "tasksDeleteBackgroundTask", "channel": "roc:tasks:delete-background-task" },
     { "key": "tasksUpdateBackgroundTask", "channel": "roc:tasks:update-background-task" },
-    { "key": "tasksOpenInChat", "channel": "roc:tasks:open-in-chat" },
     { "key": "tasksGetSchedulerStatus", "channel": "roc:tasks:get-scheduler-status" },
     { "key": "lifecycleGetTraySummary", "channel": "roc:lifecycle:get-tray-summary" },
     { "key": "lifecyclePauseBackground", "channel": "roc:lifecycle:pause-background" },

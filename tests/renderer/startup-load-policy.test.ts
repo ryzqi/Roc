@@ -12,7 +12,10 @@ describe('startup load policy', () => {
   });
 
   it('loads feature data only for the selected feature surface', () => {
-    expect(getStartupLoadIntent({ activeView: 'tasks', activeWorkbenchTool: 'files', workbenchVisible: false }).targets).toEqual(
+    expect(getStartupLoadIntent({ activeView: 'tasks-board', activeWorkbenchTool: 'files', workbenchVisible: false }).targets).toEqual(
+      new Set(['taskSurface'])
+    );
+    expect(getStartupLoadIntent({ activeView: 'task-detail', activeWorkbenchTool: 'files', workbenchVisible: false }).targets).toEqual(
       new Set(['taskSurface'])
     );
     expect(getStartupLoadIntent({ activeView: 'memory', activeWorkbenchTool: 'files', workbenchVisible: false }).targets).toEqual(

@@ -74,7 +74,7 @@ describe('AppShell', () => {
   it('opens the task workbench entry as the board page instead of chat', async () => {
     const client = createShellClient();
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=tasks-board');
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -99,22 +99,33 @@ describe('AppShell', () => {
   it('opens task detail after workbench task creation succeeds', async () => {
     const client = createShellClient();
     const createdTask = createActiveTask({ taskId: 'task-created', threadId: 'thread-created', goal: '每天晚上总结新闻' });
-    vi.mocked(client.api.chat.startRun).mockResolvedValue({
-      ok: true,
-      data: {
-        runId: 'run-created',
-        mode: 'task',
-        threadId: 'thread-created',
-        providerId: 'provider-openai',
-        modelId: 'gpt-test',
-        createdAt: '2026-05-21T00:00:00.000Z'
-      }
+    let creationStarted = false;
+    let activeTaskPollCount = 0;
+    vi.mocked(client.api.chat.startRun).mockImplementation(async () => {
+      creationStarted = true;
+      return {
+        ok: true,
+        data: {
+          runId: 'run-created',
+          mode: 'task',
+          threadId: 'run-thread',
+          providerId: 'provider-openai',
+          modelId: 'gpt-test',
+          createdAt: '2026-05-21T00:00:00.000Z'
+        }
+      };
     });
-    vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [createdTask] });
+    vi.mocked(client.api.tasks.getActiveTasks).mockImplementation(async () => {
+      if (!creationStarted) {
+        return { ok: true, data: [] };
+      }
+      activeTaskPollCount += 1;
+      return { ok: true, data: activeTaskPollCount === 1 ? [] : [createdTask] };
+    });
     vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: createTaskDetail(createdTask) });
     vi.mocked(client.api.tasks.listScheduledRuns).mockResolvedValue({ ok: true, data: [] });
     window.roc = client.api;
-    window.history.replaceState(null, '', '/?page=tasks-board');
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
 
     await act(async () => {
       root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
@@ -127,6 +138,10 @@ describe('AppShell', () => {
     setTextareaValue('task-create-description', '每天晚上总结新闻');
     await act(async () => {
       queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
     });
     await flushPromises();
 

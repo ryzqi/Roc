@@ -108,7 +108,7 @@ describe('TasksFeature', () => {
     });
   });
 
-  it('renders the kanban board without a task detail drawer', async () => {
+  it('renders the kanban board page surface', async () => {
     await act(async () => {
       root.render(
         <TasksBoardFeature
@@ -126,7 +126,6 @@ describe('TasksFeature', () => {
     });
 
     expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="task-detail-drawer"]')).toBeNull();
   });
 
   it('renders the standalone task detail page', async () => {
