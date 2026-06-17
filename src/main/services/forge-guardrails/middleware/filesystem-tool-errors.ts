@@ -4,9 +4,8 @@ import { createMiddleware } from 'langchain';
 const FILESYSTEM_TOOL_NAMES = new Set(['read_file', 'write_file', 'edit_file', 'ls', 'glob', 'grep']);
 
 const ROUTE_OR_PERMISSION_ERROR_PATTERNS = [
-  'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。',
+  'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。',
   'Roc 已将 /skills/ 挂载为只读能力目录。',
-  'Roc 已将 /agents/ 挂载为只读项目规则目录。',
   'Roc 当前回合未启用这个 skill。',
   'permission_denied'
 ] as const;

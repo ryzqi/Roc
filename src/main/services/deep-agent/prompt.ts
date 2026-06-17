@@ -79,17 +79,15 @@ function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
 
 function createWorkspaceBoundary(workspacePath: string | null): string[] {
   if (workspacePath === null) {
-    return ['Workspace: not selected.', 'Default cwd: unavailable; ask user to select workspace before file or shell ops.'];
+    return ['Workspace: not selected.', 'Default command cwd: unavailable; ask user to select workspace before local command operations.'];
   }
   return [
     `Workspace: ${workspacePath}`,
-    'Default cwd for shell commands: selected Roc workspace root.',
-    'Use /workspace/ only for Deep Agents file tools.',
-    'Use the Windows workspace root for shell paths; never run rtk ls /workspace.',
-    'For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.',
-    'Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.',
-    'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
-    'Run file and shell ops inside workspace unless user explicitly names another allowed path.'
+    'DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.',
+    'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
+    'Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.',
+    'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.',
+    'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
   ];
 }
 

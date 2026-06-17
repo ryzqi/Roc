@@ -68,7 +68,7 @@ export function buildAgentCapabilityPreview(input: {
   }
 
   const toolCards = [
-    createExecuteCard(),
+    createRunShellCommandCard(),
     createWebReadCard(),
     createDeleteFileCard(input.approvalMode),
     ...selectedMcpCards
@@ -203,19 +203,19 @@ function createWebReadCard(): AgentCapabilityCard {
   };
 }
 
-function createExecuteCard(): AgentCapabilityCard {
+function createRunShellCommandCard(): AgentCapabilityCard {
   return {
-    id: 'builtin:execute',
-    name: 'execute',
+    id: 'builtin:run_shell_command',
+    name: 'run_shell_command',
     capabilityType: 'terminal_tool',
-    description: '通过 Deep Agents 内建 execute 在当前工作区执行命令，由 Roc 的 RTK 与审计层统一包裹。',
-    requiredInput: 'shell command',
+    description: '通过 Roc Windows 命令工具在当前工作区执行 PowerShell 命令，由 Roc 的 RTK 与审计层统一包裹。',
+    requiredInput: 'PowerShell command',
     scope: 'workspace',
-    dependencies: ['LocalShellBackend', 'RtkService'],
+    dependencies: ['ShellExecutionService', 'RtkService'],
     sideEffects: ['workspace_command_execution', 'task_trace_audit'],
     requiresApproval: false,
     supportsLongTermGrant: false,
-    revokeGrantHint: 'execute 由 Roc 内置 backend 提供，不创建长期授权。',
+    revokeGrantHint: 'run_shell_command 由 Roc 内置工具提供，不创建长期授权。',
     riskLevel: 'medium',
     auditCategory: 'agent_execute',
     untrustedContext: false

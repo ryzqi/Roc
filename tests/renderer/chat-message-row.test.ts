@@ -56,7 +56,7 @@ describe('chat message row', () => {
             interruptId: 'interrupt-1',
             actionRequests: [
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'git status'
                 }
@@ -64,7 +64,7 @@ describe('chat message row', () => {
             ],
             reviewConfigs: [
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
@@ -212,7 +212,7 @@ describe('chat message row', () => {
             interruptId: 'interrupt-1',
             actionRequests: [
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'git status'
                 }
@@ -220,7 +220,7 @@ describe('chat message row', () => {
             ],
             reviewConfigs: [
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
@@ -231,7 +231,7 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid="chat-approval-card"');
-    expect(html).toContain('data-testid="chat-approval-tool-name">execute<');
+    expect(html).toContain('data-testid="chat-approval-tool-name">run_shell_command<');
     expect(html).toContain('git status');
     expect(html).toContain('approve / edit / reject');
     expect(html).not.toContain('chat-approval-dot');
@@ -316,7 +316,7 @@ describe('chat message row', () => {
                 }
               },
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'pnpm test'
                 }
@@ -328,7 +328,7 @@ describe('chat message row', () => {
                 allowedDecisions: ['approve', 'edit', 'reject']
               },
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'reject']
               }
             ]
@@ -341,7 +341,7 @@ describe('chat message row', () => {
     expect(html).toContain('data-testid="chat-approval-card"');
     expect(html).not.toContain('data-testid="task-approval-card"');
     expect(html).toContain('data-testid="chat-approval-tool-name">propose_background_task<');
-    expect(html).toContain('data-testid="chat-approval-tool-name">execute<');
+    expect(html).toContain('data-testid="chat-approval-tool-name">run_shell_command<');
     expect(html).toContain('chat-approval-count">2</span>');
   });
 });

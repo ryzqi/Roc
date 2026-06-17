@@ -35,7 +35,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'execute',
+          name: 'run_shell_command',
           args: { command: 'git status' }
         }
       } as never,
@@ -78,7 +78,7 @@ describe('createRTKMiddleware', () => {
     const request = {
       toolCall: {
         id: 'call-execute',
-        name: 'execute',
+        name: 'run_shell_command',
         args: { command: 'git status' }
       }
     };
@@ -108,7 +108,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'execute',
+          name: 'run_shell_command',
           args: { command: 'rm -rf .' }
         }
       } as never,
@@ -200,7 +200,7 @@ describe('createRTKMiddleware', () => {
     const missingCommandRequest = {
       toolCall: {
         id: 'call-empty',
-        name: 'execute',
+        name: 'run_shell_command',
         args: { path: 'notes.md' }
       }
     };
@@ -214,7 +214,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'execute',
+          name: 'run_shell_command',
           args: { command: 'git status' }
         }
       } as never,
@@ -237,7 +237,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'execute',
+          name: 'run_shell_command',
           args: { command: 'git status' }
         }
       } as never,
@@ -259,7 +259,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'execute',
+          name: 'run_shell_command',
           args: null
         }
       } as never,

@@ -94,16 +94,14 @@ export class SystemPromptBuilder {
     const sections: string[] = [];
     if (workspacePath === null) {
       sections.push('Workspace: not selected.');
-      sections.push('Default cwd: unavailable; ask user to select workspace before file or shell ops.');
+      sections.push('Default command cwd: unavailable; ask user to select workspace before local command operations.');
     } else {
       sections.push(`Workspace: ${workspacePath}`);
-      sections.push('Default cwd for shell commands: selected Roc workspace root.');
-      sections.push('Use /workspace/ only for Deep Agents file tools.');
-      sections.push('Use the Windows workspace root for shell paths; never run rtk ls /workspace.');
-      sections.push('For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.');
-      sections.push('Do not pass Windows absolute paths like C:\\path\\file.txt or G:\\path\\file.txt to read_file, write_file, or edit_file.');
+      sections.push('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
+      sections.push('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
+      sections.push('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
+      sections.push('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
       sections.push('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
-      sections.push('Run file and shell ops inside workspace unless user explicitly names another allowed path.');
     }
     const content = sections.join('\n');
     return {

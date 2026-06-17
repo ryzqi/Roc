@@ -31,7 +31,10 @@ describe('buildDeepAgent harness profile wiring', () => {
       skillSources: [],
       subagents: [],
       tools: [],
-      filesystemPermissions: undefined,
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+      ],
       interruptOn: undefined,
       checkpointer: undefined,
       providerType: 'openai_compatible',
@@ -43,6 +46,12 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     expect(ensureRocHarnessProfilesRegistered).toHaveBeenCalledTimes(1);
     expect(createDeepAgent).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createDeepAgent).mock.calls[0]?.[0]).toMatchObject({
+      permissions: [
+        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+      ]
+    });
   });
 
   it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {
@@ -64,7 +73,10 @@ describe('buildDeepAgent harness profile wiring', () => {
           schema: internetSearchSchema
         })
       ],
-      filesystemPermissions: undefined,
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+      ],
       interruptOn: undefined,
       checkpointer: undefined,
       providerType: 'openai_compatible',

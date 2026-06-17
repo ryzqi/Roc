@@ -33,12 +33,12 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
   it('marks invalid write_file route output as a hard tool error', async () => {
     const result = await runWrapToolCall({
       toolName: 'write_file',
-      content: 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。'
+      content: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
     });
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).status).toBe('error');
-    expect(String((result as ToolMessage).content)).toContain('Roc 当前只允许访问');
+    expect(String((result as ToolMessage).content)).toContain('Roc 文件工具只允许访问');
   });
 
   it('marks invalid read_file route output as a hard tool error', async () => {
@@ -47,7 +47,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
       content: [
         {
           type: 'text',
-          text: 'Error: Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。'
+          text: 'Error: Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
         }
       ]
     });
@@ -62,7 +62,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
       content: [
         {
           type: 'text',
-          text: "34: const UNKNOWN_ROUTE_ERROR = 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。';"
+          text: "34: const UNKNOWN_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';"
         }
       ]
     });
@@ -99,7 +99,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
   it('ignores non-filesystem tools', async () => {
     const result = await runWrapToolCall({
       toolName: 'web_read',
-      content: 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。'
+      content: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
     });
 
     expect(result).toBeInstanceOf(ToolMessage);

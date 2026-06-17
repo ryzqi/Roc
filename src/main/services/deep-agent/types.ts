@@ -66,8 +66,7 @@ export const DEEP_AGENT_BUILT_IN_TOOLS = [
   'write_file',
   'edit_file',
   'glob',
-  'grep',
-  'execute'
+  'grep'
 ] as const;
 
 export const RUN_EVENT_NAME = 'run-event';

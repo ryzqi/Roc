@@ -53,7 +53,7 @@ function createBuildInput(): DeepAgentBuildInput {
       fakeTool('update_background_task'),
       fakeTool('cancel_background_task')
     ],
-    filesystemPermissions: undefined,
+    filesystemPermissions: [],
     interruptOn: undefined,
     checkpointer: undefined,
     providerType: 'openai_compatible',

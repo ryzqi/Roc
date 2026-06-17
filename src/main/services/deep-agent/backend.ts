@@ -3,15 +3,14 @@ import {
   FilesystemBackend,
   type AnyBackendProtocol,
   type EditResult,
-  type ExecuteResponse,
+  type FilesystemPermission,
   type FileDownloadResponse,
   type FileUploadResponse,
   type GlobResult,
   type GrepResult,
   type LsResult,
   type ReadRawResult,
-  type ReadResult,
-  type SandboxBackendProtocolV2
+  type ReadResult
 } from 'deepagents';
 import { join } from 'node:path';
 import type { MemoryKind } from '../../../shared/types';
@@ -21,28 +20,30 @@ import type { ConsolidatorService } from '../memory/consolidator';
 import { SecurityScanService } from '../memory/security-scan';
 import { buildWorkspaceHash, type RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
-import type { AgentExecuteAdapter } from './types';
 import { WritableMemoryFilesystemBackend } from './writable-memory-backend';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
 const MEMORY_ROUTE = '/memory/';
-const AGENTS_ROUTE = '/agents/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
-const READ_ONLY_AGENTS_ERROR = 'Roc 已将 /agents/ 挂载为只读项目规则目录。';
 const SKILL_ACCESS_DENIED_ERROR = 'Roc 当前回合未启用这个 skill。';
-const UNKNOWN_ROUTE_ERROR = 'Roc 当前只允许访问 /workspace/、/skills/、/agents/、/memory/ 路径。';
+const UNKNOWN_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';
 
-export type RocCompositeBackend = CompositeBackend &
-  SandboxBackendProtocolV2 & {
-    readonly routePrefixes: string[];
-  };
+export type RocCompositeBackend = {
+  readonly routePrefixes: string[];
+} & AnyBackendProtocol;
 
-class RocHostShellBackend implements SandboxBackendProtocolV2 {
-  readonly id = 'roc-host-shell';
+export function createRocFilesystemPermissions(): FilesystemPermission[] {
+  return [
+    { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+    { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
+    { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
+    { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+  ];
+}
 
-  constructor(private readonly shellExecutionService: AgentExecuteAdapter) {
-  }
+class RocRouteRejectingFilesystemBackend {
+  readonly id = 'roc-route-rejecting-filesystem';
 
   ls(_path: string): Promise<LsResult> {
     return Promise.resolve({ files: [] });
@@ -89,10 +90,6 @@ class RocHostShellBackend implements SandboxBackendProtocolV2 {
         error: 'permission_denied'
       }))
     );
-  }
-
-  execute(command: string): Promise<ExecuteResponse> {
-    return this.shellExecutionService.executeAgentCommand({ command });
   }
 }
 
@@ -279,10 +276,53 @@ class SelectedSkillsFilesystemBackend {
   }
 }
 
+class RocNonExecutingCompositeBackend {
+  constructor(private readonly delegate: CompositeBackend) {}
+
+  get routePrefixes(): string[] {
+    return this.delegate.routePrefixes;
+  }
+
+  ls(path: string): Promise<LsResult> {
+    return this.delegate.ls(path);
+  }
+
+  read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
+    return this.delegate.read(filePath, offset, limit);
+  }
+
+  readRaw(filePath: string): Promise<ReadRawResult> {
+    return this.delegate.readRaw(filePath);
+  }
+
+  grep(pattern: string, path?: string, glob?: string | null): Promise<GrepResult> {
+    return this.delegate.grep(pattern, path, glob);
+  }
+
+  glob(pattern: string, path?: string): Promise<GlobResult> {
+    return this.delegate.glob(pattern, path);
+  }
+
+  write(filePath: string, content: string): Promise<import('deepagents').WriteResult> {
+    return this.delegate.write(filePath, content);
+  }
+
+  edit(filePath: string, oldString: string, newString: string, replaceAll?: boolean): Promise<EditResult> {
+    return this.delegate.edit(filePath, oldString, newString, replaceAll);
+  }
+
+  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
+    return this.delegate.uploadFiles(files);
+  }
+
+  downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    return this.delegate.downloadFiles(paths);
+  }
+}
+
 function createRouteBackends(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
-  shellExecutionService: AgentExecuteAdapter;
   securityScan: SecurityScanService;
   capacity: CapacityService;
   consolidatorService: ConsolidatorService;
@@ -292,7 +332,7 @@ function createRouteBackends(input: {
   backend: RocCompositeBackend;
   memoryRoute: string;
 } {
-  const hostShellBackend = new RocHostShellBackend(input.shellExecutionService);
+  const routeRejectingBackend = new RocRouteRejectingFilesystemBackend();
   const workspace = input.workspaceService.getCurrentWorkspace();
   const workspaceHash = buildWorkspaceHash(workspace === null ? null : workspace.path);
   const skillsBackendBase = new FilesystemBackend({
@@ -304,17 +344,12 @@ function createRouteBackends(input: {
     selectedSkillIds.length === 0
       ? new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR)
       : new SelectedSkillsFilesystemBackend(skillsBackendBase, selectedSkillIds, READ_ONLY_SKILLS_ERROR);
-  const agentsBackendBase = new FilesystemBackend({
-    rootDir: input.paths.memoryDir,
-    virtualMode: true
-  });
   const memoryBackendBase = new FilesystemBackend({
     rootDir: input.paths.memoryDir,
     virtualMode: true
   });
   const routes: Record<string, AnyBackendProtocol> = {
     [SKILLS_ROUTE]: skillsBackend,
-    [AGENTS_ROUTE]: new ReadOnlyFilesystemBackend(agentsBackendBase, READ_ONLY_AGENTS_ERROR),
     [MEMORY_ROUTE]: new WritableMemoryFilesystemBackend(
       memoryBackendBase,
       workspaceHash,
@@ -335,7 +370,8 @@ function createRouteBackends(input: {
     });
   }
 
-  const backend = new CompositeBackend(hostShellBackend, routes) as RocCompositeBackend;
+  const routedBackend = new CompositeBackend(routeRejectingBackend, routes);
+  const backend = new RocNonExecutingCompositeBackend(routedBackend);
 
   return {
     backend,
@@ -346,7 +382,6 @@ function createRouteBackends(input: {
 export function createBackend(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
-  shellExecutionService: AgentExecuteAdapter;
   securityScan: SecurityScanService;
   capacity: CapacityService;
   consolidatorService: ConsolidatorService;

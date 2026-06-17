@@ -19,6 +19,7 @@ import {
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
+import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
@@ -63,6 +64,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createToolProtocolMiddleware(),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
+    createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware(),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens

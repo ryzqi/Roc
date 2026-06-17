@@ -763,7 +763,7 @@ describe('task plugin', () => {
           interruptId: 'interrupt-1',
           actionRequests: [
             {
-              name: 'execute',
+              name: 'run_shell_command',
               args: {
                 command: 'git status'
               }
@@ -771,7 +771,7 @@ describe('task plugin', () => {
           ],
           reviewConfigs: [
             {
-              actionName: 'execute',
+              actionName: 'run_shell_command',
               allowedDecisions: ['approve', 'reject']
             }
           ]
@@ -796,7 +796,7 @@ describe('task plugin', () => {
           interruptId: 'interrupt-1',
           actionRequests: [
             expect.objectContaining({
-              name: 'execute',
+              name: 'run_shell_command',
               args: {
                 command: 'git status'
               }

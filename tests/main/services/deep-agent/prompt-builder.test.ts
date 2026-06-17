@@ -104,6 +104,23 @@ describe('SystemPromptBuilder', () => {
     expect(blocks[4].stability).toBe(BlockStability.CAPABILITY);
   });
 
+  it('应写入新的 Windows 路径边界提示', () => {
+    const blocks = SystemPromptBuilder.build({
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      frozenSnapshot: createFrozenSnapshot(),
+      workflowHint: null,
+      tools: []
+    });
+
+    const content = blocks[1]?.content ?? '';
+    expect(content).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
+    expect(content).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
+    expect(content).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
+    expect(content).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
+    expect(content).toContain('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
+  });
+
   it('应添加 DeepAgents 负责的后台任务创建指引', () => {
     const blocks = SystemPromptBuilder.build({
       enabledCapabilities: { mcpServers: [], skills: [] },

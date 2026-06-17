@@ -9,6 +9,7 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
   ChatStartRunRequest,
+  ShellExecutionResult,
   TaskDetail,
   TaskRun,
   Workspace
@@ -142,8 +143,15 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const buildInput = readBuildInput();
 
-    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/agents/', '/memory/']));
-    expect(buildInput.filesystemPermissions).toBeUndefined();
+    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(buildInput.backend.routePrefixes).not.toContain('/agents/');
+    expect('execute' in buildInput.backend).toBe(false);
+    expect(buildInput.filesystemPermissions).toEqual([
+      { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+      { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
+      { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
+      { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+    ]);
   });
 
   it('wires background task change tools to task capabilities', async () => {
@@ -187,12 +195,10 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const buildInput = readBuildInput();
     expect(buildInput.systemPrompt).toContain('本轮工作流：创建后台任务。');
-    expect(buildInput.systemPrompt).toContain('Default cwd for shell commands: selected Roc workspace root.');
-    expect(buildInput.systemPrompt).toContain('Use /workspace/ only for Deep Agents file tools.');
-    expect(buildInput.systemPrompt).toContain('Use the Windows workspace root for shell paths; never run rtk ls /workspace.');
-    expect(buildInput.systemPrompt).toContain(
-      'For directory listings on native Windows, prefer the file ls tool or PowerShell Get-ChildItem.'
-    );
+    expect(buildInput.systemPrompt).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
+    expect(buildInput.systemPrompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
+    expect(buildInput.systemPrompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
+    expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
     expect(buildInput.systemPrompt).not.toContain('current directory means /workspace/.');
     expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');
   });
@@ -228,6 +234,42 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).not.toContain('read_background_task');
     expect(toolNames).not.toContain('update_background_task');
     expect(toolNames).not.toContain('cancel_background_task');
+  });
+
+  it('exposes Roc Windows command tool instead of DeepAgents built-in execute', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    const toolNames = readBuiltTools().map((tool) => tool.name);
+
+    expect(toolNames).toContain('run_shell_command');
+    expect(toolNames).not.toContain('execute');
+  });
+
+  it('runs Roc Windows command tool through shell.execute capability', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    const output = await invokeTool(findTool(readBuiltTools(), 'run_shell_command'), {
+      command: 'python .\\create_docx.py'
+    });
+
+    expect(output).toContain('"exitCode": 0');
+    expect(capabilityCalls).toContainEqual({
+      name: 'shell.execute',
+      input: {
+        command: 'python .\\create_docx.py',
+        cwd: undefined,
+        source: 'agent'
+      }
+    });
   });
 
   it('rejects background task workflow hints without workbench source', async () => {
@@ -574,6 +616,18 @@ function createCapabilities(
       }
       if (name === 'task.background.cancel') {
         return createTask(createPreview({ goal: '已取消任务' }), 'cancelled') as TOutput;
+      }
+      if (name === 'shell.execute') {
+        return {
+          command: (input as { command: string }).command,
+          normalizedCommand: (input as { command: string }).command,
+          cwd: 'F:\\Code\\Roc',
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          durationMs: 1,
+          usedRtk: false
+        } satisfies ShellExecutionResult as TOutput;
       }
       throw new Error(`unexpected_capability:${name}`);
     }

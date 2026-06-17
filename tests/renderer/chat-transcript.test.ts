@@ -906,7 +906,7 @@ describe('chat transcript helpers', () => {
             interruptId: 'interrupt-1',
             actionRequests: [
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'git status'
                 }
@@ -914,7 +914,7 @@ describe('chat transcript helpers', () => {
             ],
             reviewConfigs: [
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'reject']
               }
             ]
@@ -994,7 +994,7 @@ describe('chat transcript helpers', () => {
             interruptId: 'interrupt-1',
             actionRequests: [
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'git status'
                 }
@@ -1002,7 +1002,7 @@ describe('chat transcript helpers', () => {
             ],
             reviewConfigs: [
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'reject']
               }
             ]

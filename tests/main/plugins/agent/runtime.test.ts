@@ -799,7 +799,7 @@ describe('AgentPluginRuntime', () => {
             payload: {
               actionRequests: [
                 {
-                  name: 'execute',
+                  name: 'run_shell_command',
                   args: {
                     command: 'git status'
                   }
@@ -807,7 +807,7 @@ describe('AgentPluginRuntime', () => {
               ],
               reviewConfigs: [
                 {
-                  actionName: 'execute',
+                  actionName: 'run_shell_command',
                   allowedDecisions: ['approve', 'reject']
                 }
               ]
@@ -842,7 +842,7 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_approval_1',
             actionRequests: [
               {
-                name: 'execute',
+                name: 'run_shell_command',
                 args: {
                   command: 'git status'
                 }
@@ -850,7 +850,7 @@ describe('AgentPluginRuntime', () => {
             ],
             reviewConfigs: [
               {
-                actionName: 'execute',
+                actionName: 'run_shell_command',
                 allowedDecisions: ['approve', 'reject']
               }
             ]
@@ -879,7 +879,7 @@ describe('AgentPluginRuntime', () => {
               payload: {
                 actionRequests: [
                   {
-                    name: 'execute',
+                    name: 'run_shell_command',
                     args: {
                       command: 'git status'
                     }
@@ -887,7 +887,7 @@ describe('AgentPluginRuntime', () => {
                 ],
                 reviewConfigs: [
                   {
-                    actionName: 'execute',
+                    actionName: 'run_shell_command',
                     allowedDecisions: ['approve', 'reject']
                   }
                 ]

@@ -27,6 +27,15 @@ describe('agent capability preview', () => {
     );
     expect(preview.interruptOn.update_background_task).toBeUndefined();
     expect(preview.interruptOn.cancel_background_task).toBeUndefined();
+    const card = preview.toolCards.find((item) => item.name === 'run_shell_command');
+    expect(card).toMatchObject({
+      id: 'builtin:run_shell_command',
+      name: 'run_shell_command',
+      capabilityType: 'terminal_tool',
+      requiredInput: 'PowerShell command',
+      dependencies: ['ShellExecutionService', 'RtkService'],
+      auditCategory: 'agent_execute'
+    });
   });
 });
 

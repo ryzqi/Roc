@@ -2938,7 +2938,7 @@ try {
         (item) => item.id === 'missing-mcp' && item.type === 'mcp_server' && item.reason === 'not_found'
       ) &&
       agentPreviewApiEvidence.cards.includes('web:web_read') &&
-      agentPreviewApiEvidence.cards.includes('builtin:execute') &&
+      agentPreviewApiEvidence.cards.includes('builtin:run_shell_command') &&
       agentPreviewApiEvidence.cards.includes('builtin:delete_file') &&
       agentPreviewApiEvidence.cards.includes('mcp:smoke-mcp:smoke_tool') &&
       agentPreviewApiEvidence.skills.includes('skill:smoke-skill') &&

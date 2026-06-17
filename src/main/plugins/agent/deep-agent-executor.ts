@@ -11,7 +11,6 @@ import type {
   ChatRunEvent,
   ChatStartRunRequest,
   FileDeleteResult,
-  ShellExecutionResult,
   TaskDetail,
   TaskRun,
   UpdateBackgroundTaskRequest,
@@ -27,7 +26,8 @@ import type { WebReadRequest } from '../../services/web-read-service';
 import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
-import { createBackend } from '../../services/deep-agent/backend';
+import { createBackend, createRocFilesystemPermissions } from '../../services/deep-agent/backend';
+import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { buildSystemPrompt } from '../../services/deep-agent/prompt';
 import * as recordUtils from '../../services/deep-agent/record-utils';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
@@ -72,11 +72,13 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
 
       const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
       requireWorkbenchSourceForBackgroundTaskWorkflow(input.request);
+      const shellExecutionService = createShellExecutionAdapter(options.capabilities);
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         enabledCapabilities: input.request.enabledCapabilities,
         backgroundTaskToolMode: readBackgroundTaskToolMode(input.request),
-        runtimeWorkspacePath: workspace === null ? null : workspace.path
+        runtimeWorkspacePath: workspace === null ? null : workspace.path,
+        shellExecutionService
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
@@ -102,7 +104,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           webReadTool: tools.webReadTool
         }),
         tools: tools.runTools,
-        filesystemPermissions: undefined,
+        filesystemPermissions: createRocFilesystemPermissions(),
         interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
         checkpointer,
         providerType: handle.runtime.providerType,
@@ -558,6 +560,7 @@ async function createExecutorTools(input: {
   enabledCapabilities: TaskRun['enabledCapabilities'];
   backgroundTaskToolMode: 'all' | 'change' | null;
   runtimeWorkspacePath: string | null;
+  shellExecutionService: AgentExecuteAdapter;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
@@ -567,6 +570,7 @@ async function createExecutorTools(input: {
   const runTools: ClientTool[] = [
     webReadTool,
     createDeleteFileTool(input.capabilities),
+    createRocWindowsCommandTool(input.shellExecutionService),
     ...mcpTools
   ];
   if (input.backgroundTaskToolMode !== null) {
@@ -704,11 +708,25 @@ function createRuntimeBackend(input: {
             label: input.workspace.displayName
           }
   };
-  const shellExecutionService: AgentExecuteAdapter = {
+  return createBackend({
+    workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
+    paths: input.paths,
+    securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
+    capacity: new CapacityService(defaultSettings.memory.charLimits),
+    consolidatorService: {
+      scheduleForFile: () => {}
+    } as unknown as Parameters<typeof createBackend>[0]['consolidatorService'],
+    activeModelHandle: input.handle,
+    selectedSkillIds: input.selectedSkillIds
+  });
+}
+
+function createShellExecutionAdapter(capabilities: RocCapabilityRegistry): AgentExecuteAdapter {
+  return {
     executeAgentCommand: async ({ command, cwd }) => {
-      const result = await input.capabilities.invoke<
+      const result = await capabilities.invoke<
         { command: string; cwd?: string; source: 'agent' },
-        ShellExecutionResult
+        import('../../../shared/types').ShellExecutionResult
       >('shell.execute', {
         command,
         cwd,
@@ -720,22 +738,11 @@ function createRuntimeBackend(input: {
         exitCode: result.exitCode,
         output: formatShellOutput(result),
         truncated: false,
-        usedRtk: result.usedRtk
+        usedRtk: result.usedRtk,
+        bypassReason: result.bypassReason
       };
     }
   };
-  return createBackend({
-    workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
-    paths: input.paths,
-    shellExecutionService,
-    securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
-    capacity: new CapacityService(defaultSettings.memory.charLimits),
-    consolidatorService: {
-      scheduleForFile: () => {}
-    } as unknown as Parameters<typeof createBackend>[0]['consolidatorService'],
-    activeModelHandle: input.handle,
-    selectedSkillIds: input.selectedSkillIds
-  });
 }
 
 function disabledSnapshot(): FrozenSnapshot {
@@ -773,7 +780,7 @@ function disabledSnapshot(): FrozenSnapshot {
   };
 }
 
-function formatShellOutput(result: ShellExecutionResult): string {
+function formatShellOutput(result: import('../../../shared/types').ShellExecutionResult): string {
   const output = [result.stdout, result.stderr].filter((value) => value.length > 0).join('\n');
   if (output.length === 0) {
     return `<no output>\n\nExit code: ${result.exitCode}`;

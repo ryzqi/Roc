@@ -17,7 +17,10 @@ export function ensureRocHarnessProfilesRegistered(): void {
   if (registered) {
     return;
   }
-  const profile = createHarnessProfile({ excludedMiddleware: ['SummarizationMiddleware'] });
+  const profile = createHarnessProfile({
+    excludedMiddleware: ['SummarizationMiddleware'],
+    excludedTools: ['execute']
+  });
   registerHarnessProfile('anthropic', profile);
   registerHarnessProfile('openai', profile);
   registered = true;

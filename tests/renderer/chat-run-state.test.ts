@@ -106,7 +106,7 @@ describe('chat run state', () => {
       payload: {
         actionRequests: [
           {
-            name: 'execute',
+            name: 'run_shell_command',
             args: {
               command: 'git status'
             }
@@ -120,7 +120,7 @@ describe('chat run state', () => {
         ],
         reviewConfigs: [
           {
-            actionName: 'execute',
+            actionName: 'run_shell_command',
             allowedDecisions: ['approve', 'edit', 'reject']
           },
           {
@@ -134,7 +134,7 @@ describe('chat run state', () => {
     expect(state.status).toBe('waiting_user');
     expect(state.pendingApprovals[0]?.actionRequests).toEqual([
       {
-        name: 'execute',
+        name: 'run_shell_command',
         args: {
           command: 'git status'
         }
@@ -282,7 +282,7 @@ function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['
   return {
     actionRequests: [
       {
-        name: 'execute',
+        name: 'run_shell_command',
         args: {
           command: 'git status'
         }
@@ -290,7 +290,7 @@ function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['
     ],
     reviewConfigs: [
       {
-        actionName: 'execute',
+        actionName: 'run_shell_command',
         allowedDecisions: ['approve', 'reject']
       }
     ]
