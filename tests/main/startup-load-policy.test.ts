@@ -98,9 +98,14 @@ describe('startup load policy', () => {
     }
   });
 
-  it('loads task surface only when the current view presents task data', () => {
-    const tasksIntent = getStartupLoadIntent({
-      activeView: 'tasks',
+  it('loads task surface for both task board and task detail pages only', () => {
+    const boardIntent = getStartupLoadIntent({
+      activeView: 'tasks-board',
+      activeWorkbenchTool: 'files',
+      workbenchVisible: false
+    });
+    const detailIntent = getStartupLoadIntent({
+      activeView: 'task-detail',
       activeWorkbenchTool: 'files',
       workbenchVisible: false
     });
@@ -110,7 +115,8 @@ describe('startup load policy', () => {
       workbenchVisible: false
     });
 
-    expectTargets(tasksIntent, ['taskSurface']);
+    expectTargets(boardIntent, ['taskSurface']);
+    expectTargets(detailIntent, ['taskSurface']);
     expect(chatIntent.targets.has('taskSurface')).toBe(false);
   });
 

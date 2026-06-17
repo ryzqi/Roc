@@ -1,6 +1,7 @@
 export type StartupLoadViewId =
   | 'chat'
-  | 'tasks'
+  | 'tasks-board'
+  | 'task-detail'
   | 'workspace'
   | 'git'
   | 'terminal'
@@ -49,7 +50,7 @@ export function getStartupLoadIntent(input: StartupLoadPolicyInput): StartupLoad
     targets.add('memory');
   }
 
-  if (input.activeView === 'tasks') {
+  if (input.activeView === 'tasks-board' || input.activeView === 'task-detail') {
     targets.add('taskSurface');
   }
 

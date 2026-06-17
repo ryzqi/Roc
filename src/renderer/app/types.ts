@@ -26,7 +26,8 @@ import type {
 
 export type ViewId =
   | 'chat'
-  | 'tasks'
+  | 'tasks-board'
+  | 'task-detail'
   | 'workspace'
   | 'git'
   | 'terminal'

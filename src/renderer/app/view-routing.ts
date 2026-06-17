@@ -3,7 +3,8 @@ import type { MainViewId, PageMeta, PreviewIconName, ViewId, WorkbenchTool } fro
 
 export const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
-  'tasks',
+  'tasks-board',
+  'task-detail',
   'workspace',
   'git',
   'terminal',
@@ -29,9 +30,14 @@ export const PAGE_META: Record<MainViewId, PageMeta> = {
     topMeta: '未选择工作区',
     pageLabel: '主会话'
   },
-  tasks: {
+  'tasks-board': {
     title: '任务工作台',
-    topMeta: '任务状态',
+    topMeta: '任务看板',
+    pageLabel: '任务控制'
+  },
+  'task-detail': {
+    title: '任务详情',
+    topMeta: '任务执行上下文',
     pageLabel: '任务控制'
   },
   workspace: {
@@ -135,7 +141,7 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
   if (view === 'chat') {
     return visibleWorkspaceLabel(state);
   }
-  if (view === 'tasks') {
+  if (view === 'tasks-board' || view === 'task-detail') {
     return `${state.taskSnapshot.counts.total} 个任务 · 运行中 ${state.taskSnapshot.counts.running}`;
   }
   if (view === 'workspace' || view === 'git' || view === 'terminal' || view === 'preview') {
