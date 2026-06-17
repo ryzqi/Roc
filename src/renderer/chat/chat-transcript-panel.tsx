@@ -80,7 +80,7 @@ export function ChatTranscriptPanel({
     if (container === null) {
       return;
     }
-    if (!measureAtBottom()) {
+    if (!isAtBottom) {
       return;
     }
     if (rafHandleRef.current !== null) {
@@ -93,7 +93,7 @@ export function ChatTranscriptPanel({
         node.scrollTo(buildStreamingAutoFollowScrollOptions(node.scrollHeight));
       }
     });
-  }, [liveSignal, measureAtBottom, messages, scrollContainerRef]);
+  }, [isAtBottom, liveSignal, messages, scrollContainerRef]);
 
   useEffect(() => {
     return () => {
