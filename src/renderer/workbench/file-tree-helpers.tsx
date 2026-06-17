@@ -76,20 +76,6 @@ export function flattenTreeEntries<E extends FileEntryShape>(
   return nodes;
 }
 
-export function fileTypeLabel(preview: FilePreviewLike | null): string {
-  if (preview === null) {
-    return '未加载';
-  }
-  if (preview.kind === 'image') {
-    return preview.mediaType ?? '图片';
-  }
-  if (preview.kind === 'binary') {
-    return '二进制文件';
-  }
-  const extension = fileExtension(preview.relativePath);
-  return extension.length === 0 ? '文本文件' : `${extension.toUpperCase()} 文件`;
-}
-
 export function fileTreeIcon(entry: FileEntryShape, active: boolean, expanded: boolean): React.JSX.Element {
   const className = active ? 'tree-item-file-icon tree-item-file-icon--active' : 'tree-item-file-icon';
   if (entry.type === 'directory') {

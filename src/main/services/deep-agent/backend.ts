@@ -13,7 +13,6 @@ import {
   type ReadResult
 } from 'deepagents';
 import { join } from 'node:path';
-import type { MemoryKind } from '../../../shared/types';
 import type { LangChainChatModelHandle } from '../langchain-model-factory';
 import { CapacityService } from '../memory/capacity';
 import type { ConsolidatorService } from '../memory/consolidator';

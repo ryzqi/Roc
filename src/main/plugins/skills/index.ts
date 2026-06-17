@@ -91,7 +91,6 @@ export function createSkillsPlugin(options: SkillsPluginOptions = {}): RocPlugin
   };
 }
 
-export const skillsPlugin = createSkillsPlugin();
 export { skillsCapabilityDescriptors };
 
 function descriptor<TInput, TOutput>(

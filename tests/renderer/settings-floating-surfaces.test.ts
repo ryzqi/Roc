@@ -157,7 +157,6 @@ describe('settings surfaces', () => {
         onDeleteProvider: async () => {},
         onEditProvider: () => {},
         onSaveProviderDraft: async () => {},
-        onSetProviderSecret: async () => {},
         onStartNewProvider: () => {},
         onTestProvider: async () => {},
         onUpdateDraft: () => {},

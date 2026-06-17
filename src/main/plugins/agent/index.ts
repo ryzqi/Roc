@@ -232,8 +232,6 @@ function resolveDeepAgentExecutor(
   });
 }
 
-export const agentPlugin = createAgentPlugin();
-
 function resolveDependencies(options: AgentPluginOptions): string[] {
   const dependencies = new Set<string>();
   if (options.capabilityPreview !== undefined) {

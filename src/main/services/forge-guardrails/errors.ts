@@ -21,5 +21,3 @@ export const FORGE_EXHAUSTED_CODES = {
   retries: 'forge_retries_exhausted',
   toolErrors: 'forge_tool_errors_exhausted'
 } as const;
-
-export type ForgeExhaustedCode = (typeof FORGE_EXHAUSTED_CODES)[keyof typeof FORGE_EXHAUSTED_CODES];

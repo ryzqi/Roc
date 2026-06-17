@@ -231,13 +231,6 @@ export function SettingsView({
     }
   }
 
-  const setProviderSecret = useCallback(
-    async (providerId: string, plaintext: string): Promise<void> => {
-      await saveProviderSecret(providerId, plaintext);
-    },
-    [saveProviderSecret]
-  );
-
   const clearProviderSecret = useCallback(
     async (providerId: string): Promise<void> => {
       setSecretBusyProviderId(providerId);
@@ -358,7 +351,6 @@ export function SettingsView({
                 onDeleteProvider={deleteProvider}
                 onEditProvider={editProvider}
                 onSaveProviderDraft={saveProviderDraft}
-                onSetProviderSecret={setProviderSecret}
                 onStartNewProvider={startNewProvider}
                 onTestProvider={testProvider}
                 onUpdateDraft={updateProviderDraft}

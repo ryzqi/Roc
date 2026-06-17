@@ -5,16 +5,8 @@ export function gitStatusChanges(status: GitStatusResult): GitStatusChange[] {
   return status.changes;
 }
 
-export function canStageGitChange(change: GitStatusChange): boolean {
-  return change.worktree !== ' ' || change.index === '?' || change.index === '!';
-}
-
 export function canUnstageGitChange(change: GitStatusChange): boolean {
   return change.index !== ' ' && change.index !== '?';
-}
-
-export function canDiscardGitChange(change: GitStatusChange): boolean {
-  return change.index !== '?';
 }
 
 export function buildGitChangeStateLabel(change: GitStatusChange): string {

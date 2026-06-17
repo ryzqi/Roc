@@ -19,10 +19,6 @@ type ReasoningSource =
       values: string[];
     };
 
-type ContentBlockText = {
-  text: string;
-};
-
 type ToolCallChunkBlock = {
   name: string;
   data: Record<string, unknown>;

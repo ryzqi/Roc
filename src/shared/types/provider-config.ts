@@ -123,34 +123,6 @@ type LegacyProviderConfig = Pick<
   'id' | 'name' | 'type' | 'enabled' | 'models' | 'endpoint' | 'credentialRef' | 'options'
 >;
 
-export function isOpenAIProvider(
-  config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'openai_compatible' }> {
-  return config.type === 'openai_compatible';
-}
-
-export function isAnthropicProvider(
-  config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'anthropic_compatible' }> {
-  return config.type === 'anthropic_compatible';
-}
-
-export function isNvidiaProvider(config: ProviderConfigTyped): config is Extract<ProviderConfigTyped, { type: 'nvidia' }> {
-  return config.type === 'nvidia';
-}
-
-export function isLlamaCppProvider(
-  config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'llama_cpp' }> {
-  return config.type === 'llama_cpp';
-}
-
-export function isOpenRouterProvider(
-  config: ProviderConfigTyped
-): config is Extract<ProviderConfigTyped, { type: 'openrouter' }> {
-  return config.type === 'openrouter';
-}
-
 export function toTypedProviderConfig(legacy: LegacyProviderConfig): ProviderConfigTyped {
   const baseConfig: BaseProviderConfig = {
     id: legacy.id,

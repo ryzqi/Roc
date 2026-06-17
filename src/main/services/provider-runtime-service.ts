@@ -3,7 +3,6 @@ import type {
   ProviderConfig,
   ProviderTestResult
 } from '../../shared/types';
-import { resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import { LangChainModelFactory } from './langchain-model-factory';
@@ -124,7 +123,7 @@ export class ProviderRuntimeService {
       }
     }
     try {
-      const response = await executeWithProviderRequestRetry(
+      await executeWithProviderRequestRetry(
         async () => {
           const result = await this.executeTransportRequest({
             provider,

@@ -72,7 +72,7 @@ class AnthropicStrategy implements CacheStrategy {
     return new SystemMessage({ content: enhanced });
   }
 
-  estimateSavings(blocks: PromptBlock[], usage: any): CacheSavings {
+  estimateSavings(_blocks: PromptBlock[], usage: any): CacheSavings {
     const cacheReadTokens = usage?.input_token_details?.cache_read || 0;
     const totalPromptTokens = usage?.input_tokens || 0;
 
@@ -89,12 +89,12 @@ class AnthropicStrategy implements CacheStrategy {
 }
 
 class OpenAIStrategy implements CacheStrategy {
-  detectBreakpoints(blocks: PromptBlock[], strategy: PromptCachingStrategy): number[] {
+  detectBreakpoints(_blocks: PromptBlock[], _strategy: PromptCachingStrategy): number[] {
     // OpenAI 自动缓存前缀，无需标记
     return [];
   }
 
-  applyCacheControl(message: SystemMessage, breakpoints: number[]): SystemMessage {
+  applyCacheControl(message: SystemMessage, _breakpoints: number[]): SystemMessage {
     // OpenAI 不注入 cache_control
     return message;
   }
@@ -140,22 +140,6 @@ export class CacheStrategyFactory {
 }
 
 export { AnthropicStrategy, OpenAIStrategy };
-
-function isBlockBasedContent(content: unknown): boolean {
-  return Array.isArray(content) && content.every(block =>
-    typeof block === 'object' && block !== null && 'type' in block
-  );
-}
-
-function extractBlocks(content: any[]): PromptBlock[] {
-  // 从 SystemMessage.content 提取 blocks
-  return content.map(block => ({
-    type: block.blockType || 'unknown',
-    content: block.text || String(block),
-    stability: block.stability || BlockStability.REQUEST,
-    hash: block.hash || ''
-  }));
-}
 
 /**
  * 从带分隔符的字符串中解析 PromptBlock[]
@@ -256,4 +240,3 @@ export function createPromptCachingMiddleware(options: PromptCachingOptions) {
     }
   });
 }
-

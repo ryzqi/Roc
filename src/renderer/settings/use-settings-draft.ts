@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   AppSettings,
   PermissionsConfig,
-  ProviderConfig,
-  SettingsSnapshot
+  ProviderConfig
 } from '../../shared/types';
 import {
   buildImpactRows,
@@ -13,8 +12,6 @@ import {
   type ImpactSourceState,
   type SettingsSectionId
 } from '../settings-model';
-
-export type DraftSlice<T> = [T, (next: T) => void];
 
 export type SettingsDraft = {
   settings: AppSettings;
@@ -132,13 +129,4 @@ export function useSettingsDraft(input: {
     resetSection,
     buildSaveRequest
   };
-}
-
-export function applySnapshotToDraft(
-  draft: Pick<SettingsDraft, 'setSettings' | 'setPermissions' | 'setDefaultModelId'>,
-  snapshot: SettingsSnapshot
-): void {
-  draft.setSettings(snapshot.settings);
-  draft.setPermissions(snapshot.permissions);
-  draft.setDefaultModelId(snapshot.defaultModelId);
 }

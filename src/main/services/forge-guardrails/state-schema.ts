@@ -31,9 +31,6 @@ export const forgeGuardrailsStateSchema = new StateSchema({
   })
 });
 
-export type ForgeGuardrailsState = typeof forgeGuardrailsStateSchema.State;
-export type ForgeGuardrailsUpdate = typeof forgeGuardrailsStateSchema.Update;
-
 export function markIterationOnMessage(message: BaseMessage, iterationIndex: number): BaseMessage {
   if (message.additional_kwargs === undefined) {
     message.additional_kwargs = {};

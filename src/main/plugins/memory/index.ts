@@ -157,8 +157,6 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
   };
 }
 
-export const memoryPlugin = createMemoryPlugin();
-
 function registerMemoryCapabilities(context: RocPluginContext, repository: MemoryRepository): void {
   context.capabilities.register(pluginId, memoryCapabilityDescriptors[0], async () => repository.status());
   context.capabilities.register(pluginId, memoryCapabilityDescriptors[1], async (input) =>

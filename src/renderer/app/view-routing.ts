@@ -1,5 +1,5 @@
 import type { LoadedState } from '../loaded-state';
-import type { MainViewId, PageMeta, PreviewIconName, ViewId, WorkbenchTool } from './types';
+import type { MainViewId, PreviewIconName, ViewId, WorkbenchTool } from './types';
 
 export const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
@@ -23,69 +23,6 @@ export const WORKBENCH_TOOLS: Array<{ id: WorkbenchTool; label: string; icon: Pr
   { id: 'git', label: 'Git', icon: 'git' },
   { id: 'terminal', label: '终端', icon: 'terminal' }
 ];
-
-export const PAGE_META: Record<MainViewId, PageMeta> = {
-  chat: {
-    title: '聊天主页',
-    topMeta: '未选择工作区',
-    pageLabel: '主会话'
-  },
-  'tasks-board': {
-    title: '任务工作台',
-    topMeta: '任务看板',
-    pageLabel: '任务控制'
-  },
-  'task-detail': {
-    title: '任务详情',
-    topMeta: '任务执行上下文',
-    pageLabel: '任务控制'
-  },
-  workspace: {
-    title: '工作区文件',
-    topMeta: '文件视图',
-    pageLabel: '工作区'
-  },
-  git: {
-    title: 'Git 面板',
-    topMeta: 'Git 状态',
-    pageLabel: '工作区'
-  },
-  terminal: {
-    title: '嵌入式终端',
-    topMeta: '终端会话',
-    pageLabel: '工作区'
-  },
-  preview: {
-    title: '文件预览',
-    topMeta: '预览面板',
-    pageLabel: '工作区'
-  },
-  mcp: {
-    title: 'MCP',
-    topMeta: 'MCP 清单',
-    pageLabel: '控制面'
-  },
-  skills: {
-    title: 'Skill',
-    topMeta: 'Skill 清单',
-    pageLabel: '控制面'
-  },
-  memory: {
-    title: '记忆中心',
-    topMeta: '记忆状态',
-    pageLabel: '控制面'
-  },
-  settings: {
-    title: '设置',
-    topMeta: '设置',
-    pageLabel: '控制面'
-  },
-  diagnostics: {
-    title: '任务诊断包',
-    topMeta: '失败任务',
-    pageLabel: '控制面'
-  }
-};
 
 export function parseViewId(value: string | null): ViewId {
   if (value !== null && MAIN_VIEW_IDS.has(value as ViewId)) {

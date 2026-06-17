@@ -276,12 +276,6 @@ export class AgentSessionRepository {
     return row.max_run_number + 1;
   }
 
-  private requireActiveThread(threadId: string): void {
-    if (!this.hasActiveThread(threadId)) {
-      throw new Error('task_thread_not_found');
-    }
-  }
-
   private hasActiveThread(threadId: string): boolean {
     const row = this.db.prepare('SELECT id FROM task_threads WHERE id = ? AND archived_at IS NULL').get(threadId) as
       | { id: string }

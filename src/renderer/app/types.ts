@@ -19,7 +19,6 @@ import type {
   SchedulerStatus,
   ScheduledTaskRun,
   TaskDetail,
-  TaskSnapshot,
   TerminalSessionSnapshot,
   TraySummary
 } from '../../shared/types';
@@ -61,12 +60,6 @@ export type NavItem = {
   meta: string;
   icon: PreviewIconName;
   active?: boolean;
-};
-
-export type PageMeta = {
-  title: string;
-  topMeta: string;
-  pageLabel: string;
 };
 
 export type HistoryContextMenuState = {

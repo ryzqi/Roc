@@ -8,7 +8,6 @@
  */
 
 import { ChatOpenAI } from '@langchain/openai';
-import { ChatAnthropic } from '@langchain/anthropic';
 
 interface TestResult {
   provider: string;

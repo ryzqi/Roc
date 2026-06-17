@@ -13,7 +13,7 @@ import type {
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import { requireText } from './validation';
-import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
+import { defaultMcpConfig, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
 import {
   isCurrentSettingsDocument,
   isLegacyUnifiedSettingsDocument,

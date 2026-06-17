@@ -144,8 +144,6 @@ export function createTaskPlugin(): RocPlugin {
   };
 }
 
-export const taskPlugin = createTaskPlugin();
-
 function registerTaskCapabilities(context: RocPluginContext, repository: TaskRepository, scheduler: TaskScheduler): void {
   context.capabilities.register(pluginId, taskCapabilityDescriptors[0], async () => repository.getSnapshot());
   context.capabilities.register(pluginId, taskCapabilityDescriptors[1], async (input) =>

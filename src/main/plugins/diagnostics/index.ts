@@ -152,7 +152,6 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
   };
 }
 
-export const diagnosticsPlugin = createDiagnosticsPlugin();
 export { diagnosticsCapabilityDescriptors };
 
 function registerDiagnosticsCapabilities(

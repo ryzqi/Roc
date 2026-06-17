@@ -4,7 +4,6 @@ import {
   isRetryableProviderHttpStatus,
   providerRequestTimeoutMessage
 } from '../provider-request-retry';
-import { isRecord } from './record-utils';
 import { redact } from './redact';
 import type { RunFailure } from './types';
 
@@ -13,16 +12,6 @@ const KNOWN_PROPOSE_TOP_LEVEL_KEYS = new Set(['goal', 'trigger', 'workspacePath'
 const PROPOSE_TOOL_NAME = 'propose_background_task';
 const PROPOSE_SCHEMA_SUGGESTION =
   'propose_background_task 模型只填写 goal 和 trigger；workspacePath、allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 由 runtime 设置。';
-
-function readHttpStatus(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && /^\d+$/.test(value)) {
-    return Number(value);
-  }
-  return null;
-}
 
 export function toRunFailure(error: unknown): RunFailure {
   if (error instanceof RocDomainError) {

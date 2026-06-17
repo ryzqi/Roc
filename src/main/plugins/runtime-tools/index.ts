@@ -105,7 +105,6 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
   };
 }
 
-export const runtimeToolsPlugin = createRuntimeToolsPlugin();
 export { runtimeToolsCapabilityDescriptors };
 
 async function confirmShell(

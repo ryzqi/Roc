@@ -52,7 +52,6 @@ export function ProvidersSection({
   onDeleteProvider,
   onEditProvider,
   onSaveProviderDraft,
-  onSetProviderSecret,
   onStartNewProvider,
   onTestProvider,
   onUpdateDraft,
@@ -67,7 +66,6 @@ export function ProvidersSection({
   onDeleteProvider: (providerId: string) => Promise<void>;
   onEditProvider: (provider: ProviderConfig) => void;
   onSaveProviderDraft: () => Promise<void>;
-  onSetProviderSecret: (providerId: string, plaintext: string) => Promise<void>;
   onStartNewProvider: (type: CreatableProviderType) => void;
   onTestProvider: (providerId: string) => Promise<void>;
   onUpdateDraft: (partial: Partial<ProviderDraft>) => void;

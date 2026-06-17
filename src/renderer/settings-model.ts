@@ -1,5 +1,3 @@
-import type { ProviderSecretStatus } from '../shared/types';
-
 export type SettingsSectionId =
   | 'providers'
   | 'default-model'
@@ -29,13 +27,6 @@ export function selectSettingsSection(current: SettingsSectionId, requested: str
     return requested as SettingsSectionId;
   }
   return current;
-}
-
-export function findSecretStatus(
-  statuses: readonly ProviderSecretStatus[],
-  providerId: string
-): ProviderSecretStatus | null {
-  return statuses.find((entry) => entry.providerId === providerId) ?? null;
 }
 
 export * from './settings/provider-draft-model';

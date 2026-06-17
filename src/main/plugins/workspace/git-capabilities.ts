@@ -1,16 +1,9 @@
 import type {
   GitBatchFileOperationRequest,
-  GitBranchListResult,
-  GitBranchMutationResult,
   GitCheckoutBranchRequest,
   GitCommitRequest,
-  GitCommitResult,
   GitCreateBranchRequest,
-  GitDiffStatResult,
-  GitFileDiffResult,
-  GitFileOperationRequest,
-  GitPushResult,
-  GitStatusResult
+  GitFileOperationRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { GitService } from '../../services/git-service';
@@ -52,54 +45,3 @@ export function registerGitCapabilities(
     gitService.checkoutBranch((input as GitCheckoutBranchRequest).name)
   );
 }
-
-export type WorkspaceGitCapabilityTypes = {
-  status: {
-    input: Record<string, never>;
-    output: GitStatusResult;
-  };
-  diffStat: {
-    input: Record<string, never>;
-    output: GitDiffStatResult;
-  };
-  fileDiff: {
-    input: GitFileOperationRequest;
-    output: GitFileDiffResult;
-  };
-  stageFile: {
-    input: GitFileOperationRequest;
-    output: GitStatusResult;
-  };
-  stageFiles: {
-    input: GitBatchFileOperationRequest;
-    output: GitStatusResult;
-  };
-  unstageFile: {
-    input: GitFileOperationRequest;
-    output: GitStatusResult;
-  };
-  discardFile: {
-    input: GitFileOperationRequest;
-    output: GitStatusResult;
-  };
-  commit: {
-    input: GitCommitRequest;
-    output: GitCommitResult;
-  };
-  push: {
-    input: Record<string, never>;
-    output: GitPushResult;
-  };
-  listBranches: {
-    input: Record<string, never>;
-    output: GitBranchListResult;
-  };
-  createBranch: {
-    input: GitCreateBranchRequest;
-    output: GitBranchMutationResult;
-  };
-  checkoutBranch: {
-    input: GitCheckoutBranchRequest;
-    output: GitBranchMutationResult;
-  };
-};

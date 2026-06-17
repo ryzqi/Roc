@@ -2,8 +2,7 @@ import type {
   TerminalSessionCloseRequest,
   TerminalSessionCreateRequest,
   TerminalSessionInputRequest,
-  TerminalSessionResizeRequest,
-  TerminalSessionSnapshot
+  TerminalSessionResizeRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { TerminalSessionService } from '../../services/terminal-session-service';
@@ -30,22 +29,3 @@ export function registerTerminalCapabilities(
     terminalService.closeSession(input as TerminalSessionCloseRequest)
   );
 }
-
-export type WorkspaceTerminalCapabilityTypes = {
-  createSession: {
-    input: TerminalSessionCreateRequest;
-    output: TerminalSessionSnapshot;
-  };
-  writeInput: {
-    input: TerminalSessionInputRequest;
-    output: { delivered: true };
-  };
-  resize: {
-    input: TerminalSessionResizeRequest;
-    output: TerminalSessionSnapshot;
-  };
-  closeSession: {
-    input: TerminalSessionCloseRequest;
-    output: { closed: true };
-  };
-};

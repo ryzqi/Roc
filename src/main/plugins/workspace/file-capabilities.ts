@@ -1,14 +1,8 @@
 import type {
-  FileDeleteResult,
   FilePreviewRequest,
-  FilePreviewResult,
   FileSearchRequest,
-  FileSearchResult,
   FileTreeRequest,
-  FileTreeResult,
   FilesWorkbenchPdfPreviewRequest,
-  FilesWorkbenchPdfPreviewResult,
-  FileWriteResult,
   FileWriteTextRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
@@ -40,30 +34,3 @@ export function registerFileCapabilities(
     fileService.deleteFile((input as { relativePath: string }).relativePath)
   );
 }
-
-export type WorkspaceFileCapabilityTypes = {
-  listTree: {
-    input: FileTreeRequest;
-    output: FileTreeResult;
-  };
-  search: {
-    input: FileSearchRequest;
-    output: FileSearchResult;
-  };
-  preview: {
-    input: FilePreviewRequest;
-    output: FilePreviewResult;
-  };
-  previewPdf: {
-    input: FilesWorkbenchPdfPreviewRequest;
-    output: FilesWorkbenchPdfPreviewResult;
-  };
-  writeText: {
-    input: FileWriteTextRequest;
-    output: FileWriteResult;
-  };
-  delete: {
-    input: { relativePath: string };
-    output: FileDeleteResult;
-  };
-};

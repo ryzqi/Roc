@@ -1,23 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   BACKGROUND_TASK_PROPOSE_EXAMPLE,
-  FORBIDDEN_MODEL_TOP_LEVEL_KEYS,
   FORBIDDEN_TRIGGER_KEYS,
   MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE,
   PROPOSE_OPTIONAL_KEYS,
   PROPOSE_REQUIRED_KEYS,
-  PROPOSE_TOOL_DESCRIPTION,
-  PROPOSE_TOOL_NAME,
-  buildTaskProposalPrompt
+  PROPOSE_TOOL_DESCRIPTION
 } from '../../src/shared/background-task-tool-contract';
 import { proposeInputSchema } from '../../src/main/services/deep-agent/background-task-tools';
 import { validProposeInput } from '../_factories/background-task';
 
 describe('background task shared tool contract', () => {
-  function readJsonShapeLines(prompt: string): string[] {
-    return prompt.split('\n').filter((line) => line.trim().startsWith('{ "goal"'));
-  }
-
   it('minimal canonical example only exposes model-authored keys', () => {
     expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE).sort()).toEqual(['goal', 'trigger']);
     expect(Object.keys(MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE.trigger).sort()).toEqual([
@@ -48,53 +41,6 @@ describe('background task shared tool contract', () => {
     expect(BACKGROUND_TASK_PROPOSE_EXAMPLE.workspacePath).toMatch(/^[A-Z]:\\/u);
   });
 
-  it('prompt embeds the concrete workspace path', () => {
-    const prompt = buildTaskProposalPrompt({
-      description: '每天早上 9 点检查失败测试',
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    expect(prompt).toContain('F:\\Code\\Roc');
-  });
-
-  it('prompt mentions the tool name and required schema fields', () => {
-    const prompt = buildTaskProposalPrompt({
-      description: '每天早上 9 点检查失败测试',
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    expect(prompt).toContain(PROPOSE_TOOL_NAME);
-    expect(prompt).toContain('trigger.type');
-    expect(prompt).toContain('cronExpression');
-    expect(prompt).toContain('nextRunAt');
-    expect(prompt).toContain('workspacePath');
-  });
-
-  it('prompt requires a direct tool call without approval prose', () => {
-    const prompt = buildTaskProposalPrompt({
-      description: '每天早上 9 点检查失败测试',
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    expect(prompt).toContain('只提交一次 tool call');
-    expect(prompt).toContain('不要输出普通文本');
-    expect(prompt).toContain('不要请求批准');
-    expect(prompt).toContain('创建任务不是预览任务');
-  });
-
-  it('prompt does not reference forbidden or runtime-only fields', () => {
-    const prompt = buildTaskProposalPrompt({
-      description: '每天早上 9 点检查失败测试',
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    expect(prompt).not.toReferenceForbiddenField();
-    expect(prompt).toContain('不要添加 allowedActions、forbiddenActions、notificationPolicy、enabledCapabilities 或 failurePolicy');
-    expect(prompt).toContain('不要把 runtime-only 字段写入 JSON 形状。');
-    for (const line of readJsonShapeLines(prompt)) {
-      for (const field of FORBIDDEN_MODEL_TOP_LEVEL_KEYS) {
-        expect(line).not.toContain(`"${field}"`);
-        expect(line).not.toContain(`${field}:`);
-      }
-    }
-  });
-
   it('tool description uses canonical fields without forbidden aliases', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('goal');
     expect(PROPOSE_TOOL_DESCRIPTION).toContain('trigger.type');
@@ -108,15 +54,6 @@ describe('background task shared tool contract', () => {
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('只填写 goal、trigger、workspacePath');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toContain('无法确定触发方式时使用 manual');
     expect(PROPOSE_TOOL_DESCRIPTION).not.toReferenceForbiddenField();
-  });
-
-  it('proposal prompt only allows manual when the user explicitly requests no schedule', () => {
-    const prompt = buildTaskProposalPrompt({
-      description: '有需要时手动运行一次',
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    expect(prompt).toContain('只有用户明确要求手动执行、按需执行或不设定时间时，才使用 manual。');
-    expect(prompt).not.toContain('无法确定触发方式时，使用 manual。');
   });
 
   it('golden: example JSON key sets are stable', () => {

@@ -1,5 +1,3 @@
-import type { ChatTodoItem } from '../../../shared/types';
-
 export type MessageContentSummary = {
   hasReasoning: boolean;
   hasVisibleText: boolean;
@@ -421,30 +419,4 @@ export function readAsyncIterable(value: unknown): AsyncIterable<unknown> | null
     return null;
   }
   return value as AsyncIterable<unknown>;
-}
-
-export function readTodos(candidate: unknown): ChatTodoItem[] | null {
-  if (!isRecord(candidate) || !Array.isArray(candidate.todos)) {
-    return null;
-  }
-  const todos = candidate.todos
-    .map((item) => {
-      if (!isRecord(item)) {
-        return null;
-      }
-      const content = readNonEmptyString(item.content);
-      const status = item.status;
-      if (
-        content === null ||
-        (status !== 'pending' && status !== 'in_progress' && status !== 'completed')
-      ) {
-        return null;
-      }
-      return {
-        content,
-        status
-      };
-    })
-    .filter((item): item is ChatTodoItem => item !== null);
-  return todos.length === 0 ? null : todos;
 }

@@ -83,12 +83,6 @@ const SSH_BACKDOOR_RULES: Rule[] = [
 const INVISIBLE_UNICODE_RE = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/u;
 const INVISIBLE_UNICODE_RE_GLOBAL = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
 
-const RULES_BY_CATEGORY: Record<Exclude<SecurityScanCategory, 'invisible_unicode'>, Rule[]> = {
-  prompt_injection: PROMPT_INJECTION_RULES,
-  credential: CREDENTIAL_RULES,
-  ssh_backdoor: SSH_BACKDOOR_RULES
-};
-
 export class SecurityScanService {
   constructor(private readonly settings: MemorySecurityScanSettings) {}
 
@@ -160,5 +154,3 @@ export class SecurityScanService {
     return excerpt;
   }
 }
-
-export const SECURITY_SCAN_RULES = RULES_BY_CATEGORY;

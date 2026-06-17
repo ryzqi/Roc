@@ -84,7 +84,6 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
   };
 }
 
-export const mcpPlugin = createMcpPlugin();
 export { mcpCapabilityDescriptors };
 
 function createConfigAdapter(context: RocPluginContext): McpConfigService {

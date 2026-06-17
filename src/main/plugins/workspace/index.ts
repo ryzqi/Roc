@@ -1,5 +1,3 @@
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { z } from 'zod';
 
 import type {
@@ -241,7 +239,6 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
   };
 }
 
-export const workspacePlugin = createWorkspacePlugin();
 export { workspaceCapabilityDescriptors };
 
 function createWorkspaceConfigAdapter(context: RocPluginContext): WorkspaceConfigService {

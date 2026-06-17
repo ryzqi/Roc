@@ -411,10 +411,6 @@ function validatePatch(patch: Partial<z.infer<typeof proposeInputSchema>>): void
   }
 }
 
-export function validateBackgroundTaskPatch(patch: Partial<z.infer<typeof proposeInputSchema>>): void {
-  validatePatch(patch);
-}
-
 function validateTrigger(trigger: z.infer<typeof triggerSchema>): void {
   if (trigger.type === 'cron') {
     parseCronExpression(trigger.cronExpression);
@@ -433,10 +429,6 @@ function validateTrigger(trigger: z.infer<typeof triggerSchema>): void {
   }
 }
 
-export function validateBackgroundTaskTrigger(trigger: z.infer<typeof triggerSchema>): void {
-  validateTrigger(trigger);
-}
-
 function validateWorkspacePath(workspacePath: string): void {
   if (!existsSync(workspacePath)) {
     throw new RocDomainError({
@@ -447,8 +439,4 @@ function validateWorkspacePath(workspacePath: string): void {
       userAction: '请选择仍然存在的工作区路径。'
     });
   }
-}
-
-export function validateBackgroundTaskWorkspacePath(workspacePath: string): void {
-  validateWorkspacePath(workspacePath);
 }

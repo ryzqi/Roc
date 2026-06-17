@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AppSettings, HostIntegrationStatus } from '../../src/shared/types';
+import type { AppSettings } from '../../src/shared/types';
 import { WindowsHostService } from '../../src/main/windows-host-service';
 
 type WindowEvent = 'close';
@@ -54,21 +54,6 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
         maxRegisteredTasks: 256,
         ...overrides.tasks?.scheduler
       }
-    }
-  };
-}
-
-function createHostIntegrationStatus(): HostIntegrationStatus {
-  return {
-    startup: {
-      configuredOpenAtLogin: false,
-      effectiveOpenAtLogin: false,
-      syncError: null
-    },
-    globalHotkey: {
-      accelerator: null,
-      registered: false,
-      registrationError: null
     }
   };
 }

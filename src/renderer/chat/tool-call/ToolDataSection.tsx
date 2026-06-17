@@ -1,6 +1,3 @@
-import { Copy } from 'lucide-react';
-import { useCopyContent } from '../activity-block/use-copy-content';
-
 type ToolDataSectionProps = {
   label: string;
   data: unknown;

@@ -32,11 +32,6 @@ export const modalPopTransition: Transition = {
   ease: EASING_STANDARD_TUPLE
 };
 
-export const bubbleEnter: Variants = {
-  initial: { opacity: 0, y: 4 },
-  animate: { opacity: 1, y: 0 }
-};
-
 export const userBubbleEnter: Variants = {
   initial: { opacity: 0, y: 4 },
   animate: { opacity: 1, y: 0 }

@@ -48,7 +48,6 @@ import { createWorkspaceRefreshSubscription } from './workspace-refresh';
 import { useLazyStartupResource } from './use-lazy-startup-resource';
 import { PreviewIcon } from '../components/PreviewIcon';
 import { filterHistoryItems } from '../history-sidebar';
-import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import { SettingsModal } from '../settings/settings-modal';
 import type { RocClient } from '../shared/roc-client';
