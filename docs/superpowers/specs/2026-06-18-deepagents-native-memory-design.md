@@ -11,6 +11,10 @@ DeepAgents `StoreBackend` over a Roc SQLite-backed LangGraph `BaseStore`.
 
 - Use option B: replace the current Roc custom memory storage bottom layer.
 - Reuse Roc's existing SQLite database for the LangGraph `BaseStore`.
+- Align with the current JavaScript DeepAgents API used by this repository:
+  `deepagents` 1.10.x. The authoritative runtime shape is the installed package
+  types plus official JavaScript DeepAgents docs, not older Python examples or
+  local 0.6.x notes.
 - Keep the Memory page and convert it into a Store-backed markdown editor.
 - Do not migrate old disk memory files. The old disk-backed memory data under the
   Roc memory root will be cleaned up as part of the refactor.
@@ -70,8 +74,10 @@ The store must support the operations required by DeepAgents `StoreBackend`:
 - `get(namespace, key)`
 - `put(namespace, key, value)`
 - `delete(namespace, key)` if required by the interface version in use
-- `search(namespace, options)` with pagination behavior compatible with
+- `search(namespacePrefix, options)` with pagination behavior compatible with
   `StoreBackend`
+- `batch(operations)` for the operation shapes exported by the current
+  `@langchain/langgraph` package
 
 Stored values use DeepAgents file data shape:
 
@@ -93,11 +99,19 @@ The DeepAgents backend composition remains:
 
 - `/workspace/` -> selected workspace `FilesystemBackend`
 - `/skills/` -> selected skills read-only backend
-- `/memory/` -> `StoreBackend`
+- `/memory/global/` -> `StoreBackend` using namespace
+  `['roc', 'memory', 'global']`
+- `/memory/workspaces/current/` -> `StoreBackend` using namespace
+  `['roc', 'memory', 'workspaces', workspaceHash]`
 - default -> rejecting backend
 
 `CompositeBackend` remains the route boundary, and existing path permissions
 continue to deny access outside `/workspace/`, `/skills/`, and `/memory/`.
+
+Do not mount a single broad `/memory/` StoreBackend. DeepAgents
+`CompositeBackend` strips the matched route prefix before delegating, so global
+and workspace memory need separate route prefixes to select separate Store
+namespaces.
 
 ### Namespace
 
@@ -146,13 +160,13 @@ This makes DeepAgents memory middleware the loader for always-on memory.
 
 ## Automatic Consolidation
 
-After an agent run completes, Roc performs a lightweight memory extraction pass.
+After an agent run completes, Roc performs a lightweight non-LLM memory append
+pass.
 
 Inputs:
 
-- current user request
-- final assistant response
-- relevant tool summaries when already available from the run transcript
+- completed run id
+- completed run summary already produced by the runtime event
 - current target `MEMORY.md`
 
 Rules:
@@ -167,11 +181,12 @@ Rules:
 - Keep only stable, reusable facts or project state.
 - Avoid storing transient step-by-step chat content.
 - Preserve markdown format.
+- Do not call an LLM in the first implementation.
 
-The first version appends a dated markdown section only when the extracted facts
-are not already present in the target file. It does not rewrite `USER.md`,
-`AGENTS.md`, or unrelated `MEMORY.md` sections. If the generated output is empty
-or fails validation, no memory write occurs.
+The first version appends a dated markdown section only when the completed-run
+summary is non-empty and the exact bullet is not already present in the target
+file. It does not rewrite `USER.md`, `AGENTS.md`, or unrelated `MEMORY.md`
+sections. If the summary is empty or fails validation, no memory write occurs.
 
 ## Validation And Safety
 
@@ -220,17 +235,22 @@ implementation.
 
 ## Cleanup
 
-Remove or replace these custom disk-backed pieces where they become obsolete:
+Remove or replace these custom disk-backed pieces where they become obsolete.
+Do not leave compatibility reads, fallback writes, aliases, or active
+initialization paths for old disk memory:
 
 - `WritableMemoryFilesystemBackend`
-- `resolveMemoryPath` if no longer used by the Store route adapter
+- `resolveMemoryPath`
 - disk reads in `MemoryRepository`
 - disk reads in frozen snapshot generation
 - prompt text that describes custom Roc disk memory instead of DeepAgents memory
+- production dependencies on `memory.root` / `paths.memoryDir`
+- generated directories created only for old disk-backed memory
 
-Clean old memory files under `paths.memoryDir` for this refactor. Generated
-directories that only existed for old disk-backed memory should not remain as an
-active compatibility path.
+Old memory data under `paths.memoryDir` is intentionally not migrated. The
+implementation should stop using that directory for active memory behavior; any
+filesystem cleanup must be explicit and verified, not hidden behind fallback
+logic.
 
 ## Tests
 

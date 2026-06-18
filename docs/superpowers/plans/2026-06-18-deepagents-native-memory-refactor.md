@@ -4,7 +4,7 @@
 
 **Goal:** Move Roc memory from disk-backed custom files to DeepAgents native memory over a Roc SQLite-backed LangGraph `BaseStore`, while keeping exactly five markdown slots and the existing Memory management UI.
 **Architecture:** `core.db` stores DeepAgents file objects through a new SQLite `BaseStore`; `/memory/global/` and `/memory/workspaces/current/` mount DeepAgents `StoreBackend` instances behind Roc validation wrappers; the Memory plugin edits the same Store records; completed agent runs can append lightweight notes only to `MEMORY.md`.
-**Tech Stack:** TypeScript ESM, Electron main process, React renderer, Vitest, `better-sqlite3`, `@langchain/langgraph` `BaseStore`, DeepAgents `StoreBackend`/`CompositeBackend`.
+**Tech Stack:** TypeScript ESM, Electron main process, React renderer, Vitest, `better-sqlite3`, `@langchain/langgraph` `BaseStore`, DeepAgents JS 1.10.x `StoreBackend`/`CompositeBackend`.
 
 ---
 
@@ -18,6 +18,9 @@
   - `/memory/workspaces/current/MEMORY.md`
 - Use DeepAgents native memory loading by passing these virtual paths through `createDeepAgent({ memory })`.
 - Use DeepAgents `StoreBackend`; do not keep the disk `FilesystemBackend` under `/memory/`.
+- Treat the installed `deepagents` 1.10.x and `@langchain/langgraph` types as
+  the implementation authority. Do not copy older Python or DeepAgents 0.6.x
+  constructor examples when they conflict with current TypeScript types.
 - Reuse Roc SQLite. Store memory in `core.db` through `DatabasePool.getCoreConnection()`, so the agent runtime and Memory page share one physical store.
 - Do not migrate old disk memory. Delete the old disk-backed memory implementation and tests instead of adding compatibility paths.
 - Preserve markdown as the durable memory format. SQLite stores DeepAgents file records with markdown `content`, not normalized facts.
@@ -68,6 +71,32 @@ tests/main/plugins/memory/consolidator-adapter.test.ts
 ```
 
 Keep `src/main/services/memory/capacity.ts` and `src/main/services/memory/security-scan.ts`; they remain Store write validation services.
+
+## Task 0: Verify Current DeepAgents And LangGraph Contracts
+
+### Change
+
+- [ ] Record the installed `deepagents` version from `package.json`.
+- [ ] Inspect `node_modules/deepagents/dist/index.d.ts` for:
+  - `CreateDeepAgentParams.memory?: string[]`
+  - `StoreBackendOptions.store?: BaseStore`
+  - `StoreBackendOptions.namespace?: string[] | StoreBackendNamespaceFactory`
+  - `CompositeBackend` route prefix behavior
+  - `BackendProtocolV2` result shapes for `read`, `write`, `edit`, `ls`, `glob`, and `grep`
+- [ ] Inspect the current `@langchain/langgraph` exported operation types for:
+  - `BaseStore`
+  - `GetOperation`
+  - `PutOperation`
+  - `SearchOperation`
+  - `ListNamespacesOperation`
+  - `OperationResults`
+- [ ] Update any examples in this plan before coding if the current package types differ.
+
+### Verification
+
+- [ ] `pnpm list deepagents @langchain/langgraph`
+- [ ] `rg -n "interface CreateDeepAgentParams|interface StoreBackendOptions|declare class StoreBackend|declare class CompositeBackend|interface BackendProtocolV2" node_modules/deepagents/dist/index.d.ts`
+- [ ] `rg -n "BaseStore|GetOperation|PutOperation|SearchOperation|ListNamespacesOperation|OperationResults" node_modules/@langchain/langgraph node_modules/.pnpm -g "*.d.ts"`
 
 ## Task 1: Add A Shared Core SQLite Facade
 
@@ -121,7 +150,7 @@ createPluginDatabaseFacade(pluginId: string): {
 - [ ] Make `put(namespace, key, value)` update `updated_at` but preserve `created_at`.
 - [ ] Make `delete(namespace, key)` remove the item.
 - [ ] Make `search(namespacePrefix, { filter, limit, offset })` return only items whose namespace starts with the prefix.
-- [ ] Make `batch()` dispatch `GetOperation`, `PutOperation`, `SearchOperation`, and `ListNamespacesOperation`.
+- [ ] Make `batch()` dispatch `GetOperation`, `PutOperation`, `SearchOperation`, and `ListNamespacesOperation` using the discriminants from the current `@langchain/langgraph` type declarations. Do not rely on broad duck-typing if two operations can share the same field names.
 - [ ] Reject invalid namespaces or keys with explicit errors.
 
 Core implementation outline:
@@ -138,6 +167,8 @@ export class RocSqliteStore extends BaseStore {
 
   async batch<Op extends Operation[]>(operations: Op): Promise<OperationResults<Op>> {
     const results = operations.map((operation) => {
+      // Replace this sketch with explicit type guards that match the current
+      // @langchain/langgraph operation declarations verified in Task 0.
       if ('key' in operation && 'value' in operation) {
         if (operation.value === null) {
           this.deleteSync(operation.namespace, operation.key);
@@ -160,6 +191,7 @@ export class RocSqliteStore extends BaseStore {
 ```
 
 Do not import from `@langchain/langgraph-checkpoint` directly; Roc already imports `BaseStore` and `InMemoryStore` from `@langchain/langgraph`.
+If the package type declarations prove that a direct checkpoint import is the only type-correct source, stop and revise this plan before implementation instead of adding mixed imports opportunistically.
 
 ### Tests
 
@@ -281,6 +313,7 @@ class RocStoreMemoryBackend {
 ```
 
 Implementation note: DeepAgents `StoreBackend.write()` rejects existing files. Roc UI writes should call `store.put()` directly through the slot service. Agent file-tool edits should use `edit_file` after reading; new empty slots can be created by `write_file`.
+Implementation note: DeepAgents JS 1.10.x `StoreBackend` writes FileData v2 values and infers MIME type from the delegated file path. Roc UI direct writes should create Store values compatible with that FileData v2 shape and may explicitly set `mimeType: 'text/markdown'` for markdown slots.
 
 ### Tests
 
@@ -390,6 +423,10 @@ export function createMarkdownFileValue(content: string, existing?: Item | null)
 }
 ```
 
+This helper is only for Roc-owned direct Store writes. Agent file-tool writes
+must go through the validated DeepAgents `StoreBackend` wrapper so its read,
+write, edit, glob, and grep semantics stay aligned with official backend tools.
+
 ### Tests
 
 Update `tests/main/plugins/memory/plugin.test.ts`:
@@ -456,6 +493,8 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
 
 - [ ] Delete disk-memory-only modules listed in File Structure.
 - [ ] Remove imports of `join(input.paths.memoryDir, ...)` and `WritableMemoryFilesystemBackend`.
+- [ ] Remove production use of `paths.memoryDir` / `memory.root` from memory behavior. `RocPaths.memoryDir` may remain only if another unrelated feature still exposes it; it must not be an active compatibility path for memory reads or writes.
+- [ ] Update `RocPaths.ensureTree()` if it creates directories only needed by the deleted disk-backed memory path.
 - [ ] Update `src/main/services/deep-agent/prompt.ts` and `prompt-builder.ts` wording:
   - replace "changes land on disk immediately" with "changes are stored in Roc SQLite through DeepAgents memory".
   - keep the same five virtual paths.
@@ -468,10 +507,18 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
   - `.consolidator-backup`
   - "disk-backed memory"
   - `/memory/` as the single memory route, except generic permission docs.
+- [ ] Search and either remove or justify any remaining references to:
+  - `paths.memoryDir`
+  - `memoryDir`
+  - `MemoryRepository`
+  - `ConsolidatorService`
+  - `MemoryConsolidatorAdapter`
+  - `tests/main/memory-integration`
 
 ### Verification
 
 - [ ] `rg -n "WritableMemoryFilesystemBackend|resolveMemoryPath|memory\\.root|\\.consolidator-backup|changes land on disk" src tests`
+- [ ] `rg -n "paths\\.memoryDir|memoryDir|MemoryRepository|ConsolidatorService|MemoryConsolidatorAdapter|tests/main/memory-integration" src tests`
 - [ ] `pnpm test -- tests/main/deep-agent-prompt.test.ts tests/main/memory tests/main/plugins/memory/plugin.test.ts`
 
 ## Task 9: Run Focused And Broad Verification
@@ -513,3 +560,4 @@ git commit -m "refactor: use deepagents sqlite memory store"
 - `StoreBackend` uses route-stripped keys. That is why global and workspace memory need separate route prefixes rather than one `/memory/` StoreBackend.
 - Existing disk memory files are intentionally not migrated. The implementation should not add fallback reads from `paths.memoryDir`.
 - No embedding/vector search in this refactor. `BaseStore.search()` lexical/prefix behavior is enough for DeepAgents file listing, grep, and glob.
+- `createDeepAgent({ memory })` is the always-on memory loader. The local field name `memorySources` is only Roc internal plumbing; the final call must still pass `memory: runtimeBackend.memorySources`.
