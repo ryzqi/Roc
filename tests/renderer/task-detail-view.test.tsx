@@ -80,6 +80,81 @@ describe('TaskDetailView', () => {
     expect(container.querySelector('.task-detail-transcript-shell')).not.toBeNull();
   });
 
+  it('renders the control console summary and metadata from the task detail', async () => {
+    await act(async () => {
+      root.render(
+        <TaskDetailView
+          client={{ api: window.roc } as never}
+          liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({
+            taskDetail: createTaskDetail({
+              backgroundTask: {
+                id: 'task-1',
+                threadId: 'thread-1',
+                runId: 'run-1',
+                goal: '每天整理工作区变更并输出日报',
+                status: 'running',
+                scheduled: true,
+                triggerType: 'cron',
+                triggerDescription: '每天 09:00',
+                nextRunAt: '2026-05-17T01:00:00.000Z',
+                cronExpression: '0 9 * * *',
+                workspacePath: 'F:\\\\Code\\\\Roc',
+                allowedActions: ['读取工作区', '写入日报'],
+                forbiddenActions: ['删除文件'],
+                failurePolicy: 'pause_and_report',
+                notificationPolicy: 'failures_and_confirmations',
+                riskLevel: 'medium',
+                requiresConfirmation: true,
+                lastRunAt: '2026-05-16T01:00:00.000Z',
+                lastRunStatus: 'success',
+                runCount: 7,
+                createdAt: '2026-05-15T07:00:00.000Z',
+                updatedAt: '2026-05-16T07:05:00.000Z',
+                enabledCapabilities: null
+              },
+              runHistory: [
+                {
+                  id: 'run-1',
+                  threadId: 'thread-1',
+                  runNumber: 7,
+                  userInput: '执行日报任务',
+                  status: 'completed',
+                  startedAt: '2026-05-16T01:00:00.000Z',
+                  endedAt: '2026-05-16T01:05:00.000Z',
+                  modelId: 'gpt-5.4',
+                  enabledCapabilities: {
+                    mcpServers: ['filesystem'],
+                    skills: ['task-planner']
+                  }
+                }
+              ]
+            })
+          })}
+          taskActions={createTaskActionsMock()}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-testid="task-detail-summary-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="task-detail-meta-panel"]')).not.toBeNull();
+    expect(container.textContent).toContain('每天整理工作区变更并输出日报');
+    expect(container.textContent).toContain('running');
+    expect(container.textContent).toContain('风险 medium');
+    expect(container.textContent).toContain('调度器已注册');
+    expect(container.textContent).toContain('F:\\\\Code\\\\Roc');
+    expect(container.textContent).toContain('每天 09:00');
+    expect(container.textContent).toContain('0 9 * * *');
+    expect(container.textContent).toContain('2026-05-17 01:00');
+    expect(container.textContent).toContain('运行 7 次');
+    expect(container.textContent).toContain('需要确认');
+  });
+
   it('submits inline continue input for waiting_user tasks', async () => {
     const onSubmitTaskInput = vi.fn().mockResolvedValue({ ok: true as const });
 

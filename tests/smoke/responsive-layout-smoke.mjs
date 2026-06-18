@@ -74,23 +74,56 @@ const taskWorkbenchMarkup = `
               <button class="action-button" type="button">返回任务工作台</button>
               <div class="page-copy">
                 <h1 class="page-title mini">窄屏任务布局回归检查</h1>
-                <p class="page-meta">waiting_user</p>
-              </div>
-            </div>
-            <div class="task-detail-page-body" data-testid="task-detail-page-body">
-              <div class="chat-transcript" data-testid="chat-transcript">
-                <div class="chat-message-row chat-message-row--assistant" data-testid="chat-message-assistant">
-                  <article class="chat-bubble chat-bubble--assistant">
-                    <div class="chat-assistant-content" data-testid="chat-assistant-content">
-                      <p>任务详情页转录内容保持在任务域内。</p>
-                    </div>
-                  </article>
+                <div class="task-detail-head-pills">
+                  <span class="status-pill info">waiting_user</span>
+                  <span class="status-pill warn">风险 medium</span>
+                  <span class="status-pill ok">调度器已注册</span>
                 </div>
               </div>
-              <form class="task-detail-followup" data-testid="task-detail-followup">
-                <textarea data-testid="task-detail-followup-input">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap\\inside\\followup</textarea>
-                <button class="action-button" type="submit">继续任务</button>
-              </form>
+            </div>
+            <div class="task-detail-content-shell">
+              <div class="task-detail-page-body" data-testid="task-detail-page-body">
+                <div class="task-detail-main-column">
+                  <section class="task-detail-panel task-detail-summary-panel" data-testid="task-detail-summary-panel">
+                    <div class="task-detail-panel-head">
+                      <div>
+                        <span class="task-detail-kicker">Task Console</span>
+                        <h2>任务概览</h2>
+                      </div>
+                    </div>
+                    <p class="task-detail-goal">窄屏任务布局回归检查：确认详情页控制台在窗口缩小时不会互相覆盖。</p>
+                    <div class="task-detail-metric-grid">
+                      <div class="task-detail-metric"><span>当前状态</span><strong>waiting_user</strong></div>
+                      <div class="task-detail-metric"><span>运行次数</span><strong>运行 7 次</strong></div>
+                      <div class="task-detail-metric"><span>最近运行</span><strong>2026-05-16 01:00</strong></div>
+                      <div class="task-detail-metric"><span>下次运行</span><strong>2026-05-17 01:00</strong></div>
+                    </div>
+                  </section>
+                  <section class="task-detail-panel task-detail-transcript-shell">
+                    <div class="chat-transcript" data-testid="chat-transcript">
+                      <div class="chat-message-row chat-message-row--assistant" data-testid="chat-message-assistant">
+                        <article class="chat-bubble chat-bubble--assistant">
+                          <div class="chat-assistant-content" data-testid="chat-assistant-content">
+                            <p>任务详情页转录内容保持在任务域内。</p>
+                          </div>
+                        </article>
+                      </div>
+                    </div>
+                  </section>
+                  <form class="task-detail-followup" data-testid="task-detail-followup">
+                    <textarea data-testid="task-detail-followup-input">F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap\\inside\\followup</textarea>
+                    <button class="action-button" type="submit">继续任务</button>
+                  </form>
+                </div>
+                <aside class="task-detail-side-column">
+                  <section class="task-detail-panel task-detail-meta-panel" data-testid="task-detail-meta-panel">
+                    <dl class="task-detail-meta-list">
+                      <div class="task-detail-meta-row"><dt>工作区</dt><dd>F:\\Code\\Roc\\very\\long\\workspace\\path\\that\\should\\wrap</dd></div>
+                      <div class="task-detail-meta-row"><dt>触发器</dt><dd>每天 09:00 · cron</dd></div>
+                    </dl>
+                  </section>
+                </aside>
+              </div>
             </div>
           </section>
         </div>

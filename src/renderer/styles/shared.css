@@ -680,25 +680,173 @@
 .task-detail-page-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 14px;
   min-width: 0;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line-soft);
 }
 
+.task-detail-back-button {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.task-detail-head-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .task-detail-content-shell {
   min-width: 0;
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 34%),
+    var(--surface);
+  box-shadow: var(--shadow-input);
 }
 
 .task-detail-page-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.task-detail-main-column,
+.task-detail-side-column {
+  display: grid;
   gap: 14px;
   min-width: 0;
+}
+
+.task-detail-panel {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg-soft));
+}
+
+.task-detail-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.task-detail-panel-head h2 {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: var(--font-h3-size);
+  line-height: 1.35;
+}
+
+.task-detail-kicker {
+  color: var(--subtle);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.task-detail-thread-id,
+.task-detail-count {
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.task-detail-goal {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.task-detail-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.task-detail-metric {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+}
+
+.task-detail-metric span {
+  color: var(--subtle);
+  font-size: var(--font-meta-size);
+  line-height: 1.35;
+}
+
+.task-detail-metric strong {
+  color: var(--ink);
+  font-size: var(--font-ui-size);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.task-detail-meta-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.task-detail-meta-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.task-detail-meta-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.task-detail-meta-row:last-child {
+  padding-bottom: 0;
+}
+
+.task-detail-meta-row dt,
+.task-detail-meta-row dd {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.task-detail-meta-row dt {
+  color: var(--subtle);
+  font-size: var(--font-meta-size);
+}
+
+.task-detail-meta-row dd {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--font-meta-size);
+  overflow-wrap: anywhere;
 }
 
 .task-detail-transcript-shell {
@@ -712,10 +860,10 @@
 .task-detail-followup {
   display: grid;
   gap: 10px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg-soft);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-soft));
 }
 
 .task-detail-followup textarea {
@@ -736,11 +884,33 @@
 }
 
 .task-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
-  align-items: center;
-  padding-top: 2px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.task-detail-actions-label {
+  margin-bottom: 2px;
+}
+
+.task-action-button {
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-action-button--warn {
+  border-color: var(--st-warn-line);
+  color: var(--st-warn);
+}
+
+.task-action-button--danger {
+  border-color: var(--st-bad-line);
+  color: var(--st-bad);
 }
 
 .empty-state p,

@@ -89,6 +89,7 @@ export class SystemPromptBuilder {
       sections.push('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
       sections.push('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
       sections.push('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
+      sections.push('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
       sections.push('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
       sections.push('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
     }

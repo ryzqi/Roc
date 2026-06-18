@@ -47,12 +47,43 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     expect(ensureRocHarnessProfilesRegistered).toHaveBeenCalledTimes(1);
     expect(createDeepAgent).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(createDeepAgent).mock.calls[0]?.[0]).toMatchObject({
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    expect(createDeepAgentInput).toMatchObject({
       permissions: [
         { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
         { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
       ]
     });
+    expect(createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name'))).toEqual(
+      expect.arrayContaining(['RocFilesystemPathPolicyMiddleware', 'RocShellPathPolicyMiddleware'])
+    );
+  });
+
+  it('runs Roc shell path policy before RTK can rewrite or deny shell commands', () => {
+    const input = {
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: 'default',
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
+
+    expect(middlewareNames.indexOf('RocShellPathPolicyMiddleware')).toBeLessThan(middlewareNames.indexOf('RTKMiddleware'));
   });
 
   it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {

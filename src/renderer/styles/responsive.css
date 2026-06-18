@@ -144,6 +144,17 @@
 
   .task-detail-page-head {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .task-detail-page-body,
+  .task-detail-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .task-detail-meta-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .task-detail-followup {
