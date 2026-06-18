@@ -52,6 +52,8 @@ describe('McpFeature', () => {
     expect(html).toContain('data-testid="mcp-view"');
     expect(html).toContain('data-testid="mcp-management"');
     expect(html).toContain('data-testid="mcp-test-smoke-mcp"');
+    expect(html).toContain('class="mcp-compact-summary"');
+    expect(html).not.toContain('mcp-stat-row');
   });
 
   it('refreshes plugin MCP servers when the feature mounts', async () => {

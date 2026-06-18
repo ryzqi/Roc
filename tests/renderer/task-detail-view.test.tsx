@@ -145,8 +145,9 @@ describe('TaskDetailView', () => {
     expect(container.querySelector('[data-testid="task-detail-meta-panel"]')).not.toBeNull();
     expect(container.textContent).toContain('每天整理工作区变更并输出日报');
     expect(container.textContent).toContain('running');
-    expect(container.textContent).toContain('风险 medium');
-    expect(container.textContent).toContain('调度器已注册');
+    expect(container.querySelector('.task-detail-head-pills')).toBeNull();
+    expect(container.textContent).not.toContain('风险 medium');
+    expect(container.textContent).not.toContain('调度器已注册');
     expect(container.textContent).toContain('F:\\\\Code\\\\Roc');
     expect(container.textContent).toContain('每天 09:00');
     expect(container.textContent).toContain('0 9 * * *');

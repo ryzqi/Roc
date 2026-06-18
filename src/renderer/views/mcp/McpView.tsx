@@ -1,4 +1,3 @@
-import { Metric } from '../../components/Metric';
 import { PageHeading } from '../../components/PageHeading';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
@@ -14,14 +13,19 @@ export function McpView({
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
 }): React.JSX.Element {
+  const enabledServers = state.mcpServers.filter((server) => server.enabled).length;
+  const totalTools = sumMcpTools(state.mcpServers);
+  const riskyServers = state.mcpServers.filter((server) => server.riskLevel === 'medium' || server.riskLevel === 'high').length;
+
   return (
     <>
-      <PageHeading title="MCP" meta={`本机 ${state.mcpServers.length} 个服务 · ${sumMcpTools(state.mcpServers)} 个工具`} />
-      <section className="canvas-stage stage-grid" data-testid="mcp-view">
-        <div className="stat-row">
-          <Metric label="MCP 服务" note={`${state.mcpServers.filter((server) => server.enabled).length} 个已启用`} value={state.mcpServers.length} />
-          <Metric label="MCP 工具" note="来自服务快照" value={sumMcpTools(state.mcpServers)} />
-          <Metric label="长期授权" note="均可撤销" tone="warn" value={state.mcpServers.filter((server) => server.riskLevel !== 'low').length} />
+      <PageHeading title="MCP" meta={`本机 ${state.mcpServers.length} 个服务 · ${totalTools} 个工具`} />
+      <section className="canvas-stage stage-grid mcp-dashboard" data-testid="mcp-view">
+        <div className="mcp-compact-summary">
+          <span>{state.mcpServers.length} 个服务</span>
+          <span>{enabledServers} 个已启用</span>
+          <span>{totalTools} 个工具</span>
+          <span>{riskyServers} 个风险服务</span>
         </div>
         <McpManagementPanel client={client} state={state} updateLoadedState={updateLoadedState} />
       </section>

@@ -74,11 +74,6 @@ const taskWorkbenchMarkup = `
               <button class="action-button" type="button">返回任务工作台</button>
               <div class="page-copy">
                 <h1 class="page-title mini">窄屏任务布局回归检查</h1>
-                <div class="task-detail-head-pills">
-                  <span class="status-pill info">waiting_user</span>
-                  <span class="status-pill warn">风险 medium</span>
-                  <span class="status-pill ok">调度器已注册</span>
-                </div>
               </div>
             </div>
             <div class="task-detail-content-shell">

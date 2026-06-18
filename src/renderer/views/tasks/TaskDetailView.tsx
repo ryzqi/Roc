@@ -100,17 +100,6 @@ export function TaskDetailView({
         </button>
         <div className="page-copy">
           <h1 className="page-title mini">{loadedDetail.thread.title}</h1>
-          <div className="task-detail-head-pills">
-            <span className="status-pill info">{loadedDetail.thread.status}</span>
-            {loadedDetail.backgroundTask === null ? null : (
-              <span className={riskPillClassName(loadedDetail.backgroundTask.riskLevel)}>
-                风险 {loadedDetail.backgroundTask.riskLevel}
-              </span>
-            )}
-            <span className={loadedDetail.schedulerRegistered ? 'status-pill ok' : 'status-pill warn'}>
-              {loadedDetail.schedulerRegistered ? '调度器已注册' : '调度器未注册'}
-            </span>
-          </div>
         </div>
       </div>
       <div className="task-detail-content-shell">
@@ -362,14 +351,4 @@ function formatConfirmation(requiresConfirmation: boolean): string {
     return '需要确认';
   }
   return '无需确认';
-}
-
-function riskPillClassName(riskLevel: BackgroundTask['riskLevel']): string {
-  if (riskLevel === 'high') {
-    return 'status-pill bad';
-  }
-  if (riskLevel === 'medium') {
-    return 'status-pill warn';
-  }
-  return 'status-pill ok';
 }
