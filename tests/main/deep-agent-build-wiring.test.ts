@@ -35,6 +35,7 @@ describe('buildDeepAgent harness profile wiring', () => {
         { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
         { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
       ],
+      workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
       providerType: 'openai_compatible',
@@ -77,6 +78,7 @@ describe('buildDeepAgent harness profile wiring', () => {
         { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
         { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
       ],
+      workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
       providerType: 'openai_compatible',

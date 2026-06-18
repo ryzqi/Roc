@@ -7,7 +7,7 @@ import type { AppBootstrap } from '../../src/renderer/app/use-app-bootstrap';
 import type { LoadedState } from '../../src/renderer/loaded-state';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
-import type { ActiveTaskItem, ChatRunEvent, TaskDetail, TaskStatus } from '../../src/shared/types';
+import type { ActiveTaskItem, ChatRunEvent, TaskDetail, TaskStatus, TaskUpdateEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
 describe('AppShell', () => {
@@ -365,6 +365,68 @@ describe('AppShell', () => {
     }));
   });
 
+  it('returns to the task board after deleting the open task detail without refreshing the deleted detail', async () => {
+    const client = createShellClient();
+    let taskUpdateListener: ((event: TaskUpdateEvent | null) => void) | null = null;
+    const task = createActiveTask({
+      taskId: 'task-delete',
+      threadId: 'thread-delete',
+      goal: '删除后返回任务工作台',
+      status: 'running'
+    });
+    vi.mocked(client.api.tasks.onUpdated).mockImplementation((listener) => {
+      taskUpdateListener = listener;
+      return () => {
+        taskUpdateListener = null;
+      };
+    });
+    let taskDeleted = false;
+    vi.mocked(client.api.tasks.getActiveTasks).mockImplementation(async () => ({ ok: true, data: taskDeleted ? [] : [task] }));
+    vi.mocked(client.api.tasks.getTaskDetail).mockResolvedValue({ ok: true, data: createBackgroundTaskDetail(task) });
+    vi.mocked(client.api.tasks.deleteBackgroundTask).mockImplementation(async () => {
+      taskDeleted = true;
+      taskUpdateListener?.(null);
+      return { ok: true, data: { deleted: true, taskId: 'task-delete' } };
+    });
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(
+        <AppShell
+          bootstrap={createBootstrap({
+            activeTasks: [task],
+            taskDetail: createBackgroundTaskDetail(task)
+          })}
+          client={client}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-board-card-task-delete').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    vi.mocked(client.api.tasks.getTaskDetail).mockClear();
+    vi.mocked(client.api.tasks.getTaskDetail).mockImplementation(async () => ({
+      ok: false,
+      error: {
+        code: 'task_not_found',
+        message: '任务会话不存在或已被删除。',
+        category: 'not_found',
+        retryable: false
+      }
+    }));
+    await act(async () => {
+      queryButton('task-detail-action-delete').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.tasks.deleteBackgroundTask).toHaveBeenCalledWith('task-delete');
+    expect(client.api.tasks.getTaskDetail).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Roc 启动失败');
+  });
+
   it('starts workbench background task creation with the current MCP and skill selections', async () => {
     const client = createShellClient();
     vi.mocked(client.api.chat.startRun).mockResolvedValue({
@@ -448,6 +510,7 @@ function createShellClient(): RocClient {
       getTaskDetail: vi.fn().mockResolvedValue({ ok: true, data: null }),
       listScheduledRuns: vi.fn().mockResolvedValue({ ok: true, data: [] }),
       onUpdated: vi.fn().mockReturnValue(() => {}),
+      deleteBackgroundTask: vi.fn().mockResolvedValue({ ok: true, data: { deleted: true, taskId: 'task-1' } }),
       deleteThread: vi.fn().mockResolvedValue({ ok: true, data: { deleted: true } })
     },
     lifecycle: {
@@ -518,6 +581,38 @@ function createTaskDetail(task: ActiveTaskItem): TaskDetail {
     backgroundTask: null,
     runHistory: [],
     recentEvents: []
+  };
+}
+
+function createBackgroundTaskDetail(task: ActiveTaskItem): TaskDetail {
+  const detail = createTaskDetail(task);
+  return {
+    ...detail,
+    backgroundTask: {
+      id: task.taskId ?? 'task-created',
+      threadId: task.threadId,
+      runId: detail.lastRunId ?? 'run-created',
+      goal: task.goal,
+      status: task.status,
+      scheduled: true,
+      triggerType: 'manual',
+      triggerDescription: '手动触发',
+      nextRunAt: task.nextRunAt,
+      cronExpression: null,
+      workspacePath: task.workspacePath ?? 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      riskLevel: task.riskLevel,
+      requiresConfirmation: false,
+      lastRunAt: task.lastRunAt,
+      lastRunStatus: null,
+      runCount: 0,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      enabledCapabilities: null
+    }
   };
 }
 

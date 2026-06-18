@@ -202,6 +202,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
     expect(buildInput.backend.routePrefixes).not.toContain('/agents/');
     expect('execute' in buildInput.backend).toBe(false);
+    expect(buildInput.workspacePath).toBe(workspacePath);
     expect(buildInput.filesystemPermissions).toEqual([
       { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
       { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },

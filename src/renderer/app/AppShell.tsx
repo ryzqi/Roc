@@ -90,6 +90,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
+  const selectedTaskSurfaceTaskIdRef = useRef<string | null | undefined>(selectedTaskSurfaceTaskId);
   const [activeTaskDetailId, setActiveTaskDetailId] = useState<string | null>(null);
   const [taskBoardUiState, setTaskBoardUiState] = useState<{
     railId: 'all' | 'todo' | 'running' | 'paused' | 'done';
@@ -130,9 +131,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatWorkspaceHostWidth, setChatWorkspaceHostWidth] = useState(0);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
+    const selectedTaskId = selectedTaskSurfaceTaskIdRef.current;
     const [taskSnapshot, taskSurfaceData] = await Promise.all([
       client.api.tasks.getSnapshot(),
-      loadTaskSurfaceData(selectedTaskSurfaceTaskId, client)
+      loadTaskSurfaceData(selectedTaskId, client)
     ]);
     setState((current) =>
       current === null
@@ -143,7 +145,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             ...taskSurfaceData
           }
     );
-  }, [selectedTaskSurfaceTaskId]);
+  }, [client, setState]);
 
   useEffect(() => {
     return client.api.app.onAppearanceUpdated(applySystemAppearance);
@@ -233,6 +235,10 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const chatFeature = useChatFeature(client);
 
   useEffect(() => {
+    selectedTaskSurfaceTaskIdRef.current = selectedTaskSurfaceTaskId;
+  }, [selectedTaskSurfaceTaskId]);
+
+  useEffect(() => {
     const nextSnapshot = {
       workspace: state?.workspace ?? null,
       previewRelativePath: state?.filePreview?.relativePath ?? null,
@@ -265,10 +271,16 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     if (boardUiState !== undefined) {
       setTaskBoardUiState(boardUiState);
     }
+    selectedTaskSurfaceTaskIdRef.current = taskId;
     setSelectedTaskSurfaceTaskId(taskId);
     setActiveTaskDetailId(taskId);
     setActiveView('task-detail');
     setHistoryContextMenu(null);
+  }, []);
+
+  const clearDeletingTaskSelection = useCallback((): void => {
+    selectedTaskSurfaceTaskIdRef.current = null;
+    setSelectedTaskSurfaceTaskId(null);
   }, []);
 
   const returnToTaskBoard = useCallback((): void => {
@@ -724,6 +736,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
               onOpenTaskDetail={openTaskDetail}
               onTaskApprovalDecision={resumeTaskApprovalFromDetail}
               onBackToTaskBoard={returnToTaskBoard}
+              onDeleteTaskStarted={clearDeletingTaskSelection}
               operationsLoadState={operationsLoadState}
               onQueueTaskPrompt={createTaskFromWorkbench}
               onSelectWorkspace={selectWorkspaceFromDialog}

@@ -41,6 +41,7 @@ export function TaskDetailFeature(props: {
   liveTaskRun: ChatRunState | null;
   onApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToBoard: () => void;
+  onDeleteTaskStarted: () => void;
   onSubmitTaskInput: (payload: TaskDetailInputRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   state: LoadedState;
   taskId: string;
@@ -49,6 +50,7 @@ export function TaskDetailFeature(props: {
   const taskActions = useTaskFeature({
     client: props.client,
     onTaskDeleted: props.onBackToBoard,
+    onTaskDeleteStarted: props.onDeleteTaskStarted,
     selectedTaskId: props.taskId,
     updateLoadedState: props.updateLoadedState
   });

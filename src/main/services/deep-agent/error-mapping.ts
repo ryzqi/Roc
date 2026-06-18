@@ -113,7 +113,7 @@ function readToolFailure(error: Error): RunFailure | null {
       retryable: false
     };
   }
-  if (message.startsWith('web_read timeoutSeconds 必须是 1 到 120 之间的整数。')) {
+  if (message.startsWith('web_read timeoutSeconds 必须是 1 到 180 之间的整数。')) {
     return {
       code: 'web_read_timeout_invalid',
       message,

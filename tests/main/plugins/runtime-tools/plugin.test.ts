@@ -46,7 +46,10 @@ describe('runtime tools plugin', () => {
       url: 'https://example.com/docs',
       responseMode: 'readerlm-v2',
       timeoutSeconds: 9,
-      noCache: true
+      noCache: true,
+      withLinksSummary: 'all',
+      retainLinks: 'gpt-oss',
+      maxTokens: 1000
     });
 
     expect(output).toBe('Reader output body');
@@ -54,15 +57,43 @@ describe('runtime tools plugin', () => {
       'https://r.jina.ai/https://example.com/docs',
       expect.objectContaining({
         headers: expect.objectContaining({
-          'cache-control': 'no-cache',
-          pragma: 'no-cache',
-          'x-respond-with': 'readerlm-v2'
+          'X-No-Cache': 'true',
+          'X-Respond-With': 'readerlm-v2',
+          'X-Timeout': '9',
+          'X-Max-Tokens': '1000',
+          'X-Retain-Links': 'gpt-oss',
+          'X-With-Links-Summary': 'all'
         })
       })
     );
     await expect(capabilities.invoke('web.read', { url: 'ftp://example.com/file' })).rejects.toMatchObject({
       code: 'web_read_url_invalid'
     });
+  });
+
+  it('uses the shared web.read fallback when readerlm-v2 is unauthorized', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('unauthorized', { status: 401 }))
+      .mockResolvedValueOnce(new Response('Fallback markdown body', { status: 200 }));
+    const capabilities = await initializePlugin({ fetchImpl: fetchMock });
+
+    const output = await capabilities.invoke('web.read', {
+      url: 'https://finance.sina.com.cn/nmetal/quotation.shtml',
+      responseMode: 'readerlm-v2',
+      timeoutSeconds: 10
+    });
+
+    expect(output).toBe('Fallback markdown body');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://r.jina.ai/https://finance.sina.com.cn/nmetal/quotation.shtml',
+      expect.objectContaining({
+        headers: {
+          'X-Respond-With': 'markdown',
+          'X-Timeout': '10'
+        }
+      })
+    );
   });
 });
 

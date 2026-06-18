@@ -28,6 +28,7 @@ export function ViewContent({
   onOpenTaskDetail,
   onTaskApprovalDecision,
   onBackToTaskBoard,
+  onDeleteTaskStarted,
   operationsLoadState,
   onQueueTaskPrompt,
   onSelectWorkspace,
@@ -50,6 +51,7 @@ export function ViewContent({
   onOpenTaskDetail: (taskId: string, boardUiState: TaskBoardUiState) => void;
   onTaskApprovalDecision: (request: TaskDetailApprovalRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
   onBackToTaskBoard: () => void;
+  onDeleteTaskStarted: () => void;
   operationsLoadState: LazyLoadState;
   onQueueTaskPrompt: (prompt: TaskPromptSubmission) => Promise<{ ok: true } | { ok: false; error: string }>;
   onSelectWorkspace: () => Promise<void>;
@@ -103,6 +105,7 @@ export function ViewContent({
         liveTaskRun={liveTaskRun}
         onApprovalDecision={onTaskApprovalDecision}
         onBackToBoard={onBackToTaskBoard}
+        onDeleteTaskStarted={onDeleteTaskStarted}
         onSubmitTaskInput={onSubmitTaskDetailInput}
         state={state}
         taskId={selectedTaskDetailId}

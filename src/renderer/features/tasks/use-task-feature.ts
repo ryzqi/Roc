@@ -14,11 +14,13 @@ export function createTaskFeatureActions(input: {
 export function useTaskFeature(input: {
   client: RocClient;
   onTaskDeleted?: (item: ActiveTaskItem) => void;
+  onTaskDeleteStarted?: (item: ActiveTaskItem) => void;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   selectedTaskId?: string | null;
 }): TaskActions {
   return useTaskActions(input.client, input.updateLoadedState, {
     onTaskDeleted: input.onTaskDeleted,
+    onTaskDeleteStarted: input.onTaskDeleteStarted,
     selectedTaskId: input.selectedTaskId
   });
 }

@@ -128,9 +128,9 @@ describe('deep agent error mapping', () => {
       message: 'web_read 只支持合法的 HTTP/HTTPS URL。',
       retryable: false
     });
-    expect(toRunFailure(new Error('web_read timeoutSeconds 必须是 1 到 120 之间的整数。'))).toEqual({
+    expect(toRunFailure(new Error('web_read timeoutSeconds 必须是 1 到 180 之间的整数。'))).toEqual({
       code: 'web_read_timeout_invalid',
-      message: 'web_read timeoutSeconds 必须是 1 到 120 之间的整数。',
+      message: 'web_read timeoutSeconds 必须是 1 到 180 之间的整数。',
       retryable: false
     });
   });

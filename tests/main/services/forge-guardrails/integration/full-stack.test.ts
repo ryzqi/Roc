@@ -59,6 +59,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     subagents: [],
     tools: [fakeTool('propose_background_task'), fakeTool('schedule_background_task')],
     filesystemPermissions: [],
+    workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,
     checkpointer: undefined,
     providerType: 'llama_cpp',

@@ -137,6 +137,7 @@ describe('TasksFeature', () => {
           liveTaskRun={null}
           onApprovalDecision={vi.fn()}
           onBackToBoard={() => {}}
+          onDeleteTaskStarted={() => {}}
           onSubmitTaskInput={vi.fn()}
           state={createLoadedState({})}
           taskId="task-1"
@@ -160,6 +161,7 @@ describe('TasksFeature', () => {
           liveTaskRun={null}
           onApprovalDecision={vi.fn()}
           onBackToBoard={() => {}}
+          onDeleteTaskStarted={() => {}}
           onSubmitTaskInput={vi.fn()}
           state={createLoadedState({ taskDetail: createTaskDetail(task) })}
           taskId="task-1"
@@ -188,6 +190,7 @@ describe('TasksFeature', () => {
           liveTaskRun={null}
           onApprovalDecision={vi.fn()}
           onBackToBoard={onBackToBoard}
+          onDeleteTaskStarted={() => {}}
           onSubmitTaskInput={vi.fn()}
           state={createLoadedState({ taskDetail: createTaskDetail(task) })}
           taskId="task-1"

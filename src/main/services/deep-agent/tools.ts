@@ -7,16 +7,12 @@ import { RocDomainError } from '../errors';
 import type { FileService } from '../file-service';
 import type { McpService } from '../mcp-service';
 import { WebReadService, type WebReadRequest } from '../web-read-service';
+import { webReadToolSchema } from '../web-read-request-schema';
 import { toWebSearchFailure } from './error-mapping';
 import type { RuntimeSubagent } from './types';
 
 export function createWebReadTool(webReadService: WebReadService): DynamicStructuredTool<any, any, any, string> {
-  const schema = z.object({
-    url: z.string().url(),
-    responseMode: z.enum(['markdown', 'readerlm-v2']).default('markdown'),
-    timeoutSeconds: z.number().int().min(1).max(120).default(20),
-    noCache: z.boolean().default(false)
-  });
+  const schema = webReadToolSchema;
   return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
     name: 'web_read',
     description: '读取公开网页正文，返回适合继续分析的文本内容。',

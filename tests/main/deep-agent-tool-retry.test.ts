@@ -54,6 +54,7 @@ function createBuildInput(): DeepAgentBuildInput {
       fakeTool('cancel_background_task')
     ],
     filesystemPermissions: [],
+    workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,
     checkpointer: undefined,
     providerType: 'openai_compatible',

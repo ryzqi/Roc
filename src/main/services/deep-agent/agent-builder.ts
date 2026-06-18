@@ -34,6 +34,7 @@ export type DeepAgentBuildInput = {
   subagents: RuntimeSubagent[];
   tools: ClientTool[];
   filesystemPermissions: FilesystemPermission[] | undefined;
+  workspacePath: string | null;
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   checkpointer: BaseCheckpointSaver | undefined;
   providerType: ProviderType;
@@ -64,7 +65,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createToolProtocolMiddleware(),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
-    createRocFilesystemPathPolicyMiddleware(),
+    createRocFilesystemPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     createFilesystemToolErrorMiddleware(),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens

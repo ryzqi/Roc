@@ -11,6 +11,7 @@ import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
 import type { WorkspaceConfigService } from '../../services/workspace-service';
 import type { WebReadRequest } from '../../services/web-read-service';
+import { webReadRequestSchema } from '../../services/web-read-request-schema';
 import { createRtkService } from './rtk-adapter';
 import {
   createShellExecutionService,
@@ -39,12 +40,6 @@ const shellConfirmationResultSchema = z.object({
   confirmed: z.boolean(),
   response: z.number().int()
 }) satisfies z.ZodType<ShellConfirmationResult>;
-const webReadRequestSchema = z.object({
-  url: z.string(),
-  responseMode: z.enum(['markdown', 'readerlm-v2']).optional(),
-  timeoutSeconds: z.number().int().optional(),
-  noCache: z.boolean().optional()
-}) satisfies z.ZodType<WebReadRequest>;
 
 const runtimeToolsCapabilityDescriptors = [
   descriptor('rtk.status', emptyInputSchema, z.custom<RtkStatus>()),

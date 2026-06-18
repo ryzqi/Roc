@@ -16,6 +16,7 @@ export type TaskActions = {
 export function createTaskActions(input: {
   client?: RocClient;
   onTaskDeleted?: (item: ActiveTaskItem) => void;
+  onTaskDeleteStarted?: (item: ActiveTaskItem) => void;
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
 }): TaskActions {
   function requireTaskId(item: ActiveTaskItem): string | null {
@@ -41,6 +42,7 @@ export function createTaskActions(input: {
         return;
       }
       const client = resolveClient();
+      input.onTaskDeleteStarted?.(item);
       void client.api.tasks.deleteBackgroundTask(taskId).then(async (result) => {
         if (!result.ok) {
           return;
@@ -86,6 +88,7 @@ export function useTaskActions(
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   input?: {
     onTaskDeleted?: (item: ActiveTaskItem) => void;
+    onTaskDeleteStarted?: (item: ActiveTaskItem) => void;
     selectedTaskId?: string | null;
   }
 ): TaskActions {
@@ -102,6 +105,7 @@ export function useTaskActions(
         ...taskSurfaceData
       });
     },
-    onTaskDeleted: input?.onTaskDeleted
+    onTaskDeleted: input?.onTaskDeleted,
+    onTaskDeleteStarted: input?.onTaskDeleteStarted
   });
 }
