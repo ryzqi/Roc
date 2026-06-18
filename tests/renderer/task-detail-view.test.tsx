@@ -75,6 +75,9 @@ describe('TaskDetailView', () => {
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
     expect(container.textContent).toContain('已经整理完成');
+    expect(container.querySelector('.task-detail-page-head')).not.toBeNull();
+    expect(container.querySelector('.task-detail-content-shell')).not.toBeNull();
+    expect(container.querySelector('.task-detail-transcript-shell')).not.toBeNull();
   });
 
   it('submits inline continue input for waiting_user tasks', async () => {
@@ -108,6 +111,7 @@ describe('TaskDetailView', () => {
       );
     });
 
+    expect(queryTextarea('task-detail-followup-input').getAttribute('placeholder')).toBe('继续说明任务需要的信息...');
     setTextareaValue('task-detail-followup-input', '继续处理');
     await act(async () => {
       queryButton('task-detail-followup-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -169,6 +173,7 @@ describe('TaskDetailView', () => {
       );
     });
 
+    expect(container.querySelector('[data-testid="task-detail-actions"]')?.className).toContain('task-detail-actions');
     await act(async () => {
       queryButton('task-detail-action-pause').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       queryButton('task-detail-action-run-now').dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -289,9 +294,14 @@ function queryButton(testId: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
-function setTextareaValue(testId: string, value: string): void {
+function queryTextarea(testId: string): HTMLTextAreaElement {
   const textarea = document.querySelector<HTMLTextAreaElement>(`[data-testid="${testId}"]`);
   expect(textarea).not.toBeNull();
+  return textarea as HTMLTextAreaElement;
+}
+
+function setTextareaValue(testId: string, value: string): void {
+  const textarea = queryTextarea(testId);
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
   expect(setter).not.toBeUndefined();
   setter?.call(textarea, value);
