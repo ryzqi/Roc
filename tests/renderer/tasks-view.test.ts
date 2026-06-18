@@ -24,6 +24,23 @@ describe('TasksView', () => {
     expect(html).toContain('data-testid="task-board-card-running-1"');
     expect(html).toContain('data-testid="task-board-card-paused-1"');
     expect(html).toContain('data-testid="task-board-card-done-1"');
+    expect(html).toContain('class="task-board-column-count status-pill info"');
+    expect(html).toContain('class="task-board-card-status status-pill info"');
+    expect(html).toContain('class="task-board-card-workspace"');
+    expect(html).toContain('F:\\Code\\Roc');
+  });
+
+  it('renders empty lane states without removing the four task columns', () => {
+    const html = renderTasksView([
+      createActiveTask({ taskId: 'running-1', threadId: 'thread-running-1', goal: '执行中', status: 'running' })
+    ]);
+
+    expect(html).toContain('data-testid="task-board-column-待处理"');
+    expect(html).toContain('data-testid="task-board-column-进行中"');
+    expect(html).toContain('data-testid="task-board-column-已暂停"');
+    expect(html).toContain('data-testid="task-board-column-已结束"');
+    expect(html).toContain('class="task-board-column-empty"');
+    expect(html).toContain('此列暂无任务');
   });
 
   it('renders the task workbench empty state inside the board page', () => {
