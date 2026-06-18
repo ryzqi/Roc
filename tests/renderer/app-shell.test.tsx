@@ -150,8 +150,13 @@ describe('AppShell', () => {
     expect(client.api.chat.startRun).toHaveBeenCalledWith(expect.objectContaining({
       input: '每天晚上总结新闻',
       mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
       workflowHint: 'propose_background_task',
-      taskSource: 'workbench'
+      taskSource: 'workbench',
+      workspacePath: 'F:\\Code\\Roc'
     }));
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
@@ -359,6 +364,58 @@ describe('AppShell', () => {
       taskSource: 'workbench'
     }));
   });
+
+  it('starts workbench background task creation with the current MCP and skill selections', async () => {
+    const client = createShellClient();
+    vi.mocked(client.api.chat.startRun).mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run-created',
+        mode: 'task',
+        threadId: 'run-thread',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    });
+    vi.mocked(client.api.tasks.getActiveTasks).mockResolvedValue({ ok: true, data: [] });
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(
+        <AppShell
+          bootstrap={createBootstrap({
+            selectedMcpServers: ['exa-hosted'],
+            selectedSkills: ['deep-review']
+          })}
+          client={client}
+        />
+      );
+    });
+
+    const trigger = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === '新建任务');
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setTextareaValue('task-create-description', '每天同步金价');
+    await act(async () => {
+      queryButton('task-create-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.chat.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      input: '每天同步金价',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: ['deep-review']
+      },
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench',
+      workspacePath: 'F:\\Code\\Roc'
+    }));
+  });
 });
 
 function createBootstrap(statePartial: Partial<LoadedState> = {}): AppBootstrap {
@@ -402,7 +459,7 @@ function createShellClient(): RocClient {
       onRunEvent: vi.fn().mockReturnValue(() => {})
     },
     agent: {
-      getCapabilityPreview: vi.fn()
+      getCapabilityPreview: vi.fn().mockResolvedValue({ ok: true, data: state.agentCapabilityPreview })
     },
     workspace: {
       selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })

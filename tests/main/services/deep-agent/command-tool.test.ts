@@ -21,7 +21,27 @@ describe('createRocWindowsCommandTool', () => {
     const executeAgentCommand = vi.fn();
     const tool = createRocWindowsCommandTool({ executeAgentCommand });
 
-    await expect(tool.invoke({ command: 'python /workspace/create_docx.py' })).rejects.toThrow(
+    await expect(tool.invoke({ command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py' })).rejects.toThrow(
+      '/workspace/ 是 DeepAgents 文件工具路由，不是 Windows shell 路径。'
+    );
+    expect(executeAgentCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects DeepAgents virtual workspace paths in option values before shell execution', async () => {
+    const executeAgentCommand = vi.fn();
+    const tool = createRocWindowsCommandTool({ executeAgentCommand });
+
+    await expect(tool.invoke({ command: 'python .\\main.py --input=/workspace/gold_price_scheduler/main.py' })).rejects.toThrow(
+      '/workspace/ 是 DeepAgents 文件工具路由，不是 Windows shell 路径。'
+    );
+    expect(executeAgentCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects DeepAgents virtual workspace cwd before shell execution', async () => {
+    const executeAgentCommand = vi.fn();
+    const tool = createRocWindowsCommandTool({ executeAgentCommand });
+
+    await expect(tool.invoke({ command: 'python .\\main.py', cwd: '/workspace/gold_price_scheduler' })).rejects.toThrow(
       '/workspace/ 是 DeepAgents 文件工具路由，不是 Windows shell 路径。'
     );
     expect(executeAgentCommand).not.toHaveBeenCalled();

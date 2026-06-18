@@ -176,7 +176,8 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
       mode: 'task',
       taskSource: 'workbench',
       threadId: task.threadId,
-      enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities
+      enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities,
+      workspacePath: task.workspacePath
     });
     const result = scheduler.runNow(id, startResult.runId);
     await publishTaskUpdated(context, { kind: 'task_run_fired', taskId: result.taskId, runId: result.runId });

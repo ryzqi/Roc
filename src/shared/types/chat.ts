@@ -130,6 +130,7 @@ export type ChatStartRunRequest = {
   threadId?: string | null;
   workflowHint?: WorkflowHint;
   taskSource?: 'workbench' | null;
+  workspacePath?: string | null;
 };
 
 export type ChatStartRunResult = {

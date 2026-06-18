@@ -100,7 +100,8 @@ describe('TaskScheduler', () => {
         input: task.goal,
         mode: 'task',
         taskSource: 'workbench',
-        threadId: task.threadId
+        threadId: task.threadId,
+        workspacePath: task.workspacePath
       })
     ]);
     expect(repository.listScheduledRuns({ taskId: task.id })).toContainEqual(

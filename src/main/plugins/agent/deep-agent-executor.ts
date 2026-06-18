@@ -71,13 +71,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const usageAccumulator = createUsageAccumulator();
 
       const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
+      const runtimeWorkspace = resolveRuntimeWorkspace(input.request, workspace);
       requireWorkbenchSourceForBackgroundTaskWorkflow(input.request);
-      const shellExecutionService = createShellExecutionAdapter(options.capabilities);
+      const shellExecutionService = createShellExecutionAdapter(options.capabilities, runtimeWorkspace === null ? null : runtimeWorkspace.path);
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         enabledCapabilities: input.request.enabledCapabilities,
         backgroundTaskToolMode: readBackgroundTaskToolMode(input.request),
-        runtimeWorkspacePath: workspace === null ? null : workspace.path,
+        runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         shellExecutionService
       });
       const runtimeBackend = createRuntimeBackend({
@@ -85,11 +86,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         handle,
         paths: options.paths,
         selectedSkillIds: input.request.enabledCapabilities.skills,
-        workspace
+        workspace: runtimeWorkspace
       });
       const systemPrompt = buildSystemPrompt({
         enabledCapabilities: input.request.enabledCapabilities,
-        workspacePath: workspace === null ? null : workspace.path,
+        workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         frozenSnapshot: disabledSnapshot(),
         workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
       });
@@ -238,6 +239,26 @@ function createInitialState(input: string): unknown {
   return {
     messages: [new HumanMessage(input)],
     forge_error_tracker: defaultErrorTracker()
+  };
+}
+
+function resolveRuntimeWorkspace(request: ChatStartRunRequest, currentWorkspace: Workspace | null): Workspace | null {
+  if (request.workspacePath === undefined || request.workspacePath === null) {
+    return currentWorkspace;
+  }
+  const workspacePath = request.workspacePath.trim();
+  if (workspacePath.length === 0) {
+    throw new Error('agent_workspace_path_empty');
+  }
+  if (currentWorkspace !== null && currentWorkspace.path === workspacePath) {
+    return currentWorkspace;
+  }
+  return {
+    id: 'request-workspace',
+    path: workspacePath,
+    displayName: workspacePath,
+    lastOpenedAt: new Date().toISOString(),
+    trustState: 'trusted'
   };
 }
 
@@ -658,7 +679,14 @@ function isClientTool(value: unknown): value is ClientTool {
 }
 
 function normalizeMcpToolName(name: string, enabledServerIds: readonly string[]): string | null {
-  if (enabledServerIds.includes('exa-hosted') && (name === 'web_search' || name === 'web_search_exa' || name === 'web_search_advanced_exa')) {
+  if (
+    enabledServerIds.includes('exa-hosted') &&
+    (name === 'web_search' ||
+      name === 'web_search_exa' ||
+      name === 'web_search_advanced_exa' ||
+      name === 'exa-hosted__web_search_exa' ||
+      name === 'exa-hosted__web_search_advanced_exa')
+  ) {
     return 'web_search';
   }
   return enabledServerIds.some((serverId) => name.startsWith(`${serverId}__`)) ? name : null;
@@ -721,15 +749,19 @@ function createRuntimeBackend(input: {
   });
 }
 
-function createShellExecutionAdapter(capabilities: RocCapabilityRegistry): AgentExecuteAdapter {
+function createShellExecutionAdapter(capabilities: RocCapabilityRegistry, defaultCwd: string | null): AgentExecuteAdapter {
   return {
     executeAgentCommand: async ({ command, cwd }) => {
+      const requestCwd = cwd === undefined ? defaultCwd : cwd;
+      if (requestCwd === null) {
+        throw new Error('agent_workspace_required_for_shell');
+      }
       const result = await capabilities.invoke<
         { command: string; cwd?: string; source: 'agent' },
         import('../../../shared/types').ShellExecutionResult
       >('shell.execute', {
         command,
-        cwd,
+        cwd: requestCwd,
         source: 'agent'
       });
       return {

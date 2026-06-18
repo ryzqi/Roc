@@ -41,7 +41,8 @@ const chatStartRunRequestSchema = z.object({
   enabledCapabilities: enabledCapabilitiesSchema,
   threadId: z.string().nullable().optional(),
   workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
-  taskSource: z.enum(['workbench']).nullable().optional()
+  taskSource: z.enum(['workbench']).nullable().optional(),
+  workspacePath: z.string().nullable().optional()
 }) satisfies z.ZodType<ChatStartRunRequest>;
 
 const chatStartRunResultSchema = z.object({

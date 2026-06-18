@@ -48,6 +48,27 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
   });
 
+  it('keeps selected MCP tools and skill sources available during background task runs', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls, { mcpTools: [createMcpTool('exa-hosted__web_search_exa')] }), {
+      enabledCapabilities: {
+        mcpServers: ['exa-hosted'],
+        skills: ['deep-review']
+      },
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench'
+    });
+
+    const buildInput = readBuildInput();
+    const toolNames = buildInput.tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(expect.arrayContaining(['web_search', 'run_shell_command', 'propose_background_task']));
+    expect(buildInput.skillSources).toEqual(['/skills/']);
+    expect(buildInput.systemPrompt).toContain('Capabilities: mcp=exa-hosted;skills=deep-review;');
+    expect(buildInput.systemPrompt).toContain('本轮后台任务继承当前主聊天已启用的 MCP 和 skills');
+    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent', 'mcp.tools.get']);
+  });
+
   it('routes proposal tools to task preview and create capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
@@ -114,6 +135,41 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(parsed.preview.workspacePath).toBe(workspacePath);
     expect(capabilityCalls.find((call) => call.name === 'task.background.preview')?.input).toMatchObject({
       workspacePath
+    });
+  });
+
+  it('binds background task runs to the saved task workspace instead of the current UI workspace', async () => {
+    const taskWorkspacePath = join(workspacePath, 'scheduled-task-workspace');
+    const currentWorkspacePath = join(workspacePath, 'current-ui-workspace');
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(
+      createCapabilities(capabilityCalls, {
+        workspace: {
+          id: 'workspace-current',
+          path: currentWorkspacePath,
+          displayName: 'Current UI Workspace',
+          lastOpenedAt: '2026-06-04T00:00:00.000Z',
+          trustState: 'trusted'
+        }
+      }),
+      {
+        taskSource: 'workbench',
+        workspacePath: taskWorkspacePath
+      }
+    );
+
+    const buildInput = readBuildInput();
+    const shellOutput = await invokeTool(findTool(buildInput.tools, 'run_shell_command'), {
+      command: 'git status'
+    });
+
+    expect(buildInput.systemPrompt).toContain(`Workspace: ${taskWorkspacePath}`);
+    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(readJson(shellOutput)).toMatchObject({
+      cwd: taskWorkspacePath
+    });
+    expect(capabilityCalls.find((call) => call.name === 'shell.execute')?.input).toMatchObject({
+      cwd: taskWorkspacePath
     });
   });
 
@@ -266,7 +322,7 @@ describe('createAgentDeepAgentExecutor', () => {
       name: 'shell.execute',
       input: {
         command: 'python .\\create_docx.py',
-        cwd: undefined,
+        cwd: workspacePath,
         source: 'agent'
       }
     });
@@ -570,7 +626,7 @@ async function startExecutorExecution(input: ExecutorEventsInput): Promise<Async
 
 function createCapabilities(
   calls: Array<{ name: string; input: unknown }>,
-  options: { capabilityPreview?: boolean; workspace?: Workspace | null } = {}
+  options: { capabilityPreview?: boolean; mcpTools?: ClientTool[]; workspace?: Workspace | null } = {}
 ): RocCapabilityRegistry {
   const capabilityPreviewDescriptor: CapabilityDescriptor = {
     name: 'agent.capability.preview',
@@ -602,6 +658,9 @@ function createCapabilities(
         } satisfies Workspace;
         return workspace as TOutput;
       }
+      if (name === 'mcp.tools.get') {
+        return (options.mcpTools === undefined ? [] : options.mcpTools) as TOutput;
+      }
       if (name === 'task.background.preview') {
         return createPreview(input as BackgroundTaskPreviewRequest) as TOutput;
       }
@@ -618,10 +677,12 @@ function createCapabilities(
         return createTask(createPreview({ goal: '已取消任务' }), 'cancelled') as TOutput;
       }
       if (name === 'shell.execute') {
+        const request = input as { command: string; cwd?: string };
+        const cwd = request.cwd === undefined ? workspacePath : request.cwd;
         return {
-          command: (input as { command: string }).command,
-          normalizedCommand: (input as { command: string }).command,
-          cwd: 'F:\\Code\\Roc',
+          command: request.command,
+          normalizedCommand: request.command,
+          cwd,
           exitCode: 0,
           stdout: 'ok',
           stderr: '',
@@ -632,6 +693,13 @@ function createCapabilities(
       throw new Error(`unexpected_capability:${name}`);
     }
   } satisfies RocCapabilityRegistry;
+}
+
+function createMcpTool(name: string): ClientTool {
+  return {
+    name,
+    description: 'MCP search tool'
+  } as ClientTool;
 }
 
 function createRun(): TaskRun {

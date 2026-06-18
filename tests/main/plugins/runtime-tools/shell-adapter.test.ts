@@ -107,15 +107,57 @@ describe('runtime tools shell adapter', () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'rtk ls /workspace',
+      command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'rtk ls /workspace',
-      normalizedCommand: 'rtk ls /workspace',
+      command: 'copy /workspace/gold_price_scheduler/main.py G:\\杂\\test\\gold_price.py',
+      normalizedCommand: 'copy /workspace/gold_price_scheduler/main.py g:\\杂\\test\\gold_price.py',
       cwd: workspaceRoot,
+      stdout: '',
+      exitCode: 1,
+      usedRtk: false,
+      bypassReason: 'virtual_workspace_path'
+    });
+    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
+    expect(commandCalls).toHaveLength(0);
+  });
+
+  it('rejects agent shell commands that pass the Deep Agents route as an option value', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'python .\\main.py --input=/workspace/gold_price_scheduler/main.py',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'python .\\main.py --input=/workspace/gold_price_scheduler/main.py',
+      cwd: workspaceRoot,
+      stdout: '',
+      exitCode: 1,
+      usedRtk: false,
+      bypassReason: 'virtual_workspace_path'
+    });
+    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
+    expect(commandCalls).toHaveLength(0);
+  });
+
+  it('rejects agent shell cwd that uses the Deep Agents /workspace route', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'python .\\main.py',
+      cwd: '/workspace/gold_price_scheduler',
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'python .\\main.py',
+      cwd: '/workspace/gold_price_scheduler',
       stdout: '',
       exitCode: 1,
       usedRtk: false,
@@ -191,6 +233,30 @@ describe('runtime tools shell adapter', () => {
     expect(commandCalls).toHaveLength(1);
     expect(commandCalls[0].args.join(' ')).toContain('Write-Output /workspace/package.json');
   });
+
+  it('executes agent commands with explicit real cwd when no workspace is selected', async () => {
+    const { capabilities, commandCalls } = await initializePlugin({ workspacePath: undefined });
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'Write-Output explicit',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'Write-Output explicit',
+      cwd: workspaceRoot,
+      stdout: 'notes.txt\n',
+      exitCode: 0,
+      usedRtk: false,
+      bypassReason: 'command_not_supported'
+    });
+    expect(commandCalls).toHaveLength(1);
+    expect(commandCalls[0]).toMatchObject({
+      file: 'powershell.exe',
+      cwd: workspaceRoot
+    });
+  });
 });
 
 type CommandCall = {
@@ -200,11 +266,14 @@ type CommandCall = {
   extraEnv: Record<string, string>;
 };
 
-async function initializePlugin(): Promise<{ capabilities: CapabilityRegistry; commandCalls: CommandCall[] }> {
+async function initializePlugin(options: { workspacePath?: string } = { workspacePath: workspaceRoot }): Promise<{
+  capabilities: CapabilityRegistry;
+  commandCalls: CommandCall[];
+}> {
   const commandCalls: CommandCall[] = [];
   const plugin = createRuntimeToolsPlugin({
     rootDir: root,
-    workspacePath: workspaceRoot,
+    workspacePath: options.workspacePath,
     commandExecutor: (file, args, cwd, extraEnv) => {
       commandCalls.push({ file, args, cwd, extraEnv });
       return {

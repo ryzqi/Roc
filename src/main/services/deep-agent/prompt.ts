@@ -24,6 +24,7 @@ const ROC_STATIC_SYSTEM_PROMPT = [
 export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   '',
   '本轮工作流：创建后台任务。',
+  '本轮后台任务继承当前主聊天已启用的 MCP 和 skills；需要检索、读取网页或使用 skill 时直接调用可用工具/读取 /skills/。',
   '你负责解析用户目标和触发时间；先调用 resolve_background_task_time，再用返回的 trigger 调用 propose_background_task 创建 preview，最后调用 schedule_background_task 落地。',
   '创建后台任务不是立即执行任务目标；不要把用户要求定时执行的文件、shell 或业务动作在当前回合直接完成。',
   '中文时段解析约定：早上7点=07:00，晚上9点=21:00，中午1点=13:00，晚上12点=00:00。',

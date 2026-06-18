@@ -148,7 +148,8 @@ export class TaskScheduler {
         mode: 'task',
         taskSource: 'workbench',
         threadId: task.threadId,
-        enabledCapabilities: task.enabledCapabilities ?? emptyCapabilities
+        enabledCapabilities: task.enabledCapabilities ?? emptyCapabilities,
+        workspacePath: task.workspacePath
       });
       this.runNow(task.id, result.runId);
     } catch (error) {

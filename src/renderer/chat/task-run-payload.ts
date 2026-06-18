@@ -4,4 +4,5 @@ export type ChatTaskSubmitPayload = {
   input: string;
   workflowHint?: WorkflowHint;
   taskSource?: 'workbench' | null;
+  workspacePath?: string | null;
 };

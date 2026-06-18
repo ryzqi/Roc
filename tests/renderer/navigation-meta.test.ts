@@ -4,6 +4,39 @@ import { buildTopMeta } from '../../src/renderer/app/view-routing';
 import { createLoadedState } from './view-test-helpers';
 
 describe('renderer navigation meta', () => {
+  it('uses active task surface counts for the task board meta', () => {
+    const state = createLoadedState({
+      taskSnapshot: {
+        ...createLoadedState({}).taskSnapshot,
+        counts: {
+          total: 3,
+          running: 3,
+          failed: 0,
+          pendingConfirmation: 0
+        }
+      },
+      activeTasks: [
+        {
+          kind: 'background',
+          taskId: 'task-running',
+          threadId: 'thread-running',
+          title: '同步金价',
+          goal: '同步金价',
+          status: 'running',
+          trigger: null,
+          nextRunAt: null,
+          lastRunAt: null,
+          riskLevel: 'low',
+          workspacePath: 'F:\\Code\\Roc',
+          createdAt: '2026-06-18T00:00:00.000Z',
+          updatedAt: '2026-06-18T00:00:00.000Z'
+        }
+      ]
+    });
+
+    expect(buildTopMeta('tasks-board', state)).toBe('1 个任务 · 运行中 1');
+  });
+
   it('uses the current memory label instead of the Phase 1 placeholder', () => {
     const state = createLoadedState({
       memoryStatus: {

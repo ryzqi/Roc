@@ -316,7 +316,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           skills: currentSelectedSkills
         },
         workflowHint: null,
-        taskSource: null
+        taskSource: null,
+        workspacePath: null
       });
       setPendingWorkflowHint(null);
       setPendingTaskSource(null);
@@ -340,6 +341,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       const threadId = options === undefined ? selectedThreadId : options.threadId;
       const requestWorkflowHint = workflowHint === undefined ? null : workflowHint;
       const requestTaskSource = taskSource === undefined ? null : taskSource;
+      const requestWorkspacePath = payload.workspacePath === undefined ? null : payload.workspacePath;
       const result = await chatFeature.startRun({
         input: payload.input,
         mode: 'task',
@@ -349,7 +351,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           skills: currentSelectedSkills
         },
         workflowHint: requestWorkflowHint,
-        taskSource: requestTaskSource
+        taskSource: requestTaskSource,
+        workspacePath: requestWorkspacePath
       });
       setPendingWorkflowHint(null);
       setPendingTaskSource(null);
@@ -379,7 +382,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       const result = await startTaskRun({
         input: payload.input,
         workflowHint: payload.workflowHint,
-        taskSource: payload.taskSource
+        taskSource: payload.taskSource,
+        workspacePath: payload.workspacePath
       });
       if (!result.ok) {
         return result;

@@ -5,6 +5,7 @@ import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { WorkspaceService } from './workspace-service';
 import { redact } from './deep-agent/redact';
+import { containsVirtualWorkspacePath } from './deep-agent/shell-path-guard';
 
 const powershellUtf8Prefix =
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
@@ -45,7 +46,11 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.rejectVirtualWorkspaceCwd(request.command, cwd) ?? this.runAgentCommand(request.command, cwd))
+        ? (this.rejectVirtualWorkspacePath({
+            command: request.command,
+            cwd,
+            fallbackCwd: this.readFallbackCwd()
+          }) ?? this.runAgentCommand(request.command, cwd))
         : this.executeTerminalCommand(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
@@ -86,7 +91,11 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.rejectVirtualWorkspaceCwd(request.command, cwd) ?? (await this.runAgentCommandAsync(request.command, cwd)))
+        ? (this.rejectVirtualWorkspacePath({
+            command: request.command,
+            cwd,
+            fallbackCwd: this.readFallbackCwd()
+          }) ?? (await this.runAgentCommandAsync(request.command, cwd)))
         : await this.executeTerminalCommandAsync(request.command, cwd);
     const result: ShellExecutionResult = {
       command: request.command,
@@ -133,7 +142,11 @@ export class ShellExecutionService {
     bypassReason?: ShellExecutionResult['bypassReason'];
   } {
     const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
-    const workspaceRouteViolation = this.rejectVirtualWorkspaceCwd(input.command, cwd);
+    const workspaceRouteViolation = this.rejectVirtualWorkspacePath({
+      command: input.command,
+      cwd,
+      fallbackCwd: input.cwd === undefined ? cwd : this.readFallbackCwd()
+    });
     if (workspaceRouteViolation !== null) {
       if (input.threadId !== undefined && input.runId !== undefined) {
         this.taskService.recordEvent({
@@ -208,7 +221,11 @@ export class ShellExecutionService {
     }
   > {
     const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
-    const workspaceRouteViolation = this.rejectVirtualWorkspaceCwd(input.command, cwd);
+    const workspaceRouteViolation = this.rejectVirtualWorkspacePath({
+      command: input.command,
+      cwd,
+      fallbackCwd: input.cwd === undefined ? cwd : this.readFallbackCwd()
+    });
     if (workspaceRouteViolation !== null) {
       if (input.threadId !== undefined && input.runId !== undefined) {
         this.taskService.recordEvent({
@@ -541,22 +558,22 @@ export class ShellExecutionService {
     };
   }
 
-  private rejectVirtualWorkspaceCwd(command: string, cwd: string): ExecutedShellCommand | null {
-    if (!this.containsVirtualWorkspacePath(command)) {
+  private rejectVirtualWorkspacePath(input: { command: string; cwd: string; fallbackCwd: string }): ExecutedShellCommand | null {
+    if (!containsVirtualWorkspacePath(input.command) && !containsVirtualWorkspacePath(input.cwd)) {
       return null;
     }
 
     return {
       stdout: '',
       exitCode: 1,
-      stderr: `Error: /workspace is a Deep Agents file-tool route, not a shell directory. Use the selected workspace root on Windows: ${cwd}`,
+      stderr: `Error: /workspace is a Deep Agents file-tool route, not a shell directory. Use the selected workspace root on Windows: ${input.fallbackCwd}`,
       usedRtk: false,
       bypassReason: 'virtual_workspace_path'
     };
   }
 
-  private containsVirtualWorkspacePath(command: string): boolean {
-    return /(?:"\/workspace(?:\/|$)[^"]*"|'\/workspace(?:\/|$)[^']*'|(?:^|[\s;&|])\/workspace(?:\/|$)\S*)/i.test(command);
+  private readFallbackCwd(): string {
+    return this.workspaceService.getCurrentWorkspace()?.path ?? 'selected workspace root';
   }
 
   private toText(value: Buffer | string | undefined): string {

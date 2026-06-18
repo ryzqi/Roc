@@ -79,7 +79,8 @@ export function buildTopMeta(view: MainViewId, state: LoadedState): string {
     return visibleWorkspaceLabel(state);
   }
   if (view === 'tasks-board' || view === 'task-detail') {
-    return `${state.taskSnapshot.counts.total} 个任务 · 运行中 ${state.taskSnapshot.counts.running}`;
+    const runningCount = state.activeTasks.filter((task) => task.status === 'running').length;
+    return `${state.activeTasks.length} 个任务 · 运行中 ${runningCount}`;
   }
   if (view === 'workspace' || view === 'git' || view === 'terminal' || view === 'preview') {
     return visibleWorkspaceLabel(state);
