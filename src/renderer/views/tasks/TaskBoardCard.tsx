@@ -11,9 +11,9 @@ export function TaskBoardCard({
 
   return (
     <button className="task-board-card" data-testid={`task-board-card-${itemId}`} type="button" onClick={onOpenTask}>
+      <span className="task-board-card-status status-pill info">{item.status}</span>
       <span className="task-board-card-title">{item.goal}</span>
-      <span className="task-board-card-meta">{item.status}</span>
-      <span className="task-board-card-meta">{item.workspacePath ?? '无工作区'}</span>
+      <span className="task-board-card-workspace">{item.workspacePath ?? '无工作区'}</span>
     </button>
   );
 }
