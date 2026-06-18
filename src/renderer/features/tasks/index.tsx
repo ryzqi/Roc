@@ -48,6 +48,7 @@ export function TaskDetailFeature(props: {
 }): React.JSX.Element {
   const taskActions = useTaskFeature({
     client: props.client,
+    onTaskDeleted: props.onBackToBoard,
     selectedTaskId: props.taskId,
     updateLoadedState: props.updateLoadedState
   });

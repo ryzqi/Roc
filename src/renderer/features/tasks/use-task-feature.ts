@@ -1,4 +1,5 @@
 import type { RocClient } from '../../shared/roc-client';
+import type { ActiveTaskItem } from '../../../shared/types';
 import type { TaskActions } from '../../views/tasks/use-task-actions';
 import { createTaskActions, useTaskActions } from '../../views/tasks/use-task-actions';
 import type { LoadedState } from '../../loaded-state';
@@ -12,10 +13,12 @@ export function createTaskFeatureActions(input: {
 
 export function useTaskFeature(input: {
   client: RocClient;
+  onTaskDeleted?: (item: ActiveTaskItem) => void;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
   selectedTaskId?: string | null;
 }): TaskActions {
   return useTaskActions(input.client, input.updateLoadedState, {
+    onTaskDeleted: input.onTaskDeleted,
     selectedTaskId: input.selectedTaskId
   });
 }

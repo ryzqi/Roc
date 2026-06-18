@@ -77,6 +77,66 @@ describe('createTaskActions', () => {
     expect(runBackgroundNow).toHaveBeenCalledWith('task-2');
     expect(refreshTaskSurface).not.toHaveBeenCalled();
   });
+
+  it('does not fall back to the selected detail task after delete clears the selection', async () => {
+    const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
+    const deleteBackgroundTask = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        deleted: true,
+        taskId: 'task-2'
+      }
+    });
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          deleteBackgroundTask
+        }
+      }
+    });
+
+    const actions = createTaskActions({
+      refreshTaskSurface
+    });
+
+    actions.deleteTask(createBackgroundItem({ taskId: 'task-2' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(deleteBackgroundTask).toHaveBeenCalledWith('task-2');
+    expect(refreshTaskSurface).toHaveBeenCalledWith(null);
+  });
+
+  it('does not notify deletion when delete fails', async () => {
+    const refreshTaskSurface = vi.fn().mockResolvedValue(undefined);
+    const onTaskDeleted = vi.fn();
+    const deleteBackgroundTask = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        message: '任务会话不存在或已被删除。'
+      }
+    });
+    vi.stubGlobal('window', {
+      roc: {
+        tasks: {
+          deleteBackgroundTask
+        }
+      }
+    });
+
+    const actions = createTaskActions({
+      onTaskDeleted,
+      refreshTaskSurface
+    });
+
+    actions.deleteTask(createBackgroundItem({ taskId: 'task-2' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(deleteBackgroundTask).toHaveBeenCalledWith('task-2');
+    expect(refreshTaskSurface).not.toHaveBeenCalled();
+    expect(onTaskDeleted).not.toHaveBeenCalled();
+  });
 });
 
 function createBackgroundItem(partial: Partial<ActiveTaskItem>): ActiveTaskItem {

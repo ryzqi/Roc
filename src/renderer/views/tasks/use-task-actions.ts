@@ -15,6 +15,7 @@ export type TaskActions = {
 
 export function createTaskActions(input: {
   client?: RocClient;
+  onTaskDeleted?: (item: ActiveTaskItem) => void;
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
 }): TaskActions {
   function requireTaskId(item: ActiveTaskItem): string | null {
@@ -40,7 +41,13 @@ export function createTaskActions(input: {
         return;
       }
       const client = resolveClient();
-      void client.api.tasks.deleteBackgroundTask(taskId).then(async () => input.refreshTaskSurface(null));
+      void client.api.tasks.deleteBackgroundTask(taskId).then(async (result) => {
+        if (!result.ok) {
+          return;
+        }
+        await input.refreshTaskSurface(null);
+        input.onTaskDeleted?.(item);
+      });
     },
     pauseTask: (item) => {
       const taskId = requireTaskId(item);
@@ -78,6 +85,7 @@ export function useTaskActions(
   client: RocClient | undefined,
   updateLoadedState: (partial: Partial<LoadedState>) => void,
   input?: {
+    onTaskDeleted?: (item: ActiveTaskItem) => void;
     selectedTaskId?: string | null;
   }
 ): TaskActions {
@@ -87,12 +95,13 @@ export function useTaskActions(
       const taskClient = client ?? createRocClient();
       const [taskSnapshot, taskSurfaceData] = await Promise.all([
         taskClient.api.tasks.getSnapshot(),
-        loadTaskSurfaceData(selectedTaskId ?? input?.selectedTaskId, taskClient)
+        loadTaskSurfaceData(selectedTaskId === undefined ? input?.selectedTaskId : selectedTaskId, taskClient)
       ]);
       updateLoadedState({
         taskSnapshot: unwrap<TaskSnapshot>('task snapshot', taskSnapshot),
         ...taskSurfaceData
       });
-    }
+    },
+    onTaskDeleted: input?.onTaskDeleted
   });
 }

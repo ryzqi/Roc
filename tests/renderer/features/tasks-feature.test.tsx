@@ -175,6 +175,36 @@ describe('TasksFeature', () => {
 
     expect(client.api.tasks.pauseBackgroundTask).toHaveBeenCalledWith('task-1');
   });
+
+  it('returns to the task board after deleting from standalone task detail without reloading deleted detail', async () => {
+    const client = createTasksClient();
+    const onBackToBoard = vi.fn();
+    const task = createBackgroundItem({ taskId: 'task-1', threadId: 'thread-1', status: 'running' });
+
+    await act(async () => {
+      root.render(
+        <TaskDetailFeature
+          client={client}
+          liveTaskRun={null}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={onBackToBoard}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({ taskDetail: createTaskDetail(task) })}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-detail-action-delete').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(client.api.tasks.deleteBackgroundTask).toHaveBeenCalledWith('task-1');
+    expect(client.api.tasks.getTaskDetail).not.toHaveBeenCalled();
+    expect(onBackToBoard).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createTasksClient(): RocClient {
