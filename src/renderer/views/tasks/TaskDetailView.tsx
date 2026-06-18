@@ -53,12 +53,16 @@ export function TaskDetailView({
   if (detail === null || detail.taskId !== taskId) {
     return (
       <section className="canvas-stage task-detail-page" data-testid="task-detail-view">
-        <button className="action-button" type="button" onClick={onBackToBoard}>
-          返回任务工作台
-        </button>
-        <div className="section-empty-state">
-          <strong>任务不存在</strong>
-          <p>当前任务不存在或已经删除。</p>
+        <div className="task-detail-page-head">
+          <button className="action-button" type="button" onClick={onBackToBoard}>
+            返回任务工作台
+          </button>
+        </div>
+        <div className="task-detail-content-shell">
+          <div className="section-empty-state">
+            <strong>任务不存在</strong>
+            <p>当前任务不存在或已经删除。</p>
+          </div>
         </div>
       </section>
     );
@@ -94,52 +98,57 @@ export function TaskDetailView({
           <p className="page-meta">{loadedDetail.thread.status}</p>
         </div>
       </div>
-      <div className="task-detail-page-body" ref={transcriptScrollRef}>
-        <ChatTranscriptPanel
-          messages={transcript}
-          liveSignal={liveSignal}
-          scrollContainerRef={transcriptScrollRef}
-          onApprovalDecision={(interruptId, decisions) => {
-            if (loadedDetail.lastRunId === null) {
-              setInlineError('当前没有可恢复的审批运行。');
-              return;
-            }
-            void onApprovalDecision({
-              runId: loadedDetail.lastRunId,
-              threadId: loadedDetail.threadId,
-              interruptId,
-              decisions
-            }).then((result) => {
-              if (result.ok) {
-                setInlineError(null);
-              } else {
-                setInlineError(result.error);
-              }
-            });
-          }}
-        />
-        {waitingUser ? (
-          <form
-            className="task-detail-followup"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitFollowup();
-            }}
-          >
-            <textarea
-              data-testid="task-detail-followup-input"
-              value={followupInput}
-              onChange={(event) => setFollowupInput(event.target.value)}
+      <div className="task-detail-content-shell">
+        <div className="task-detail-page-body" ref={transcriptScrollRef}>
+          <div className="task-detail-transcript-shell">
+            <ChatTranscriptPanel
+              messages={transcript}
+              liveSignal={liveSignal}
+              scrollContainerRef={transcriptScrollRef}
+              onApprovalDecision={(interruptId, decisions) => {
+                if (loadedDetail.lastRunId === null) {
+                  setInlineError('当前没有可恢复的审批运行。');
+                  return;
+                }
+                void onApprovalDecision({
+                  runId: loadedDetail.lastRunId,
+                  threadId: loadedDetail.threadId,
+                  interruptId,
+                  decisions
+                }).then((result) => {
+                  if (result.ok) {
+                    setInlineError(null);
+                  } else {
+                    setInlineError(result.error);
+                  }
+                });
+              }}
             />
-            <button className="action-button" data-testid="task-detail-followup-submit" type="submit">
-              继续任务
-            </button>
-          </form>
-        ) : null}
-        {loadedDetail.backgroundTask === null ? null : (
-          <TaskActionControls item={createTaskActionItem(loadedDetail)} taskActions={taskActions} />
-        )}
-        {inlineError === null ? null : <span className="inline-warning">{inlineError}</span>}
+          </div>
+          {waitingUser ? (
+            <form
+              className="task-detail-followup"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitFollowup();
+              }}
+            >
+              <textarea
+                data-testid="task-detail-followup-input"
+                placeholder="继续说明任务需要的信息..."
+                value={followupInput}
+                onChange={(event) => setFollowupInput(event.target.value)}
+              />
+              <button className="action-button" data-testid="task-detail-followup-submit" type="submit">
+                继续任务
+              </button>
+            </form>
+          ) : null}
+          {loadedDetail.backgroundTask === null ? null : (
+            <TaskActionControls item={createTaskActionItem(loadedDetail)} taskActions={taskActions} />
+          )}
+          {inlineError === null ? null : <span className="inline-warning">{inlineError}</span>}
+        </div>
       </div>
     </section>
   );
