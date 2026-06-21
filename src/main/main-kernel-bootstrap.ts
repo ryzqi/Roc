@@ -155,9 +155,13 @@ function createDefaultMainKernelPlugins(input: {
     }),
     createAgentPlugin({
       capabilityPreview: {
-        approvalModeProvider: () => {
+        deleteFileApprovalModeProvider: () => {
           configService.reloadSettingsDocument();
           return configService.getPermissions().mode;
+        },
+        mcpApprovalModeProvider: () => {
+          configService.reloadSettingsDocument();
+          return configService.getMcpConfig().approvalMode;
         }
       },
       deepAgentExecutor: {

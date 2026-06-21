@@ -1,8 +1,9 @@
 import type {
-  AgentRuntimeStatus,
   AgentCapabilityPreview,
+  AgentRuntimeStatus,
   ActiveTaskItem,
   AppStatus,
+  ApprovalMode,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
@@ -43,6 +44,7 @@ import type {
   McpServerConfig,
   McpServerSnapshot,
   McpServerTestResult,
+  McpServersConfig,
   MemoryFileWriteOutcome,
   MemoryFileWriteRequest,
   MemoryKind,
@@ -171,6 +173,8 @@ export type RocPreloadApi = {
     setServerEnabled: (request: { id: string; enabled: boolean }) => Promise<IpcResult<McpServerConfig>>;
     deleteServer: (id: string) => Promise<IpcResult<{ deleted: true }>>;
     testServer: (id: string) => Promise<IpcResult<McpServerTestResult>>;
+    getConfig: () => Promise<IpcResult<McpServersConfig>>;
+    setApprovalMode: (request: { approvalMode: ApprovalMode }) => Promise<IpcResult<McpServersConfig>>;
   };
   skills: {
     list: () => Promise<IpcResult<SkillSnapshot[]>>;

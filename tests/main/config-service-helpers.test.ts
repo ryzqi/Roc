@@ -54,6 +54,7 @@ describe('config helper modules', () => {
     expect(defaultProviders.providers.map((provider) => provider.id)).toEqual(['nvidia', 'openrouter', 'llama_cpp']);
     expect(defaultMcpConfig).toEqual({
       schemaVersion: 1,
+      approvalMode: 'fully_automatic',
       servers: []
     });
 
@@ -146,6 +147,7 @@ describe('config helper modules', () => {
       })
     ).toEqual({
       schemaVersion: 1,
+      approvalMode: 'fully_automatic',
       servers: [
         {
           id: 'legacy-mcp',

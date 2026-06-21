@@ -216,12 +216,13 @@ export const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   allowedTools: z.array(z.string().min(1))
 });
 
+export const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
+
 export const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
   schemaVersion: z.literal(1),
+  approvalMode: ApprovalModeSchema,
   servers: z.array(McpServerSchema)
 });
-
-export const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
 
 export const PermissionsConfigSchema: z.ZodType<PermissionsConfig> = z.object({
   schemaVersion: z.literal(3),

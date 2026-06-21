@@ -5,7 +5,8 @@ import type { AgentRuntimeStatus } from '../../../../src/shared/types';
 describe('agent capability preview', () => {
   it('does not show background task tools in ordinary agent capability preview', () => {
     const preview = buildAgentCapabilityPreview({
-      approvalMode: 'default',
+      deleteFileApprovalMode: 'default',
+      mcpApprovalMode: 'default',
       mcpServers: [],
       requestedCapabilities: {
         mcpServers: [],
@@ -36,6 +37,74 @@ describe('agent capability preview', () => {
       dependencies: ['ShellExecutionService', 'RtkService'],
       auditCategory: 'agent_execute'
     });
+  });
+
+  it('uses delete_file and MCP approval modes independently', () => {
+    const mcpDefaultPreview = buildAgentCapabilityPreview({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'default',
+      mcpServers: [
+        {
+          id: 'docs',
+          name: 'Docs',
+          enabled: true,
+          transport: 'http',
+          status: 'ready',
+          tools: 1,
+          preset: false,
+          riskLevel: 'medium',
+          url: 'https://docs.example.test/mcp',
+          allowedTools: ['search_docs'],
+          lastError: null
+        }
+      ],
+      requestedCapabilities: {
+        mcpServers: ['docs'],
+        skills: []
+      },
+      runtimeStatus: readyRuntimeStatus(),
+      skills: []
+    });
+
+    expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'delete_file')?.requiresApproval).toBe(false);
+    expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'search_docs')?.requiresApproval).toBe(true);
+    expect(mcpDefaultPreview.interruptOn.delete_file).toBeUndefined();
+    expect(mcpDefaultPreview.interruptOn.search_docs).toEqual({
+      allowedDecisions: ['approve', 'reject']
+    });
+
+    const deleteFileDefaultPreview = buildAgentCapabilityPreview({
+      deleteFileApprovalMode: 'default',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [
+        {
+          id: 'docs',
+          name: 'Docs',
+          enabled: true,
+          transport: 'http',
+          status: 'ready',
+          tools: 1,
+          preset: false,
+          riskLevel: 'medium',
+          url: 'https://docs.example.test/mcp',
+          allowedTools: ['search_docs'],
+          lastError: null
+        }
+      ],
+      requestedCapabilities: {
+        mcpServers: ['docs'],
+        skills: []
+      },
+      runtimeStatus: readyRuntimeStatus(),
+      skills: []
+    });
+
+    expect(deleteFileDefaultPreview.toolCards.find((card) => card.name === 'delete_file')?.requiresApproval).toBe(true);
+    expect(deleteFileDefaultPreview.toolCards.find((card) => card.name === 'search_docs')?.requiresApproval).toBe(false);
+    expect(deleteFileDefaultPreview.interruptOn.delete_file).toEqual({
+      allowedDecisions: ['approve', 'edit', 'reject']
+    });
+    expect(deleteFileDefaultPreview.interruptOn.search_docs).toBeUndefined();
   });
 });
 

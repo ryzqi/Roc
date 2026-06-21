@@ -127,6 +127,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       }
     },
     providerTestStatus: null,
+    mcpApprovalMode: 'fully_automatic',
     mcpServers: [],
     mcpTestStatus: null,
     skills: [],

@@ -63,6 +63,7 @@ export const defaultProviders: ProvidersConfig = {
 
 export const defaultMcpConfig: McpServersConfig = {
   schemaVersion: 1,
+  approvalMode: 'fully_automatic',
   servers: []
 };
 

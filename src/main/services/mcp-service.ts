@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
+import type { ApprovalMode, McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
 import { RocDomainError } from './errors';
 import { requireText } from './validation';
 
@@ -42,6 +42,20 @@ export class McpService {
     }));
   }
 
+  getConfig(): McpServersConfig {
+    return this.readConfig();
+  }
+
+  setApprovalMode(approvalMode: ApprovalMode): McpServersConfig {
+    const config = this.readConfig();
+    const nextConfig: McpServersConfig = {
+      ...config,
+      approvalMode
+    };
+    this.writeConfig(nextConfig);
+    return nextConfig;
+  }
+
   ensureExaPreset(): McpServerConfig {
     const existing = this.readConfig().servers.find((server) => server.id === 'exa-hosted');
     if (existing !== undefined) {
@@ -69,6 +83,7 @@ export class McpService {
       existingIndex === -1 ? [...config.servers, parsed] : config.servers.map((item) => (item.id === parsed.id ? parsed : item));
     this.writeConfig({
       schemaVersion: 1,
+      approvalMode: config.approvalMode,
       servers: nextServers
     });
     return parsed;
@@ -87,6 +102,7 @@ export class McpService {
     };
     this.writeConfig({
       schemaVersion: 1,
+      approvalMode: config.approvalMode,
       servers: config.servers.map((server) => (server.id === serverId ? nextServer : server))
     });
     return nextServer;
@@ -101,6 +117,7 @@ export class McpService {
     }
     this.writeConfig({
       schemaVersion: 1,
+      approvalMode: config.approvalMode,
       servers: config.servers.filter((server) => server.id !== serverId)
     });
   }
@@ -140,6 +157,7 @@ export class McpService {
   private writeConfig(config: McpServersConfig): void {
     const parsed = {
       schemaVersion: 1 as const,
+      approvalMode: config.approvalMode,
       servers: z.array(McpServerSchema).parse(config.servers)
     };
     this.configService.saveMcpConfig(parsed);

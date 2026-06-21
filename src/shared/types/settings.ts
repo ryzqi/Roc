@@ -228,6 +228,7 @@ export type ProvidersConfig = {
 
 export type McpServersConfig = {
   schemaVersion: 1;
+  approvalMode: ApprovalMode;
   servers: McpServerConfig[];
 };
 

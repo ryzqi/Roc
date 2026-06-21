@@ -28,7 +28,8 @@ describe('agent plugin manifest', () => {
   it('declares plugin dependencies when the capability preview API is enabled', () => {
     const plugin = createAgentPlugin({
       capabilityPreview: {
-        approvalModeProvider: () => 'fully_automatic'
+        deleteFileApprovalModeProvider: () => 'fully_automatic',
+        mcpApprovalModeProvider: () => 'fully_automatic'
       }
     });
 

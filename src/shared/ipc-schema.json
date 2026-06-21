@@ -50,6 +50,8 @@
     { "key": "mcpSetServerEnabled", "channel": "roc:mcp:set-server-enabled" },
     { "key": "mcpDeleteServer", "channel": "roc:mcp:delete-server" },
     { "key": "mcpTestServer", "channel": "roc:mcp:test-server" },
+    { "key": "mcpGetConfig", "channel": "roc:mcp:get-config" },
+    { "key": "mcpSetApprovalMode", "channel": "roc:mcp:set-approval-mode" },
     { "key": "skillsList", "channel": "roc:skills:list" },
     { "key": "skillsImport", "channel": "roc:skills:import" },
     { "key": "skillsSetEnabled", "channel": "roc:skills:set-enabled" },

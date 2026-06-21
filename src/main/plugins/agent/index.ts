@@ -147,7 +147,8 @@ export const agentCapabilityDescriptors = [
 
 export type AgentPluginOptions = {
   capabilityPreview?: {
-    approvalModeProvider: () => ApprovalMode;
+    deleteFileApprovalModeProvider: () => ApprovalMode;
+    mcpApprovalModeProvider: () => ApprovalMode;
   };
   deepAgentExecutor?: { paths: RocPaths } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
@@ -209,7 +210,8 @@ function createCapabilityPreviewProvider(
   const capabilityPreviewOptions = options.capabilityPreview;
   return async ({ requestedCapabilities, runtimeStatus }) =>
     buildAgentCapabilityPreview({
-      approvalMode: capabilityPreviewOptions.approvalModeProvider(),
+      deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
+      mcpApprovalMode: capabilityPreviewOptions.mcpApprovalModeProvider(),
       mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
       requestedCapabilities,
       runtimeStatus,
@@ -259,7 +261,7 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async () =>
     buildDeepAgentConfigPreview({
-      approvalMode: options.capabilityPreview?.approvalModeProvider() ?? 'default',
+      deleteFileApprovalMode: options.capabilityPreview?.deleteFileApprovalModeProvider() ?? 'default',
       runtimeStatus: runtime.getStatus()
     })
   );

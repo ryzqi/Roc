@@ -13,7 +13,7 @@ function createPermissions(mode: PermissionsConfig['mode'] = 'fully_automatic'):
 }
 
 describe('AuthSecuritySection', () => {
-  it('renders global approval mode radios and grant state copy', () => {
+  it('renders delete_file approval mode radios and grant state copy without MCP copy', () => {
     const html = renderToStaticMarkup(
       React.createElement(AuthSecuritySection, {
         draft: createPermissions('default'),
@@ -26,7 +26,8 @@ describe('AuthSecuritySection', () => {
     expect(html).toContain('data-testid="settings-approval-mode-default"');
     expect(html).toContain('全自动');
     expect(html).toContain('默认');
-    expect(html).toContain('仅在 delete_file 与 MCP 工具调用前弹出审批卡');
+    expect(html).toContain('仅在 delete_file 调用前弹出审批卡');
+    expect(html).not.toContain('MCP');
     expect(html).toContain('目前没有长期授权记录');
     expect(html).toContain('未启用系统 URL 协议、文件关联、自动更新或崩溃上报');
     expect(html).not.toContain('settings-confirmation-');

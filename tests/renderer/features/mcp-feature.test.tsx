@@ -52,11 +52,13 @@ describe('McpFeature', () => {
     expect(html).toContain('data-testid="mcp-view"');
     expect(html).toContain('data-testid="mcp-management"');
     expect(html).toContain('data-testid="mcp-test-smoke-mcp"');
-    expect(html).toContain('class="mcp-compact-summary"');
+    expect(html).toContain('data-testid="mcp-approval-mode-fully-automatic"');
+    expect(html).not.toContain('class="mcp-toolbar-metrics"');
+    expect(html).not.toContain('class="mcp-compact-summary"');
     expect(html).not.toContain('mcp-stat-row');
   });
 
-  it('refreshes plugin MCP servers when the feature mounts', async () => {
+  it('refreshes plugin MCP config and servers when the feature mounts', async () => {
     const server = {
       id: 'smoke-mcp',
       name: 'Smoke MCP',
@@ -68,21 +70,31 @@ describe('McpFeature', () => {
       preset: false,
       url: 'http://127.0.0.1:65534/mcp'
     };
+    const getConfig = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        schemaVersion: 1 as const,
+        approvalMode: 'default' as const,
+        servers: []
+      }
+    }));
     const listServers = vi.fn(async () => ({ ok: true as const, data: [server] }));
     const updateLoadedState = vi.fn();
 
     await act(async () => {
       root.render(
         <McpFeature
-          client={{ api: { mcp: { listServers } } as unknown as RocPreloadApi }}
+          client={{ api: { mcp: { getConfig, listServers } } as unknown as RocPreloadApi }}
           state={createLoadedState({ mcpServers: [], selectedMcpServers: [], mcpTestStatus: null })}
           updateLoadedState={updateLoadedState}
         />
       );
     });
 
+    expect(getConfig).toHaveBeenCalledTimes(1);
     expect(listServers).toHaveBeenCalledTimes(1);
     expect(updateLoadedState).toHaveBeenCalledWith({
+      mcpApprovalMode: 'default',
       mcpServers: [server],
       selectedMcpServers: ['smoke-mcp']
     });

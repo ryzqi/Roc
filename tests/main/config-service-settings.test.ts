@@ -124,7 +124,7 @@ describe('ConfigService unified settings document', () => {
   });
 
 
-  it('drops legacy MCP approval mode fields and resets permissions to fully_automatic during migration', () => {
+  it('moves legacy server approval fields to default MCP approval mode during migration', () => {
     writeFileSync(
       join(root, 'config', 'settings.json'),
       `${JSON.stringify({
@@ -187,6 +187,7 @@ describe('ConfigService unified settings document', () => {
 
     expect(configService.getMcpConfig()).toEqual({
       schemaVersion: 1,
+      approvalMode: 'fully_automatic',
       servers: [
         expect.objectContaining({
           id: 'legacy-mcp'
@@ -198,6 +199,45 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 3,
       mode: 'fully_automatic',
       grants: []
+    });
+  });
+
+  it('normalizes current MCP config without approvalMode to fully_automatic', () => {
+    writeFileSync(
+      join(root, 'config', 'settings.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 4,
+          settings: defaultSettings,
+          providers: defaultProviders,
+          mcp: {
+            schemaVersion: 1,
+            servers: []
+          },
+          permissions: defaultPermissions,
+          shortcuts: {
+            schemaVersion: 1,
+            shortcuts: []
+          }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    expect(configService.getMcpConfig()).toEqual({
+      schemaVersion: 1,
+      approvalMode: 'fully_automatic',
+      servers: []
+    });
+    expect(readSettingsDocument()).toMatchObject({
+      mcp: {
+        approvalMode: 'fully_automatic'
+      }
     });
   });
 

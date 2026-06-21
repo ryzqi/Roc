@@ -148,6 +148,13 @@ function requiredMappings(): Array<{
     { preloadMethod: 'mcp.ensureExaPreset', capabilityName: 'mcp.ensureExaPreset', args: [], expectedInput: {} },
     { preloadMethod: 'mcp.deleteServer', capabilityName: 'mcp.deleteServer', args: ['mcp_1'], expectedInput: { id: 'mcp_1' } },
     { preloadMethod: 'mcp.testServer', capabilityName: 'mcp.testServer', args: ['mcp_1'], expectedInput: { id: 'mcp_1' } },
+    { preloadMethod: 'mcp.getConfig', capabilityName: 'mcp.getConfig', args: [], expectedInput: {} },
+    {
+      preloadMethod: 'mcp.setApprovalMode',
+      capabilityName: 'mcp.setApprovalMode',
+      args: [{ approvalMode: 'default' }],
+      expectedInput: { approvalMode: 'default' }
+    },
     { preloadMethod: 'skills.importSkill', capabilityName: 'skills.import', args: [request], expectedInput: request },
     { preloadMethod: 'skills.deleteSkill', capabilityName: 'skills.delete', args: ['skill_1'], expectedInput: { id: 'skill_1' } },
     { preloadMethod: 'skills.listFiles', capabilityName: 'skills.files.list', args: [request], expectedInput: request },

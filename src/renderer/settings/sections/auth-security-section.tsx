@@ -11,13 +11,13 @@ const approvalModes: Array<{
   {
     value: 'fully_automatic',
     title: '全自动',
-    description: '直接执行内置工具与 MCP 工具；删除文件与外部调用不再默认弹出审批卡。',
+    description: '直接执行 delete_file；删除文件不再默认弹出审批卡。',
     testId: 'settings-approval-mode-fully-automatic'
   },
   {
     value: 'default',
     title: '默认',
-    description: '仅在 delete_file 与 MCP 工具调用前弹出审批卡；execute、web_read 与记忆工具保持直通。',
+    description: '仅在 delete_file 调用前弹出审批卡；execute、web_read 与记忆工具保持直通。',
     testId: 'settings-approval-mode-default'
   }
 ];
@@ -43,7 +43,7 @@ export function AuthSecuritySection({
       </div>
       <div className="settings-form">
         <p className="card-hint">
-          这里控制 Roc 的全局审批策略。运行时是否中断并展示审批卡，会按当前模式统一决定。
+          这里控制 Roc 内置 delete_file 的审批策略。运行时是否中断并展示审批卡，会按当前模式决定。
         </p>
         <div className="form-grid">
           {approvalModes.map((option) => (

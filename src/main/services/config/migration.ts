@@ -1,4 +1,4 @@
-import type { AppSettings, McpServersConfig, PermissionsConfig, ProvidersConfig, RocSettingsDocument, ShortcutsConfig } from '../../../shared/types';
+import type { AppSettings, ApprovalMode, McpServersConfig, PermissionsConfig, ProvidersConfig, RocSettingsDocument, ShortcutsConfig } from '../../../shared/types';
 import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from './defaults';
 import {
   McpServersConfigSchema,
@@ -206,15 +206,24 @@ export function normalizeLegacyMcpConfig(raw: unknown): McpServersConfig {
   }
 
   const value = raw as Record<string, unknown>;
+  const approvalMode = readApprovalMode(value.approvalMode);
   const servers = Array.isArray(value.servers) ? value.servers : [];
   return McpServersConfigSchema.parse({
     schemaVersion: 1,
+    approvalMode,
     servers: servers.map((entry) => {
       const server = entry as Record<string, unknown>;
       const { approvalMode: _approvalMode, ...rest } = server;
       return rest;
     })
   });
+}
+
+function readApprovalMode(value: unknown): ApprovalMode {
+  if (value === 'fully_automatic' || value === 'default') {
+    return value;
+  }
+  return defaultMcpConfig.approvalMode;
 }
 
 export function upgradeLegacyPermissions(_raw: unknown): PermissionsConfig {

@@ -17,6 +17,7 @@ import type {
   GitStatusResult,
   McpServerSnapshot,
   McpServerTestResult,
+  ApprovalMode,
   MemoryStatus,
   PerformanceSample,
   PermissionsConfig,
@@ -47,6 +48,7 @@ export type LoadedState = {
   permissions: PermissionsConfig;
   hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
+  mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   mcpTestStatus: McpServerTestResult | null;
   skills: SkillSnapshot[];

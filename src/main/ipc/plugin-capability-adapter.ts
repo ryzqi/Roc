@@ -122,6 +122,8 @@ export const pluginCapabilityMappings = [
   mapping('mcp', 'mcp.setServerEnabled', ipcChannels.mcpSetServerEnabled, 'mcp.setServerEnabled', firstArg),
   mapping('mcp', 'mcp.deleteServer', ipcChannels.mcpDeleteServer, 'mcp.deleteServer', idInput('id')),
   mapping('mcp', 'mcp.testServer', ipcChannels.mcpTestServer, 'mcp.testServer', idInput('id')),
+  mapping('mcp', 'mcp.getConfig', ipcChannels.mcpGetConfig, 'mcp.getConfig', emptyInput),
+  mapping('mcp', 'mcp.setApprovalMode', ipcChannels.mcpSetApprovalMode, 'mcp.setApprovalMode', firstArg),
   mapping('skills', 'skills.list', ipcChannels.skillsList, 'skills.list', emptyInput),
   mapping('skills', 'skills.importSkill', ipcChannels.skillsImport, 'skills.import', firstArg),
   mapping('skills', 'skills.setEnabled', ipcChannels.skillsSetEnabled, 'skills.setEnabled', firstArg),

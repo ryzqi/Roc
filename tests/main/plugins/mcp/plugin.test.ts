@@ -5,7 +5,7 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import type { RocEventBus, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createMcpPlugin } from '../../../../src/main/plugins/mcp';
 import type { McpClientAdapter } from '../../../../src/main/plugins/mcp/mcp-client-adapter';
-import type { McpServerConfig } from '../../../../src/shared/types';
+import type { McpServerConfig, McpServersConfig } from '../../../../src/shared/types';
 
 const mcpCapabilities = [
   'mcp.listServers',
@@ -14,15 +14,17 @@ const mcpCapabilities = [
   'mcp.setServerEnabled',
   'mcp.deleteServer',
   'mcp.testServer',
+  'mcp.getConfig',
+  'mcp.setApprovalMode',
   'mcp.tools.get'
 ];
 
 let db: Database.Database;
-let mcpConfig: { schemaVersion: 1; servers: McpServerConfig[] };
+let mcpConfig: McpServersConfig;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  mcpConfig = { schemaVersion: 1, servers: [] };
+  mcpConfig = { schemaVersion: 1, approvalMode: 'fully_automatic', servers: [] };
 });
 
 afterEach(() => {
@@ -103,6 +105,32 @@ describe('MCP plugin', () => {
       error: null
     });
     expect(mcpConfig.servers.map((server) => server.id)).toEqual(['exa-hosted', 'docs']);
+  });
+
+  it('reads and writes the MCP approval mode without changing servers', async () => {
+    const capabilities = await initializePlugin();
+    const before = await capabilities.invoke('mcp.getConfig', {});
+
+    const updated = await capabilities.invoke('mcp.setApprovalMode', { approvalMode: 'default' });
+
+    expect(before).toMatchObject({
+      approvalMode: 'fully_automatic',
+      servers: [
+        expect.objectContaining({
+          id: 'exa-hosted'
+        })
+      ]
+    });
+    expect(updated).toMatchObject({
+      approvalMode: 'default',
+      servers: [
+        expect.objectContaining({
+          id: 'exa-hosted'
+        })
+      ]
+    });
+    expect(mcpConfig.approvalMode).toBe('default');
+    expect(mcpConfig.servers.map((server) => server.id)).toEqual(['exa-hosted']);
   });
 
   it('keeps transport field validation for stdio and HTTP/SSE servers', async () => {

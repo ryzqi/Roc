@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type {
+  ApprovalMode,
   McpServerConfig,
   McpServerSnapshot,
   McpServerTestResult,
@@ -20,6 +21,9 @@ const serverEnabledRequestSchema = z.object({
   id: z.string(),
   enabled: z.boolean()
 });
+const approvalModeRequestSchema = z.object({
+  approvalMode: z.enum(['fully_automatic', 'default'])
+});
 const idInputSchema = z.object({
   id: z.string()
 });
@@ -31,6 +35,8 @@ const mcpCapabilityDescriptors = [
   descriptor('mcp.setServerEnabled', serverEnabledRequestSchema, z.custom<McpServerConfig>()),
   descriptor('mcp.deleteServer', idInputSchema, z.object({ deleted: z.literal(true) })),
   descriptor('mcp.testServer', idInputSchema, z.custom<McpServerTestResult>()),
+  descriptor('mcp.getConfig', emptyInputSchema, z.custom<McpServersConfig>()),
+  descriptor('mcp.setApprovalMode', approvalModeRequestSchema, z.custom<McpServersConfig>()),
   descriptor('mcp.tools.get', emptyInputSchema, z.array(z.unknown()))
 ] as const satisfies readonly CapabilityDescriptor[];
 
@@ -73,7 +79,12 @@ export function createMcpPlugin(options: McpPluginOptions = {}): RocPlugin {
       context.capabilities.register(pluginId, mcpCapabilityDescriptors[5], async (input) =>
         service.testServer((input as { id: string }).id)
       );
-      context.capabilities.register(pluginId, mcpCapabilityDescriptors[6], async () =>
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[6], async () => service.getConfig());
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[7], async (input) => {
+        const request = input as { approvalMode: ApprovalMode };
+        return service.setApprovalMode(request.approvalMode);
+      });
+      context.capabilities.register(pluginId, mcpCapabilityDescriptors[8], async () =>
         clientAdapter.loadTools(configAdapter.getMcpConfig().servers.filter((server) => server.enabled))
       );
     },
@@ -104,6 +115,7 @@ function createConfigAdapter(context: RocPluginContext): McpConfigService {
 function cloneDefaultMcpConfig(): McpServersConfig {
   return {
     schemaVersion: defaultMcpConfig.schemaVersion,
+    approvalMode: defaultMcpConfig.approvalMode,
     servers: [...defaultMcpConfig.servers]
   };
 }

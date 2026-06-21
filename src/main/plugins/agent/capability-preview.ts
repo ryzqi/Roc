@@ -18,7 +18,8 @@ const deleteFileAllowedDecisions: ReadonlyArray<InterruptDecisionType> = ['appro
 const mcpAllowedDecisions: ReadonlyArray<InterruptDecisionType> = ['approve', 'reject'];
 
 export function buildAgentCapabilityPreview(input: {
-  approvalMode: ApprovalMode;
+  deleteFileApprovalMode: ApprovalMode;
+  mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   requestedCapabilities: EnabledCapabilities;
   runtimeStatus: AgentRuntimeStatus;
@@ -46,7 +47,7 @@ export function buildAgentCapabilityPreview(input: {
       continue;
     }
     selectedMcpServers.push(server.id);
-    selectedMcpCards.push(...createMcpToolCards(server, input.approvalMode));
+    selectedMcpCards.push(...createMcpToolCards(server, input.mcpApprovalMode));
   }
 
   for (const skillId of input.requestedCapabilities.skills) {
@@ -70,7 +71,7 @@ export function buildAgentCapabilityPreview(input: {
   const toolCards = [
     createRunShellCommandCard(),
     createWebReadCard(),
-    createDeleteFileCard(input.approvalMode),
+    createDeleteFileCard(input.deleteFileApprovalMode),
     ...selectedMcpCards
   ];
 
@@ -87,14 +88,18 @@ export function buildAgentCapabilityPreview(input: {
     toolCards,
     skillCards: selectedSkillCards,
     subagents: createSubagents(),
-    interruptOn: createInterruptPolicy(input.approvalMode, selectedMcpCards.map((card) => card.name)),
+    interruptOn: createInterruptPolicy({
+      deleteFileApprovalMode: input.deleteFileApprovalMode,
+      mcpApprovalMode: input.mcpApprovalMode,
+      mcpToolNames: selectedMcpCards.map((card) => card.name)
+    }),
     untrustedContextPolicy: 'external_content_reference_only',
     reason: '当前仅生成本轮能力清单预览，实际运行时才会装配 Deep Agents。'
   };
 }
 
 export function buildDeepAgentConfigPreview(input: {
-  approvalMode: ApprovalMode;
+  deleteFileApprovalMode: ApprovalMode;
   runtimeStatus: AgentRuntimeStatus;
 }): DeepAgentConfigPreview {
   const defaultModelState = input.runtimeStatus.defaultModelState;
@@ -112,7 +117,11 @@ export function buildDeepAgentConfigPreview(input: {
       sourceTool: 'write_todos',
       target: 'task_steps'
     },
-    interruptOn: createInterruptPolicy(input.approvalMode, []),
+    interruptOn: createInterruptPolicy({
+      deleteFileApprovalMode: input.deleteFileApprovalMode,
+      mcpApprovalMode: 'fully_automatic',
+      mcpToolNames: []
+    }),
     reason: 'Roc 不在 preview 阶段实际装配 Deep Agents，本结果反映下一轮装配将使用的参数。'
   };
 }
@@ -260,18 +269,23 @@ function createSubagents(): AgentSubagentPreview[] {
   ];
 }
 
-function createInterruptPolicy(approvalMode: ApprovalMode, mcpToolNames: string[]): AgentInterruptPolicy {
+function createInterruptPolicy(input: {
+  deleteFileApprovalMode: ApprovalMode;
+  mcpApprovalMode: ApprovalMode;
+  mcpToolNames: string[];
+}): AgentInterruptPolicy {
   const policy: AgentInterruptPolicy = {};
-  if (approvalMode === 'fully_automatic') {
-    return policy;
-  }
-  policy.delete_file = {
-    allowedDecisions: [...deleteFileAllowedDecisions]
-  };
-  for (const toolName of mcpToolNames) {
-    policy[toolName] = {
-      allowedDecisions: [...mcpAllowedDecisions]
+  if (input.deleteFileApprovalMode === 'default') {
+    policy.delete_file = {
+      allowedDecisions: [...deleteFileAllowedDecisions]
     };
+  }
+  if (input.mcpApprovalMode === 'default') {
+    for (const toolName of input.mcpToolNames) {
+      policy[toolName] = {
+        allowedDecisions: [...mcpAllowedDecisions]
+      };
+    }
   }
   return policy;
 }

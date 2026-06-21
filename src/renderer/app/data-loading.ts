@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AppStatus,
   ActiveTaskItem,
+  ApprovalMode,
   BackgroundTask,
   HostIntegrationStatus,
   FilePreviewRequest,
@@ -205,12 +206,18 @@ export async function loadSettingsState(client: RocClient = createRocClient()): 
   defaultModelId: string | null;
   providerSecretStatus: ProviderSecretStatus[];
   permissions: PermissionsConfig;
+  mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
   hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
 }> {
-  const snapshot = unwrap<SettingsSnapshot>('settings snapshot', await client.api.settings.get());
-  return applySettingsSnapshot(snapshot);
+  const [settingsResult, mcpConfigResult] = await Promise.all([client.api.settings.get(), client.api.mcp.getConfig()]);
+  const snapshot = unwrap<SettingsSnapshot>('settings snapshot', settingsResult);
+  const mcpConfig = unwrap('mcp config', mcpConfigResult);
+  return {
+    ...applySettingsSnapshot(snapshot),
+    mcpApprovalMode: mcpConfig.approvalMode
+  };
 }
