@@ -1,0 +1,467 @@
+import { join } from 'node:path';
+import type { ClientTool } from '@langchain/core/tools';
+import { z } from 'zod';
+import { vi } from 'vitest';
+import type {
+  BackgroundTask,
+  BackgroundTaskPreview,
+  BackgroundTaskPreviewRequest,
+  ChatRunEvent,
+  ChatStartRunRequest,
+  ShellExecutionResult,
+  TaskDetail,
+  TaskRun,
+  Workspace
+} from '../../../../src/shared/types';
+import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
+import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
+import { RocPaths } from '../../../../src/main/services/paths';
+
+const mocked = vi.hoisted(() => ({
+  buildDeepAgent: vi.fn()
+}));
+
+vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
+  buildDeepAgent: mocked.buildDeepAgent
+}));
+
+export const workspacePath = process.cwd();
+
+interface ExecutorEventsInput {
+  capabilities: RocCapabilityRegistry;
+  messages?: AsyncIterable<unknown>;
+  output?: unknown;
+  requestOverride?: Partial<ChatStartRunRequest>;
+  subagents?: AsyncIterable<unknown>;
+  toolCalls?: AsyncIterable<unknown>;
+}
+
+export async function buildExecutorOnce(
+  capabilities: RocCapabilityRegistry,
+  requestOverride: Partial<ChatStartRunRequest> = {}
+): Promise<void> {
+  await collectExecutorEvents({
+    capabilities,
+    requestOverride,
+    output: {
+      messages: [
+        {
+          role: 'assistant',
+          content: 'ok'
+        }
+      ]
+    }
+  });
+}
+
+export async function collectExecutorEvents(input: ExecutorEventsInput): Promise<ChatRunEvent[]> {
+  return await collectEvents(await startExecutorExecution(input));
+}
+
+export async function startExecutorExecution(input: ExecutorEventsInput): Promise<AsyncIterable<ChatRunEvent>> {
+  mocked.buildDeepAgent.mockReset();
+  mocked.buildDeepAgent.mockReturnValue({
+    streamEvents: vi.fn(async () => ({
+      toolCalls: input.toolCalls ?? emptyAsyncIterable(),
+      messages: input.messages ?? emptyAsyncIterable(),
+      subagents: input.subagents ?? emptyAsyncIterable(),
+      output: input.output ?? { messages: [] }
+    }))
+  });
+  const executor = createAgentDeepAgentExecutor({
+    capabilities: input.capabilities,
+    paths: new RocPaths(join(workspacePath, '.roc-test'))
+  });
+  const execution = await executor.execute({
+    abortSignal: new AbortController().signal,
+    modelHandle: {
+      providerId: 'test-provider',
+      modelId: 'test-model',
+      langChainHandle: {
+        model: {} as never,
+        modelId: 'test-model',
+        provider: {
+          id: 'test-provider',
+          name: 'Test Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://example.test',
+          credentialRef: null,
+          enabled: true,
+          models: []
+        },
+        runtime: {
+          providerType: 'openai_compatible',
+          baseUrl: null,
+          streaming: true,
+          modelKwargs: {},
+          contextBudgetTokens: 4096
+        }
+      }
+    },
+    request: {
+      input: '每天检查测试',
+      mode: 'task',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      ...input.requestOverride
+    },
+    run: createRun()
+  });
+  return execution;
+}
+
+export function createCapabilities(
+  calls: Array<{ name: string; input: unknown }>,
+  options: { capabilityPreview?: boolean; mcpTools?: ClientTool[]; workspace?: Workspace | null } = {}
+): RocCapabilityRegistry {
+  const capabilityPreviewDescriptor: CapabilityDescriptor = {
+    name: 'agent.capability.preview',
+    version: '1.0.0',
+    inputSchema: z.unknown(),
+    outputSchema: z.unknown()
+  };
+  return {
+    declare: () => {},
+    register: () => {},
+    list: () => (options.capabilityPreview === true ? [capabilityPreviewDescriptor] : []),
+    invoke: async <TInput, TOutput>(name: string, input: TInput): Promise<TOutput> => {
+      calls.push({ name, input });
+      if (name === 'agent.capability.preview') {
+        return {
+          interruptOn: {}
+        } as TOutput;
+      }
+      if (name === 'workspace.getCurrent') {
+        if ('workspace' in options) {
+          return options.workspace as TOutput;
+        }
+        const workspace = {
+          id: 'workspace-1',
+          path: workspacePath,
+          displayName: 'Roc',
+          lastOpenedAt: '2026-06-04T00:00:00.000Z',
+          trustState: 'trusted'
+        } satisfies Workspace;
+        return workspace as TOutput;
+      }
+      if (name === 'mcp.tools.get') {
+        return (options.mcpTools === undefined ? [] : options.mcpTools) as TOutput;
+      }
+      if (name === 'task.background.preview') {
+        return createPreview(input as BackgroundTaskPreviewRequest) as TOutput;
+      }
+      if (name === 'task.background.create') {
+        return createTask(input as BackgroundTaskPreview, 'running') as TOutput;
+      }
+      if (name === 'task.detail.get') {
+        return createTaskDetail() as TOutput;
+      }
+      if (name === 'task.background.update') {
+        return createTask(createPreview((input as { patch: Partial<BackgroundTaskPreviewRequest> }).patch), 'running') as TOutput;
+      }
+      if (name === 'task.background.cancel') {
+        return createTask(createPreview({ goal: '已取消任务' }), 'cancelled') as TOutput;
+      }
+      if (name === 'shell.execute') {
+        const request = input as { command: string; cwd?: string };
+        const cwd = request.cwd === undefined ? workspacePath : request.cwd;
+        return {
+          command: request.command,
+          normalizedCommand: request.command,
+          cwd,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          durationMs: 1,
+          usedRtk: false
+        } satisfies ShellExecutionResult as TOutput;
+      }
+      throw new Error(`unexpected_capability:${name}`);
+    }
+  } satisfies RocCapabilityRegistry;
+}
+
+export function createMcpTool(name: string): ClientTool {
+  return {
+    name,
+    description: 'MCP search tool'
+  } as ClientTool;
+}
+
+export function createRun(): TaskRun {
+  return {
+    id: 'run-1',
+    threadId: 'thread-1',
+    runNumber: 1,
+    userInput: '每天检查测试',
+    status: 'running',
+    startedAt: '2026-06-04T00:00:00.000Z',
+    endedAt: null,
+    modelId: 'test-model',
+    enabledCapabilities: {
+      mcpServers: [],
+      skills: []
+    }
+  };
+}
+
+export function createPreview(input: Partial<BackgroundTaskPreviewRequest>): BackgroundTaskPreview {
+  const trigger = input.trigger ?? {
+    type: 'manual',
+    description: '手动'
+  };
+  return {
+    goal: input.goal ?? '每天检查测试',
+    trigger,
+    workspacePath: input.workspacePath ?? workspacePath,
+    allowedActions: input.allowedActions ?? [],
+    forbiddenActions: input.forbiddenActions ?? [],
+    failurePolicy: 'pause_and_report',
+    notificationPolicy: 'failures_and_confirmations',
+    enabledCapabilities: input.enabledCapabilities === undefined ? null : input.enabledCapabilities,
+    scheduled: trigger.type !== 'manual',
+    nextRunAt: trigger.type === 'cron' || trigger.type === 'once' ? trigger.nextRunAt : null,
+    cronExpression: trigger.type === 'cron' ? trigger.cronExpression : null,
+    riskLevel: 'low',
+    requiresConfirmation: false
+  };
+}
+
+export function createTask(preview: BackgroundTaskPreview, status: BackgroundTask['status']): BackgroundTask {
+  return {
+    id: 'background-1',
+    threadId: 'thread-background-1',
+    runId: 'run-background-1',
+    goal: preview.goal,
+    status,
+    scheduled: preview.scheduled,
+    triggerType: preview.trigger.type,
+    triggerDescription: preview.trigger.description,
+    nextRunAt: preview.nextRunAt,
+    cronExpression: preview.cronExpression,
+    workspacePath: preview.workspacePath,
+    allowedActions: preview.allowedActions,
+    forbiddenActions: preview.forbiddenActions,
+    failurePolicy: preview.failurePolicy,
+    notificationPolicy: preview.notificationPolicy,
+    riskLevel: preview.riskLevel,
+    requiresConfirmation: preview.requiresConfirmation,
+    lastRunAt: null,
+    lastRunStatus: null,
+    runCount: 0,
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
+    enabledCapabilities: preview.enabledCapabilities
+  };
+}
+
+export function createTaskDetail(): TaskDetail {
+  return {
+    threadId: 'thread-background-1',
+    taskId: 'background-1',
+    thread: {
+      id: 'thread-background-1',
+      kind: 'background',
+      title: '每天检查测试',
+      goal: '每天检查测试',
+      status: 'running',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      updatedAt: '2026-06-04T00:00:00.000Z'
+    },
+    backgroundTask: createTask(createPreview({}), 'running'),
+    lastRunId: null,
+    runHistory: [],
+    recentEvents: [],
+    schedulerRegistered: true
+  };
+}
+
+export function readBuiltTools(): ClientTool[] {
+  return readBuildInput().tools;
+}
+
+export function readBuildInput(): DeepAgentBuildInput {
+  const input = mocked.buildDeepAgent.mock.calls[0]?.[0] as DeepAgentBuildInput | undefined;
+  if (input === undefined) {
+    throw new Error('expected_build_deep_agent_call');
+  }
+  return input;
+}
+
+export function findTool(tools: ClientTool[], name: string): ClientTool {
+  const tool = tools.find((candidate) => candidate.name === name);
+  if (tool === undefined) {
+    throw new Error(`expected_tool:${name}`);
+  }
+  return tool;
+}
+
+export async function invokeTool(tool: ClientTool, input: Record<string, unknown>): Promise<unknown> {
+  const invoke = Reflect.get(tool, 'invoke');
+  if (typeof invoke !== 'function') {
+    throw new Error(`tool_not_invokable:${tool.name}`);
+  }
+  return await invoke.call(tool, input);
+}
+
+export function readJson(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    throw new Error('expected_json_string_tool_output');
+  }
+  return JSON.parse(value) as unknown;
+}
+
+async function* emptyAsyncIterable(): AsyncIterable<unknown> {}
+
+export async function* createAsyncIterable(values: unknown[]): AsyncIterable<unknown> {
+  for (const value of values) {
+    yield value;
+  }
+}
+
+type ControlledAsyncStream<T> = {
+  close: () => void;
+  iterable: AsyncIterable<T>;
+  push: (value: T) => void;
+  waitForRead: () => Promise<void>;
+};
+
+export function createControlledAsyncStream<T>(): ControlledAsyncStream<T> {
+  const values: T[] = [];
+  const pendingReads: Array<(result: IteratorResult<T>) => void> = [];
+  const readWaiters: Array<() => void> = [];
+  let closed = false;
+  let readCount = 0;
+  let observedReadCount = 0;
+
+  const notifyRead = () => {
+    readCount += 1;
+    const waiters = readWaiters.splice(0);
+    waiters.forEach((resolve) => resolve());
+  };
+
+  return {
+    close: () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      const reads = pendingReads.splice(0);
+      reads.forEach((resolve) => resolve({ done: true, value: undefined }));
+    },
+    iterable: {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          notifyRead();
+          if (values.length > 0) {
+            return Promise.resolve({ done: false, value: values.shift() as T });
+          }
+          if (closed) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          return new Promise<IteratorResult<T>>((resolve) => {
+            pendingReads.push(resolve);
+          });
+        }
+      })
+    },
+    push: (value) => {
+      if (closed) {
+        throw new Error('controlled_stream_closed');
+      }
+      const read = pendingReads.shift();
+      if (read === undefined) {
+        values.push(value);
+        return;
+      }
+      read({ done: false, value });
+    },
+    waitForRead: async () => {
+      if (readCount > observedReadCount) {
+        observedReadCount = readCount;
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        readWaiters.push(() => {
+          observedReadCount = readCount;
+          resolve();
+        });
+      });
+    }
+  };
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+export function createDeferred<T>(): Deferred<T> {
+  let resolve: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  if (resolve === null) {
+    throw new Error('deferred_resolve_missing');
+  }
+  return {
+    promise,
+    resolve
+  };
+}
+
+export async function collectEvents(events: AsyncIterable<ChatRunEvent>): Promise<ChatRunEvent[]> {
+  const result: ChatRunEvent[] = [];
+  for await (const event of events) {
+    result.push(event);
+  }
+  return result;
+}
+
+export async function readIteratorValue<T>(read: Promise<IteratorResult<T>>, label: string): Promise<T> {
+  const result = await waitForPromise(read, label);
+  if (result.done === true) {
+    throw new Error(`expected_iterator_value:${label}`);
+  }
+  return result.value;
+}
+
+export async function waitForPromise<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`timed_out:${label}`)), 100);
+      })
+    ]);
+  } finally {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export async function drainIterator<T>(iterator: AsyncIterator<T>): Promise<void> {
+  while (true) {
+    const result = await iterator.next();
+    if (result.done === true) {
+      return;
+    }
+  }
+}
+
+export function isChatRunEventBuffer(value: readonly unknown[]): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  const first = value[0];
+  if (typeof first !== 'object' || first === null || !('type' in first)) {
+    return false;
+  }
+  return first.type === 'assistant_block';
+}
+

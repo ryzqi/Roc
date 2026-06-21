@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GitBranch, RefreshCw } from 'lucide-react';
 import type { GitBranchMutationResult, GitStatusResult } from '../../shared/types';
-import { EmptyState } from '../components/EmptyState';
 import {
   buildGitBranchSwitcherModel,
   buildGitCheckoutBranchConfirmationRequest,
@@ -14,6 +13,7 @@ import {
 } from '../git-workbench';
 import type { LazyLoadState, WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
+import { renderGitRepositoryUnavailable, renderGitWorkbenchUnavailable } from './GitWorkbenchUnavailable';
 import {
   canUnstageGitChange,
   findNextGitSelection,
@@ -22,6 +22,7 @@ import {
 import { GitBranchPopover } from './GitBranchPopover';
 import { GitChangeList } from './GitChangeList';
 import { GitDiffPanel } from './GitDiffPanel';
+import { startGitPaneResize } from './git-pane-resize';
 import { useGitDiffPreview } from './useGitDiffPreview';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
@@ -306,55 +307,13 @@ export function GitWorkbench({
     setPendingAction(null);
   }
 
-  function startGitPaneResize(event: React.PointerEvent<HTMLDivElement>): void {
-    const startX = event.clientX;
-    const startWidth = gitPaneWidth;
-    const onMove = (moveEvent: PointerEvent): void => {
-      setGitPaneWidth(clampGitSplitWidth(startWidth + moveEvent.clientX - startX));
-    };
-    const onUp = (): void => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
-  }
-
-  if (state.workspace === null) {
-    return (
-      <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-empty" title="未选择工作区" />
-      </section>
-    );
-  }
-
-  if (loadState.status === 'loading') {
-    return (
-      <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-loading" title="Git 工作台加载中" tone="loading" />
-      </section>
-    );
-  }
-
-  if (loadState.status === 'error') {
-    return (
-      <section className="tool-panel workbench-surface">
-        <EmptyState testId="workbench-git-load-error" title="Git 工作台加载失败" tone="error" />
-      </section>
-    );
+  const unavailableWorkbench = renderGitWorkbenchUnavailable({ loadState, state });
+  if (unavailableWorkbench !== null) {
+    return unavailableWorkbench;
   }
 
   if (state.gitStatus === null) {
-    return (
-      <section className="tool-panel workbench-surface">
-        <EmptyState
-          testId="workbench-git-empty"
-          title="当前工作区不是 Git 仓库"
-          tone="error"
-        />
-      </section>
-    );
+    return renderGitRepositoryUnavailable();
   }
 
   const stagedCount = gitStatusChanges(state.gitStatus).filter((change) => canUnstageGitChange(change)).length;
@@ -504,7 +463,7 @@ export function GitWorkbench({
           data-testid="workbench-git-splitter"
           role="separator"
           tabIndex={0}
-          onPointerDown={startGitPaneResize}
+          onPointerDown={(event) => startGitPaneResize(event, gitPaneWidth, setGitPaneWidth)}
         />
         <section className="git-detail-pane">
           {actionError === null ? null : (

@@ -8,12 +8,9 @@ import {
   nativeImage,
   nativeTheme,
   powerMonitor,
-  protocol,
-  safeStorage,
   screen,
   shell,
-  systemPreferences,
-  type ProcessMetric
+  systemPreferences
 } from 'electron';
 import { join } from 'node:path';
 import { ipcChannels } from '../shared/ipc';
@@ -25,9 +22,7 @@ import {
   terminalSessionExitEventType,
   terminalSessionOutputEventType
 } from './plugins/workspace/terminal-capabilities';
-import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './plugins/diagnostics/runtime-metrics';
 import { PerformanceObserverService } from './services/performance-observer-service';
-import type { SafeStorageBackend } from './services/secret-service';
 import { WindowsHostService } from './windows-host-service';
 import {
   buildMainWindowOptions,
@@ -46,6 +41,12 @@ import { createTerminalOutputBatcher } from './terminal-output-batcher';
 import { bindNativeContextMenu } from './native-context-menu';
 import { buildSystemAppearanceSnapshot } from './system-appearance';
 import { handleExternalWindowOpen } from './external-link-policy';
+import {
+  createElectronRuntimeMetricsProvider,
+  createElectronSafeStorageBackend,
+  toLogError
+} from './electron-runtime-adapters';
+import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';
 
 const isDevelopment = !app.isPackaged;
 const preloadPath = join(__dirname, '../preload/index.mjs');
@@ -53,21 +54,10 @@ const appIconPath = isDevelopment
   ? join(__dirname, '../../resources/icon.ico')
   : join(process.resourcesPath, 'icon.ico');
 const mainReadyStartedAtMs = performance.now();
-const pdfPreviewScheme = 'roc-preview';
 let pdfPreviewKernel: MainKernelBootstrap | null = null;
 let pdfPreviewProtocolRegistered = false;
 
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: pdfPreviewScheme,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      stream: true
-    }
-  }
-]);
+registerPdfPreviewScheme();
 
 let mainWindow: BrowserWindow | null = null;
 let activeKernel: MainKernelBootstrap | null = null;
@@ -309,18 +299,7 @@ async function createWindow(): Promise<void> {
     }
   });
   if (!pdfPreviewProtocolRegistered) {
-    protocol.handle(pdfPreviewScheme, (request) => {
-      const kernel = pdfPreviewKernel;
-      if (kernel === null) {
-        return new Response('Preview service unavailable', { status: 503 });
-      }
-      const url = new URL(request.url);
-      if (url.hostname !== 'workspace' || !url.pathname.startsWith('/pdf/')) {
-        return new Response('Not found', { status: 404 });
-      }
-      const relativePath = url.pathname.slice('/pdf/'.length);
-      return kernel.invokeCapability<{ relativePath: string }, Response>('files.streamPdfPreviewResource', { relativePath });
-    });
+    registerPdfPreviewProtocol(() => pdfPreviewKernel);
     pdfPreviewProtocolRegistered = true;
   }
 
@@ -524,42 +503,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-
-function createElectronSafeStorageBackend(): SafeStorageBackend {
-  return {
-    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
-    encryptString: (plaintext) => safeStorage.encryptString(plaintext),
-    decryptString: (encrypted) => safeStorage.decryptString(encrypted)
-  };
-}
-
-function createElectronRuntimeMetricsProvider(): RuntimeMetricsProvider {
-  return {
-    getBrowserWindowCount: () => BrowserWindow.getAllWindows().length,
-    getProcessMetrics: () => app.getAppMetrics().map(toRuntimeProcessMetric)
-  };
-}
-
-function toRuntimeProcessMetric(metric: ProcessMetric): RuntimeProcessMetric {
-  return {
-    pid: metric.pid,
-    type: metric.type,
-    name: metric.name,
-    serviceName: metric.serviceName,
-    cpuPercent: metric.cpu.percentCPUUsage,
-    sandboxed: metric.sandboxed,
-    integrityLevel: metric.integrityLevel,
-    memory: {
-      workingSetSizeKb: metric.memory.workingSetSize,
-      peakWorkingSetSizeKb: metric.memory.peakWorkingSetSize,
-      privateBytesKb: metric.memory.privateBytes
-    }
-  };
-}
-
-function toLogError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
-}

@@ -3,12 +3,17 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../../src/renderer/app/AppShell';
-import type { AppBootstrap } from '../../src/renderer/app/use-app-bootstrap';
-import type { LoadedState } from '../../src/renderer/loaded-state';
-import type { RocClient } from '../../src/renderer/shared/roc-client';
-import type { RocPreloadApi } from '../../src/shared/ipc';
-import type { ActiveTaskItem, ChatRunEvent, TaskDetail, TaskStatus, TaskUpdateEvent } from '../../src/shared/types';
-import { createLoadedState } from './view-test-helpers';
+import type { ChatRunEvent, TaskUpdateEvent } from '../../src/shared/types';
+import {
+  createActiveTask,
+  createBackgroundTaskDetail,
+  createBootstrap,
+  createShellClient,
+  createTaskDetail,
+  flushPromises,
+  queryButton,
+  setTextareaValue
+} from './app-shell-test-helpers';
 
 describe('AppShell', () => {
   let container: HTMLDivElement;
@@ -479,160 +484,3 @@ describe('AppShell', () => {
     }));
   });
 });
-
-function createBootstrap(statePartial: Partial<LoadedState> = {}): AppBootstrap {
-  return {
-    error: null,
-    setError: vi.fn(),
-    setState: vi.fn(),
-    setWindowState: vi.fn(),
-    state: createLoadedState(statePartial),
-    windowState: {
-      maximized: false,
-      minimized: false,
-      fullscreen: false
-    }
-  };
-}
-
-function createShellClient(): RocClient {
-  const state = createLoadedState({});
-  const api = {
-    app: {
-      getStatus: vi.fn().mockResolvedValue({ ok: true, data: state.appStatus }),
-      onAppearanceUpdated: vi.fn().mockReturnValue(() => {}),
-      onNavigate: vi.fn().mockReturnValue(() => {})
-    },
-    tasks: {
-      getSnapshot: vi.fn().mockResolvedValue({ ok: true, data: state.taskSnapshot }),
-      getActiveTasks: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-      getSchedulerStatus: vi.fn().mockResolvedValue({ ok: true, data: state.schedulerStatus }),
-      getTaskDetail: vi.fn().mockResolvedValue({ ok: true, data: null }),
-      listScheduledRuns: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-      onUpdated: vi.fn().mockReturnValue(() => {}),
-      deleteBackgroundTask: vi.fn().mockResolvedValue({ ok: true, data: { deleted: true, taskId: 'task-1' } }),
-      deleteThread: vi.fn().mockResolvedValue({ ok: true, data: { deleted: true } })
-    },
-    lifecycle: {
-      getTraySummary: vi.fn().mockResolvedValue({ ok: true, data: state.traySummary })
-    },
-    chat: {
-      startRun: vi.fn(),
-      resumeRun: vi.fn(),
-      onRunEvent: vi.fn().mockReturnValue(() => {})
-    },
-    agent: {
-      getCapabilityPreview: vi.fn().mockResolvedValue({ ok: true, data: state.agentCapabilityPreview })
-    },
-    workspace: {
-      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })
-    },
-    window: {
-      close: vi.fn().mockResolvedValue({ ok: true, data: { closed: true } }),
-      minimize: vi.fn().mockResolvedValue({
-        ok: true,
-        data: { maximized: false, minimized: true, fullscreen: false }
-      }),
-      toggleMaximize: vi.fn().mockResolvedValue({
-        ok: true,
-        data: { maximized: true, minimized: false, fullscreen: false }
-      })
-    },
-    files: {
-      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })
-    }
-  } as unknown as RocPreloadApi;
-  return { api };
-}
-
-function createActiveTask(partial: { taskId: string; threadId: string; goal: string; status?: TaskStatus }): ActiveTaskItem {
-  return {
-    kind: 'background',
-    threadId: partial.threadId,
-    taskId: partial.taskId,
-    title: partial.goal,
-    goal: partial.goal,
-    status: partial.status === undefined ? 'running' : partial.status,
-    trigger: null,
-    nextRunAt: null,
-    lastRunAt: null,
-    riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
-    createdAt: '2026-05-21T00:00:00.000Z',
-    updatedAt: '2026-05-21T00:00:00.000Z'
-  };
-}
-
-function createTaskDetail(task: ActiveTaskItem): TaskDetail {
-  return {
-    threadId: task.threadId,
-    taskId: task.taskId ?? 'task-created',
-    lastRunId: 'run-created',
-    schedulerRegistered: true,
-    thread: {
-      id: task.threadId,
-      kind: 'background',
-      title: task.title,
-      goal: task.goal,
-      status: task.status,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt
-    },
-    backgroundTask: null,
-    runHistory: [],
-    recentEvents: []
-  };
-}
-
-function createBackgroundTaskDetail(task: ActiveTaskItem): TaskDetail {
-  const detail = createTaskDetail(task);
-  return {
-    ...detail,
-    backgroundTask: {
-      id: task.taskId ?? 'task-created',
-      threadId: task.threadId,
-      runId: detail.lastRunId ?? 'run-created',
-      goal: task.goal,
-      status: task.status,
-      scheduled: true,
-      triggerType: 'manual',
-      triggerDescription: '手动触发',
-      nextRunAt: task.nextRunAt,
-      cronExpression: null,
-      workspacePath: task.workspacePath ?? 'F:\\Code\\Roc',
-      allowedActions: [],
-      forbiddenActions: [],
-      failurePolicy: 'pause_and_report',
-      notificationPolicy: 'failures_and_confirmations',
-      riskLevel: task.riskLevel,
-      requiresConfirmation: false,
-      lastRunAt: task.lastRunAt,
-      lastRunStatus: null,
-      runCount: 0,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      enabledCapabilities: null
-    }
-  };
-}
-
-function queryButton(testId: string): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`);
-  expect(button).not.toBeNull();
-  return button as HTMLButtonElement;
-}
-
-function setTextareaValue(testId: string, value: string): void {
-  const textarea = document.querySelector<HTMLTextAreaElement>(`[data-testid="${testId}"]`);
-  expect(textarea).not.toBeNull();
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-  expect(setter).not.toBeUndefined();
-  setter?.call(textarea, value);
-  textarea?.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-async function flushPromises(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}

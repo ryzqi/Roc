@@ -1,31 +1,20 @@
-import { Search } from 'lucide-react';
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type {
-  AgentCapabilityPreview,
   AppStatus,
   ChatRunEvent,
   ChatStartRunRequest,
   TaskSnapshot,
-  WorkflowHint,
-  WindowStateSnapshot,
   Workspace
 } from '../../shared/types';
-import { resolveChatWorkspaceScale } from '../../shared/chat-layout';
-import { idleLazyLoadState } from './empty-states';
 import {
   buildControlNavItems,
   buildHistoryItems,
   buildHistoryNavItems,
   buildWorkspaceNavItems
 } from './nav-items';
-import { SidebarNavGroup } from './sidebar/SidebarNavGroup';
 import { WindowWorkband } from './WindowWorkband';
 import type {
-  LazyLoadState,
-  MemoryData,
   MainViewId,
-  OperationsData,
-  TaskSurfaceData,
   ViewId,
   WorkbenchTool,
   WorkspaceData
@@ -36,34 +25,27 @@ import {
   defaultWorkbenchTool,
   parseViewId,
   parseWorkbenchTool,
-  syncRendererUrl,
-  visibleWorkspaceLabel
+  syncRendererUrl
 } from './view-routing';
 import {
-  loadMemoryData,
-  loadOperationsData,
   loadTaskSurfaceData,
   loadWorkspaceData
 } from './data-loading';
-import { createWorkspaceRefreshSubscription } from './workspace-refresh';
-import { useLazyStartupResource } from './use-lazy-startup-resource';
-import { PreviewIcon } from '../components/PreviewIcon';
 import { filterHistoryItems } from '../history-sidebar';
 import { unwrap } from '../loaded-state';
-import { SettingsModal } from '../settings/settings-modal';
 import type { RocClient } from '../shared/roc-client';
-import { getStartupLoadIntent } from '../startup-load-policy';
 import { applySystemAppearance } from '../system-appearance';
-import { sanitizeTestId } from '../utils/sanitize-test-id';
-import { ViewContent } from '../views/ViewContent';
-import type { ChatTaskSubmitPayload } from '../chat/task-run-payload';
-import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from '../views/tasks/TaskDetailView';
-import type { TaskPromptSubmission } from '../views/tasks/TasksView';
-import { RailOverlay } from '../workbench/RailOverlay';
 import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
 import type { AppBootstrap } from './use-app-bootstrap';
 import { useChatFeature } from '../features/chat/use-chat-feature';
-import { SettingsFeature } from '../features/settings';
+import { AppSidebar } from './AppSidebar';
+import { AppSettingsLayer } from './AppSettingsLayer';
+import { AppWorkspaceShell } from './AppWorkspaceShell';
+import { useAgentCapabilityPreview } from './use-agent-capability-preview';
+import { useAppStartupResources } from './use-app-startup-resources';
+import { useAppTaskRuns } from './use-app-task-runs';
+import { useChatWorkspaceScale } from './use-chat-workspace-scale';
+import { useWindowControls } from './use-window-controls';
 
 const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
@@ -74,13 +56,6 @@ type HistoryContextMenuState = {
   x: number;
   y: number;
 };
-
-type TaskRunStartOptions = {
-  threadId: string | null;
-};
-
-const taskCreationCompletedSurfacePollLimit = 8;
-const taskCreationSurfacePollDelayMs = 250;
 
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
   const { error, setError, setState, setWindowState, state, windowState } = bootstrap;
@@ -101,7 +76,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   });
   const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
-  const [pendingWorkflowHint, setPendingWorkflowHint] = useState<WorkflowHint>(null);
+  const [pendingWorkflowHint, setPendingWorkflowHint] = useState<ChatStartRunRequest['workflowHint']>(null);
   const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
   const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
@@ -115,20 +90,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
   const [historySearchVisible, setHistorySearchVisible] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [workspaceLoadState, setWorkspaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
-  const [memoryLoadState, setMemoryLoadState] = useState<LazyLoadState>(idleLazyLoadState());
-  const [operationsLoadState, setOperationsLoadState] = useState<LazyLoadState>(idleLazyLoadState());
-  const [taskSurfaceLoadState, setTaskSurfaceLoadState] = useState<LazyLoadState>(idleLazyLoadState());
   const historySearchInputRef = useRef<HTMLInputElement | null>(null);
   const chatWorkspaceScaleHostRef = useRef<HTMLDivElement | null>(null);
-  const workspaceRefreshSubscriptionRef = useRef<ReturnType<typeof createWorkspaceRefreshSubscription> | null>(null);
-  const workspaceRefreshSnapshotRef = useRef({
-    workspace: null as Workspace | null,
-    previewRelativePath: null as string | null,
-    fileWorkbenchPdfRelativePath: null as string | null,
-    gitSelectedPath: null as string | null
-  });
-  const [chatWorkspaceHostWidth, setChatWorkspaceHostWidth] = useState(0);
 
   const refreshTaskState = useCallback(async (): Promise<void> => {
     const selectedTaskId = selectedTaskSurfaceTaskIdRef.current;
@@ -233,21 +196,33 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
   const currentSelectedSkills = state?.selectedSkills ?? [];
   const chatFeature = useChatFeature(client);
+  const {
+    memoryLoadState,
+    operationsLoadState,
+    setWorkspaceLoadState,
+    workspaceLoadState
+  } = useAppStartupResources({
+    activeView,
+    activeWorkbenchTool,
+    client,
+    currentAppMode,
+    currentWorkspace,
+    selectedTaskSurfaceTaskId,
+    setError,
+    setState,
+    state,
+    workbenchVisible
+  });
+  const chatWorkspaceScale = useChatWorkspaceScale({
+    activeView,
+    chatSidebarCollapsed,
+    hostRef: chatWorkspaceScaleHostRef
+  });
+  const { closeWindow, minimizeWindow, toggleWindowMaximize } = useWindowControls(client, setWindowState);
 
   useEffect(() => {
     selectedTaskSurfaceTaskIdRef.current = selectedTaskSurfaceTaskId;
   }, [selectedTaskSurfaceTaskId]);
-
-  useEffect(() => {
-    const nextSnapshot = {
-      workspace: state?.workspace ?? null,
-      previewRelativePath: state?.filePreview?.relativePath ?? null,
-      fileWorkbenchPdfRelativePath: state?.fileWorkbenchPdfPreview?.relativePath ?? null,
-      gitSelectedPath: state?.gitSelectedPath ?? null
-    };
-    workspaceRefreshSnapshotRef.current = nextSnapshot;
-    workspaceRefreshSubscriptionRef.current?.updateSnapshot(nextSnapshot);
-  }, [state?.workspace, state?.filePreview?.relativePath, state?.fileWorkbenchPdfPreview?.relativePath, state?.gitSelectedPath]);
 
   const startNewConversation = useCallback((): void => {
     setActiveView('chat');
@@ -317,132 +292,29 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     });
   }, [chatSidebarCollapsed]);
 
-  const startChatRun = useCallback(
-    async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const result = await chatFeature.startRun({
-        input: payload.input,
-        mode: 'chat',
-        threadId: selectedThreadId,
-        enabledCapabilities: {
-          mcpServers: currentSelectedMcpServers,
-          skills: currentSelectedSkills
-        },
-        workflowHint: null,
-        taskSource: null,
-        workspacePath: null
-      });
-      setPendingWorkflowHint(null);
-      setPendingTaskSource(null);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      if (result.data.threadId === null) {
-        return { ok: false, error: '聊天运行没有返回可打开的会话。' };
-      }
-      setSelectedThreadId(result.data.threadId);
-      setHistoryContextMenu(null);
-      return { ok: true };
-    },
-    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, selectedThreadId]
-  );
-
-  const startTaskRun = useCallback(
-    async (payload: ChatTaskSubmitPayload, options?: TaskRunStartOptions): Promise<{ ok: true; runId: string; threadId: string } | { ok: false; error: string }> => {
-      const workflowHint = payload.workflowHint === undefined ? pendingWorkflowHint : payload.workflowHint;
-      const taskSource = payload.taskSource === undefined ? pendingTaskSource : payload.taskSource;
-      const threadId = options === undefined ? selectedThreadId : options.threadId;
-      const requestWorkflowHint = workflowHint === undefined ? null : workflowHint;
-      const requestTaskSource = taskSource === undefined ? null : taskSource;
-      const requestWorkspacePath = payload.workspacePath === undefined ? null : payload.workspacePath;
-      const result = await chatFeature.startRun({
-        input: payload.input,
-        mode: 'task',
-        threadId,
-        enabledCapabilities: {
-          mcpServers: currentSelectedMcpServers,
-          skills: currentSelectedSkills
-        },
-        workflowHint: requestWorkflowHint,
-        taskSource: requestTaskSource,
-        workspacePath: requestWorkspacePath
-      });
-      setPendingWorkflowHint(null);
-      setPendingTaskSource(null);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      if (result.data.threadId === null) {
-        return { ok: false, error: '任务运行没有返回可打开的会话。' };
-      }
-      setHistoryContextMenu(null);
-      return { ok: true, runId: result.data.runId, threadId: result.data.threadId };
-    },
-    [chatFeature, currentSelectedMcpServers, currentSelectedSkills, pendingTaskSource, pendingWorkflowHint, selectedThreadId]
-  );
-
-  const createTaskFromWorkbench = useCallback(
-    async (payload: TaskPromptSubmission): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const existingActiveTasksResult = await client.api.tasks.getActiveTasks();
-      if (!existingActiveTasksResult.ok) {
-        return { ok: false, error: existingActiveTasksResult.error.message };
-      }
-      const existingTaskIds = new Set(
-        existingActiveTasksResult.data
-          .map((task) => task.taskId)
-          .filter((taskId): taskId is string => taskId !== null)
-      );
-      const result = await startTaskRun({
-        input: payload.input,
-        workflowHint: payload.workflowHint,
-        taskSource: payload.taskSource,
-        workspacePath: payload.workspacePath
-      });
-      if (!result.ok) {
-        return result;
-      }
-      const createdTaskSurface = await loadTaskSurfaceForCreatedRun(client, {
-        runId: result.runId,
-        threadId: result.threadId
-      }, existingTaskIds);
-      if (!createdTaskSurface.ok) {
-        return { ok: false, error: createdTaskSurface.error };
-      }
-      setState((current) => (current === null ? current : { ...current, ...createdTaskSurface.data }));
-      openTaskDetail(createdTaskSurface.taskId, taskBoardUiState);
-      return { ok: true };
-    },
-    [client, openTaskDetail, setState, startTaskRun, taskBoardUiState]
-  );
-
-  const submitTaskDetailInput = useCallback(
-    async ({ input, taskId, threadId }: TaskDetailInputRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
-      setSelectedTaskSurfaceTaskId(taskId);
-      const result = await startTaskRun({
-        input,
-        workflowHint: 'background_task_change',
-        taskSource: 'workbench'
-      }, { threadId });
-      if (!result.ok) {
-        return result;
-      }
-      const taskSurfaceData = await loadTaskSurfaceData(taskId, client);
-      setState((current) => (current === null ? current : { ...current, ...taskSurfaceData }));
-      return { ok: true };
-    },
-    [client, setState, startTaskRun]
-  );
-
-  const resumeTaskApprovalFromDetail = useCallback(
-    async (request: TaskDetailApprovalRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const result = await chatFeature.resumeRun(request);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      await refreshTaskState();
-      return { ok: true };
-    },
-    [chatFeature, refreshTaskState]
-  );
+  const {
+    createTaskFromWorkbench,
+    resumeTaskApprovalFromDetail,
+    startChatRun,
+    submitTaskDetailInput
+  } = useAppTaskRuns({
+    chatFeature,
+    client,
+    currentSelectedMcpServers,
+    currentSelectedSkills,
+    openTaskDetail,
+    pendingTaskSource,
+    pendingWorkflowHint,
+    refreshTaskState,
+    selectedThreadId,
+    setHistoryContextMenu,
+    setPendingTaskSource,
+    setPendingWorkflowHint,
+    setSelectedTaskSurfaceTaskId,
+    setSelectedThreadId,
+    setState,
+    taskBoardUiState
+  });
 
   const deleteHistoryThread = useCallback(
     async (threadId: string): Promise<void> => {
@@ -460,147 +332,13 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     [refreshTaskState, selectedThreadId, startNewConversation]
   );
 
-  useEffect(() => {
-    if (state === null) {
-      return;
-    }
-    if (currentAgentExecution !== 'ready' || (currentSelectedMcpServers.length === 0 && currentSelectedSkills.length === 0)) {
-      setState((current) =>
-        current === null || current.agentCapabilityPreview === null
-          ? current
-          : {
-              ...current,
-              agentCapabilityPreview: null
-            }
-      );
-      return;
-    }
-
-    let cancelled = false;
-    void client.api.agent
-      .getCapabilityPreview({
-        mcpServers: currentSelectedMcpServers,
-        skills: currentSelectedSkills
-      })
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setState((current) =>
-          current === null
-            ? current
-            : {
-                ...current,
-                agentCapabilityPreview: unwrap<AgentCapabilityPreview>('agent capability preview', result)
-              }
-        );
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentAgentExecution, currentSelectedMcpServers, currentSelectedSkills]);
-
-  useEffect(() => {
-    const subscription = createWorkspaceRefreshSubscription({
-      initialSnapshot: workspaceRefreshSnapshotRef.current,
-      load: async (workspace, options) => {
-        const workspaceData = await loadWorkspaceData(workspace, options, client);
-        return {
-          fileTree: workspaceData.fileTree,
-          filePreview: workspaceData.filePreview,
-          fileWorkbenchPdfPreview: workspaceData.fileWorkbenchPdfPreview,
-          gitStatus: workspaceData.gitStatus,
-          gitBranches: workspaceData.gitBranches,
-          gitError: workspaceData.gitError,
-          gitSelectedPath: workspaceData.gitSelectedPath,
-          gitSelectedPreview: workspaceData.gitSelectedPreview
-        };
-      },
-      apply: (workspacePath, workspaceData) => {
-        setState((current) => {
-          if (current === null || current.workspace?.path !== workspacePath) {
-            return current;
-          }
-          return {
-            ...current,
-            ...workspaceData
-          };
-        });
-      },
-      onError: (message) => {
-        setError(message);
-      },
-      subscribe: (listener) => client.api.chat.onRunEvent(listener)
-    });
-    workspaceRefreshSubscriptionRef.current = subscription;
-
-    return () => {
-      workspaceRefreshSubscriptionRef.current = null;
-      subscription.dispose();
-    };
-  }, []);
-
-  const startupLoadIntent = getStartupLoadIntent({
-    activeView,
-    activeWorkbenchTool,
-    workbenchVisible
-  });
-
-  useLazyStartupResource<WorkspaceData>({
-    apply: useCallback((workspaceData) => {
-      setState((current) => (current === null ? current : { ...current, ...workspaceData }));
-    }, []),
-    cacheKey: state === null ? null : currentWorkspace?.path ?? 'no-workspace',
-    enabled: state !== null && startupLoadIntent.targets.has('workspace'),
-    load: useCallback(() => loadWorkspaceData(currentWorkspace, {}, client), [client, currentWorkspace]),
-    loadState: workspaceLoadState,
-    setLoadState: setWorkspaceLoadState
-  });
-
-  useLazyStartupResource<MemoryData>({
-    apply: useCallback((memoryData) => {
-      setState((current) => (current === null ? current : { ...current, ...memoryData }));
-    }, []),
-    cacheKey: currentAppMode,
-    enabled: currentAppMode !== null && startupLoadIntent.targets.has('memory'),
-    load: useCallback(() => loadMemoryData(currentAppMode as AppStatus['mode'], client), [client, currentAppMode]),
-    loadState: memoryLoadState,
-    setLoadState: setMemoryLoadState
-  });
-
-  useLazyStartupResource<OperationsData>({
-    apply: useCallback((operationsData) => {
-      setState((current) => (current === null ? current : { ...current, ...operationsData }));
-    }, []),
-    cacheKey: currentAppMode,
-    enabled: currentAppMode !== null && startupLoadIntent.targets.has('operations'),
-    load: useCallback(() => loadOperationsData(currentAppMode as AppStatus['mode'], client), [client, currentAppMode]),
-    loadState: operationsLoadState,
-    setLoadState: setOperationsLoadState
-  });
-
-  useLazyStartupResource<TaskSurfaceData>({
-    apply: useCallback((taskSurfaceData) => {
-      setState((current) => (current === null ? current : { ...current, ...taskSurfaceData }));
-    }, []),
-    cacheKey:
-      state === null
-        ? null
-        : selectedTaskSurfaceTaskId === undefined
-          ? 'task-surface:auto'
-          : selectedTaskSurfaceTaskId === null
-            ? 'task-surface:none'
-            : `task-surface:${selectedTaskSurfaceTaskId}`,
-    enabled: state !== null && startupLoadIntent.targets.has('taskSurface'),
-    load: useCallback(() => loadTaskSurfaceData(selectedTaskSurfaceTaskId, client), [client, selectedTaskSurfaceTaskId]),
-    loadState: taskSurfaceLoadState,
-    setLoadState: setTaskSurfaceLoadState
+  useAgentCapabilityPreview({
+    client,
+    currentAgentExecution,
+    currentSelectedMcpServers,
+    currentSelectedSkills,
+    setState,
+    state
   });
 
   useEffect(() => {
@@ -621,27 +359,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   useEffect(() => {
     syncRendererUrl(activeView, activeWorkbenchTool, workbenchVisible);
   }, [activeView, activeWorkbenchTool, workbenchVisible]);
-
-  useEffect(() => {
-    if (activeView !== 'chat') {
-      setChatWorkspaceHostWidth(0);
-      return;
-    }
-    const host = chatWorkspaceScaleHostRef.current;
-    if (host === null) {
-      return;
-    }
-    const syncWidth = () => {
-      const nextWidth = host.clientWidth;
-      setChatWorkspaceHostWidth((current) => (current === nextWidth ? current : nextWidth));
-    };
-    syncWidth();
-    const resizeObserver = new ResizeObserver(syncWidth);
-    resizeObserver.observe(host);
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [activeView, chatSidebarCollapsed]);
 
   async function selectWorkspaceFromDialog(): Promise<void> {
     setWorkspaceSelectError(null);
@@ -689,7 +406,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     return <div className="boot">Roc 正在加载本地工作台</div>;
   }
 
-  const hasWorkbench = activeView === 'chat' ? workbenchVisible : WORKBENCH_VIEWS.has(activeView);
   const topMeta = buildTopMeta(activeView as MainViewId, state);
   const historyNavItems = buildHistoryNavItems(selectedThreadId, activeView);
   const historyItems = buildHistoryItems(state);
@@ -699,97 +415,41 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const showChatSidebar = activeView !== 'chat' || !chatSidebarCollapsed;
   const workspaceNavItems = buildWorkspaceNavItems(state);
   const controlNavItems = buildControlNavItems(state);
-  const chatWorkspaceScale =
-    activeView !== 'chat'
-      ? { active: false, baseWidth: 0, scale: 1 }
-      : resolveChatWorkspaceScale({
-          availableWidth: chatWorkspaceHostWidth,
-          chatSidebarCollapsed
-        });
-  const chatWorkspaceScaleStyle =
-    activeView !== 'chat'
-      ? undefined
-      : ({
-          '--chat-workspace-scale': String(chatWorkspaceScale.scale),
-          '--chat-workspace-base-width': `${chatWorkspaceScale.baseWidth}px`
-        } as React.CSSProperties);
-  const workspaceShellStyle = hasWorkbench ? { '--workbench-width': `${workbenchWidth}px` } as React.CSSProperties : undefined;
-  const workspaceShellClassName =
-    activeView === 'chat'
-      ? hasWorkbench
-        ? 'workspace-shell workspace-shell--chat'
-        : 'workspace-shell workspace-shell--chat-collapsed'
-      : hasWorkbench
-        ? 'workspace-shell workspace-shell--with-workbench'
-        : 'workspace-shell';
   const workspaceShellNode = (
-    <div style={workspaceShellStyle} className={workspaceShellClassName}>
-      <main className={activeView === 'chat' ? 'workspace-main workspace-main--chat' : 'workspace-main'} data-testid="active-view">
-        <section className={activeView === 'chat' ? 'canvas canvas--chat' : 'canvas'}>
-          <div className="canvas-scroll">
-            <ViewContent
-              activeView={activeView}
-              chatSelectionVersion={chatSelectionVersion}
-              client={client}
-              liveTaskRun={taskLiveRunState.mode === 'task' ? taskLiveRunState : null}
-              memoryLoadState={memoryLoadState}
-              onOpenTaskDetail={openTaskDetail}
-              onTaskApprovalDecision={resumeTaskApprovalFromDetail}
-              onBackToTaskBoard={returnToTaskBoard}
-              onDeleteTaskStarted={clearDeletingTaskSelection}
-              operationsLoadState={operationsLoadState}
-              onQueueTaskPrompt={createTaskFromWorkbench}
-              onSelectWorkspace={selectWorkspaceFromDialog}
-              onSubmitChatTask={startChatRun}
-              onSubmitTaskDetailInput={submitTaskDetailInput}
-              onTaskSurfaceSelectionChange={setSelectedTaskSurfaceTaskId}
-              selectedTaskDetailId={activeTaskDetailId}
-              selectedThreadId={selectedThreadId}
-              state={state}
-              taskBoardUiState={taskBoardUiState}
-              onTaskBoardUiStateChange={setTaskBoardUiState}
-              updateLoadedState={(partial) =>
-                setState((current) => (current === null ? current : { ...current, ...partial }))
-              }
-              workspaceLoadState={workspaceLoadState}
-            />
-          </div>
-        </section>
-      </main>
-
-      {activeView === 'chat' ? (
-        <RailOverlay
-          activeTool={activeWorkbenchTool}
-          activeView={activeView}
-          workbenchVisible={hasWorkbench}
-          onOpenToolView={(tool) => {
-            setActiveWorkbenchTool(tool);
-            setActiveView('chat');
-            setWorkbenchVisible(true);
-          }}
-        />
-      ) : null}
-      {hasWorkbench ? (
-        <Suspense fallback={<aside className="workbench" data-testid="workbench-panel" />}>
-          <WorkbenchPanel
-            activeTool={activeWorkbenchTool}
-            activeView={activeView}
-            client={client}
-            onToolChange={setActiveWorkbenchTool}
-            onClose={() => {
-              setActiveView('chat');
-              setWorkbenchVisible(false);
-            }}
-            state={state}
-            updateWorkspaceData={updateWorkspaceData}
-            workspaceLoadState={workspaceLoadState}
-            width={workbenchWidth}
-            onWidthChange={setWorkbenchWidth}
-            windowState={windowState}
-          />
-        </Suspense>
-      ) : null}
-    </div>
+    <AppWorkspaceShell
+      activeTaskDetailId={activeTaskDetailId}
+      activeView={activeView}
+      activeWorkbenchTool={activeWorkbenchTool}
+      chatSelectionVersion={chatSelectionVersion}
+      client={client}
+      clearDeletingTaskSelection={clearDeletingTaskSelection}
+      createTaskFromWorkbench={createTaskFromWorkbench}
+      memoryLoadState={memoryLoadState}
+      openTaskDetail={openTaskDetail}
+      operationsLoadState={operationsLoadState}
+      resumeTaskApprovalFromDetail={resumeTaskApprovalFromDetail}
+      returnToTaskBoard={returnToTaskBoard}
+      selectWorkspaceFromDialog={selectWorkspaceFromDialog}
+      selectedThreadId={selectedThreadId}
+      setActiveView={setActiveView}
+      setActiveWorkbenchTool={setActiveWorkbenchTool}
+      setSelectedTaskSurfaceTaskId={setSelectedTaskSurfaceTaskId}
+      setState={setState}
+      setTaskBoardUiState={setTaskBoardUiState}
+      setWorkbenchVisible={setWorkbenchVisible}
+      setWorkbenchWidth={setWorkbenchWidth}
+      startChatRun={startChatRun}
+      state={state}
+      submitTaskDetailInput={submitTaskDetailInput}
+      taskBoardUiState={taskBoardUiState}
+      taskLiveRunState={taskLiveRunState}
+      updateWorkspaceData={updateWorkspaceData}
+      workbenchPanel={WorkbenchPanel}
+      workbenchVisible={workbenchVisible}
+      workbenchWidth={workbenchWidth}
+      windowState={windowState}
+      workspaceLoadState={workspaceLoadState}
+    />
   );
 
   return (
@@ -800,19 +460,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         onHistorySearchToggle={toggleHistorySearch}
         onNewConversation={startNewConversation}
         onSidebarToggle={toggleChatSidebar}
-        onWindowClose={() => {
-          void client.api.window.close();
-        }}
-        onWindowMaximizeToggle={() => {
-          void client.api.window.toggleMaximize().then((result) => {
-            setWindowState(unwrap<WindowStateSnapshot>('window toggle maximize', result));
-          });
-        }}
-        onWindowMinimize={() => {
-          void client.api.window.minimize().then((result) => {
-            setWindowState(unwrap<WindowStateSnapshot>('window minimize', result));
-          });
-        }}
+        onWindowClose={closeWindow}
+        onWindowMaximizeToggle={toggleWindowMaximize}
+        onWindowMinimize={minimizeWindow}
         showHistorySearch={showHistorySearch}
         topMeta={topMeta}
         windowState={windowState}
@@ -828,134 +478,37 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
         }
       >
         {showChatSidebar ? (
-          <aside className="sidebar">
-            <div className="sidebar-head">
-              <button
-                className="workspace-pill"
-                data-testid="workspace-select-button"
-                title={visibleWorkspaceLabel(state)}
-                type="button"
-                onClick={() => void selectWorkspaceFromDialog()}
-              >
-                <PreviewIcon name="folder" />
-                <span>{visibleWorkspaceLabel(state)}</span>
-                <strong>选择</strong>
-              </button>
-              {workspaceSelectError === null ? null : <span className="inline-warning">{workspaceSelectError}</span>}
-            </div>
-            {historyNavItems.length === 0 ? null : (
-              <SidebarNavGroup
-                activeView={activeView}
-                items={historyNavItems}
-                title="对话"
-                onSelect={(item) => {
-                  if (item.id === 'chat') {
-                    startNewConversation();
-                    return;
-                  }
-                  setActiveView(item.id);
-                }}
-              />
-            )}
-            <div className="sidebar-block sidebar-block--history">
-              <div className="side-title">历史会话</div>
-              {showHistorySearch ? (
-                <label className="history-search-field">
-                  <Search aria-hidden="true" className="icon-svg" size={15} strokeWidth={1.8} />
-                  <input
-                    aria-label="搜索历史会话"
-                    data-testid="chat-history-search-input"
-                    placeholder="搜索历史会话"
-                    ref={historySearchInputRef}
-                    type="search"
-                    value={historySearchQuery}
-                    onChange={(event) => {
-                      setHistoryContextMenu(null);
-                      setHistorySearchQuery(event.target.value);
-                    }}
-                  />
-                </label>
-              ) : null}
-              <div className="sidebar-block-scroll history-list">
-                {historyItems.length === 0 ? (
-                  <div className="history-empty">暂无历史会话</div>
-                ) : showHistorySearchEmpty ? (
-                  <div className="history-empty" data-testid="chat-history-search-empty">未找到匹配的历史会话</div>
-                ) : (
-                  visibleHistoryItems.map((item) => (
-                    <button
-                      className={item.id === selectedThreadId ? 'nav-button active' : 'nav-button'}
-                      data-testid={`history-thread-${sanitizeTestId(item.id)}`}
-                      key={item.id}
-                      type="button"
-                      onClick={() => selectHistoryThread(item.id)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        setHistoryContextMenu({
-                          threadId: item.id,
-                          x: event.clientX,
-                          y: event.clientY
-                        });
-                      }}
-                    >
-                      <PreviewIcon name={item.icon} />
-                      <span className="nav-copy">
-                        <span className="nav-label">{item.label}</span>
-                        <span className="nav-meta">{item.meta}</span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-              {historyContextMenu === null ? null : (
-                <div
-                  className="history-context-menu"
-                  style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
-                >
-                  <button
-                    data-testid="history-thread-delete"
-                    type="button"
-                    onClick={() => void deleteHistoryThread(historyContextMenu.threadId)}
-                  >
-                    删除
-                  </button>
-                </div>
-              )}
-            </div>
-            <SidebarNavGroup
-              className="sidebar-block sidebar-block--tasks"
-              activeView={activeView}
-              items={workspaceNavItems}
-              title="任务工作台"
-              onSelect={(item) => setActiveView(item.id)}
-            />
-            <SidebarNavGroup
-              className="sidebar-block sidebar-block--control"
-              activeView={activeView}
-              items={controlNavItems}
-              title="控制区"
-              onSelect={(item) => setActiveView(item.id)}
-            />
-            <div className="sidebar-footer">
-              <button
-                className="settings-gear"
-                data-testid="settings-gear"
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                title="打开设置"
-                aria-label="打开设置"
-              >
-                <PreviewIcon name="wrench" />
-              </button>
-            </div>
-          </aside>
+          <AppSidebar
+            activeView={activeView}
+            controlNavItems={controlNavItems}
+            deleteHistoryThread={deleteHistoryThread}
+            historyContextMenu={historyContextMenu}
+            historyItems={historyItems}
+            historyNavItems={historyNavItems}
+            historySearchInputRef={historySearchInputRef}
+            historySearchQuery={historySearchQuery}
+            selectHistoryThread={selectHistoryThread}
+            selectWorkspaceFromDialog={selectWorkspaceFromDialog}
+            selectedThreadId={selectedThreadId}
+            setActiveView={setActiveView}
+            setHistoryContextMenu={setHistoryContextMenu}
+            setHistorySearchQuery={setHistorySearchQuery}
+            setSettingsOpen={setSettingsOpen}
+            showHistorySearch={showHistorySearch}
+            showHistorySearchEmpty={showHistorySearchEmpty}
+            startNewConversation={startNewConversation}
+            state={state}
+            visibleHistoryItems={visibleHistoryItems}
+            workspaceNavItems={workspaceNavItems}
+            workspaceSelectError={workspaceSelectError}
+          />
         ) : null}
         {activeView === 'chat' ? (
           <div
             className="chat-workspace-scale-host"
             data-chat-scale-active={chatWorkspaceScale.active ? 'true' : 'false'}
             ref={chatWorkspaceScaleHostRef}
-            style={chatWorkspaceScaleStyle}
+            style={chatWorkspaceScale.style}
           >
             <div className="chat-workspace-scale-frame">{workspaceShellNode}</div>
           </div>
@@ -963,108 +516,15 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
           workspaceShellNode
         )}
       </div>
-      {settingsOpen ? (
-        <SettingsModal onClose={() => setSettingsOpen(false)}>
-          <SettingsFeature
-            client={client}
-            onNavigate={(target) => {
-              setSettingsOpen(false);
-              setActiveView(target);
-              setWorkbenchVisible(false);
-            }}
-            state={state}
-            updateLoadedState={(partial) =>
-              setState((current) => (current === null ? current : { ...current, ...partial }))
-            }
-          />
-        </SettingsModal>
-      ) : null}
+      <AppSettingsLayer
+        client={client}
+        open={settingsOpen}
+        setActiveView={setActiveView}
+        setOpen={setSettingsOpen}
+        setState={setState}
+        setWorkbenchVisible={setWorkbenchVisible}
+        state={state}
+      />
     </div>
   );
-}
-
-type TaskCreationRun = {
-  runId: string;
-  threadId: string;
-};
-
-type TaskCreationTerminalEvent = Extract<ChatRunEvent, { type: 'run_completed' | 'run_failed' | 'run_interrupted' }>;
-
-async function loadTaskSurfaceForCreatedRun(
-  client: RocClient,
-  creationRun: TaskCreationRun,
-  existingTaskIds: ReadonlySet<string>
-): Promise<{ ok: true; taskId: string; data: TaskSurfaceData } | { ok: false; error: string }> {
-  const terminalEventRef: { current: TaskCreationTerminalEvent | null } = { current: null };
-  let completedSurfacePollCount = 0;
-  const unsubscribe = client.api.chat.onRunEvent((event) => {
-    if (event.runId !== creationRun.runId || !isTaskCreationTerminalEvent(event)) {
-      return;
-    }
-    terminalEventRef.current = event;
-  });
-  try {
-    while (true) {
-      const surface = await loadTaskSurfaceData(undefined, client);
-      const createdTask = findCreatedTaskSurfaceItem(surface.activeTasks, creationRun.threadId, existingTaskIds);
-      if (createdTask !== null) {
-        return {
-          ok: true,
-          taskId: createdTask.taskId,
-          data: await loadTaskSurfaceData(createdTask.taskId, client)
-        };
-      }
-      const terminalEvent = terminalEventRef.current;
-      if (terminalEvent !== null) {
-        if (terminalEvent.type !== 'run_completed') {
-          return { ok: false, error: formatTaskCreationTerminalError(terminalEvent) };
-        }
-        if (completedSurfacePollCount >= taskCreationCompletedSurfacePollLimit) {
-          return { ok: false, error: formatTaskCreationTerminalError(terminalEvent) };
-        }
-        completedSurfacePollCount += 1;
-      }
-      await waitForTaskCreationSurfacePoll();
-    }
-  } finally {
-    unsubscribe();
-  }
-}
-
-function findCreatedTaskSurfaceItem(
-  activeTasks: TaskSurfaceData['activeTasks'],
-  threadId: string,
-  existingTaskIds: ReadonlySet<string>
-): TaskSurfaceData['activeTasks'][number] | null {
-  const matchingThreadTask = activeTasks.find((item) => item.threadId === threadId);
-  if (matchingThreadTask !== undefined) {
-    return matchingThreadTask;
-  }
-
-  const newTasks = activeTasks.filter((item) => !existingTaskIds.has(item.taskId));
-  if (newTasks.length === 1) {
-    return newTasks[0];
-  }
-
-  return null;
-}
-
-function isTaskCreationTerminalEvent(event: ChatRunEvent): event is TaskCreationTerminalEvent {
-  return event.type === 'run_completed' || event.type === 'run_failed' || event.type === 'run_interrupted';
-}
-
-function formatTaskCreationTerminalError(event: TaskCreationTerminalEvent): string {
-  if (event.type === 'run_failed') {
-    return event.message;
-  }
-  if (event.type === 'run_interrupted') {
-    return '任务创建需要人工确认，请在任务详情中处理。';
-  }
-  return '任务创建流程已结束，但没有创建后台任务。';
-}
-
-async function waitForTaskCreationSurfacePoll(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    window.setTimeout(resolve, taskCreationSurfacePollDelayMs);
-  });
 }

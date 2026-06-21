@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 import type {
   GitBranchListResult,
   GitBranchMutationResult,
@@ -13,6 +13,14 @@ import type {
   GitStatusResult
 } from '../../shared/types';
 import { RocDomainError } from './errors';
+import {
+  isGitDiffExitCodeOne,
+  normalizeBranchName,
+  normalizeGitPath,
+  normalizeGitPaths,
+  parseGitStatusChanges,
+  toGitCommandError
+} from './git-service-helpers';
 import type { WorkspaceService } from './workspace-service';
 
 export class GitService {
@@ -82,7 +90,7 @@ export class GitService {
   async getFileDiffAsync(relativePath: string): Promise<GitFileDiffResult> {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPath = this.normalizeGitPath(relativePath);
+    const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     const change = (await this.getStatusChangesAsync(workspace.path)).find((item) => item.relativePath === normalizedPath);
     if (change === undefined) {
@@ -111,7 +119,7 @@ export class GitService {
   getFileDiff(relativePath: string): GitFileDiffResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPath = this.normalizeGitPath(relativePath);
+    const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     const change = this.getStatusChanges(workspace.path).find((item) => item.relativePath === normalizedPath);
     if (change === undefined) {
@@ -140,7 +148,7 @@ export class GitService {
   stageFile(relativePath: string): GitStatusResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPath = this.normalizeGitPath(relativePath);
+    const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     this.runGit(workspace.path, ['add', '--', normalizedPath]);
     return this.getStatus();
@@ -149,7 +157,7 @@ export class GitService {
   stageFiles(relativePaths: string[]): GitStatusResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPaths = this.normalizeGitPaths(relativePaths);
+    const normalizedPaths = normalizeGitPaths(relativePaths);
     for (const normalizedPath of normalizedPaths) {
       this.workspaceService.resolveInsideWorkspace(normalizedPath);
     }
@@ -160,7 +168,7 @@ export class GitService {
   unstageFile(relativePath: string): GitStatusResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPath = this.normalizeGitPath(relativePath);
+    const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     this.runGit(workspace.path, ['restore', '--staged', '--', normalizedPath]);
     return this.getStatus();
@@ -169,7 +177,7 @@ export class GitService {
   discardFileChanges(relativePath: string): GitStatusResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedPath = this.normalizeGitPath(relativePath);
+    const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     const currentStatus = this.getStatus();
     const change = currentStatus.changes.find((item) => item.relativePath === normalizedPath);
@@ -271,7 +279,7 @@ export class GitService {
   createBranch(name: string, checkoutAfterCreate: boolean): GitBranchMutationResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedBranchName = this.normalizeBranchName(name);
+    const normalizedBranchName = normalizeBranchName(name);
     this.runGit(workspace.path, ['branch', '--list', normalizedBranchName]);
     this.runGit(workspace.path, ['branch', normalizedBranchName]);
     if (checkoutAfterCreate) {
@@ -287,7 +295,7 @@ export class GitService {
   checkoutBranch(name: string): GitBranchMutationResult {
     const workspace = this.workspaceService.requireWorkspace();
     this.ensureGitRepository(workspace.path);
-    const normalizedBranchName = this.normalizeBranchName(name);
+    const normalizedBranchName = normalizeBranchName(name);
     const branchInfo = this.readBranchList(workspace.path);
     if (!branchInfo.branches.some((branch) => branch.name === normalizedBranchName)) {
       throw new RocDomainError({
@@ -327,7 +335,7 @@ export class GitService {
         stdio: ['ignore', 'pipe', 'pipe']
       });
     } catch (error) {
-      throw this.toGitCommandError(args, error);
+      throw toGitCommandError(args, error);
     }
   }
 
@@ -344,7 +352,7 @@ export class GitService {
         },
         (error, stdout, stderr) => {
           if (error !== null) {
-            reject(this.toGitCommandError(args, { ...error, stdout, stderr }));
+            reject(toGitCommandError(args, { ...error, stdout, stderr }));
             return;
           }
           resolve(stdout.toString());
@@ -362,10 +370,10 @@ export class GitService {
         stdio: ['ignore', 'pipe', 'pipe']
       });
     } catch (error) {
-      if (this.isGitDiffExitCodeOne(error)) {
+      if (isGitDiffExitCodeOne(error)) {
         return error.stdout;
       }
-      throw this.toGitCommandError(args, error);
+      throw toGitCommandError(args, error);
     }
   }
 
@@ -386,11 +394,11 @@ export class GitService {
             return;
           }
           const failed = { ...error, stdout: stdout.toString(), stderr: stderr.toString(), status: error.code };
-          if (this.isGitDiffExitCodeOne(failed)) {
+          if (isGitDiffExitCodeOne(failed)) {
             resolve(failed.stdout);
             return;
           }
-          reject(this.toGitCommandError(args, failed));
+          reject(toGitCommandError(args, failed));
         }
       );
     }));
@@ -410,53 +418,14 @@ export class GitService {
     }
   }
 
-  private isGitDiffExitCodeOne(error: unknown): error is { status: number; stdout: string } {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'status' in error &&
-      (error as { status?: unknown }).status === 1 &&
-      'stdout' in error &&
-      typeof (error as { stdout?: unknown }).stdout === 'string'
-    );
-  }
-
   private getStatusChanges(cwd: string): GitStatusChange[] {
     const rawStatus = this.runGit(cwd, ['status', '--porcelain=v1', '-z']);
-    return this.parseStatusChanges(rawStatus);
+    return parseGitStatusChanges(rawStatus);
   }
 
   private async getStatusChangesAsync(cwd: string): Promise<GitStatusChange[]> {
     const rawStatus = await this.runGitAsync(cwd, ['status', '--porcelain=v1', '-z']);
-    return this.parseStatusChanges(rawStatus);
-  }
-
-  private parseStatusChanges(rawStatus: string): GitStatusChange[] {
-    const records = rawStatus.split('\0').filter((record) => record.length > 0);
-    const changes: GitStatusChange[] = [];
-
-    for (let index = 0; index < records.length; index += 1) {
-      const record = records[index];
-      const statusIndex = record.charAt(0);
-      const statusWorktree = record.charAt(1);
-      const relativePath = record.slice(3);
-      const originalPath = statusIndex === 'R' || statusIndex === 'C' ? records[index + 1] : undefined;
-      changes.push({
-        porcelain:
-          originalPath === undefined
-            ? `${statusIndex}${statusWorktree} ${relativePath}`
-            : `${statusIndex}${statusWorktree} ${originalPath} -> ${relativePath}`,
-        index: statusIndex,
-        worktree: statusWorktree,
-        relativePath,
-        originalPath
-      });
-      if (originalPath !== undefined) {
-        index += 1;
-      }
-    }
-
-    return changes;
+    return parseGitStatusChanges(rawStatus);
   }
 
   private readBranchList(cwd: string): GitBranchListResult {
@@ -495,66 +464,6 @@ export class GitService {
     };
   }
 
-  private normalizeGitPath(relativePath: string): string {
-    const normalizedPath = relativePath.trim().replaceAll('\\', '/');
-    if (normalizedPath.length === 0 || normalizedPath === '.') {
-      throw new RocDomainError({
-        code: 'git_file_path_empty',
-        message: 'Git 文件路径不能为空。',
-        category: 'validation',
-        retryable: true,
-        userAction: '请选择一个具体文件后再执行 Git 操作。'
-      });
-    }
-    const pathParts = normalizedPath.split('/');
-    if (isAbsolute(normalizedPath) || pathParts.includes('..')) {
-      throw new RocDomainError({
-        code: 'git_file_path_outside_workspace',
-        message: 'Git 文件路径必须在当前工作区内。',
-        category: 'permission',
-        retryable: false,
-        userAction: '请选择当前工作区内的文件。'
-      });
-    }
-    return normalizedPath;
-  }
-
-  private normalizeGitPaths(relativePaths: string[]): string[] {
-    if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
-      throw new RocDomainError({
-        code: 'git_file_paths_empty',
-        message: '批量暂存至少需要一个文件路径。',
-        category: 'validation',
-        retryable: true,
-        userAction: '请先选择至少一个变更文件后再执行批量暂存。'
-      });
-    }
-    return relativePaths.map((relativePath) => this.normalizeGitPath(relativePath));
-  }
-
-  private normalizeBranchName(name: string): string {
-    const normalizedName = name.trim();
-    if (normalizedName.length === 0) {
-      throw new RocDomainError({
-        code: 'git_branch_name_empty',
-        message: '分支名不能为空。',
-        category: 'validation',
-        retryable: true,
-        userAction: '请输入有效的本地分支名后再继续。'
-      });
-    }
-    if (normalizedName.includes('..') || normalizedName.includes('\\') || normalizedName.startsWith('/') || normalizedName.endsWith('/')) {
-      throw new RocDomainError({
-        code: 'git_branch_name_invalid',
-        message: '分支名不合法。',
-        category: 'validation',
-        retryable: true,
-        userAction: '请使用 Git 允许的本地分支名。'
-      });
-    }
-    return normalizedName;
-  }
-
   private readGitConfigValue(cwd: string, key: string): string {
     try {
       return execFileSync('git', ['config', key], {
@@ -568,29 +477,4 @@ export class GitService {
     }
   }
 
-  private toGitCommandError(args: string[], error: unknown): RocDomainError {
-    const stderr =
-      typeof error === 'object' &&
-      error !== null &&
-      'stderr' in error &&
-      typeof (error as { stderr?: unknown }).stderr === 'string'
-        ? (error as { stderr: string }).stderr.trim()
-        : '';
-    const stdout =
-      typeof error === 'object' &&
-      error !== null &&
-      'stdout' in error &&
-      typeof (error as { stdout?: unknown }).stdout === 'string'
-        ? (error as { stdout: string }).stdout.trim()
-        : '';
-    const detail = stderr || stdout;
-    const commandText = `git ${args.join(' ')}`;
-    return new RocDomainError({
-      code: 'git_command_failed',
-      message: detail.length > 0 ? detail : `${commandText} 执行失败。`,
-      category: 'external',
-      retryable: false,
-      userAction: '请检查 Git 仓库状态、远端配置或认证信息后重试。'
-    });
-  }
 }

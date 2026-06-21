@@ -1,6 +1,13 @@
 @import './app-shell.css';
+@import './app-sidebar.css';
 @import './chat.css';
+@import './chat-rich-content.css';
 @import './shared.css';
+@import './mcp.css';
+@import './workspace-shared.css';
+@import './task.css';
+@import './task-create-dialog.css';
+@import './capability-timeline.css';
 @import './skills.css';
 @import './composer.css';
 @import './workbench.css';
@@ -8,4 +15,6 @@
 @import './terminal.css';
 @import './memory.css';
 @import './settings.css';
+@import './settings-shell.css';
+@import './settings-providers.css';
 @import './responsive.css';

@@ -8,6 +8,21 @@ import {
 } from '../forge-guardrails';
 import * as recordUtils from './record-utils';
 import { redact } from './redact';
+import {
+  buildToolCallChunkData,
+  readContentBlocks,
+  readToolCallId,
+  readToolChunkId,
+  redactUnknown
+} from './stream-tool-utils';
+import {
+  createUsageAccumulator,
+  updateUsageAccumulator,
+  type ProviderUsageAccumulator
+} from './stream-usage-accumulator';
+
+export { createUsageAccumulator };
+export type { ProviderUsageAccumulator };
 
 type ReasoningSource =
   | {
@@ -43,24 +58,6 @@ type StreamConsumerCallbacks = {
     payload: Record<string, unknown>
   ) => void;
 };
-
-export type ProviderUsageAccumulator = {
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
-};
-
-export function createUsageAccumulator(): ProviderUsageAccumulator {
-  return {
-    promptTokens: null,
-    completionTokens: null,
-    totalTokens: null,
-    cacheReadTokens: null,
-    cacheCreationTokens: null
-  };
-}
 
 export async function consumeMessageStream(input: {
   messages: AsyncIterable<unknown>;
@@ -267,32 +264,6 @@ export async function consumeSubagentStream(input: {
   }
 }
 
-function updateUsageAccumulator(target: ProviderUsageAccumulator, message: unknown): void {
-  const usageMetadata = recordUtils.readRecordValue(message, 'usage_metadata');
-  const inputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'input_tokens'));
-  const outputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'output_tokens'));
-  const totalTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'total_tokens'));
-  const inputTokenDetails = recordUtils.readRecordValue(usageMetadata, 'input_token_details');
-  const cacheReadTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_read'));
-  const cacheCreationTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_creation'));
-
-  if (inputTokens !== null) {
-    target.promptTokens = inputTokens;
-  }
-  if (outputTokens !== null) {
-    target.completionTokens = outputTokens;
-  }
-  if (totalTokens !== null) {
-    target.totalTokens = totalTokens;
-  }
-  if (cacheReadTokens !== null) {
-    target.cacheReadTokens = cacheReadTokens;
-  }
-  if (cacheCreationTokens !== null) {
-    target.cacheCreationTokens = cacheCreationTokens;
-  }
-}
-
 async function readReasoningFromOutput(message: unknown): Promise<string | null> {
   return await recordUtils.readReasoningFromMessageOutput(recordUtils.readRecordValue(message, 'output'));
 }
@@ -400,49 +371,6 @@ function emitToolCallChunkActivity(
   });
 }
 
-function readToolCallId(call: unknown): string | null {
-  const callId = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'callId'));
-  if (callId !== null) {
-    return callId;
-  }
-  const id = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'id'));
-  if (id !== null) {
-    return id;
-  }
-  return null;
-}
-
-function readToolChunkId(chunk: ToolCallChunkBlock, index: number): string {
-  const id = recordUtils.readNonEmptyString(recordUtils.readRecordValue(chunk.data, 'id'));
-  if (id !== null) {
-    return id;
-  }
-  return `chunk-${index}`;
-}
-
-function buildToolCallChunkData(block: Record<string, unknown>): Record<string, unknown> {
-  const entries: Array<[string, unknown]> = [];
-  for (const key of ['id', 'args', 'input', 'index']) {
-    const value = recordUtils.readRecordValue(block, key);
-    if (value !== undefined) {
-      entries.push([key, redactUnknown(value)]);
-    }
-  }
-  return Object.fromEntries(entries);
-}
-
-function readContentBlocks(value: unknown): unknown[] {
-  if (!recordUtils.isRecord(value)) {
-    return [];
-  }
-  const contentBlocks = recordUtils.readRecordValue(value, 'contentBlocks');
-  if (Array.isArray(contentBlocks)) {
-    return contentBlocks;
-  }
-  const content = recordUtils.readRecordValue(value, 'content');
-  return Array.isArray(content) ? content : [];
-}
-
 function hasSkillInstructionPath(value: unknown): boolean {
   if (!recordUtils.isRecord(value)) {
     return false;
@@ -544,10 +472,6 @@ async function* createStringAsyncIterable(values: readonly string[]): AsyncGener
   }
 }
 
-function readNonNegativeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
-}
-
 function readGuardrailNudgePayload(message: unknown): StreamGuardrailNudgePayload | null {
   if (!BaseMessage.isInstance(message)) {
     return null;
@@ -601,19 +525,4 @@ function forgeTagToNudgeKind(tag: ForgeMessageType): GuardrailNudgePayload['nudg
 function readNudgeTier(message: BaseMessage): number | null {
   const value = message.additional_kwargs.forge_nudge_tier;
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
-}
-
-function redactUnknown(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return redact(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactUnknown(item));
-  }
-  if (recordUtils.isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, redactUnknown(entry)])
-    );
-  }
-  return value;
 }

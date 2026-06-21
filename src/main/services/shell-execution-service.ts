@@ -1,15 +1,22 @@
 import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
-import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../rtk-integration';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import type { WorkspaceService } from './workspace-service';
-import { redact } from './deep-agent/redact';
 import { containsVirtualWorkspacePath } from './deep-agent/shell-path-guard';
+import {
+  buildAgentExecutePayload,
+  buildRtkEnvironment,
+  combineOutput,
+  normalizeShellCommand,
+  resolveRtkRoute,
+  resolveRtkRouteAsync,
+  toText,
+  type RtkRoutingDecision
+} from './shell-execution-helpers';
 
 const powershellUtf8Prefix =
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';
-const maxPersistedAgentOutputChars = 4096;
 
 type ExecutedShellCommand = {
   stdout: string;
@@ -18,16 +25,6 @@ type ExecutedShellCommand = {
   usedRtk: boolean;
   bypassReason?: ShellExecutionResult['bypassReason'];
 };
-
-type RtkRoutingDecision =
-  | {
-      kind: 'rtk';
-      args: string[];
-    }
-  | {
-      kind: 'fallback';
-      bypassReason: ShellExecutionResult['bypassReason'];
-    };
 
 export type ShellTaskEventRecorder = {
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): unknown;
@@ -41,7 +38,7 @@ export class ShellExecutionService {
   ) {}
 
   execute(request: ShellExecutionRequest): ShellExecutionResult {
-    const normalizedCommand = this.normalizeCommand(request.command);
+    const normalizedCommand = normalizeShellCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
     const execution =
@@ -69,7 +66,7 @@ export class ShellExecutionService {
         threadId: request.threadId,
         runId: request.runId,
         type: 'agent_execute',
-        payload: this.buildAgentExecutePayload({
+        payload: buildAgentExecutePayload({
           command: result.command,
           normalizedCommand: result.normalizedCommand,
           cwd: result.cwd,
@@ -77,7 +74,7 @@ export class ShellExecutionService {
           durationMs: result.durationMs,
           usedRtk: result.usedRtk,
           bypassReason: result.bypassReason,
-          output: this.combineOutput(result.stdout, result.stderr)
+          output: combineOutput(result.stdout, result.stderr)
         })
       });
     }
@@ -86,7 +83,7 @@ export class ShellExecutionService {
   }
 
   async executeAsync(request: ShellExecutionRequest): Promise<ShellExecutionResult> {
-    const normalizedCommand = this.normalizeCommand(request.command);
+    const normalizedCommand = normalizeShellCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
     const execution =
@@ -114,7 +111,7 @@ export class ShellExecutionService {
         threadId: request.threadId,
         runId: request.runId,
         type: 'agent_execute',
-        payload: this.buildAgentExecutePayload({
+        payload: buildAgentExecutePayload({
           command: result.command,
           normalizedCommand: result.normalizedCommand,
           cwd: result.cwd,
@@ -122,7 +119,7 @@ export class ShellExecutionService {
           durationMs: result.durationMs,
           usedRtk: result.usedRtk,
           bypassReason: result.bypassReason,
-          output: this.combineOutput(result.stdout, result.stderr)
+          output: combineOutput(result.stdout, result.stderr)
         })
       });
     }
@@ -153,7 +150,7 @@ export class ShellExecutionService {
           threadId: input.threadId,
           runId: input.runId,
           type: 'agent_execute',
-          payload: this.buildAgentExecutePayload({
+          payload: buildAgentExecutePayload({
             command: input.command,
             cwd,
             exitCode: workspaceRouteViolation.exitCode,
@@ -177,14 +174,14 @@ export class ShellExecutionService {
     }
     const startedAt = Date.now();
     const execution = this.runAgentCommand(input.command, cwd);
-    const output = this.combineOutput(execution.stdout, execution.stderr);
+    const output = combineOutput(execution.stdout, execution.stderr);
 
     if (input.threadId !== undefined && input.runId !== undefined) {
       this.taskService.recordEvent({
         threadId: input.threadId,
         runId: input.runId,
         type: 'agent_execute',
-        payload: this.buildAgentExecutePayload({
+        payload: buildAgentExecutePayload({
           command: input.command,
           cwd,
           exitCode: execution.exitCode,
@@ -232,7 +229,7 @@ export class ShellExecutionService {
           threadId: input.threadId,
           runId: input.runId,
           type: 'agent_execute',
-          payload: this.buildAgentExecutePayload({
+          payload: buildAgentExecutePayload({
             command: input.command,
             cwd,
             exitCode: workspaceRouteViolation.exitCode,
@@ -256,14 +253,14 @@ export class ShellExecutionService {
     }
     const startedAt = Date.now();
     const execution = await this.runAgentCommandAsync(input.command, cwd);
-    const output = this.combineOutput(execution.stdout, execution.stderr);
+    const output = combineOutput(execution.stdout, execution.stderr);
 
     if (input.threadId !== undefined && input.runId !== undefined) {
       this.taskService.recordEvent({
         threadId: input.threadId,
         runId: input.runId,
         type: 'agent_execute',
-        payload: this.buildAgentExecutePayload({
+        payload: buildAgentExecutePayload({
           command: input.command,
           cwd,
           exitCode: execution.exitCode,
@@ -297,7 +294,7 @@ export class ShellExecutionService {
       };
     }
 
-    const rtkRoute = this.resolveRtkRoute(command);
+    const rtkRoute = resolveRtkRoute(command);
     if (rtkRoute.kind === 'fallback') {
       const fallback = this.executePowerShell(command, cwd);
       return {
@@ -325,7 +322,7 @@ export class ShellExecutionService {
       };
     }
 
-    const rtkRoute = await this.resolveRtkRouteAsync(command, rtk);
+    const rtkRoute = await resolveRtkRouteAsync(command, rtk);
     if (rtkRoute.kind === 'fallback') {
       const fallback = await this.executePowerShellAsync(command, cwd);
       return {
@@ -365,14 +362,7 @@ export class ShellExecutionService {
     cwd: string,
     metadata: RtkExecutionMetadata
   ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
-    return this.execFile(metadata.binaryPath, args, cwd, {
-      APPDATA: metadata.runtimeRoot,
-      LOCALAPPDATA: metadata.runtimeRoot,
-      XDG_CONFIG_HOME: metadata.runtimeRoot,
-      XDG_DATA_HOME: metadata.runtimeRoot,
-      RTK_DB_PATH: metadata.trackingDatabasePath,
-      RTK_TEE_DIR: metadata.teeDir
-    });
+    return this.execFile(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata));
   }
 
   private async executeRtkAsync(
@@ -380,14 +370,7 @@ export class ShellExecutionService {
     cwd: string,
     metadata: RtkExecutionMetadata
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
-    return await this.execFileAsync(metadata.binaryPath, args, cwd, {
-      APPDATA: metadata.runtimeRoot,
-      LOCALAPPDATA: metadata.runtimeRoot,
-      XDG_CONFIG_HOME: metadata.runtimeRoot,
-      XDG_DATA_HOME: metadata.runtimeRoot,
-      RTK_DB_PATH: metadata.trackingDatabasePath,
-      RTK_TEE_DIR: metadata.teeDir
-    });
+    return await this.execFileAsync(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata));
   }
 
   private executePowerShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
@@ -428,8 +411,8 @@ export class ShellExecutionService {
       if (typeof error === 'object' && error !== null && 'status' in error) {
         const failed = error as { stdout?: Buffer | string; stderr?: Buffer | string; status?: number };
         return {
-          stdout: this.toText(failed.stdout),
-          stderr: this.toText(failed.stderr),
+          stdout: toText(failed.stdout),
+          stderr: toText(failed.stderr),
           exitCode: typeof failed.status === 'number' ? failed.status : 1
         };
       }
@@ -467,8 +450,8 @@ export class ShellExecutionService {
           }
           if (typeof error === 'object' && error !== null && 'code' in error) {
             resolve({
-              stdout: this.toText(stdout as Buffer | string | undefined),
-              stderr: this.toText(stderr as Buffer | string | undefined),
+              stdout: toText(stdout as Buffer | string | undefined),
+              stderr: toText(stderr as Buffer | string | undefined),
               exitCode: typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : 1
             });
             return;
@@ -484,78 +467,6 @@ export class ShellExecutionService {
       return request.cwd;
     }
     return this.workspaceService.requireWorkspace().path;
-  }
-
-  private normalizeCommand(command: string): string {
-    return command.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
-  }
-
-  private resolveRtkRoute(command: string): RtkRoutingDecision {
-    const explicitRtkArgs = parseRtkArgs(command.trim());
-    if (explicitRtkArgs !== null) {
-      return this.resolveExplicitRtkRoute(explicitRtkArgs);
-    }
-
-    const normalized = this.normalizeCommand(command);
-    if (normalized === 'ls' || normalized.startsWith('ls ')) {
-      return {
-        kind: 'fallback',
-        bypassReason: 'windows_shell_alias'
-      };
-    }
-    if (normalized === 'git status' || normalized.startsWith('git status ')) {
-      return {
-        kind: 'rtk',
-        args: command.trim().split(/\s+/)
-      };
-    }
-    if (normalized === 'git diff' || normalized.startsWith('git diff ')) {
-      return {
-        kind: 'rtk',
-        args: command.trim().split(/\s+/)
-      };
-    }
-    return {
-      kind: 'fallback',
-      bypassReason: 'command_not_supported'
-    };
-  }
-
-  private async resolveRtkRouteAsync(command: string, metadata: RtkExecutionMetadata): Promise<RtkRoutingDecision> {
-    const explicitRtkArgs = parseRtkArgs(command.trim());
-    if (explicitRtkArgs !== null) {
-      return this.resolveExplicitRtkRoute(explicitRtkArgs);
-    }
-
-    const normalized = this.normalizeCommand(command);
-    if (normalized === 'ls' || normalized.startsWith('ls ')) {
-      return {
-        kind: 'fallback',
-        bypassReason: 'windows_shell_alias'
-      };
-    }
-
-    const rewritten = await new CommandRewriter(metadata.binaryPath).rewrite(command);
-    if (rewritten.rtkArgs === null || isWindowsRtkDeniedSubcommand(rewritten.rtkArgs)) {
-      return this.resolveRtkRoute(command);
-    }
-    return {
-      kind: 'rtk',
-      args: rewritten.rtkArgs
-    };
-  }
-
-  private resolveExplicitRtkRoute(args: string[]): RtkRoutingDecision {
-    if (isWindowsRtkDeniedSubcommand(args)) {
-      return {
-        kind: 'fallback',
-        bypassReason: 'windows_shell_alias'
-      };
-    }
-    return {
-      kind: 'rtk',
-      args
-    };
   }
 
   private rejectVirtualWorkspacePath(input: { command: string; cwd: string; fallbackCwd: string }): ExecutedShellCommand | null {
@@ -576,56 +487,4 @@ export class ShellExecutionService {
     return this.workspaceService.getCurrentWorkspace()?.path ?? 'selected workspace root';
   }
 
-  private toText(value: Buffer | string | undefined): string {
-    if (value === undefined) {
-      return '';
-    }
-    return Buffer.isBuffer(value) ? value.toString('utf8') : value;
-  }
-
-  private combineOutput(stdout: string, stderr: string): string {
-    if (stdout.length === 0) {
-      return stderr;
-    }
-    if (stderr.length === 0) {
-      return stdout;
-    }
-    return `${stdout}\n[stderr]\n${stderr}`;
-  }
-
-  private buildAgentExecutePayload(input: {
-    command: string;
-    normalizedCommand?: string;
-    cwd: string;
-    exitCode: number;
-    durationMs?: number;
-    usedRtk: boolean;
-    bypassReason?: ShellExecutionResult['bypassReason'];
-    output: string;
-  }): Record<string, unknown> {
-    return {
-      command: input.command,
-      normalizedCommand: input.normalizedCommand,
-      cwd: input.cwd,
-      exitCode: input.exitCode,
-      durationMs: input.durationMs,
-      usedRtk: input.usedRtk,
-      bypassReason: input.bypassReason,
-      ...this.preparePersistedAgentOutput(input.output)
-    };
-  }
-
-  private preparePersistedAgentOutput(output: string): { output: string; outputTruncated: boolean } {
-    const redacted = redact(output);
-    if (redacted.length <= maxPersistedAgentOutputChars) {
-      return {
-        output: redacted,
-        outputTruncated: false
-      };
-    }
-    return {
-      output: redacted.slice(0, maxPersistedAgentOutputChars),
-      outputTruncated: true
-    };
-  }
 }

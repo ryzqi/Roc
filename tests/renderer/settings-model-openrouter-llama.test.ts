@@ -1,0 +1,308 @@
+import { describe, expect, it } from 'vitest';
+import type {
+  AppSettings,
+  HostIntegrationStatus,
+  McpServerSnapshot,
+  PermissionsConfig,
+  ProviderConfig,
+  ProviderSecretStatus,
+  SkillSnapshot
+} from '../../src/shared/types';
+import {
+  selectSettingsSection,
+  SETTINGS_SECTIONS
+} from '../../src/renderer/settings-model';
+import {
+  assertProviderCreateIdAvailable,
+  buildEnabledModelOptions,
+  buildProviderConfigFromDraft,
+  buildProviderIdFromName,
+  createProviderDraft,
+  parseProviderModelDraft,
+  providerTypeMeta,
+  type ProviderDraft
+} from '../../src/renderer/settings/provider-draft-model';
+import { buildImpactRows } from '../../src/renderer/settings/impact-model';
+import {
+  applySettingsSnapshot,
+  buildSettingsSaveRequest,
+  deleteProviderFromSettingsSaveRequest,
+  setDefaultModelInSettingsSaveRequest,
+  upsertProviderInSettingsSaveRequest
+} from '../../src/renderer/settings/settings-save-model';
+
+function defaultSettings(): AppSettings {
+  return {
+    schemaVersion: 2,
+    defaultWorkspace: null,
+    startup: { openAtLogin: false, minimizeToTray: true },
+    notifications: { lowDistraction: true },
+    globalHotkey: null,
+    memory: {
+      frozenSnapshotEnabled: true,
+      userProfileEnabled: true,
+      agentsRulesEnabled: true,
+      charLimits: { user: 1375, agents: 800, memory: 2200 },
+      sessionRetentionDays: 90,
+      consolidatorEnabled: true,
+      consolidatorDebounceMinutes: 10,
+      consolidatorTargetRatio: 0.85,
+      consolidatorDailyQuota: 50,
+      preCompactionFlushEnabled: true,
+      preCompactionTokenThreshold: 0.85,
+      preCompactionContextWindowTokens: 200000,
+      securityScan: {
+        promptInjection: true,
+        credential: true,
+        sshBackdoor: true,
+        invisibleUnicode: true
+      }
+    },
+    tasks: {
+      longRunningThresholds: {
+        runningSeconds: 90,
+        toolCallCount: 8,
+        subagentCount: 1
+      },
+      scheduler: {
+        catchUpOnStartup: true,
+        maxRegisteredTasks: 256
+      }
+    }
+  };
+}
+
+function defaultPermissions(): PermissionsConfig {
+  return {
+    schemaVersion: 3,
+    mode: 'fully_automatic',
+    grants: []
+  };
+}
+
+function defaultHostIntegration(): HostIntegrationStatus {
+  return {
+    startup: {
+      configuredOpenAtLogin: false,
+      effectiveOpenAtLogin: false,
+      syncError: null
+    },
+    globalHotkey: {
+      accelerator: null,
+      registered: false,
+      registrationError: null
+    }
+  };
+}
+
+function defaultNvidiaDraftFields() {
+  return {
+    topP: '',
+    topK: '',
+    minP: '',
+    frequencyPenalty: '',
+    presencePenalty: '',
+    repetitionPenalty: '',
+    seed: '',
+    stop: '',
+    organization: '',
+    useResponsesApi: 'unset',
+    openAiReasoningEffort: 'unset',
+    openAiReasoningSummary: 'unset',
+    includeReasoning: 'unset',
+    parallelToolCalls: 'unset',
+    streamUsage: 'unset',
+    serviceTier: 'unset',
+    timeoutMs: '',
+    verbosity: 'unset',
+    zdrEnabled: 'unset',
+    defaultHeaders: '',
+    modelKwargs: '',
+    anthropicThinkingMode: 'unset',
+    anthropicThinkingBudgetTokens: '',
+    toolChoice: 'unset',
+    toolChoiceFunctionName: '',
+    endpointOverride: '',
+    guidedJson: '',
+    guidedRegex: '',
+    guidedChoice: '',
+    guidedGrammar: ''
+  };
+}
+
+
+describe('settings model helpers', () => {
+  it('builds the fixed OpenRouter provider config without requiring endpoint or model input', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('openrouter'),
+      endpoint: '',
+      modelsText: '',
+      apiKey: 'sk-or-v1-test'
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: true,
+      models: [
+        {
+          id: '~openai/gpt-latest',
+          displayName: 'OpenAI GPT Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~anthropic/claude-sonnet-latest',
+          displayName: 'Claude Sonnet Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        },
+        {
+          id: '~google/gemini-pro-latest',
+          displayName: 'Gemini Pro Latest',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: undefined
+    });
+  });
+
+
+  it('builds the fixed OpenRouter provider config with configured models and fixed endpoint', () => {
+    const draft: ProviderDraft = {
+      ...createProviderDraft('openrouter'),
+      endpoint: 'https://example.invalid/v1',
+      modelsText: 'custom/openrouter-model | Custom OpenRouter model',
+      apiKey: 'sk-or-v1-test'
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openrouter',
+      endpoint: 'https://openrouter.ai/api/v1',
+      credentialRef: 'secret:openrouter',
+      enabled: true,
+      models: [
+        {
+          id: 'custom/openrouter-model',
+          displayName: 'Custom OpenRouter model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ],
+      options: undefined
+    });
+  });
+
+
+  it('builds the fixed llama.cpp provider config from model list text while allowing an empty API key', () => {
+    const draft = {
+      ...createProviderDraft('llama_cpp'),
+      endpoint: 'http://127.0.0.1:9090/v1',
+      modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
+      apiKey: ''
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toEqual({
+      id: 'llama_cpp',
+      name: 'llama.cpp',
+      type: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      credentialRef: null,
+      enabled: true,
+      models: [
+        {
+          id: 'qwen3.5-4b',
+          displayName: 'Qwen 3.5 4B',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    });
+  });
+
+
+  it('replaces a saved llama.cpp provider with a null credentialRef when API key is cleared before save', () => {
+    const settings = defaultSettings();
+    const permissions = defaultPermissions();
+    const request = buildSettingsSaveRequest({
+      settings,
+      providers: [
+        {
+          id: 'llama_cpp',
+          name: 'llama.cpp',
+          type: 'llama_cpp',
+          endpoint: 'http://127.0.0.1:8081/v1',
+          credentialRef: 'secret:llama_cpp',
+          enabled: true,
+          models: [
+            {
+              id: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+              displayName: 'Qwen 3.5 4B',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ],
+      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      permissions
+    });
+
+    const savedProvider = buildProviderConfigFromDraft({
+      ...createProviderDraft('llama_cpp'),
+      endpoint: 'http://127.0.0.1:8081',
+      modelsText: 'Qwen3.5-4B-UD-Q5_K_XL.gguf | Qwen 3.5 4B',
+      apiKey: ''
+    });
+
+    expect(upsertProviderInSettingsSaveRequest(request, savedProvider)).toEqual({
+      settings,
+      providers: [savedProvider],
+      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      permissions
+    });
+    expect(savedProvider.credentialRef).toBeNull();
+  });
+
+
+  it('keeps the existing provider id when editing a saved provider', () => {
+    const provider: ProviderConfig = {
+      id: 'anthropic-east',
+      name: 'Anthropic East',
+      type: 'anthropic_compatible',
+      endpoint: 'https://anthropic.example.test/v1',
+      credentialRef: 'secret:anthropic-east',
+      enabled: true,
+      models: [
+        {
+          id: 'claude-sonnet-4-5',
+          displayName: 'Claude Sonnet 4.5',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true
+        }
+      ]
+    };
+
+    expect(createProviderDraft('anthropic_compatible', provider)).toMatchObject({
+      mode: 'edit',
+      id: 'anthropic-east',
+      apiKey: ''
+    });
+    expect(buildProviderConfigFromDraft(createProviderDraft('anthropic_compatible', provider))).toEqual(provider);
+  });
+
+});
+
