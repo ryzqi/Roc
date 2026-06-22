@@ -1,4 +1,4 @@
-import type { ExecuteResponse, SubAgent } from 'deepagents';
+import type { AnySubAgent, ExecuteResponse } from 'deepagents';
 import type {
   ChatStartRunRequest,
   ShellExecutionResult,
@@ -40,7 +40,7 @@ export type RunFailure = {
   suggestion?: string;
 };
 
-export type RuntimeSubagent = SubAgent;
+export type RuntimeSubagent = AnySubAgent;
 
 export type AgentExecuteAdapter = {
   executeAgentCommand(input: { command: string; cwd?: string }): Promise<
