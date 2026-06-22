@@ -165,6 +165,10 @@ function createDefaultMainKernelPlugins(input: {
         }
       },
       deepAgentExecutor: {
+        getMemorySettings: () => {
+          configService.reloadSettingsDocument();
+          return configService.getSettings().memory;
+        },
         paths: input.paths
       },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
@@ -178,8 +182,15 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createMemoryPlugin({
-      workspace: defaultWorkspace === null ? null : { path: defaultWorkspace, label: defaultWorkspace },
-      getMemorySettings: () => configService.getSettings().memory
+      getWorkspace: () => {
+        configService.reloadSettingsDocument();
+        const workspacePath = configService.getSettings().defaultWorkspace;
+        return workspacePath === null ? null : { path: workspacePath, label: workspacePath };
+      },
+      getMemorySettings: () => {
+        configService.reloadSettingsDocument();
+        return configService.getSettings().memory;
+      }
     }),
     createTaskPlugin(),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),

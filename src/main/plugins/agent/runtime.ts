@@ -237,6 +237,7 @@ export class AgentPluginRuntime {
         threadId: run.threadId,
         enabledCapabilities: run.enabledCapabilities,
         taskSource: pendingInterrupt.taskSource,
+        workspacePath: pendingInterrupt.workspacePath,
         workflowHint: pendingInterrupt.workflowHint
       },
       resumePayload: {
@@ -279,6 +280,7 @@ export class AgentPluginRuntime {
     durationMs: number;
     providerId: string;
     modelId: string;
+    workspacePath: ChatStartRunRequest['workspacePath'];
   }): Promise<{ run: TaskRun; message: SessionMessageEntry; event: TaskEvent }> {
     const run = this.options.repository.updateRunStatus({
       endedAt: new Date().toISOString(),
@@ -304,7 +306,17 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       type: 'message'
     });
-    await this.publish('agent.run.completed', {
+    const completedPayload: {
+      runId: string;
+      threadId: string;
+      providerId: string;
+      modelId: string;
+      durationMs: number;
+      summary: string;
+      assistantMessage: string;
+      finishReason: 'stop';
+      workspacePath?: string | null;
+    } = {
       runId: run.id,
       threadId: run.threadId,
       providerId: input.providerId,
@@ -313,7 +325,11 @@ export class AgentPluginRuntime {
       summary: input.summary,
       assistantMessage: input.assistantMessage,
       finishReason: 'stop'
-    });
+    };
+    if (input.workspacePath !== undefined) {
+      completedPayload.workspacePath = input.workspacePath;
+    }
+    await this.publish('agent.run.completed', completedPayload);
     await this.publishChatRunEvent({
       type: 'run_completed',
       runId: run.id,
@@ -383,7 +399,8 @@ export class AgentPluginRuntime {
         summary: execution.assistantMessage.slice(0, 120),
         durationMs: Date.now() - startedAtMs,
         providerId: input.providerId,
-        modelId: input.modelId
+        modelId: input.modelId,
+        workspacePath: input.request.workspacePath
       });
     } catch (error) {
       if (!this.activeRuns.has(input.runId)) {
@@ -442,7 +459,8 @@ export class AgentPluginRuntime {
           runId: input.run.id,
           threadId: input.run.threadId,
           taskSource: input.request.taskSource === undefined ? null : input.request.taskSource,
-          workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
+          workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
+          workspacePath: input.request.workspacePath
         });
         return {
           status: 'interrupted'
@@ -491,6 +509,7 @@ export class AgentPluginRuntime {
     payload: ChatApprovalRequest;
     taskSource: ChatStartRunRequest['taskSource'] | null;
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
+    workspacePath: ChatStartRunRequest['workspacePath'];
   }): Promise<void> {
     this.options.repository.updateRunStatus({
       runId: input.runId,
@@ -500,7 +519,8 @@ export class AgentPluginRuntime {
       interruptId: input.interruptId,
       payload: input.payload,
       taskSource: input.taskSource,
-      workflowHint: input.workflowHint
+      workflowHint: input.workflowHint,
+      workspacePath: input.workspacePath
     });
     await this.publish('agent.run.task-event', {
       runId: input.runId,

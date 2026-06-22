@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
+  AppSettings,
   ApprovalMode,
   ChatCancelRunResult,
   ChatResumeRunRequest,
@@ -151,7 +152,7 @@ export type AgentPluginOptions = {
     deleteFileApprovalModeProvider: () => ApprovalMode;
     mcpApprovalModeProvider: () => ApprovalMode;
   };
-  deepAgentExecutor?: { paths: RocPaths } | AgentDeepAgentExecutor;
+  deepAgentExecutor?: { paths: RocPaths; getMemorySettings?: () => AppSettings['memory'] } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
@@ -232,6 +233,7 @@ function resolveDeepAgentExecutor(
   }
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
+    getMemorySettings: option.getMemorySettings,
     paths: option.paths,
     store: new RocSqliteStore(context.database.getCoreConnection())
   });

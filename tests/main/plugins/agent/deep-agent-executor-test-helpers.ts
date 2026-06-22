@@ -9,6 +9,7 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
   ChatStartRunRequest,
+  AppSettings,
   ShellExecutionResult,
   TaskDetail,
   TaskRun,
@@ -31,6 +32,7 @@ export const workspacePath = process.cwd();
 
 interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
+  getMemorySettings?: () => AppSettings['memory'];
   messages?: AsyncIterable<unknown>;
   output?: unknown;
   requestOverride?: Partial<ChatStartRunRequest>;
@@ -72,6 +74,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   });
   const executor = createAgentDeepAgentExecutor({
     capabilities: input.capabilities,
+    getMemorySettings: input.getMemorySettings,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore()
   });

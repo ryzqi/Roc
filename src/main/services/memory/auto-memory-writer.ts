@@ -1,17 +1,17 @@
 import type { RocPluginContext } from '../../kernel/types';
 import type { MemoryScope } from '../../../shared/types';
-import type { MemoryStoreRepository } from '../../plugins/memory/memory-store-repository';
+import type { MemoryStoreRepository, MemoryWorkspaceContext } from '../../plugins/memory/memory-store-repository';
 
 export type AgentRunCompletedPayload = {
   runId: string;
   threadId: string | null;
+  workspacePath?: string | null;
   summary: string;
   assistantMessage: string;
 };
 
 type AutoMemoryWriterOptions = {
   repository: MemoryStoreRepository;
-  targetScope: MemoryScope;
   logger: RocPluginContext['logger'];
 };
 
@@ -23,17 +23,19 @@ export class AutoMemoryWriter {
     if (summary.length === 0) {
       return;
     }
-    const current = await this.options.repository.readFile({ scope: this.options.targetScope, kind: 'memory' });
+    const workspaceOverride = resolveWorkspaceOverride(payload);
+    const targetScope: MemoryScope = this.options.repository.hasWorkspace(workspaceOverride) ? 'workspace' : 'global';
+    const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
     const bullet = `- Completed run ${payload.runId}: ${summary}`;
     const next = appendBullet(current === null ? '' : current, resolveDate(createdAt), bullet);
     if (next === null) {
       return;
     }
     const result = await this.options.repository.writeFile({
-      scope: this.options.targetScope,
+      scope: targetScope,
       kind: 'memory',
       content: next
-    });
+    }, workspaceOverride);
     if (!result.ok) {
       if (result.reason === 'capacity_exceeded') {
         this.options.logger.warn('memory_auto_write_skipped_capacity', {
@@ -57,9 +59,27 @@ export function isAgentRunCompletedPayload(value: unknown): value is AgentRunCom
   return (
     typeof record.runId === 'string' &&
     (typeof record.threadId === 'string' || record.threadId === null) &&
+    (record.workspacePath === undefined || typeof record.workspacePath === 'string' || record.workspacePath === null) &&
     typeof record.summary === 'string' &&
     typeof record.assistantMessage === 'string'
   );
+}
+
+function resolveWorkspaceOverride(payload: AgentRunCompletedPayload): MemoryWorkspaceContext | null | undefined {
+  if (payload.workspacePath === undefined) {
+    return undefined;
+  }
+  if (payload.workspacePath === null) {
+    return null;
+  }
+  const workspacePath = payload.workspacePath.trim();
+  if (workspacePath.length === 0) {
+    throw new Error('agent_run_completed_workspace_path_empty');
+  }
+  return {
+    path: workspacePath,
+    label: workspacePath
+  };
 }
 
 function appendBullet(existing: string, date: string, bullet: string): string | null {

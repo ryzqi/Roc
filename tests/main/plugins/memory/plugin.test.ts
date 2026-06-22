@@ -116,6 +116,44 @@ describe('memory plugin', () => {
     });
   });
 
+  it('resolves workspace from the provider for each memory capability call', async () => {
+    const firstWorkspace = {
+      label: 'First Workspace',
+      path: join(root, 'first')
+    };
+    const secondWorkspace = {
+      label: 'Second Workspace',
+      path: join(root, 'second')
+    };
+    let workspace = firstWorkspace;
+    const capabilities = await initializePlugin({
+      getWorkspace: () => workspace
+    });
+
+    await expect(capabilities.invoke<{}, MemoryStatus>('memory.status.get', {})).resolves.toMatchObject({
+      workspaceHash: buildWorkspaceHash(firstWorkspace.path),
+      workspaceLabel: 'First Workspace'
+    });
+
+    workspace = secondWorkspace;
+
+    await expect(capabilities.invoke<{}, MemoryStatus>('memory.status.get', {})).resolves.toMatchObject({
+      workspaceHash: buildWorkspaceHash(secondWorkspace.path),
+      workspaceLabel: 'Second Workspace'
+    });
+    await expect(
+      capabilities.invoke('memory.file.write', {
+        scope: 'workspace',
+        kind: 'memory',
+        content: 'second workspace facts'
+      })
+    ).resolves.toMatchObject({ ok: true });
+    expect(readStoreValue('/MEMORY.md')).toMatchObject({
+      namespace_json: JSON.stringify(['roc', 'memory', 'workspaces', buildWorkspaceHash(secondWorkspace.path)]),
+      value_json: expect.stringContaining('second workspace facts')
+    });
+  });
+
   it('keeps workspace slots visible but ineffective when no workspace is selected', async () => {
     const capabilities = await initializePlugin({ workspace: null });
 
@@ -244,6 +282,36 @@ describe('memory plugin', () => {
     await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'agents' })).resolves.toBeNull();
   });
 
+  it('uses the completed run workspacePath for automatic workspace memory writes', async () => {
+    const currentWorkspace = {
+      label: 'Current UI Workspace',
+      path: join(root, 'current-ui')
+    };
+    const taskWorkspacePath = join(root, 'scheduled-task');
+    const { capabilities, eventBus } = await initializePluginWithBus({
+      getWorkspace: () => currentWorkspace
+    });
+
+    await eventBus.publish({
+      type: 'agent.run.completed',
+      source: '@roc/plugin-agent',
+      payload: {
+        runId: 'run_1',
+        threadId: 'thread_1',
+        workspacePath: taskWorkspacePath,
+        summary: 'Scheduled task used saved workspace.',
+        assistantMessage: 'done'
+      },
+      createdAt: '2026-06-18T10:00:00.000Z'
+    });
+
+    await expect(capabilities.invoke('memory.file.read', { scope: 'workspace', kind: 'memory' })).resolves.toBeNull();
+    expect(readStoreValue('/MEMORY.md')).toMatchObject({
+      namespace_json: JSON.stringify(['roc', 'memory', 'workspaces', buildWorkspaceHash(taskWorkspacePath)]),
+      value_json: expect.stringContaining('Scheduled task used saved workspace.')
+    });
+  });
+
   it('appends completed run summaries to global MEMORY.md without a workspace and skips duplicates or empty summaries', async () => {
     const { capabilities, eventBus } = await initializePluginWithBus({ workspace: null });
     const event = {
@@ -314,6 +382,7 @@ describe('memory plugin', () => {
 });
 
 async function initializePlugin(input: {
+  getWorkspace?: MemoryPluginOptions['getWorkspace'];
   workspace?: { path: string; label: string } | null;
   getMemorySettings?: MemoryPluginOptions['getMemorySettings'];
 } = {}): Promise<CapabilityRegistry> {
@@ -321,11 +390,13 @@ async function initializePlugin(input: {
 }
 
 async function initializePluginWithBus(input: {
+  getWorkspace?: MemoryPluginOptions['getWorkspace'];
   workspace?: { path: string; label: string } | null;
   getMemorySettings?: MemoryPluginOptions['getMemorySettings'];
 } = {}): Promise<{ capabilities: CapabilityRegistry; eventBus: RocEventBus }> {
   const eventBus = createTestEventBus();
   const plugin = createMemoryPlugin({
+    getWorkspace: input.getWorkspace,
     workspace: input.workspace,
     getMemorySettings: input.getMemorySettings
   });

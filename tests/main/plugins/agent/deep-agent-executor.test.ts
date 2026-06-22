@@ -235,6 +235,34 @@ describe('createAgentDeepAgentExecutor', () => {
     ]);
   });
 
+  it('applies current memory settings to DeepAgents memory backend writes', async () => {
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      getMemorySettings: () => ({
+        charLimits: { user: 5, agents: 5, memory: 5 },
+        sessionRetentionDays: 90,
+        securityScan: {
+          promptInjection: false,
+          credential: false,
+          sshBackdoor: false,
+          invisibleUnicode: false
+        }
+      }),
+      output: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'ok'
+          }
+        ]
+      }
+    });
+
+    await expect(readBuildInput().backend.write('/memory/global/MEMORY.md', '123456')).resolves.toMatchObject({
+      error: expect.stringContaining('chars: 6/5 (kind=memory)')
+    });
+  });
+
 
   it('wires background task change tools to task capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];

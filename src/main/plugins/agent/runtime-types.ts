@@ -14,4 +14,5 @@ export type PendingInterrupt = {
   payload: ChatApprovalRequest;
   taskSource: ChatStartRunRequest['taskSource'] | null;
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
+  workspacePath: ChatStartRunRequest['workspacePath'];
 };

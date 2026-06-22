@@ -22,13 +22,20 @@ import { RocSqliteStore } from '../../services/memory/sqlite-store';
 
 export type MemoryStoreRepositorySettings = AppSettings['memory'];
 
+export type MemoryWorkspaceContext = {
+  path: string;
+  label: string;
+};
+
 type MemoryStoreRepositoryOptions = {
   store: RocSqliteStore;
-  workspace?: {
-    path: string;
-    label: string;
-  } | null;
+  getWorkspace: () => MemoryWorkspaceContext | null;
   getMemorySettings?: () => MemoryStoreRepositorySettings;
+};
+
+type MemoryRepositoryContext = {
+  workspace: MemoryWorkspaceContext | null;
+  workspaceHash: string | null;
 };
 
 const slotRequests: Array<{ scope: MemoryScope; kind: MemoryKind }> = [
@@ -47,8 +54,9 @@ export class MemoryStoreRepository {
       options.getMemorySettings === undefined ? () => defaultSettings.memory : options.getMemorySettings;
   }
 
-  async readFile(input: { scope: MemoryScope; kind: MemoryKind }): Promise<string | null> {
-    const resolved = resolveMemorySlotByScopeKind(input, this.workspaceHash());
+  async readFile(input: { scope: MemoryScope; kind: MemoryKind }, workspaceOverride?: MemoryWorkspaceContext | null): Promise<string | null> {
+    const context = this.resolveContext(workspaceOverride);
+    const resolved = resolveMemorySlotByScopeKind(input, context.workspaceHash);
     if (!resolved.ok) {
       return null;
     }
@@ -56,8 +64,12 @@ export class MemoryStoreRepository {
     return readMarkdownContent(item);
   }
 
-  async writeFile(request: MemoryFileWriteRequest): Promise<MemoryFileWriteOutcome> {
-    const resolved = resolveMemorySlotByScopeKind(request, this.workspaceHash());
+  async writeFile(
+    request: MemoryFileWriteRequest,
+    workspaceOverride?: MemoryWorkspaceContext | null
+  ): Promise<MemoryFileWriteOutcome> {
+    const context = this.resolveContext(workspaceOverride);
+    const resolved = resolveMemorySlotByScopeKind(request, context.workspaceHash);
     if (!resolved.ok) {
       return resolveFailure(resolved);
     }
@@ -93,9 +105,10 @@ export class MemoryStoreRepository {
   }
 
   async status(): Promise<MemoryStatus> {
+    const context = this.resolveContext();
     const files: MemoryFileMeta[] = [];
     for (const request of slotRequests) {
-      const resolved = resolveMemorySlotByScopeKind(request, this.workspaceHash());
+      const resolved = resolveMemorySlotByScopeKind(request, context.workspaceHash);
       if (!resolved.ok) {
         files.push(this.buildUnavailableMeta(request.scope, request.kind));
         continue;
@@ -113,8 +126,8 @@ export class MemoryStoreRepository {
     }
     return {
       root: '/memory',
-      workspaceHash: this.workspaceHash(),
-      workspaceLabel: this.options.workspace === null || this.options.workspace === undefined ? null : this.options.workspace.label,
+      workspaceHash: context.workspaceHash,
+      workspaceLabel: context.workspace === null ? null : context.workspace.label,
       files,
       snapshot: {
         enabled: true,
@@ -131,9 +144,10 @@ export class MemoryStoreRepository {
   }
 
   async buildSnapshotPreview(): Promise<{ text: string }> {
+    const context = this.resolveContext();
     const sections = ['# DeepAgents Memory Preview'];
     for (const request of slotRequests) {
-      const resolved = resolveMemorySlotByScopeKind(request, this.workspaceHash());
+      const resolved = resolveMemorySlotByScopeKind(request, context.workspaceHash);
       if (!resolved.ok) {
         continue;
       }
@@ -145,6 +159,10 @@ export class MemoryStoreRepository {
       sections.push(`## ${resolved.slot.virtualPath}`, content);
     }
     return { text: sections.join('\n\n') };
+  }
+
+  hasWorkspace(workspaceOverride?: MemoryWorkspaceContext | null): boolean {
+    return this.resolveContext(workspaceOverride).workspaceHash !== null;
   }
 
   private buildUnavailableMeta(scope: MemoryScope, kind: MemoryKind): MemoryFileMeta {
@@ -174,11 +192,12 @@ export class MemoryStoreRepository {
     };
   }
 
-  private workspaceHash(): string | null {
-    if (this.options.workspace === null || this.options.workspace === undefined) {
-      return null;
-    }
-    return buildWorkspaceHash(this.options.workspace.path);
+  private resolveContext(workspaceOverride?: MemoryWorkspaceContext | null): MemoryRepositoryContext {
+    const workspace = workspaceOverride === undefined ? this.options.getWorkspace() : workspaceOverride;
+    return {
+      workspace,
+      workspaceHash: workspace === null ? null : buildWorkspaceHash(workspace.path)
+    };
   }
 }
 

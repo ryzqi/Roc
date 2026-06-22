@@ -6,6 +6,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 
 import type {
+  AppSettings,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
@@ -46,6 +47,7 @@ import {
 
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
+  getMemorySettings?: () => AppSettings['memory'];
   paths: RocPaths;
   store: BaseStore;
 };
@@ -76,6 +78,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
+        getMemorySettings: options.getMemorySettings,
         handle,
         paths: options.paths,
         selectedSkillIds: input.request.enabledCapabilities.skills,
@@ -407,6 +410,7 @@ function createDeleteFileTool(capabilities: RocCapabilityRegistry): DynamicStruc
 
 function createRuntimeBackend(input: {
   capabilities: RocCapabilityRegistry;
+  getMemorySettings?: () => AppSettings['memory'];
   handle: LangChainChatModelHandle;
   paths: RocPaths;
   selectedSkillIds: readonly string[];
@@ -422,12 +426,13 @@ function createRuntimeBackend(input: {
             label: input.workspace.displayName
           }
   };
+  const memorySettings = input.getMemorySettings === undefined ? defaultSettings.memory : input.getMemorySettings();
   return createBackend({
     workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
     paths: input.paths,
     store: input.store,
-    securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
-    capacity: new CapacityService(defaultSettings.memory.charLimits),
+    securityScan: new SecurityScanService(memorySettings.securityScan),
+    capacity: new CapacityService(memorySettings.charLimits),
     selectedSkillIds: input.selectedSkillIds
   });
 }

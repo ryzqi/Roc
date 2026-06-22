@@ -165,6 +165,35 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('publishes the request workspacePath on completed run events', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor('Workspace-bound response.'),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      workspacePath: 'F:\\Code\\ScheduledTask'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.run.completed' && readPayloadRunId(event.payload) === result.runId)
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.completed',
+        payload: expect.objectContaining({
+          runId: result.runId,
+          workspacePath: 'F:\\Code\\ScheduledTask'
+        })
+      })
+    );
+  });
+
 
   it('keeps a DeepAgent approval interrupt waiting for user decision', async () => {
     const repository = new AgentSessionRepository(db);

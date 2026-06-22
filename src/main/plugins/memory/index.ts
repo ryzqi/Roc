@@ -10,7 +10,11 @@ import type {
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { AutoMemoryWriter, isAgentRunCompletedPayload } from '../../services/memory/auto-memory-writer';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
-import { MemoryStoreRepository, type MemoryStoreRepositorySettings } from './memory-store-repository';
+import {
+  MemoryStoreRepository,
+  type MemoryStoreRepositorySettings,
+  type MemoryWorkspaceContext
+} from './memory-store-repository';
 import { applyMemoryPluginSchema } from './schema';
 
 const pluginId = '@roc/plugin-memory';
@@ -99,6 +103,7 @@ export type MemoryPluginOptions = {
     path: string;
     label: string;
   } | null;
+  getWorkspace?: () => MemoryWorkspaceContext | null;
   getMemorySettings?: () => MemoryStoreRepositorySettings;
 };
 
@@ -119,14 +124,14 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
     initialize: async (context) => {
       const db = context.database.getConnection();
       applyMemoryPluginSchema(db);
+      const getWorkspace = createMemoryWorkspaceProvider(options);
       const repository = new MemoryStoreRepository({
         store: new RocSqliteStore(context.database.getCoreConnection()),
-        workspace: options.workspace,
+        getWorkspace,
         getMemorySettings: options.getMemorySettings
       });
       const autoMemoryWriter = new AutoMemoryWriter({
         repository,
-        targetScope: options.workspace === null || options.workspace === undefined ? 'global' : 'workspace',
         logger: context.logger
       });
       registerMemoryCapabilities(context, repository);
@@ -147,6 +152,17 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
     },
     healthCheck: async () => ({ status: 'healthy' })
   };
+}
+
+function createMemoryWorkspaceProvider(options: MemoryPluginOptions): () => MemoryWorkspaceContext | null {
+  if (options.workspace !== undefined && options.getWorkspace !== undefined) {
+    throw new Error('memory_workspace_source_conflict');
+  }
+  if (options.getWorkspace !== undefined) {
+    return options.getWorkspace;
+  }
+  const workspace = options.workspace === undefined ? null : options.workspace;
+  return () => workspace;
 }
 
 function registerMemoryCapabilities(context: RocPluginContext, repository: MemoryStoreRepository): void {
