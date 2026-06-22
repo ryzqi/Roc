@@ -368,14 +368,6 @@ describe('AgentPluginRuntime', () => {
 
 });
 
-function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
-  return {
-    execute: async function* (input) {
-      yield createTextBlock(input.run.id, text);
-    }
-  };
-}
-
 function createTextBlock(runId: string, text: string): ChatRunEvent {
   return {
     type: 'assistant_block',
@@ -425,29 +417,5 @@ function readChatRunEvent(payload: unknown): ChatRunEvent | null {
     return null;
   }
   return payload as ChatRunEvent;
-}
-
-function readPayloadRunId(payload: unknown): string | null {
-  if (typeof payload !== 'object' || payload === null) {
-    return null;
-  }
-  const runId = Reflect.get(payload, 'runId');
-  return typeof runId === 'string' ? runId : null;
-}
-
-function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolveValue: ((value: T) => void) | null = null;
-  const promise = new Promise<T>((resolve) => {
-    resolveValue = resolve;
-  });
-  return {
-    promise,
-    resolve: (value) => {
-      if (resolveValue === null) {
-        throw new Error('deferred_not_initialized');
-      }
-      resolveValue(value);
-    }
-  };
 }
 
