@@ -191,6 +191,91 @@ describe('chat transcript helpers', () => {
     ]);
   });
 
+  it('rebuilds structured subagent blocks from persisted subagent_event records', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-subagent', '子代理任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-subagent',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'message',
+          payload: { role: 'user', content: '研究文档' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        },
+        {
+          id: 'subagent-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 1,
+            identity: {
+              subagentId: 'subagent-run-subagent-0',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 0,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'Search docs'
+            },
+            event: { kind: 'started' }
+          },
+          createdAt: '2026-05-09T08:20:01.000Z'
+        },
+        {
+          id: 'subagent-text',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 2,
+            identity: {
+              subagentId: 'subagent-run-subagent-0',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 0,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'Search docs'
+            },
+            event: {
+              kind: 'assistant_block',
+              block: {
+                kind: 'text',
+                blockId: 'subagent-run-subagent-0-text',
+                phase: 'delta',
+                text: '找到资料。'
+              }
+            }
+          },
+          createdAt: '2026-05-09T08:20:02.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: createIdleRunState(),
+      pendingUserInput: null,
+      selectedThreadId: 'thread-subagent',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages[1]?.blocks[0]).toMatchObject({
+      kind: 'subagent',
+      identity: { subagentId: 'subagent-run-subagent-0', name: 'research' },
+      status: 'running',
+      blocks: [
+        {
+          id: 'subagent-run-subagent-0-text',
+          kind: 'text',
+          content: '找到资料。'
+        }
+      ]
+    });
+  });
+
 
   it('merges completed reasoning into the persisted assistant reply without duplicating the bubble', () => {
     const snapshot = createSnapshot({

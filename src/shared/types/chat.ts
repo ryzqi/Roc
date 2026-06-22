@@ -1,5 +1,6 @@
-import type { EnabledCapabilities } from './agent';
+import type { AsyncTaskStatus } from 'deepagents';
 import type { HITLRequest, HITLResponse } from 'langchain';
+import type { EnabledCapabilities } from './agent';
 
 export type ChatRunMode = 'chat' | 'task';
 
@@ -35,6 +36,30 @@ export type ChatAssistantBlock =
       output?: unknown;
       error?: unknown;
     };
+
+export type SubagentExecution = 'sync' | 'async';
+
+export type SubagentStatus = 'started' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export type SubagentIdentity = {
+  subagentId: string;
+  parentSubagentId: string | null;
+  name: string;
+  depth: number;
+  path: string[];
+  execution: SubagentExecution;
+  taskInput: string | null;
+  asyncTaskId?: string;
+};
+
+export type SubagentEventPayload =
+  | { kind: 'started' }
+  | { kind: 'assistant_block'; block: ChatAssistantBlock }
+  | { kind: 'tool_call'; block: Extract<ChatAssistantBlock, { kind: 'tool_call' }> }
+  | { kind: 'async_status'; status: AsyncTaskStatus; checkedAt?: string }
+  | { kind: 'completed'; summary: string | null }
+  | { kind: 'failed'; error: string }
+  | { kind: 'cancelled'; reason?: string };
 
 export type ChatApprovalRequest = HITLRequest;
 
@@ -93,9 +118,9 @@ export type ChatRunEvent =
   | {
       type: 'subagent_event';
       runId: string;
-      subagent: string;
-      status: 'started' | 'completed' | 'failed';
-      summary: string | null;
+      sequence: number;
+      identity: SubagentIdentity;
+      event: SubagentEventPayload;
     }
   | {
       type: 'run_completed';

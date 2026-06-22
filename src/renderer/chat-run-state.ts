@@ -1,4 +1,13 @@
-import type { ChatAssistantBlock, ChatPendingApproval, ChatRunEvent, ChatRunMode, ChatTodoItem } from '../shared/types';
+import type {
+  ChatAssistantBlock,
+  ChatPendingApproval,
+  ChatRunEvent,
+  ChatRunMode,
+  ChatTodoItem,
+  SubagentEventPayload,
+  SubagentIdentity,
+  SubagentStatus
+} from '../shared/types';
 
 export type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
 
@@ -19,10 +28,21 @@ export type ChatRunActivityBlock =
       error: unknown;
     };
 
-export type ChatRunSubagentState = {
-  subagent: string;
-  status: 'started' | 'completed' | 'failed';
+export type ChatRunSubagentBlock =
+  | {
+      id: string;
+      kind: 'text';
+      content: string;
+    }
+  | ChatRunActivityBlock;
+
+export type ChatRunSubagentNode = {
+  identity: SubagentIdentity;
+  status: SubagentStatus;
   summary: string | null;
+  error: string | null;
+  blocks: ChatRunSubagentBlock[];
+  children: ChatRunSubagentNode[];
 };
 
 export type ChatRunState = {
@@ -43,7 +63,7 @@ export type ChatRunState = {
   pendingApprovals: ChatPendingApproval[];
   resumeBusy: boolean;
   todos: ChatTodoItem[];
-  subagents: ChatRunSubagentState[];
+  subagents: ChatRunSubagentNode[];
 };
 
 export function createEmptyChatRunState(): ChatRunState {
@@ -111,28 +131,22 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   if (event.type === 'subagent_event') {
     return {
       ...state,
-      subagents: [
-        ...state.subagents.filter((item) => item.subagent !== event.subagent),
-        {
-          subagent: event.subagent,
-          status: event.status,
-          summary: event.summary
-        }
-      ]
+      subagents: upsertSubagentNode(state.subagents, event.identity.parentSubagentId, event.identity, event.event)
     };
   }
 
   if (event.type === 'run_completed') {
+    const completedEvent = event;
     return {
       ...state,
-      threadId: event.threadId,
-      providerId: event.providerId,
-      modelId: event.modelId,
-      createdAt: event.createdAt,
+      threadId: completedEvent.threadId,
+      providerId: completedEvent.providerId,
+      modelId: completedEvent.modelId,
+      createdAt: completedEvent.createdAt,
       status: 'completed',
-      assistantMessage: event.assistantMessage,
-      durationMs: event.durationMs,
-      summary: event.summary,
+      assistantMessage: completedEvent.assistantMessage,
+      durationMs: completedEvent.durationMs,
+      summary: completedEvent.summary,
       pendingApprovals: [],
       resumeBusy: false
     };
@@ -231,6 +245,161 @@ function applyToolBlock(
 ): ChatRunActivityBlock[] {
   const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'tool_call' }> => item.kind === 'tool_call' && item.id === block.blockId);
   const nextBlock: Extract<ChatRunActivityBlock, { kind: 'tool_call' }> = {
+    id: block.blockId,
+    kind: 'tool_call',
+    callId: block.callId,
+    name: block.name,
+    status: block.phase,
+    input: existing === undefined ? null : existing.input,
+    output: existing === undefined ? null : existing.output,
+    error: existing === undefined ? null : existing.error
+  };
+  if ('input' in block) {
+    nextBlock.input = block.input;
+  }
+  if ('output' in block) {
+    nextBlock.output = block.output;
+  }
+  if ('error' in block) {
+    nextBlock.error = block.error;
+  }
+  if (existing === undefined) {
+    return [...blocks, nextBlock];
+  }
+  return blocks.map((item) => (item === existing ? nextBlock : item));
+}
+
+function upsertSubagentNode(
+  nodes: readonly ChatRunSubagentNode[],
+  parentSubagentId: string | null,
+  identity: SubagentIdentity,
+  payload: SubagentEventPayload
+): ChatRunSubagentNode[] {
+  if (parentSubagentId !== null) {
+    return nodes.map((node) =>
+      node.identity.subagentId === parentSubagentId
+        ? { ...node, children: upsertSubagentNode(node.children, null, identity, payload) }
+        : { ...node, children: upsertSubagentNode(node.children, parentSubagentId, identity, payload) }
+    );
+  }
+
+  const existing = nodes.find((node) => node.identity.subagentId === identity.subagentId);
+  const next = applySubagentEvent(
+    existing ?? {
+      identity,
+      status: 'started',
+      summary: null,
+      error: null,
+      blocks: [],
+      children: []
+    },
+    payload
+  );
+  return existing === undefined ? [...nodes, next] : nodes.map((node) => (node === existing ? next : node));
+}
+
+function applySubagentEvent(node: ChatRunSubagentNode, payload: SubagentEventPayload): ChatRunSubagentNode {
+  if (payload.kind === 'started') {
+    return {
+      ...node,
+      status: 'started'
+    };
+  }
+  if (payload.kind === 'assistant_block') {
+    return {
+      ...node,
+      status: node.status === 'started' ? 'running' : node.status,
+      blocks: appendSubagentAssistantBlock(node.blocks, payload.block)
+    };
+  }
+  if (payload.kind === 'tool_call') {
+    return {
+      ...node,
+      status: node.status === 'started' ? 'running' : node.status,
+      blocks: appendSubagentToolBlock(node.blocks, payload.block)
+    };
+  }
+  if (payload.kind === 'async_status') {
+    return {
+      ...node,
+      status: 'running'
+    };
+  }
+  if (payload.kind === 'completed') {
+    return {
+      ...node,
+      status: 'completed',
+      summary: payload.summary
+    };
+  }
+  if (payload.kind === 'failed') {
+    return {
+      ...node,
+      status: 'failed',
+      error: payload.error
+    };
+  }
+  return {
+    ...node,
+    status: 'cancelled',
+    error: payload.reason ?? null
+  };
+}
+
+function appendSubagentAssistantBlock(
+  blocks: readonly ChatRunSubagentBlock[],
+  block: ChatAssistantBlock
+): ChatRunSubagentBlock[] {
+  if (block.kind === 'text') {
+    if (typeof block.text !== 'string') {
+      return [...blocks];
+    }
+    const existing = blocks.find((item): item is Extract<ChatRunSubagentBlock, { kind: 'text' }> => item.kind === 'text' && item.id === block.blockId);
+    if (existing === undefined) {
+      return [
+        ...blocks,
+        {
+          id: block.blockId,
+          kind: 'text',
+          content: block.text
+        }
+      ];
+    }
+    return blocks.map((item) => (item === existing ? { ...item, content: `${item.content}${block.text}` } : item));
+  }
+  if (block.kind === 'reasoning') {
+    return appendSubagentReasoningBlock(blocks, block);
+  }
+  return appendSubagentToolBlock(blocks, block);
+}
+
+function appendSubagentReasoningBlock(
+  blocks: readonly ChatRunSubagentBlock[],
+  block: Extract<ChatAssistantBlock, { kind: 'reasoning' }>
+): ChatRunSubagentBlock[] {
+  if (typeof block.text !== 'string') {
+    return [...blocks];
+  }
+  const existing = blocks.find((item): item is Extract<ChatRunSubagentBlock, { kind: 'reasoning' }> => item.kind === 'reasoning' && item.id === block.blockId);
+  if (existing === undefined) {
+    return [
+      ...blocks,
+      {
+        id: block.blockId,
+        kind: 'reasoning',
+        content: block.text
+      }
+    ];
+  }
+  return blocks.map((item) => (item === existing ? { ...item, content: `${item.content}${block.text}` } : item));
+}
+
+function appendSubagentToolBlock(
+  blocks: readonly ChatRunSubagentBlock[],
+  block: Extract<ChatAssistantBlock, { kind: 'tool_call' }>
+): ChatRunSubagentBlock[] {
+  const existing = blocks.find((item): item is Extract<ChatRunSubagentBlock, { kind: 'tool_call' }> => item.kind === 'tool_call' && item.id === block.blockId);
+  const nextBlock: Extract<ChatRunSubagentBlock, { kind: 'tool_call' }> = {
     id: block.blockId,
     kind: 'tool_call',
     callId: block.callId,

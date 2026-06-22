@@ -484,10 +484,11 @@ export class AgentPluginRuntime {
         await this.publish('agent.run.task-event', {
           runId: input.run.id,
           threadId: input.run.threadId,
-          type: event.status === 'started' ? 'subagent_started' : 'subagent_completed',
+          type: 'subagent_event',
           payload: {
-            name: event.subagent,
-            summary: event.summary
+            sequence: event.sequence,
+            identity: event.identity,
+            event: event.event
           }
         });
       }

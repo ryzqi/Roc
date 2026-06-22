@@ -294,6 +294,78 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('persists structured subagent events without old started/completed task types', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'subagent_event',
+            runId: input.run.id,
+            sequence: 1,
+            identity: {
+              subagentId: 'subagent-runtime-0',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 0,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'Search docs'
+            },
+            event: {
+              kind: 'started'
+            }
+          } satisfies ChatRunEvent;
+          yield createTextBlock(input.run.id, '研究完成。');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: '先研究文档，再总结。',
+      mode: 'task'
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'subagent_event',
+          payload: {
+            sequence: 1,
+            identity: {
+              subagentId: 'subagent-runtime-0',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 0,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'Search docs'
+            },
+            event: {
+              kind: 'started'
+            }
+          }
+        }
+      })
+    );
+    const persistedSubagentEventTypes = events
+      .filter((event) => event.type === 'agent.run.task-event')
+      .map((event) => (typeof event.payload === 'object' && event.payload !== null ? Reflect.get(event.payload, 'type') : null))
+      .filter((type) => typeof type === 'string' && type.startsWith('subagent'));
+    expect(persistedSubagentEventTypes).toEqual(['subagent_event']);
+  });
+
 });
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {

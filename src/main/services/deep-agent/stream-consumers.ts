@@ -8,6 +8,7 @@ import {
 } from '../forge-guardrails';
 import * as recordUtils from './record-utils';
 import { redact } from './redact';
+import { projectSubagentStream } from './subagent-projection';
 import {
   buildToolCallChunkData,
   readContentBlocks,
@@ -53,10 +54,7 @@ type StreamConsumerCallbacks = {
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
-  recordTaskEvent: (
-    type: 'subagent_started' | 'subagent_completed' | 'guardrail_nudge',
-    payload: Record<string, unknown>
-  ) => void;
+  recordTaskEvent: (type: 'guardrail_nudge', payload: Record<string, unknown>) => void;
 };
 
 export async function consumeMessageStream(input: {
@@ -215,53 +213,11 @@ export async function consumeSubagentStream(input: {
   context: StreamConsumerContext;
   callbacks: StreamConsumerCallbacks;
 }): Promise<void> {
-  for await (const subagent of input.subagents) {
-    const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(subagent, 'name')) ?? 'subagent';
-    const taskInput = await Promise.resolve(recordUtils.readRecordValue(subagent, 'taskInput'));
-    const summary = recordUtils.readNonEmptyString(taskInput) ?? null;
-    input.callbacks.markVisibleOutput?.();
-    input.callbacks.emitRuntimeEvent({
-      type: 'subagent_event',
-      runId: input.context.runId,
-      subagent: name,
-      status: 'started',
-      summary
-    });
-    if (input.context.taskRun !== null) {
-      input.callbacks.recordTaskEvent('subagent_started', {
-        name,
-        summary
-      });
-    }
-
-    try {
-      await Promise.resolve(recordUtils.readRecordValue(subagent, 'output'));
-      input.callbacks.markVisibleOutput?.();
-      input.callbacks.emitRuntimeEvent({
-        type: 'subagent_event',
-        runId: input.context.runId,
-        subagent: name,
-        status: 'completed',
-        summary
-      });
-      if (input.context.taskRun !== null) {
-        input.callbacks.recordTaskEvent('subagent_completed', {
-          name,
-          summary
-        });
-      }
-    } catch (error) {
-      const failureSummary = error instanceof Error ? error.message : summary;
-      input.callbacks.markVisibleOutput?.();
-      input.callbacks.emitRuntimeEvent({
-        type: 'subagent_event',
-        runId: input.context.runId,
-        subagent: name,
-        status: 'failed',
-        summary: failureSummary
-      });
-    }
-  }
+  await projectSubagentStream({
+    subagents: input.subagents,
+    runId: input.context.runId,
+    callbacks: input.callbacks
+  });
 }
 
 async function readReasoningFromOutput(message: unknown): Promise<string | null> {

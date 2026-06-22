@@ -165,9 +165,19 @@ describe('chat run state', () => {
     state = applyChatRunEvent(state, {
       type: 'subagent_event',
       runId: 'chat_stream_mix',
-      subagent: 'research',
-      status: 'started',
-      summary: 'Search docs'
+      sequence: 1,
+      identity: {
+        subagentId: 'subagent-chat_stream_mix-0',
+        parentSubagentId: null,
+        name: 'research',
+        depth: 0,
+        path: ['research#0'],
+        execution: 'sync',
+        taskInput: 'Search docs'
+      },
+      event: {
+        kind: 'started'
+      }
     });
     state = applyChatRunEvent(state, textBlock('chat_stream_mix', '正在整理'));
     state = applyChatRunEvent(state, toolBlock('chat_stream_mix', 'start', { query: 'roc phase 7' }));
@@ -176,9 +186,20 @@ describe('chat run state', () => {
     state = applyChatRunEvent(state, {
       type: 'subagent_event',
       runId: 'chat_stream_mix',
-      subagent: 'research',
-      status: 'completed',
-      summary: 'Search docs'
+      sequence: 2,
+      identity: {
+        subagentId: 'subagent-chat_stream_mix-0',
+        parentSubagentId: null,
+        name: 'research',
+        depth: 0,
+        path: ['research#0'],
+        execution: 'sync',
+        taskInput: 'Search docs'
+      },
+      event: {
+        kind: 'completed',
+        summary: 'Search docs'
+      }
     });
     state = applyChatRunEvent(state, textBlock('chat_stream_mix', '完成。'));
 
@@ -203,9 +224,20 @@ describe('chat run state', () => {
     ]);
     expect(state.subagents).toEqual([
       {
-        subagent: 'research',
+        identity: {
+          subagentId: 'subagent-chat_stream_mix-0',
+          parentSubagentId: null,
+          name: 'research',
+          depth: 0,
+          path: ['research#0'],
+          execution: 'sync',
+          taskInput: 'Search docs'
+        },
         status: 'completed',
-        summary: 'Search docs'
+        summary: 'Search docs',
+        error: null,
+        blocks: [],
+        children: []
       }
     ]);
   });

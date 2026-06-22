@@ -96,9 +96,20 @@ describe('chat transcript helpers', () => {
         ],
         subagents: [
           {
-            subagent: 'research',
+            identity: {
+              subagentId: 'subagent-run-current-0',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 0,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: '搜索资料'
+            },
             status: 'completed',
-            summary: '搜索资料'
+            summary: '搜索资料',
+            error: null,
+            blocks: [],
+            children: []
           }
         ]
       },
@@ -129,11 +140,17 @@ describe('chat transcript helpers', () => {
           error: null
         },
         {
-          id: 'live-run-current-subagent-0',
+          id: 'subagent-run-current-0',
           kind: 'subagent',
-          name: 'research',
+          identity: {
+            subagentId: 'subagent-run-current-0',
+            name: 'research'
+          },
           status: 'completed',
-          summary: '搜索资料'
+          summary: '搜索资料',
+          error: null,
+          blocks: [],
+          children: []
         }
       ],
       isStreaming: true

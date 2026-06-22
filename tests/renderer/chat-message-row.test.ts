@@ -124,6 +124,53 @@ describe('chat message row', () => {
     expect(html).toContain('<ul>');
   });
 
+  it('renders structured subagent tree with partial transcript and failed status', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-subagent',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          approval: null,
+          isStreaming: false,
+          blocks: [
+            {
+              id: 'subagent-root',
+              kind: 'subagent',
+              identity: {
+                subagentId: 'subagent-root',
+                parentSubagentId: null,
+                name: 'research',
+                depth: 0,
+                path: ['research#0'],
+                execution: 'sync',
+                taskInput: 'Search docs'
+              },
+              status: 'failed',
+              summary: null,
+              error: 'remote failed',
+              blocks: [
+                {
+                  id: 'subagent-root-text',
+                  kind: 'text',
+                  content: 'partial'
+                }
+              ],
+              children: []
+            }
+          ]
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid=\"chat-activity-subagent\"');
+    expect(html).toContain('research');
+    expect(html).toContain('failed');
+    expect(html).toContain('partial');
+    expect(html).toContain('remote failed');
+  });
+
   it('opens streaming reasoning activity by default while completed tool activity stays collapsed', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {

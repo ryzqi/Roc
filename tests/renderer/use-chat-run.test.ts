@@ -125,9 +125,19 @@ describe('applyChatRunEventBatch', () => {
       {
         type: 'subagent_event',
         runId: 'chat_test',
-        subagent: 'research',
-        status: 'started',
-        summary: 'Search docs'
+        sequence: 1,
+        identity: {
+          subagentId: 'subagent-chat_test-0',
+          parentSubagentId: null,
+          name: 'research',
+          depth: 0,
+          path: ['research#0'],
+          execution: 'sync',
+          taskInput: 'Search docs'
+        },
+        event: {
+          kind: 'started'
+        }
       },
       {
         type: 'assistant_block',
@@ -164,9 +174,20 @@ describe('applyChatRunEventBatch', () => {
       {
         type: 'subagent_event',
         runId: 'chat_test',
-        subagent: 'research',
-        status: 'completed',
-        summary: 'Search docs'
+        sequence: 2,
+        identity: {
+          subagentId: 'subagent-chat_test-0',
+          parentSubagentId: null,
+          name: 'research',
+          depth: 0,
+          path: ['research#0'],
+          execution: 'sync',
+          taskInput: 'Search docs'
+        },
+        event: {
+          kind: 'completed',
+          summary: 'Search docs'
+        }
       },
       {
         type: 'assistant_block',
@@ -195,9 +216,20 @@ describe('applyChatRunEventBatch', () => {
     expect(next.assistantMessage).toBe('AB');
     expect(next.subagents).toEqual([
       {
-        subagent: 'research',
+        identity: {
+          subagentId: 'subagent-chat_test-0',
+          parentSubagentId: null,
+          name: 'research',
+          depth: 0,
+          path: ['research#0'],
+          execution: 'sync',
+          taskInput: 'Search docs'
+        },
         status: 'completed',
-        summary: 'Search docs'
+        summary: 'Search docs',
+        error: null,
+        blocks: [],
+        children: []
       }
     ]);
     expect(next.activityBlocks).toEqual([

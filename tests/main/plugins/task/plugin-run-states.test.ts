@@ -100,10 +100,21 @@ describe('task plugin', () => {
       payload: {
         runId: 'run_subagent_1',
         threadId: 'thread_subagent_1',
-        type: 'subagent_started',
+        type: 'subagent_event',
         payload: {
-          name: 'research',
-          summary: 'Search docs'
+          sequence: 1,
+          identity: {
+            subagentId: 'subagent-run_subagent_1-0',
+            parentSubagentId: null,
+            name: 'research',
+            depth: 0,
+            path: ['research#0'],
+            execution: 'sync',
+            taskInput: 'Search docs'
+          },
+          event: {
+            kind: 'started'
+          }
         }
       }
     });
@@ -114,10 +125,22 @@ describe('task plugin', () => {
       payload: {
         runId: 'run_subagent_1',
         threadId: 'thread_subagent_1',
-        type: 'subagent_completed',
+        type: 'subagent_event',
         payload: {
-          name: 'research',
-          summary: 'Search docs'
+          sequence: 2,
+          identity: {
+            subagentId: 'subagent-run_subagent_1-0',
+            parentSubagentId: null,
+            name: 'research',
+            depth: 0,
+            path: ['research#0'],
+            execution: 'sync',
+            taskInput: 'Search docs'
+          },
+          event: {
+            kind: 'completed',
+            summary: 'Search docs'
+          }
         }
       }
     });
@@ -128,10 +151,21 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: 'run_subagent_1',
         threadId: 'thread_subagent_1',
-        type: 'subagent_started',
+        type: 'subagent_event',
         payload: {
-          name: 'research',
-          summary: 'Search docs'
+          sequence: 1,
+          identity: {
+            subagentId: 'subagent-run_subagent_1-0',
+            parentSubagentId: null,
+            name: 'research',
+            depth: 0,
+            path: ['research#0'],
+            execution: 'sync',
+            taskInput: 'Search docs'
+          },
+          event: {
+            kind: 'started'
+          }
         }
       })
     );
@@ -139,10 +173,22 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: 'run_subagent_1',
         threadId: 'thread_subagent_1',
-        type: 'subagent_completed',
+        type: 'subagent_event',
         payload: {
-          name: 'research',
-          summary: 'Search docs'
+          sequence: 2,
+          identity: {
+            subagentId: 'subagent-run_subagent_1-0',
+            parentSubagentId: null,
+            name: 'research',
+            depth: 0,
+            path: ['research#0'],
+            execution: 'sync',
+            taskInput: 'Search docs'
+          },
+          event: {
+            kind: 'completed',
+            summary: 'Search docs'
+          }
         }
       })
     );

@@ -1,5 +1,46 @@
-import type { ChatAssistantBlock, ChatPendingApproval, TaskEvent, TaskSnapshot } from '../shared/types';
-import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentState } from './chat-run-state';
+import type {
+  ChatAssistantBlock,
+  ChatPendingApproval,
+  SubagentEventPayload,
+  SubagentIdentity,
+  SubagentStatus,
+  TaskEvent,
+  TaskSnapshot
+} from '../shared/types';
+import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentBlock, ChatRunSubagentNode } from './chat-run-state';
+
+export type ChatTranscriptSubagentBlock =
+  | {
+      id: string;
+      kind: 'text';
+      content: string;
+    }
+  | {
+      id: string;
+      kind: 'reasoning';
+      content: string;
+      isStreaming: boolean;
+    }
+  | {
+      id: string;
+      kind: 'tool_call';
+      name: string;
+      status: Extract<ChatRunActivityBlock, { kind: 'tool_call' }>['status'];
+      input: unknown;
+      output: unknown;
+      error: unknown;
+    };
+
+export type ChatTranscriptSubagentActivityBlock = {
+  id: string;
+  kind: 'subagent';
+  identity: SubagentIdentity;
+  status: SubagentStatus;
+  summary: string | null;
+  error: string | null;
+  blocks: ChatTranscriptSubagentBlock[];
+  children: ChatTranscriptSubagentActivityBlock[];
+};
 
 export type ChatTranscriptActivityBlock =
   | {
@@ -17,13 +58,7 @@ export type ChatTranscriptActivityBlock =
       output: unknown;
       error: unknown;
     }
-  | {
-      id: string;
-      kind: 'subagent';
-      name: string;
-      status: ChatRunSubagentState['status'];
-      summary: string | null;
-    }
+  | ChatTranscriptSubagentActivityBlock
   | {
       id: string;
       kind: 'guardrail';
@@ -48,9 +83,10 @@ type MessagePayload = {
   content: string;
 };
 
-type SubagentPayload = {
-  name: string;
-  summary?: string | null;
+type SubagentEventRecord = {
+  sequence: number;
+  identity: SubagentIdentity;
+  event: SubagentEventPayload;
 };
 
 type GuardrailPayload = {
@@ -116,13 +152,71 @@ function isToolPhase(value: unknown): value is Extract<ChatRunActivityBlock, { k
   return value === 'start' || value === 'progress' || value === 'end' || value === 'error';
 }
 
-function isSubagentPayload(payload: unknown): payload is SubagentPayload {
+function isSubagentEventRecord(payload: unknown): payload is SubagentEventRecord {
   if (typeof payload !== 'object' || payload === null) {
     return false;
   }
-  const name = Reflect.get(payload, 'name');
-  const summary = Reflect.get(payload, 'summary');
-  return typeof name === 'string' && (summary === undefined || summary === null || typeof summary === 'string');
+  const sequence = Reflect.get(payload, 'sequence');
+  const identity = Reflect.get(payload, 'identity');
+  const event = Reflect.get(payload, 'event');
+  return typeof sequence === 'number' && isSubagentIdentity(identity) && isSubagentEventPayload(event);
+}
+
+function isSubagentIdentity(value: unknown): value is SubagentIdentity {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const subagentId = Reflect.get(value, 'subagentId');
+  const parentSubagentId = Reflect.get(value, 'parentSubagentId');
+  const name = Reflect.get(value, 'name');
+  const depth = Reflect.get(value, 'depth');
+  const path = Reflect.get(value, 'path');
+  const execution = Reflect.get(value, 'execution');
+  const taskInput = Reflect.get(value, 'taskInput');
+  const asyncTaskId = Reflect.get(value, 'asyncTaskId');
+  return (
+    typeof subagentId === 'string' &&
+    (parentSubagentId === null || typeof parentSubagentId === 'string') &&
+    typeof name === 'string' &&
+    typeof depth === 'number' &&
+    Array.isArray(path) &&
+    path.every((item) => typeof item === 'string') &&
+    (execution === 'sync' || execution === 'async') &&
+    (taskInput === null || typeof taskInput === 'string') &&
+    (asyncTaskId === undefined || typeof asyncTaskId === 'string')
+  );
+}
+
+function isSubagentEventPayload(value: unknown): value is SubagentEventPayload {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const kind = Reflect.get(value, 'kind');
+  if (kind === 'started') {
+    return true;
+  }
+  if (kind === 'assistant_block') {
+    return isAssistantBlockPayload(Reflect.get(value, 'block'));
+  }
+  if (kind === 'tool_call') {
+    const block = Reflect.get(value, 'block');
+    return isAssistantBlockPayload(block) && Reflect.get(block, 'kind') === 'tool_call';
+  }
+  if (kind === 'async_status') {
+    return typeof Reflect.get(value, 'status') === 'string';
+  }
+  if (kind === 'completed') {
+    const summary = Reflect.get(value, 'summary');
+    return summary === null || typeof summary === 'string';
+  }
+  if (kind === 'failed') {
+    return typeof Reflect.get(value, 'error') === 'string';
+  }
+  if (kind === 'cancelled') {
+    const reason = Reflect.get(value, 'reason');
+    return reason === undefined || typeof reason === 'string';
+  }
+  return false;
 }
 
 function isGuardrailPayload(payload: unknown): payload is GuardrailPayload {
@@ -283,27 +377,181 @@ function applyToolCallBlock(draft: AssistantDraft, payload: Extract<ChatAssistan
   }
 }
 
-function applySubagentBlock(
-  draft: AssistantDraft,
-  payload: SubagentPayload,
-  status: ChatRunSubagentState['status'],
-  idPrefix: string
-): void {
-  const existing = draft.subagentBlocks.find((block) => block.name === payload.name);
-  if (existing !== undefined) {
-    existing.status = status;
-    existing.summary = payload.summary ?? null;
-    return;
+function applyStructuredSubagentBlock(draft: AssistantDraft, payload: SubagentEventRecord): void {
+  draft.subagentBlocks = upsertTranscriptSubagentBlock(
+    draft.subagentBlocks,
+    payload.identity.parentSubagentId,
+    payload.identity,
+    payload.event,
+    false
+  );
+  syncDraftSubagentBlocks(draft);
+}
+
+function syncDraftSubagentBlocks(draft: AssistantDraft): void {
+  const seen = new Set<string>();
+  draft.message.blocks = draft.message.blocks.map((block) => {
+    if (block.kind !== 'subagent') {
+      return block;
+    }
+    seen.add(block.id);
+    return draft.subagentBlocks.find((candidate) => candidate.id === block.id) ?? block;
+  });
+  for (const block of draft.subagentBlocks) {
+    if (!seen.has(block.id)) {
+      draft.message.blocks.push(block);
+    }
   }
-  const block: Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }> = {
-    id: `${idPrefix}-subagent-${draft.subagentBlocks.length}`,
-    kind: 'subagent',
-    name: payload.name,
-    status,
-    summary: payload.summary ?? null
+}
+
+function upsertTranscriptSubagentBlock(
+  blocks: readonly ChatTranscriptSubagentActivityBlock[],
+  parentSubagentId: string | null,
+  identity: SubagentIdentity,
+  payload: SubagentEventPayload,
+  isStreaming: boolean
+): ChatTranscriptSubagentActivityBlock[] {
+  if (parentSubagentId !== null) {
+    return blocks.map((block) =>
+      block.identity.subagentId === parentSubagentId
+        ? {
+            ...block,
+            children: upsertTranscriptSubagentBlock(block.children, null, identity, payload, isStreaming)
+          }
+        : {
+            ...block,
+            children: upsertTranscriptSubagentBlock(block.children, parentSubagentId, identity, payload, isStreaming)
+          }
+    );
+  }
+
+  const existing = blocks.find((block) => block.identity.subagentId === identity.subagentId);
+  const next = applyTranscriptSubagentEvent(
+    existing ?? {
+      id: identity.subagentId,
+      kind: 'subagent',
+      identity,
+      status: 'started',
+      summary: null,
+      error: null,
+      blocks: [],
+      children: []
+    },
+    payload,
+    isStreaming
+  );
+  return existing === undefined ? [...blocks, next] : blocks.map((block) => (block === existing ? next : block));
+}
+
+function applyTranscriptSubagentEvent(
+  block: ChatTranscriptSubagentActivityBlock,
+  payload: SubagentEventPayload,
+  isStreaming: boolean
+): ChatTranscriptSubagentActivityBlock {
+  if (payload.kind === 'started') {
+    return {
+      ...block,
+      status: 'started'
+    };
+  }
+  if (payload.kind === 'assistant_block') {
+    return {
+      ...block,
+      status: block.status === 'started' ? 'running' : block.status,
+      blocks: appendTranscriptSubagentAssistantBlock(block.blocks, payload.block, isStreaming)
+    };
+  }
+  if (payload.kind === 'tool_call') {
+    return {
+      ...block,
+      status: block.status === 'started' ? 'running' : block.status,
+      blocks: appendTranscriptSubagentToolBlock(block.blocks, payload.block)
+    };
+  }
+  if (payload.kind === 'async_status') {
+    return {
+      ...block,
+      status: 'running'
+    };
+  }
+  if (payload.kind === 'completed') {
+    return {
+      ...block,
+      status: 'completed',
+      summary: payload.summary
+    };
+  }
+  if (payload.kind === 'failed') {
+    return {
+      ...block,
+      status: 'failed',
+      error: payload.error
+    };
+  }
+  return {
+    ...block,
+    status: 'cancelled',
+    error: payload.reason ?? null
   };
-  draft.subagentBlocks.push(block);
-  draft.message.blocks.push(block);
+}
+
+function appendTranscriptSubagentAssistantBlock(
+  blocks: readonly ChatTranscriptSubagentBlock[],
+  block: ChatAssistantBlock,
+  isStreaming: boolean
+): ChatTranscriptSubagentBlock[] {
+  if (block.kind === 'text') {
+    if (typeof block.text !== 'string') {
+      return [...blocks];
+    }
+    const existing = blocks.find((item): item is Extract<ChatTranscriptSubagentBlock, { kind: 'text' }> => item.kind === 'text' && item.id === block.blockId);
+    if (existing === undefined) {
+      return [...blocks, { id: block.blockId, kind: 'text', content: block.text }];
+    }
+    return blocks.map((item) => (item === existing ? { ...item, content: `${item.content}${block.text}` } : item));
+  }
+  if (block.kind === 'reasoning') {
+    if (typeof block.text !== 'string') {
+      return [...blocks];
+    }
+    const existing = blocks.find((item): item is Extract<ChatTranscriptSubagentBlock, { kind: 'reasoning' }> => item.kind === 'reasoning' && item.id === block.blockId);
+    if (existing === undefined) {
+      return [...blocks, { id: block.blockId, kind: 'reasoning', content: block.text, isStreaming }];
+    }
+    return blocks.map((item) =>
+      item === existing ? { ...item, content: `${item.content}${block.text}`, isStreaming } : item
+    );
+  }
+  return appendTranscriptSubagentToolBlock(blocks, block);
+}
+
+function appendTranscriptSubagentToolBlock(
+  blocks: readonly ChatTranscriptSubagentBlock[],
+  payload: Extract<ChatAssistantBlock, { kind: 'tool_call' }>
+): ChatTranscriptSubagentBlock[] {
+  const existing = blocks.find((block): block is Extract<ChatTranscriptSubagentBlock, { kind: 'tool_call' }> => block.kind === 'tool_call' && block.id === payload.blockId);
+  const nextBlock: Extract<ChatTranscriptSubagentBlock, { kind: 'tool_call' }> = {
+    id: payload.blockId,
+    kind: 'tool_call',
+    name: payload.name,
+    status: payload.phase,
+    input: existing === undefined ? null : existing.input,
+    output: existing === undefined ? null : existing.output,
+    error: existing === undefined ? null : existing.error
+  };
+  if ('input' in payload) {
+    nextBlock.input = payload.input;
+  }
+  if ('output' in payload) {
+    nextBlock.output = payload.output;
+  }
+  if ('error' in payload) {
+    nextBlock.error = payload.error;
+  }
+  if (existing === undefined) {
+    return [...blocks, nextBlock];
+  }
+  return blocks.map((block) => (block === existing ? nextBlock : block));
 }
 
 function appendGuardrailBlock(draft: AssistantDraft, payload: GuardrailPayload, idPrefix: string): void {
@@ -342,13 +590,8 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
       continue;
     }
 
-    if (event.type === 'subagent_started' && isSubagentPayload(event.payload)) {
-      applySubagentBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, 'started', `subagent-${event.runId}`);
-      continue;
-    }
-
-    if (event.type === 'subagent_completed' && isSubagentPayload(event.payload)) {
-      applySubagentBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, 'completed', `subagent-${event.runId}`);
+    if (event.type === 'subagent_event' && isSubagentEventRecord(event.payload)) {
+      applyStructuredSubagentBlock(getAssistantDraft(drafts, messages, event.runId), event.payload);
       continue;
     }
 
@@ -373,7 +616,6 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
 }
 
 function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActivityBlock[] {
-  const idPrefix = chatRunState.runId === null ? 'live-assistant' : `live-${chatRunState.runId}`;
   const blocks: ChatTranscriptActivityBlock[] = chatRunState.activityBlocks.map((block) => {
     if (block.kind === 'reasoning') {
       return {
@@ -393,16 +635,42 @@ function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActi
       error: block.error
     };
   });
-  chatRunState.subagents.forEach((subagent, index) => {
-    blocks.push({
-      id: `${idPrefix}-subagent-${index}`,
-      kind: 'subagent',
-      name: subagent.subagent,
-      status: subagent.status,
-      summary: subagent.summary
-    });
-  });
+  blocks.push(...chatRunState.subagents.map((subagent) => mapLiveSubagentNode(subagent, chatRunState.status === 'running')));
   return blocks;
+}
+
+function mapLiveSubagentNode(node: ChatRunSubagentNode, isStreaming: boolean): ChatTranscriptSubagentActivityBlock {
+  return {
+    id: node.identity.subagentId,
+    kind: 'subagent',
+    identity: node.identity,
+    status: node.status,
+    summary: node.summary,
+    error: node.error,
+    blocks: node.blocks.map((block) => mapLiveSubagentBlock(block, isStreaming)),
+    children: node.children.map((child) => mapLiveSubagentNode(child, isStreaming))
+  };
+}
+
+function mapLiveSubagentBlock(block: ChatRunSubagentBlock, isStreaming: boolean): ChatTranscriptSubagentBlock {
+  if (block.kind === 'text') {
+    return block;
+  }
+  if (block.kind === 'reasoning') {
+    return {
+      ...block,
+      isStreaming
+    };
+  }
+  return {
+    id: block.id,
+    kind: 'tool_call',
+    name: block.name,
+    status: block.status,
+    input: block.input,
+    output: block.output,
+    error: block.error
+  };
 }
 
 function readReasoningFromBlocks(blocks: readonly ChatTranscriptActivityBlock[]): string {
