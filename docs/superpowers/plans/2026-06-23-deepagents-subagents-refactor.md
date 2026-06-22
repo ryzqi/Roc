@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Roc's flat subagent started/completed path with DeepAgents-first structured, streaming, nested subagent events across runtime, persistence, and UI.
+**Goal:** Replace Roc's flat subagent started/completed path with DeepAgents-first structured, streaming, sequenced, nested subagent events across runtime, persistence, and UI.
 
-**Architecture:** Keep `createDeepAgent()` as the only harness. Add a Roc projection layer that consumes DeepAgents subagent streams and emits one `subagent_event` envelope for chat and task history. Remove all old `subagent_started` / `subagent_completed` reads, writes, tests, and renderer branches.
+**Architecture:** Keep `createDeepAgent()` as the only harness. Add a Roc projection layer that consumes DeepAgents subagent streams and emits one sequenced `subagent_event` envelope for chat and task history. Remove all old `subagent_started` / `subagent_completed` reads, writes, tests, and renderer branches.
 
 **Tech Stack:** TypeScript ESM, Electron main/preload/renderer, React 19, Vitest, DeepAgents 1.10.2, LangGraph 1.3.2, zod 4.4.3.
 
@@ -19,6 +19,9 @@
 - No old subagent history migration.
 - No prompt-only permission, path, concurrency, or depth control.
 - DeepAgents file tools use virtual `/workspace/`; shell execution uses real Windows workspace path.
+- DeepAgents `streamEvents(..., { version: 'v3' })` is experimental in 1.10.2; guard the local contract before changing projection code.
+- Do not expose DeepAgents native `execute`; shell execution stays on Roc `run_shell_command` plus Windows path guard.
+- Every `subagent_event` carries a run-local monotonic `sequence`.
 - Each task starts with a failing test or compile check, then minimal implementation, then direct verification.
 
 ---
@@ -26,6 +29,10 @@
 ## File Structure
 
 Create:
+
+- `tests/main/services/deep-agent/deep-agent-official-contracts.test.ts`
+  - Locks the DeepAgents 1.10.2 declarations Roc depends on.
+  - Documents that official filesystem tools include `execute`, while Roc intentionally does not expose it.
 
 - `src/main/services/deep-agent/subagent-projection.ts`
   - Owns DeepAgents subagent stream projection.
@@ -48,6 +55,7 @@ Modify:
 - `src/main/services/deep-agent/types.ts`
   - Change `RuntimeSubagent` from `SubAgent` to `AnySubAgent`.
   - Keep DeepAgents-native type source.
+  - Fix `DEEP_AGENT_BUILT_IN_TOOLS` comment so the Roc allowlist explicitly excludes native `execute`.
 
 - `src/main/services/deep-agent/stream-consumers.ts`
   - Remove old subagent started/completed implementation.
@@ -92,6 +100,137 @@ Generated:
 
 ---
 
+### Task 0: DeepAgents 1.10.2 Contract Guard
+
+**Files:**
+- Create: `tests/main/services/deep-agent/deep-agent-official-contracts.test.ts`
+- Modify: `src/main/services/deep-agent/types.ts`
+- Test: `tests/main/services/deep-agent/deep-agent-official-contracts.test.ts`
+- Test: `tests/main/services/deep-agent/backend.test.ts`
+
+**Interfaces:**
+- Consumes DeepAgents exported types: `AnySubAgent`, `AsyncSubAgent`, `AsyncTaskStatus`, `CreateDeepAgentParams`, `SubagentRunStream`.
+- Produces a local contract test proving the design's assumptions before shared type or projection changes begin.
+
+- [ ] **Step 1: Write the contract guard test**
+
+Create `tests/main/services/deep-agent/deep-agent-official-contracts.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import type {
+  AsyncSubAgent,
+  AsyncTaskStatus,
+  CreateDeepAgentParams,
+  SubagentRunStream
+} from 'deepagents';
+import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../../../src/main/services/deep-agent/types';
+
+describe('DeepAgents official contract assumptions', () => {
+  it('accepts async subagents through CreateDeepAgentParams', () => {
+    const asyncSubagent: AsyncSubAgent = {
+      name: 'remote-research',
+      description: 'Run long research on an Agent Protocol server.',
+      graphId: 'research_graph',
+      url: 'http://127.0.0.1:2024'
+    };
+
+    const params = {
+      subagents: [asyncSubagent]
+    } satisfies Pick<CreateDeepAgentParams, 'subagents'>;
+
+    expect(params.subagents?.[0]).toMatchObject({
+      name: 'remote-research',
+      graphId: 'research_graph'
+    });
+  });
+
+  it('locks async task statuses used by Roc event payloads', () => {
+    const statuses: AsyncTaskStatus[] = [
+      'pending',
+      'running',
+      'success',
+      'error',
+      'cancelled',
+      'timeout',
+      'interrupted'
+    ];
+
+    expect(statuses).toEqual([
+      'pending',
+      'running',
+      'success',
+      'error',
+      'cancelled',
+      'timeout',
+      'interrupted'
+    ]);
+  });
+
+  it('documents SubagentRunStream fields consumed by the projection layer', () => {
+    type RequiredKeys = 'name' | 'taskInput' | 'output' | 'messages' | 'toolCalls' | 'subagents';
+    const keys: RequiredKeys[] = ['name', 'taskInput', 'output', 'messages', 'toolCalls', 'subagents'];
+
+    const assertKeys = (_keys: Array<keyof SubagentRunStream>): Array<keyof SubagentRunStream> => _keys;
+
+    expect(assertKeys(keys)).toEqual(['name', 'taskInput', 'output', 'messages', 'toolCalls', 'subagents']);
+  });
+
+  it('keeps Roc built-in tool allowlist from exposing DeepAgents native execute', () => {
+    expect(DEEP_AGENT_BUILT_IN_TOOLS).toEqual([
+      'write_todos',
+      'task',
+      'ls',
+      'read_file',
+      'write_file',
+      'edit_file',
+      'glob',
+      'grep'
+    ]);
+    expect(DEEP_AGENT_BUILT_IN_TOOLS).not.toContain('execute');
+  });
+});
+```
+
+- [ ] **Step 2: Run the contract guard and confirm red**
+
+Run: `pnpm test -- tests/main/services/deep-agent/deep-agent-official-contracts.test.ts`
+
+Expected: FAIL if the generic `CreateDeepAgentParams` pick does not compile or if the test file is not yet wired correctly. If it passes immediately, continue because the contract is already true.
+
+- [ ] **Step 3: Fix the Roc built-in tool comment**
+
+In `src/main/services/deep-agent/types.ts`, replace the comment above `DEEP_AGENT_BUILT_IN_TOOLS` with:
+
+```ts
+/**
+ * Roc-visible built-in DeepAgents tool allowlist.
+ *
+ * DeepAgents 1.10.2 also has a native `execute` filesystem tool, but Roc must not expose it:
+ * filesystem permissions do not constrain shell commands. Roc shell access is only
+ * `run_shell_command`, guarded by createRocShellPathPolicyMiddleware and ShellExecutionService.
+ */
+```
+
+- [ ] **Step 4: Verify the contract and existing backend guard**
+
+Run:
+
+```powershell
+pnpm test -- tests/main/services/deep-agent/deep-agent-official-contracts.test.ts tests/main/services/deep-agent/backend.test.ts
+```
+
+Expected: PASS. `backend.test.ts` must still prove the backend passed to DeepAgents does not expose `execute`.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add src/main/services/deep-agent/types.ts tests/main/services/deep-agent/deep-agent-official-contracts.test.ts
+git commit -m "test: lock deepagents subagent contract"
+```
+
+---
+
 ### Task 1: Shared Structured Subagent Contract
 
 **Files:**
@@ -107,7 +246,7 @@ Generated:
   - `export type SubagentStatus = 'started' | 'running' | 'completed' | 'failed' | 'cancelled';`
   - `export type SubagentIdentity = { subagentId: string; parentSubagentId: string | null; name: string; depth: number; path: string[]; execution: SubagentExecution; taskInput: string | null; asyncTaskId?: string; };`
   - `export type SubagentEventPayload = ...`
-  - `ChatRunEvent` arm `{ type: 'subagent_event'; runId: string; identity: SubagentIdentity; event: SubagentEventPayload; }`
+  - `ChatRunEvent` arm `{ type: 'subagent_event'; runId: string; sequence: number; identity: SubagentIdentity; event: SubagentEventPayload; }`
   - `TaskEvent['type']` includes `'subagent_event'` and excludes old subagent types.
 
 - [ ] **Step 1: Write failing type-driven test**
@@ -118,6 +257,7 @@ Replace the old flat subagent section in `tests/renderer/chat-run-state.test.ts`
 state = applyChatRunEvent(state, {
   type: 'subagent_event',
   runId: 'chat_stream_mix',
+  sequence: 1,
   identity: {
     subagentId: 'subagent-chat_stream_mix-0',
     parentSubagentId: null,
@@ -139,6 +279,7 @@ Also replace the completion event:
 state = applyChatRunEvent(state, {
   type: 'subagent_event',
   runId: 'chat_stream_mix',
+  sequence: 2,
   identity: {
     subagentId: 'subagent-chat_stream_mix-0',
     parentSubagentId: null,
@@ -203,6 +344,7 @@ Replace the `ChatRunEvent` subagent arm with:
   | {
       type: 'subagent_event';
       runId: string;
+      sequence: number;
       identity: SubagentIdentity;
       event: SubagentEventPayload;
     }
@@ -297,6 +439,7 @@ describe('projectSubagentStream', () => {
     ]);
     expect(events[0]).toMatchObject({
       runId: 'run_nested',
+      sequence: 1,
       identity: {
         subagentId: 'subagent-run_nested-0',
         parentSubagentId: null,
@@ -309,6 +452,7 @@ describe('projectSubagentStream', () => {
       event: { kind: 'started' }
     });
     expect(events[1]).toMatchObject({
+      sequence: 2,
       identity: { subagentId: 'subagent-run_nested-0' },
       event: {
         kind: 'assistant_block',
@@ -321,6 +465,7 @@ describe('projectSubagentStream', () => {
       }
     });
     expect(events[2]).toMatchObject({
+      sequence: 3,
       identity: { subagentId: 'subagent-run_nested-0' },
       event: {
         kind: 'tool_call',
@@ -335,6 +480,7 @@ describe('projectSubagentStream', () => {
       }
     });
     expect(events[4]).toMatchObject({
+      sequence: 5,
       identity: {
         subagentId: 'subagent-run_nested-0-0',
         parentSubagentId: 'subagent-run_nested-0',
@@ -345,6 +491,7 @@ describe('projectSubagentStream', () => {
       event: { kind: 'started' }
     });
     expect(events.at(-1)).toMatchObject({
+      sequence: 7,
       identity: { subagentId: 'subagent-run_nested-0' },
       event: { kind: 'completed', summary: 'done' }
     });
@@ -417,6 +564,7 @@ type ProjectionContext = {
   parent: SubagentIdentity | null;
   path: string[];
   ordinal: number;
+  nextSequence: () => number;
 };
 
 export async function projectSubagentStream(input: {
@@ -424,11 +572,16 @@ export async function projectSubagentStream(input: {
   runId: string;
   callbacks: SubagentProjectionCallbacks;
 }): Promise<void> {
+  let sequence = 0;
   await consumeSubagents(input.subagents, {
     runId: input.runId,
     parent: null,
     path: [],
-    ordinal: 0
+    ordinal: 0,
+    nextSequence: () => {
+      sequence += 1;
+      return sequence;
+    }
   }, input.callbacks);
 }
 
@@ -466,31 +619,37 @@ async function consumeOneSubagent(
     ...(asyncTaskId === undefined ? {} : { asyncTaskId })
   };
 
-  emit(callbacks, context.runId, identity, { kind: 'started' });
+  emit(callbacks, context.runId, context.nextSequence(), identity, { kind: 'started' });
 
   const messages = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'messages'));
   const toolCalls = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'toolCalls'));
   const nested = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'subagents'));
   const projectionTasks: Array<Promise<void>> = [];
   if (messages !== null) {
-    projectionTasks.push(consumeMessages(messages, context.runId, identity, callbacks));
+    projectionTasks.push(consumeMessages(messages, context.runId, identity, context.nextSequence, callbacks));
   }
   if (toolCalls !== null) {
-    projectionTasks.push(consumeToolCalls(toolCalls, context.runId, identity, callbacks));
+    projectionTasks.push(consumeToolCalls(toolCalls, context.runId, identity, context.nextSequence, callbacks));
   }
   if (nested !== null) {
-    projectionTasks.push(consumeSubagents(nested, { runId: context.runId, parent: identity, path, ordinal: 0 }, callbacks));
+    projectionTasks.push(
+      consumeSubagents(
+        nested,
+        { runId: context.runId, parent: identity, path, ordinal: 0, nextSequence: context.nextSequence },
+        callbacks
+      )
+    );
   }
   await Promise.all(projectionTasks);
 
   try {
     const output = await Promise.resolve(recordUtils.readRecordValue(subagent, 'output'));
-    emit(callbacks, context.runId, identity, {
+    emit(callbacks, context.runId, context.nextSequence(), identity, {
       kind: 'completed',
       summary: typeof output === 'string' && output.length > 0 ? output : taskInput
     });
   } catch (error) {
-    emit(callbacks, context.runId, identity, {
+    emit(callbacks, context.runId, context.nextSequence(), identity, {
       kind: 'failed',
       error: redact(error instanceof Error ? error.message : String(error))
     });
@@ -501,6 +660,7 @@ async function consumeMessages(
   messages: AsyncIterable<unknown>,
   runId: string,
   identity: SubagentIdentity,
+  nextSequence: () => number,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
   for await (const message of messages) {
@@ -512,7 +672,7 @@ async function consumeMessages(
       if (typeof delta !== 'string' || delta.length === 0) {
         continue;
       }
-      emit(callbacks, runId, identity, {
+      emit(callbacks, runId, nextSequence(), identity, {
         kind: 'assistant_block',
         block: {
           kind: 'text',
@@ -529,6 +689,7 @@ async function consumeToolCalls(
   calls: AsyncIterable<unknown>,
   runId: string,
   identity: SubagentIdentity,
+  nextSequence: () => number,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
   for await (const call of calls) {
@@ -546,7 +707,7 @@ async function consumeToolCalls(
       phase: 'start',
       input
     };
-    emit(callbacks, runId, identity, { kind: 'tool_call', block: startBlock });
+    emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: startBlock });
     callbacks.emitTodoEvent(input);
 
     try {
@@ -556,10 +717,10 @@ async function consumeToolCalls(
         phase: 'end',
         output
       };
-      emit(callbacks, runId, identity, { kind: 'tool_call', block: endBlock });
+      emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: endBlock });
       callbacks.recordSessionToolCall?.(name, input, output);
     } catch (error) {
-      emit(callbacks, runId, identity, {
+      emit(callbacks, runId, nextSequence(), identity, {
         kind: 'tool_call',
         block: {
           ...startBlock,
@@ -574,6 +735,7 @@ async function consumeToolCalls(
 function emit(
   callbacks: SubagentProjectionCallbacks,
   runId: string,
+  sequence: number,
   identity: SubagentIdentity,
   event: SubagentEventPayload
 ): void {
@@ -581,6 +743,7 @@ function emit(
   callbacks.emitRuntimeEvent({
     type: 'subagent_event',
     runId,
+    sequence,
     identity,
     event
   });
@@ -642,7 +805,7 @@ git commit -m "feat: project deepagents subagent streams"
 
 **Interfaces:**
 - Consumes: structured `ChatRunEvent.subagent_event`.
-- Produces: `agent.run.task-event` payload with `type: 'subagent_event'` and `payload: { identity, event }`.
+- Produces: `agent.run.task-event` payload with `type: 'subagent_event'` and `payload: { sequence, identity, event }`.
 
 - [ ] **Step 1: Write failing runtime persistence test**
 
@@ -657,6 +820,7 @@ it('persists structured subagent events without old started/completed task types
         yield {
           type: 'subagent_event',
           runId: input.run.id,
+          sequence: 1,
           identity: {
             subagentId: 'subagent-runtime-0',
             parentSubagentId: null,
@@ -692,6 +856,7 @@ it('persists structured subagent events without old started/completed task types
       runId: result.runId,
       type: 'subagent_event',
       payload: {
+        sequence: 1,
         identity: {
           subagentId: 'subagent-runtime-0',
           parentSubagentId: null,
@@ -719,6 +884,7 @@ In `tests/main/plugins/task/plugin-run-states.test.ts`, replace old event publis
 ```ts
 type: 'subagent_event',
 payload: {
+  sequence: 1,
   identity: {
     subagentId: 'subagent-run_subagent_1-0',
     parentSubagentId: null,
@@ -737,6 +903,7 @@ and:
 ```ts
 type: 'subagent_event',
 payload: {
+  sequence: 2,
   identity: {
     subagentId: 'subagent-run_subagent_1-0',
     parentSubagentId: null,
@@ -767,6 +934,7 @@ In `src/main/plugins/agent/runtime.ts`, replace the `event.type === 'subagent_ev
           threadId: input.run.threadId,
           type: 'subagent_event',
           payload: {
+            sequence: event.sequence,
             identity: event.identity,
             event: event.event
           }
@@ -788,6 +956,8 @@ with:
 ```ts
     value === 'subagent_event' ||
 ```
+
+Do not strip `payload.sequence`; it is part of the persisted structured subagent envelope consumed by task detail replay.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -867,6 +1037,7 @@ it('rebuilds structured subagent blocks from persisted subagent_event records', 
         runId: 'run-subagent',
         type: 'subagent_event',
         payload: {
+          sequence: 1,
           identity: {
             subagentId: 'subagent-run-subagent-0',
             parentSubagentId: null,
@@ -886,6 +1057,7 @@ it('rebuilds structured subagent blocks from persisted subagent_event records', 
         runId: 'run-subagent',
         type: 'subagent_event',
         payload: {
+          sequence: 2,
           identity: {
             subagentId: 'subagent-run-subagent-0',
             parentSubagentId: null,
@@ -1026,6 +1198,7 @@ In `src/renderer/chat-transcript.ts`:
 
 ```ts
 type SubagentEventRecord = {
+  sequence: number;
   identity: SubagentIdentity;
   event: SubagentEventPayload;
 };
@@ -1364,6 +1537,7 @@ git commit -m "feat: accept validated async subagents"
 **Interfaces:**
 - Consumes all previous tasks.
 - Produces no old subagent event references outside spec and plan docs.
+- Proves Roc still excludes DeepAgents native `execute` from its visible built-in tool allowlist.
 
 - [ ] **Step 1: Generate IPC schema**
 
@@ -1380,6 +1554,14 @@ rg -n "subagent_started|subagent_completed|SubagentPayload|ChatRunSubagentState|
 ```
 
 Expected: no matches. If matches remain, remove them by replacing with structured `identity` / `event` usage from Tasks 1-5.
+
+Run:
+
+```powershell
+rg -n -e "'execute'" -e "execute" src/main/services/deep-agent src/main/plugins/agent/capability-preview.ts tests/main/services/deep-agent
+```
+
+Expected: matches are limited to comments/tests that explicitly document native `execute` exclusion, backend tests proving `execute` is absent, and Roc-owned `ExecuteResponse` / `executeAgentCommand` types. No visible built-in tool allowlist may include `'execute'`.
 
 - [ ] **Step 3: Run IPC check**
 
@@ -1398,6 +1580,7 @@ Expected: PASS.
 Run:
 
 ```powershell
+pnpm test -- tests/main/services/deep-agent/deep-agent-official-contracts.test.ts tests/main/services/deep-agent/backend.test.ts
 pnpm typecheck
 pnpm test
 git diff --check
@@ -1417,10 +1600,11 @@ git commit -m "refactor: remove legacy subagent events"
 ## Self-Review Checklist
 
 - Spec coverage:
+  - DeepAgents 1.10.2 official contract and Roc `execute` exclusion: Task 0.
   - DeepAgents-first harness: Task 2 keeps projection under existing DeepAgent executor; Task 6 keeps DeepAgents `AnySubAgent`.
   - Structured event model: Task 1.
-  - Streaming recursive projection: Task 2.
-  - Runtime persistence: Task 3.
+  - Streaming recursive projection with run-local `sequence`: Task 2.
+  - Runtime persistence with `{ sequence, identity, event }`: Task 3.
   - Renderer live and persisted state: Task 4.
   - UI tree and error display: Task 5.
   - AsyncSubAgent acceptance and reserved name guard: Task 6.
@@ -1431,3 +1615,5 @@ git commit -m "refactor: remove legacy subagent events"
 - Type consistency:
   - Shared types from Task 1 feed projection, runtime, renderer, and UI tasks.
   - `subagent_event` envelope shape is identical in chat events and task events.
+  - `sequence` is top-level on `ChatRunEvent.subagent_event` and included in persisted task payload.
+  - `DEEP_AGENT_BUILT_IN_TOOLS` remains a Roc-visible allowlist and must not include DeepAgents native `execute`.
