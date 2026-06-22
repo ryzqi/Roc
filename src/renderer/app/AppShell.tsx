@@ -1,24 +1,40 @@
 import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AppStatus,
-  ChatRunEvent,
   ChatStartRunRequest,
-  TaskSnapshot,
-  Workspace
+  TaskSnapshot
 } from '../../shared/types';
+import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
+import { useChatFeature } from '../features/chat/use-chat-feature';
+import { filterHistoryItems } from '../history-sidebar';
+import { unwrap } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { applySystemAppearance } from '../system-appearance';
+import { AppSettingsLayer } from './AppSettingsLayer';
+import { AppSidebar } from './AppSidebar';
+import { AppWorkspaceShell } from './AppWorkspaceShell';
+import {
+  loadTaskSurfaceData,
+  loadWorkspaceData
+} from './data-loading';
 import {
   buildControlNavItems,
   buildHistoryItems,
   buildHistoryNavItems,
   buildWorkspaceNavItems
 } from './nav-items';
-import { WindowWorkband } from './WindowWorkband';
 import type {
   MainViewId,
   ViewId,
   WorkbenchTool,
   WorkspaceData
 } from './types';
+import { useAgentCapabilityPreview } from './use-agent-capability-preview';
+import type { AppBootstrap } from './use-app-bootstrap';
+import { useAppStartupResources } from './use-app-startup-resources';
+import { useAppTaskRuns } from './use-app-task-runs';
+import { useChatWorkspaceScale } from './use-chat-workspace-scale';
+import { useWindowControls } from './use-window-controls';
 import {
   WORKBENCH_VIEWS,
   buildTopMeta,
@@ -27,25 +43,7 @@ import {
   parseWorkbenchTool,
   syncRendererUrl
 } from './view-routing';
-import {
-  loadTaskSurfaceData,
-  loadWorkspaceData
-} from './data-loading';
-import { filterHistoryItems } from '../history-sidebar';
-import { unwrap } from '../loaded-state';
-import type { RocClient } from '../shared/roc-client';
-import { applySystemAppearance } from '../system-appearance';
-import { applyChatRunEvent, createEmptyChatRunState, type ChatRunState } from '../chat-run-state';
-import type { AppBootstrap } from './use-app-bootstrap';
-import { useChatFeature } from '../features/chat/use-chat-feature';
-import { AppSidebar } from './AppSidebar';
-import { AppSettingsLayer } from './AppSettingsLayer';
-import { AppWorkspaceShell } from './AppWorkspaceShell';
-import { useAgentCapabilityPreview } from './use-agent-capability-preview';
-import { useAppStartupResources } from './use-app-startup-resources';
-import { useAppTaskRuns } from './use-app-task-runs';
-import { useChatWorkspaceScale } from './use-chat-workspace-scale';
-import { useWindowControls } from './use-window-controls';
+import { WindowWorkband } from './WindowWorkband';
 
 const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))

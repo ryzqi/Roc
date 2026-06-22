@@ -7,7 +7,6 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   BackgroundTaskSummary,
-  BackgroundTaskTrigger,
   ChatStartRunRequest,
   EnabledCapabilities,
   ScheduledTaskRun,
@@ -31,28 +30,28 @@ import {
   requireText
 } from './task-repository-mappers';
 import {
+  recordAgentRunStarted as createAgentRun,
   createBackgroundTaskRecord,
   createPreviewRequestFromTask,
-  pauseBackgroundTaskAfterRunFailure,
-  recordAgentRunStarted as createAgentRun,
   recordScheduledTaskRun as insertScheduledTaskRun,
+  pauseBackgroundTaskAfterRunFailure,
   transitionBackgroundTask,
   updateBackgroundTaskLastRunStatus,
   updateBackgroundTaskRecord
 } from './task-repository-mutations';
 import {
-  findBackgroundTask as readBackgroundTask,
-  findBackgroundTaskByRunId as readBackgroundTaskByRunId,
-  getBackgroundTaskSummary as readBackgroundTaskSummary,
-  getActiveTasks as readActiveTasks,
-  listBackgroundTasks as readBackgroundTasks,
   listEventsForRun,
   listEventsForThread,
   listRecentEventsForThread,
   listRunsForThread,
-  listScheduledRuns as readScheduledRuns,
-  listSchedulableBackgroundTasks as readSchedulableBackgroundTasks,
+  getActiveTasks as readActiveTasks,
+  findBackgroundTask as readBackgroundTask,
+  findBackgroundTaskByRunId as readBackgroundTaskByRunId,
+  listBackgroundTasks as readBackgroundTasks,
+  getBackgroundTaskSummary as readBackgroundTaskSummary,
   readRecentEvents,
+  listSchedulableBackgroundTasks as readSchedulableBackgroundTasks,
+  listScheduledRuns as readScheduledRuns,
   readThreads,
   requireActiveThread
 } from './task-repository-queries';

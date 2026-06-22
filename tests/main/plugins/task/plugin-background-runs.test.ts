@@ -6,39 +6,12 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
-  ActiveTaskItem,
   BackgroundTask,
   BackgroundTaskPreviewRequest,
   ChatStartRunRequest,
   ChatStartRunResult,
-  TaskDetail,
-  TaskEvent,
-  TaskSnapshot,
-  Workspace
+  TaskDetail
 } from '../../../../src/shared/types';
-
-const taskCapabilities = [
-  'task.snapshot.get',
-  'task.background.preview',
-  'task.background.create',
-  'task.background.update',
-  'task.background.runNow',
-  'task.background.pause',
-  'task.background.resume',
-  'task.background.cancel',
-  'task.background.delete',
-  'task.scheduler.status',
-  'task.scheduler.suspend',
-  'task.scheduler.resume',
-  'task.scheduler.handlePowerResume',
-  'task.background.summary',
-  'task.thread.messages.list',
-  'task.background.list',
-  'task.thread.delete',
-  'task.active.list',
-  'task.detail.get',
-  'task.scheduledRuns.list'
-];
 
 let db: Database.Database;
 
@@ -183,23 +156,6 @@ describe('task plugin', () => {
 
 });
 
-function registerWorkspaceGetCurrent(capabilities: CapabilityRegistry): void {
-  const descriptor = {
-    name: 'workspace.getCurrent',
-    version: '1.0.0',
-    inputSchema: z.object({}),
-    outputSchema: z.custom<Workspace | null>()
-  };
-  capabilities.declare('@roc/plugin-workspace', descriptor);
-  capabilities.register('@roc/plugin-workspace', descriptor, async () => ({
-    id: 'workspace_1',
-    path: 'F:\\Code\\Roc',
-    displayName: 'Roc',
-    lastOpenedAt: '2026-06-04T00:00:00.000Z',
-    trustState: 'trusted'
-  }));
-}
-
 function registerAgentRunStart(
   capabilities: CapabilityRegistry,
   eventBus: RocEventBus,
@@ -238,26 +194,6 @@ function registerAgentRunStart(
       ...result
     };
   });
-}
-
-function readToolCallStatuses(snapshot: TaskSnapshot, name: string): string[] {
-  return snapshot.recentEvents
-    .filter((event) => {
-      if (event.type !== 'tool_call' || event.payload === null || typeof event.payload !== 'object') {
-        return false;
-      }
-      return Reflect.get(event.payload, 'name') === name;
-    })
-    .map((event) => {
-      if (event.payload === null || typeof event.payload !== 'object') {
-        throw new Error('task_tool_call_payload_invalid');
-      }
-      const status = Reflect.get(event.payload, 'status');
-      if (typeof status !== 'string') {
-        throw new Error('task_tool_call_status_invalid');
-      }
-      return status;
-    });
 }
 
 function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocEventBus }): RocPluginContext {

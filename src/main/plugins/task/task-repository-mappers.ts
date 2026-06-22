@@ -79,14 +79,6 @@ export type TaskRunRow = {
   enabled_capabilities_json: string;
 };
 
-const taskDetailRunHistoryLimit = 20;
-const taskDetailRecentEventLimit = 20;
-
-const emptyCapabilities: EnabledCapabilities = {
-  mcpServers: [],
-  skills: []
-};
-
 export function mapBackgroundTask(row: BackgroundTaskRecord): BackgroundTask {
   return {
     id: row.id,

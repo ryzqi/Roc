@@ -1,31 +1,30 @@
-import { useEffect, useState } from 'react';
 import { GitBranch, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { GitBranchMutationResult, GitStatusResult } from '../../shared/types';
+import type { LazyLoadState, WorkspaceData } from '../app/types';
 import {
   buildGitBranchSwitcherModel,
   buildGitCheckoutBranchConfirmationRequest,
   buildGitCommitButtonState,
   buildGitCreateBranchConfirmationRequest,
   buildGitSelectionModel,
-  clampGitSplitWidth,
   GIT_SPLIT_DEFAULT_WIDTH,
   selectAllGitChanges
 } from '../git-workbench';
-import type { LazyLoadState, WorkspaceData } from '../app/types';
 import type { LoadedState } from '../loaded-state';
+import type { RocClient } from '../shared/roc-client';
+import { createRocClient } from '../shared/roc-client';
+import { GitBranchPopover } from './GitBranchPopover';
+import { GitChangeList } from './GitChangeList';
+import { GitDiffPanel } from './GitDiffPanel';
 import { renderGitRepositoryUnavailable, renderGitWorkbenchUnavailable } from './GitWorkbenchUnavailable';
 import {
   canUnstageGitChange,
   findNextGitSelection,
   gitStatusChanges
 } from './git-helpers';
-import { GitBranchPopover } from './GitBranchPopover';
-import { GitChangeList } from './GitChangeList';
-import { GitDiffPanel } from './GitDiffPanel';
 import { startGitPaneResize } from './git-pane-resize';
 import { useGitDiffPreview } from './useGitDiffPreview';
-import type { RocClient } from '../shared/roc-client';
-import { createRocClient } from '../shared/roc-client';
 
 export function GitWorkbench({
   client,

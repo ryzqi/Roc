@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
-import { appendLiveTranscriptMessages, buildChatTranscript } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
+import { buildChatTranscript } from '../../src/renderer/chat-transcript';
+import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
   return {

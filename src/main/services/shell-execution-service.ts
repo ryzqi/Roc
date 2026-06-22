@@ -1,9 +1,8 @@
-import { execFile, execFileSync } from 'node:child_process';
 import type { ExecuteResponse } from 'deepagents';
+import { execFile, execFileSync } from 'node:child_process';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
-import type { RtkExecutionMetadata, RtkService } from './rtk-service';
-import type { WorkspaceService } from './workspace-service';
 import { containsVirtualWorkspacePath } from './deep-agent/shell-path-guard';
+import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import {
   buildAgentExecutePayload,
   buildRtkEnvironment,
@@ -11,9 +10,9 @@ import {
   normalizeShellCommand,
   resolveRtkRoute,
   resolveRtkRouteAsync,
-  toText,
-  type RtkRoutingDecision
+  toText
 } from './shell-execution-helpers';
+import type { WorkspaceService } from './workspace-service';
 
 const powershellUtf8Prefix =
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;';

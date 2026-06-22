@@ -1,17 +1,5 @@
 import {
-  anthropicThinkingMinBudgetTokens,
-  type AnthropicThinkingOption,
-  type NvidiaToolChoice,
-  type OpenAiReasoningEffort,
-  type OpenAiReasoningOption,
-  type OpenAiReasoningSummary,
-  type OpenAiServiceTier,
-  type OpenAiVerbosity,
-  type ProviderConfig,
-  type ProviderModel,
-  type ProviderType
-} from '../../shared/types';
-import {
+  createFixedOpenRouterModelConfigs,
   fixedLlamaCppBaseUrl,
   fixedLlamaCppProviderId,
   fixedLlamaCppProviderName,
@@ -21,19 +9,27 @@ import {
   fixedOpenRouterBaseUrl,
   fixedOpenRouterProviderId,
   fixedOpenRouterProviderName,
-  createFixedOpenRouterModelConfigs,
   normalizeFixedLlamaCppProvider,
   normalizeFixedNvidiaProvider,
   normalizeFixedOpenRouterProvider
 } from '../../shared/provider-defaults';
-import { buildProviderOptionsFromDraft } from './provider-draft-options';
 import {
+  type OpenAiReasoningEffort,
+  type OpenAiReasoningSummary,
+  type OpenAiServiceTier,
+  type OpenAiVerbosity,
+  type ProviderConfig,
+  type ProviderModel,
+  type ProviderType
+} from '../../shared/types';
+import {
+  booleanDraftValue,
   createAnthropicCompatibleAdvancedFields,
   createNvidiaAdvancedFields,
   createOpenAiCompatibleAdvancedFields,
-  defaultProviderAdvancedFields,
-  booleanDraftValue
+  defaultProviderAdvancedFields
 } from './provider-draft-advanced-fields';
+import { buildProviderOptionsFromDraft } from './provider-draft-options';
 
 export type EditableProviderType = Extract<
   ProviderType,

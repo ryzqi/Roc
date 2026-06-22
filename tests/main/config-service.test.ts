@@ -1,24 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ZodError } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppSettings, McpServerConfig, PermissionsConfig, ProviderConfig } from '../../src/shared/types';
-import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
-import {
-  isCurrentSettingsDocument,
-  isLegacyUnifiedSettingsDocument,
-  migrateLegacySplitConfig,
-  normalizeLegacyMcpConfig
-} from '../../src/main/services/config/migration';
-import {
-  defaultModelStateForProviders,
-  normalizeProvidersConfig
-} from '../../src/main/services/config/provider-rules';
-import { SettingsDocumentSchema } from '../../src/main/services/config/schema';
 import { ConfigService } from '../../src/main/services/config-service';
-import { McpService } from '../../src/main/services/mcp-service';
+import { defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
+import { SettingsDocumentSchema } from '../../src/main/services/config/schema';
 import { RocPaths } from '../../src/main/services/paths';
+import type { PermissionsConfig } from '../../src/shared/types';
 
 let root: string;
 let paths: RocPaths;

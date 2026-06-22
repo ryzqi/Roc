@@ -1,11 +1,11 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
+import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
+import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
-import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
-import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
-import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 
 let db: Database.Database;
@@ -294,19 +294,6 @@ function createTextBlock(runId: string, text: string): ChatRunEvent {
   };
 }
 
-function createReasoningBlock(runId: string, text: string): ChatRunEvent {
-  return {
-    type: 'assistant_block',
-    runId,
-    block: {
-      kind: 'reasoning',
-      blockId: `reasoning-${runId}`,
-      phase: 'delta',
-      text
-    }
-  };
-}
-
 function createToolBlock(runId: string, block: Extract<ChatRunEvent, { type: 'assistant_block' }>['block']): ChatRunEvent {
   return {
     type: 'assistant_block',
@@ -338,21 +325,5 @@ function readPayloadRunId(payload: unknown): string | null {
   }
   const runId = Reflect.get(payload, 'runId');
   return typeof runId === 'string' ? runId : null;
-}
-
-function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolveValue: ((value: T) => void) | null = null;
-  const promise = new Promise<T>((resolve) => {
-    resolveValue = resolve;
-  });
-  return {
-    promise,
-    resolve: (value) => {
-      if (resolveValue === null) {
-        throw new Error('deferred_not_initialized');
-      }
-      resolveValue(value);
-    }
-  };
 }
 

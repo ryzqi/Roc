@@ -1,9 +1,7 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ZodError } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppSettings, McpServerConfig, PermissionsConfig, ProviderConfig } from '../../src/shared/types';
 import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings } from '../../src/main/services/config/defaults';
 import {
   isCurrentSettingsDocument,
@@ -16,24 +14,10 @@ import {
   normalizeProvidersConfig
 } from '../../src/main/services/config/provider-rules';
 import { SettingsDocumentSchema } from '../../src/main/services/config/schema';
-import { ConfigService } from '../../src/main/services/config-service';
-import { McpService } from '../../src/main/services/mcp-service';
 import { RocPaths } from '../../src/main/services/paths';
 
 let root: string;
 let paths: RocPaths;
-
-function readSettingsDocument(): unknown {
-  return JSON.parse(readFileSync(join(root, 'config', 'settings.json'), 'utf8')) as unknown;
-}
-
-function expectedPermissions(): PermissionsConfig {
-  return {
-    schemaVersion: 3,
-    mode: 'fully_automatic',
-    grants: []
-  };
-}
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-config-test-'));

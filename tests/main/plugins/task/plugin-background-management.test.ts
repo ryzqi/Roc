@@ -9,36 +9,9 @@ import type {
   ActiveTaskItem,
   BackgroundTask,
   BackgroundTaskPreviewRequest,
-  ChatStartRunRequest,
-  ChatStartRunResult,
-  TaskDetail,
-  TaskEvent,
   TaskSnapshot,
   Workspace
 } from '../../../../src/shared/types';
-
-const taskCapabilities = [
-  'task.snapshot.get',
-  'task.background.preview',
-  'task.background.create',
-  'task.background.update',
-  'task.background.runNow',
-  'task.background.pause',
-  'task.background.resume',
-  'task.background.cancel',
-  'task.background.delete',
-  'task.scheduler.status',
-  'task.scheduler.suspend',
-  'task.scheduler.resume',
-  'task.scheduler.handlePowerResume',
-  'task.background.summary',
-  'task.thread.messages.list',
-  'task.background.list',
-  'task.thread.delete',
-  'task.active.list',
-  'task.detail.get',
-  'task.scheduledRuns.list'
-];
 
 let db: Database.Database;
 
@@ -189,46 +162,6 @@ function registerWorkspaceGetCurrent(capabilities: CapabilityRegistry): void {
     lastOpenedAt: '2026-06-04T00:00:00.000Z',
     trustState: 'trusted'
   }));
-}
-
-function registerAgentRunStart(
-  capabilities: CapabilityRegistry,
-  eventBus: RocEventBus,
-  requests: ChatStartRunRequest[]
-): void {
-  const descriptor = {
-    name: 'agent.run.start',
-    version: '1.0.0',
-    inputSchema: z.custom<ChatStartRunRequest>(),
-    outputSchema: z.custom<ChatStartRunResult>()
-  };
-  capabilities.declare('@roc/plugin-agent', descriptor);
-  capabilities.register('@roc/plugin-agent', descriptor, async (requestInput) => {
-    const request = requestInput as ChatStartRunRequest;
-    requests.push(request);
-    const result = {
-      runId: 'run_manual_now_1',
-      mode: 'task',
-      threadId: request.threadId ?? null,
-      providerId: 'smoke-provider',
-      modelId: 'smoke-model',
-      createdAt: '2026-06-04T00:00:01.000Z'
-    } satisfies ChatStartRunResult;
-    await eventBus.publish({
-      type: 'agent.run.started',
-      source: '@roc/plugin-agent',
-      createdAt: result.createdAt,
-      payload: {
-        ...result,
-        userInput: request.input,
-        enabledCapabilities: request.enabledCapabilities,
-        workflowHint: request.workflowHint ?? null
-      }
-    });
-    return {
-      ...result
-    };
-  });
 }
 
 function readToolCallStatuses(snapshot: TaskSnapshot, name: string): string[] {

@@ -1,20 +1,12 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
-  ActiveTaskItem,
-  BackgroundTask,
   BackgroundTaskPreviewRequest,
-  ChatStartRunRequest,
-  ChatStartRunResult,
-  TaskDetail,
-  TaskEvent,
-  TaskSnapshot,
-  Workspace
+  TaskSnapshot
 } from '../../../../src/shared/types';
 
 const taskCapabilities = [
@@ -302,83 +294,6 @@ describe('task plugin', () => {
   });
 
 });
-
-function registerWorkspaceGetCurrent(capabilities: CapabilityRegistry): void {
-  const descriptor = {
-    name: 'workspace.getCurrent',
-    version: '1.0.0',
-    inputSchema: z.object({}),
-    outputSchema: z.custom<Workspace | null>()
-  };
-  capabilities.declare('@roc/plugin-workspace', descriptor);
-  capabilities.register('@roc/plugin-workspace', descriptor, async () => ({
-    id: 'workspace_1',
-    path: 'F:\\Code\\Roc',
-    displayName: 'Roc',
-    lastOpenedAt: '2026-06-04T00:00:00.000Z',
-    trustState: 'trusted'
-  }));
-}
-
-function registerAgentRunStart(
-  capabilities: CapabilityRegistry,
-  eventBus: RocEventBus,
-  requests: ChatStartRunRequest[]
-): void {
-  const descriptor = {
-    name: 'agent.run.start',
-    version: '1.0.0',
-    inputSchema: z.custom<ChatStartRunRequest>(),
-    outputSchema: z.custom<ChatStartRunResult>()
-  };
-  capabilities.declare('@roc/plugin-agent', descriptor);
-  capabilities.register('@roc/plugin-agent', descriptor, async (requestInput) => {
-    const request = requestInput as ChatStartRunRequest;
-    requests.push(request);
-    const result = {
-      runId: 'run_manual_now_1',
-      mode: 'task',
-      threadId: request.threadId ?? null,
-      providerId: 'smoke-provider',
-      modelId: 'smoke-model',
-      createdAt: '2026-06-04T00:00:01.000Z'
-    } satisfies ChatStartRunResult;
-    await eventBus.publish({
-      type: 'agent.run.started',
-      source: '@roc/plugin-agent',
-      createdAt: result.createdAt,
-      payload: {
-        ...result,
-        userInput: request.input,
-        enabledCapabilities: request.enabledCapabilities,
-        workflowHint: request.workflowHint ?? null
-      }
-    });
-    return {
-      ...result
-    };
-  });
-}
-
-function readToolCallStatuses(snapshot: TaskSnapshot, name: string): string[] {
-  return snapshot.recentEvents
-    .filter((event) => {
-      if (event.type !== 'tool_call' || event.payload === null || typeof event.payload !== 'object') {
-        return false;
-      }
-      return Reflect.get(event.payload, 'name') === name;
-    })
-    .map((event) => {
-      if (event.payload === null || typeof event.payload !== 'object') {
-        throw new Error('task_tool_call_payload_invalid');
-      }
-      const status = Reflect.get(event.payload, 'status');
-      if (typeof status !== 'string') {
-        throw new Error('task_tool_call_status_invalid');
-      }
-      return status;
-    });
-}
 
 function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocEventBus }): RocPluginContext {
   return {

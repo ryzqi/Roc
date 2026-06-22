@@ -1,25 +1,16 @@
 import { join } from 'node:path';
-import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import type { BackgroundTaskPreview } from '../../../../src/shared/types';
-import { tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
 import {
   buildExecutorOnce,
   collectExecutorEvents,
   createCapabilities,
-  createControlledAsyncStream,
-  createDeferred,
   createMcpTool,
-  drainIterator,
   findTool,
   invokeTool,
-  isChatRunEventBuffer,
   readBuildInput,
   readBuiltTools,
-  readIteratorValue,
   readJson,
-  startExecutorExecution,
-  waitForPromise,
   workspacePath
 } from './deep-agent-executor-test-helpers';
 
