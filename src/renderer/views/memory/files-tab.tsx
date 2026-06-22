@@ -103,7 +103,7 @@ export function FilesTab({ client, initialStatus }: { client?: RocClient; initia
         {selected === null ? (
           <div className="section-empty-state" data-testid="memory-file-empty">
             <strong>选择一个记忆文件</strong>
-            <p>全局与当前工作区文件会写入磁盘；安全扫描和容量限制会在保存时执行。</p>
+            <p>全局与当前工作区文件会写入 DeepAgents 记忆 Store；安全扫描和容量限制会在保存时执行。</p>
           </div>
         ) : (
           <>

@@ -61,7 +61,6 @@ describe('core plugins integration', () => {
           }
         }),
         createMemoryPlugin({
-          memoryRoot: join(root, 'memory'),
           workspace: {
             path: root,
             label: 'Integration Workspace'
@@ -105,8 +104,8 @@ describe('core plugins integration', () => {
     });
     expect(preview.goal).toBe('Create a task plugin preview');
 
-    await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toMatchObject({
-      text: expect.stringContaining('<FROZEN_SNAPSHOT>')
+    await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toEqual({
+      text: '# DeepAgents Memory Preview'
     });
 
     await runtime.publishEvent({

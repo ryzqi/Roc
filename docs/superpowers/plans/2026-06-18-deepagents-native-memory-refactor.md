@@ -25,6 +25,7 @@
 - Do not migrate old disk memory. Delete the old disk-backed memory implementation and tests instead of adding compatibility paths.
 - Preserve markdown as the durable memory format. SQLite stores DeepAgents file records with markdown `content`, not normalized facts.
 - Automatic memory writes are allowed only to `MEMORY.md`; `USER.md` and `AGENTS.md` are manual or explicit file-tool writes.
+- Settings must not keep controls or saved fields for the old frozen snapshot, LLM consolidator, or pre-compaction pipeline unless a current runtime path still consumes them after this refactor.
 - No review queue, no extra slots, no new project/feedback memory hierarchy.
 
 ## File Structure
@@ -36,6 +37,7 @@ src/main/kernel/kernel-runtime.ts
 src/main/services/memory/sqlite-store.ts                 # new
 src/main/services/memory/store-slots.ts                  # new
 src/main/services/memory/auto-memory-writer.ts           # new
+src/main/services/memory/snapshot.ts
 src/main/services/deep-agent/store-memory-backend.ts     # new
 src/main/services/deep-agent/backend.ts
 src/main/services/deep-agent/prompt.ts
@@ -43,17 +45,29 @@ src/main/services/deep-agent/prompt-builder.ts
 src/main/plugins/agent/index.ts
 src/main/plugins/agent/deep-agent-executor.ts
 src/main/plugins/memory/index.ts
+src/main/services/config/defaults.ts
+src/main/services/config/migration.ts
+src/main/services/config/schema.ts
+src/renderer/settings/sections/memory-section.tsx
+src/renderer/settings/impact-model.ts
 src/shared/types/memory.ts
+src/shared/types/settings.ts
 src/renderer/views/memory/files-tab.tsx
 tests/main/memory/sqlite-store.test.ts                   # new
 tests/main/memory/store-slots.test.ts                    # new
 tests/main/deep-agent/store-memory-backend.test.ts       # new
+tests/main/config-memory-defaults.test.ts
+tests/main/config-service-helpers.test.ts
+tests/main/config-service-settings.test.ts
 tests/main/plugins/memory/plugin.test.ts
 tests/main/plugins/agent/deep-agent-executor.test.ts
 tests/main/deep-agent-build-wiring.test.ts
 tests/main/deep-agent-prompt.test.ts
 tests/main/kernel/types.test.ts
 tests/main/infrastructure/database-pool.test.ts
+tests/renderer/settings-model.test.ts
+tests/renderer/settings-model-save.test.ts
+tests/renderer/settings-floating-surfaces.test.ts
 tests/renderer/memory-view.test.tsx
 tests/renderer/features/memory-feature.test.tsx
 ```
@@ -64,8 +78,10 @@ Delete these disk-memory-only files after replacements are green:
 src/main/plugins/memory/memory-repository.ts
 src/main/plugins/memory/consolidator-adapter.ts
 src/main/services/deep-agent/writable-memory-backend.ts
+src/main/services/memory/consolidator.ts
 src/main/services/memory/path-resolver.ts
 tests/main/memory-integration/writable-memory-backend.test.ts
+tests/main/memory/consolidator.test.ts
 tests/main/memory/path-resolver.test.ts
 tests/main/plugins/memory/consolidator-adapter.test.ts
 ```
@@ -487,7 +503,57 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
 
 - [ ] `pnpm test -- tests/main/plugins/memory/plugin.test.ts`
 
-## Task 8: Clean Up Disk Memory Code And Prompts
+## Task 8: Align Settings Memory Surface With Native Memory
+
+### Change
+
+- [ ] Update `src/shared/types/settings.ts` so `AppSettings['memory']` contains only fields still consumed after the native memory refactor:
+  - keep `charLimits`
+  - keep `sessionRetentionDays` if session recall retention still uses it
+  - keep `securityScan`
+  - remove `frozenSnapshotEnabled`
+  - remove `userProfileEnabled`
+  - remove `agentsRulesEnabled`
+  - remove `consolidatorEnabled`
+  - remove `consolidatorDebounceMinutes`
+  - remove `consolidatorTargetRatio`
+  - remove `consolidatorDailyQuota`
+  - remove `preCompactionFlushEnabled`
+  - remove `preCompactionTokenThreshold`
+  - remove `preCompactionContextWindowTokens`
+- [ ] Update `src/main/services/config/defaults.ts`, `schema.ts`, and `migration.ts` to match the new shape. Legacy saved values for removed fields should be ignored during upgrade, not carried forward as active configuration.
+- [ ] Update `src/renderer/settings/sections/memory-section.tsx` to remove stale controls and copy:
+  - "冻结快照"
+  - "用户画像"
+  - "规则文件"
+  - "自动压缩"
+  - "压缩延迟"
+  - "压缩目标"
+  - "压缩配额"
+  - "预压缩刷新"
+  - "刷新阈值"
+  - "上下文窗口"
+- [ ] Keep the settings section focused on:
+  - `USER.md`, `AGENTS.md`, and `MEMORY.md` character limits
+  - session recall retention
+  - memory write security scan toggles
+- [ ] Update `src/renderer/settings/impact-model.ts` so impact rows mention native DeepAgents memory writes and no longer mention frozen snapshots, automatic compression, or pre-compaction.
+- [ ] Update settings tests and shared test fixtures that currently construct the old memory settings shape.
+
+### Tests
+
+- [ ] `tests/main/config-memory-defaults.test.ts` expects only the retained memory settings.
+- [ ] `tests/main/config-service-helpers.test.ts` and `tests/main/config-service-settings.test.ts` accept legacy input with removed fields but return the new shape.
+- [ ] `tests/renderer/settings-model.test.ts` still lists "记忆策略" and no stale memory controls.
+- [ ] `tests/renderer/settings-model-save.test.ts` asserts impact rows for retained memory fields only.
+- [ ] `tests/renderer/settings-floating-surfaces.test.ts` renders the compact memory settings section without stale controls.
+
+### Verification
+
+- [ ] `pnpm test -- tests/main/config-memory-defaults.test.ts tests/main/config-service-helpers.test.ts tests/main/config-service-settings.test.ts`
+- [ ] `pnpm test -- tests/renderer/settings-model.test.ts tests/renderer/settings-model-save.test.ts tests/renderer/settings-floating-surfaces.test.ts`
+
+## Task 9: Clean Up Disk Memory Code And Prompts
 
 ### Change
 
@@ -495,6 +561,8 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
 - [ ] Remove imports of `join(input.paths.memoryDir, ...)` and `WritableMemoryFilesystemBackend`.
 - [ ] Remove production use of `paths.memoryDir` / `memory.root` from memory behavior. `RocPaths.memoryDir` may remain only if another unrelated feature still exposes it; it must not be an active compatibility path for memory reads or writes.
 - [ ] Update `RocPaths.ensureTree()` if it creates directories only needed by the deleted disk-backed memory path.
+- [ ] Delete or replace `src/main/services/memory/snapshot.ts`; frozen snapshot generation must not remain in the agent prompt path once `createDeepAgent({ memory })` is the loader.
+- [ ] Delete `src/main/services/memory/consolidator.ts` and its tests if no current runtime path consumes it after Task 7.
 - [ ] Update `src/main/services/deep-agent/prompt.ts` and `prompt-builder.ts` wording:
   - replace "changes land on disk immediately" with "changes are stored in Roc SQLite through DeepAgents memory".
   - keep the same five virtual paths.
@@ -505,6 +573,7 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
   - `WritableMemoryFilesystemBackend`
   - `resolveMemoryPath`
   - `.consolidator-backup`
+  - `frozenSnapshot`
   - "disk-backed memory"
   - `/memory/` as the single memory route, except generic permission docs.
 - [ ] Search and either remove or justify any remaining references to:
@@ -514,14 +583,18 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
   - `ConsolidatorService`
   - `MemoryConsolidatorAdapter`
   - `tests/main/memory-integration`
+  - `frozenSnapshotEnabled`
+  - `userProfileEnabled`
+  - `agentsRulesEnabled`
+  - `preCompaction`
 
 ### Verification
 
-- [ ] `rg -n "WritableMemoryFilesystemBackend|resolveMemoryPath|memory\\.root|\\.consolidator-backup|changes land on disk" src tests`
-- [ ] `rg -n "paths\\.memoryDir|memoryDir|MemoryRepository|ConsolidatorService|MemoryConsolidatorAdapter|tests/main/memory-integration" src tests`
+- [ ] `rg -n "WritableMemoryFilesystemBackend|resolveMemoryPath|memory\\.root|\\.consolidator-backup|changes land on disk|frozenSnapshot" src tests`
+- [ ] `rg -n "paths\\.memoryDir|memoryDir|MemoryRepository|ConsolidatorService|MemoryConsolidatorAdapter|tests/main/memory-integration|frozenSnapshotEnabled|userProfileEnabled|agentsRulesEnabled|preCompaction" src tests`
 - [ ] `pnpm test -- tests/main/deep-agent-prompt.test.ts tests/main/memory tests/main/plugins/memory/plugin.test.ts`
 
-## Task 9: Run Focused And Broad Verification
+## Task 10: Run Focused And Broad Verification
 
 ### Focused
 
@@ -529,6 +602,8 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
 - [ ] `pnpm test -- tests/main/memory/sqlite-store.test.ts tests/main/memory/store-slots.test.ts tests/main/deep-agent/store-memory-backend.test.ts`
 - [ ] `pnpm test -- tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/memory/plugin.test.ts`
 - [ ] `pnpm test -- tests/main/deep-agent-build-wiring.test.ts tests/main/deep-agent-prompt.test.ts`
+- [ ] `pnpm test -- tests/main/config-memory-defaults.test.ts tests/main/config-service-helpers.test.ts tests/main/config-service-settings.test.ts`
+- [ ] `pnpm test -- tests/renderer/settings-model.test.ts tests/renderer/settings-model-save.test.ts tests/renderer/settings-floating-surfaces.test.ts`
 - [ ] `pnpm test -- tests/renderer/memory-view.test.tsx tests/renderer/features/memory-feature.test.tsx`
 
 ### Broad
@@ -538,18 +613,18 @@ Add tests to `tests/main/plugins/memory/plugin.test.ts` or create `tests/main/me
 
 Known local note: if `pnpm test` prints `node-pty` `AttachConsole failed` during teardown but exits `0`, treat it as existing non-fatal noise and report it precisely.
 
-## Task 10: Commit
+## Task 11: Commit
 
 ### Change
 
-- [ ] Review `git diff -- src/main src/shared tests docs/superpowers/plans/2026-06-18-deepagents-native-memory-refactor.md`.
+- [ ] Review `git diff -- src/main src/shared tests docs/superpowers/plans/2026-06-18-deepagents-native-memory-refactor.md docs/superpowers/specs/2026-06-18-deepagents-native-memory-design.md`.
 - [ ] Confirm no unrelated renderer task files were touched.
 - [ ] Commit only files changed for this memory refactor.
 
 Suggested commit:
 
 ```powershell
-git add src/main src/shared tests docs/superpowers/plans/2026-06-18-deepagents-native-memory-refactor.md
+git add src/main src/shared tests docs/superpowers/plans/2026-06-18-deepagents-native-memory-refactor.md docs/superpowers/specs/2026-06-18-deepagents-native-memory-design.md
 git commit -m "refactor: use deepagents sqlite memory store"
 ```
 

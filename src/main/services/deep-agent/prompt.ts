@@ -1,6 +1,4 @@
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
-import type { FrozenSnapshot } from '../memory/snapshot';
-import { renderFrozenSnapshot } from '../memory/snapshot';
 
 const ROC_STATIC_SYSTEM_PROMPT = [
   'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
@@ -8,7 +6,7 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
   'For code or configuration changes, run direct verification before claiming completion.',
   '',
-  'Persistent memory you can edit (changes land on disk immediately, visible in next session):',
+  'Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:',
   '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
   '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
   '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
@@ -16,6 +14,7 @@ const ROC_STATIC_SYSTEM_PROMPT = [
   '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
   '',
   'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
+  'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
   '',
   'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
   'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
@@ -40,7 +39,6 @@ export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
 export function buildSystemPrompt(input: {
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
-  frozenSnapshot: FrozenSnapshot;
   workflowHint: WorkflowHint;
 }): string {
   const sections = [
@@ -49,10 +47,6 @@ export function buildSystemPrompt(input: {
     `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`
   ];
   sections.push(...createWorkflowOverview(input.workflowHint));
-  const snapshotBlock = renderFrozenSnapshot(input.frozenSnapshot);
-  if (snapshotBlock.length > 0) {
-    sections.push('', snapshotBlock);
-  }
   return sections.join('\n');
 }
 

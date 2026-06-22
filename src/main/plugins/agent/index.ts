@@ -18,6 +18,7 @@ import type {
   SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
@@ -231,7 +232,8 @@ function resolveDeepAgentExecutor(
   }
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
-    paths: option.paths
+    paths: option.paths,
+    store: new RocSqliteStore(context.database.getCoreConnection())
   });
 }
 

@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ClientTool } from '@langchain/core/tools';
-import type { FrozenSnapshot } from '../memory/snapshot';
-import { renderFrozenSnapshotWithPercentage } from '../memory/snapshot';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from './prompt';
 
 /**
@@ -11,7 +9,6 @@ import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } f
 export enum BlockStability {
   STATIC = 'static',           // 跨所有会话不变
   WORKSPACE = 'workspace',     // 工作区级稳定
-  SESSION = 'session',         // 会话级稳定
   CAPABILITY = 'capability',   // 能力集变化时失效
   REQUEST = 'request'          // 每请求重建
 }
@@ -19,7 +16,7 @@ export enum BlockStability {
  * 系统提示的可缓存块
  */
 export interface PromptBlock {
-  type: 'static' | 'workspace' | 'tools' | 'snapshot' | 'capability';
+  type: 'static' | 'workspace' | 'tools' | 'capability';
   content: string;
   stability: BlockStability;
   hash: string;  // SHA-256 前 16 字符
@@ -38,7 +35,6 @@ export class SystemPromptBuilder {
   static build(input: {
     enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
     workspacePath: string | null;
-    frozenSnapshot: FrozenSnapshot;
     workflowHint: WorkflowHint;
     tools: ClientTool[];
   }): PromptBlock[] {
@@ -46,7 +42,6 @@ export class SystemPromptBuilder {
     blocks.push(SystemPromptBuilder.buildStaticBlock());
     blocks.push(SystemPromptBuilder.buildWorkspaceBlock(input.workspacePath));
     blocks.push(SystemPromptBuilder.buildToolsBlock(input.tools));
-    blocks.push(SystemPromptBuilder.buildSnapshotBlock(input.frozenSnapshot));
     blocks.push(SystemPromptBuilder.buildCapabilityBlock(input.enabledCapabilities, input.workflowHint));
     return blocks;
   }
@@ -58,7 +53,7 @@ export class SystemPromptBuilder {
       'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
       'For code or configuration changes, run direct verification before claiming completion.',
       '',
-      'Persistent memory you can edit (changes land on disk immediately, visible in next session):',
+      'Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:',
       '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
       '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
       '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
@@ -66,6 +61,7 @@ export class SystemPromptBuilder {
       '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
       '',
       'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
+      'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
@@ -120,16 +116,6 @@ export class SystemPromptBuilder {
       type: 'tools',
       content,
       stability: BlockStability.CAPABILITY,
-      hash: SystemPromptBuilder.computeHash(content)
-    };
-  }
-
-  private static buildSnapshotBlock(snapshot: FrozenSnapshot): PromptBlock {
-    const content = renderFrozenSnapshotWithPercentage(snapshot);
-    return {
-      type: 'snapshot',
-      content,
-      stability: BlockStability.SESSION,
       hash: SystemPromptBuilder.computeHash(content)
     };
   }

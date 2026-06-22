@@ -79,13 +79,13 @@ describe('MemoryFeature', () => {
       limit: 50
     });
     expect(client.api.memory.snapshotPreview).toHaveBeenCalled();
-    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('<FROZEN_SNAPSHOT>');
+    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# DeepAgents Memory Preview');
   });
 });
 
 function createMemoryStatus(): MemoryStatus {
   return {
-    root: 'F:\\Code\\Roc\\.roc\\memory',
+    root: '/memory',
     workspaceHash: 'abcdef0123456789',
     workspaceLabel: 'Roc',
     files: [
@@ -95,7 +95,7 @@ function createMemoryStatus(): MemoryStatus {
         exists: true,
         charCount: 25,
         charLimit: 1375,
-        absolutePath: 'F:\\Code\\Roc\\.roc\\memory\\global\\USER.md',
+        absolutePath: '/memory/global/USER.md',
         effective: true,
         updatedAt: '2026-05-28T00:00:00.000Z'
       }
@@ -121,7 +121,7 @@ function createMemoryClient(memoryStatus: MemoryStatus): RocClient {
       snapshotPreview: vi.fn().mockResolvedValue({
         ok: true,
         data: {
-          text: '<FROZEN_SNAPSHOT>\n# user prefers PowerShell\n</FROZEN_SNAPSHOT>'
+          text: '# DeepAgents Memory Preview\n\n## /memory/global/USER.md\n\n# user prefers PowerShell'
         }
       })
     },

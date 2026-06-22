@@ -8,12 +8,9 @@ import type {
   MemoryStatus
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
-import {
-  isAgentRunCompletedPayload,
-  isAgentSessionArchivedPayload,
-  MemoryConsolidatorAdapter
-} from './consolidator-adapter';
-import { MemoryRepository, type MemoryRepositorySettings } from './memory-repository';
+import { AutoMemoryWriter, isAgentRunCompletedPayload } from '../../services/memory/auto-memory-writer';
+import { RocSqliteStore } from '../../services/memory/sqlite-store';
+import { MemoryStoreRepository, type MemoryStoreRepositorySettings } from './memory-store-repository';
 import { applyMemoryPluginSchema } from './schema';
 
 const pluginId = '@roc/plugin-memory';
@@ -98,12 +95,11 @@ export const memoryCapabilityDescriptors = [
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type MemoryPluginOptions = {
-  memoryRoot?: string;
   workspace?: {
     path: string;
     label: string;
   } | null;
-  getMemorySettings?: () => MemoryRepositorySettings;
+  getMemorySettings?: () => MemoryStoreRepositorySettings;
 };
 
 export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin {
@@ -121,29 +117,25 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
       capabilities: memoryCapabilityDescriptors
     },
     initialize: async (context) => {
-      const memoryRoot = resolveMemoryRoot(options, context);
       const db = context.database.getConnection();
       applyMemoryPluginSchema(db);
-      const repository = new MemoryRepository({
-        db,
-        memoryRoot,
+      const repository = new MemoryStoreRepository({
+        store: new RocSqliteStore(context.database.getCoreConnection()),
         workspace: options.workspace,
         getMemorySettings: options.getMemorySettings
       });
-      const consolidator = new MemoryConsolidatorAdapter(repository);
+      const autoMemoryWriter = new AutoMemoryWriter({
+        repository,
+        targetScope: options.workspace === null || options.workspace === undefined ? 'global' : 'workspace',
+        logger: context.logger
+      });
       registerMemoryCapabilities(context, repository);
       subscriptions = [
-        context.eventBus.subscribe('agent.run.completed', (event) => {
+        context.eventBus.subscribe('agent.run.completed', async (event) => {
           if (!isAgentRunCompletedPayload(event.payload)) {
             throw new Error('agent_run_completed_payload_invalid');
           }
-          consolidator.handleAgentRunCompleted(event.payload);
-        }),
-        context.eventBus.subscribe('agent.session.archived', (event) => {
-          if (!isAgentSessionArchivedPayload(event.payload)) {
-            throw new Error('agent_session_archived_payload_invalid');
-          }
-          consolidator.handleAgentSessionArchived(event.payload);
+          await autoMemoryWriter.handleAgentRunCompleted(event.payload, event.createdAt);
         })
       ];
     },
@@ -157,7 +149,7 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
   };
 }
 
-function registerMemoryCapabilities(context: RocPluginContext, repository: MemoryRepository): void {
+function registerMemoryCapabilities(context: RocPluginContext, repository: MemoryStoreRepository): void {
   context.capabilities.register(pluginId, memoryCapabilityDescriptors[0], async () => repository.status());
   context.capabilities.register(pluginId, memoryCapabilityDescriptors[1], async (input) =>
     repository.readFile(input as { scope: MemoryScope; kind: MemoryKind })
@@ -179,15 +171,4 @@ function descriptor<TInput, TOutput>(
     inputSchema,
     outputSchema
   };
-}
-
-function resolveMemoryRoot(options: MemoryPluginOptions, context: RocPluginContext): string {
-  if (options.memoryRoot !== undefined) {
-    return options.memoryRoot;
-  }
-  const configured = context.config.get<string>('memory.root');
-  if (configured === null || configured.trim().length === 0) {
-    throw new Error('memory_root_missing');
-  }
-  return configured;
 }

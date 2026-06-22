@@ -57,9 +57,14 @@ describe('DatabasePool', () => {
     const facade = pool.createPluginDatabaseFacade('@roc/plugin-agent');
 
     facade.getConnection().prepare('CREATE TABLE scoped (id TEXT PRIMARY KEY)').run();
+    facade.getCoreConnection().prepare('CREATE TABLE shared (id TEXT PRIMARY KEY)').run();
 
     expect(facade.getConnection.length).toBe(0);
+    expect(facade.getCoreConnection.length).toBe(0);
     expect(() => pool.getConnection('@roc/plugin-task').prepare('SELECT * FROM scoped').all()).toThrow();
+    expect(pool.getCoreConnection().prepare('SELECT name FROM sqlite_master WHERE name = ?').pluck().get('shared')).toBe(
+      'shared'
+    );
   });
 
   it('closes every open connection', () => {

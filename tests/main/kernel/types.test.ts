@@ -94,6 +94,7 @@ describe('kernel canonical type contracts', () => {
   it('scopes plugin context facades to the current plugin', () => {
     expectTypeOf<RocPluginContext['database']>().toEqualTypeOf<{
       getConnection(): Database;
+      getCoreConnection(): Database;
     }>();
     expectTypeOf<RocPluginContext['config']>().toEqualTypeOf<{
       get<T>(key: string): T | null;

@@ -1,6 +1,7 @@
 import {
   CompositeBackend,
   FilesystemBackend,
+  StoreBackend,
   type AnyBackendProtocol,
   type EditResult,
   type FilesystemPermission,
@@ -12,21 +13,22 @@ import {
   type ReadRawResult,
   type ReadResult
 } from 'deepagents';
-import { join } from 'node:path';
-import type { LangChainChatModelHandle } from '../langchain-model-factory';
+import type { BaseStore } from '@langchain/langgraph';
 import { CapacityService } from '../memory/capacity';
-import type { ConsolidatorService } from '../memory/consolidator';
 import { SecurityScanService } from '../memory/security-scan';
+import { listMemorySlots } from '../memory/store-slots';
 import { buildWorkspaceHash, type RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
-import { WritableMemoryFilesystemBackend } from './writable-memory-backend';
+import { RocStoreMemoryBackend } from './store-memory-backend';
 
 const WORKSPACE_ROUTE = '/workspace/';
 const SKILLS_ROUTE = '/skills/';
-const MEMORY_ROUTE = '/memory/';
+const MEMORY_GLOBAL_ROUTE = '/memory/global/';
+const MEMORY_WORKSPACE_ROUTE = '/memory/workspaces/current/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
 const SKILL_ACCESS_DENIED_ERROR = 'Roc 当前回合未启用这个 skill。';
 const UNKNOWN_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';
+const WORKSPACE_MEMORY_REQUIRED_ERROR = 'No workspace selected; select a workspace before writing workspace-scoped memory.';
 
 export type RocCompositeBackend = {
   readonly routePrefixes: string[];
@@ -138,6 +140,46 @@ class ReadOnlyFilesystemBackend {
 
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
     return this.delegate.downloadFiles(paths);
+  }
+}
+
+class WorkspaceMemoryRequiredBackend {
+  readonly id = 'roc-workspace-memory-required';
+
+  ls(_path: string): Promise<LsResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  read(_filePath: string, _offset?: number, _limit?: number): Promise<ReadResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  readRaw(_filePath: string): Promise<ReadRawResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  grep(_pattern: string, _path?: string | null, _glob?: string | null): Promise<GrepResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  glob(_pattern: string, _path?: string): Promise<GlobResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
+    return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
+  }
+
+  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
+    return Promise.resolve(files.map(([path]) => ({ path, error: 'permission_denied' })));
+  }
+
+  downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    return Promise.resolve(paths.map((path) => ({ path, content: null, error: 'permission_denied' })));
   }
 }
 
@@ -322,14 +364,13 @@ class RocNonExecutingCompositeBackend {
 function createRouteBackends(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
+  store: BaseStore;
   securityScan: SecurityScanService;
   capacity: CapacityService;
-  consolidatorService: ConsolidatorService;
-  activeModelHandle: LangChainChatModelHandle;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;
-  memoryRoute: string;
+  memorySources: string[];
 } {
   const routeRejectingBackend = new RocRouteRejectingFilesystemBackend();
   const workspace = input.workspaceService.getCurrentWorkspace();
@@ -343,24 +384,32 @@ function createRouteBackends(input: {
     selectedSkillIds.length === 0
       ? new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR)
       : new SelectedSkillsFilesystemBackend(skillsBackendBase, selectedSkillIds, READ_ONLY_SKILLS_ERROR);
-  const memoryBackendBase = new FilesystemBackend({
-    rootDir: input.paths.memoryDir,
-    virtualMode: true
-  });
+  const slots = listMemorySlots(workspaceHash);
+  const globalSlots = slots.filter((slot) => slot.scope === 'global');
+  const workspaceSlots = slots.filter((slot) => slot.scope === 'workspace');
+  const globalKindByKey = new Map(globalSlots.map((slot) => [slot.storeKey, slot.kind]));
+  const workspaceKindByKey = new Map(workspaceSlots.map((slot) => [slot.storeKey, slot.kind]));
   const routes: Record<string, AnyBackendProtocol> = {
     [SKILLS_ROUTE]: skillsBackend,
-    [MEMORY_ROUTE]: new WritableMemoryFilesystemBackend(
-      memoryBackendBase,
-      workspaceHash,
+    [MEMORY_GLOBAL_ROUTE]: new RocStoreMemoryBackend(
+      new StoreBackend({ store: input.store, namespace: ['roc', 'memory', 'global'] }),
+      new Set(globalSlots.map((slot) => slot.storeKey)),
       input.securityScan,
       input.capacity,
-      (resolved, kind) => input.consolidatorService.scheduleForFile(
-        join(input.paths.memoryDir, resolved),
-        kind,
-        input.activeModelHandle
-      )
+      globalKindByKey
     )
   };
+
+  routes[MEMORY_WORKSPACE_ROUTE] =
+    workspaceHash === null
+      ? new WorkspaceMemoryRequiredBackend()
+      : new RocStoreMemoryBackend(
+          new StoreBackend({ store: input.store, namespace: ['roc', 'memory', 'workspaces', workspaceHash] }),
+          new Set(workspaceSlots.map((slot) => slot.storeKey)),
+          input.securityScan,
+          input.capacity,
+          workspaceKindByKey
+        );
 
   if (workspace !== null) {
     routes[WORKSPACE_ROUTE] = new FilesystemBackend({
@@ -374,21 +423,20 @@ function createRouteBackends(input: {
 
   return {
     backend,
-    memoryRoute: MEMORY_ROUTE
+    memorySources: slots.map((slot) => slot.virtualPath)
   };
 }
 
 export function createBackend(input: {
   workspaceService: WorkspaceService;
   paths: RocPaths;
+  store: BaseStore;
   securityScan: SecurityScanService;
   capacity: CapacityService;
-  consolidatorService: ConsolidatorService;
-  activeModelHandle: LangChainChatModelHandle;
   selectedSkillIds?: readonly string[];
 }): {
   backend: RocCompositeBackend;
-  memoryRoute: string;
+  memorySources: string[];
 } {
   return createRouteBackends(input);
 }

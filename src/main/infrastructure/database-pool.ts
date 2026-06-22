@@ -41,10 +41,14 @@ export class DatabasePool {
     return connection;
   }
 
-  createPluginDatabaseFacade(pluginId: string): { getConnection(): DatabaseConnection } {
+  createPluginDatabaseFacade(pluginId: string): {
+    getConnection(): DatabaseConnection;
+    getCoreConnection(): DatabaseConnection;
+  } {
     assertPluginId(pluginId);
     return {
-      getConnection: () => this.getConnection(pluginId)
+      getConnection: () => this.getConnection(pluginId),
+      getCoreConnection: () => this.getCoreConnection()
     };
   }
 

@@ -178,5 +178,52 @@ describe('config helper modules', () => {
       permissions: defaultPermissions
     });
   });
+
+  it('drops obsolete disk-memory settings during legacy migration', () => {
+    const migrated = migrateLegacySplitConfig({
+      rawSettings: {
+        schemaVersion: 2,
+        defaultWorkspace: null,
+        startup: { openAtLogin: false, minimizeToTray: true },
+        notifications: { lowDistraction: true },
+        globalHotkey: null,
+        memory: {
+          frozenSnapshotEnabled: false,
+          userProfileEnabled: false,
+          agentsRulesEnabled: false,
+          charLimits: { user: 2048, agents: 1024, memory: 4096 },
+          sessionRetentionDays: 30,
+          consolidatorEnabled: false,
+          consolidatorDebounceMinutes: 3,
+          consolidatorTargetRatio: 0.5,
+          consolidatorDailyQuota: 2,
+          preCompactionFlushEnabled: false,
+          preCompactionTokenThreshold: 0.5,
+          preCompactionContextWindowTokens: 64000,
+          securityScan: {
+            promptInjection: false,
+            credential: true,
+            sshBackdoor: false,
+            invisibleUnicode: true
+          }
+        }
+      },
+      legacyProviders: undefined,
+      legacyMcp: undefined,
+      legacyPermissions: undefined,
+      legacyShortcuts: undefined
+    });
+
+    expect(migrated.settings.memory).toEqual({
+      charLimits: { user: 2048, agents: 1024, memory: 4096 },
+      sessionRetentionDays: 30,
+      securityScan: {
+        promptInjection: false,
+        credential: true,
+        sshBackdoor: false,
+        invisibleUnicode: true
+      }
+    });
+  });
 });
 

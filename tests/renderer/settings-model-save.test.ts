@@ -39,18 +39,8 @@ function defaultSettings(): AppSettings {
     notifications: { lowDistraction: true },
     globalHotkey: null,
     memory: {
-      frozenSnapshotEnabled: true,
-      userProfileEnabled: true,
-      agentsRulesEnabled: true,
       charLimits: { user: 1375, agents: 800, memory: 2200 },
       sessionRetentionDays: 90,
-      consolidatorEnabled: true,
-      consolidatorDebounceMinutes: 10,
-      consolidatorTargetRatio: 0.85,
-      consolidatorDailyQuota: 50,
-      preCompactionFlushEnabled: true,
-      preCompactionTokenThreshold: 0.85,
-      preCompactionContextWindowTokens: 200000,
       securityScan: {
         promptInjection: true,
         credential: true,
@@ -425,8 +415,15 @@ describe('settings model helpers', () => {
       defaultWorkspace: 'F:\\Code\\Roc',
       memory: {
         ...baseSettings.memory,
-        frozenSnapshotEnabled: false,
-        sessionRetentionDays: 30
+        charLimits: {
+          ...baseSettings.memory.charLimits,
+          memory: 4400
+        },
+        sessionRetentionDays: 30,
+        securityScan: {
+          ...baseSettings.memory.securityScan,
+          credential: false
+        }
       }
     };
     const basePermissions = defaultPermissions();
@@ -443,13 +440,17 @@ describe('settings model helpers', () => {
     expect(rows.map((row) => row.field)).toEqual([
       'defaultModelId',
       'defaultWorkspace',
-      'memory.frozenSnapshotEnabled',
+      'memory.charLimits.memory',
       'memory.sessionRetentionDays',
+      'memory.securityScan.credential',
       'permissions.mode'
     ]);
     expect(rows.find((row) => row.field === 'defaultModelId')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'defaultWorkspace')?.severity).toBe('info');
-    expect(rows.find((row) => row.field === 'memory.frozenSnapshotEnabled')?.after).toBe('已关闭');
+    expect(rows.find((row) => row.field === 'memory.charLimits.memory')?.impact).toBe(
+      '会影响 DeepAgents native memory 写入 MEMORY.md 的容量上限。'
+    );
+    expect(rows.find((row) => row.field === 'memory.securityScan.credential')?.after).toBe('已关闭');
     expect(rows.find((row) => row.field === 'permissions.mode')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'permissions.mode')?.after).toBe('默认(MCP 与删除文件需审批)');
   });

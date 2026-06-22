@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { InMemoryStore } from '@langchain/langgraph';
+import { describe, expect, it } from 'vitest';
 import { createBackend, createRocFilesystemPermissions } from '../../../../src/main/services/deep-agent/backend';
 import { CapacityService } from '../../../../src/main/services/memory/capacity';
 import { defaultSettings } from '../../../../src/main/services/config/defaults';
@@ -13,12 +14,9 @@ function createTestBackend() {
       getCurrentWorkspace: () => ({ path: workspacePath, label: 'Roc' })
     } as unknown as Parameters<typeof createBackend>[0]['workspaceService'],
     paths: new RocPaths('F:\\Code\\Roc\\.test-data'),
+    store: new InMemoryStore(),
     securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
     capacity: new CapacityService(defaultSettings.memory.charLimits),
-    consolidatorService: {
-      scheduleForFile: vi.fn()
-    } as unknown as Parameters<typeof createBackend>[0]['consolidatorService'],
-    activeModelHandle: {} as Parameters<typeof createBackend>[0]['activeModelHandle'],
     selectedSkillIds: []
   });
 }
@@ -34,7 +32,10 @@ describe('DeepAgents Roc backend', () => {
   it('keeps Roc virtual route prefixes for file tools', () => {
     const { backend } = createTestBackend();
 
-    expect(backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(backend.routePrefixes).toEqual(
+      expect.arrayContaining(['/workspace/', '/skills/', '/memory/global/', '/memory/workspaces/current/'])
+    );
+    expect(backend.routePrefixes).not.toContain('/memory/');
     expect(backend.routePrefixes).not.toContain('/agents/');
   });
 

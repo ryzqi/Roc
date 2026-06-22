@@ -143,7 +143,6 @@ describe('microkernel regression', () => {
           }
         }),
         createMemoryPlugin({
-          memoryRoot: join(root, 'memory'),
           workspace: {
             path: workspaceRoot,
             label: 'Regression Workspace'
@@ -223,7 +222,9 @@ describe('microkernel regression', () => {
     expect(scheduledRuns).toEqual([]);
     expect(runNow).toMatchObject({ taskId: task.id });
     expect(runOutputEvents).toContainEqual(expect.objectContaining({ runId: runNow.runId, type: 'message', role: 'assistant' }));
-    expect(memorySnapshot.text).toContain('Recent Agent Memory Events');
+    expect(memorySnapshot.text).toContain('# DeepAgents Memory Preview');
+    expect(memorySnapshot.text).toContain('Completed run');
+    expect(memorySnapshot.text).toContain('Static DeepAgent response.');
     expect(mcpServers).toContainEqual(expect.objectContaining({ id: 'exa-hosted' }));
     expect(rtkStatus).toMatchObject({ resourceState: 'ready' });
     expect(fileTree.entries).toContainEqual(expect.objectContaining({ name: 'README.md' }));

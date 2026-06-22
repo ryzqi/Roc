@@ -83,7 +83,6 @@ describe('secondary plugins integration', () => {
           }
         }),
         createMemoryPlugin({
-          memoryRoot: join(root, 'memory'),
           workspace: {
             path: workspaceRoot,
             label: 'Secondary Workspace'

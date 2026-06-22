@@ -297,7 +297,7 @@ function createContext(capabilities: CapabilityRegistry): RocPluginContext {
     pluginId: '@roc/plugin-runtime-tools',
     eventBus: createEventBus(),
     capabilities,
-    database: { getConnection: () => db },
+    database: { getConnection: () => db, getCoreConnection: () => db },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }

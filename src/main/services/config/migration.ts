@@ -85,10 +85,6 @@ function readPositiveInteger(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function readRatio(value: unknown, fallback: number): number {
-  return typeof value === 'number' && value >= 0 && value <= 1 ? value : fallback;
-}
-
 function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
   if (raw === null || typeof raw !== 'object') {
     return defaultSettings.memory;
@@ -105,43 +101,12 @@ function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
       : {};
 
   return {
-    frozenSnapshotEnabled: readBoolean(
-      value.frozenSnapshotEnabled,
-      defaultSettings.memory.frozenSnapshotEnabled
-    ),
-    userProfileEnabled: readBoolean(value.userProfileEnabled, defaultSettings.memory.userProfileEnabled),
-    agentsRulesEnabled: readBoolean(value.agentsRulesEnabled, defaultSettings.memory.agentsRulesEnabled),
     charLimits: {
       user: readPositiveInteger(charLimits.user, defaultSettings.memory.charLimits.user),
       agents: readPositiveInteger(charLimits.agents, defaultSettings.memory.charLimits.agents),
       memory: readPositiveInteger(charLimits.memory, defaultSettings.memory.charLimits.memory)
     },
     sessionRetentionDays: readPositiveInteger(value.sessionRetentionDays, defaultSettings.memory.sessionRetentionDays),
-    consolidatorEnabled: readBoolean(value.consolidatorEnabled, defaultSettings.memory.consolidatorEnabled),
-    consolidatorDebounceMinutes: readPositiveInteger(
-      value.consolidatorDebounceMinutes,
-      defaultSettings.memory.consolidatorDebounceMinutes
-    ),
-    consolidatorTargetRatio: readRatio(
-      value.consolidatorTargetRatio,
-      defaultSettings.memory.consolidatorTargetRatio
-    ),
-    consolidatorDailyQuota: readPositiveInteger(
-      value.consolidatorDailyQuota,
-      defaultSettings.memory.consolidatorDailyQuota
-    ),
-    preCompactionFlushEnabled: readBoolean(
-      value.preCompactionFlushEnabled,
-      defaultSettings.memory.preCompactionFlushEnabled
-    ),
-    preCompactionTokenThreshold: readRatio(
-      value.preCompactionTokenThreshold,
-      defaultSettings.memory.preCompactionTokenThreshold
-    ),
-    preCompactionContextWindowTokens: readPositiveInteger(
-      value.preCompactionContextWindowTokens,
-      defaultSettings.memory.preCompactionContextWindowTokens
-    ),
     securityScan: {
       promptInjection: readBoolean(securityScan.promptInjection, defaultSettings.memory.securityScan.promptInjection),
       credential: readBoolean(securityScan.credential, defaultSettings.memory.securityScan.credential),

@@ -247,9 +247,7 @@ describe('ConfigService unified settings document', () => {
       globalHotkey: 'Ctrl+Alt+R',
       memory: {
         ...defaultSettings.memory,
-        frozenSnapshotEnabled: false,
-        sessionRetentionDays: 30,
-        consolidatorTargetRatio: 0.75
+        sessionRetentionDays: 30
       },
       tasks: {
         longRunningThresholds: {

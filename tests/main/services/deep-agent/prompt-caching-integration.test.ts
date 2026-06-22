@@ -23,7 +23,6 @@ Workspace content here`;
   it('should have BlockStability enum values', () => {
     expect(BlockStability.STATIC).toBe('static');
     expect(BlockStability.WORKSPACE).toBe('workspace');
-    expect(BlockStability.SESSION).toBe('session');
     expect(BlockStability.CAPABILITY).toBe('capability');
     expect(BlockStability.REQUEST).toBe('request');
   });
@@ -39,7 +38,6 @@ Workspace content here`;
 
     expect(shouldCache(BlockStability.STATIC, 'balanced')).toBe(true);
     expect(shouldCache(BlockStability.WORKSPACE, 'balanced')).toBe(true);
-    expect(shouldCache(BlockStability.SESSION, 'balanced')).toBe(true);
     expect(shouldCache(BlockStability.CAPABILITY, 'balanced')).toBe(true);
     expect(shouldCache(BlockStability.REQUEST, 'balanced')).toBe(false);
   });

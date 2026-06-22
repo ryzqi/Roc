@@ -87,7 +87,7 @@ describe('MemoryView file editor', () => {
     await flushPromises();
 
     expect(preload.memory.snapshotPreview).toHaveBeenCalled();
-    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('<FROZEN_SNAPSHOT>');
+    expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# DeepAgents Memory Preview');
     expect(container.querySelector('[data-testid="memory-snapshot-preview"]')?.textContent).toContain('# user prefers PowerShell');
   });
 
@@ -130,7 +130,7 @@ describe('MemoryView file editor', () => {
 
 function createMemoryStatus(): MemoryStatus {
   return {
-    root: 'F:\\Code\\Roc\\.roc\\memory',
+    root: '/memory',
     workspaceHash: 'abcdef0123456789',
     workspaceLabel: 'Roc',
     files: [
@@ -140,7 +140,7 @@ function createMemoryStatus(): MemoryStatus {
         exists: true,
         charCount: 25,
         charLimit: 1375,
-        absolutePath: 'F:\\Code\\Roc\\.roc\\memory\\global\\USER.md',
+        absolutePath: '/memory/global/USER.md',
         effective: true,
         updatedAt: '2026-05-28T00:00:00.000Z'
       },
@@ -150,7 +150,7 @@ function createMemoryStatus(): MemoryStatus {
         exists: false,
         charCount: 0,
         charLimit: 2200,
-        absolutePath: 'F:\\Code\\Roc\\.roc\\memory\\workspaces\\abcdef0123456789\\MEMORY.md',
+        absolutePath: '/memory/workspaces/current/MEMORY.md',
         effective: false,
         updatedAt: null
       }
@@ -188,13 +188,7 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
       snapshotPreview: vi.fn().mockResolvedValue({
         ok: true as const,
         data: {
-          text: [
-            '<FROZEN_SNAPSHOT>',
-            '<USER_PROFILE usage="25/1375" source="global">',
-            '# user prefers PowerShell',
-            '</USER_PROFILE>',
-            '</FROZEN_SNAPSHOT>'
-          ].join('\n')
+          text: ['# DeepAgents Memory Preview', '## /memory/global/USER.md', '# user prefers PowerShell'].join('\n\n')
         }
       })
     },

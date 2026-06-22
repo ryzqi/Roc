@@ -129,6 +129,17 @@ describe('settings surfaces', () => {
     expect(sectionHtml).toContain('系统实际状态');
     expect(sectionHtml).toContain('已同步');
     expect(sectionHtml).toContain('注册失败');
+    expect(sectionHtml).toContain('DeepAgents native memory');
+    expect(sectionHtml).not.toContain('冻结快照');
+    expect(sectionHtml).not.toContain('用户画像');
+    expect(sectionHtml).not.toContain('规则文件');
+    expect(sectionHtml).not.toContain('自动压缩');
+    expect(sectionHtml).not.toContain('压缩延迟');
+    expect(sectionHtml).not.toContain('压缩目标');
+    expect(sectionHtml).not.toContain('压缩配额');
+    expect(sectionHtml).not.toContain('预压缩刷新');
+    expect(sectionHtml).not.toContain('刷新阈值');
+    expect(sectionHtml).not.toContain('上下文窗口');
   });
 
   it('renders provider rows without status dots or card title chrome', () => {

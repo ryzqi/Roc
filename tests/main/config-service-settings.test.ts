@@ -123,6 +123,75 @@ describe('ConfigService unified settings document', () => {
     });
   });
 
+  it('normalizes current settings documents by dropping obsolete disk-memory fields', () => {
+    writeFileSync(
+      join(root, 'config', 'settings.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 4,
+          settings: {
+            ...defaultSettings,
+            memory: {
+              frozenSnapshotEnabled: false,
+              userProfileEnabled: false,
+              agentsRulesEnabled: false,
+              charLimits: { user: 2048, agents: 1024, memory: 4096 },
+              sessionRetentionDays: 30,
+              consolidatorEnabled: false,
+              consolidatorDebounceMinutes: 3,
+              consolidatorTargetRatio: 0.5,
+              consolidatorDailyQuota: 2,
+              preCompactionFlushEnabled: false,
+              preCompactionTokenThreshold: 0.5,
+              preCompactionContextWindowTokens: 64000,
+              securityScan: {
+                promptInjection: false,
+                credential: true,
+                sshBackdoor: false,
+                invisibleUnicode: true
+              }
+            }
+          },
+          providers: defaultProviders,
+          mcp: defaultMcpConfig,
+          permissions: defaultPermissions,
+          shortcuts: {
+            schemaVersion: 1,
+            shortcuts: []
+          }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    expect(configService.getSettings().memory).toEqual({
+      charLimits: { user: 2048, agents: 1024, memory: 4096 },
+      sessionRetentionDays: 30,
+      securityScan: {
+        promptInjection: false,
+        credential: true,
+        sshBackdoor: false,
+        invisibleUnicode: true
+      }
+    });
+    const persisted = readSettingsDocument() as { settings: { memory: unknown } };
+    expect(persisted.settings.memory).toEqual({
+      charLimits: { user: 2048, agents: 1024, memory: 4096 },
+      sessionRetentionDays: 30,
+      securityScan: {
+        promptInjection: false,
+        credential: true,
+        sshBackdoor: false,
+        invisibleUnicode: true
+      }
+    });
+  });
+
 
   it('moves legacy server approval fields to default MCP approval mode during migration', () => {
     writeFileSync(

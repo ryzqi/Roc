@@ -4,7 +4,6 @@ import {
   buildSystemPrompt,
   createCapabilitySummary
 } from '../../src/main/services/deep-agent/prompt';
-import type { FrozenSnapshot } from '../../src/main/services/memory/snapshot';
 
 describe('deep agent prompt', () => {
   it('forbids echoing SKILL.md contents after read_file', () => {
@@ -14,7 +13,6 @@ describe('deep agent prompt', () => {
         skills: ['project-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: null
     });
 
@@ -28,7 +26,6 @@ describe('deep agent prompt', () => {
         skills: ['project-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: null
     });
 
@@ -38,10 +35,12 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Before changing files, inspect the relevant source, tests, and configuration.');
     expect(prompt).toContain('Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.');
     expect(prompt).toContain('For code or configuration changes, run direct verification before claiming completion.');
-    expect(prompt).toContain('Persistent memory you can edit (changes land on disk immediately, visible in next session):');
+    expect(prompt).toContain('Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:');
     expect(prompt).toContain('/memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)');
     expect(prompt).toContain('/memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)');
     expect(prompt).toContain('Use Edit/Write on those paths.');
+    expect(prompt).toContain('Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.');
+    expect(prompt).not.toContain('FROZEN_SNAPSHOT');
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
     expect(prompt).toContain(
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
@@ -68,7 +67,6 @@ describe('deep agent prompt', () => {
         skills: ['zeta-review', 'alpha-review']
       },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: null
     });
 
@@ -78,7 +76,7 @@ describe('deep agent prompt', () => {
       'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
       'For code or configuration changes, run direct verification before claiming completion.',
       '',
-      'Persistent memory you can edit (changes land on disk immediately, visible in next session):',
+      'Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:',
       '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
       '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
       '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
@@ -86,6 +84,7 @@ describe('deep agent prompt', () => {
       '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
       '',
       'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
+      'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).',
@@ -107,7 +106,6 @@ describe('deep agent prompt', () => {
         skills: []
       },
       workspacePath: null,
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: null
     });
 
@@ -124,66 +122,21 @@ describe('deep agent prompt', () => {
     ).toBe('mcp=none;skills=none;untrusted_context_policy=external_content_reference_only');
   });
 
-  it('embeds the frozen snapshot block when enabled', () => {
-    const prompt = buildSystemPrompt({
-      enabledCapabilities: { mcpServers: [], skills: [] },
-      workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: {
-        user: {
-          kind: 'user',
-          filename: 'USER.md',
-          content: '# user',
-          charCount: 6,
-          charLimit: 1375,
-          source: 'global',
-          enabled: true
-        },
-        agents: {
-          kind: 'agents',
-          filename: 'AGENTS.md',
-          content: '',
-          charCount: 0,
-          charLimit: 800,
-          source: 'global',
-          enabled: true
-        },
-        memory: {
-          kind: 'memory',
-          filename: 'MEMORY.md',
-          content: '',
-          charCount: 0,
-          charLimit: 2200,
-          source: 'global',
-          enabled: true
-        },
-        totalChars: 6,
-        totalLimit: 4375,
-        globallyEnabled: true
-      },
-      workflowHint: null
-    });
-
-    expect(prompt).toContain('<FROZEN_SNAPSHOT>');
-    expect(prompt).toContain('<USER_PROFILE');
-    expect(prompt).toContain('# user');
-  });
-
-  it('omits the frozen snapshot block when globally disabled', () => {
+  it('does not embed a frozen snapshot block because DeepAgents memory loads the source files', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: null,
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: null
     });
 
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
+    expect(prompt).toContain('Persistent memory is stored in Roc SQLite through DeepAgents memory');
   });
 
   it('adds a propose-background-task workflow overview for DeepAgents creation', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: 'propose_background_task'
     });
 
@@ -229,7 +182,6 @@ describe('deep agent prompt', () => {
     const prompt = buildSystemPrompt({
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
-      frozenSnapshot: disabledSnapshot(),
       workflowHint: 'background_task_change'
     });
 
@@ -250,38 +202,3 @@ describe('deep agent prompt', () => {
     ).toBe('mcp=a-docs,z-docs;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only');
   });
 });
-
-function disabledSnapshot(): FrozenSnapshot {
-  return {
-    user: {
-      kind: 'user',
-      filename: 'USER.md',
-      content: '',
-      charCount: 0,
-      charLimit: 1375,
-      source: 'global',
-      enabled: false
-    },
-    agents: {
-      kind: 'agents',
-      filename: 'AGENTS.md',
-      content: '',
-      charCount: 0,
-      charLimit: 800,
-      source: 'global',
-      enabled: false
-    },
-    memory: {
-      kind: 'memory',
-      filename: 'MEMORY.md',
-      content: '',
-      charCount: 0,
-      charLimit: 2200,
-      source: 'global',
-      enabled: false
-    },
-    totalChars: 0,
-    totalLimit: 4375,
-    globallyEnabled: false
-  };
-}

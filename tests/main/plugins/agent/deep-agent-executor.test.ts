@@ -161,7 +161,17 @@ describe('createAgentDeepAgentExecutor', () => {
     });
 
     expect(buildInput.systemPrompt).toContain(`Workspace: ${taskWorkspacePath}`);
-    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(buildInput.backend.routePrefixes).toEqual(
+      expect.arrayContaining(['/workspace/', '/skills/', '/memory/global/', '/memory/workspaces/current/'])
+    );
+    expect(buildInput.backend.routePrefixes).not.toContain('/memory/');
+    expect(buildInput.memorySources).toEqual([
+      '/memory/global/USER.md',
+      '/memory/global/AGENTS.md',
+      '/memory/global/MEMORY.md',
+      '/memory/workspaces/current/AGENTS.md',
+      '/memory/workspaces/current/MEMORY.md'
+    ]);
     expect(readJson(shellOutput)).toMatchObject({
       cwd: taskWorkspacePath
     });
@@ -176,6 +186,11 @@ describe('createAgentDeepAgentExecutor', () => {
       workflowHint: 'propose_background_task',
       taskSource: 'workbench'
     });
+    expect(readBuildInput().memorySources).toEqual([
+      '/memory/global/USER.md',
+      '/memory/global/AGENTS.md',
+      '/memory/global/MEMORY.md'
+    ]);
 
     await expect(
       invokeTool(findTool(readBuiltTools(), 'propose_background_task'), {
@@ -198,7 +213,17 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const buildInput = readBuildInput();
 
-    expect(buildInput.backend.routePrefixes).toEqual(expect.arrayContaining(['/workspace/', '/skills/', '/memory/']));
+    expect(buildInput.backend.routePrefixes).toEqual(
+      expect.arrayContaining(['/workspace/', '/skills/', '/memory/global/', '/memory/workspaces/current/'])
+    );
+    expect(buildInput.backend.routePrefixes).not.toContain('/memory/');
+    expect(buildInput.memorySources).toEqual([
+      '/memory/global/USER.md',
+      '/memory/global/AGENTS.md',
+      '/memory/global/MEMORY.md',
+      '/memory/workspaces/current/AGENTS.md',
+      '/memory/workspaces/current/MEMORY.md'
+    ]);
     expect(buildInput.backend.routePrefixes).not.toContain('/agents/');
     expect('execute' in buildInput.backend).toBe(false);
     expect(buildInput.workspacePath).toBe(workspacePath);

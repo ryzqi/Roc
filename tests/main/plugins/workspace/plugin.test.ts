@@ -80,7 +80,7 @@ function createContext(capabilities: CapabilityRegistry): RocPluginContext {
     pluginId: '@roc/plugin-workspace',
     eventBus: createEventBus(),
     capabilities,
-    database: { getConnection: () => db },
+    database: { getConnection: () => db, getCoreConnection: () => db },
     config: {
       get: <T>(key: string) => (config.has(key) ? (config.get(key) as T) : null),
       set: <T>(key: string, value: T) => {

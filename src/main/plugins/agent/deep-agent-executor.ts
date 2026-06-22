@@ -1,5 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
-import { Command, InMemoryStore, MemorySaver } from '@langchain/langgraph';
+import { Command, MemorySaver } from '@langchain/langgraph';
+import type { BaseStore } from '@langchain/langgraph';
 import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
@@ -33,7 +34,6 @@ import { buildSystemPrompt } from '../../services/deep-agent/prompt';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
-import type { FrozenSnapshot } from '../../services/memory/snapshot';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { AgentDeepAgentExecutor } from './runtime';
 import { createChatRunEventQueue } from './chat-run-event-queue';
@@ -47,10 +47,10 @@ import {
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
   paths: RocPaths;
+  store: BaseStore;
 };
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
-  const store = new InMemoryStore();
   const checkpointer = new MemorySaver();
   return {
     execute: async function* (input) {
@@ -79,20 +79,20 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         handle,
         paths: options.paths,
         selectedSkillIds: input.request.enabledCapabilities.skills,
+        store: options.store,
         workspace: runtimeWorkspace
       });
       const systemPrompt = buildSystemPrompt({
         enabledCapabilities: input.request.enabledCapabilities,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        frozenSnapshot: disabledSnapshot(),
         workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
       });
       const agent = buildDeepAgent({
         model: handle.model,
         systemPrompt,
         backend: runtimeBackend.backend,
-        store,
-        memorySources: [],
+        store: options.store,
+        memorySources: runtimeBackend.memorySources,
         skillSources: input.request.enabledCapabilities.skills.length === 0 ? [] : ['/skills/'],
         subagents: createRunSubagents({
           webReadTool: tools.webReadTool
@@ -410,6 +410,7 @@ function createRuntimeBackend(input: {
   handle: LangChainChatModelHandle;
   paths: RocPaths;
   selectedSkillIds: readonly string[];
+  store: BaseStore;
   workspace: Workspace | null;
 }): ReturnType<typeof createBackend> {
   const workspaceService = {
@@ -424,12 +425,9 @@ function createRuntimeBackend(input: {
   return createBackend({
     workspaceService: workspaceService as Parameters<typeof createBackend>[0]['workspaceService'],
     paths: input.paths,
+    store: input.store,
     securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
     capacity: new CapacityService(defaultSettings.memory.charLimits),
-    consolidatorService: {
-      scheduleForFile: () => {}
-    } as unknown as Parameters<typeof createBackend>[0]['consolidatorService'],
-    activeModelHandle: input.handle,
     selectedSkillIds: input.selectedSkillIds
   });
 }
@@ -459,41 +457,6 @@ function createShellExecutionAdapter(capabilities: RocCapabilityRegistry, defaul
         bypassReason: result.bypassReason
       };
     }
-  };
-}
-
-function disabledSnapshot(): FrozenSnapshot {
-  return {
-    user: {
-      kind: 'user',
-      filename: 'USER.md',
-      content: '',
-      charCount: 0,
-      charLimit: 1375,
-      source: 'global',
-      enabled: false
-    },
-    agents: {
-      kind: 'agents',
-      filename: 'AGENTS.md',
-      content: '',
-      charCount: 0,
-      charLimit: 800,
-      source: 'global',
-      enabled: false
-    },
-    memory: {
-      kind: 'memory',
-      filename: 'MEMORY.md',
-      content: '',
-      charCount: 0,
-      charLimit: 2200,
-      source: 'global',
-      enabled: false
-    },
-    totalChars: 0,
-    totalLimit: 4375,
-    globallyEnabled: false
   };
 }
 

@@ -26,18 +26,8 @@ export type AppSettings = {
   };
   globalHotkey: string | null;
   memory: {
-    frozenSnapshotEnabled: boolean;
-    userProfileEnabled: boolean;
-    agentsRulesEnabled: boolean;
     charLimits: MemoryCharLimits;
     sessionRetentionDays: number;
-    consolidatorEnabled: boolean;
-    consolidatorDebounceMinutes: number;
-    consolidatorTargetRatio: number;
-    consolidatorDailyQuota: number;
-    preCompactionFlushEnabled: boolean;
-    preCompactionTokenThreshold: number;
-    preCompactionContextWindowTokens: number;
     securityScan: MemorySecurityScanSettings;
   };
   tasks: {

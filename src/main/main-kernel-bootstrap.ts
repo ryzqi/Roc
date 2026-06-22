@@ -178,7 +178,6 @@ function createDefaultMainKernelPlugins(input: {
       }
     }),
     createMemoryPlugin({
-      memoryRoot: input.paths.memoryDir,
       workspace: defaultWorkspace === null ? null : { path: defaultWorkspace, label: defaultWorkspace },
       getMemorySettings: () => configService.getSettings().memory
     }),

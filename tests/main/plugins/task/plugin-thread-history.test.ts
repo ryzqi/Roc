@@ -341,7 +341,7 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     pluginId: '@roc/plugin-task',
     eventBus: input.eventBus,
     capabilities: input.capabilities,
-    database: { getConnection: () => db },
+    database: { getConnection: () => db, getCoreConnection: () => db },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }

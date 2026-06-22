@@ -26,22 +26,12 @@ export const SettingsSchema: z.ZodType<AppSettings> = z.object({
   }),
   globalHotkey: z.string().nullable(),
   memory: z.object({
-    frozenSnapshotEnabled: z.boolean(),
-    userProfileEnabled: z.boolean(),
-    agentsRulesEnabled: z.boolean(),
     charLimits: z.object({
       user: z.number().int().positive(),
       agents: z.number().int().positive(),
       memory: z.number().int().positive()
     }),
     sessionRetentionDays: z.number().int().positive(),
-    consolidatorEnabled: z.boolean(),
-    consolidatorDebounceMinutes: z.number().int().positive(),
-    consolidatorTargetRatio: z.number().min(0).max(1),
-    consolidatorDailyQuota: z.number().int().positive(),
-    preCompactionFlushEnabled: z.boolean(),
-    preCompactionTokenThreshold: z.number().min(0).max(1),
-    preCompactionContextWindowTokens: z.number().int().positive(),
     securityScan: z.object({
       promptInjection: z.boolean(),
       credential: z.boolean(),

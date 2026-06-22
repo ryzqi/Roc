@@ -16,6 +16,10 @@ DeepAgents `StoreBackend` over a Roc SQLite-backed LangGraph `BaseStore`.
   types plus official JavaScript DeepAgents docs, not older Python examples or
   local 0.6.x notes.
 - Keep the Memory page and convert it into a Store-backed markdown editor.
+- Update the Settings memory section at the same time. Remove controls whose
+  only meaning was the old frozen snapshot, LLM consolidator, or pre-compaction
+  pipeline; keep only settings that still affect the native Store-backed memory
+  path.
 - Do not migrate old disk memory files. The old disk-backed memory data under the
   Roc memory root will be cleaned up as part of the refactor.
 - Keep only five markdown slots:
@@ -202,8 +206,6 @@ On capacity overflow:
 
 - fail explicitly with chars and limit
 - do not silently truncate
-- optional consolidator can retry with a shorter markdown rewrite, but only if it
-  still passes scan and capacity checks
 
 No broad catch-all error swallowing in business logic. Errors should surface
 through capability or IPC result boundaries.
@@ -233,6 +235,23 @@ The UI should still show:
 it as a virtual path such as `/memory/global/USER.md` in the shared type during
 implementation.
 
+The Settings memory section should be synchronized with the new runtime model:
+
+- Remove "冻结快照", "用户画像", and "规则文件" toggles unless the
+  implementation deliberately supports source-level exclusion from
+  `createDeepAgent({ memory })`. The preferred path is no toggle: the five
+  approved memory sources are loaded by native DeepAgents memory.
+- Remove "自动压缩", "压缩延迟", "压缩目标", and "压缩配额" settings. The new
+  automatic write path is a deterministic append to `MEMORY.md`, not the old LLM
+  capacity consolidator.
+- Remove "预压缩刷新", "刷新阈值", and "上下文窗口" settings unless a current
+  runtime path still consumes them after the refactor. Do not keep inert
+  settings in the UI or saved schema.
+- Keep character limits, security scan toggles, and session recall retention if
+  their existing services still consume them.
+- Bump or migrate the settings schema so removed fields do not survive as active
+  configuration, and update the settings impact summary copy.
+
 ## Cleanup
 
 Remove or replace these custom disk-backed pieces where they become obsolete.
@@ -243,9 +262,12 @@ initialization paths for old disk memory:
 - `resolveMemoryPath`
 - disk reads in `MemoryRepository`
 - disk reads in frozen snapshot generation
+- `ConsolidatorService` and `.consolidator-backup`
 - prompt text that describes custom Roc disk memory instead of DeepAgents memory
 - production dependencies on `memory.root` / `paths.memoryDir`
 - generated directories created only for old disk-backed memory
+- settings fields and UI controls for obsolete snapshot, consolidator, and
+  pre-compaction behavior
 
 Old memory data under `paths.memoryDir` is intentionally not migrated. The
 implementation should stop using that directory for active memory behavior; any
@@ -261,6 +283,8 @@ Add or update tests for:
 - `/memory/` route rejects paths outside the five-slot whitelist
 - `createDeepAgent` receives non-empty memory sources
 - Memory UI reads and writes Store-backed markdown content
+- Settings memory section exposes only native-memory-relevant controls
+- Settings schema migration drops or ignores obsolete memory fields explicitly
 - automatic consolidation writes only `MEMORY.md`
 - no workspace selected writes global `MEMORY.md`
 - workspace selected writes workspace `MEMORY.md`
@@ -270,9 +294,10 @@ Add or update tests for:
 Verification commands:
 
 - `pnpm test -- tests/main/memory`
-- `pnpm test -- tests/main/memory-integration`
+- `pnpm test -- tests/main/config-service-helpers.test.ts tests/main/config-memory-defaults.test.ts`
 - `pnpm test -- tests/main/deep-agent-prompt.test.ts`
 - `pnpm test -- tests/main/plugins/agent/deep-agent-executor.test.ts`
+- `pnpm test -- tests/renderer/settings-model.test.ts tests/renderer/settings-model-save.test.ts tests/renderer/settings-floating-surfaces.test.ts`
 - `pnpm test -- tests/renderer/memory-view.test.tsx tests/renderer/features/memory-feature.test.tsx`
 - `pnpm typecheck`
 

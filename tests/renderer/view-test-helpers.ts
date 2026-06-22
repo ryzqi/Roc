@@ -75,18 +75,8 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       },
       globalHotkey: null,
       memory: {
-        frozenSnapshotEnabled: true,
-        userProfileEnabled: true,
-        agentsRulesEnabled: true,
         charLimits: { user: 1375, agents: 800, memory: 2200 },
         sessionRetentionDays: 30,
-        consolidatorEnabled: true,
-        consolidatorDebounceMinutes: 10,
-        consolidatorTargetRatio: 0.85,
-        consolidatorDailyQuota: 50,
-        preCompactionFlushEnabled: true,
-        preCompactionTokenThreshold: 0.85,
-        preCompactionContextWindowTokens: 200000,
         securityScan: {
           promptInjection: true,
           credential: true,
