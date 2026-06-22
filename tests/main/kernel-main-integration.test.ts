@@ -59,12 +59,16 @@ describe('main kernel bootstrap integration', () => {
 
   it('keeps existing Electron window, tray, app icon, protocol, and host integration code in main entry', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8');
+    const pdfPreviewProtocolSource = readFileSync(join(process.cwd(), 'src', 'main', 'pdf-preview-protocol.ts'), 'utf8');
 
     expect(source).toContain('new BrowserWindow(buildMainWindowOptions');
     expect(source).toContain('applyWindowMaterialWithFallback');
     expect(source).toContain('new Tray');
     expect(source).toContain('appIconPath');
-    expect(source).toContain('protocol.handle(pdfPreviewScheme');
+    expect(source).toContain("import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';");
+    expect(source).toContain('registerPdfPreviewScheme();');
+    expect(source).toContain('registerPdfPreviewProtocol(() => pdfPreviewKernel);');
+    expect(pdfPreviewProtocolSource).toContain('protocol.handle(pdfPreviewScheme');
     expect(source).toContain('hostService.bindMainWindow');
     expect(source).toContain('kernel.subscribeEvent<TerminalSessionOutputEvent>');
     expect(source).toContain('kernel.subscribeEvent<ChatRunEvent>');

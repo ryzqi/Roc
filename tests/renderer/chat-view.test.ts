@@ -59,12 +59,15 @@ describe('chat view', () => {
   it('does not add extra bottom offset for the empty chat composer layout', () => {
     const entryCss = readFileSync('src/renderer/styles/main.css', 'utf8');
     const chatCss = readFileSync('src/renderer/styles/chat.css', 'utf8');
+    const richContentCss = readFileSync('src/renderer/styles/chat-rich-content.css', 'utf8');
+    const chatLayoutCss = `${chatCss}\n${richContentCss}`;
 
     expect(entryCss).toContain("@import './chat.css';");
-    expect(chatCss).toContain('.chat-bottom-stack--empty {');
-    expect(chatCss).toContain('padding: 0;');
-    expect(chatCss).not.toContain('.chat-bottom-stack--empty {\r\n  justify-items: center;\r\n  padding: 0 0 36px;');
-    expect(chatCss).not.toContain('.chat-bottom-stack--empty {\n  justify-items: center;\n  padding: 0 0 36px;');
+    expect(entryCss).toContain("@import './chat-rich-content.css';");
+    expect(chatLayoutCss).toContain('.chat-bottom-stack--empty {');
+    expect(chatLayoutCss).toContain('padding: 0;');
+    expect(chatLayoutCss).not.toContain('.chat-bottom-stack--empty {\r\n  justify-items: center;\r\n  padding: 0 0 36px;');
+    expect(chatLayoutCss).not.toContain('.chat-bottom-stack--empty {\n  justify-items: center;\n  padding: 0 0 36px;');
   });
 
   it('applies many chat deltas as one bounded frame batch', () => {

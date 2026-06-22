@@ -49,6 +49,11 @@ describe('package scripts', () => {
   it('records Windows native-feel fields in smoke artifacts', () => {
     const performanceSmokeScript = readFileSync(new URL('../smoke/performance-smoke.mjs', import.meta.url), 'utf8');
     const electronSmokeScript = readFileSync(new URL('../smoke/electron-smoke.mjs', import.meta.url), 'utf8');
+    const electronSmokeDiagnosticsHelper = readFileSync(
+      new URL('../smoke/lib/electron-smoke-chat-diagnostics.mjs', import.meta.url),
+      'utf8'
+    );
+    const electronSmokeResultHelper = readFileSync(new URL('../smoke/lib/electron-smoke-result.mjs', import.meta.url), 'utf8');
     const releaseReadinessSmokeHelper = readFileSync(new URL('../smoke/lib/release-readiness.mjs', import.meta.url), 'utf8');
 
     expect(performanceSmokeScript).toContain('nativeFeelScorecard');
@@ -56,13 +61,16 @@ describe('package scripts', () => {
     expect(performanceSmokeScript).not.toContain('warmQuickReopenMs');
     expect(performanceSmokeScript).toContain('processMetricsSummary');
     expect(performanceSmokeScript).toContain('ipcSummary');
-    expect(electronSmokeScript).toContain('nativeModuleProbe');
-    expect(electronSmokeScript).toContain('processMetricsSummary');
-    expect(electronSmokeScript).toContain('ipcTopNRecorded');
-    expect(electronSmokeScript).toContain('browserWindowCount');
-    expect(electronSmokeScript).toContain('materialEvidence');
-    expect(electronSmokeScript).toContain('windowPlacementEvidence');
-    expect(electronSmokeScript).toContain('phase3WebViewEvidence');
+    expect(electronSmokeScript).toContain('writeElectronSmokeResult(ctx)');
+    expect(electronSmokeDiagnosticsHelper).toContain('nativeModuleProbe');
+    expect(electronSmokeDiagnosticsHelper).toContain('processMetricsSummary');
+    expect(electronSmokeResultHelper).toContain('nativeModuleProbe');
+    expect(electronSmokeResultHelper).toContain('processMetricsSummary');
+    expect(electronSmokeResultHelper).toContain('ipcTopNRecorded');
+    expect(electronSmokeResultHelper).toContain('browserWindowCount');
+    expect(electronSmokeResultHelper).toContain('materialEvidence');
+    expect(electronSmokeResultHelper).toContain('windowPlacementEvidence');
+    expect(electronSmokeResultHelper).toContain('phase3WebViewEvidence');
     expect(electronSmokeScript).toContain('releaseReadiness');
     expect(electronSmokeScript).toContain('src/main/infrastructure/legacy-data-cleanup.ts');
     expect(electronSmokeScript).toContain('src/main/kernel/kernel-runtime.ts');
