@@ -75,6 +75,9 @@ export class RocPaths {
   }
 }
 
+export function buildWorkspaceHash(workspacePath: string): string;
+export function buildWorkspaceHash(workspacePath: null): null;
+export function buildWorkspaceHash(workspacePath: string | null): string | null;
 export function buildWorkspaceHash(workspacePath: string | null): string | null {
   if (workspacePath === null) {
     return null;
