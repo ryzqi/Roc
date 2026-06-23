@@ -21,7 +21,7 @@ export const nativeFeelScorecard = Object.freeze({
   ]
 });
 
-export function latestTimingDurationMs(sample, phase) {
+function latestTimingDurationMs(sample, phase) {
   const matches = sample.timing?.samples?.filter((item) => item.phase === phase) ?? [];
   const latest = matches.at(-1);
   return typeof latest?.durationMs === 'number' ? Math.round(latest.durationMs) : null;

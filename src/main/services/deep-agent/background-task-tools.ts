@@ -4,7 +4,6 @@ import { z } from 'zod';
 import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
-  ChatResumeDecision,
   EnabledCapabilities,
   TaskDetail,
   UpdateBackgroundTaskRequest
@@ -14,51 +13,51 @@ import { RocDomainError } from '../errors';
 import { PreviewStore, RocToolResolutionError } from '../forge-guardrails';
 import { parseCronExpression } from '../../plugins/task/cron-parser';
 
-export const manualTriggerSchema = z.strictObject({
+const manualTriggerSchema = z.strictObject({
   type: z.literal('manual').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).describe('展示给用户的触发说明，单句中文。')
 });
 
-export const onceTriggerSchema = z.strictObject({
+const onceTriggerSchema = z.strictObject({
   type: z.literal('once').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).describe('展示给用户的触发说明，单句中文。'),
   nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
-export const cronTriggerSchema = z.strictObject({
+const cronTriggerSchema = z.strictObject({
   type: z.literal('cron').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).describe('展示给用户的触发说明，单句中文。'),
   cronExpression: z.string().min(1).describe('五段 cron，按本机时区执行，例如 50 21 * * *。'),
   nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
-export const triggerSchema = z
+const triggerSchema = z
   .discriminatedUnion('type', [manualTriggerSchema, onceTriggerSchema, cronTriggerSchema])
   .describe('触发类型：manual / once / cron。');
 
-export const modelManualTriggerSchema = z.strictObject({
+const modelManualTriggerSchema = z.strictObject({
   type: z.literal('manual').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。')
 });
 
-export const modelOnceTriggerSchema = z.strictObject({
+const modelOnceTriggerSchema = z.strictObject({
   type: z.literal('once').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。'),
   nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
-export const modelCronTriggerSchema = z.strictObject({
+const modelCronTriggerSchema = z.strictObject({
   type: z.literal('cron').describe('触发类型：manual / once / cron。'),
   description: z.string().min(1).optional().describe('展示给用户的触发说明，单句中文；可省略，由 runtime 补齐。'),
   cronExpression: z.string().min(1).describe('五段 cron，按本机时区执行，例如 50 21 * * *。'),
   nextRunAt: z.string().datetime().describe('UTC ISO 时间戳（含 T 与 Z），调度器下次触发时间。')
 });
 
-export const modelTriggerSchema = z
+const modelTriggerSchema = z
   .discriminatedUnion('type', [modelManualTriggerSchema, modelOnceTriggerSchema, modelCronTriggerSchema])
   .describe('触发类型：manual / once / cron。');
 
-export const enabledCapabilitiesSchema = z.object({
+const enabledCapabilitiesSchema = z.object({
   mcpServers: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([])
 });
@@ -69,7 +68,7 @@ export const proposeToolInputSchema = z.strictObject({
   workspacePath: z.string().min(1).optional().describe('兼容旧模型输出；实际后台任务 workspacePath 始终由 runtime 注入。')
 });
 
-export const fullProposeInputSchema = z.strictObject({
+const fullProposeInputSchema = z.strictObject({
   goal: z.string().min(1).max(500).describe('后台任务目标，单句中文描述。'),
   trigger: triggerSchema,
   workspacePath: z.string().min(1).describe('Windows 绝对工作区路径，由 runtime 注入。')
@@ -82,26 +81,26 @@ export const proposeInputSchema = fullProposeInputSchema.extend({
   enabledCapabilities: enabledCapabilitiesSchema.nullable().optional()
 });
 
-export const updateInputSchema = z.object({
+const updateInputSchema = z.object({
   taskId: z.string().min(1),
   patch: proposeInputSchema.partial(),
   reason: z.string().min(1)
 });
 
-export const cancelInputSchema = z.object({
+const cancelInputSchema = z.object({
   taskId: z.string().min(1),
   reason: z.string().min(1)
 });
 
-export const readInputSchema = z.strictObject({
+const readInputSchema = z.strictObject({
   taskId: z.string().min(1)
 });
 
-export const scheduleInputSchema = z.strictObject({
+const scheduleInputSchema = z.strictObject({
   previewId: z.string().min(1).describe('propose_background_task 返回的 previewId。')
 });
 
-export const SCHEDULE_TOOL_DESCRIPTION = [
+const SCHEDULE_TOOL_DESCRIPTION = [
   '把 propose_background_task 返回的 preview 实际落地为后台任务并加入调度。',
   '必须先调用过 propose_background_task 拿到 previewId。',
   '本工具会创建任务、注册调度器，并返回真实 taskId。'
@@ -182,45 +181,6 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
     return changeTools;
   }
   return creationTools;
-}
-
-export async function applyBackgroundTaskToolDecision(input: {
-  taskAdapter: BackgroundTaskToolTaskAdapter;
-  schedulerAdapter: BackgroundTaskToolSchedulerAdapter;
-  actionName: 'update_background_task' | 'cancel_background_task';
-  actionArgs: unknown;
-  decision: ChatResumeDecision;
-}): Promise<Record<string, unknown>> {
-  if (input.decision.type === 'reject') {
-    return {
-      ok: false,
-      reason: 'rejected'
-    };
-  }
-
-  const actionArgs = readApprovedActionArgs(input.actionName, input.actionArgs, input.decision);
-  if (input.actionName === 'update_background_task') {
-    const request = updateInputSchema.parse(actionArgs);
-    validatePatch(request.patch);
-    const task = await input.taskAdapter.updateBackgroundTask(toUpdateRequest(request));
-    input.schedulerAdapter.refreshTask(task);
-    return {
-      ok: true,
-      taskId: task.id,
-      threadId: task.threadId,
-      scheduledNextRunAt: task.nextRunAt
-    };
-  }
-
-  const request = cancelInputSchema.parse(actionArgs);
-  const task = await input.taskAdapter.cancelBackgroundTask(request.taskId);
-  input.schedulerAdapter.unregisterTask(task.id);
-  return {
-    ok: true,
-    taskId: task.id,
-    threadId: task.threadId,
-    status: task.status
-  };
 }
 
 async function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
@@ -363,31 +323,6 @@ function describeCronTrigger(cronExpression: string): string {
     return `每周 ${dayOfWeek} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')} 触发`;
   }
   return `按 cron ${cronExpression} 触发`;
-}
-
-function readApprovedActionArgs(
-  actionName: string,
-  originalArgs: unknown,
-  decision: ChatResumeDecision
-): unknown {
-  if (decision.type === 'approve') {
-    return originalArgs;
-  }
-  if (decision.type !== 'edit') {
-    return originalArgs;
-  }
-
-  const editedAction = Reflect.get(decision, 'editedAction');
-  if (typeof editedAction !== 'object' || editedAction === null || Reflect.get(editedAction, 'name') !== actionName) {
-    throw new RocDomainError({
-      code: 'background_task_edited_action_mismatch',
-      message: '后台任务审批编辑内容与原工具不匹配。',
-      category: 'validation',
-      retryable: false,
-      userAction: '请只编辑当前审批卡中的后台任务字段。'
-    });
-  }
-  return Reflect.get(editedAction, 'args');
 }
 
 function toUpdateRequest(input: z.infer<typeof updateInputSchema>): UpdateBackgroundTaskRequest {

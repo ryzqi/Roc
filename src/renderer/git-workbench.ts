@@ -1,7 +1,7 @@
 import type { GitBranchListResult, ShellConfirmationRequest } from '../shared/types';
 
-export const GIT_SPLIT_MIN_WIDTH = 320;
-export const GIT_SPLIT_MAX_WIDTH = 720;
+const GIT_SPLIT_MIN_WIDTH = 320;
+const GIT_SPLIT_MAX_WIDTH = 720;
 export const GIT_SPLIT_DEFAULT_WIDTH = 410;
 
 type GitBranchSwitcherModelInput = {

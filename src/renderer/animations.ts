@@ -69,7 +69,7 @@ export const scrollBottomTransition: Transition = {
   ease: EASING_STANDARD_TUPLE
 };
 
-export function prefersReducedMotion(): boolean {
+function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 

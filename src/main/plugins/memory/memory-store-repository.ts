@@ -201,7 +201,7 @@ export class MemoryStoreRepository {
   }
 }
 
-export function createMarkdownFileValue(content: string, existing?: Item | null): Record<string, unknown> {
+function createMarkdownFileValue(content: string, existing?: Item | null): Record<string, unknown> {
   const now = new Date().toISOString();
   const createdAt = readCreatedAt(existing);
   return {

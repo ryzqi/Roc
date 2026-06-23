@@ -32,6 +32,6 @@ export function createRocWindowsCommandTool(
   });
 }
 
-export function validateRocWindowsCommand(command: string): void {
+function validateRocWindowsCommand(command: string): void {
   validateRocWindowsShellPath(command);
 }

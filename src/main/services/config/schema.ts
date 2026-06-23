@@ -52,7 +52,7 @@ export const SettingsSchema: z.ZodType<AppSettings> = z.object({
   })
 });
 
-export const ProviderModelSchema = z.object({
+const ProviderModelSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   enabled: z.boolean(),
@@ -60,7 +60,7 @@ export const ProviderModelSchema = z.object({
   supportsToolCalls: z.boolean()
 });
 
-export const ProviderCredentialRefSchema = z
+const ProviderCredentialRefSchema = z
   .string()
   .nullable()
   .refine(
@@ -111,7 +111,7 @@ const OpenAiReasoningSchema = z.object({
   summary: OpenAiReasoningSummarySchema.optional()
 });
 
-export const ProviderOptionsSchema = z
+const ProviderOptionsSchema = z
   .object({
     temperature: z.number().finite().optional(),
     maxTokens: z.number().int().positive().optional(),
@@ -206,7 +206,7 @@ export const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
   allowedTools: z.array(z.string().min(1))
 });
 
-export const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
+const ApprovalModeSchema = z.enum(['fully_automatic', 'default']);
 
 export const McpServersConfigSchema: z.ZodType<McpServersConfig> = z.object({
   schemaVersion: z.literal(1),

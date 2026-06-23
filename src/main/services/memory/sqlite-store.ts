@@ -197,7 +197,7 @@ export class RocSqliteStore extends BaseStore {
   }
 }
 
-export function applyRocSqliteStoreSchema(db: DatabaseConnection): void {
+function applyRocSqliteStoreSchema(db: DatabaseConnection): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS langgraph_store_items (
       namespace_key TEXT NOT NULL,

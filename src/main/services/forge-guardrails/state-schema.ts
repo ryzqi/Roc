@@ -17,7 +17,7 @@ export function defaultErrorTracker(): ForgeErrorTrackerState {
   return errorTrackerSchema.parse({});
 }
 
-export function mergeErrorTracker(
+function mergeErrorTracker(
   current: ForgeErrorTrackerState | undefined,
   update: z.infer<typeof errorTrackerUpdateSchema> | undefined
 ): ForgeErrorTrackerState {

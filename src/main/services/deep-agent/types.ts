@@ -70,5 +70,3 @@ export const DEEP_AGENT_BUILT_IN_TOOLS = [
   'glob',
   'grep'
 ] as const;
-
-export const RUN_EVENT_NAME = 'run-event';

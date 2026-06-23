@@ -74,7 +74,7 @@ export async function resolveRtkRouteAsync(command: string, metadata: RtkExecuti
   };
 }
 
-export function resolveExplicitRtkRoute(args: string[]): RtkRoutingDecision {
+function resolveExplicitRtkRoute(args: string[]): RtkRoutingDecision {
   if (isWindowsRtkDeniedSubcommand(args)) {
     return {
       kind: 'fallback',

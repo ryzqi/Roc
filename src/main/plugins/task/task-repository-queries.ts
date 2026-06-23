@@ -26,7 +26,7 @@ import {
   type TaskThreadRow
 } from './task-repository-mappers';
 
-export function listActiveBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
+function listActiveBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
   const rows = db
     .prepare(
       `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,

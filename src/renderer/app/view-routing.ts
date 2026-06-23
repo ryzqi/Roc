@@ -1,7 +1,7 @@
 import type { LoadedState } from '../loaded-state';
 import type { MainViewId, PreviewIconName, ViewId, WorkbenchTool } from './types';
 
-export const MAIN_VIEW_IDS = new Set<ViewId>([
+const MAIN_VIEW_IDS = new Set<ViewId>([
   'chat',
   'tasks-board',
   'task-detail',

@@ -241,25 +241,3 @@ function readTopLevelObjectKeys(objectText: string): string[] {
   }
   return keys;
 }
-
-export function toWebSearchFailure(error: unknown): RocDomainError {
-  if (error instanceof RocDomainError) {
-    return error;
-  }
-  if (error instanceof Error) {
-    return new RocDomainError({
-      code: 'web_search_unavailable',
-      message: `web_search 不可用：${redact(error.message)}`,
-      category: 'external',
-      retryable: true,
-      userAction: '请测试 Exa Hosted MCP 连接或稍后重试。'
-    });
-  }
-  return new RocDomainError({
-    code: 'web_search_unavailable',
-    message: 'web_search 当前不可用。',
-    category: 'external',
-    retryable: true,
-    userAction: '请测试 Exa Hosted MCP 连接或稍后重试。'
-  });
-}

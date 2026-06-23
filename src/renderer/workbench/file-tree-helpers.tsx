@@ -34,7 +34,7 @@ export function fileLabel(relativePath: string): string {
   return parts.at(-1) ?? relativePath;
 }
 
-export function fileExtension(relativePath: string): string {
+function fileExtension(relativePath: string): string {
   const label = fileLabel(relativePath);
   const dotIndex = label.lastIndexOf('.');
   if (dotIndex <= 0 || dotIndex === label.length - 1) {
@@ -43,7 +43,7 @@ export function fileExtension(relativePath: string): string {
   return label.slice(dotIndex + 1).toLowerCase();
 }
 
-export function compareFileEntries(left: FileEntryShape, right: FileEntryShape): number {
+function compareFileEntries(left: FileEntryShape, right: FileEntryShape): number {
   if (left.type !== right.type) {
     return left.type === 'directory' ? -1 : 1;
   }

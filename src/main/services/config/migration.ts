@@ -116,7 +116,7 @@ function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
   };
 }
 
-export function upgradeLegacySettings(raw: unknown): AppSettings {
+function upgradeLegacySettings(raw: unknown): AppSettings {
   if (raw === null || typeof raw !== 'object') {
     return defaultSettings;
   }
@@ -140,7 +140,7 @@ export function upgradeLegacySettings(raw: unknown): AppSettings {
   });
 }
 
-export function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
+function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
   if (raw === null || typeof raw !== 'object') {
     return defaultProviders;
   }
@@ -191,7 +191,7 @@ function readApprovalMode(value: unknown): ApprovalMode {
   return defaultMcpConfig.approvalMode;
 }
 
-export function upgradeLegacyPermissions(_raw: unknown): PermissionsConfig {
+function upgradeLegacyPermissions(_raw: unknown): PermissionsConfig {
   return defaultPermissions;
 }
 

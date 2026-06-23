@@ -1,6 +1,5 @@
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import type { BaseLanguageModelInput } from '@langchain/core/language_models/base';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { convertChunksToEvents } from '@langchain/core/language_models/compat';
 import type { ChatModelStreamEvent } from '@langchain/core/language_models/event';
 import {
@@ -146,22 +145,6 @@ export class LlamaCppCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
   protected override cloneWithFields(): ReasoningAwareChatOpenAI {
     return new LlamaCppCompatibleChatOpenAI(this.fields);
   }
-}
-
-export function applyOpenAiCompatibleDefaultOptions(
-  model: BaseChatModel,
-  defaults: Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean }
-): void {
-  if (Object.keys(defaults).length === 0) {
-    return;
-  }
-  const target = model as BaseChatModel & {
-    defaultOptions?: Record<string, unknown>;
-  };
-  target.defaultOptions = {
-    ...(target.defaultOptions ?? {}),
-    ...defaults
-  };
 }
 
 class NvidiaCompatibleChatOpenAICompletions extends ChatOpenAICompletions {

@@ -204,7 +204,7 @@ function compareTaskEventsDescending(left: TaskEvent, right: TaskEvent): number 
   return (right.sequence === undefined ? 0 : right.sequence) - (left.sequence === undefined ? 0 : left.sequence);
 }
 
-export function parseEnabledCapabilities(value: string | null): EnabledCapabilities | null {
+function parseEnabledCapabilities(value: string | null): EnabledCapabilities | null {
   if (value === null) {
     return null;
   }

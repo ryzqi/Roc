@@ -6,9 +6,9 @@ export const PROPOSE_REQUIRED_KEYS = ['goal', 'trigger', 'workspacePath'] as con
 
 export const PROPOSE_OPTIONAL_KEYS = ['allowedActions', 'forbiddenActions', 'notificationPolicy'] as const;
 
-export const PROPOSE_MODEL_KEYS = ['goal', 'trigger'] as const;
+const PROPOSE_MODEL_KEYS = ['goal', 'trigger'] as const;
 
-export const PROPOSE_RUNTIME_DEFAULTS = {
+const PROPOSE_RUNTIME_DEFAULTS = {
   allowedActions: [] as string[],
   forbiddenActions: [] as string[],
   notificationPolicy: 'failures_and_confirmations'

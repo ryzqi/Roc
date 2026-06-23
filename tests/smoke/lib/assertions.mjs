@@ -1,6 +1,6 @@
 import { writeFatalArtifact } from './artifacts.mjs';
 
-export async function waitForWindowWithSelector(app, selector) {
+async function waitForWindowWithSelector(app, selector) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
     for (const candidate of app.windows()) {

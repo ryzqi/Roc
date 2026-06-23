@@ -1,1 +1,0 @@
-export { requireText } from '../validation';

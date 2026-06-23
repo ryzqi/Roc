@@ -8,7 +8,7 @@ import {
 } from '../../../shared/provider-defaults';
 import type { DefaultModelState, ProviderConfig, ProvidersConfig } from '../../../shared/types';
 
-export function sanitizeDefaultModelIdForDisabledProviders(
+function sanitizeDefaultModelIdForDisabledProviders(
   providers: readonly ProviderConfig[],
   defaultModelId: string | null
 ): string | null {

@@ -96,7 +96,7 @@ export function WorkspaceView({
   );
 }
 
-export function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Element {
+function WorkspaceStatusPanels({ state }: { state: LoadedState }): React.JSX.Element {
   const terminalLabel =
     state.terminalSession === null
       ? state.workspace === null

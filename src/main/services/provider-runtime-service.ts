@@ -28,10 +28,10 @@ type ProviderTransportResponse = {
 };
 
 type ProviderTransport = (request: ProviderTransportRequest) => ProviderTransportResponse | Promise<ProviderTransportResponse>;
-export const providerTestPrompt = 'Reply with OK only.';
-export const nvidiaProviderTestPrompt = 'What is 1+1? Reply with the number only.';
+const providerTestPrompt = 'Reply with OK only.';
+const nvidiaProviderTestPrompt = 'What is 1+1? Reply with the number only.';
 
-export function providerTestPromptForProvider(provider: Pick<ProviderConfig, 'type'>): string {
+function providerTestPromptForProvider(provider: Pick<ProviderConfig, 'type'>): string {
   return provider.type === 'nvidia' ? nvidiaProviderTestPrompt : providerTestPrompt;
 }
 

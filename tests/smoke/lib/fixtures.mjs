@@ -14,11 +14,11 @@ export async function createSmokePaths() {
   };
 }
 
-export function buildSmokeContent(label, lines = 1) {
+function buildSmokeContent(label, lines = 1) {
   return Array.from({ length: lines }, (_, index) => `${label} ${index + 1}`).join('\n') + '\n';
 }
 
-export function runWorkspaceGit(workspaceRoot, args) {
+function runWorkspaceGit(workspaceRoot, args) {
   const result = spawnSync('git', args, {
     cwd: workspaceRoot,
     encoding: 'utf8',

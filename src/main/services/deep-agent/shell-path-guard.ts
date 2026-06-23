@@ -2,8 +2,8 @@ const linuxLocalPathPattern = /(?:^|[\s"'`=({\[;&|,])\/(?:home\/user|tmp)(?=\/|$
 const VIRTUAL_WORKSPACE_ROUTE = '/workspace';
 const VIRTUAL_WORKSPACE_DELIMITERS = new Set([' ', '\t', '\r', '\n', '"', '\'', '`', '=', '(', '{', '[', ';', '&', '|', ',']);
 
-export const VIRTUAL_WORKSPACE_SHELL_ERROR = '/workspace/ 是 DeepAgents 文件工具路由，不是 Windows shell 路径。';
-export const LINUX_LOCAL_SHELL_ERROR = 'Roc 在 Windows 本地执行命令；请使用当前工作区 cwd 下的相对路径或 Windows 路径。';
+const VIRTUAL_WORKSPACE_SHELL_ERROR = '/workspace/ 是 DeepAgents 文件工具路由，不是 Windows shell 路径。';
+const LINUX_LOCAL_SHELL_ERROR = 'Roc 在 Windows 本地执行命令；请使用当前工作区 cwd 下的相对路径或 Windows 路径。';
 
 export function containsVirtualWorkspacePath(value: string): boolean {
   const lowerValue = value.toLowerCase();

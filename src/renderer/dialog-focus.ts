@@ -7,7 +7,7 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(',');
 
-export function findDialogFocusableElements(root: HTMLElement): HTMLElement[] {
+function findDialogFocusableElements(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => {
     if (element.getAttribute('aria-hidden') === 'true') {
       return false;

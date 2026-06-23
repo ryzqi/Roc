@@ -42,7 +42,7 @@ export type InvalidProposeInputKind =
   | 'non-iso-nextRunAt'
   | 'extra-unknown-key';
 
-export function futureIso(offsetMs = 60_000): string {
+function futureIso(offsetMs = 60_000): string {
   return new Date(Date.now() + offsetMs).toISOString();
 }
 

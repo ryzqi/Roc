@@ -196,7 +196,7 @@ export function createMcpTool(name: string): ClientTool {
   } as ClientTool;
 }
 
-export function createRun(): TaskRun {
+function createRun(): TaskRun {
   return {
     id: 'run-1',
     threadId: 'thread-1',
@@ -213,7 +213,7 @@ export function createRun(): TaskRun {
   };
 }
 
-export function createPreview(input: Partial<BackgroundTaskPreviewRequest>): BackgroundTaskPreview {
+function createPreview(input: Partial<BackgroundTaskPreviewRequest>): BackgroundTaskPreview {
   const trigger = input.trigger ?? {
     type: 'manual',
     description: '手动'
@@ -235,7 +235,7 @@ export function createPreview(input: Partial<BackgroundTaskPreviewRequest>): Bac
   };
 }
 
-export function createTask(preview: BackgroundTaskPreview, status: BackgroundTask['status']): BackgroundTask {
+function createTask(preview: BackgroundTaskPreview, status: BackgroundTask['status']): BackgroundTask {
   return {
     id: 'background-1',
     threadId: 'thread-background-1',
@@ -263,7 +263,7 @@ export function createTask(preview: BackgroundTaskPreview, status: BackgroundTas
   };
 }
 
-export function createTaskDetail(): TaskDetail {
+function createTaskDetail(): TaskDetail {
   return {
     threadId: 'thread-background-1',
     taskId: 'background-1',
@@ -418,7 +418,7 @@ export function createDeferred<T>(): Deferred<T> {
   };
 }
 
-export async function collectEvents(events: AsyncIterable<ChatRunEvent>): Promise<ChatRunEvent[]> {
+async function collectEvents(events: AsyncIterable<ChatRunEvent>): Promise<ChatRunEvent[]> {
   const result: ChatRunEvent[] = [];
   for await (const event of events) {
     result.push(event);

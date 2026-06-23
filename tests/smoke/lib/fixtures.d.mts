@@ -25,10 +25,6 @@ export interface StartSmokeProviderInput {
 
 export function createSmokePaths(): Promise<SmokePaths>;
 
-export function buildSmokeContent(label: string, lines?: number): string;
-
-export function runWorkspaceGit(workspaceRoot: string, args: string[]): void;
-
 export function seedSmokeWorkspace(workspaceRoot: string, remoteRoot: string): void;
 
 export function seedSmokeSkillSource(skillSourceRoot: string): void;
