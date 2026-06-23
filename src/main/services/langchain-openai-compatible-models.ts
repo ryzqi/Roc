@@ -5,10 +5,16 @@ import type { ChatModelStreamEvent } from '@langchain/core/language_models/event
 import {
   AIMessage,
   AIMessageChunk,
+  ChatMessage,
+  ChatMessageChunk,
   FunctionMessage,
+  FunctionMessageChunk,
   HumanMessage,
+  HumanMessageChunk,
   SystemMessage,
+  SystemMessageChunk,
   ToolMessage,
+  ToolMessageChunk,
   type BaseMessage
 } from '@langchain/core/messages';
 import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
@@ -25,15 +31,24 @@ import {
   resolveNvidiaModelFamily
 } from './nvidia-model-family';
 import {
+  isExplicitReasoningContentBlock,
   normalizeOpenAiStreamingChunks,
   readProviderReasoningFromMessage,
   stripProviderReasoningDelta
 } from './openai-stream-normalization';
 
 type JsonObject = Record<string, unknown>;
-const NVIDIA_EMPTY_TOOL_CONTENT = 'Task completed';
+const EMPTY_TOOL_CONTENT_PLACEHOLDER = 'Task completed';
 
 export class ReasoningAwareChatOpenAI extends ChatOpenAI {
+  override async _generate(
+    messages: BaseMessage[],
+    options: this['ParsedCallOptions'],
+    runManager?: CallbackManagerForLLMRun
+  ): Promise<ChatResult> {
+    return await super._generate(stripRawReasoningContentBlocks(messages), options, runManager);
+  }
+
   async *_streamChatModelEvents(
     messages: BaseMessage[],
     options: this['ParsedCallOptions'],
@@ -52,7 +67,7 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatGenerationChunk> {
-    yield* normalizeOpenAiStreamingChunks(super._streamResponseChunks(messages, options, runManager));
+    yield* normalizeOpenAiStreamingChunks(super._streamResponseChunks(stripRawReasoningContentBlocks(messages), options, runManager));
   }
 
   protected cloneWithFields(): ReasoningAwareChatOpenAI {
@@ -67,6 +82,126 @@ export class ReasoningAwareChatOpenAI extends ChatOpenAI {
     };
     return newModel;
   }
+}
+
+function stripRawReasoningContentBlocks(messages: BaseMessage[]): BaseMessage[] {
+  return messages.map((message) => stripRawReasoningContentBlock(message));
+}
+
+function stripRawReasoningContentBlock(message: BaseMessage): BaseMessage {
+  let content = stripReasoningBlocksFromContent(message.content);
+  if (content === message.content) {
+    return message;
+  }
+  if (Array.isArray(content) && content.length === 0 && (ToolMessage.isInstance(message) || isToolMessageChunk(message))) {
+    content = EMPTY_TOOL_CONTENT_PLACEHOLDER;
+  }
+
+  const fields = {
+    id: message.id,
+    name: message.name,
+    content,
+    additional_kwargs: message.additional_kwargs,
+    response_metadata: message.response_metadata
+  };
+
+  if (SystemMessageChunk.isInstance(message)) {
+    return new SystemMessageChunk(fields);
+  }
+  if (HumanMessageChunk.isInstance(message)) {
+    return new HumanMessageChunk(fields);
+  }
+  if (AIMessageChunk.isInstance(message)) {
+    return new AIMessageChunk({
+      ...fields,
+      tool_call_chunks: message.tool_call_chunks,
+      tool_calls: message.tool_calls,
+      invalid_tool_calls: message.invalid_tool_calls,
+      usage_metadata: message.usage_metadata
+    });
+  }
+  if (isToolMessageChunk(message)) {
+    return new ToolMessageChunk({
+      ...fields,
+      tool_call_id: message.tool_call_id,
+      artifact: message.artifact,
+      status: message.status
+    });
+  }
+  if (ChatMessageChunk.isInstance(message)) {
+    return new ChatMessageChunk({
+      ...fields,
+      role: message.role
+    });
+  }
+  if (FunctionMessageChunk.isInstance(message)) {
+    if (message.name === undefined) {
+      return message;
+    }
+    return new FunctionMessageChunk({
+      ...fields,
+      name: message.name
+    });
+  }
+  if (SystemMessage.isInstance(message)) {
+    return new SystemMessage(fields);
+  }
+  if (HumanMessage.isInstance(message)) {
+    return new HumanMessage(fields);
+  }
+  if (AIMessage.isInstance(message)) {
+    return new AIMessage({
+      ...fields,
+      tool_calls: message.tool_calls,
+      invalid_tool_calls: message.invalid_tool_calls,
+      usage_metadata: message.usage_metadata
+    });
+  }
+  if (ToolMessage.isInstance(message)) {
+    return new ToolMessage({
+      ...fields,
+      tool_call_id: message.tool_call_id,
+      artifact: message.artifact,
+      status: message.status,
+      metadata: message.metadata
+    });
+  }
+  if (ChatMessage.isInstance(message)) {
+    return new ChatMessage({
+      ...fields,
+      role: message.role
+    });
+  }
+  if (FunctionMessage.isInstance(message)) {
+    if (message.name === undefined) {
+      return message;
+    }
+    return new FunctionMessage({
+      ...fields,
+      name: message.name
+    });
+  }
+  return message;
+}
+
+function stripReasoningBlocksFromContent(content: BaseMessage['content']): BaseMessage['content'] {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+
+  let changed = false;
+  const stripped = content.filter((block) => {
+    if (isExplicitReasoningContentBlock(block)) {
+      changed = true;
+      return false;
+    }
+    return true;
+  });
+  return changed ? stripped : content;
+}
+
+function isToolMessageChunk(message: BaseMessage): message is ToolMessageChunk {
+  return ToolMessageChunk.isInstance(message) && message.type === 'tool';
 }
 
 export class NvidiaCompatibleChatOpenAI extends ReasoningAwareChatOpenAI {
@@ -380,7 +515,7 @@ function normalizeNvidiaTextOnlyMessage(message: BaseMessage): BaseMessage {
     return message;
   }
   if (ToolMessage.isInstance(message) && normalizedContent.length === 0) {
-    normalizedContent = NVIDIA_EMPTY_TOOL_CONTENT;
+    normalizedContent = EMPTY_TOOL_CONTENT_PLACEHOLDER;
   }
 
   const responseMetadata = stripOutputVersion(message.response_metadata);

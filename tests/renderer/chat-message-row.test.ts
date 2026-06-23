@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -246,6 +247,24 @@ describe('chat message row', () => {
               error: null,
               blocks: [],
               children: []
+            },
+            {
+              id: 'subagent-completed',
+              kind: 'subagent',
+              identity: {
+                subagentId: 'subagent-completed',
+                parentSubagentId: null,
+                name: 'reviewer',
+                depth: 0,
+                path: ['reviewer#0'],
+                execution: 'async',
+                taskInput: null
+              },
+              status: 'completed',
+              summary: '复核完成。',
+              error: null,
+              blocks: [],
+              children: []
             }
           ]
         }
@@ -253,10 +272,21 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid=\"chat-activity-subagent\"');
-    expect(html).toMatch(/data-testid=\"chat-activity-subagent\"(?![^>]*open)/);
+    expect(html.match(/data-testid=\"chat-activity-subagent\"/g)).toHaveLength(2);
+    expect(html).toMatch(/subagent-card--running\" data-testid=\"chat-activity-subagent\"(?![^>]*open)/);
+    expect(html).toMatch(/subagent-card--completed\" data-testid=\"chat-activity-subagent\"(?![^>]*open)/);
     expect(html).toContain('Subagent · research');
     expect(html).toContain('运行中');
     expect(html).toContain('sync');
+    expect(html).toContain('Subagent · reviewer');
+    expect(html).toContain('完成');
+    expect(html).toContain('async');
+  });
+
+  it('keeps subagent styling flat without gradient decoration', () => {
+    const css = readFileSync('src/renderer/styles/subagent.css', 'utf8');
+
+    expect(css).not.toMatch(/linear-gradient|radial-gradient|gradient/);
   });
 
   it('opens streaming reasoning activity by default while completed tool activity stays collapsed', () => {

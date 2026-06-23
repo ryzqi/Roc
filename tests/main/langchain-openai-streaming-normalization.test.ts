@@ -1,4 +1,4 @@
-import { AIMessageChunk, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, ChatMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
@@ -82,6 +82,191 @@ describe('OpenAI-compatible streaming normalization', () => {
       }
     ]);
     expect(aggregated?.invalid_tool_calls).toEqual([]);
+  });
+
+  it('strips raw reasoning blocks from chat input before the next OpenAI-compatible call', async () => {
+    configureOpenAiCompatibleProvider();
+
+    const configuredModel = await createConfiguredModel();
+    const receivedMessages = stubOkStream(configuredModel);
+
+    const chunks: AIMessageChunk[] = [];
+    for await (const chunk of await configuredModel.stream([
+      new AIMessage({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'Thinking'
+          },
+          {
+            type: 'text',
+            text: 'Done.'
+          }
+        ]
+      })
+    ])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.map((chunk) => chunk.content).join('')).toBe('OK');
+    expect(readFirstMessageContent(receivedMessages)).toEqual([
+      {
+        type: 'text',
+        text: 'Done.'
+      }
+    ]);
+  });
+
+  it('strips raw reasoning blocks from generic chat messages used by DeepAgents state', async () => {
+    configureOpenAiCompatibleProvider();
+
+    const configuredModel = await createConfiguredModel();
+    const receivedMessages = stubOkStream(configuredModel);
+
+    const chunks: AIMessageChunk[] = [];
+    for await (const chunk of await configuredModel.stream([
+      new ChatMessage(
+        {
+          content: [
+            {
+              type: 'reasoning',
+              reasoning: 'Thinking'
+            },
+            {
+              type: 'text',
+              text: 'Done.'
+            }
+          ],
+          role: 'assistant'
+        }
+      )
+    ])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.map((chunk) => chunk.content).join('')).toBe('OK');
+    expect(readFirstMessageContent(receivedMessages)).toEqual([
+      {
+        type: 'text',
+        text: 'Done.'
+      }
+    ]);
+  });
+
+  it('strips provider-specific reasoning block variants from chat input', async () => {
+    configureOpenAiCompatibleProvider();
+
+    const configuredModel = await createConfiguredModel();
+    const receivedMessages = stubOkStream(configuredModel);
+
+    const chunks: AIMessageChunk[] = [];
+    for await (const chunk of await configuredModel.stream([
+      new AIMessage({
+        content: [
+          {
+            type: 'reasoning_content',
+            reasoning_content: 'Hidden reasoning content'
+          },
+          {
+            type: 'thinking',
+            thinking: 'Hidden thinking'
+          },
+          {
+            type: 'text',
+            text: 'Done.'
+          }
+        ]
+      })
+    ])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.map((chunk) => chunk.content).join('')).toBe('OK');
+    expect(readFirstMessageContent(receivedMessages)).toEqual([
+      {
+        type: 'text',
+        text: 'Done.'
+      }
+    ]);
+  });
+
+  it('uses a protocol-safe placeholder when a tool message only contains reasoning blocks', async () => {
+    configureOpenAiCompatibleProvider();
+
+    const configuredModel = await createConfiguredModel();
+    const receivedMessages = stubOkStream(configuredModel);
+
+    const chunks: AIMessageChunk[] = [];
+    for await (const chunk of await configuredModel.stream([
+      new ToolMessage({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'Hidden tool reasoning'
+          }
+        ],
+        tool_call_id: 'functions.task:17'
+      })
+    ])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.map((chunk) => chunk.content).join('')).toBe('OK');
+    expect(readFirstMessageContent(receivedMessages)).toBe('Task completed');
+  });
+
+  it('preserves message chunk fields while stripping raw reasoning input', async () => {
+    configureOpenAiCompatibleProvider();
+
+    const configuredModel = await createConfiguredModel();
+    const receivedMessages = stubOkStream(configuredModel);
+
+    const chunks: AIMessageChunk[] = [];
+    for await (const chunk of await configuredModel.stream([
+      new AIMessageChunk({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'Hidden chunk reasoning'
+          },
+          {
+            type: 'text',
+            text: 'Done.'
+          }
+        ],
+        tool_call_chunks: [
+          {
+            id: 'call-search',
+            name: 'web_search',
+            args: '{"query":"roc"}',
+            type: 'tool_call_chunk'
+          }
+        ]
+      })
+    ])) {
+      chunks.push(chunk);
+    }
+
+    const firstMessage = receivedMessages[0];
+    expect(chunks.map((chunk) => chunk.content).join('')).toBe('OK');
+    expect(AIMessageChunk.isInstance(firstMessage)).toBe(true);
+    if (!AIMessageChunk.isInstance(firstMessage)) {
+      throw new Error('Expected first message to remain an AIMessageChunk.');
+    }
+    expect(firstMessage.content).toEqual([
+      {
+        type: 'text',
+        text: 'Done.'
+      }
+    ]);
+    expect(firstMessage.tool_call_chunks).toEqual([
+      {
+        id: 'call-search',
+        name: 'web_search',
+        args: '{"query":"roc"}',
+        type: 'tool_call_chunk'
+      }
+    ]);
   });
 
   it('lets an agent execute a tool emitted as split chunks without indexes', async () => {
@@ -305,4 +490,32 @@ function readToolOutputContent(value: unknown): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stubOkStream(model: ChatOpenAI): unknown[] {
+  const receivedMessages: unknown[] = [];
+  const completionModel = model as unknown as {
+    completions: {
+      _streamResponseChunks: (messages: unknown[]) => AsyncGenerator<ChatGenerationChunk>;
+    };
+  };
+  completionModel.completions._streamResponseChunks = async function* (messages) {
+    receivedMessages.splice(0, receivedMessages.length, ...messages);
+    yield new ChatGenerationChunk({
+      message: new AIMessageChunk({
+        content: 'OK'
+      }),
+      text: 'OK',
+      generationInfo: {}
+    });
+  };
+  return receivedMessages;
+}
+
+function readFirstMessageContent(messages: unknown[]): unknown {
+  const message = messages[0];
+  if (!isRecord(message)) {
+    throw new Error('Expected first message to be a record.');
+  }
+  return message.content;
 }

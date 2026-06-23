@@ -67,6 +67,14 @@ export function stripProviderReasoningDelta(additionalKwargs: unknown): Record<s
   return rest;
 }
 
+export function isExplicitReasoningContentBlock(item: unknown): boolean {
+  if (!isRecord(item)) {
+    return false;
+  }
+  const type = item.type;
+  return type === 'reasoning' || type === 'reasoning_content' || type === 'thinking';
+}
+
 function createOpenAiToolCallChunkIndexState(): OpenAiToolCallChunkIndexState {
   return {
     activeIndex: null,
@@ -274,13 +282,7 @@ function hasExplicitReasoningBlocks(content: unknown): boolean {
     return false;
   }
 
-  return content.some((item) => {
-    if (!isRecord(item)) {
-      return false;
-    }
-    const type = item.type;
-    return type === 'reasoning' || type === 'reasoning_content' || type === 'thinking';
-  });
+  return content.some((item) => isExplicitReasoningContentBlock(item));
 }
 
 function isRecord(value: unknown): value is JsonObject {
