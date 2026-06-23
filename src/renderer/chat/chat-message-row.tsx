@@ -15,6 +15,7 @@ import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCar
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
 import { StreamingMarkdownView } from './streaming-markdown-view';
+import { SubagentActivityCard } from './subagent/SubagentActivityCard';
 
 type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
@@ -175,7 +176,7 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
   }
 
   if (block.kind === 'subagent') {
-    return <SubagentActivityView block={block} />;
+    return <SubagentActivityCard block={block} />;
   }
 
   return (
@@ -183,39 +184,6 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
       <summary>{`Guardrail · ${block.nudgeKind}`}</summary>
       <div className="activity-body">
         <StreamingMarkdownView text={block.content} isStreaming={false} />
-      </div>
-    </details>
-  );
-}
-
-function SubagentActivityView({ block }: { block: Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }> }): React.JSX.Element {
-  return (
-    <details
-      className="chat-bubble-activity chat-bubble-subagent"
-      data-testid="chat-activity-subagent"
-      open={block.status === 'failed'}
-    >
-      <summary>
-        <span>{`子代理 · ${block.identity.name}`}</span>
-        <span className={`subagent-status subagent-status--${block.status}`}>{block.status}</span>
-      </summary>
-      <div className="activity-body subagent-body">
-        {block.summary === null ? null : <p>{block.summary}</p>}
-        {block.error === null ? null : <pre className="subagent-error">{block.error}</pre>}
-        {block.blocks.map((child) =>
-          child.kind === 'text' ? (
-            <StreamingMarkdownView key={child.id} text={child.content} isStreaming={block.status === 'started'} />
-          ) : child.kind === 'reasoning' ? (
-            <ReasoningBlock key={child.id} id={child.id} content={child.content} isStreaming={child.isStreaming} />
-          ) : (
-            <ToolCallView key={child.id} block={child} />
-          )
-        )}
-        {block.children.map((child) => (
-          <div key={child.id} data-testid="chat-activity-subagent-child">
-            <SubagentActivityView block={child} />
-          </div>
-        ))}
       </div>
     </details>
   );

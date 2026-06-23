@@ -124,7 +124,7 @@ describe('chat message row', () => {
     expect(html).toContain('<ul>');
   });
 
-  it('renders structured subagent tree with partial transcript and failed status', () => {
+  it('renders failed subagent work cards open with status, meta, nested children, and no task summary', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
@@ -141,22 +141,110 @@ describe('chat message row', () => {
               identity: {
                 subagentId: 'subagent-root',
                 parentSubagentId: null,
-                name: 'research',
+                name: 'general-purpose',
                 depth: 0,
-                path: ['research#0'],
-                execution: 'sync',
-                taskInput: 'Search docs'
+                path: ['general-purpose#0'],
+                execution: 'async',
+                taskInput: 'Search docs and do not show this text',
+                asyncTaskId: 'async-1'
               },
               status: 'failed',
-              summary: null,
+              summary: '已完成部分调查。',
               error: 'remote failed',
               blocks: [
                 {
                   id: 'subagent-root-text',
                   kind: 'text',
                   content: 'partial'
+                },
+                {
+                  id: 'subagent-root-reasoning',
+                  kind: 'reasoning',
+                  content: '检查上下文',
+                  isStreaming: false
+                },
+                {
+                  id: 'subagent-root-tool',
+                  kind: 'tool_call',
+                  name: 'read_file',
+                  status: 'end',
+                  input: { path: 'F:\\Code\\Roc\\README.md' },
+                  output: { bytes: 128 },
+                  error: null
                 }
               ],
+              children: [
+                {
+                  id: 'subagent-child',
+                  kind: 'subagent',
+                  identity: {
+                    subagentId: 'subagent-child',
+                    parentSubagentId: 'subagent-root',
+                    name: 'research',
+                    depth: 1,
+                    path: ['general-purpose#0', 'research#0'],
+                    execution: 'sync',
+                    taskInput: 'Nested task input should also stay hidden'
+                  },
+                  status: 'completed',
+                  summary: '子任务完成。',
+                  error: null,
+                  blocks: [],
+                  children: []
+                }
+              ]
+            }
+          ]
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid=\"chat-activity-subagent\"');
+    expect(html).toMatch(/data-testid=\"chat-activity-subagent\"[^>]*open=\"\">/);
+    expect(html).toContain('Subagent · general-purpose');
+    expect(html).toContain('失败');
+    expect(html).toContain('async');
+    expect(html).toContain('1 tool');
+    expect(html).toContain('1 child');
+    expect(html).toContain('reasoning');
+    expect(html).toContain('remote failed');
+    expect(html).toContain('已完成部分调查。');
+    expect(html).toContain('partial');
+    expect(html).toContain('read_file');
+    expect(html).toContain('data-testid=\"chat-activity-subagent-child\"');
+    expect(html).toContain('Subagent · research');
+    expect(html).toContain('完成');
+    expect(html).not.toContain('Search docs and do not show this text');
+    expect(html).not.toContain('Nested task input should also stay hidden');
+  });
+
+  it('keeps non-failed subagent work cards collapsed by default', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-subagent-running',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          approval: null,
+          isStreaming: true,
+          blocks: [
+            {
+              id: 'subagent-running',
+              kind: 'subagent',
+              identity: {
+                subagentId: 'subagent-running',
+                parentSubagentId: null,
+                name: 'research',
+                depth: 0,
+                path: ['research#0'],
+                execution: 'sync',
+                taskInput: null
+              },
+              status: 'running',
+              summary: null,
+              error: null,
+              blocks: [],
               children: []
             }
           ]
@@ -165,10 +253,10 @@ describe('chat message row', () => {
     );
 
     expect(html).toContain('data-testid=\"chat-activity-subagent\"');
-    expect(html).toContain('research');
-    expect(html).toContain('failed');
-    expect(html).toContain('partial');
-    expect(html).toContain('remote failed');
+    expect(html).toMatch(/data-testid=\"chat-activity-subagent\"(?![^>]*open)/);
+    expect(html).toContain('Subagent · research');
+    expect(html).toContain('运行中');
+    expect(html).toContain('sync');
   });
 
   it('opens streaming reasoning activity by default while completed tool activity stays collapsed', () => {
