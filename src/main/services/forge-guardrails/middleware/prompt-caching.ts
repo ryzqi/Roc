@@ -1,8 +1,8 @@
 import { SystemMessage, type BaseMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import type { ProviderType } from '../../../../shared/types';
-import type { PromptBlock } from '../../deep-agent/prompt-builder';
-import { BlockStability } from '../../deep-agent/prompt-builder';
+import type { PromptBlock } from '../../deep-agent/context/prompt-blocks';
+import { BlockStability } from '../../deep-agent/context/prompt-blocks';
 
 export type PromptCachingStrategy = 'aggressive' | 'balanced' | 'conservative' | 'disabled';
 

@@ -1,11 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { SystemMessage } from '@langchain/core/messages';
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  BlockStability,
+  buildPromptBlocks
+} from '../../../../../src/main/services/deep-agent/context/prompt-blocks';
+import type { PromptBlock } from '../../../../../src/main/services/deep-agent/context/prompt-blocks';
+import { serializePromptBlocks } from '../../../../../src/main/services/deep-agent/context/prompt-serialization';
 import {
   AnthropicStrategy,
-  OpenAIStrategy,
-  CacheStrategyFactory
+  CacheStrategyFactory,
+  createPromptCachingMiddleware,
+  OpenAIStrategy
 } from '../../../../../src/main/services/forge-guardrails/middleware/prompt-caching';
-import { BlockStability } from '../../../../../src/main/services/deep-agent/prompt-builder';
-import type { PromptBlock } from '../../../../../src/main/services/deep-agent/prompt-builder';
 
 describe('AnthropicStrategy', () => {
   const strategy = new AnthropicStrategy();
@@ -43,5 +50,50 @@ describe('CacheStrategyFactory', () => {
   it('应为 openai 返回 OpenAIStrategy', () => {
     const strategy = CacheStrategyFactory.create('openai_compatible');
     expect(strategy).toBeInstanceOf(OpenAIStrategy);
+  });
+});
+
+describe('createPromptCachingMiddleware', () => {
+  it('injects cache_control from a production serialized prompt for Anthropic-compatible providers', async () => {
+    const prompt = serializePromptBlocks(
+      buildPromptBlocks({
+        enabledCapabilities: { mcpServers: [], skills: [] },
+        workspacePath: 'F:\\Code\\Roc',
+        workflowHint: null,
+        tools: [{ name: 'session_search', description: 'Search prior conversations' }]
+      })
+    );
+    const middleware = createPromptCachingMiddleware({
+      providerType: 'anthropic_compatible',
+      strategy: 'balanced'
+    });
+    const handler = vi.fn(async request => request);
+    const wrapModelCall = middleware.wrapModelCall;
+    if (wrapModelCall === undefined) {
+      throw new Error('prompt_caching_wrap_model_call_missing');
+    }
+
+    await wrapModelCall(
+      {
+        messages: [new SystemMessage(prompt)]
+      } as never,
+      handler as never
+    );
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const firstCall = handler.mock.calls[0];
+    if (firstCall === undefined) {
+      throw new Error('prompt_caching_handler_not_called');
+    }
+    const handledRequest = firstCall[0] as { messages: SystemMessage[] };
+    const systemMessage = handledRequest.messages[0];
+    expect(systemMessage.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'text',
+          cache_control: { type: 'ephemeral' }
+        })
+      ])
+    );
   });
 });

@@ -4,8 +4,8 @@ import {
   OpenAIStrategy,
   CacheStrategyFactory
 } from '../../../../src/main/services/forge-guardrails/middleware/prompt-caching';
-import { BlockStability } from '../../../../src/main/services/deep-agent/prompt-builder';
-import type { PromptBlock } from '../../../../src/main/services/deep-agent/prompt-builder';
+import { BlockStability } from '../../../../src/main/services/deep-agent/context/prompt-blocks';
+import type { PromptBlock } from '../../../../src/main/services/deep-agent/context/prompt-blocks';
 
 describe('AnthropicStrategy', () => {
   const strategy = new AnthropicStrategy();
