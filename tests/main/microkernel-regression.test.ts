@@ -223,7 +223,7 @@ describe('microkernel regression', () => {
     expect(runNow).toMatchObject({ taskId: task.id });
     expect(runOutputEvents).toContainEqual(expect.objectContaining({ runId: runNow.runId, type: 'message', role: 'assistant' }));
     expect(memorySnapshot.text).toContain('# DeepAgents Memory Preview');
-    expect(memorySnapshot.text).toContain('Completed run');
+    expect(memorySnapshot.text).toMatch(/- run_[^:\n]+: Static DeepAgent response\./u);
     expect(memorySnapshot.text).toContain('Static DeepAgent response.');
     expect(mcpServers).toContainEqual(expect.objectContaining({ id: 'exa-hosted' }));
     expect(rtkStatus).toMatchObject({ resourceState: 'ready' });

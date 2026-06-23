@@ -275,7 +275,7 @@ describe('memory plugin', () => {
     });
 
     await expect(capabilities.invoke('memory.file.read', { scope: 'workspace', kind: 'memory' })).resolves.toBe(
-      ['## 2026-06-18', '', '- Completed run run_1: Native memory now uses Store records.'].join('\n')
+      ['## 2026-06-18', '', '- run_1: Native memory now uses Store records.'].join('\n')
     );
     await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'memory' })).resolves.toBeNull();
     await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'user' })).resolves.toBeNull();
@@ -334,7 +334,7 @@ describe('memory plugin', () => {
     });
 
     await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'memory' })).resolves.toBe(
-      ['## 2026-06-18', '', '- Completed run run_1: Global memory updated.'].join('\n')
+      ['## 2026-06-18', '', '- run_1: Global memory updated.'].join('\n')
     );
   });
 
