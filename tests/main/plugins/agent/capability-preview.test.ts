@@ -67,7 +67,10 @@ describe('agent capability preview', () => {
       skills: []
     });
 
-    expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'delete_file')?.requiresApproval).toBe(false);
+    expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'delete_file')).toMatchObject({
+      requiresApproval: false,
+      requiredInput: 'file_path: /workspace/...'
+    });
     expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'search_docs')?.requiresApproval).toBe(true);
     expect(mcpDefaultPreview.interruptOn.delete_file).toBeUndefined();
     expect(mcpDefaultPreview.interruptOn.search_docs).toEqual({

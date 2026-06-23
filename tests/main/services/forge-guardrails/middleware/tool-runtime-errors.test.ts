@@ -13,7 +13,7 @@ async function runWrapToolCall(input: { toolName: string; handler: () => Promise
     {
       toolCall: {
         name: input.toolName,
-        args: { relativePath: 'docs' },
+        args: { file_path: '/workspace/docs' },
         id: `call-${input.toolName}`
       }
     } as never,

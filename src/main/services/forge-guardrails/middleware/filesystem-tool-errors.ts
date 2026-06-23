@@ -1,10 +1,20 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
+import {
+  ROC_FILE_TOOL_MISSING_PATH_ERROR,
+  ROC_FILE_TOOL_PATH_FIELDS,
+  ROC_FILE_TOOL_ROUTE_ERROR,
+  ROC_FILE_TOOL_TRAVERSAL_ERROR,
+  ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+} from '../../deep-agent/filesystem-tool-contract';
 
-const FILESYSTEM_TOOL_NAMES = new Set(['read_file', 'write_file', 'edit_file', 'ls', 'glob', 'grep']);
+const FILESYSTEM_TOOL_NAMES = new Set(Object.keys(ROC_FILE_TOOL_PATH_FIELDS));
 
 const ROUTE_OR_PERMISSION_ERROR_PATTERNS = [
-  'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。',
+  ROC_FILE_TOOL_ROUTE_ERROR,
+  ROC_FILE_TOOL_WINDOWS_PATH_ERROR,
+  ROC_FILE_TOOL_TRAVERSAL_ERROR,
+  ROC_FILE_TOOL_MISSING_PATH_ERROR,
   'Roc 已将 /skills/ 挂载为只读能力目录。',
   'Roc 当前回合未启用这个 skill。',
   'permission_denied'

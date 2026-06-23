@@ -68,7 +68,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createToolProtocolMiddleware(),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
-    createRocFilesystemPathPolicyMiddleware({ workspacePath: input.workspacePath }),
+    createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware(),
     createForgeTieredCompactionMiddleware({
       budgetTokens: input.contextBudgetTokens

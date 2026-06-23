@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import type { ClientTool } from '@langchain/core/tools';
+import { ROC_FILE_TOOL_PROMPT_LINES } from './filesystem-tool-contract';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from './prompt';
 
 /**
@@ -82,11 +83,7 @@ export class SystemPromptBuilder {
       sections.push('Default command cwd: unavailable; ask user to select workspace before local command operations.');
     } else {
       sections.push(`Workspace: ${workspacePath}`);
-      sections.push('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
-      sections.push('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
-      sections.push('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
-      sections.push('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
-      sections.push('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
+      sections.push(...ROC_FILE_TOOL_PROMPT_LINES);
       sections.push('After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.');
     }
     const content = sections.join('\n');

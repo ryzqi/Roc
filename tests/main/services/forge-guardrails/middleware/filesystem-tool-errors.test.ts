@@ -1,5 +1,9 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
+import {
+  ROC_FILE_TOOL_ROUTE_ERROR,
+  ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+} from '../../../../../src/main/services/deep-agent/filesystem-tool-contract';
 import { createFilesystemToolErrorMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/filesystem-tool-errors';
 
 async function runWrapToolCall(input: {
@@ -33,7 +37,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
   it('marks invalid write_file route output as a hard tool error', async () => {
     const result = await runWrapToolCall({
       toolName: 'write_file',
-      content: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
+      content: ROC_FILE_TOOL_ROUTE_ERROR
     });
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -47,7 +51,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
       content: [
         {
           type: 'text',
-          text: 'Error: Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
+          text: `Error: ${ROC_FILE_TOOL_ROUTE_ERROR}`
         }
       ]
     });
@@ -62,7 +66,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
       content: [
         {
           type: 'text',
-          text: "34: const UNKNOWN_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';"
+          text: `34: const UNKNOWN_ROUTE_ERROR = '${ROC_FILE_TOOL_ROUTE_ERROR}';`
         }
       ]
     });
@@ -99,10 +103,29 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
   it('ignores non-filesystem tools', async () => {
     const result = await runWrapToolCall({
       toolName: 'web_read',
-      content: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
+      content: ROC_FILE_TOOL_ROUTE_ERROR
     });
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).status).toBe('success');
+  });
+
+  it('marks Windows virtual-route violations as hard file-tool errors', async () => {
+    const result = await runWrapToolCall({
+      toolName: 'read_file',
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${ROC_FILE_TOOL_WINDOWS_PATH_ERROR}`
+        }
+      ]
+    });
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect(result).toMatchObject({
+      tool_call_id: 'call-read_file',
+      name: 'read_file',
+      status: 'error'
+    });
   });
 });

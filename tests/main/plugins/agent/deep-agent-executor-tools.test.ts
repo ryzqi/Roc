@@ -5,6 +5,7 @@ import {
   findTool,
   invokeTool,
   readBuildInput,
+  readJson,
   readBuiltTools,
   workspacePath
 } from './deep-agent-executor-test-helpers';
@@ -22,7 +23,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
     expect(buildInput.systemPrompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
     expect(buildInput.systemPrompt).toContain('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
-    expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
+    expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.');
     expect(buildInput.systemPrompt).not.toContain('current directory means /workspace/.');
     expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');
   });
@@ -98,6 +99,45 @@ describe('createAgentDeepAgentExecutor', () => {
         source: 'agent'
       }
     });
+  });
+
+
+  it('converts delete_file /workspace file_path to files.delete relativePath', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    const output = await invokeTool(findTool(readBuiltTools(), 'delete_file'), {
+      file_path: '/workspace/src/remove-me.ts'
+    });
+
+    expect(readJson(output)).toMatchObject({
+      relativePath: 'src/remove-me.ts'
+    });
+    expect(capabilityCalls).toContainEqual({
+      name: 'files.delete',
+      input: {
+        relativePath: 'src/remove-me.ts'
+      }
+    });
+  });
+
+
+  it.each([
+    ['relative path', { file_path: 'src/remove-me.ts' }, 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'],
+    ['memory path', { file_path: '/memory/global/MEMORY.md' }, 'delete_file 只允许删除 /workspace/ 路径下的文件或空目录。'],
+    ['workspace root', { file_path: '/workspace/' }, 'delete_file 只允许删除 /workspace/ 路径下的文件或空目录。']
+  ])('rejects delete_file %s', async (_label, input, message) => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    await expect(invokeTool(findTool(readBuiltTools(), 'delete_file'), input)).rejects.toThrow(message);
   });
 
 

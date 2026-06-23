@@ -10,6 +10,8 @@ import type {
   ChatRunEvent,
   ChatStartRunRequest,
   AppSettings,
+  FileDeleteResult,
+  RecoveryPoint,
   ShellExecutionResult,
   TaskDetail,
   TaskRun,
@@ -184,6 +186,13 @@ export function createCapabilities(
           usedRtk: false
         } satisfies ShellExecutionResult as TOutput;
       }
+      if (name === 'files.delete') {
+        const request = input as { relativePath: string };
+        return {
+          relativePath: request.relativePath,
+          recoveryPoint: createRecoveryPoint(request.relativePath)
+        } satisfies FileDeleteResult as TOutput;
+      }
       throw new Error(`unexpected_capability:${name}`);
     }
   } satisfies RocCapabilityRegistry;
@@ -281,6 +290,18 @@ function createTaskDetail(): TaskDetail {
     runHistory: [],
     recentEvents: [],
     schedulerRegistered: true
+  };
+}
+
+function createRecoveryPoint(relativePath: string): RecoveryPoint {
+  return {
+    id: 'recovery-1',
+    relativePath,
+    snapshotPath: 'F:\\Code\\Roc\\.roc-test\\recovery-1',
+    contentSha256: 'sha256-test',
+    source: 'agent',
+    createdAt: '2026-06-04T00:00:00.000Z',
+    restored: false
   };
 }
 

@@ -4,7 +4,6 @@ import {
   StoreBackend,
   type AnyBackendProtocol,
   type EditResult,
-  type FilesystemPermission,
   type FileDownloadResponse,
   type FileUploadResponse,
   type GlobResult,
@@ -19,6 +18,10 @@ import { SecurityScanService } from '../memory/security-scan';
 import { listMemorySlots } from '../memory/store-slots';
 import { buildWorkspaceHash, type RocPaths } from '../paths';
 import type { WorkspaceService } from '../workspace-service';
+import {
+  ROC_FILE_TOOL_ROUTE_ERROR,
+  validateRocFileToolPath
+} from './filesystem-tool-contract';
 import { RocStoreMemoryBackend } from './store-memory-backend';
 
 const WORKSPACE_ROUTE = '/workspace/';
@@ -27,51 +30,41 @@ const MEMORY_GLOBAL_ROUTE = '/memory/global/';
 const MEMORY_WORKSPACE_ROUTE = '/memory/workspaces/current/';
 const READ_ONLY_SKILLS_ERROR = 'Roc 已将 /skills/ 挂载为只读能力目录。';
 const SKILL_ACCESS_DENIED_ERROR = 'Roc 当前回合未启用这个 skill。';
-const UNKNOWN_ROUTE_ERROR = 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。';
 const WORKSPACE_MEMORY_REQUIRED_ERROR = 'No workspace selected; select a workspace before writing workspace-scoped memory.';
 
 export type RocCompositeBackend = {
   readonly routePrefixes: string[];
 } & AnyBackendProtocol;
 
-export function createRocFilesystemPermissions(): FilesystemPermission[] {
-  return [
-    { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
-    { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
-    { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
-    { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
-  ];
-}
-
 class RocRouteRejectingFilesystemBackend {
   readonly id = 'roc-route-rejecting-filesystem';
 
   ls(_path: string): Promise<LsResult> {
-    return Promise.resolve({ files: [] });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   read(_filePath: string, _offset?: number, _limit?: number): Promise<ReadResult> {
-    return Promise.resolve({ error: UNKNOWN_ROUTE_ERROR });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   readRaw(_filePath: string): Promise<ReadRawResult> {
-    return Promise.resolve({ error: UNKNOWN_ROUTE_ERROR });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   grep(_pattern: string, _path?: string | null, _glob?: string | null): Promise<GrepResult> {
-    return Promise.resolve({ matches: [] });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   glob(_pattern: string, _path?: string): Promise<GlobResult> {
-    return Promise.resolve({ files: [] });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   write(_filePath: string, _content: string): Promise<import('deepagents').WriteResult> {
-    return Promise.resolve({ error: UNKNOWN_ROUTE_ERROR });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   edit(_filePath: string, _oldString: string, _newString: string, _replaceAll?: boolean): Promise<EditResult> {
-    return Promise.resolve({ error: UNKNOWN_ROUTE_ERROR });
+    return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
   uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
@@ -325,38 +318,80 @@ class RocNonExecutingCompositeBackend {
   }
 
   ls(path: string): Promise<LsResult> {
+    const validation = validateRocFileToolPath(path);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.ls(path);
   }
 
   read(filePath: string, offset?: number, limit?: number): Promise<ReadResult> {
+    const validation = validateRocFileToolPath(filePath);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.read(filePath, offset, limit);
   }
 
   readRaw(filePath: string): Promise<ReadRawResult> {
+    const validation = validateRocFileToolPath(filePath);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.readRaw(filePath);
   }
 
-  grep(pattern: string, path?: string, glob?: string | null): Promise<GrepResult> {
+  grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+    if (typeof path !== 'string') {
+      return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
+    }
+    const validation = validateRocFileToolPath(path);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.grep(pattern, path, glob);
   }
 
   glob(pattern: string, path?: string): Promise<GlobResult> {
+    if (typeof path !== 'string') {
+      return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
+    }
+    const validation = validateRocFileToolPath(path);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.glob(pattern, path);
   }
 
   write(filePath: string, content: string): Promise<import('deepagents').WriteResult> {
+    const validation = validateRocFileToolPath(filePath);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.write(filePath, content);
   }
 
   edit(filePath: string, oldString: string, newString: string, replaceAll?: boolean): Promise<EditResult> {
+    const validation = validateRocFileToolPath(filePath);
+    if (!validation.ok) {
+      return Promise.resolve({ error: validation.error });
+    }
     return this.delegate.edit(filePath, oldString, newString, replaceAll);
   }
 
   uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
+    const invalid = files.find(([path]) => !validateRocFileToolPath(path).ok);
+    if (invalid !== undefined) {
+      return Promise.resolve(files.map(([path]) => ({ path, error: 'permission_denied' })));
+    }
     return this.delegate.uploadFiles(files);
   }
 
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const invalid = paths.find((path) => !validateRocFileToolPath(path).ok);
+    if (invalid !== undefined) {
+      return Promise.resolve(paths.map((path) => ({ path, content: null, error: 'permission_denied' })));
+    }
     return this.delegate.downloadFiles(paths);
   }
 }

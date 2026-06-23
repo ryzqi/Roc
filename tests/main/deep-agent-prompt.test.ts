@@ -50,7 +50,7 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
     expect(prompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
     expect(prompt).toContain('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
-    expect(prompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.');
+    expect(prompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.');
     expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(
       'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
@@ -93,7 +93,7 @@ describe('deep agent prompt', () => {
       'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
       'Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.',
       'Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.',
-      'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.',
+      'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.',
       'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
       'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
     ]);

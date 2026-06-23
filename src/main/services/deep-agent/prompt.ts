@@ -1,4 +1,5 @@
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
+import { ROC_FILE_TOOL_PROMPT_LINES } from './filesystem-tool-contract';
 
 const ROC_STATIC_SYSTEM_PROMPT = [
   'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
@@ -75,11 +76,7 @@ function createWorkspaceBoundary(workspacePath: string | null): string[] {
   }
   return [
     `Workspace: ${workspacePath}`,
-    'DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.',
-    'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
-    'Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.',
-    'Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.',
-    'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, or grep.',
+    ...ROC_FILE_TOOL_PROMPT_LINES,
     'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
   ];
 }

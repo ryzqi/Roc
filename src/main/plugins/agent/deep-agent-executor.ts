@@ -29,7 +29,8 @@ import { webReadToolSchema } from '../../services/web-read-request-schema';
 import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
-import { createBackend, createRocFilesystemPermissions } from '../../services/deep-agent/backend';
+import { createBackend } from '../../services/deep-agent/backend';
+import { createRocFilesystemPermissions, toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { buildSystemPrompt } from '../../services/deep-agent/prompt';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
@@ -397,14 +398,25 @@ function createWebReadTool(capabilities: RocCapabilityRegistry): DynamicStructur
 
 function createDeleteFileTool(capabilities: RocCapabilityRegistry): DynamicStructuredTool<any, any, any, string> {
   const schema = z.object({
-    relativePath: z.string().trim().min(1)
+    file_path: z.string().trim().min(1)
   });
-  return new DynamicStructuredTool<typeof schema, { relativePath: string }, { relativePath: string }, string>({
+  return new DynamicStructuredTool<typeof schema, { file_path: string }, { file_path: string }, string>({
     name: 'delete_file',
-    description: '仅删除工作区内文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
+    description: '删除 /workspace/... 下的文件或空目录，会先写入恢复点；仅当确实需要删除目标时使用。',
     schema,
-    func: async (request) =>
-      JSON.stringify(await capabilities.invoke<{ relativePath: string }, FileDeleteResult>('files.delete', request), null, 2)
+    func: async (request) => {
+      const relativePath = toWorkspaceRelativePath(request.file_path);
+      if (!relativePath.ok) {
+        throw new Error(relativePath.error);
+      }
+      return JSON.stringify(
+        await capabilities.invoke<{ relativePath: string }, FileDeleteResult>('files.delete', {
+          relativePath: relativePath.relativePath
+        }),
+        null,
+        2
+      );
+    }
   });
 }
 

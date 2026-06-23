@@ -191,7 +191,7 @@ describe('forge guardrails full stack', () => {
       {
         toolCall: {
           name: 'delete_file',
-          args: { relativePath: 'docs' },
+          args: { file_path: '/workspace/docs' },
           id: 'call-delete-dir'
         },
         state: {

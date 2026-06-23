@@ -1,6 +1,10 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
 import { createRocFilesystemPathPolicyMiddleware, normalizeRocFileToolPath, validateRocFileToolPath } from '../../../../src/main/services/deep-agent/filesystem-path-policy';
+import {
+  ROC_FILE_TOOL_MISSING_PATH_ERROR,
+  ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+} from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 
 describe('validateRocFileToolPath', () => {
   it.each([
@@ -27,17 +31,17 @@ describe('validateRocFileToolPath', () => {
 });
 
 describe('normalizeRocFileToolPath', () => {
-  it('maps selected workspace root to /workspace/', () => {
-    expect(normalizeRocFileToolPath('F:\\Code\\Roc', 'F:\\Code\\Roc')).toEqual({
-      ok: true,
-      path: '/workspace/'
+  it('rejects selected workspace Windows paths instead of rewriting them', () => {
+    expect(normalizeRocFileToolPath('F:\\Code\\Roc\\scripts\\probe.ts')).toEqual({
+      ok: false,
+      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
     });
   });
 
-  it('keeps Windows paths outside the selected workspace invalid', () => {
-    expect(normalizeRocFileToolPath('F:\\Other\\probe.ts', 'F:\\Code\\Roc')).toEqual({
+  it('rejects Windows paths outside the selected workspace', () => {
+    expect(normalizeRocFileToolPath('F:\\Other\\probe.ts')).toEqual({
       ok: false,
-      error: 'Roc 文件工具使用虚拟路径；请改用 /workspace/...。'
+      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
     });
   });
 });
@@ -76,44 +80,92 @@ describe('createRocFilesystemPathPolicyMiddleware', () => {
     });
   });
 
-  it('rewrites selected workspace Windows paths to /workspace before the handler', async () => {
-    const middleware = createRocFilesystemPathPolicyMiddleware({
-      workspacePath: 'F:\\Code\\Roc'
-    });
-    const handler = vi.fn(async (request: { toolCall: { args: { file_path: string } } }) => new ToolMessage({
-      tool_call_id: 'call-2',
-      name: 'write_file',
-      content: request.toolCall.args.file_path
+  it('returns an error ToolMessage when a file tool omits its path field', async () => {
+    const middleware = createRocFilesystemPathPolicyMiddleware();
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call-missing',
+      name: 'read_file',
+      content: 'handler reached'
     }));
 
     const result = await middleware.wrapToolCall!(
       {
         toolCall: {
-          id: 'call-2',
-          name: 'write_file',
+          id: 'call-missing',
+          name: 'read_file',
+          args: {}
+        },
+        state: { messages: [] }
+      } as never,
+      handler
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      tool_call_id: 'call-missing',
+      name: 'read_file',
+      status: 'error',
+      content: ROC_FILE_TOOL_MISSING_PATH_ERROR
+    });
+  });
+
+  it('returns an error ToolMessage when a file tool path field is not a string', async () => {
+    const middleware = createRocFilesystemPathPolicyMiddleware();
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call-non-string',
+      name: 'ls',
+      content: 'handler reached'
+    }));
+
+    const result = await middleware.wrapToolCall!(
+      {
+        toolCall: {
+          id: 'call-non-string',
+          name: 'ls',
+          args: { path: 42 }
+        },
+        state: { messages: [] }
+      } as never,
+      handler
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      tool_call_id: 'call-non-string',
+      name: 'ls',
+      status: 'error',
+      content: ROC_FILE_TOOL_MISSING_PATH_ERROR
+    });
+  });
+
+  it('applies the same virtual path policy to delete_file', async () => {
+    const middleware = createRocFilesystemPathPolicyMiddleware();
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call-delete',
+      name: 'delete_file',
+      content: 'handler reached'
+    }));
+
+    const result = await middleware.wrapToolCall!(
+      {
+        toolCall: {
+          id: 'call-delete',
+          name: 'delete_file',
           args: {
-            file_path: 'F:\\Code\\Roc\\scripts\\probe.ts',
-            content: 'export {};'
+            file_path: 'src/remove-me.ts'
           }
         },
         state: { messages: [] }
       } as never,
-      handler as never
+      handler
     );
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0]?.[0]).toMatchObject({
-      toolCall: {
-        args: {
-          file_path: '/workspace/scripts/probe.ts',
-          content: 'export {};'
-        }
-      }
-    });
+    expect(handler).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      tool_call_id: 'call-2',
-      name: 'write_file',
-      content: '/workspace/scripts/probe.ts'
+      tool_call_id: 'call-delete',
+      name: 'delete_file',
+      status: 'error',
+      content: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
     });
   });
 

@@ -1,5 +1,7 @@
+import { createFilesystemMiddleware } from 'deepagents';
 import { describe, expect, it } from 'vitest';
 import type {
+  AnyBackendProtocol,
   AsyncSubAgent,
   AsyncTaskStatus,
   CreateDeepAgentParams,
@@ -69,5 +71,74 @@ describe('DeepAgents official contract assumptions', () => {
       'grep'
     ]);
     expect(DEEP_AGENT_BUILT_IN_TOOLS).not.toContain('execute');
+  });
+
+  it('documents that DeepAgents filesystem middleware registers execute with file tools', () => {
+    const middleware = createFilesystemMiddleware();
+    const tools = middleware.tools;
+    if (tools === undefined) {
+      throw new Error('expected_filesystem_tools');
+    }
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'ls',
+      'read_file',
+      'write_file',
+      'edit_file',
+      'glob',
+      'grep',
+      'execute'
+    ]));
+    expect(DEEP_AGENT_BUILT_IN_TOOLS).not.toContain('execute');
+  });
+
+  it('documents that empty DeepAgents permissions are permissive for file tools', async () => {
+    const backend = {
+      ls: async () => ({
+        files: [{ path: '/outside/file.txt', is_dir: false, size: 5 }]
+      }),
+      read: async () => ({
+        content: 'hello'
+      }),
+      readRaw: async () => ({
+        data: {
+          content: 'hello',
+          mimeType: 'text/plain',
+          created_at: '2026-06-04T00:00:00.000Z',
+          modified_at: '2026-06-04T00:00:00.000Z'
+        }
+      }),
+      write: async (filePath: string) => ({
+        path: filePath,
+        filesUpdate: null
+      }),
+      edit: async (filePath: string) => ({
+        path: filePath,
+        occurrences: 1,
+        filesUpdate: null
+      }),
+      glob: async () => ({
+        files: [{ path: '/outside/file.txt', is_dir: false, size: 5 }]
+      }),
+      grep: async () => ({
+        matches: [{ path: '/outside/file.txt', line: 1, text: 'hello' }]
+      }),
+      uploadFiles: async () => [],
+      downloadFiles: async () => []
+    } satisfies AnyBackendProtocol;
+    const middleware = createFilesystemMiddleware({ backend, permissions: [] });
+    const tools = middleware.tools;
+    if (tools === undefined) {
+      throw new Error('expected_filesystem_tools');
+    }
+    const readTool = tools.find((tool) => tool.name === 'read_file');
+    if (readTool === undefined) {
+      throw new Error('expected_read_file_tool');
+    }
+
+    await expect(readTool.invoke({ file_path: '/outside/file.txt' })).resolves.toEqual([
+      { type: 'text', text: '     1\thello' }
+    ]);
   });
 });

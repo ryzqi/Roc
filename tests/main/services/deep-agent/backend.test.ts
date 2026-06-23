@@ -1,12 +1,27 @@
 import { InMemoryStore } from '@langchain/langgraph';
 import { describe, expect, it } from 'vitest';
-import { createBackend, createRocFilesystemPermissions } from '../../../../src/main/services/deep-agent/backend';
+import { createBackend } from '../../../../src/main/services/deep-agent/backend';
+import {
+  ROC_FILE_TOOL_ROUTE_ERROR,
+  ROC_FILE_TOOL_WINDOWS_PATH_ERROR,
+  createRocFilesystemPermissions
+} from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 import { CapacityService } from '../../../../src/main/services/memory/capacity';
 import { defaultSettings } from '../../../../src/main/services/config/defaults';
 import { SecurityScanService } from '../../../../src/main/services/memory/security-scan';
 import { RocPaths } from '../../../../src/main/services/paths';
 
 const workspacePath = 'F:\\Code\\Roc';
+
+type TestBackend = ReturnType<typeof createBackend>['backend'] & {
+  ls: (path: string) => Promise<unknown>;
+  read: (filePath: string) => Promise<unknown>;
+  readRaw: (filePath: string) => Promise<unknown>;
+  write: (filePath: string, content: string) => Promise<unknown>;
+  edit: (filePath: string, oldString: string, newString: string) => Promise<unknown>;
+  glob: (pattern: string, path?: string) => Promise<unknown>;
+  grep: (pattern: string, path?: string | null, glob?: string | null) => Promise<unknown>;
+};
 
 function createTestBackend() {
   return createBackend({
@@ -43,8 +58,46 @@ describe('DeepAgents Roc backend', () => {
     const { backend } = createTestBackend();
 
     await expect(backend.write('/home/user/workarea/create_docx.py', 'print(1)')).resolves.toEqual({
-      error: 'Roc 文件工具只允许访问 /workspace/、/skills/、/memory/ 路径。'
+      error: ROC_FILE_TOOL_ROUTE_ERROR
     });
+  });
+
+  it.each([
+    ['ls', async (backend: TestBackend) => await backend.ls('/')],
+    ['glob', async (backend: TestBackend) => await backend.glob('**/*', '/')],
+    ['grep', async (backend: TestBackend) => await backend.grep('needle', '/')]
+  ])('rejects root %s instead of returning an empty result', async (_name, call) => {
+    const { backend } = createTestBackend();
+
+    await expect(call(backend as TestBackend)).resolves.toEqual({ error: ROC_FILE_TOOL_ROUTE_ERROR });
+  });
+
+  it.each([
+    ['ls', async (backend: TestBackend) => await backend.ls('/agents')],
+    ['read', async (backend: TestBackend) => await backend.read('/agents/AGENTS.md')],
+    ['readRaw', async (backend: TestBackend) => await backend.readRaw('/agents/AGENTS.md')],
+    ['write', async (backend: TestBackend) => await backend.write('/agents/notes.md', 'x')],
+    ['edit', async (backend: TestBackend) => await backend.edit('/agents/notes.md', 'x', 'y')],
+    ['glob', async (backend: TestBackend) => await backend.glob('**/*', '/agents')],
+    ['grep', async (backend: TestBackend) => await backend.grep('needle', '/agents')]
+  ])('rejects unknown route through backend method %s', async (_name, call) => {
+    const { backend } = createTestBackend();
+
+    await expect(call(backend as TestBackend)).resolves.toEqual({ error: ROC_FILE_TOOL_ROUTE_ERROR });
+  });
+
+  it('rejects Windows absolute paths at the backend boundary', async () => {
+    const { backend } = createTestBackend();
+
+    await expect(backend.read('F:\\Code\\Roc\\package.json')).resolves.toEqual({
+      error: ROC_FILE_TOOL_WINDOWS_PATH_ERROR
+    });
+  });
+
+  it('allows routed workspace paths through the backend boundary', async () => {
+    const { backend } = createTestBackend();
+
+    await expect((backend as TestBackend).ls('/workspace/')).resolves.toHaveProperty('files');
   });
 
   it('uses an explicit final deny rule because DeepAgents permissions default to allow', () => {

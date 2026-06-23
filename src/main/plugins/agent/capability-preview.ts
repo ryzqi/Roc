@@ -237,7 +237,7 @@ function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
     name: 'delete_file',
     capabilityType: 'terminal_tool',
     description: '删除当前工作区内的文件或空目录，并在删除前写入恢复点。',
-    requiredInput: 'workspace relative path',
+    requiredInput: 'file_path: /workspace/...',
     scope: 'workspace',
     dependencies: ['FileService'],
     sideEffects: ['workspace_delete', 'recovery_point_write'],
