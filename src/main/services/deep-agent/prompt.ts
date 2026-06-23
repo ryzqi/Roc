@@ -1,25 +1,6 @@
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
-import { ROC_FILE_TOOL_PROMPT_LINES } from './filesystem-tool-contract';
-
-const ROC_STATIC_SYSTEM_PROMPT = [
-  'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
-  'Before changing files, inspect the relevant source, tests, and configuration.',
-  'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
-  'For code or configuration changes, run direct verification before claiming completion.',
-  '',
-  'Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:',
-  '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
-  '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
-  '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
-  '  /memory/workspaces/current/AGENTS.md   — workspace-specific rules (overrides global if exists)',
-  '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
-  '',
-  'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
-  'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
-  '',
-  'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
-  'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
-].join('\n');
+import { buildPromptBlocks } from './context/prompt-blocks';
+import { serializePromptBlocks } from './context/prompt-serialization';
 
 export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   '',
@@ -42,43 +23,14 @@ export function buildSystemPrompt(input: {
   workspacePath: string | null;
   workflowHint: WorkflowHint;
 }): string {
-  const sections = [
-    ROC_STATIC_SYSTEM_PROMPT,
-    ...createWorkspaceBoundary(input.workspacePath),
-    `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`
-  ];
-  sections.push(...createWorkflowOverview(input.workflowHint));
-  return sections.join('\n');
-}
-
-function createWorkflowOverview(workflowHint: WorkflowHint): string[] {
-  if (workflowHint === 'propose_background_task') {
-    return [...BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW];
-  }
-
-  if (workflowHint === 'background_task_change') {
-    return [
-      '',
-      '本轮工作流：修改已有后台任务。',
-      '可用工具：read_background_task / update_background_task / cancel_background_task。',
-      'update / cancel 会触发用户审批；read 用于先看清楚再改。',
-      '如果缺少 taskId、当前状态或触发规则，先调用 read_background_task；信息已经明确时可以直接 update 或 cancel。',
-      'update patch 只包含用户明确要求改变的字段；不要猜测未提及配置。'
-    ];
-  }
-
-  return [];
-}
-
-function createWorkspaceBoundary(workspacePath: string | null): string[] {
-  if (workspacePath === null) {
-    return ['Workspace: not selected.', 'Default command cwd: unavailable; ask user to select workspace before local command operations.'];
-  }
-  return [
-    `Workspace: ${workspacePath}`,
-    ...ROC_FILE_TOOL_PROMPT_LINES,
-    'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
-  ];
+  return serializePromptBlocks(
+    buildPromptBlocks({
+      enabledCapabilities: input.enabledCapabilities,
+      workspacePath: input.workspacePath,
+      workflowHint: input.workflowHint,
+      tools: []
+    })
+  );
 }
 
 export function createCapabilitySummary(enabledCapabilities: ChatStartRunRequest['enabledCapabilities']): string {

@@ -45,6 +45,9 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain(
       'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).'
     );
+    expect(prompt).toContain('<!-- BLOCK:static:static:');
+    expect(prompt).toContain('<!-- BLOCK:context_recall:workspace:');
+    expect(prompt).toContain('Available Tools: provided by runtime tool schema.');
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
     expect(prompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
@@ -70,7 +73,10 @@ describe('deep agent prompt', () => {
       workflowHint: null
     });
 
-    expect(prompt.split('\n')).toEqual([
+    const lines = prompt.split('\n');
+
+    expect(lines[0]).toMatch(/^<!-- BLOCK:static:static:[a-f0-9]{16} -->$/);
+    expect(lines.slice(1, 17)).toEqual([
       'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
       'Before changing files, inspect the relevant source, tests, and configuration.',
       'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
@@ -86,17 +92,15 @@ describe('deep agent prompt', () => {
       'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
       'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
       '',
-      'For SKILL.md: read silently; never quote, paraphrase, or summarize.',
-      'Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).',
-      'Workspace: F:\\Code\\Roc',
-      'DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.',
-      'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
-      'Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.',
-      'Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.',
-      'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.',
-      'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.',
-      'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
+      'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
     ]);
+    expect(lines[17]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
+    expect(prompt).toContain('Workspace: F:\\Code\\Roc');
+    expect(prompt).toContain(
+      'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
+    );
+    expect(prompt).toContain('Use session_search(query) to recall what was discussed in past conversations (0 token cost until called).');
+    expect(prompt).toContain('Workflow: default chat run.');
   });
 
   it('makes missing workspace state explicit without inventing a default directory', () => {
