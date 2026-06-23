@@ -118,14 +118,7 @@ export function buildRendererBoundaryCapabilities(ctx) {
       agentPreviewApiEvidence.cards.includes('builtin:delete_file') &&
       agentPreviewApiEvidence.cards.includes('mcp:smoke-mcp:smoke_tool') &&
       agentPreviewApiEvidence.skills.includes('skill:smoke-skill') &&
-      agentPreviewApiEvidence.subagents.some(
-        (subagent) =>
-          subagent.id === 'code-review' &&
-          Array.isArray(subagent.skills) &&
-          subagent.skills.length === 0 &&
-          Array.isArray(subagent.tools) &&
-          subagent.tools.length === 0
-      ) &&
+      !agentPreviewApiEvidence.subagents.some((subagent) => subagent.id === 'code-review') &&
       agentPreviewApiEvidence.subagents.some(
         (subagent) =>
           subagent.id === 'research' &&

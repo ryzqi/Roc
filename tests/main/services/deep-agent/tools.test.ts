@@ -5,7 +5,7 @@ import type { AsyncSubAgent } from 'deepagents';
 import { createRunSubagents, validateRuntimeSubagents } from '../../../../src/main/services/deep-agent/tools';
 
 describe('deep agent runtime subagents', () => {
-  it('defines focused prompts for code review and research subagents', () => {
+  it('defines the focused research subagent', () => {
     const webReadTool = new DynamicStructuredTool({
       name: 'web_read',
       description: 'test web read',
@@ -16,11 +16,9 @@ describe('deep agent runtime subagents', () => {
     });
 
     const subagents = createRunSubagents({ webReadTool });
-    const codeReview = subagents.find((subagent) => subagent.name === 'code-review');
     const research = subagents.find((subagent) => subagent.name === 'research');
 
-    expect(readSystemPrompt(codeReview)).toContain('只审查当前任务相关改动');
-    expect(readSystemPrompt(codeReview)).toContain('没有问题时返回空数组');
+    expect(subagents.map((subagent) => subagent.name)).toEqual(['research']);
     expect(readSystemPrompt(research)).toContain('优先使用 web_read 读取来源原文');
     expect(readSystemPrompt(research)).toContain('区分外部事实和你的判断');
   });

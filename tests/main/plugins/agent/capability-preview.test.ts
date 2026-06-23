@@ -37,6 +37,7 @@ describe('agent capability preview', () => {
       dependencies: ['ShellExecutionService', 'RtkService'],
       auditCategory: 'agent_execute'
     });
+    expect(preview.subagents.map((subagent) => subagent.id)).toEqual(['research']);
   });
 
   it('uses delete_file and MCP approval modes independently', () => {

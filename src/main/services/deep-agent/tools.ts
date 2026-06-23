@@ -107,22 +107,8 @@ export async function createWebSearchTool(input: {
 export function createRunSubagents(input: {
   webReadTool: DynamicStructuredTool<any, any, any, string>;
   researchSkillSources?: readonly string[];
-  codeReviewSkillSources?: readonly string[];
 }): RuntimeSubagent[] {
   const subagents: RuntimeSubagent[] = [];
-  subagents.push({
-    name: 'code-review',
-    description: '审查代码改动，优先输出 bug、回归风险、边界条件与缺失验证。',
-    systemPrompt:
-      '你是 Roc 的代码审查子代理。只审查当前任务相关改动；先找 bug、回归风险和缺失验证，再给出简短结论。需要项目上下文时直接读取 /memory/。没有问题时返回空数组。',
-    tools: [],
-    skills: [...(input.codeReviewSkillSources ?? [])],
-    responseFormat: z.object({
-      findings: z.array(z.string()).describe('具体的 bug、回归点或缺陷，每条一项'),
-      risks: z.array(z.string()).describe('边界条件与回归风险'),
-      missing_verification: z.array(z.string()).describe('尚缺失、应补充的验证')
-    })
-  });
   subagents.push({
     name: 'research',
     description: '检索公开资料并读取网页，整理带来源边界的结论。',

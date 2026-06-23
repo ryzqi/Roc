@@ -253,13 +253,6 @@ function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
 function createSubagents(): AgentSubagentPreview[] {
   return [
     {
-      id: 'code-review',
-      name: '代码审查子任务',
-      purpose: '隔离审查上下文，并把 bug、风险与缺失验证回流主任务轨迹。',
-      skills: [],
-      tools: []
-    },
-    {
       id: 'research',
       name: '资料检索子任务',
       purpose: '围绕网页阅读整理外部资料结论，并明确来源边界。',

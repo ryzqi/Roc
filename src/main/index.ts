@@ -12,7 +12,8 @@ import {
   shell,
   systemPreferences
 } from 'electron';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
 import type { ChatRunEvent, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
@@ -48,10 +49,11 @@ import {
 } from './electron-runtime-adapters';
 import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';
 
+const mainModuleDir = dirname(fileURLToPath(import.meta.url));
 const isDevelopment = !app.isPackaged;
-const preloadPath = join(__dirname, '../preload/index.mjs');
+const preloadPath = join(mainModuleDir, '../preload/index.mjs');
 const appIconPath = isDevelopment
-  ? join(__dirname, '../../resources/icon.ico')
+  ? join(mainModuleDir, '../../resources/icon.ico')
   : join(process.resourcesPath, 'icon.ico');
 const mainReadyStartedAtMs = performance.now();
 let pdfPreviewKernel: MainKernelBootstrap | null = null;
@@ -201,7 +203,7 @@ async function loadMainRenderer(window: BrowserWindow): Promise<void> {
     await window.loadURL(process.env.ELECTRON_RENDERER_URL);
     return;
   }
-  await window.loadFile(join(__dirname, '../renderer/index.html'));
+  await window.loadFile(join(mainModuleDir, '../renderer/index.html'));
 }
 
 function showMainPage(page: string): void {
