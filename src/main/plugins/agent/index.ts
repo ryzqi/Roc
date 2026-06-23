@@ -87,12 +87,14 @@ const sessionMessageSchema = z.object({
   content: z.string(),
   phase: z.enum(['visible', 'pre_compaction_flush']),
   tokenCount: z.number().int().nullable(),
+  workspaceHash: z.string().nullable(),
   createdAt: z.string()
 }) satisfies z.ZodType<SessionMessageEntry>;
 
 const sessionSearchInputSchema = z.object({
   query: z.string(),
-  workspaceScope: z.enum(['current', 'global', 'all']),
+  workspaceScope: z.enum(['current', 'all']),
+  workspaceHash: z.string().nullable().optional(),
   threadId: z.string().optional(),
   sinceDays: z.number().int().positive().optional(),
   limit: z.number().int().positive().optional()

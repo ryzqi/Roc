@@ -43,6 +43,7 @@ type SessionMessageRow = {
   content: string;
   phase: SessionMessagePhase;
   token_count: number | null;
+  workspace_hash: string | null;
   created_at: string;
 };
 
@@ -181,17 +182,19 @@ export class AgentSessionRepository {
     content: string;
     tokenCount?: number | null;
     phase?: SessionMessagePhase;
+    workspaceHash?: string | null;
   }): SessionMessageEntry {
     const createdAt = new Date().toISOString();
     const tokenCount = input.tokenCount === undefined ? null : input.tokenCount;
     const phase = input.phase === undefined ? 'visible' : input.phase;
+    const workspaceHash = input.workspaceHash === undefined ? null : input.workspaceHash;
     const id = `smsg_${randomUUID()}`;
     this.db
       .prepare(
-        `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.threadId, input.role, input.content, tokenCount, phase, createdAt);
+      .run(id, input.threadId, input.role, input.content, tokenCount, phase, workspaceHash, createdAt);
     return {
       id,
       threadId: input.threadId,
@@ -200,6 +203,7 @@ export class AgentSessionRepository {
       content: input.content,
       phase,
       tokenCount,
+      workspaceHash,
       createdAt
     };
   }
@@ -208,7 +212,7 @@ export class AgentSessionRepository {
     const limit = input.limit === undefined ? 200 : input.limit;
     const rows = this.db
       .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.created_at,
+        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
                 tt.title AS thread_title
          FROM session_messages sm
          LEFT JOIN task_threads tt ON tt.id = sm.thread_id
@@ -242,6 +246,13 @@ export class AgentSessionRepository {
   private searchRows(query: string, input: SessionMessageSearchRequest, limit: number): SessionMessageSearchRow[] {
     const filters: string[] = [];
     const params: unknown[] = [query];
+    if (input.workspaceScope === 'current') {
+      if (input.workspaceHash === undefined || input.workspaceHash === null || input.workspaceHash.trim().length === 0) {
+        throw new Error('session_search_workspace_required');
+      }
+      filters.push('sm.workspace_hash = ?');
+      params.push(input.workspaceHash);
+    }
     if (input.threadId !== undefined) {
       filters.push('sm.thread_id = ?');
       params.push(input.threadId);
@@ -254,7 +265,7 @@ export class AgentSessionRepository {
     params.push(limit);
     return this.db
       .prepare(
-        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.created_at,
+        `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
                 tt.title AS thread_title,
                 snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet
          FROM session_messages_fts
@@ -328,6 +339,7 @@ function mapSessionMessage(row: SessionMessageRow): SessionMessageEntry {
     content: row.content,
     phase: row.phase,
     tokenCount: row.token_count,
+    workspaceHash: row.workspace_hash,
     createdAt: row.created_at
   };
 }

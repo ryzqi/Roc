@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import type { RocError, SessionMessageSearchResult } from '../../../shared/types';
+import type { RocError, SessionMessageSearchRequest, SessionMessageSearchResult } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { createRocClient } from '../../shared/roc-client';
 
-type WorkspaceScope = 'current' | 'global' | 'all';
+type WorkspaceScope = 'current' | 'all';
 
-export function SessionsTab({ client }: { client?: RocClient }): React.JSX.Element {
+export function SessionsTab({ client, workspaceHash }: { client?: RocClient; workspaceHash: string | null }): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>('current');
   const [sinceDays, setSinceDays] = useState(30);
@@ -21,12 +21,16 @@ export function SessionsTab({ client }: { client?: RocClient }): React.JSX.Eleme
     setLoading(true);
     setError(null);
     const memoryClient = client ?? createRocClient();
-    const response = await memoryClient.api.sessions.search({
+    const request: SessionMessageSearchRequest = {
       query: normalizedQuery,
       workspaceScope,
       sinceDays,
       limit: 50
-    });
+    };
+    if (workspaceScope === 'current') {
+      request.workspaceHash = workspaceHash;
+    }
+    const response = await memoryClient.api.sessions.search(request);
     setLoading(false);
     if (response.ok) {
       setResult(response.data);
@@ -57,7 +61,6 @@ export function SessionsTab({ client }: { client?: RocClient }): React.JSX.Eleme
             value={workspaceScope}
           >
             <option value="current">current</option>
-            <option value="global">global</option>
             <option value="all">all</option>
           </select>
         </label>
@@ -117,8 +120,8 @@ export function SessionsTab({ client }: { client?: RocClient }): React.JSX.Eleme
 }
 
 function readWorkspaceScope(value: string): WorkspaceScope {
-  if (value === 'global' || value === 'all') {
-    return value;
+  if (value === 'all') {
+    return 'all';
   }
   return 'current';
 }

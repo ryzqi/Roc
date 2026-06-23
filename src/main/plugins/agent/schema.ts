@@ -37,13 +37,14 @@ export function applyAgentPluginSchema(db: DatabaseConnection): void {
     );
 
     CREATE TABLE IF NOT EXISTS session_messages (
-      id          TEXT PRIMARY KEY,
-      thread_id   TEXT NOT NULL,
-      role        TEXT NOT NULL CHECK(role IN ('user','assistant','tool','system')),
-      content     TEXT NOT NULL,
-      token_count INTEGER,
-      phase       TEXT NOT NULL DEFAULT 'visible' CHECK(phase IN ('visible','pre_compaction_flush')),
-      created_at  TEXT NOT NULL
+      id             TEXT PRIMARY KEY,
+      thread_id      TEXT NOT NULL,
+      role           TEXT NOT NULL CHECK(role IN ('user','assistant','tool','system')),
+      content        TEXT NOT NULL,
+      token_count    INTEGER,
+      phase          TEXT NOT NULL DEFAULT 'visible' CHECK(phase IN ('visible','pre_compaction_flush')),
+      workspace_hash TEXT,
+      created_at     TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_agent_task_runs_thread_run_number
@@ -54,6 +55,9 @@ export function applyAgentPluginSchema(db: DatabaseConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_agent_session_messages_thread_created
     ON session_messages(thread_id, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_agent_session_messages_workspace_created
+    ON session_messages(workspace_hash, created_at);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
       content,

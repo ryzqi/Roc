@@ -54,12 +54,14 @@ export type SessionMessageEntry = {
   content: string;
   phase: SessionMessagePhase;
   tokenCount: number | null;
+  workspaceHash: string | null;
   createdAt: string;
 };
 
 export type SessionMessageSearchRequest = {
   query: string;
-  workspaceScope: 'current' | 'global' | 'all';
+  workspaceScope: 'current' | 'all';
+  workspaceHash?: string | null;
   threadId?: string;
   sinceDays?: number;
   limit?: number;

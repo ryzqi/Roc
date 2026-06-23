@@ -96,6 +96,84 @@ describe('AgentSessionRepository', () => {
       token_count: 12
     });
   });
+
+  it('persists workspace hash on session messages', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Remember workspace context'
+    });
+
+    const message = repository.recordSessionMessage({
+      content: 'Workspace specific answer',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_a'
+    });
+
+    expect(columnNames('session_messages')).toContain('workspace_hash');
+    expect(message.workspaceHash).toBe('workspace_hash_a');
+    expect(rawRow('session_messages', message.id)).toMatchObject({
+      workspace_hash: 'workspace_hash_a'
+    });
+    expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
+  });
+
+  it('filters current workspace search by workspace hash and keeps unscoped rows only in all scope', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const runA = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Workspace A'
+    });
+    const runB = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Workspace B'
+    });
+
+    repository.recordSessionMessage({
+      content: 'alpha recall from workspace a',
+      role: 'assistant',
+      threadId: runA.threadId,
+      workspaceHash: 'workspace_hash_a'
+    });
+    repository.recordSessionMessage({
+      content: 'alpha recall from workspace b',
+      role: 'assistant',
+      threadId: runB.threadId,
+      workspaceHash: 'workspace_hash_b'
+    });
+    repository.recordSessionMessage({
+      content: 'alpha recall from unscoped history',
+      role: 'assistant',
+      threadId: runB.threadId,
+      workspaceHash: null
+    });
+
+    const current = repository.searchSessionMessages({
+      query: 'alpha',
+      workspaceScope: 'current',
+      workspaceHash: 'workspace_hash_a'
+    });
+    expect(current.items.map((item) => item.content)).toEqual(['alpha recall from workspace a']);
+
+    const all = repository.searchSessionMessages({
+      query: 'alpha',
+      workspaceScope: 'all'
+    });
+    expect(all.items.map((item) => item.content).sort()).toEqual([
+      'alpha recall from unscoped history',
+      'alpha recall from workspace a',
+      'alpha recall from workspace b'
+    ]);
+  });
 });
 
 function columnNames(tableName: string): string[] {

@@ -120,11 +120,49 @@ describe('MemoryView file editor', () => {
     expect(preload.sessions.search).toHaveBeenCalledWith({
       query: 'electron',
       workspaceScope: 'current',
+      workspaceHash: 'abcdef0123456789',
       sinceDays: 30,
       limit: 50
     });
     expect(container.querySelector('[data-testid="memory-session-results"]')?.textContent).toContain('过去对话');
     expect(container.querySelector('[data-testid="memory-session-results"]')?.textContent).toContain('**electron**');
+  });
+
+  it('searches all archived session messages when all scope is selected', async () => {
+    const memoryStatus = createMemoryStatus();
+    const preload = createMockPreloadApi(memoryStatus);
+    window.roc = preload as unknown as RocPreloadApi;
+
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryView, {
+          loadState: { status: 'ready', error: null, key: null },
+          state: createLoadedState({ memoryStatus })
+        })
+      );
+    });
+    await flushPromises();
+
+    await act(async () => {
+      queryButton('memory-tab-sessions').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(Array.from(querySelect('memory-session-scope').options).map((option) => option.value)).toEqual(['current', 'all']);
+
+    setInputValue('memory-session-query', 'memory');
+    setSelectValue('memory-session-scope', 'all');
+    await act(async () => {
+      queryButton('memory-session-search').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(preload.sessions.search).toHaveBeenCalledWith({
+      query: 'memory',
+      workspaceScope: 'all',
+      sinceDays: 30,
+      limit: 50
+    });
   });
 });
 
@@ -208,6 +246,7 @@ function createMockPreloadApi(memoryStatus: MemoryStatus): {
               content: '上次我说 electron 启动崩溃了',
               phase: 'visible',
               tokenCount: null,
+              workspaceHash: null,
               createdAt: '2026-05-28T00:00:00.000Z',
               snippet: '上次我说 **electron** 启动崩溃了'
             }
@@ -236,6 +275,12 @@ function queryInput(testId: string): HTMLInputElement {
   return input as HTMLInputElement;
 }
 
+function querySelect(testId: string): HTMLSelectElement {
+  const select = containerOrDocument().querySelector<HTMLSelectElement>(`[data-testid="${testId}"]`);
+  expect(select).not.toBeNull();
+  return select as HTMLSelectElement;
+}
+
 function queryByText(text: string): Element | null {
   return Array.from(containerOrDocument().querySelectorAll('*')).find((node) => node.textContent?.trim() === text) ?? null;
 }
@@ -254,6 +299,14 @@ function setInputValue(testId: string, value: string): void {
   expect(setter).not.toBeUndefined();
   setter?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setSelectValue(testId: string, value: string): void {
+  const select = querySelect(testId);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+  expect(setter).not.toBeUndefined();
+  setter?.call(select, value);
+  select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function containerOrDocument(): ParentNode {

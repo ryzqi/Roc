@@ -75,6 +75,7 @@ describe('MemoryFeature', () => {
     expect(client.api.sessions.search).toHaveBeenCalledWith({
       query: 'electron',
       workspaceScope: 'current',
+      workspaceHash: 'abcdef0123456789',
       sinceDays: 30,
       limit: 50
     });
@@ -140,6 +141,7 @@ function createMemoryClient(memoryStatus: MemoryStatus): RocClient {
               content: 'electron',
               phase: 'visible',
               tokenCount: null,
+              workspaceHash: null,
               createdAt: '2026-05-28T00:00:00.000Z',
               snippet: '**electron**'
             }

@@ -78,7 +78,7 @@ export function MemoryView({
           </button>
         </div>
         {tab === 'files' ? <FilesTab client={client} initialStatus={state.memoryStatus} /> : null}
-        {tab === 'sessions' ? <SessionsTab client={client} /> : null}
+        {tab === 'sessions' ? <SessionsTab client={client} workspaceHash={state.memoryStatus.workspaceHash} /> : null}
         {tab === 'snapshot' ? <SnapshotTab client={client} /> : null}
       </section>
     </>
