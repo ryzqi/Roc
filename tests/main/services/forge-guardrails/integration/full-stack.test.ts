@@ -1,10 +1,12 @@
 import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { Command } from '@langchain/langgraph';
+import { MiddlewareError } from 'langchain';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import type { RocCompositeBackend } from '../../../../../src/main/services/deep-agent/backend';
 import type { DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
+import { RocDomainError } from '../../../../../src/main/services/errors';
 import {
   defaultErrorTracker,
   markIterationOnMessage,
@@ -84,6 +86,83 @@ function middlewareNames(middleware: MiddlewareDescriptor[]): string[] {
   return middleware.map((item) => item.name);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readRequestState(request: unknown): Record<string, unknown> {
+  if (!isRecord(request) || !isRecord(request.state)) {
+    return {};
+  }
+  return request.state;
+}
+
+function requireRequestRecord(request: unknown): Record<string, unknown> {
+  if (!isRecord(request)) {
+    throw new Error('Expected middleware request object.');
+  }
+  return request;
+}
+
+function middlewareState(middleware: MiddlewareDescriptor, state: Record<string, unknown>): Record<string, unknown> {
+  if (middleware.name === 'ForgeErrorBudgetMiddleware') {
+    return {
+      messages: Array.isArray(state.messages) ? state.messages : [],
+      forge_error_tracker: state.forge_error_tracker
+    };
+  }
+  return {
+    messages: Array.isArray(state.messages) ? state.messages : []
+  };
+}
+
+async function runToolThroughMiddleware(
+  middleware: MiddlewareDescriptor[],
+  request: unknown,
+  handler: (request: unknown) => Promise<unknown>
+): Promise<unknown> {
+  const wrappers = middleware.filter((item) => typeof item.wrapToolCall === 'function');
+  let next = handler;
+  for (let index = wrappers.length - 1; index >= 0; index -= 1) {
+    const wrapper = wrappers[index];
+    const wrapToolCall = wrapper?.wrapToolCall;
+    if (wrapToolCall === undefined) {
+      throw new Error('Missing wrapToolCall.');
+    }
+    const inner = next;
+    next = async (currentRequest) => {
+      const currentRequestRecord = requireRequestRecord(currentRequest);
+      const originalState = readRequestState(currentRequest);
+      try {
+        const result = await wrapToolCall(
+          {
+            ...currentRequestRecord,
+            state: middlewareState(wrapper, originalState)
+          },
+          async (passedRequest) => {
+            const passedRequestRecord = requireRequestRecord(passedRequest);
+            const passedState = readRequestState(passedRequest);
+            return await inner({
+              ...passedRequestRecord,
+              state: {
+                ...originalState,
+                ...passedState
+              }
+            });
+          }
+        );
+        if (!ToolMessage.isInstance(result) && !(result instanceof Command)) {
+          throw new Error(`Invalid response from "wrapToolCall" in middleware "${wrapper.name}".`);
+        }
+        return result;
+      } catch (error) {
+        throw MiddlewareError.wrap(error, wrapper.name);
+      }
+    };
+  }
+  return await next(request);
+}
+
 describe('forge guardrails full stack', () => {
   it('wires guardrails without step enforcement and keeps iteration tracking before compaction', async () => {
     const middleware = await buildMiddleware();
@@ -100,8 +179,50 @@ describe('forge guardrails full stack', () => {
       'ContextEditingMiddleware',
       'ForgeRescueParsingMiddleware',
       'ForgeToolResolutionMiddleware',
+      'RocToolRuntimeErrorMiddleware',
       'ForgeCleanupMiddleware'
     ]);
+  });
+
+  it('feeds Roc delete_file tool errors back through the agent error budget', async () => {
+    const middleware = await buildMiddleware();
+    const result = await runToolThroughMiddleware(
+      middleware,
+      {
+        toolCall: {
+          name: 'delete_file',
+          args: { relativePath: 'docs' },
+          id: 'call-delete-dir'
+        },
+        state: {
+          messages: [],
+          forge_error_tracker: defaultErrorTracker()
+        }
+      },
+      async () => {
+        throw new RocDomainError({
+          code: 'delete_file_target_not_empty',
+          message: '只能删除空目录。',
+          category: 'validation',
+          retryable: false,
+          userAction: '请先清空目录内容，或改为删除具体文件。'
+        });
+      }
+    );
+
+    expect(result).toBeInstanceOf(Command);
+    const update = (result as Command).update as { messages?: unknown[]; forge_error_tracker?: { consecutiveToolErrors?: number } };
+    const [message] = update.messages ?? [];
+    expect(message).toBeInstanceOf(ToolMessage);
+    expect((message as ToolMessage).status).toBe('error');
+    expect((message as ToolMessage).tool_call_id).toBe('call-delete-dir');
+    expect((message as ToolMessage).name).toBe('delete_file');
+    expect(String((message as ToolMessage).content)).toContain('delete_file_target_not_empty');
+    expect(String((message as ToolMessage).content)).toContain('只能删除空目录。');
+    expect(String((message as ToolMessage).content)).toContain('请先清空目录内容，或改为删除具体文件。');
+    expect(update.forge_error_tracker).toMatchObject({
+      consecutiveToolErrors: 1
+    });
   });
 
   it('TieredCompact 后 error_tracker 不丢', async () => {

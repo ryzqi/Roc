@@ -32,7 +32,7 @@ describe('deep agent tool retry policy', () => {
 
     expect(mocked.toolRetryMiddleware).toHaveBeenCalledWith({
       maxRetries: 2,
-      tools: ['web_read'],
+      tools: ['web_read', 'web_search'],
       backoffFactor: 1.5
     });
   });

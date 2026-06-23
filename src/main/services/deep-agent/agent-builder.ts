@@ -15,6 +15,7 @@ import {
   createRescueParsingMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
+  createToolRuntimeErrorMiddleware,
   createPromptCachingMiddleware
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
@@ -43,7 +44,7 @@ export type DeepAgentBuildInput = {
   contextBudgetTokens: number | undefined;
 };
 
-const NETWORK_SENSITIVE_TOOLS = ['web_read'] as const;
+const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();
@@ -74,6 +75,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     }),
     createRescueParsingMiddleware({ availableTools: knownToolCandidates }),
     createToolResolutionMiddleware(),
+    createToolRuntimeErrorMiddleware(),
     createForgeCleanupMiddleware()
   ];
 

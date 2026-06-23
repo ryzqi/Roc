@@ -51,7 +51,7 @@ import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-prev
 
 const mainModuleDir = dirname(fileURLToPath(import.meta.url));
 const isDevelopment = !app.isPackaged;
-const preloadPath = join(mainModuleDir, '../preload/index.mjs');
+const preloadPath = join(mainModuleDir, '../preload/index.js');
 const appIconPath = isDevelopment
   ? join(mainModuleDir, '../../resources/icon.ico')
   : join(process.resourcesPath, 'icon.ico');

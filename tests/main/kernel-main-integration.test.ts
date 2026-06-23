@@ -78,6 +78,13 @@ describe('main kernel bootstrap integration', () => {
     expect(source).not.toContain('services.terminalSessionService.onOutput');
   });
 
+  it('loads the preload bundle filename emitted by electron-vite', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8');
+
+    expect(source).toContain("const preloadPath = join(mainModuleDir, '../preload/index.js');");
+    expect(source).not.toContain("../preload/index.mjs");
+  });
+
   it('boots only the main kernel from the Electron entrypoint', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8');
 
