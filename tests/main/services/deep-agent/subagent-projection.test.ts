@@ -127,6 +127,35 @@ describe('projectSubagentStream', () => {
       event: { kind: 'failed', error: 'remote failed' }
     });
   });
+
+  it('accepts native subagent streams without legacy task input', async () => {
+    const events: ChatRunEvent[] = [];
+    await projectSubagentStream({
+      runId: 'run_native',
+      subagents: single({
+        name: 'research',
+        cause: { type: 'toolCall', tool_call_id: 'call-research' },
+        output: 'done'
+      }),
+      callbacks: callbacks(events)
+    });
+
+    expect(events[0]).toMatchObject({
+      runId: 'run_native',
+      sequence: 1,
+      identity: {
+        subagentId: 'subagent-run_native-0',
+        name: 'research',
+        taskInput: null
+      },
+      event: { kind: 'started' }
+    });
+    expect(events.at(-1)).toMatchObject({
+      sequence: 2,
+      identity: { subagentId: 'subagent-run_native-0' },
+      event: { kind: 'completed', summary: 'done' }
+    });
+  });
 });
 
 function callbacks(events: ChatRunEvent[]) {

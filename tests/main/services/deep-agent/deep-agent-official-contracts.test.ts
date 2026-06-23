@@ -48,13 +48,13 @@ describe('DeepAgents official contract assumptions', () => {
     ]);
   });
 
-  it('documents SubagentRunStream fields consumed by the projection layer', () => {
-    type RequiredKeys = 'name' | 'taskInput' | 'output' | 'messages' | 'toolCalls' | 'subagents';
-    const keys: RequiredKeys[] = ['name', 'taskInput', 'output', 'messages', 'toolCalls', 'subagents'];
+  it('documents native SubagentRunStream fields available to the projection layer', () => {
+    type RequiredKeys = 'name' | 'cause' | 'output' | 'messages' | 'toolCalls' | 'subagents';
+    const keys: RequiredKeys[] = ['name', 'cause', 'output', 'messages', 'toolCalls', 'subagents'];
 
     const assertKeys = (_keys: Array<keyof SubagentRunStream>): Array<keyof SubagentRunStream> => _keys;
 
-    expect(assertKeys(keys)).toEqual(['name', 'taskInput', 'output', 'messages', 'toolCalls', 'subagents']);
+    expect(assertKeys(keys)).toEqual(['name', 'cause', 'output', 'messages', 'toolCalls', 'subagents']);
   });
 
   it('keeps Roc built-in tool allowlist from exposing DeepAgents native execute', () => {
