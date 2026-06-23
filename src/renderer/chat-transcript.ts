@@ -404,6 +404,54 @@ function syncDraftSubagentBlocks(draft: AssistantDraft): void {
   }
 }
 
+function filterSubagentTaskToolBlocks(blocks: ChatTranscriptSubagentBlock[]): ChatTranscriptSubagentBlock[] {
+  const nextBlocks = blocks.filter((block) => block.kind !== 'tool_call' || block.name !== 'task');
+  return nextBlocks.length === blocks.length ? blocks : nextBlocks;
+}
+
+function normalizeSubagentActivityBlock(block: ChatTranscriptSubagentActivityBlock): ChatTranscriptSubagentActivityBlock {
+  const children = block.children.map((child) => normalizeSubagentActivityBlock(child));
+  const hasChildChange = children.some((child, index) => child !== block.children[index]);
+  const blocks = block.children.length === 0 ? block.blocks : filterSubagentTaskToolBlocks(block.blocks);
+  if (!hasChildChange && blocks === block.blocks) {
+    return block;
+  }
+  return {
+    ...block,
+    blocks,
+    children
+  };
+}
+
+function filterRedundantSubagentTaskBlocks(blocks: ChatTranscriptActivityBlock[]): ChatTranscriptActivityBlock[] {
+  let changed = false;
+  const normalizedBlocks = blocks.map((block) => {
+    if (block.kind !== 'subagent') {
+      return block;
+    }
+    const nextBlock = normalizeSubagentActivityBlock(block);
+    if (nextBlock !== block) {
+      changed = true;
+    }
+    return nextBlock;
+  });
+  if (!normalizedBlocks.some((block) => block.kind === 'subagent')) {
+    return changed ? normalizedBlocks : blocks;
+  }
+  const nextBlocks = normalizedBlocks.filter((block) => block.kind !== 'tool_call' || block.name !== 'task');
+  return changed || nextBlocks.length !== blocks.length ? nextBlocks : blocks;
+}
+
+function filterRedundantSubagentTaskBlocksFromMessage(message: ChatTranscriptMessage): ChatTranscriptMessage {
+  const blocks = filterRedundantSubagentTaskBlocks(message.blocks);
+  return blocks === message.blocks
+    ? message
+    : {
+        ...message,
+        blocks
+      };
+}
+
 function upsertTranscriptSubagentBlock(
   blocks: readonly ChatTranscriptSubagentActivityBlock[],
   parentSubagentId: string | null,
@@ -610,9 +658,11 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
     }
   }
 
-  return messages.filter(
-    (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.approval !== null
-  );
+  return messages
+    .map((message) => (message.role === 'assistant' ? filterRedundantSubagentTaskBlocksFromMessage(message) : message))
+    .filter(
+      (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.approval !== null
+    );
 }
 
 function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActivityBlock[] {
@@ -636,7 +686,7 @@ function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActi
     };
   });
   blocks.push(...chatRunState.subagents.map((subagent) => mapLiveSubagentNode(subagent, chatRunState.status === 'running')));
-  return blocks;
+  return filterRedundantSubagentTaskBlocks(blocks);
 }
 
 function mapLiveSubagentNode(node: ChatRunSubagentNode, isStreaming: boolean): ChatTranscriptSubagentActivityBlock {

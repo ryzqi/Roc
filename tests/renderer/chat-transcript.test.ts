@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
-import { appendLiveTranscriptMessages, buildChatTranscript } from '../../src/renderer/chat-transcript';
+import { appendLiveTranscriptMessages, buildChatTranscript, buildPersistedTranscriptMessages } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -271,6 +271,256 @@ describe('chat transcript helpers', () => {
           id: 'subagent-run-subagent-0-text',
           kind: 'text',
           content: '找到资料。'
+        }
+      ]
+    });
+  });
+
+  it('filters the persisted task tool wrapper when a structured subagent block represents the same assistant work', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'user-subagent',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'message',
+          payload: { role: 'user', content: '调查问题' },
+          createdAt: '2026-05-09T08:20:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'tool-task-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'assistant_block',
+          payload: {
+            kind: 'tool_call',
+            blockId: 'tool-run-subagent-task',
+            callId: 'call-run-subagent-task',
+            name: 'task',
+            phase: 'start',
+            input: { description: '调查问题' }
+          },
+          createdAt: '2026-05-09T08:20:01.000Z',
+          sequence: 2
+        },
+        {
+          id: 'subagent-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 3,
+            identity: {
+              subagentId: 'subagent-run-subagent-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '调查问题'
+            },
+            event: { kind: 'started' }
+          },
+          createdAt: '2026-05-09T08:20:02.000Z',
+          sequence: 3
+        },
+        {
+          id: 'subagent-text',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 4,
+            identity: {
+              subagentId: 'subagent-run-subagent-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '调查问题'
+            },
+            event: {
+              kind: 'assistant_block',
+              block: {
+                kind: 'text',
+                blockId: 'subagent-run-subagent-0-text',
+                phase: 'delta',
+                text: '实时调查中'
+              }
+            }
+          },
+          createdAt: '2026-05-09T08:20:03.000Z',
+          sequence: 4
+        }
+      ],
+      'thread-subagent'
+    );
+
+    expect(messages[1]?.blocks).toEqual([
+      {
+        id: 'subagent-run-subagent-0',
+        kind: 'subagent',
+        identity: {
+          subagentId: 'subagent-run-subagent-0',
+          parentSubagentId: null,
+          name: 'general-purpose',
+          depth: 0,
+          path: ['general-purpose#0'],
+          execution: 'sync',
+          taskInput: '调查问题'
+        },
+        status: 'running',
+        summary: null,
+        error: null,
+        blocks: [
+          {
+            id: 'subagent-run-subagent-0-text',
+            kind: 'text',
+            content: '实时调查中'
+          }
+        ],
+        children: []
+      }
+    ]);
+  });
+
+  it('keeps persisted non-task tool calls when structured subagent blocks are present', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'tool-shell',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'assistant_block',
+          payload: {
+            kind: 'tool_call',
+            blockId: 'tool-run-subagent-read',
+            callId: 'call-run-subagent-read',
+            name: 'read_file',
+            phase: 'end',
+            input: { path: 'README.md' },
+            output: { bytes: 128 }
+          },
+          createdAt: '2026-05-09T08:20:01.000Z',
+          sequence: 1
+        },
+        {
+          id: 'subagent-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 2,
+            identity: {
+              subagentId: 'subagent-run-subagent-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '调查问题'
+            },
+            event: { kind: 'started' }
+          },
+          createdAt: '2026-05-09T08:20:02.000Z',
+          sequence: 2
+        }
+      ],
+      'thread-subagent'
+    );
+
+    expect(messages[0]?.blocks.map((block) => block.kind === 'tool_call' ? block.name : block.kind)).toEqual([
+      'read_file',
+      'subagent'
+    ]);
+  });
+
+  it('filters persisted nested subagent task wrappers while keeping the child subagent', () => {
+    const rootIdentity = {
+      subagentId: 'subagent-run-subagent-0',
+      parentSubagentId: null,
+      name: 'general-purpose',
+      depth: 0,
+      path: ['general-purpose#0'],
+      execution: 'sync' as const,
+      taskInput: '调查问题'
+    };
+    const childIdentity = {
+      subagentId: 'subagent-run-subagent-0-0',
+      parentSubagentId: 'subagent-run-subagent-0',
+      name: 'research',
+      depth: 1,
+      path: ['general-purpose#0', 'research#0'],
+      execution: 'sync' as const,
+      taskInput: '继续调查'
+    };
+
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'subagent-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 1,
+            identity: rootIdentity,
+            event: { kind: 'started' }
+          },
+          createdAt: '2026-05-09T08:20:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'subagent-task-tool',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 2,
+            identity: rootIdentity,
+            event: {
+              kind: 'tool_call',
+              block: {
+                kind: 'tool_call',
+                blockId: 'subagent-run-subagent-0-tool-task',
+                callId: 'call-task',
+                name: 'task',
+                phase: 'start',
+                input: { description: '继续调查' }
+              }
+            }
+          },
+          createdAt: '2026-05-09T08:20:01.000Z',
+          sequence: 2
+        },
+        {
+          id: 'nested-subagent-start',
+          threadId: 'thread-subagent',
+          runId: 'run-subagent',
+          type: 'subagent_event',
+          payload: {
+            sequence: 3,
+            identity: childIdentity,
+            event: { kind: 'started' }
+          },
+          createdAt: '2026-05-09T08:20:02.000Z',
+          sequence: 3
+        }
+      ],
+      'thread-subagent'
+    );
+
+    expect(messages[0]?.blocks[0]).toMatchObject({
+      id: 'subagent-run-subagent-0',
+      kind: 'subagent',
+      blocks: [],
+      children: [
+        {
+          id: 'subagent-run-subagent-0-0',
+          kind: 'subagent',
+          identity: { name: 'research' }
         }
       ]
     });

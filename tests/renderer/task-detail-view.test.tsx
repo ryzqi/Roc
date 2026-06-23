@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatRunState } from '../../src/renderer/chat-run-state';
 import { TaskDetailView } from '../../src/renderer/views/tasks/TaskDetailView';
 import { createLoadedState } from './view-test-helpers';
 
@@ -78,6 +79,80 @@ describe('TaskDetailView', () => {
     expect(container.querySelector('.task-detail-page-head')).not.toBeNull();
     expect(container.querySelector('.task-detail-content-shell')).not.toBeNull();
     expect(container.querySelector('.task-detail-transcript-shell')).not.toBeNull();
+  });
+
+  it('merges the current task live subagent run into the detail transcript', async () => {
+    await act(async () => {
+      root.render(
+        <TaskDetailView
+          client={{ api: window.roc } as never}
+          liveTaskRun={createLiveTaskRun({ threadId: 'thread-1' })}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({
+            taskDetail: createTaskDetail({
+              recentEvents: [
+                {
+                  id: 'message-user',
+                  threadId: 'thread-1',
+                  runId: 'run-1',
+                  type: 'message',
+                  payload: { role: 'user', content: '请分派子代理调查' },
+                  createdAt: '2026-05-16T07:00:00.000Z'
+                }
+              ]
+            })
+          })}
+          taskActions={createTaskActionsMock()}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    const subagent = container.querySelector<HTMLDetailsElement>('[data-testid="chat-activity-subagent"]');
+    expect(subagent).not.toBeNull();
+    expect(subagent?.open).toBe(false);
+    expect(container.textContent).toContain('Subagent · general-purpose');
+    expect(container.textContent).toContain('正在调查仓库状态');
+    expect(container.textContent).toContain('读取关键文件');
+    expect(container.textContent).toContain('read_file');
+    expect(container.textContent).not.toContain('task shell should stay hidden');
+  });
+
+  it('does not merge another thread live subagent run into the current task detail', async () => {
+    await act(async () => {
+      root.render(
+        <TaskDetailView
+          client={{ api: window.roc } as never}
+          liveTaskRun={createLiveTaskRun({ threadId: 'thread-other' })}
+          onApprovalDecision={vi.fn()}
+          onBackToBoard={() => {}}
+          onSubmitTaskInput={vi.fn()}
+          state={createLoadedState({
+            taskDetail: createTaskDetail({
+              recentEvents: [
+                {
+                  id: 'message-user',
+                  threadId: 'thread-1',
+                  runId: 'run-1',
+                  type: 'message',
+                  payload: { role: 'user', content: '请分派子代理调查' },
+                  createdAt: '2026-05-16T07:00:00.000Z'
+                }
+              ]
+            })
+          })}
+          taskActions={createTaskActionsMock()}
+          taskId="task-1"
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-testid="chat-activity-subagent"]')).toBeNull();
+    expect(container.textContent).not.toContain('正在调查仓库状态');
   });
 
   it('renders the control console summary and metadata from the task detail', async () => {
@@ -361,6 +436,78 @@ function createTaskActionsMock() {
     pauseTask: vi.fn(),
     resumeTask: vi.fn(),
     runNow: vi.fn()
+  };
+}
+
+function createLiveTaskRun({ threadId }: { threadId: string }): ChatRunState {
+  return {
+    runId: 'run-live',
+    mode: 'task',
+    threadId,
+    providerId: 'openai',
+    modelId: 'gpt-5.4',
+    createdAt: '2026-05-16T07:00:01.000Z',
+    status: 'running',
+    assistantMessage: '',
+    activityBlocks: [
+      {
+        id: 'tool-run-live-task',
+        kind: 'tool_call',
+        callId: 'call-run-live-task',
+        name: 'task',
+        status: 'start',
+        input: { description: 'task shell should stay hidden' },
+        output: null,
+        error: null
+      }
+    ],
+    durationMs: null,
+    summary: null,
+    errorCode: null,
+    errorMessage: null,
+    retryable: false,
+    pendingApprovals: [],
+    resumeBusy: false,
+    todos: [],
+    subagents: [
+      {
+        identity: {
+          subagentId: 'subagent-live-0',
+          parentSubagentId: null,
+          name: 'general-purpose',
+          depth: 0,
+          path: ['general-purpose#0'],
+          execution: 'sync',
+          taskInput: 'task shell should stay hidden'
+        },
+        status: 'running',
+        summary: null,
+        error: null,
+        blocks: [
+          {
+            id: 'subagent-live-0-text',
+            kind: 'text',
+            content: '正在调查仓库状态'
+          },
+          {
+            id: 'subagent-live-0-reasoning',
+            kind: 'reasoning',
+            content: '读取关键文件'
+          },
+          {
+            id: 'subagent-live-0-tool',
+            kind: 'tool_call',
+            callId: 'call-subagent-live-0-tool',
+            name: 'read_file',
+            status: 'end',
+            input: { path: 'README.md' },
+            output: { bytes: 128 },
+            error: null
+          }
+        ],
+        children: []
+      }
+    ]
   };
 }
 

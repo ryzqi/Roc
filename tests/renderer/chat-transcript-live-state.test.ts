@@ -157,6 +157,232 @@ describe('chat transcript helpers', () => {
     });
   });
 
+  it('filters the live task tool wrapper when a subagent block represents the same assistant work', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '分派子代理调查' },
+          createdAt: '2026-05-09T08:20:00.000Z'
+        }
+      ]
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        activityBlocks: [
+          {
+            id: 'tool-run-current-task',
+            kind: 'tool_call',
+            callId: 'call-run-current-task',
+            name: 'task',
+            status: 'start',
+            input: { description: '分派子代理调查' },
+            output: null,
+            error: null
+          }
+        ],
+        subagents: [
+          {
+            identity: {
+              subagentId: 'subagent-run-current-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '分派子代理调查'
+            },
+            status: 'running',
+            summary: null,
+            error: null,
+            blocks: [
+              {
+                id: 'subagent-run-current-0-text',
+                kind: 'text',
+                content: '正在调查'
+              }
+            ],
+            children: []
+          }
+        ]
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages.at(-1)?.blocks).toEqual([
+      {
+        id: 'subagent-run-current-0',
+        kind: 'subagent',
+        identity: {
+          subagentId: 'subagent-run-current-0',
+          parentSubagentId: null,
+          name: 'general-purpose',
+          depth: 0,
+          path: ['general-purpose#0'],
+          execution: 'sync',
+          taskInput: '分派子代理调查'
+        },
+        status: 'running',
+        summary: null,
+        error: null,
+        blocks: [
+          {
+            id: 'subagent-run-current-0-text',
+            kind: 'text',
+            content: '正在调查'
+          }
+        ],
+        children: []
+      }
+    ]);
+  });
+
+  it('keeps live non-task tool calls when a subagent block is present', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: []
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        activityBlocks: [
+          {
+            id: 'tool-run-current-read',
+            kind: 'tool_call',
+            callId: 'call-run-current-read',
+            name: 'read_file',
+            status: 'end',
+            input: { path: 'README.md' },
+            output: { bytes: 128 },
+            error: null
+          }
+        ],
+        subagents: [
+          {
+            identity: {
+              subagentId: 'subagent-run-current-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '调查问题'
+            },
+            status: 'started',
+            summary: null,
+            error: null,
+            blocks: [],
+            children: []
+          }
+        ]
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages.at(-1)?.blocks.map((block) => block.kind === 'tool_call' ? block.name : block.kind)).toEqual([
+      'read_file',
+      'subagent'
+    ]);
+  });
+
+  it('filters live nested subagent task wrappers while keeping the child subagent', () => {
+    const snapshot = createSnapshot({
+      threads: [createThread('thread-current', '当前任务', '2026-05-09T08:20:00.000Z')],
+      recentEvents: []
+    });
+
+    const messages = buildChatTranscript({
+      promotedThreadIds: new Set(),
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-current',
+        threadId: 'thread-current',
+        status: 'running',
+        subagents: [
+          {
+            identity: {
+              subagentId: 'subagent-run-current-0',
+              parentSubagentId: null,
+              name: 'general-purpose',
+              depth: 0,
+              path: ['general-purpose#0'],
+              execution: 'sync',
+              taskInput: '调查问题'
+            },
+            status: 'running',
+            summary: null,
+            error: null,
+            blocks: [
+              {
+                id: 'subagent-run-current-0-tool-task',
+                kind: 'tool_call',
+                callId: 'call-task',
+                name: 'task',
+                status: 'start',
+                input: { description: '继续调查' },
+                output: null,
+                error: null
+              }
+            ],
+            children: [
+              {
+                identity: {
+                  subagentId: 'subagent-run-current-0-0',
+                  parentSubagentId: 'subagent-run-current-0',
+                  name: 'research',
+                  depth: 1,
+                  path: ['general-purpose#0', 'research#0'],
+                  execution: 'sync',
+                  taskInput: '继续调查'
+                },
+                status: 'started',
+                summary: null,
+                error: null,
+                blocks: [],
+                children: []
+              }
+            ]
+          }
+        ]
+      },
+      pendingUserInput: null,
+      selectedThreadId: 'thread-current',
+      taskSnapshot: snapshot
+    });
+
+    expect(messages.at(-1)?.blocks[0]).toMatchObject({
+      id: 'subagent-run-current-0',
+      kind: 'subagent',
+      blocks: [],
+      children: [
+        {
+          id: 'subagent-run-current-0-0',
+          kind: 'subagent',
+          identity: { name: 'research' }
+        }
+      ]
+    });
+  });
+
 
   it('keeps the just-submitted user message visible before task snapshot refreshes', () => {
     const snapshot = createSnapshot({
