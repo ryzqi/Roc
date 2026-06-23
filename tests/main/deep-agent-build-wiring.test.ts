@@ -151,4 +151,46 @@ describe('buildDeepAgent harness profile wiring', () => {
       }
     ]);
   });
+
+  it('lets DeepAgents create the native general-purpose subagent with main tools, skills, and memory state', () => {
+    const inspectSchema = z.object({
+      target: z.string()
+    });
+    const inspectTool = tool(async ({ target }: z.infer<typeof inspectSchema>) => `seen:${target}`, {
+      name: 'mcp_docs_lookup',
+      description: 'Lookup docs through selected MCP.',
+      schema: inspectSchema
+    });
+    const input = {
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: ['/memory/global/AGENTS.md', '/memory/workspaces/current/AGENTS.md'],
+      skillSources: ['/skills/'],
+      subagents: [],
+      tools: [inspectTool],
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+      ],
+      workspacePath: 'F:\\\\Code\\\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: 'default',
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+
+    expect(createDeepAgentInput).toMatchObject({
+      memory: ['/memory/global/AGENTS.md', '/memory/workspaces/current/AGENTS.md'],
+      skills: ['/skills/'],
+      tools: [inspectTool]
+    });
+    expect(createDeepAgentInput?.subagents?.some((subagent) => subagent.name === 'general-purpose')).toBe(false);
+  });
 });

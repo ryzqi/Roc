@@ -32,6 +32,7 @@ import {
 } from './openai-stream-normalization';
 
 type JsonObject = Record<string, unknown>;
+const NVIDIA_EMPTY_TOOL_CONTENT = 'Task completed';
 
 export class ReasoningAwareChatOpenAI extends ChatOpenAI {
   async *_streamChatModelEvents(
@@ -391,9 +392,12 @@ function isRecord(value: unknown): value is JsonObject {
 }
 
 function normalizeNvidiaTextOnlyMessage(message: BaseMessage): BaseMessage {
-  const normalizedContent = readTextOnlyBlockContent(message.content);
+  let normalizedContent = readTextOnlyBlockContent(message.content);
   if (normalizedContent === null) {
     return message;
+  }
+  if (ToolMessage.isInstance(message) && normalizedContent.length === 0) {
+    normalizedContent = NVIDIA_EMPTY_TOOL_CONTENT;
   }
 
   const responseMetadata = stripOutputVersion(message.response_metadata);
@@ -450,10 +454,17 @@ function readTextOnlyBlockContent(content: BaseMessage['content']): string | nul
       texts.push(block);
       continue;
     }
-    if (block === null || typeof block !== 'object' || block.type !== 'text' || typeof block.text !== 'string') {
+    if (!isRecord(block)) {
       return null;
     }
-    texts.push(block.text);
+    if (block.type === 'text' && typeof block.text === 'string') {
+      texts.push(block.text);
+      continue;
+    }
+    if (block.type === 'reasoning') {
+      continue;
+    }
+    return null;
   }
   return texts.join('\n\n');
 }

@@ -1,5 +1,5 @@
 import { ChatAnthropic } from '@langchain/anthropic';
-import { AIMessageChunk, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { ChatGenerationChunk } from '@langchain/core/outputs';
 import { ChatOpenAI } from '@langchain/openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -335,6 +335,254 @@ describe('LangChainModelFactory', () => {
     expect(requests[0]?.messages?.[0]).toMatchObject({
       role: 'system',
       content: 'detailed thinking off'
+    });
+  });
+
+
+  it('omits NVIDIA tool message reasoning blocks before provider requests', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ messages?: Array<{ role: string; content: unknown }> }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { messages?: Array<{ role: string; content: unknown }> });
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([
+      new ToolMessage({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: '子代理内部思考'
+          },
+          {
+            type: 'text',
+            text: '子代理最终摘要'
+          }
+        ],
+        tool_call_id: 'functions.task:17'
+      })
+    ]);
+
+    expect(requests[0]?.messages?.[0]).toMatchObject({
+      role: 'tool',
+      content: '子代理最终摘要'
+    });
+  });
+
+  it('omits unreadable NVIDIA reasoning blocks instead of sending unsupported content parts', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ messages?: Array<{ role: string; content: unknown }> }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { messages?: Array<{ role: string; content: unknown }> });
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([
+      new ToolMessage({
+        content: [
+          {
+            type: 'reasoning',
+            summary: []
+          },
+          {
+            type: 'text',
+            text: 'visible tool output'
+          }
+        ],
+        tool_call_id: 'functions.task:17'
+      })
+    ]);
+
+    expect(requests[0]?.messages?.[0]).toMatchObject({
+      role: 'tool',
+      content: 'visible tool output'
+    });
+  });
+
+  it('uses a protocol-safe placeholder when NVIDIA tool output only contains reasoning blocks', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ messages?: Array<{ role: string; content: unknown }> }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { messages?: Array<{ role: string; content: unknown }> });
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([
+      new ToolMessage({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'hidden-only output'
+          }
+        ],
+        tool_call_id: 'functions.task:17'
+      })
+    ]);
+
+    expect(requests[0]?.messages?.[0]).toMatchObject({
+      role: 'tool',
+      content: 'Task completed'
+    });
+  });
+
+  it('omits NVIDIA assistant reasoning blocks without exposing hidden reasoning as text', async () => {
+    services.secretService.setProviderSecret('nvidia', 'nvapi-test');
+    services.configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      providers: [
+        {
+          id: 'nvidia',
+          name: 'NVIDIA',
+          type: 'nvidia',
+          endpoint: 'https://integrate.api.nvidia.com/v1',
+          credentialRef: 'secret:nvidia',
+          enabled: true,
+          models: [
+            {
+              id: 'meta/llama-3.3-70b-instruct',
+              displayName: 'Llama 3.3',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true
+            }
+          ]
+        }
+      ]
+    });
+
+    const factory = new LangChainModelFactory(services.configService, services.secretService);
+    const result = await factory.createDefaultChatModel({ streaming: true });
+    const requests: Array<{ messages?: Array<{ role: string; content: unknown }> }> = [];
+    const completionModel = result.model as unknown as {
+      completions: {
+        completionWithRetry: (request: unknown) => AsyncIterable<unknown>;
+      };
+    };
+    completionModel.completions.completionWithRetry = async function* (request) {
+      requests.push(request as { messages?: Array<{ role: string; content: unknown }> });
+      yield {
+        choices: [{ delta: { role: 'assistant', content: 'OK' }, index: 0, finish_reason: 'stop' }]
+      };
+    };
+
+    await result.model.invoke([
+      new AIMessage({
+        content: [
+          {
+            type: 'reasoning',
+            reasoning: 'hidden assistant reasoning'
+          },
+          {
+            type: 'text',
+            text: 'visible assistant output'
+          }
+        ]
+      })
+    ]);
+
+    expect(requests[0]?.messages?.[0]).toMatchObject({
+      role: 'assistant',
+      content: 'visible assistant output'
     });
   });
 
