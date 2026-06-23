@@ -1,0 +1,186 @@
+.subagent-card {
+  width: min(100%, 620px);
+  display: grid;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 144, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.subagent-card--nested {
+  width: 100%;
+  margin: 2px 0 0;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.subagent-card__header {
+  list-style: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.subagent-card__header::-webkit-details-marker,
+.subagent-card__header::marker {
+  display: none;
+  content: '';
+}
+
+.subagent-card__icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.08);
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.subagent-card__title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.subagent-card__title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-card__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.subagent-card__badge--started {
+  background: var(--tool-st-start-bg);
+  color: var(--tool-st-start-text);
+}
+
+.subagent-card__badge--running {
+  background: var(--tool-st-progress-bg);
+  color: var(--tool-st-progress-text);
+}
+
+.subagent-card__badge--completed {
+  background: var(--tool-st-end-bg);
+  color: var(--tool-st-end-text);
+}
+
+.subagent-card__badge--failed,
+.subagent-card__badge--cancelled {
+  background: var(--tool-st-error-bg);
+  color: var(--tool-st-error-text);
+}
+
+.subagent-card__expand {
+  color: var(--subtle);
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+.subagent-card[open] .subagent-card__expand {
+  transform: rotate(180deg);
+}
+
+.subagent-card--running .subagent-card__icon svg {
+  animation: tool-spin 1s linear infinite;
+}
+
+.subagent-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 31px;
+}
+
+.subagent-card__chip {
+  padding: 2px 7px;
+  border: 1px solid rgba(120, 144, 184, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+  font-feature-settings: var(--font-feature-mono);
+}
+
+.subagent-card__body {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 0 31px;
+  border-top: 1px solid rgba(120, 144, 184, 0.12);
+  animation: tool-expand var(--duration-base) var(--easing-standard);
+}
+
+.subagent-card__summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.subagent-card__error {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(244, 63, 94, 0.22);
+  border-radius: 7px;
+  background: rgba(255, 241, 242, 0.78);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagent-card__child {
+  display: grid;
+  padding-left: 12px;
+  border-left: 2px solid rgba(120, 144, 184, 0.16);
+}
+
+:root[data-theme='dark'] .subagent-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(190, 205, 228, 0.12);
+}
+
+:root[data-theme='dark'] .subagent-card--nested {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+:root[data-theme='dark'] .subagent-card__icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .subagent-card__chip {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(190, 205, 228, 0.12);
+}
+
+:root[data-theme='dark'] .subagent-card__body {
+  border-top-color: rgba(190, 205, 228, 0.12);
+}
+
+:root[data-theme='dark'] .subagent-card__error {
+  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.26);
+}
