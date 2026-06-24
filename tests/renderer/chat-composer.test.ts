@@ -17,6 +17,7 @@ describe('chat composer skills popover', () => {
         onChatInputChange: () => {},
         selectedAttachments: [],
         onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
         activeComposerPopover: 'skills',
         onActiveComposerPopoverChange: () => {},
         submitting: false,
@@ -55,6 +56,7 @@ describe('chat composer capability triggers', () => {
         onChatInputChange: () => {},
         selectedAttachments: [],
         onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
         activeComposerPopover: null,
         onActiveComposerPopoverChange: () => {},
         submitting: false,
@@ -74,6 +76,39 @@ describe('chat composer capability triggers', () => {
     expect(html).not.toContain('tool-badge');
   });
 
+  it('renders selected image attachments with remove controls', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatComposer, {
+        client: testClient,
+        chatInput: '描述图片',
+        onChatInputChange: () => {},
+        selectedAttachments: [
+          {
+            kind: 'image',
+            source: 'clipboard',
+            name: 'chart.png',
+            mediaType: 'image/png',
+            sizeBytes: 123,
+            data: 'AQID',
+            previewUrl: null
+          }
+        ],
+        onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
+        activeComposerPopover: null,
+        onActiveComposerPopoverChange: () => {},
+        submitting: false,
+        state: createLoadedState({}),
+        updateLoadedState: () => {},
+        onSubmit: async () => {}
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-image-attachment"');
+    expect(html).toContain('chart.png');
+    expect(html).toContain('data-testid="chat-image-remove"');
+  });
+
   it('renders shared popover structure for tools and models', () => {
     const toolsHtml = renderToStaticMarkup(
       React.createElement(ChatComposer, {
@@ -82,6 +117,7 @@ describe('chat composer capability triggers', () => {
         onChatInputChange: () => {},
         selectedAttachments: [],
         onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
         activeComposerPopover: 'tools',
         onActiveComposerPopoverChange: () => {},
         submitting: false,
@@ -114,6 +150,7 @@ describe('chat composer capability triggers', () => {
         onChatInputChange: () => {},
         selectedAttachments: [],
         onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
         activeComposerPopover: 'models',
         onActiveComposerPopoverChange: () => {},
         submitting: false,

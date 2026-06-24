@@ -179,6 +179,71 @@ describe('ChatFeature', () => {
     expect(client.api.agent.getStatus).toHaveBeenCalled();
     expect(container.querySelector('[data-testid="chat-blocked"]')).toBeNull();
   });
+
+  it('submits image attachments with the chat input and clears them after success', async () => {
+    const provider = createProvider();
+    provider.models[0] = {
+      ...provider.models[0]!,
+      supportsImages: true
+    };
+    const submit = vi.fn().mockResolvedValue({ ok: true as const });
+    const state = createLoadedState({
+      providers: [provider],
+      defaultModelId: provider.models[0]!.id
+    });
+    const client = createChatClient();
+    vi.mocked(client.api.files.selectFromDialog).mockResolvedValue({
+      ok: true,
+      data: {
+        filePaths: ['F:\\Code\\Roc\\chart.png']
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ChatFeature
+          chatSelectionVersion={1}
+          client={client}
+          onSubmitChatTask={submit}
+          selectedThreadId={null}
+          state={state}
+          updateLoadedState={() => {}}
+        />
+      );
+    });
+
+    const input = container.querySelector<HTMLTextAreaElement>('[data-testid="chat-input"]');
+    const attach = container.querySelector<HTMLButtonElement>('[data-testid="chat-attachment-trigger"]');
+    expect(input).toBeInstanceOf(HTMLTextAreaElement);
+    expect(attach).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      setTextareaValue(input!, '描述图片');
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    await act(async () => {
+      attach!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="chat-task-submit"]')!.click();
+    });
+
+    expect(submit).toHaveBeenCalledWith({
+      input: '描述图片',
+      attachments: [
+        expect.objectContaining({
+          kind: 'image',
+          source: 'file',
+          name: 'chart.png',
+          mediaType: 'image/png',
+          path: 'F:\\Code\\Roc\\chart.png'
+        })
+      ]
+    });
+    expect(container.querySelector('[data-testid="chat-image-attachment"]')).toBeNull();
+  });
 });
 
 function ChatFeatureHarness({ client, initialState }: { client: RocClient; initialState: LoadedState }): React.JSX.Element {
@@ -255,7 +320,8 @@ function createProvider(): ProviderConfig {
         displayName: 'Model 1',
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       }
     ]
   };
@@ -301,4 +367,12 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+function setTextareaValue(input: HTMLTextAreaElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  if (descriptor === undefined || descriptor.set === undefined) {
+    throw new Error('textarea_value_setter_missing');
+  }
+  descriptor.set.call(input, value);
 }

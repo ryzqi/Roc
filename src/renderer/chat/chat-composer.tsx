@@ -1,10 +1,13 @@
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
-import type { Dispatch, SetStateAction } from 'react';
+import { useState } from 'react';
+import type { ClipboardEvent, Dispatch, DragEvent, SetStateAction } from 'react';
 import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
 import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
+import type { RendererImageAttachment } from './image-attachments';
+import { createFileImageAttachment, validateImageAttachmentSelection } from './image-attachments';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -12,8 +15,9 @@ type ChatComposerProps = {
   client: RocClient;
   chatInput: string;
   onChatInputChange: (value: string) => void;
-  selectedAttachments: string[];
-  onSelectedAttachmentsChange: (paths: string[]) => void;
+  selectedAttachments: RendererImageAttachment[];
+  onSelectedAttachmentsChange: (attachments: RendererImageAttachment[]) => void;
+  imageInputSupported: boolean;
   activeComposerPopover: ComposerPopover;
   onActiveComposerPopoverChange: Dispatch<SetStateAction<ComposerPopover>>;
   submitting: boolean;
@@ -91,6 +95,7 @@ export function ChatComposer({
   onChatInputChange,
   selectedAttachments,
   onSelectedAttachmentsChange,
+  imageInputSupported,
   activeComposerPopover,
   onActiveComposerPopoverChange,
   submitting,
@@ -98,6 +103,7 @@ export function ChatComposer({
   updateLoadedState,
   onSubmit
 }: ChatComposerProps): React.JSX.Element {
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const visibleCapabilityServers = state.mcpServers.filter((server) => server.enabled);
   const visibleCapabilitySkills = state.skills.filter(
     (skill) => skill.enabled && skill.status === 'ready'
@@ -125,7 +131,11 @@ export function ChatComposer({
   }
 
   const trimmedInput = chatInput.trim();
-  const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
+  const sendDisabled =
+    submitting ||
+    trimmedInput.length === 0 ||
+    state.agent.execution !== 'ready' ||
+    (selectedAttachments.length > 0 && !imageInputSupported);
 
   function refreshCapabilityOptions(): void {
     const currentSelectedMcpServers = state.selectedMcpServers;
@@ -152,23 +162,100 @@ export function ChatComposer({
   }
 
   async function selectAttachmentsFromDialog(): Promise<void> {
-    const selection = await client.api.files.selectFromDialog();
-    if (!selection.ok || selection.data === null) {
+    try {
+      const selection = await client.api.files.selectFromDialog();
+      if (!selection.ok || selection.data === null) {
+        return;
+      }
+      const nextAttachments = selection.data.filePaths.map(createPathImageAttachment);
+      const combined = [...selectedAttachments, ...nextAttachments];
+      validateImageAttachmentSelection(combined);
+      setAttachmentError(null);
+      onSelectedAttachmentsChange(combined);
+    } catch (error) {
+      setAttachmentError(imageAttachmentErrorCopy(error));
+    }
+  }
+
+  async function addFileAttachments(files: FileList, source: 'clipboard' | 'drop'): Promise<void> {
+    try {
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/') || hasSupportedImageExtension(file.name));
+      if (imageFiles.length === 0) {
+        return;
+      }
+      const nextAttachments = await Promise.all(imageFiles.map(async (file) => await createFileImageAttachment(file, source)));
+      const combined = [...selectedAttachments, ...nextAttachments];
+      validateImageAttachmentSelection(combined);
+      setAttachmentError(null);
+      onSelectedAttachmentsChange(combined);
+    } catch (error) {
+      setAttachmentError(imageAttachmentErrorCopy(error));
+    }
+  }
+
+  function removeAttachment(target: RendererImageAttachment): void {
+    if (target.previewUrl !== null) {
+      URL.revokeObjectURL(target.previewUrl);
+    }
+    onSelectedAttachmentsChange(selectedAttachments.filter((attachment) => attachment !== target));
+  }
+
+  async function submitComposer(): Promise<void> {
+    if (selectedAttachments.length > 0 && !imageInputSupported) {
+      setAttachmentError(imageAttachmentErrorCopy(new Error('chat_model_images_unsupported')));
       return;
     }
-    onSelectedAttachmentsChange(selection.data.filePaths);
+    await onSubmit();
   }
 
   return (
-    <div className="composer composer--chat">
+    <div
+      className="composer composer--chat"
+      onDragOver={(event) => {
+        if (event.dataTransfer.files.length === 0) {
+          return;
+        }
+        event.preventDefault();
+      }}
+      onDrop={(event: DragEvent<HTMLDivElement>) => {
+        if (event.dataTransfer.files.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        void addFileAttachments(event.dataTransfer.files, 'drop');
+      }}
+    >
       {selectedAttachments.length === 0 ? null : (
         <div className="chat-attachment-strip">
-          {selectedAttachments.map((path) => (
-            <span className="chat-attachment-pill" data-testid="chat-attachment-pill" key={path}>
-              <PaperclipIcon />
-              <span>{path.split(/[/\\]/).at(-1) ?? path}</span>
+          {selectedAttachments.map((attachment) => (
+            <span
+              className="chat-attachment-pill"
+              data-testid="chat-image-attachment"
+              key={`${attachment.source}-${attachment.name}-${attachment.sizeBytes}`}
+            >
+              {attachment.previewUrl === null ? (
+                <PaperclipIcon />
+              ) : (
+                <img alt="" className="chat-attachment-thumb" src={attachment.previewUrl} />
+              )}
+              <span>{attachment.name}</span>
+              {attachment.path === undefined ? <small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small> : null}
+              <button
+                aria-label={`移除 ${attachment.name}`}
+                className="chat-attachment-remove"
+                data-testid="chat-image-remove"
+                type="button"
+                onClick={() => removeAttachment(attachment)}
+              >
+                ×
+              </button>
             </span>
           ))}
+        </div>
+      )}
+      {attachmentError === null ? null : (
+        <div className="chat-attachment-error" data-testid="chat-attachment-error">
+          {attachmentError}
         </div>
       )}
       <textarea
@@ -179,12 +266,18 @@ export function ChatComposer({
         rows={3}
         value={chatInput}
         onChange={(event) => onChatInputChange(event.target.value)}
+        onPaste={(event: ClipboardEvent<HTMLTextAreaElement>) => {
+          if (event.clipboardData.files.length === 0) {
+            return;
+          }
+          void addFileAttachments(event.clipboardData.files, 'clipboard');
+        }}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
             return;
           }
           event.preventDefault();
-          void onSubmit();
+          void submitComposer();
         }}
       />
       <div className="composer-bottom">
@@ -405,7 +498,7 @@ export function ChatComposer({
             type="button"
             aria-label="发送"
             disabled={sendDisabled}
-            onClick={() => void onSubmit()}
+            onClick={() => void submitComposer()}
           >
             <SendIcon />
           </button>
@@ -413,4 +506,64 @@ export function ChatComposer({
       </div>
     </div>
   );
+}
+
+function createPathImageAttachment(path: string): RendererImageAttachment {
+  return {
+    kind: 'image',
+    source: 'file',
+    name: fileNameFromPath(path),
+    mediaType: mediaTypeFromPath(path),
+    sizeBytes: 1,
+    path,
+    previewUrl: null
+  };
+}
+
+function fileNameFromPath(path: string): string {
+  const segments = path.split(/[/\\]/).filter((segment) => segment.length > 0);
+  if (segments.length === 0) {
+    return path;
+  }
+  const name = segments[segments.length - 1];
+  if (name === undefined) {
+    return path;
+  }
+  return name;
+}
+
+function mediaTypeFromPath(path: string): RendererImageAttachment['mediaType'] {
+  const lowerPath = path.toLowerCase();
+  if (lowerPath.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (lowerPath.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  throw new Error('chat_image_unsupported_type');
+}
+
+function hasSupportedImageExtension(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.webp');
+}
+
+function imageAttachmentErrorCopy(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message === 'chat_image_too_many') {
+    return '每条消息最多添加 4 张图片。';
+  }
+  if (message === 'chat_image_too_large') {
+    return '单张图片不能超过 5 MB。';
+  }
+  if (message === 'chat_image_unsupported_type') {
+    return '仅支持 PNG、JPG、JPEG、WEBP 图片。';
+  }
+  if (message === 'chat_model_images_unsupported') {
+    return '当前默认模型不支持图片输入。';
+  }
+  return '图片添加失败。';
 }

@@ -7,6 +7,8 @@ import { ChatComposer } from './chat-composer';
 import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
 import type { ChatTaskSubmitPayload } from './task-run-payload';
+import type { RendererImageAttachment } from './image-attachments';
+import { isImageInputSupported, toChatImageAttachments } from './image-attachments';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -56,11 +58,12 @@ export function ChatView({
   const chatRun = useChatRun(client);
   const [chatInput, setChatInput] = useState('');
   const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
-  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
+  const [selectedAttachments, setSelectedAttachments] = useState<RendererImageAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
   const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const selectedAttachmentsRef = useRef<RendererImageAttachment[]>([]);
 
   const deferredAssistantMessage = useDeferredValue(chatRun.state.assistantMessage);
   const deferredActivityBlocks = useDeferredValue(chatRun.state.activityBlocks);
@@ -167,9 +170,14 @@ export function ChatView({
   }, [activeThreadId, latestPersistedThreadEventId]);
 
   useEffect(() => {
+    selectedAttachmentsRef.current = selectedAttachments;
+  }, [selectedAttachments]);
+
+  useEffect(() => {
     setChatInput('');
     setPendingUserInput(null);
     setPersistedMessages([]);
+    revokeAttachmentPreviewUrls(selectedAttachmentsRef.current);
     setSelectedAttachments([]);
     setSubmitting(false);
     setActiveComposerPopover(null);
@@ -180,16 +188,31 @@ export function ChatView({
 
   async function submitCurrentInput(): Promise<void> {
     const trimmedInput = chatInput.trim();
-    const sendDisabled = submitting || trimmedInput.length === 0 || state.agent.execution !== 'ready';
+    const imageInputSupported = isImageInputSupported(state);
+    const sendDisabled =
+      submitting ||
+      trimmedInput.length === 0 ||
+      state.agent.execution !== 'ready' ||
+      (selectedAttachments.length > 0 && !imageInputSupported);
     if (sendDisabled) {
       return;
     }
     setSubmitting(true);
     try {
-      const result = await onSubmitChatTask({ input: trimmedInput });
+      const attachments = toChatImageAttachments(selectedAttachments);
+      const payload: ChatTaskSubmitPayload =
+        attachments.length === 0
+          ? { input: trimmedInput }
+          : {
+              input: trimmedInput,
+              attachments
+            };
+      const result = await onSubmitChatTask(payload);
       if (result.ok) {
         setPendingUserInput(trimmedInput);
         setChatInput('');
+        revokeAttachmentPreviewUrls(selectedAttachments);
+        setSelectedAttachments([]);
       } else {
         chatRun.setError(result.error);
       }
@@ -255,6 +278,7 @@ export function ChatView({
           onChatInputChange={setChatInput}
           selectedAttachments={selectedAttachments}
           onSelectedAttachmentsChange={setSelectedAttachments}
+          imageInputSupported={isImageInputSupported(state)}
           activeComposerPopover={activeComposerPopover}
           onActiveComposerPopoverChange={setActiveComposerPopover}
           submitting={submitting}
@@ -265,4 +289,12 @@ export function ChatView({
       </div>
     </section>
   );
+}
+
+function revokeAttachmentPreviewUrls(attachments: readonly RendererImageAttachment[]): void {
+  attachments.forEach((attachment) => {
+    if (attachment.previewUrl !== null) {
+      URL.revokeObjectURL(attachment.previewUrl);
+    }
+  });
 }
