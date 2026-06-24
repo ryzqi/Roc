@@ -12,6 +12,7 @@ import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../chat
 import type { ChatResumeDecision } from '../../shared/types';
 import { CopyAnswerButton } from './CopyAnswerButton';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
+import { HookCallBlock } from './hook-call/HookCallBlock';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
 import { StreamingMarkdownView } from './streaming-markdown-view';
@@ -187,6 +188,10 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
 
   if (block.kind === 'tool_call') {
     return <ToolCallView block={block} />;
+  }
+
+  if (block.kind === 'hook_call') {
+    return <HookCallBlock block={block} />;
   }
 
   if (block.kind === 'subagent') {

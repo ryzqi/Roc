@@ -96,7 +96,8 @@ export class HookRuntime {
         event: input.event,
         status: 'running',
         durationMs: null,
-        message: selectedHandler.handler.statusMessage === undefined ? null : selectedHandler.handler.statusMessage
+        message: selectedHandler.handler.statusMessage === undefined ? null : selectedHandler.handler.statusMessage,
+        commandDisplay: resolveCommand(selectedHandler.handler)
       })
     });
     await this.emitEvent(startedEvent);
@@ -254,7 +255,8 @@ function processExecution(
         event,
         status: 'skipped',
         durationMs: 0,
-        message: execution.skippedMessage
+        message: execution.skippedMessage,
+        commandDisplay: resolveCommand(execution.selectedHandler.handler)
       }),
       blocked: false,
       blockReason: null,
@@ -280,7 +282,8 @@ function processExecution(
         event,
         status: 'blocked',
         durationMs: execution.result.durationMs,
-        message: reason
+        message: reason,
+        commandDisplay: resolveCommand(execution.selectedHandler.handler)
       }),
       blocked: true,
       blockReason: reason,
@@ -295,7 +298,8 @@ function processExecution(
       event,
       status: 'completed',
       durationMs: execution.result.durationMs,
-      message: output.message === undefined ? null : output.message
+      message: output.message === undefined ? null : output.message,
+      commandDisplay: resolveCommand(execution.selectedHandler.handler)
     }),
     blocked: false,
     blockReason: null,
@@ -322,7 +326,8 @@ function failedExecutionToProcessed(
       event,
       status: blocked ? 'blocked' : 'failed',
       durationMs,
-      message: error
+      message: error,
+      commandDisplay: resolveCommand(execution.selectedHandler.handler)
     }),
     blocked,
     blockReason: blocked ? error : null,
@@ -369,6 +374,7 @@ function createRunSummary(input: {
   status: RocHookRunStatus;
   durationMs: number | null;
   message: string | null;
+  commandDisplay: string;
 }): RocHookRunSummary {
   return {
     runId: input.runId,
@@ -376,7 +382,8 @@ function createRunSummary(input: {
     event: input.event,
     status: input.status,
     durationMs: input.durationMs,
-    message: input.message
+    message: input.message,
+    commandDisplay: input.commandDisplay
   };
 }
 

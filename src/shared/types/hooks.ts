@@ -81,6 +81,7 @@ export type RocHookRunSummary = {
   status: RocHookRunStatus;
   durationMs: number | null;
   message: string | null;
+  commandDisplay: string;
 };
 
 export type RocHookRunEvent =

@@ -125,6 +125,47 @@ describe('chat message row', () => {
     expect(html).toContain('<ul>');
   });
 
+  it('renders hook activity as a folded assistant activity row without raw payload', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-hook',
+          role: 'assistant',
+          content: '最终答案',
+          reasoning: null,
+          blocks: [
+            {
+              id: 'hook-run-1',
+              kind: 'hook_call',
+              event: 'PreToolUse',
+              handlerId: 'PreToolUse:0:0',
+              status: 'completed',
+              durationMs: 12,
+              message: 'Checking shell command',
+              commandDisplay: 'node hook.js'
+            }
+          ],
+          approval: null,
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-activity-hook"');
+    expect(html).toContain('tool-call-modern--end');
+    expect(html).toContain('hook-call-modern--completed');
+    expect(html).toContain('Hook · PreToolUse');
+    expect(html).toContain('完成');
+    expect(html).toContain('node hook.js');
+    expect(html).toContain('12ms');
+    expect(html).toContain('Checking shell command');
+    expect(html).toContain('PreToolUse:0:0');
+    expect(html).not.toContain('stdout');
+    expect(html).not.toContain('stderr');
+    expect(html).not.toContain('toolInput');
+    expect(html).toContain('最终答案');
+  });
+
   it('renders failed subagent work cards open with status, meta, nested children, and no task summary', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {

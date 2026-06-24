@@ -114,6 +114,20 @@ describe('HookRuntime', () => {
     await runtime.runEvent(input('PreToolUse', { toolName: 'run_shell_command', toolCallId: 'call_1', toolInput: {} }));
 
     expect(emitted.map((event) => event.type)).toEqual(['hook_started', 'hook_completed']);
+    expect(emitted).toMatchObject([
+      {
+        type: 'hook_started',
+        hook: {
+          commandDisplay: 'node hook.js'
+        }
+      },
+      {
+        type: 'hook_completed',
+        hook: {
+          commandDisplay: 'node hook.js'
+        }
+      }
+    ]);
   });
 
   it('rejects virtual cwd before invoking the command runner', async () => {

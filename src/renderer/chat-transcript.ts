@@ -59,6 +59,16 @@ export type ChatTranscriptActivityBlock =
       output: unknown;
       error: unknown;
     }
+  | {
+      id: string;
+      kind: 'hook_call';
+      event: Extract<ChatRunActivityBlock, { kind: 'hook_call' }>['event'];
+      handlerId: string;
+      status: Extract<ChatRunActivityBlock, { kind: 'hook_call' }>['status'];
+      durationMs: number | null;
+      message: string | null;
+      commandDisplay: string;
+    }
   | ChatTranscriptSubagentActivityBlock
   | {
       id: string;
@@ -699,6 +709,18 @@ function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActi
         kind: 'reasoning',
         content: block.content,
         isStreaming: chatRunState.status === 'running'
+      };
+    }
+    if (block.kind === 'hook_call') {
+      return {
+        id: block.id,
+        kind: 'hook_call',
+        event: block.event,
+        handlerId: block.handlerId,
+        status: block.status,
+        durationMs: block.durationMs,
+        message: block.message,
+        commandDisplay: block.commandDisplay
       };
     }
     return {

@@ -4,6 +4,7 @@ import type {
   ChatRunEvent,
   ChatRunMode,
   ChatTodoItem,
+  RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
   SubagentStatus
@@ -26,6 +27,16 @@ export type ChatRunActivityBlock =
       input: unknown;
       output: unknown;
       error: unknown;
+    }
+  | {
+      id: string;
+      kind: 'hook_call';
+      event: RocHookRunSummary['event'];
+      handlerId: string;
+      status: RocHookRunSummary['status'];
+      durationMs: number | null;
+      message: string | null;
+      commandDisplay: string;
     };
 
 export type ChatRunSubagentBlock =
@@ -34,7 +45,8 @@ export type ChatRunSubagentBlock =
       kind: 'text';
       content: string;
     }
-  | ChatRunActivityBlock;
+  | Extract<ChatRunActivityBlock, { kind: 'reasoning' }>
+  | Extract<ChatRunActivityBlock, { kind: 'tool_call' }>;
 
 export type ChatRunSubagentNode = {
   identity: SubagentIdentity;
@@ -132,6 +144,13 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     return {
       ...state,
       subagents: upsertSubagentNode(state.subagents, event.identity.parentSubagentId, event.identity, event.event)
+    };
+  }
+
+  if (event.type === 'hook_started' || event.type === 'hook_completed') {
+    return {
+      ...state,
+      activityBlocks: upsertHookActivityBlock(state.activityBlocks, event.hook)
     };
   }
 
@@ -263,6 +282,24 @@ function applyToolBlock(
   if ('error' in block) {
     nextBlock.error = block.error;
   }
+  if (existing === undefined) {
+    return [...blocks, nextBlock];
+  }
+  return blocks.map((item) => (item === existing ? nextBlock : item));
+}
+
+function upsertHookActivityBlock(blocks: readonly ChatRunActivityBlock[], hook: RocHookRunSummary): ChatRunActivityBlock[] {
+  const nextBlock: Extract<ChatRunActivityBlock, { kind: 'hook_call' }> = {
+    id: hook.runId,
+    kind: 'hook_call',
+    event: hook.event,
+    handlerId: hook.handlerId,
+    status: hook.status,
+    durationMs: hook.durationMs,
+    message: hook.message,
+    commandDisplay: hook.commandDisplay
+  };
+  const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'hook_call' }> => item.kind === 'hook_call' && item.id === hook.runId);
   if (existing === undefined) {
     return [...blocks, nextBlock];
   }

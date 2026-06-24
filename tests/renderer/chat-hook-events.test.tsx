@@ -4,7 +4,7 @@ import { applyChatRunEvent, createEmptyChatRunState } from '../../src/renderer/c
 import type { ChatRunEvent } from '../../src/shared/types';
 
 describe('renderer chat hook events', () => {
-  it('ignores hook runtime events without polluting the model-visible transcript', () => {
+  it('renders hook runtime activity without polluting assistant text', () => {
     const runStarted: ChatRunEvent = {
       type: 'run_started',
       runId: 'run-1',
@@ -23,7 +23,8 @@ describe('renderer chat hook events', () => {
         event: 'PreToolUse',
         status: 'running',
         durationMs: null,
-        message: 'Checking shell command'
+        message: 'Checking shell command',
+        commandDisplay: 'node hook.js'
       }
     };
     const assistantBlock: ChatRunEvent = {
@@ -45,7 +46,8 @@ describe('renderer chat hook events', () => {
         event: 'PreToolUse',
         status: 'completed',
         durationMs: 12,
-        message: 'Hook completed'
+        message: 'Hook completed',
+        commandDisplay: 'node hook.js'
       }
     };
     const runCompleted: ChatRunEvent = {
@@ -72,9 +74,32 @@ describe('renderer chat hook events', () => {
       selectedThreadId: 'thread-1'
     });
 
-    expect(afterHookStarted).toEqual(running);
+    expect(afterHookStarted).not.toEqual(running);
+    expect(afterHookStarted.activityBlocks).toMatchObject([
+      {
+        id: 'hook-run-1',
+        kind: 'hook_call',
+        event: 'PreToolUse',
+        handlerId: 'PreToolUse:0:0',
+        status: 'running',
+        durationMs: null,
+        message: 'Checking shell command',
+        commandDisplay: 'node hook.js'
+      }
+    ]);
     expect(afterHookCompleted.assistantMessage).toBe('Visible answer');
-    expect(afterHookCompleted.activityBlocks).toEqual([]);
+    expect(afterHookCompleted.activityBlocks).toMatchObject([
+      {
+        id: 'hook-run-1',
+        kind: 'hook_call',
+        event: 'PreToolUse',
+        handlerId: 'PreToolUse:0:0',
+        status: 'completed',
+        durationMs: 12,
+        message: 'Hook completed',
+        commandDisplay: 'node hook.js'
+      }
+    ]);
     expect(completed.status).toBe('completed');
     expect(completed.summary).toBe('done');
     expect(transcript).toHaveLength(1);
@@ -82,7 +107,11 @@ describe('renderer chat hook events', () => {
       role: 'assistant',
       content: 'Visible answer'
     });
-    expect(JSON.stringify(transcript)).not.toContain('Checking shell command');
-    expect(JSON.stringify(transcript)).not.toContain('Hook completed');
+    expect(JSON.stringify(transcript)).toContain('Hook completed');
+    expect(JSON.stringify(transcript)).toContain('node hook.js');
+    expect(JSON.stringify(transcript)).not.toContain('stdout');
+    expect(JSON.stringify(transcript)).not.toContain('stderr');
+    expect(JSON.stringify(transcript)).not.toContain('toolInput');
+    expect(transcript[0]?.reasoning).toBeNull();
   });
 });

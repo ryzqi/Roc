@@ -196,7 +196,8 @@ describe('createRocHookMiddleware', () => {
         event: 'PreToolUse',
         status: 'running',
         durationMs: null,
-        message: null
+        message: null,
+        commandDisplay: 'node hook.js'
       }
     };
     const completed: RocHookRunEvent = {
@@ -208,7 +209,8 @@ describe('createRocHookMiddleware', () => {
         event: 'PreToolUse',
         status: 'completed',
         durationMs: 3,
-        message: null
+        message: null,
+        commandDisplay: 'node hook.js'
       }
     };
     const middleware = createTestMiddleware({
