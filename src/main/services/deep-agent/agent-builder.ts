@@ -7,6 +7,8 @@ import { toolRetryMiddleware } from 'langchain';
 import { z } from 'zod';
 import type { ProviderType, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
+import { createRocHookMiddleware } from '../hooks';
+import type { RocHookMiddlewareOptions } from '../hooks';
 import {
   createForgeTieredCompactionMiddleware,
   createForgeCleanupMiddleware,
@@ -42,6 +44,7 @@ export type DeepAgentBuildInput = {
   providerType: ProviderType;
   workflowHint: WorkflowHint;
   contextBudgetTokens: number | undefined;
+  hookMiddleware?: RocHookMiddlewareOptions;
 };
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
@@ -52,7 +55,9 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   const knownToolCandidates = (): RescueToolCandidate[] => {
     return [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
   };
+  const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
   const guardrails = [
+    ...hookMiddleware,
     createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     rtkMiddleware,
     createPromptCachingMiddleware({

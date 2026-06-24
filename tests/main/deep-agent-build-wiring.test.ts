@@ -86,6 +86,57 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(middlewareNames.indexOf('RocShellPathPolicyMiddleware')).toBeLessThan(middlewareNames.indexOf('RTKMiddleware'));
   });
 
+  it('wires hook middleware before Roc guardrails when hook runtime is provided', () => {
+    const input = {
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined,
+      hookMiddleware: {
+        hookRuntime: {
+          runEvent: vi.fn(async () => ({
+            blocked: false,
+            blockReason: null,
+            updatedInput: undefined,
+            additionalContexts: [],
+            requestContinue: null,
+            runs: [],
+            events: []
+          }))
+        },
+        runContext: {
+          runId: 'run_1',
+          threadId: 'thread_1',
+          workspacePath: 'F:\\Code\\Roc',
+          cwd: 'F:\\Code\\Roc',
+          source: 'chat',
+          modelId: 'model_1',
+          workflowHint: null
+        },
+        emitHookEvent: vi.fn()
+      }
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
+
+    expect(middlewareNames.indexOf('RocHookMiddleware')).toBeGreaterThanOrEqual(0);
+    expect(middlewareNames.indexOf('RocHookMiddleware')).toBeLessThan(middlewareNames.indexOf('RocShellPathPolicyMiddleware'));
+  });
+
   it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {
     const internetSearchSchema = z.object({
       query: z.string()
