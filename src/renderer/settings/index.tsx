@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import type {
   McpServerSnapshot,
@@ -36,8 +36,7 @@ import { DefaultModelSection } from './sections/default-model-section';
 import { AppBasicsSection } from './sections/app-basics-section';
 import { AuthSecuritySection } from './sections/auth-security-section';
 import { MemorySection } from './sections/memory-section';
-import { BrowserSection } from './sections/browser-section';
-import { CapabilitiesSection } from './sections/capabilities-section';
+import { TaskSettingsSection } from './sections/task-settings-section';
 
 export type SettingsViewState = {
   settings: AppSettings;
@@ -55,12 +54,10 @@ export type SettingsViewUpdate = (partial: Partial<LoadedState>) => void;
 
 export function SettingsView({
   client,
-  onNavigate,
   state,
   updateLoadedState
 }: {
   client?: RocClient;
-  onNavigate: (target: 'mcp' | 'skills') => void;
   state: SettingsViewState;
   updateLoadedState: SettingsViewUpdate;
 }): React.JSX.Element {
@@ -68,7 +65,6 @@ export function SettingsView({
   const [providerDraft, setProviderDraft] = useState<ProviderDraft>(() => createInitialProviderDraft(state.providers));
   const [providerDraftError, setProviderDraftError] = useState<string | null>(null);
   const [secretBusyProviderId, setSecretBusyProviderId] = useState<string | null>(null);
-  const [exaTestLabel, setExaTestLabel] = useState<string>('未测试');
   const [savingAll, setSavingAll] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -82,11 +78,6 @@ export function SettingsView({
     baseDefaultModelId: state.defaultModelId,
     baseProviders: state.providers
   });
-
-  const exaServer = useMemo(
-    () => state.mcpServers.find((server) => server.id === 'exa-hosted') ?? null,
-    [state.mcpServers]
-  );
 
   const buildBaseSaveRequest = useCallback(
     () =>
@@ -255,19 +246,6 @@ export function SettingsView({
     [client, refreshSettingsSnapshot]
   );
 
-  const testExa = useCallback(async (): Promise<void> => {
-    if (exaServer === null) {
-      setExaTestLabel('未配置');
-      return;
-    }
-    try {
-      const result = unwrap('mcp test exa', await resolveClient().api.mcp.testServer(exaServer.id));
-      setExaTestLabel(result.status);
-    } catch (error) {
-      setExaTestLabel(error instanceof Error ? error.message : 'invalid');
-    }
-  }, [client, exaServer]);
-
   const saveAll = useCallback(async (): Promise<void> => {
     setSaveError(null);
     setSavingAll(true);
@@ -284,10 +262,6 @@ export function SettingsView({
       setSavingAll(false);
     }
   }, [buildBaseSaveRequest, client, updateLoadedState]);
-
-  useEffect(() => {
-    setExaTestLabel('未测试');
-  }, [exaServer?.id]);
 
   const dirtyCount = draft.impactRows.length;
 
@@ -375,21 +349,17 @@ export function SettingsView({
                 onChange={draft.setSettings}
               />
             ) : null}
+            {activeSection === 'tasks' ? (
+              <TaskSettingsSection
+                draft={draft.settings}
+                onChange={draft.setSettings}
+              />
+            ) : null}
             {activeSection === 'auth-security' ? (
               <AuthSecuritySection draft={draft.permissions} onChange={draft.setPermissions} />
             ) : null}
             {activeSection === 'memory' ? (
               <MemorySection draft={draft.settings} onChange={draft.setSettings} />
-            ) : null}
-            {activeSection === 'browser' ? (
-              <BrowserSection exaServer={exaServer} onTestExa={testExa} testStatusLabel={exaTestLabel} />
-            ) : null}
-            {activeSection === 'capabilities' ? (
-              <CapabilitiesSection
-                mcpServers={state.mcpServers}
-                onNavigate={onNavigate}
-                skills={state.skills}
-              />
             ) : null}
           </div>
         </div>

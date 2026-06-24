@@ -517,10 +517,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       <AppSettingsLayer
         client={client}
         open={settingsOpen}
-        setActiveView={setActiveView}
         setOpen={setSettingsOpen}
         setState={setState}
-        setWorkbenchVisible={setWorkbenchVisible}
         state={state}
       />
     </div>

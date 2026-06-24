@@ -5,11 +5,10 @@ import type { HostIntegrationStatus, PermissionsConfig, ProviderConfig } from '.
 import { createLoadedState } from './view-test-helpers';
 import { AppBasicsSection } from '../../src/renderer/settings/sections/app-basics-section';
 import { AuthSecuritySection } from '../../src/renderer/settings/sections/auth-security-section';
-import { BrowserSection } from '../../src/renderer/settings/sections/browser-section';
-import { CapabilitiesSection } from '../../src/renderer/settings/sections/capabilities-section';
 import { DefaultModelSection } from '../../src/renderer/settings/sections/default-model-section';
 import { MemorySection } from '../../src/renderer/settings/sections/memory-section';
 import { ProvidersSection } from '../../src/renderer/settings/sections/providers-section';
+import { TaskSettingsSection } from '../../src/renderer/settings/sections/task-settings-section';
 import { createProviderDraft } from '../../src/renderer/settings-model';
 
 function createPermissions(mode: PermissionsConfig['mode'] = 'fully_automatic'): PermissionsConfig {
@@ -98,29 +97,9 @@ describe('settings surfaces', () => {
         })
       ),
       renderToStaticMarkup(
-        React.createElement(BrowserSection, {
-          exaServer: {
-            id: 'exa-hosted',
-            name: 'Exa Hosted MCP',
-            enabled: false,
-            transport: 'http',
-            status: 'not_connected',
-            tools: 2,
-            preset: true,
-            riskLevel: 'medium',
-            url: 'https://mcp.exa.ai/mcp',
-            allowedTools: ['web_search_exa'],
-            lastError: null
-          },
-          onTestExa: async () => {},
-          testStatusLabel: '未测试'
-        })
-      ),
-      renderToStaticMarkup(
-        React.createElement(CapabilitiesSection, {
-          mcpServers: [],
-          onNavigate: () => {},
-          skills: []
+        React.createElement(TaskSettingsSection, {
+          draft: settings,
+          onChange: vi.fn()
         })
       )
     ].join('\n');
@@ -130,7 +109,12 @@ describe('settings surfaces', () => {
     expect(sectionHtml).toContain('系统实际状态');
     expect(sectionHtml).toContain('已同步');
     expect(sectionHtml).toContain('注册失败');
+    expect(sectionHtml).toContain('任务与调度');
     expect(sectionHtml).toContain('DeepAgents native memory');
+    expect(sectionHtml).toContain('高级保护');
+    expect(sectionHtml).toContain('高级容量');
+    expect(sectionHtml).toContain('Prompt injection 扫描');
+    expect(sectionHtml).toContain('USER 容量');
     expect(sectionHtml).not.toContain('冻结快照');
     expect(sectionHtml).not.toContain('用户画像');
     expect(sectionHtml).not.toContain('规则文件');

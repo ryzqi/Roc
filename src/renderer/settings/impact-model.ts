@@ -34,6 +34,14 @@ const approvalModeCopy: Record<ApprovalMode, string> = {
   default: '默认(MCP 与删除文件需审批)'
 };
 
+const taskFieldImpactCopy: Record<string, string> = {
+  'longRunningThresholds.runningSeconds': '会影响任务运行多久后被识别为长任务候选。',
+  'longRunningThresholds.toolCallCount': '会影响工具调用多少次后被识别为长任务候选。',
+  'longRunningThresholds.subagentCount': '会影响子代理数量达到多少后被识别为复杂任务候选。',
+  'scheduler.catchUpOnStartup': '会影响应用启动时是否补跑错过触发时间的后台任务。',
+  'scheduler.maxRegisteredTasks': '会影响后台调度器最多登记多少个任务。'
+};
+
 function describeMemoryValue(field: string, value: boolean | number): string {
   if (typeof value === 'boolean') {
     return value === true ? '已启用' : '已关闭';
@@ -117,23 +125,67 @@ export function buildImpactRows(base: ImpactSourceState, draft: ImpactSourceStat
   pushIfChanged(
     rows,
     'app-basics',
-    'notifications.lowDistraction',
-    base.settings.notifications.lowDistraction,
-    draft.settings.notifications.lowDistraction,
-    '会影响 Roc 主动通知的频率与范围。',
-    'info',
-    (value) => (value ? '低打扰' : '常规')
-  );
-
-  pushIfChanged(
-    rows,
-    'app-basics',
     'globalHotkey',
     base.settings.globalHotkey,
     draft.settings.globalHotkey,
     '会影响全局快捷键；保存后会同步注册系统级快捷键。',
     'info',
     (value) => (value === null || value.length === 0 ? '未设置' : value)
+  );
+
+  pushIfChanged(
+    rows,
+    'tasks',
+    'tasks.longRunningThresholds.runningSeconds',
+    base.settings.tasks.longRunningThresholds.runningSeconds,
+    draft.settings.tasks.longRunningThresholds.runningSeconds,
+    taskFieldImpactCopy['longRunningThresholds.runningSeconds'],
+    'info',
+    (value) => `${value} 秒`
+  );
+
+  pushIfChanged(
+    rows,
+    'tasks',
+    'tasks.longRunningThresholds.toolCallCount',
+    base.settings.tasks.longRunningThresholds.toolCallCount,
+    draft.settings.tasks.longRunningThresholds.toolCallCount,
+    taskFieldImpactCopy['longRunningThresholds.toolCallCount'],
+    'info',
+    (value) => `${value} 次`
+  );
+
+  pushIfChanged(
+    rows,
+    'tasks',
+    'tasks.longRunningThresholds.subagentCount',
+    base.settings.tasks.longRunningThresholds.subagentCount,
+    draft.settings.tasks.longRunningThresholds.subagentCount,
+    taskFieldImpactCopy['longRunningThresholds.subagentCount'],
+    'info',
+    (value) => `${value} 个`
+  );
+
+  pushIfChanged(
+    rows,
+    'tasks',
+    'tasks.scheduler.catchUpOnStartup',
+    base.settings.tasks.scheduler.catchUpOnStartup,
+    draft.settings.tasks.scheduler.catchUpOnStartup,
+    taskFieldImpactCopy['scheduler.catchUpOnStartup'],
+    'info',
+    (value) => (value ? '启动时补跑' : '启动时不补跑')
+  );
+
+  pushIfChanged(
+    rows,
+    'tasks',
+    'tasks.scheduler.maxRegisteredTasks',
+    base.settings.tasks.scheduler.maxRegisteredTasks,
+    draft.settings.tasks.scheduler.maxRegisteredTasks,
+    taskFieldImpactCopy['scheduler.maxRegisteredTasks'],
+    'info',
+    (value) => `${value} 个`
   );
 
   const pushMemoryChange = (field: string, before: boolean | number, after: boolean | number): void => {

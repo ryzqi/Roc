@@ -70,9 +70,6 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
         openAtLogin: false,
         minimizeToTray: false
       },
-      notifications: {
-        lowDistraction: false
-      },
       globalHotkey: null,
       memory: {
         charLimits: { user: 1375, agents: 800, memory: 2200 },

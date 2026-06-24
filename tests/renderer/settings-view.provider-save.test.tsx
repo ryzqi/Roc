@@ -60,7 +60,6 @@ describe('SettingsView provider save', () => {
       root.render(
         React.createElement(SettingsView, {
           client,
-          onNavigate: () => {},
           state: {
             settings: snapshot.settings,
             providers: snapshot.providers,
@@ -127,7 +126,6 @@ describe('SettingsView provider save', () => {
       root.render(
         React.createElement(SettingsView, {
           client,
-          onNavigate: () => {},
           state: {
             settings: snapshot.settings,
             providers: snapshot.providers,

@@ -19,7 +19,6 @@ function defaultSettings(): AppSettings {
     schemaVersion: 2,
     defaultWorkspace: null,
     startup: { openAtLogin: false, minimizeToTray: true },
-    notifications: { lowDistraction: true },
     globalHotkey: null,
     memory: {
       charLimits: { user: 1375, agents: 800, memory: 2200 },
@@ -235,4 +234,3 @@ describe('settings model helpers', () => {
   });
 
 });
-

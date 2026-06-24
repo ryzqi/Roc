@@ -122,6 +122,31 @@ describe('AgentSessionRepository', () => {
     expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
   });
 
+  it('migrates existing session messages to support workspace hashes', () => {
+    db.exec(`
+      CREATE TABLE session_messages (
+        id             TEXT PRIMARY KEY,
+        thread_id      TEXT NOT NULL,
+        role           TEXT NOT NULL CHECK(role IN ('user','assistant','tool','system')),
+        content        TEXT NOT NULL,
+        token_count    INTEGER,
+        phase          TEXT NOT NULL DEFAULT 'visible' CHECK(phase IN ('visible','pre_compaction_flush')),
+        created_at     TEXT NOT NULL
+      );
+
+      INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, created_at)
+      VALUES ('smsg_legacy', 'thread_legacy', 'assistant', 'Legacy context', 8, 'visible', '2026-06-24T00:00:00.000Z');
+    `);
+
+    applyAgentPluginSchema(db);
+
+    expect(columnNames('session_messages')).toContain('workspace_hash');
+    expect(rawRow('session_messages', 'smsg_legacy')).toMatchObject({
+      content: 'Legacy context',
+      workspace_hash: null
+    });
+  });
+
   it('stores user image attachment metadata without base64 data', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);

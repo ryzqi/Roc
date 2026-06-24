@@ -29,7 +29,9 @@ describe('AuthSecuritySection', () => {
     expect(html).toContain('仅在 delete_file 调用前弹出审批卡');
     expect(html).not.toContain('MCP');
     expect(html).toContain('目前没有长期授权记录');
-    expect(html).toContain('未启用系统 URL 协议、文件关联、自动更新或崩溃上报');
+    expect(html).not.toContain('发布级系统能力');
+    expect(html).not.toContain('release surface');
+    expect(html).not.toContain('未启用系统 URL 协议');
     expect(html).not.toContain('settings-confirmation-');
   });
 });

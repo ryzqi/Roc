@@ -55,11 +55,13 @@ describe('settings model helpers', () => {
       '模型提供商',
       '默认模型',
       '应用基础',
+      '任务与调度',
       '授权与安全',
-      '记忆策略',
-      '网页与浏览器',
-      '能力入口'
+      '记忆策略'
     ]);
+    expect(selectSettingsSection('providers', 'tasks')).toBe('tasks');
+    expect(selectSettingsSection('providers', 'browser')).toBe('providers');
+    expect(selectSettingsSection('providers', 'capabilities')).toBe('providers');
     expect(selectSettingsSection('providers', 'memory')).toBe('memory');
     expect(selectSettingsSection('providers', 'unknown')).toBe('providers');
   });

@@ -170,7 +170,6 @@ describe('config helper modules', () => {
         schemaVersion: 2,
         defaultWorkspace: null,
         startup: { openAtLogin: false, minimizeToTray: true },
-        notifications: { lowDistraction: true },
         globalHotkey: null,
         memory: {
           frozenSnapshotEnabled: false,
@@ -249,4 +248,3 @@ describe('config helper modules', () => {
     });
   });
 });
-

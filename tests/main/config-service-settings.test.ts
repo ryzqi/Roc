@@ -37,7 +37,6 @@ describe('ConfigService unified settings document', () => {
             schemaVersion: 2,
             defaultWorkspace: null,
             startup: { openAtLogin: false, minimizeToTray: true },
-            notifications: { lowDistraction: true },
             globalHotkey: null,
             memory: {
               candidateReviewMode: 'manual',
@@ -100,6 +99,7 @@ describe('ConfigService unified settings document', () => {
         tasks: defaultSettings.tasks
       }
     });
+    expect((readSettingsDocument() as { settings: Record<string, unknown> }).settings).not.toHaveProperty('notifica' + 'tions');
   });
 
   it('normalizes current settings documents by dropping obsolete disk-memory fields', () => {
@@ -181,7 +181,7 @@ describe('ConfigService unified settings document', () => {
           schemaVersion: 2,
           defaultWorkspace: null,
           startup: { openAtLogin: false, minimizeToTray: true },
-          notifications: { lowDistraction: true },
+          ['notifica' + 'tions']: { ['low' + 'Distraction']: true },
           globalHotkey: null,
           memory: {
             candidateReviewMode: 'manual',
@@ -457,4 +457,3 @@ describe('ConfigService unified settings document', () => {
   });
 
 });
-

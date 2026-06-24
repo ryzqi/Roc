@@ -122,7 +122,6 @@ function upgradeLegacySettings(raw: unknown): AppSettings {
   }
   const value = raw as Record<string, unknown>;
   const startup = (value.startup ?? {}) as Record<string, unknown>;
-  const notifications = (value.notifications ?? {}) as Record<string, unknown>;
 
   return SettingsSchema.parse({
     schemaVersion: 2,
@@ -130,9 +129,6 @@ function upgradeLegacySettings(raw: unknown): AppSettings {
     startup: {
       openAtLogin: typeof startup.openAtLogin === 'boolean' ? startup.openAtLogin : false,
       minimizeToTray: typeof startup.minimizeToTray === 'boolean' ? startup.minimizeToTray : true
-    },
-    notifications: {
-      lowDistraction: typeof notifications.lowDistraction === 'boolean' ? notifications.lowDistraction : true
     },
     globalHotkey: typeof value.globalHotkey === 'string' && value.globalHotkey.length > 0 ? value.globalHotkey : null,
     memory: upgradeMemorySettings(value.memory),

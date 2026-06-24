@@ -127,9 +127,6 @@ describe('ConfigService unified settings document', () => {
         openAtLogin: true,
         minimizeToTray: false
       },
-      notifications: {
-        lowDistraction: false
-      },
       memory: {
         candidateReviewMode: 'manual' as const,
         warmRecallEnabled: false
@@ -199,7 +196,6 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 2,
       defaultWorkspace: 'F:\\Code\\Roc',
       startup: { openAtLogin: true, minimizeToTray: false },
-      notifications: { lowDistraction: false },
       globalHotkey: null,
       memory: defaultSettings.memory
     });

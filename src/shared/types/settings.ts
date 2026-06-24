@@ -21,9 +21,6 @@ export type AppSettings = {
     openAtLogin: boolean;
     minimizeToTray: boolean;
   };
-  notifications: {
-    lowDistraction: boolean;
-  };
   globalHotkey: string | null;
   memory: {
     charLimits: MemoryCharLimits;

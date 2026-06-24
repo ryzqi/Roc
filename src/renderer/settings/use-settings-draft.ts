@@ -87,7 +87,7 @@ export function useSettingsDraft(input: {
 
   const resetSection = useCallback(
     (sectionId: SettingsSectionId) => {
-      if (sectionId === 'app-basics' || sectionId === 'memory') {
+      if (sectionId === 'app-basics' || sectionId === 'memory' || sectionId === 'tasks') {
         setDraftSettings(baseSettings);
       }
       if (sectionId === 'auth-security') {

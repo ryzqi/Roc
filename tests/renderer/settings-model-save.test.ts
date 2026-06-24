@@ -28,7 +28,6 @@ function defaultSettings(): AppSettings {
     schemaVersion: 2,
     defaultWorkspace: null,
     startup: { openAtLogin: false, minimizeToTray: true },
-    notifications: { lowDistraction: true },
     globalHotkey: null,
     memory: {
       charLimits: { user: 1375, agents: 800, memory: 2200 },
@@ -296,8 +295,7 @@ describe('settings model helpers', () => {
     const settings: AppSettings = {
       ...defaultSettings(),
       defaultWorkspace: 'F:\\Code\\Roc',
-      startup: { openAtLogin: true, minimizeToTray: false },
-      notifications: { lowDistraction: false }
+      startup: { openAtLogin: true, minimizeToTray: false }
     };
     const provider: ProviderConfig = {
       id: 'openai-a',
@@ -389,6 +387,13 @@ describe('settings model helpers', () => {
           ...baseSettings.memory.securityScan,
           credential: false
         }
+      },
+      tasks: {
+        ...baseSettings.tasks,
+        scheduler: {
+          ...baseSettings.tasks.scheduler,
+          maxRegisteredTasks: 128
+        }
       }
     };
     const basePermissions = defaultPermissions();
@@ -405,6 +410,7 @@ describe('settings model helpers', () => {
     expect(rows.map((row) => row.field)).toEqual([
       'defaultModelId',
       'defaultWorkspace',
+      'tasks.scheduler.maxRegisteredTasks',
       'memory.charLimits.memory',
       'memory.sessionRetentionDays',
       'memory.securityScan.credential',
@@ -412,6 +418,8 @@ describe('settings model helpers', () => {
     ]);
     expect(rows.find((row) => row.field === 'defaultModelId')?.severity).toBe('high');
     expect(rows.find((row) => row.field === 'defaultWorkspace')?.severity).toBe('info');
+    expect(rows.find((row) => row.field === 'tasks.scheduler.maxRegisteredTasks')?.sectionId).toBe('tasks');
+    expect(rows.find((row) => row.field === 'tasks.scheduler.maxRegisteredTasks')?.after).toBe('128 个');
     expect(rows.find((row) => row.field === 'memory.charLimits.memory')?.impact).toBe(
       '会影响 DeepAgents native memory 写入 MEMORY.md 的容量上限。'
     );
@@ -421,4 +429,3 @@ describe('settings model helpers', () => {
   });
 
 });
-

@@ -21,9 +21,6 @@ export const SettingsSchema: z.ZodType<AppSettings> = z.object({
     openAtLogin: z.boolean(),
     minimizeToTray: z.boolean()
   }),
-  notifications: z.object({
-    lowDistraction: z.boolean()
-  }),
   globalHotkey: z.string().nullable(),
   memory: z.object({
     charLimits: z.object({

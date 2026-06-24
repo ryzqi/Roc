@@ -46,7 +46,14 @@ export function applyAgentPluginSchema(db: DatabaseConnection): void {
       workspace_hash TEXT,
       created_at     TEXT NOT NULL
     );
+  `);
 
+  const sessionMessageColumns = db.prepare('PRAGMA table_info(session_messages)').all() as Array<{ name: string }>;
+  if (!sessionMessageColumns.some((column) => column.name === 'workspace_hash')) {
+    db.exec('ALTER TABLE session_messages ADD COLUMN workspace_hash TEXT;');
+  }
+
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_agent_task_runs_thread_run_number
     ON task_runs(thread_id, run_number DESC);
 

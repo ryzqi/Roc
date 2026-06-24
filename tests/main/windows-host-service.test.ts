@@ -16,10 +16,6 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
       minimizeToTray: true,
       ...overrides.startup
     },
-    notifications: {
-      lowDistraction: true,
-      ...overrides.notifications
-    },
     globalHotkey: overrides.globalHotkey ?? null,
     memory: {
       charLimits: { user: 1375, agents: 800, memory: 2200 },

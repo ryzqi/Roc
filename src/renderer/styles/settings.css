@@ -127,6 +127,41 @@
   border-top: 1px solid var(--line);
 }
 
+.settings-section-group {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-group-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-toggle-row {
+  min-height: 74px;
+}
+
+.field-error {
+  color: var(--st-bad);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-advanced {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 248, 252, 0.5);
+}
+
+.settings-advanced > summary {
+  color: var(--ink);
+  font-size: var(--font-meta-size);
+  font-weight: 600;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;

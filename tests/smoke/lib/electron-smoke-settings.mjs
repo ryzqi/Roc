@@ -153,15 +153,19 @@ export async function runSmokeSettingsChecks(ctx) {
     'providers',
     'default-model',
     'app-basics',
+    'tasks',
     'auth-security',
-    'memory',
-    'browser',
-    'capabilities'
+    'memory'
   ]) {
     await clickSmokeControl(page, `[data-testid="settings-section-${sectionId}"]`);
     await page.waitForSelector(`[data-testid="settings-panel-${sectionId}"], [data-testid="provider-settings"], [data-testid="default-model-settings"]`, {
       timeout: 5000
     });
+    if (sectionId === 'tasks') {
+      providerSettingsEvidence.taskSettingsVisible =
+        (await page.locator('[data-testid="settings-panel-tasks"]').count()) > 0 ||
+        ((await page.textContent('[data-testid="settings-view"]')) ?? '').includes('任务与调度');
+    }
   }
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
   await page.waitForFunction(

@@ -12,9 +12,6 @@ function createSettings(): AppSettings {
       openAtLogin: false,
       minimizeToTray: true
     },
-    notifications: {
-      lowDistraction: true
-    },
     globalHotkey: null,
     memory: {
       charLimits: { user: 1375, agents: 800, memory: 2200 },
@@ -55,8 +52,8 @@ function createHostIntegration(): HostIntegrationStatus {
   };
 }
 
-describe('AppBasicsSection release honesty', () => {
-  it('does not imply low-distraction notifications are Windows toast notifications', () => {
+describe('AppBasicsSection', () => {
+  it('renders workspace, window behavior, and global entry settings without notification controls', () => {
     const html = renderToStaticMarkup(
       React.createElement(AppBasicsSection, {
         draft: createSettings(),
@@ -65,7 +62,13 @@ describe('AppBasicsSection release honesty', () => {
       })
     );
 
-    expect(html).toContain('低打扰通知');
-    expect(html).toContain('仅调整 Roc 内部任务提醒频率；尚未启用 Windows toast。');
+    expect(html).toContain('工作区');
+    expect(html).toContain('窗口行为');
+    expect(html).toContain('全局入口');
+    expect(html).toContain('data-testid="settings-default-workspace"');
+    expect(html).toContain('data-testid="settings-startup-open-at-login"');
+    expect(html).toContain('data-testid="settings-startup-minimize-to-tray"');
+    expect(html).toContain('data-testid="settings-global-hotkey"');
+    expect(html).not.toContain('低打扰通知');
   });
 });

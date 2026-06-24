@@ -81,17 +81,6 @@ export function AuthSecuritySection({
           </ul>
         )}
       </div>
-      <div className="settings-subsection">
-        <div className="section-head">
-          <h3 className="section-title">发布级系统能力</h3>
-        </div>
-        <InfoRow
-          sub="未启用系统 URL 协议、文件关联、自动更新或崩溃上报；当前发布证据以 packaged smoke、日志和诊断包为准。"
-          tag="absent"
-          title="release surface"
-          tone="info"
-        />
-      </div>
     </section>
   );
 }

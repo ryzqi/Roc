@@ -43,7 +43,6 @@ describe('ConfigService unified settings document', () => {
         schemaVersion: 1,
         defaultWorkspace: null,
         startup: { openAtLogin: false, minimizeToTray: true },
-        notifications: { lowDistraction: true },
         memory: { candidateReviewMode: 'manual', warmRecallEnabled: true }
       },
       providers: {
@@ -235,7 +234,6 @@ describe('ConfigService unified settings document', () => {
       schemaVersion: 2,
       defaultWorkspace: null,
       startup: { openAtLogin: true, minimizeToTray: true },
-      notifications: { lowDistraction: false },
       globalHotkey: 'Ctrl+Alt+R',
       memory: {
         ...defaultSettings.memory,
@@ -276,4 +274,3 @@ describe('ConfigService unified settings document', () => {
   });
 
 });
-
