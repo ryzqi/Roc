@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
+  ChatPersistedAttachment,
   EnabledCapabilities,
   SessionMessageEntry,
   SessionMessagePhase,
@@ -60,6 +61,7 @@ export class AgentSessionRepository {
     enabledCapabilities: EnabledCapabilities;
     threadKind: TaskKind;
     threadId?: string;
+    attachments?: ChatPersistedAttachment[];
   }): TaskRun {
     const now = new Date().toISOString();
     const runId = `run_${randomUUID()}`;
@@ -69,6 +71,19 @@ export class AgentSessionRepository {
     const hasActiveThread = existingThreadId !== null && this.hasActiveThread(threadId);
     const runNumber = existingThreadId === null || !hasActiveThread ? 1 : this.nextRunNumber(threadId);
     const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
+    const userMessagePayload: {
+      role: 'user';
+      content: string;
+      enabledCapabilities: EnabledCapabilities;
+      attachments?: ChatPersistedAttachment[];
+    } = {
+      role: 'user',
+      content: input.userInput,
+      enabledCapabilities: input.enabledCapabilities
+    };
+    if (input.attachments !== undefined && input.attachments.length > 0) {
+      userMessagePayload.attachments = input.attachments;
+    }
 
     this.db
       .transaction(() => {
@@ -103,11 +118,7 @@ export class AgentSessionRepository {
             threadId,
             runId,
             'message',
-            JSON.stringify({
-              role: 'user',
-              content: input.userInput,
-              enabledCapabilities: input.enabledCapabilities
-            }),
+            JSON.stringify(userMessagePayload),
             now
           );
       })();

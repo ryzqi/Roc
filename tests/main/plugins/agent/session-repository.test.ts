@@ -122,6 +122,42 @@ describe('AgentSessionRepository', () => {
     expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
   });
 
+  it('stores user image attachment metadata without base64 data', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: '描述图片',
+      attachments: [
+        {
+          kind: 'image',
+          name: 'diagram.png',
+          mediaType: 'image/png',
+          sizeBytes: 123
+        }
+      ]
+    });
+
+    const events = repository.listThreadEvents(run.threadId);
+
+    expect(events[0]?.payload).toEqual({
+      role: 'user',
+      content: '描述图片',
+      enabledCapabilities,
+      attachments: [
+        {
+          kind: 'image',
+          name: 'diagram.png',
+          mediaType: 'image/png',
+          sizeBytes: 123
+        }
+      ]
+    });
+    expect(JSON.stringify(events[0]?.payload)).not.toContain('base64');
+  });
+
   it('filters current workspace search by workspace hash and keeps unscoped rows only in all scope', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);

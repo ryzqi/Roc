@@ -11,6 +11,7 @@ import type {
   ChatResumeRunResult,
   ChatStartRunRequest,
   ChatStartRunResult,
+  ChatValidatedImageAttachment,
   EnabledCapabilities,
   SessionMessageEntry,
   SessionMessageSearchRequest,
@@ -22,6 +23,7 @@ import type {
 import type { RocEventBus } from '../../kernel/types';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
+import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentSessionRepository } from './session-repository';
 import type { DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
@@ -46,6 +48,7 @@ export type AgentDeepAgentExecutor = {
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
+    validatedAttachments?: ChatValidatedImageAttachment[];
   }): AsyncIterable<ChatRunEvent> | Promise<AsyncIterable<ChatRunEvent>>;
 };
 
@@ -100,7 +103,9 @@ export class AgentPluginRuntime {
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
     const capabilityPreview =
       this.options.capabilityPreviewProvider === undefined ? undefined : await this.getCapabilityPreview(request.enabledCapabilities);
+    const preparedAttachments = prepareChatImageAttachments(request.attachments);
     const run = this.options.repository.createTaskRun({
+      attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
       enabledCapabilities: request.enabledCapabilities,
       modelId: modelHandle.modelId,
       threadKind: resolveNewRunThreadKind(request),
@@ -146,6 +151,7 @@ export class AgentPluginRuntime {
         modelHandle,
         run,
         threadId: run.threadId,
+        validatedAttachments: preparedAttachments.images,
         workflowHint: request.workflowHint === undefined ? null : request.workflowHint
       });
       this.pendingRuns.add(pendingRun);
@@ -375,6 +381,7 @@ export class AgentPluginRuntime {
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
     threadId: string;
+    validatedAttachments?: ChatValidatedImageAttachment[];
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
     enabledCapabilities: EnabledCapabilities;
   }): Promise<void> {
@@ -391,7 +398,8 @@ export class AgentPluginRuntime {
         modelHandle: input.modelHandle,
         request: input.request,
         resumePayload: input.resumePayload,
-        run: input.run
+        run: input.run,
+        validatedAttachments: input.validatedAttachments
       });
       if (execution.status === 'interrupted') {
         return;
@@ -451,6 +459,7 @@ export class AgentPluginRuntime {
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
+    validatedAttachments?: ChatValidatedImageAttachment[];
   }): Promise<DeepAgentExecutionResult> {
     const assistantChunks: string[] = [];
     const successfulToolBlockIds = new Set<string>();

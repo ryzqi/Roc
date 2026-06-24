@@ -194,6 +194,65 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('validates image attachments before invoking the DeepAgent executor', async () => {
+    const repository = new AgentSessionRepository(db);
+    let validatedAttachments: unknown = null;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          validatedAttachments = Reflect.get(input, 'validatedAttachments');
+          yield createTextBlock(input.run.id, '图片里有图表。');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      input: '描述图片',
+      mode: 'chat',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      attachments: [
+        {
+          kind: 'image',
+          source: 'clipboard',
+          name: 'chart.png',
+          mediaType: 'image/png',
+          sizeBytes: 3,
+          data: Buffer.from([1, 2, 3]).toString('base64')
+        }
+      ]
+    });
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(validatedAttachments).toEqual([
+      {
+        kind: 'image',
+        name: 'chart.png',
+        mediaType: 'image/png',
+        sizeBytes: 3,
+        base64: Buffer.from([1, 2, 3]).toString('base64')
+      }
+    ]);
+    expect(repository.listThreadEvents(result.threadId!)[0]?.payload).toMatchObject({
+      role: 'user',
+      content: '描述图片',
+      attachments: [
+        {
+          kind: 'image',
+          name: 'chart.png',
+          mediaType: 'image/png',
+          sizeBytes: 3
+        }
+      ]
+    });
+    expect(JSON.stringify(repository.listThreadEvents(result.threadId!)[0]?.payload)).not.toContain('AQID');
+  });
+
 
   it('keeps a DeepAgent approval interrupt waiting for user decision', async () => {
     const repository = new AgentSessionRepository(db);
