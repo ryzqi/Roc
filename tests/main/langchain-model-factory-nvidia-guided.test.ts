@@ -33,7 +33,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -93,7 +94,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { endpointOverride: 'http://localhost:8000/v1' }
@@ -128,7 +130,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Qwen3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { includeReasoning: false }
@@ -164,7 +167,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {

@@ -34,7 +34,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Kimi K2.6',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -83,7 +84,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Kimi K2.6',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -184,7 +186,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Claude Sonnet 4.5',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }

@@ -76,21 +76,24 @@ describe('settings model helpers', () => {
           displayName: 'OpenAI GPT Latest',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         },
         {
           id: '~anthropic/claude-sonnet-latest',
           displayName: 'Claude Sonnet Latest',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         },
         {
           id: '~google/gemini-pro-latest',
           displayName: 'Gemini Pro Latest',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: undefined
@@ -119,7 +122,8 @@ describe('settings model helpers', () => {
           displayName: 'Custom OpenRouter model',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: undefined
@@ -148,7 +152,8 @@ describe('settings model helpers', () => {
           displayName: 'Qwen 3.5 4B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     });
@@ -174,7 +179,8 @@ describe('settings model helpers', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -214,7 +220,8 @@ describe('settings model helpers', () => {
           displayName: 'Claude Sonnet 4.5',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };

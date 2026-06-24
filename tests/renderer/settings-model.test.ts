@@ -148,14 +148,16 @@ describe('settings model helpers', () => {
           displayName: 'Kimi K2.6',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         },
         {
           id: 'meta/llama-3.3-70b-instruct',
           displayName: 'Llama 3.3 70B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {
@@ -197,7 +199,8 @@ describe('settings model helpers', () => {
           displayName: 'Qwen 3.5 4B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {

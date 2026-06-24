@@ -345,7 +345,8 @@ function configureOpenAiCompatibleProvider(): void {
             displayName: 'Qwen Local',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ]
       }

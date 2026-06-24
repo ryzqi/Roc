@@ -36,7 +36,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Claude Sonnet 4.5',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -91,7 +92,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Qwen Local',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -172,7 +174,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Qwen3 235B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { thinking: true }
@@ -211,7 +214,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'DeepSeek V4 Flash',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { thinking: true }
@@ -251,7 +255,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Nemotron Super 49B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { thinking: true }
@@ -307,7 +312,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Nemotron Super 49B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { thinking: false }
@@ -358,7 +364,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -421,7 +428,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -484,7 +492,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -543,7 +552,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -606,7 +616,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -654,7 +665,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: { streamUsage: false, parallelToolCalls: true }

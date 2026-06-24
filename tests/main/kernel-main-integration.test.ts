@@ -133,7 +133,8 @@ describe('main kernel bootstrap integration', () => {
                 displayName: 'Smoke Model',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ]
           }

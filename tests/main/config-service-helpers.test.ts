@@ -231,7 +231,8 @@ describe('config helper modules', () => {
                 displayName: 'Legacy Model',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ]
           }

@@ -86,7 +86,8 @@ function configureOpenAiCompatibleProvider(): void {
             displayName: 'OpenAI Compatible Thinking Model',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ],
         options: {

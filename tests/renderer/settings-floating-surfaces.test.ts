@@ -52,7 +52,8 @@ describe('settings surfaces', () => {
           displayName: 'GPT Test',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -156,7 +157,8 @@ describe('settings surfaces', () => {
           displayName: 'GPT Test',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };

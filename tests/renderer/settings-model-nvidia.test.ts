@@ -33,14 +33,16 @@ describe('settings model helpers', () => {
           displayName: 'Kimi K2.6',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         },
         {
           id: 'meta/llama-3.3-70b-instruct',
           displayName: 'meta/llama-3.3-70b-instruct',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {
@@ -66,7 +68,8 @@ describe('settings model helpers', () => {
           displayName: 'Qwen3',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {
@@ -138,7 +141,8 @@ describe('settings model helpers', () => {
           displayName: 'Qwen3',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {

@@ -24,7 +24,8 @@ describe('settings model helpers', () => {
           displayName: 'GPT 4.1 Mini',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {
@@ -134,7 +135,8 @@ describe('settings model helpers', () => {
           displayName: 'GPT 5.1',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {

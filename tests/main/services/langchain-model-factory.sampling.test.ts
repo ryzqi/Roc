@@ -119,7 +119,8 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
             displayName: 'Cloud model',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ]
       }
@@ -153,7 +154,8 @@ function llamaCppProvider(input: { modelId: string; options?: ProviderConfig['op
         displayName: input.modelId,
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       }
     ],
     options: input.options

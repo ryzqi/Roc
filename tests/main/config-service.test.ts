@@ -152,7 +152,8 @@ describe('ConfigService unified settings document', () => {
               displayName: 'Provider OpenAI Model',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }

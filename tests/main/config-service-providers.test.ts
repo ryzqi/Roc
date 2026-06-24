@@ -63,7 +63,8 @@ describe('ConfigService unified settings document', () => {
                 displayName: 'Kept Model',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ]
           },
@@ -80,7 +81,8 @@ describe('ConfigService unified settings document', () => {
                 displayName: 'Legacy',
                 enabled: true,
                 supportsStreaming: false,
-                supportsToolCalls: false
+                supportsToolCalls: false,
+                supportsImages: false
               }
             ]
           }
@@ -144,7 +146,8 @@ describe('ConfigService unified settings document', () => {
           displayName: 'Anthropic Model',
           enabled: true,
           supportsStreaming: false,
-          supportsToolCalls: false
+          supportsToolCalls: false,
+          supportsImages: false
         }
       ]
     };
@@ -215,7 +218,8 @@ describe('ConfigService unified settings document', () => {
             displayName: 'env',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ]
       } as ProviderConfig)

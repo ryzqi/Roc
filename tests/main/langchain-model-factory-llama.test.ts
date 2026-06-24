@@ -32,7 +32,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -80,7 +81,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {

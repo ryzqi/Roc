@@ -57,7 +57,8 @@ describe('providers section', () => {
           displayName: 'GPT Test',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -122,7 +123,8 @@ describe('providers section', () => {
           displayName: 'Kimi K2.6',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -167,7 +169,8 @@ describe('providers section', () => {
           displayName: 'OpenAI GPT Latest',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -213,7 +216,8 @@ describe('providers section', () => {
           displayName: 'Qwen3',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -350,7 +354,8 @@ describe('providers section', () => {
           displayName: 'Qwen 3.5 4B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -393,7 +398,8 @@ describe('providers section', () => {
           displayName: 'GPT Test',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -442,7 +448,8 @@ describe('providers section', () => {
           displayName: 'GPT Test',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };

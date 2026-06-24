@@ -24,7 +24,8 @@ beforeEach(() => {
             displayName: 'Tool capable model',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ]
       }

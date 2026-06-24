@@ -107,7 +107,8 @@ describe('settings model helpers', () => {
                 displayName: 'Existing Model',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ]
           }
@@ -133,14 +134,16 @@ describe('settings model helpers', () => {
             displayName: 'GPT A',
             enabled: true,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           },
           {
             id: 'gpt-disabled',
             displayName: 'GPT Disabled',
             enabled: false,
             supportsStreaming: true,
-            supportsToolCalls: true
+            supportsToolCalls: true,
+            supportsImages: false
           }
         ]
       },
@@ -157,7 +160,8 @@ describe('settings model helpers', () => {
             displayName: 'Claude Disabled Provider',
             enabled: true,
             supportsStreaming: false,
-            supportsToolCalls: false
+            supportsToolCalls: false,
+            supportsImages: false
           }
         ]
       }
@@ -189,7 +193,8 @@ describe('settings model helpers', () => {
           displayName: 'GPT A',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -206,7 +211,8 @@ describe('settings model helpers', () => {
           displayName: 'Claude A',
           enabled: true,
           supportsStreaming: false,
-          supportsToolCalls: false
+          supportsToolCalls: false,
+          supportsImages: false
         }
       ]
     };
@@ -254,7 +260,8 @@ describe('settings model helpers', () => {
           displayName: 'GPT A',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -305,7 +312,8 @@ describe('settings model helpers', () => {
           displayName: 'GPT A',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };

@@ -307,7 +307,8 @@ describe('ConfigService unified settings document', () => {
           displayName: 'Provider OpenAI Model',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     };
@@ -393,7 +394,8 @@ describe('ConfigService unified settings document', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }

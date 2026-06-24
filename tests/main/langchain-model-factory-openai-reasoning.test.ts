@@ -32,7 +32,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Claude Sonnet 4.6',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -79,7 +80,8 @@ describe('LangChainModelFactory', () => {
               displayName: 'Claude Sonnet 4.5',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }

@@ -29,7 +29,8 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Custom OpenRouter model',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -57,7 +58,8 @@ describe('fixed NVIDIA provider config', () => {
           displayName: 'Custom OpenRouter model',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: undefined
@@ -82,14 +84,16 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Kimi',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             },
             {
               id: 'meta/llama-3.3-70b-instruct',
               displayName: 'Llama 3.3 70B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -115,14 +119,16 @@ describe('fixed NVIDIA provider config', () => {
           displayName: 'Kimi',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         },
         {
           id: 'meta/llama-3.3-70b-instruct',
           displayName: 'Llama 3.3 70B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: {
@@ -149,7 +155,8 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Llama 3.3',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -183,7 +190,8 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -206,7 +214,8 @@ describe('fixed NVIDIA provider config', () => {
           displayName: 'Qwen 3.5 4B',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ],
       options: undefined
@@ -231,7 +240,8 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -265,7 +275,8 @@ describe('fixed NVIDIA provider config', () => {
               displayName: 'Qwen 3.5 4B',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }

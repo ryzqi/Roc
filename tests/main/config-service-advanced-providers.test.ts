@@ -48,7 +48,8 @@ describe('ConfigService unified settings document', () => {
               displayName: 'GPT OpenAI 1',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -94,7 +95,8 @@ describe('ConfigService unified settings document', () => {
               displayName: 'Claude Advanced 1',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
@@ -238,7 +240,8 @@ describe('ConfigService unified settings document', () => {
                 displayName: 'Claude Invalid Missing Budget',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ],
             options: {
@@ -282,7 +285,8 @@ describe('ConfigService unified settings document', () => {
                 displayName: 'Claude Invalid Small Budget',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ],
             options: {
@@ -327,7 +331,8 @@ describe('ConfigService unified settings document', () => {
                 displayName: 'Claude Invalid Oversized Budget',
                 enabled: true,
                 supportsStreaming: true,
-                supportsToolCalls: true
+                supportsToolCalls: true,
+                supportsImages: false
               }
             ],
             options: {
@@ -376,7 +381,8 @@ describe('ConfigService unified settings document', () => {
               displayName: 'Claude Disabled Thinking',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ],
           options: {
