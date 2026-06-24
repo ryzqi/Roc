@@ -22,6 +22,25 @@
 - Preserve existing Roc DeepAgents tools, memory, skills, workspace binding, and `interruptOn` behavior.
 - Keep unrelated existing worktree changes untouched; stage only files belonging to the current task.
 
+## Authoritative Integration Contract
+
+If a later task snippet conflicts with this section, update the snippet before implementing. This section is the source of truth for correct hook integration.
+
+- DeepAgents JavaScript receives Roc hooks through `createDeepAgent({ middleware })`; Roc hook names are product events, not native LangChain hook names.
+- Use LangChain JavaScript middleware hooks exactly as follows: `UserPromptSubmit` on the first `beforeModel`, `PreToolUse` before `handler(request)` in `wrapToolCall`, `PostToolUse` after `handler(request)` in `wrapToolCall`, and `Stop` in `afterModel`.
+- `SessionStart` and `SessionEnd` stay outside middleware at executor/runtime lifecycle boundaries.
+- `PostToolUse add_context` must be queued and injected into the next `beforeModel` context. It is not sufficient to collect it only in diagnostics.
+- `SessionStart add_context` and `UserPromptSubmit add_context` must enter the first model context.
+- `Stop request_continue` must inject a continuation message and is capped to three consecutive continuations.
+- Validate command output actions by event: `replace_input` only for `PreToolUse`; `request_continue` only for `Stop`; `add_context` only for `SessionStart`, `UserPromptSubmit`, `PostToolUse`, and `Stop`; `block` only for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, and `Stop`.
+- `SessionEnd` is always best-effort. It ignores `block`, does not inject model context, and must not throw from cancellation or finalization paths.
+- `failureMode: "block"` blocks command timeout, non-zero exit, invalid JSON, and invalid action failures for all events except `SessionEnd`.
+- The runtime must reject hook cwd values under DeepAgents virtual routes (`/workspace/...`, `/memory/...`, `/skills/...`) before invoking the command runner.
+- Hook commands are trusted shell command strings from `%USERPROFILE%\.roc\hooks.json`; untrusted or changed hashes do not execute. The Windows runner must enforce timeout and terminate the spawned process tree, or explicitly document any unavoidable limitation.
+- Runtime feedback must emit both `hook_started` before command execution and `hook_completed` after skipped, failed, blocked, or completed outcomes.
+- Settings snapshots must merge config state with `HookTrustService`; trusted handlers must render as `trusted`, not `review_required`.
+- Renderer chat state must tolerate `hook_started` and `hook_completed` events without crashing or polluting the model-visible transcript.
+
 ---
 
 ## File Structure
@@ -35,9 +54,10 @@ Create these focused modules:
 - `src/main/services/hooks/trust-service.ts`: read/write trusted handler hashes.
 - `src/main/services/hooks/command-runner.ts`: spawn hook commands with stdin JSON, timeout, output capture, and truncation.
 - `src/main/services/hooks/runtime.ts`: select handlers, apply matcher rules, execute trusted command hooks, merge outcomes.
-- `src/main/services/hooks/middleware.ts`: LangChain middleware adapter for `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop`.
+- `src/main/services/hooks/middleware.ts`: LangChain middleware adapter using `beforeModel`, `wrapToolCall`, and `afterModel` for `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop`.
 - `src/main/services/hooks/index.ts`: exports for the hook service package.
 - `src/renderer/settings/sections/hooks-section.tsx`: settings UI section for hooks.
+- `src/renderer/chat/hook-call/HookCallBlock.tsx`: folded chat activity block for hook runtime events.
 
 Modify these existing files:
 
@@ -55,6 +75,12 @@ Modify these existing files:
 - `src/renderer/settings/index.tsx`: render hooks section and wire handlers.
 - `src/renderer/settings/settings-save-model.ts`: include hook snapshot in loaded settings state.
 - `src/renderer/loaded-state.ts`: include hook settings snapshot if required by current settings state shape.
+- `src/renderer/chat-run-state.ts`: convert `hook_started` and `hook_completed` into live hook activity blocks.
+- `src/renderer/chat-transcript.ts`: project live hook activity blocks into transcript blocks.
+- `src/renderer/chat/chat-message-row.tsx`: render hook activity blocks beside reasoning, tool calls, guardrails, and subagents.
+- `src/renderer/styles/tool-call.css`: add hook-call variants using the existing tool-call folded-row layout.
+- `src/shared/types/hooks.ts`: add renderer-safe `commandDisplay` to hook run summaries.
+- `src/main/services/hooks/runtime.ts`: populate hook run summaries with the selected platform command display.
 
 Add tests:
 
@@ -69,6 +95,9 @@ Add tests:
 - `tests/main/plugins/agent/runtime-hooks.test.ts`
 - `tests/main/settings-ipc-hooks.test.ts`
 - `tests/renderer/settings-hooks-section.test.tsx`
+- `tests/renderer/chat-hook-events.test.tsx`
+- `tests/renderer/chat-message-row.test.ts`
+- `tests/main/services/hooks/runtime.test.ts`
 
 ---
 
@@ -85,6 +114,12 @@ Add tests:
 **Interfaces:**
 - Produces: `RocHookEventName`, `RocHookConfig`, `RocHookConfigSnapshot`, `RocHookCommandInput`, `RocHookCommandOutput`, `RocHookRunEvent`, `HookConfigSchema`, `HookCommandOutputSchema`.
 - Consumes: Existing `ChatRunEvent`, `SettingsSnapshot`, and `SettingsSaveRequest`.
+
+Required corrections:
+
+- `RocHookConfigSnapshot` must include `config: RocHookConfig` so the settings JSON editor can load, edit, and save the current file without reconstructing config from flattened handler rows.
+- Add `validateHookCommandOutputForEvent(event, output)` in `schema.ts`; tests must assert the event/action matrix from the Authoritative Integration Contract.
+- Add tests that reject `block` for `PostToolUse`, reject `replace_input` outside `PreToolUse`, reject `request_continue` outside `Stop`, and reject `add_context` outside `SessionStart`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.
 
 - [ ] **Step 1: Write schema tests first**
 
@@ -245,6 +280,7 @@ export type RocHookConfiguredHandlerSnapshot = {
 export type RocHookConfigSnapshot = {
   configPath: string;
   exists: boolean;
+  config: RocHookConfig;
   handlers: RocHookConfiguredHandlerSnapshot[];
   validationErrors: string[];
 };
@@ -499,6 +535,12 @@ git commit -m "feat: add hook protocol schema"
 **Interfaces:**
 - Consumes: `RocPaths`, `HookConfigSchema`, `RocHookConfig`, `RocHookConfiguredHandlerSnapshot`.
 - Produces: `computeHookHandlerHash()`, `createHookHandlerId()`, `createHookRunId()`, `HookConfigService`, `HookTrustService`.
+
+Required corrections:
+
+- `HookConfigService.loadConfigSnapshot()` must merge trust state from `HookTrustService`, either by accepting `trustService` as a dependency in the constructor or by using a small `HookSettingsSnapshotService` wrapper. Do not return every valid enabled handler as `review_required`.
+- `saveConfig()` must return the same merged snapshot shape, including `config`, `handlers`, trust state, and validation errors.
+- Add a config-service test that trusts a hash through `HookTrustService`, then reloads settings and sees `trustState: "trusted"` for the matching current handler.
 
 - [ ] **Step 1: Write hash tests**
 
@@ -884,6 +926,16 @@ git commit -m "feat: add hook config trust services"
 **Interfaces:**
 - Consumes: `HookConfigService`, `HookTrustService`, `HookCommandOutputSchema`.
 - Produces: `HookCommandRunner.run()`, `HookRuntime.runEvent()`, `HookRuntimeOutcome`.
+
+Required corrections:
+
+- Reject virtual cwd values (`/workspace/...`, `/memory/...`, `/skills/...`) before `HookCommandRunner` spawns any process.
+- Enforce `failureMode: "block"` for timeout, non-zero exit, invalid JSON, invalid event/action output, and command runner errors, except on `SessionEnd`.
+- Validate command outputs with `validateHookCommandOutputForEvent()` before merging outcomes.
+- Emit `hook_started` before command execution and `hook_completed` for skipped, completed, failed, and blocked outcomes.
+- Preserve configuration-order merge semantics even if matching commands execute concurrently.
+- Keep stderr and raw stdout out of model context; only `additionalContext` from a valid `add_context` output may be queued for model context.
+- Add runtime tests for virtual cwd rejection, command failure blocking, invalid action blocking/continuing by failure mode, `SessionEnd` best-effort, started/completed feedback, and ordered merge after concurrent execution.
 
 - [ ] **Step 1: Write command runner tests**
 
@@ -1431,6 +1483,15 @@ git commit -m "feat: add hook runtime executor"
 - Produces: `createRocHookMiddleware()`.
 - Modifies: `DeepAgentBuildInput` gains `hookRuntime?: HookRuntime` and `runMetadata`.
 
+Required corrections:
+
+- The middleware implementation in this task must use `beforeModel`, `wrapToolCall`, and `afterModel`. A `wrapToolCall`-only implementation is incomplete and must not be accepted.
+- `beforeModel` must emit `UserPromptSubmit` exactly once for the run before the first model call and inject queued `additionalContext` messages before each model call.
+- `wrapToolCall` must run `PreToolUse` before the tool handler, apply `replace_input`, block with a `ToolMessage` when needed, then run `PostToolUse` after the handler and queue any valid `add_context` for the next `beforeModel`.
+- `afterModel` must run `Stop`, enforce the three-continuation cap, and convert valid `request_continue` into the continuation mechanism used by the executor/agent loop.
+- `emitHookRuns()` must emit both `hook_started` and `hook_completed` events from runtime summaries. If runtime emits these directly, middleware must forward both without collapsing them into completed-only events.
+- Tests must cover first-model `UserPromptSubmit`, one-time prompt submission, delayed `PostToolUse add_context` injection, `Stop request_continue` cap, and renderer-safe hook event forwarding.
+
 - [ ] **Step 1: Write middleware tests**
 
 Create `tests/main/services/hooks/middleware.test.ts`:
@@ -1527,6 +1588,8 @@ Expected: FAIL because `middleware.ts` does not exist.
 
 - [ ] **Step 3: Implement hook middleware**
 
+Before writing `middleware.ts`, update the implementation template in this step so the returned `createMiddleware()` object contains `beforeModel`, `wrapToolCall`, and `afterModel`. Do not copy a `wrapToolCall`-only template.
+
 Create `src/main/services/hooks/middleware.ts`:
 
 ```typescript
@@ -1615,7 +1678,7 @@ function createHookInput<TEvent extends RocHookCommandInput['event']>(
 function emitHookRuns(options: RocHookMiddlewareOptions, runs: RocHookRunSummary[]): void {
   for (const hook of runs) {
     options.emitHookEvent({
-      type: 'hook_completed',
+      type: hook.status === 'running' ? 'hook_started' : 'hook_completed',
       runId: options.runContext.runId,
       hook
     });
@@ -1743,6 +1806,15 @@ git commit -m "feat: add hook middleware wiring"
 **Interfaces:**
 - Consumes: `HookRuntime`, `createRocHookMiddleware`, `RocHookRunContext`.
 - Produces: Hook-aware `AgentDeepAgentExecutorOptions` and best-effort run lifecycle emission.
+
+Required corrections:
+
+- `SessionStart` must run before agent streaming starts. If it returns valid `add_context`, pass that context into the hook middleware's initial context queue so the first `beforeModel` injects it.
+- `SessionStart` with `block` blocks the run before any model or tool call.
+- `SessionEnd` must be emitted for completed, failed, and cancelled runs. It is best-effort and must not change the persisted final status.
+- `cancelRun()` must not throw `active_run_metadata_missing`. If metadata is already gone, log/ignore and keep the existing cancellation return contract.
+- Any rejected `SessionEnd` promise during cancellation or finalization must be caught/logged so lifecycle hook failure does not break run cleanup.
+- Tests must cover `SessionStart add_context` propagation into first model context and cancellation when active-run metadata is missing.
 
 - [ ] **Step 1: Write executor hook tests**
 
@@ -1996,18 +2068,23 @@ Call in `cancelRun()` after status update:
 ```typescript
     const metadata = this.activeRunMetadata.get(input.runId);
     if (metadata === undefined) {
-      throw new Error('active_run_metadata_missing');
+      this.logger?.warn?.('active_run_metadata_missing', { runId: input.runId });
+      return { cancelled: true };
     }
-    void this.options.lifecycleHooks?.emitSessionEnd({
-      runId: input.runId,
-      threadId: metadata.threadId,
-      request: metadata.request,
-      status: 'cancelled',
-      error: null
-    });
+    void this.options.lifecycleHooks
+      ?.emitSessionEnd({
+        runId: input.runId,
+        threadId: metadata.threadId,
+        request: metadata.request,
+        status: 'cancelled',
+        error: null
+      })
+      .catch((error) => {
+        this.logger?.warn?.('session_end_hook_failed', { runId: input.runId, error });
+      });
 ```
 
-Keep `SessionEnd` non-blocking for cancellation by using `void`, and keep the existing `cancelRun()` return value unchanged.
+Keep `SessionEnd` non-blocking for cancellation by using `void`, catching rejection, and keeping the existing `cancelRun()` return value unchanged.
 
 - [ ] **Step 5: Write runtime SessionEnd tests**
 
@@ -2164,6 +2241,13 @@ git commit -m "feat: run agent lifecycle hooks"
 - Consumes: `HookConfigService`, `HookTrustService`.
 - Produces settings IPC methods: `getHooks`, `saveHooks`, `trustHook`.
 
+Required corrections:
+
+- Settings IPC must return the merged config/trust snapshot described in Task 2; do not call a config-only snapshot method that cannot see `HookTrustService`.
+- `trustHook` must return a freshly merged snapshot after trust is stored.
+- Modify `src/preload/index.ts` to expose `api.settings.getHooks`, `api.settings.saveHooks`, and `api.settings.trustHook`; updating `src/shared/ipc.ts` types alone is not enough.
+- Add a preload or IPC smoke test/assertion that the three settings methods are present on the renderer-facing API.
+
 - [ ] **Step 1: Write settings IPC hook test**
 
 Create `tests/main/settings-ipc-hooks.test.ts`:
@@ -2214,8 +2298,8 @@ describe('settings hook IPC', () => {
       syncHostSettings: vi.fn()
     };
     const hookConfigService = {
-      loadConfigSnapshot: vi.fn(async () => ({ configPath: 'C:\\Users\\me\\.roc\\hooks.json', exists: false, handlers: [], validationErrors: [] })),
-      saveConfig: vi.fn(async () => ({ configPath: 'C:\\Users\\me\\.roc\\hooks.json', exists: true, handlers: [], validationErrors: [] }))
+      loadConfigSnapshot: vi.fn(async () => ({ configPath: 'C:\\Users\\me\\.roc\\hooks.json', exists: false, config: { schemaVersion: 1, hooks: {} }, handlers: [], validationErrors: [] })),
+      saveConfig: vi.fn(async () => ({ configPath: 'C:\\Users\\me\\.roc\\hooks.json', exists: true, config: { schemaVersion: 1, hooks: {} }, handlers: [], validationErrors: [] }))
     };
     const hookTrustService = {
       trust: vi.fn(async () => undefined)
@@ -2258,7 +2342,7 @@ Run: `pnpm generate:ipc`
 
 Expected: `src/shared/ipc-generated.ts` updates.
 
-- [ ] **Step 4: Add preload API types**
+- [ ] **Step 4: Add preload API types and runtime exposure**
 
 Modify `src/shared/ipc.ts` imports to include:
 
@@ -2274,6 +2358,14 @@ Add methods under `settings`:
     getHooks: () => Promise<IpcResult<RocHookConfigSnapshot>>;
     saveHooks: (request: SettingsSaveHookConfigRequest) => Promise<IpcResult<RocHookConfigSnapshot>>;
     trustHook: (request: SettingsTrustHookRequest) => Promise<IpcResult<RocHookConfigSnapshot>>;
+```
+
+Modify `src/preload/index.ts` to invoke the generated channels through the existing preload IPC helper:
+
+```typescript
+      getHooks: () => invoke(ipcChannels.settingsHooksGet),
+      saveHooks: (request) => invoke(ipcChannels.settingsHooksSave, request),
+      trustHook: (request) => invoke(ipcChannels.settingsHooksTrust, request),
 ```
 
 - [ ] **Step 5: Register settings IPC handlers**
@@ -2340,7 +2432,7 @@ Add handlers:
 Update `buildSettingsSnapshotAsync()` to include:
 
 ```typescript
-    hooks: hooks === undefined ? { configPath: '', exists: false, handlers: [], validationErrors: ['hook_settings_unavailable'] } : await hooks.hookConfigService.loadConfigSnapshot(),
+    hooks: hooks === undefined ? { configPath: '', exists: false, config: { schemaVersion: 1, hooks: {} }, handlers: [], validationErrors: ['hook_settings_unavailable'] } : await hooks.hookConfigService.loadConfigSnapshot(),
 ```
 
 - [ ] **Step 6: Wire services in kernel bootstrap**
@@ -2400,6 +2492,15 @@ git commit -m "feat: expose hook settings ipc"
 - Consumes: `RocPreloadApi.settings.getHooks/saveHooks/trustHook`.
 - Produces: Hooks settings UI section.
 
+Required corrections:
+
+- The first UI version must include a JSON editor/textarea labelled for the hooks config, initialized from `snapshot.config`.
+- `Save` parses the editor JSON and calls `saveHooks({ config })`; validation errors from parsing or IPC are shown in the section.
+- `Refresh` reloads from `getHooks()` and resets the editor to the latest `snapshot.config`.
+- Handler disable/delete/edit/create flows are done by editing JSON in this first version. Do not add a separate form builder or a new settings design system.
+- The handler list remains useful for trust state, last run state, and trust action for the current hash.
+- Renderer tests must cover saving edited JSON, refreshing JSON, validation display, and trusting a handler.
+
 - [ ] **Step 1: Write renderer test**
 
 Create `tests/renderer/settings-hooks-section.test.tsx`:
@@ -2417,6 +2518,10 @@ describe('HooksSection', () => {
         snapshot={{
           configPath: 'C:\\Users\\me\\.roc\\hooks.json',
           exists: true,
+          config: {
+            schemaVersion: 1,
+            hooks: {}
+          },
           validationErrors: [],
           handlers: [
             {
@@ -2463,6 +2568,7 @@ Expected: FAIL because `hooks-section.tsx` does not exist.
 Create `src/renderer/settings/sections/hooks-section.tsx`:
 
 ```tsx
+import { useEffect, useState } from 'react';
 import type { RocHookConfigSnapshot, SettingsSaveHookConfigRequest, SettingsTrustHookRequest } from '../../../shared/types';
 
 type HooksSectionProps = {
@@ -2473,6 +2579,24 @@ type HooksSectionProps = {
 };
 
 export function HooksSection(props: HooksSectionProps) {
+  const [jsonText, setJsonText] = useState(() => JSON.stringify(props.snapshot.config, null, 2));
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setJsonText(JSON.stringify(props.snapshot.config, null, 2));
+    setLocalError(null);
+  }, [props.snapshot.config]);
+
+  const save = () => {
+    try {
+      const parsed = JSON.parse(jsonText) as SettingsSaveHookConfigRequest['config'];
+      setLocalError(null);
+      void props.onSave({ config: parsed });
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   return (
     <section className="settings-section" aria-label="Hooks">
       <div className="settings-section-header">
@@ -2484,6 +2608,18 @@ export function HooksSection(props: HooksSectionProps) {
           Refresh
         </button>
       </div>
+      <label>
+        Hooks JSON
+        <textarea
+          value={jsonText}
+          aria-label="Hooks JSON"
+          onChange={(event) => setJsonText(event.currentTarget.value)}
+        />
+      </label>
+      <button type="button" onClick={save}>
+        Save
+      </button>
+      {localError === null ? null : <p className="settings-error">{localError}</p>}
       {props.snapshot.validationErrors.map((error) => (
         <p className="settings-error" key={error}>
           {error}
@@ -2589,6 +2725,10 @@ Use an empty fallback in the initial loaded state:
 hookSettings: {
   configPath: '',
   exists: false,
+  config: {
+    schemaVersion: 1,
+    hooks: {}
+  },
   handlers: [],
   validationErrors: []
 }
@@ -2619,6 +2759,13 @@ git commit -m "feat: add hooks settings section"
 - Consumes: All tasks above.
 - Produces: Verified hook feature implementation.
 
+Required corrections:
+
+- Verification must prove all Authoritative Integration Contract bullets, not only that files compile.
+- Add focused tests for action/event validation, `failureMode: "block"` command failures, virtual cwd rejection, `hook_started`/`hook_completed`, and `PostToolUse add_context` injection into the later model context.
+- Add renderer chat/reducer tests that feed `hook_started` and `hook_completed` events and assert no crash, no model-visible transcript pollution, and no loss of ordinary run events.
+- Add IPC/preload verification for `getHooks`, `saveHooks`, and `trustHook`.
+
 - [ ] **Step 1: Run focused main hook tests**
 
 Run:
@@ -2627,7 +2774,7 @@ Run:
 pnpm test -- tests/main/services/hooks/schema.test.ts tests/main/services/hooks/hash.test.ts tests/main/services/hooks/config-service.test.ts tests/main/services/hooks/trust-service.test.ts tests/main/services/hooks/command-runner.test.ts tests/main/services/hooks/runtime.test.ts tests/main/services/hooks/middleware.test.ts
 ```
 
-Expected: PASS.
+Expected: PASS, including event/action matrix, virtual cwd rejection, failure-mode blocking, runtime feedback events, and delayed `PostToolUse add_context` injection.
 
 - [ ] **Step 2: Run agent hook tests**
 
@@ -2644,10 +2791,10 @@ Expected: PASS.
 Run:
 
 ```powershell
-pnpm test -- tests/main/settings-ipc-hooks.test.ts tests/renderer/settings-hooks-section.test.tsx tests/renderer/settings-model-save.test.ts
+pnpm test -- tests/main/settings-ipc-hooks.test.ts tests/renderer/settings-hooks-section.test.tsx tests/renderer/settings-model-save.test.ts tests/renderer/chat-hook-events.test.tsx
 ```
 
-Expected: PASS.
+Expected: PASS, including preload/API exposure and renderer tolerance for `hook_started` and `hook_completed`.
 
 - [ ] **Step 4: Run typecheck**
 
@@ -2699,6 +2846,433 @@ git commit -m "fix: complete hooks verification cleanup"
 ```
 
 Skip this commit if no cleanup changes exist after Task 7.
+
+---
+
+### Task 9: Hook Runtime Events In Chat Activity
+
+**Files:**
+- Modify: `src/shared/types/hooks.ts`
+- Modify: `src/main/services/hooks/runtime.ts`
+- Modify: `src/renderer/chat-run-state.ts`
+- Modify: `src/renderer/chat-transcript.ts`
+- Modify: `src/renderer/chat/chat-message-row.tsx`
+- Create: `src/renderer/chat/hook-call/HookCallBlock.tsx`
+- Modify: `src/renderer/styles/tool-call.css`
+- Test: `tests/main/services/hooks/runtime.test.ts`
+- Test: `tests/renderer/chat-hook-events.test.tsx`
+- Test: `tests/renderer/chat-message-row.test.ts`
+
+**Interfaces:**
+- Consumes: `RocHookRunEvent`, `RocHookRunSummary`, `ChatRunEvent`.
+- Produces: `RocHookRunSummary.commandDisplay`, `ChatRunActivityBlock` and `ChatTranscriptActivityBlock` variants with `kind: "hook_call"`.
+
+**Display Contract:**
+- Show hook events in live assistant activity blocks with a folded row similar to `ToolCallBlock`.
+- Header text is `Hook · <event>`.
+- Body shows only `handlerId`, `commandDisplay`, `status`, `durationMs`, and `message` when present.
+- Do not show stdout, stderr, raw hook payload, hook stdin, trust hash, or full command JSON.
+- Do not append hook text to `assistantMessage`.
+- Keep normal tool-call blocks working in the same message.
+- Persisted historical hook display is out of scope unless task history already stores hook events.
+
+- [ ] **Step 1: Update runtime event summary test first**
+
+Modify `tests/main/services/hooks/runtime.test.ts` in the case that asserts `hook_started` and `hook_completed`, adding command display expectations:
+
+```typescript
+expect(outcome.events).toMatchObject([
+  {
+    type: 'hook_started',
+    hook: {
+      commandDisplay: 'node hook.js'
+    }
+  },
+  {
+    type: 'hook_completed',
+    hook: {
+      commandDisplay: 'node hook.js'
+    }
+  }
+]);
+```
+
+- [ ] **Step 2: Run runtime test to verify failure**
+
+Run:
+
+```powershell
+pnpm test -- tests/main/services/hooks/runtime.test.ts
+```
+
+Expected: FAIL because `RocHookRunSummary` does not include `commandDisplay` yet.
+
+- [ ] **Step 3: Add command display to hook run summaries**
+
+Modify `src/shared/types/hooks.ts`:
+
+```typescript
+export type RocHookRunSummary = {
+  runId: string;
+  handlerId: string;
+  event: RocHookEventName;
+  status: RocHookRunStatus;
+  durationMs: number | null;
+  message: string | null;
+  commandDisplay: string;
+};
+```
+
+Modify `src/main/services/hooks/runtime.ts` so `createRunSummary()` accepts and returns `commandDisplay`, using `resolveCommand(selectedHandler.handler)` for started, skipped, completed, failed, and blocked summaries.
+
+- [ ] **Step 4: Update hook event reducer test first**
+
+Modify `tests/renderer/chat-hook-events.test.tsx` so the existing test asserts display without transcript pollution:
+
+```typescript
+expect(afterHookStarted).not.toEqual(running);
+expect(afterHookStarted.activityBlocks).toMatchObject([
+  {
+    id: 'hook-run-1',
+    kind: 'hook_call',
+    event: 'PreToolUse',
+    handlerId: 'PreToolUse:0:0',
+    status: 'running',
+    durationMs: null,
+    message: 'Checking shell command',
+    commandDisplay: 'node hook.js'
+  }
+]);
+expect(afterHookCompleted.activityBlocks).toMatchObject([
+  {
+    id: 'hook-run-1',
+    kind: 'hook_call',
+    event: 'PreToolUse',
+    handlerId: 'PreToolUse:0:0',
+    status: 'completed',
+    durationMs: 12,
+    message: 'Hook completed',
+    commandDisplay: 'node hook.js'
+  }
+]);
+expect(afterHookCompleted.assistantMessage).toBe('Visible answer');
+expect(JSON.stringify(transcript)).toContain('Hook completed');
+expect(JSON.stringify(transcript)).toContain('node hook.js');
+expect(JSON.stringify(transcript)).not.toContain('stdout');
+expect(JSON.stringify(transcript)).not.toContain('stderr');
+expect(JSON.stringify(transcript)).not.toContain('toolInput');
+expect(transcript[0]?.content).toBe('Visible answer');
+expect(transcript[0]?.reasoning).toBeNull();
+```
+
+- [ ] **Step 5: Run reducer test to verify failure**
+
+Run:
+
+```powershell
+pnpm test -- tests/renderer/chat-hook-events.test.tsx
+```
+
+Expected: FAIL because hook events are still ignored or transcript projection lacks `hook_call`.
+
+- [ ] **Step 6: Add hook activity state**
+
+Modify `src/renderer/chat-run-state.ts`.
+
+Extend `ChatRunActivityBlock`:
+
+```typescript
+  | {
+      id: string;
+      kind: 'hook_call';
+      event: RocHookRunSummary['event'];
+      handlerId: string;
+      status: RocHookRunSummary['status'];
+      durationMs: number | null;
+      message: string | null;
+      commandDisplay: string;
+    }
+```
+
+Add `RocHookRunSummary` to the type imports from `../shared/types`.
+
+Handle hook events before `run_completed`:
+
+```typescript
+  if (event.type === 'hook_started' || event.type === 'hook_completed') {
+    return {
+      ...state,
+      activityBlocks: upsertHookActivityBlock(state.activityBlocks, event.hook)
+    };
+  }
+```
+
+Add:
+
+```typescript
+function upsertHookActivityBlock(blocks: readonly ChatRunActivityBlock[], hook: RocHookRunSummary): ChatRunActivityBlock[] {
+  const nextBlock: Extract<ChatRunActivityBlock, { kind: 'hook_call' }> = {
+    id: hook.runId,
+    kind: 'hook_call',
+    event: hook.event,
+    handlerId: hook.handlerId,
+    status: hook.status,
+    durationMs: hook.durationMs,
+    message: hook.message,
+    commandDisplay: hook.commandDisplay
+  };
+  const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'hook_call' }> => item.kind === 'hook_call' && item.id === hook.runId);
+  if (existing === undefined) {
+    return [...blocks, nextBlock];
+  }
+  return blocks.map((item) => (item === existing ? nextBlock : item));
+}
+```
+
+- [ ] **Step 7: Project hook blocks into transcript**
+
+Modify `src/renderer/chat-transcript.ts`.
+
+Add a `hook_call` variant to `ChatTranscriptActivityBlock`:
+
+```typescript
+  | {
+      id: string;
+      kind: 'hook_call';
+      event: Extract<ChatRunActivityBlock, { kind: 'hook_call' }>['event'];
+      handlerId: string;
+      status: Extract<ChatRunActivityBlock, { kind: 'hook_call' }>['status'];
+      durationMs: number | null;
+      message: string | null;
+      commandDisplay: string;
+    }
+```
+
+Update `buildLiveActivityBlocks()` mapping so `block.kind === 'hook_call'` returns the same safe fields. Keep the existing reasoning and tool-call branches intact.
+
+- [ ] **Step 8: Add failing render test**
+
+Add this case to `tests/renderer/chat-message-row.test.ts`:
+
+```typescript
+  it('renders hook activity as a folded assistant activity row without raw payload', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-hook',
+          role: 'assistant',
+          content: '最终答案',
+          reasoning: null,
+          blocks: [
+            {
+              id: 'hook-run-1',
+              kind: 'hook_call',
+              event: 'PreToolUse',
+              handlerId: 'PreToolUse:0:0',
+              status: 'completed',
+              durationMs: 12,
+              message: 'Checking shell command',
+              commandDisplay: 'node hook.js'
+            }
+          ],
+          approval: null,
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-activity-hook"');
+    expect(html).toContain('Hook · PreToolUse');
+    expect(html).toContain('完成');
+    expect(html).toContain('node hook.js');
+    expect(html).toContain('12ms');
+    expect(html).toContain('Checking shell command');
+    expect(html).toContain('PreToolUse:0:0');
+    expect(html).not.toContain('stdout');
+    expect(html).not.toContain('stderr');
+    expect(html).not.toContain('toolInput');
+    expect(html).toContain('最终答案');
+  });
+```
+
+- [ ] **Step 9: Run render test to verify failure**
+
+Run:
+
+```powershell
+pnpm test -- tests/renderer/chat-message-row.test.ts
+```
+
+Expected: FAIL because `hook_call` is not rendered yet.
+
+- [ ] **Step 10: Add HookCallBlock UI**
+
+Create `src/renderer/chat/hook-call/HookCallBlock.tsx`:
+
+```tsx
+import { Ban, CheckCircle2, CircleOff, LoaderCircle, SkipForward } from 'lucide-react';
+import type { ChatTranscriptActivityBlock } from '../../chat-transcript';
+import { ActivityBlockBody } from '../activity-block/ActivityBlockBody';
+import { ActivityBlockShell } from '../activity-block/ActivityBlockShell';
+import { useActivityBlockState } from '../activity-block/use-activity-block-state';
+
+type HookCallBlockModel = Extract<ChatTranscriptActivityBlock, { kind: 'hook_call' }>;
+
+type HookCallBlockProps = {
+  block: HookCallBlockModel;
+};
+
+const STATUS_LABEL = {
+  running: '执行中',
+  completed: '完成',
+  failed: '失败',
+  blocked: '阻止',
+  skipped: '跳过'
+} satisfies Record<HookCallBlockModel['status'], string>;
+
+function HookStatusIcon({ status }: { status: HookCallBlockModel['status'] }): React.JSX.Element {
+  if (status === 'running') {
+    return <LoaderCircle aria-hidden="true" size={12} strokeWidth={2.5} />;
+  }
+  if (status === 'completed') {
+    return <CheckCircle2 aria-hidden="true" size={12} strokeWidth={2.5} />;
+  }
+  if (status === 'blocked') {
+    return <Ban aria-hidden="true" size={12} strokeWidth={2.5} />;
+  }
+  if (status === 'skipped') {
+    return <SkipForward aria-hidden="true" size={12} strokeWidth={2.5} />;
+  }
+  return <CircleOff aria-hidden="true" size={12} strokeWidth={2.5} />;
+}
+
+function formatDuration(durationMs: number | null): string {
+  if (durationMs === null) {
+    return '运行中';
+  }
+  return `${durationMs}ms`;
+}
+
+export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element {
+  const { open, setOpen } = useActivityBlockState({
+    defaultOpen: block.status === 'failed' || block.status === 'blocked'
+  });
+
+  return (
+    <ActivityBlockShell
+      className={`tool-call-modern hook-call-modern hook-call-modern--${block.status}`}
+      dataTestId="chat-activity-hook"
+      open={open}
+      onToggle={setOpen}
+      header={
+        <summary className="tool-call-modern__header">
+          <div className="tool-call-modern__icon">
+            <HookStatusIcon status={block.status} />
+          </div>
+          <span className="tool-call-modern__name">{`Hook · ${block.event}`}</span>
+          <div className="tool-call-modern__badge">{STATUS_LABEL[block.status]}</div>
+          <svg className="tool-call-modern__expand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+      }
+    >
+      <ActivityBlockBody className="tool-call-modern__body hook-call-modern__body">
+        <dl className="hook-call-modern__meta">
+          <div>
+            <dt>command</dt>
+            <dd>{block.commandDisplay}</dd>
+          </div>
+          <div>
+            <dt>handler</dt>
+            <dd>{block.handlerId}</dd>
+          </div>
+          <div>
+            <dt>duration</dt>
+            <dd>{formatDuration(block.durationMs)}</dd>
+          </div>
+        </dl>
+        {block.message === null ? null : <p className="hook-call-modern__message">{block.message}</p>}
+      </ActivityBlockBody>
+    </ActivityBlockShell>
+  );
+}
+```
+
+Modify `src/renderer/chat/chat-message-row.tsx`:
+
+```typescript
+import { HookCallBlock } from './hook-call/HookCallBlock';
+```
+
+Add before the subagent branch:
+
+```tsx
+  if (block.kind === 'hook_call') {
+    return <HookCallBlock block={block} />;
+  }
+```
+
+- [ ] **Step 11: Add minimal hook-call CSS**
+
+Modify `src/renderer/styles/tool-call.css`:
+
+```css
+.hook-call-modern__meta {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.hook-call-modern__meta div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.hook-call-modern__meta dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.hook-call-modern__meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hook-call-modern__message {
+  margin: 8px 0 0;
+}
+```
+
+- [ ] **Step 12: Run focused hook tests**
+
+Run:
+
+```powershell
+pnpm test -- tests/main/services/hooks/runtime.test.ts tests/renderer/chat-hook-events.test.tsx tests/renderer/chat-message-row.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 13: Run typecheck and whitespace check**
+
+Run:
+
+```powershell
+pnpm typecheck
+git diff --check
+```
+
+Expected: both PASS.
+
+- [ ] **Step 14: Commit Task 9**
+
+```powershell
+git add src/shared/types/hooks.ts src/main/services/hooks/runtime.ts src/renderer/chat-run-state.ts src/renderer/chat-transcript.ts src/renderer/chat/chat-message-row.tsx src/renderer/chat/hook-call/HookCallBlock.tsx src/renderer/styles/tool-call.css tests/main/services/hooks/runtime.test.ts tests/renderer/chat-hook-events.test.tsx tests/renderer/chat-message-row.test.ts
+git commit -m "feat: show hook activity in chat"
+```
 
 ---
 
