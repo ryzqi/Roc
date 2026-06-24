@@ -6,6 +6,31 @@ export type ChatRunMode = 'chat' | 'task';
 
 export type WorkflowHint = 'propose_background_task' | 'background_task_change' | null;
 
+export const chatImageAttachmentMediaTypes = ['image/png', 'image/jpeg', 'image/webp'] as const;
+
+export type ChatImageAttachmentMediaType = (typeof chatImageAttachmentMediaTypes)[number];
+
+export type ChatImageAttachment = {
+  kind: 'image';
+  source: 'file' | 'clipboard' | 'drop';
+  name: string;
+  mediaType: ChatImageAttachmentMediaType;
+  sizeBytes: number;
+  path?: string;
+  data?: string;
+};
+
+export type ChatPersistedAttachment = {
+  kind: 'image';
+  name: string;
+  mediaType: ChatImageAttachmentMediaType;
+  sizeBytes: number;
+};
+
+export type ChatValidatedImageAttachment = ChatPersistedAttachment & {
+  base64: string;
+};
+
 export type ChatTodoItem = {
   content: string;
   status: 'pending' | 'in_progress' | 'completed';
@@ -156,6 +181,7 @@ export type ChatStartRunRequest = {
   workflowHint?: WorkflowHint;
   taskSource?: 'workbench' | null;
   workspacePath?: string | null;
+  attachments?: ChatImageAttachment[];
 };
 
 export type ChatStartRunResult = {

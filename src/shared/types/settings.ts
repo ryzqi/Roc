@@ -166,6 +166,7 @@ export type ProviderModel = {
   enabled: boolean;
   supportsStreaming: boolean;
   supportsToolCalls: boolean;
+  supportsImages: boolean;
 };
 
 export type ProviderConfig = {

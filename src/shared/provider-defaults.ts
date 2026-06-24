@@ -19,21 +19,24 @@ const fixedOpenRouterDefaultModels = [
     displayName: 'OpenAI GPT Latest',
     enabled: true,
     supportsStreaming: true,
-    supportsToolCalls: true
+    supportsToolCalls: true,
+    supportsImages: true
   },
   {
     id: '~anthropic/claude-sonnet-latest',
     displayName: 'Claude Sonnet Latest',
     enabled: true,
     supportsStreaming: true,
-    supportsToolCalls: true
+    supportsToolCalls: true,
+    supportsImages: true
   },
   {
     id: '~google/gemini-pro-latest',
     displayName: 'Gemini Pro Latest',
     enabled: true,
     supportsStreaming: true,
-    supportsToolCalls: true
+    supportsToolCalls: true,
+    supportsImages: true
   }
 ] as const;
 

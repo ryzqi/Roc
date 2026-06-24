@@ -57,7 +57,8 @@ const ProviderModelSchema = z.object({
   displayName: z.string().min(1),
   enabled: z.boolean(),
   supportsStreaming: z.boolean(),
-  supportsToolCalls: z.boolean()
+  supportsToolCalls: z.boolean(),
+  supportsImages: z.boolean()
 });
 
 const ProviderCredentialRefSchema = z

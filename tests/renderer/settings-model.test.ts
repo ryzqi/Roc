@@ -237,14 +237,16 @@ describe('settings model helpers', () => {
         displayName: 'GPT 4.1',
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       },
       {
         id: 'claude-sonnet-4-5',
         displayName: 'claude-sonnet-4-5',
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       }
     ]);
   });
@@ -272,7 +274,8 @@ describe('settings model helpers', () => {
           displayName: 'Claude Sonnet 4.5',
           enabled: true,
           supportsStreaming: true,
-          supportsToolCalls: true
+          supportsToolCalls: true,
+          supportsImages: false
         }
       ]
     });

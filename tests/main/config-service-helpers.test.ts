@@ -79,7 +79,8 @@ describe('config helper modules', () => {
               displayName: 'Custom Model',
               enabled: true,
               supportsStreaming: true,
-              supportsToolCalls: true
+              supportsToolCalls: true,
+              supportsImages: false
             }
           ]
         }
@@ -207,6 +208,43 @@ describe('config helper modules', () => {
         sshBackdoor: false,
         invisibleUnicode: true
       }
+    });
+  });
+
+  it('backfills model image support during legacy provider migration', () => {
+    const migrated = migrateLegacySplitConfig({
+      rawSettings: undefined,
+      legacyProviders: {
+        schemaVersion: 1,
+        defaultModelId: 'legacy-model',
+        providers: [
+          {
+            id: 'legacy-provider',
+            name: 'Legacy Provider',
+            type: 'openai_compatible',
+            endpoint: 'https://legacy.example.test/v1',
+            credentialRef: 'secret:legacy-provider',
+            enabled: true,
+            models: [
+              {
+                id: 'legacy-model',
+                displayName: 'Legacy Model',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true
+              }
+            ]
+          }
+        ]
+      },
+      legacyMcp: undefined,
+      legacyPermissions: undefined,
+      legacyShortcuts: undefined
+    });
+
+    expect(migrated.providers.providers.find((provider) => provider.id === 'legacy-provider')?.models[0]).toMatchObject({
+      id: 'legacy-model',
+      supportsImages: false
     });
   });
 });

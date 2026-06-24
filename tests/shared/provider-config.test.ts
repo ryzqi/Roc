@@ -20,7 +20,8 @@ function provider(input: Partial<ProviderConfig> & Pick<ProviderConfig, 'type'>)
         displayName: `${input.type} model`,
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       }
     ],
     options: input.options
@@ -62,6 +63,31 @@ describe('typed provider config helpers', () => {
     expect(typed.type).toBe('openai_compatible');
     expect(typed.params).toEqual(legacy.options);
     expect(fromTypedProviderConfig(typed)).toEqual(legacy);
+  });
+
+  it('round-trips model image capability metadata', () => {
+    const typed = toTypedProviderConfig(provider({
+      type: 'openai_compatible',
+      models: [
+        {
+          id: 'vision-model',
+          displayName: 'Vision Model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: true
+        }
+      ]
+    }));
+
+    expect(typed.config.models[0]).toMatchObject({
+      id: 'vision-model',
+      supportsImages: true
+    });
+    expect(fromTypedProviderConfig(typed).models[0]).toMatchObject({
+      id: 'vision-model',
+      supportsImages: true
+    });
   });
 
   it('maps Anthropic persisted keys to typed names and back to persisted keys', () => {

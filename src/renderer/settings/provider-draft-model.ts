@@ -219,7 +219,8 @@ export function parseProviderModelDraft(modelsText: string): ProviderModel[] {
         displayName,
         enabled: true,
         supportsStreaming: true,
-        supportsToolCalls: true
+        supportsToolCalls: true,
+        supportsImages: false
       };
     });
 }

@@ -140,6 +140,20 @@ function upgradeLegacySettings(raw: unknown): AppSettings {
   });
 }
 
+function normalizeProviderModel(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if ('supportsImages' in record) {
+    return record;
+  }
+  return {
+    ...record,
+    supportsImages: false
+  };
+}
+
 function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
   if (raw === null || typeof raw !== 'object') {
     return defaultProviders;
@@ -158,7 +172,8 @@ function upgradeLegacyProviders(raw: unknown): ProvidersConfig {
           credentialRef:
             typeof credentialRef === 'string' && PROVIDER_CREDENTIAL_REF_PATTERN.test(credentialRef)
               ? credentialRef
-              : null
+              : null,
+          models: Array.isArray(provider.models) ? provider.models.map(normalizeProviderModel) : []
         };
       })
     })
@@ -229,6 +244,7 @@ export function normalizeCurrentSettingsDocument(raw: Record<string, unknown>): 
   return SettingsDocumentSchema.parse({
     ...raw,
     settings: upgradeLegacySettings(raw.settings),
+    providers: upgradeLegacyProviders(raw.providers ?? defaultProviders),
     mcp: normalizeLegacyMcpConfig(raw.mcp),
     shortcuts: ShortcutsConfigSchema.parse((raw.shortcuts ?? defaultShortcuts) as ShortcutsConfig)
   });
