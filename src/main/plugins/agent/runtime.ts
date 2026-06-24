@@ -26,7 +26,7 @@ import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/conte
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentSessionRepository } from './session-repository';
-import type { DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
+import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
 import {
   createBlockedAgentRuntimeStatus,
   createTaskEventFromAssistantBlock,
@@ -57,6 +57,7 @@ export type AgentPluginRuntimeOptions = {
   eventBus: RocEventBus;
   modelFactory: AgentModelFactoryAdapter;
   deepAgentExecutor?: AgentDeepAgentExecutor;
+  lifecycleHooks?: AgentLifecycleHookEmitter;
   capabilityPreviewProvider?: AgentCapabilityPreviewProvider;
   pluginId?: string;
   status?: AgentRuntimeStatus;
@@ -66,6 +67,13 @@ export type AgentPluginRuntimeOptions = {
 export class AgentPluginRuntime {
   private readonly activeRuns = new Set<string>();
   private readonly abortControllers = new Map<string, AbortController>();
+  private readonly activeRunMetadata = new Map<
+    string,
+    {
+      request: ChatStartRunRequest;
+      threadId: string | null;
+    }
+  >();
   private readonly pendingInterrupts = new Map<string, PendingInterrupt>();
   private readonly pendingRuns = new Set<Promise<void>>();
   private readonly scheduledRuns = new Set<NodeJS.Timeout>();
@@ -113,6 +121,14 @@ export class AgentPluginRuntime {
       userInput: input
     });
     this.activeRuns.add(run.id);
+    const normalizedRequest = {
+      ...request,
+      input
+    };
+    this.activeRunMetadata.set(run.id, {
+      request: normalizedRequest,
+      threadId: run.threadId
+    });
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const result: ChatStartRunResult = {
@@ -143,10 +159,7 @@ export class AgentPluginRuntime {
         mode: request.mode,
         providerId: modelHandle.providerId,
         runId: run.id,
-        request: {
-          ...request,
-          input
-        },
+        request: normalizedRequest,
         abortSignal: abortController.signal,
         modelHandle,
         run,
@@ -171,6 +184,8 @@ export class AgentPluginRuntime {
       };
     }
     this.activeRuns.delete(input.runId);
+    const metadata = this.activeRunMetadata.get(input.runId);
+    this.activeRunMetadata.delete(input.runId);
     const abortController = this.abortControllers.get(input.runId);
     abortController?.abort();
     this.abortControllers.delete(input.runId);
@@ -180,6 +195,15 @@ export class AgentPluginRuntime {
       runId: input.runId,
       status: 'cancelled'
     });
+    if (metadata !== undefined) {
+      void this.emitSessionEndBestEffort({
+        runId: input.runId,
+        threadId: metadata.threadId,
+        request: metadata.request,
+        status: 'cancelled',
+        error: null
+      });
+    }
     return {
       runId: input.runId,
       cancelled: true
@@ -203,6 +227,19 @@ export class AgentPluginRuntime {
     }
     const modelHandle = await this.options.modelFactory.createModelHandleByModelId(run.modelId);
     this.activeRuns.add(run.id);
+    const resumedRequest: ChatStartRunRequest = {
+      input: run.userInput,
+      mode: 'task',
+      threadId: run.threadId,
+      enabledCapabilities: run.enabledCapabilities,
+      taskSource: pendingInterrupt.taskSource,
+      workspacePath: pendingInterrupt.workspacePath,
+      workflowHint: pendingInterrupt.workflowHint
+    };
+    this.activeRunMetadata.set(run.id, {
+      request: resumedRequest,
+      threadId: run.threadId
+    });
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const resumedAt = new Date().toISOString();
@@ -241,15 +278,7 @@ export class AgentPluginRuntime {
       modelHandle,
       modelId: modelHandle.modelId,
       providerId: modelHandle.providerId,
-      request: {
-        input: run.userInput,
-        mode: 'task',
-        threadId: run.threadId,
-        enabledCapabilities: run.enabledCapabilities,
-        taskSource: pendingInterrupt.taskSource,
-        workspacePath: pendingInterrupt.workspacePath,
-        workflowHint: pendingInterrupt.workflowHint
-      },
+      request: resumedRequest,
       resumePayload: {
         decisions: request.decisions
       },
@@ -298,6 +327,7 @@ export class AgentPluginRuntime {
       status: 'completed'
     });
     this.activeRuns.delete(input.runId);
+    this.activeRunMetadata.delete(input.runId);
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
     const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
@@ -354,6 +384,17 @@ export class AgentPluginRuntime {
       assistantMessage: input.assistantMessage
     });
     return { run, message, event };
+  }
+
+  private async emitSessionEndBestEffort(input: Parameters<AgentLifecycleHookEmitter['emitSessionEnd']>[0]): Promise<void> {
+    if (this.options.lifecycleHooks === undefined) {
+      return;
+    }
+    try {
+      await this.options.lifecycleHooks.emitSessionEnd(input);
+    } catch {
+      // SessionEnd 是清理边界上的 best-effort hook，失败不能覆盖原始运行状态。
+    }
   }
 
   private async publish<TPayload>(type: string, payload: TPayload): Promise<void> {
@@ -420,11 +461,19 @@ export class AgentPluginRuntime {
         modelId: input.modelId,
         workspacePath: input.request.workspacePath
       });
+      await this.emitSessionEndBestEffort({
+        runId: input.runId,
+        threadId: input.threadId,
+        request: input.request,
+        status: 'completed',
+        error: null
+      });
     } catch (error) {
       if (!this.activeRuns.has(input.runId)) {
         return;
       }
       this.activeRuns.delete(input.runId);
+      this.activeRunMetadata.delete(input.runId);
       this.abortControllers.delete(input.runId);
       this.pendingInterrupts.delete(input.runId);
       const failure = error instanceof Error ? error.message : String(error);
@@ -432,6 +481,13 @@ export class AgentPluginRuntime {
         endedAt: new Date().toISOString(),
         runId: input.runId,
         status: 'failed'
+      });
+      await this.emitSessionEndBestEffort({
+        runId: input.runId,
+        threadId: input.threadId,
+        request: input.request,
+        status: 'failed',
+        error: failure
       });
       await this.publish('agent.run.failed', {
         runId: input.runId,

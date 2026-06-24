@@ -1,4 +1,4 @@
-import type { ChatApprovalRequest, ChatStartRunRequest } from '../../../shared/types';
+import type { ChatApprovalRequest, ChatStartRunRequest, RocHookSessionEndStatus } from '../../../shared/types';
 
 export type DeepAgentExecutionResult =
   | {
@@ -16,4 +16,14 @@ export type PendingInterrupt = {
   taskSource: ChatStartRunRequest['taskSource'] | null;
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
   workspacePath: ChatStartRunRequest['workspacePath'];
+};
+
+export type AgentLifecycleHookEmitter = {
+  emitSessionEnd(input: {
+    runId: string;
+    threadId: string | null;
+    request: ChatStartRunRequest;
+    status: RocHookSessionEndStatus;
+    error: string | null;
+  }): Promise<void>;
 };

@@ -21,6 +21,7 @@ import type {
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
+import type { HookRuntime } from '../../../../src/main/services/hooks';
 import { RocPaths } from '../../../../src/main/services/paths';
 
 const mocked = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ export const workspacePath = process.cwd();
 interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
+  hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   messages?: AsyncIterable<unknown>;
   output?: unknown;
   requestOverride?: Partial<ChatStartRunRequest>;
@@ -86,6 +88,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   const executor = createAgentDeepAgentExecutor({
     capabilities: input.capabilities,
     getMemorySettings: input.getMemorySettings,
+    hookRuntime: input.hookRuntime,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore()
   });

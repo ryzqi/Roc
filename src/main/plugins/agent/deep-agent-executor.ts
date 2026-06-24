@@ -35,6 +35,7 @@ import { createRocFilesystemPermissions, toWorkspaceRelativePath } from '../../s
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
+import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
@@ -50,6 +51,7 @@ import {
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
+  hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   paths: RocPaths;
   store: BaseStore;
 };
@@ -66,10 +68,20 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
       const usageAccumulator = createUsageAccumulator();
+      const eventQueue = createChatRunEventQueue();
 
       const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
       const runtimeWorkspace = resolveRuntimeWorkspace(input.request, workspace);
       requireWorkbenchSourceForBackgroundTaskWorkflow(input.request);
+      const hookRunContext = {
+        runId: input.run.id,
+        threadId: input.run.threadId,
+        workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
+        cwd: runtimeWorkspace === null ? options.paths.root : runtimeWorkspace.path,
+        source: isBackgroundTaskWorkflow(input.request) ? ('background_task' as const) : ('chat' as const),
+        modelId: input.modelHandle.modelId,
+        workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
+      };
       const shellExecutionService = createShellExecutionAdapter(options.capabilities, runtimeWorkspace === null ? null : runtimeWorkspace.path);
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
@@ -95,6 +107,34 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         baseTools: tools.runTools,
         searchSessions: request => options.capabilities.invoke('agent.sessions.search', request)
       });
+      const initialHookContexts: string[] = [];
+      if (options.hookRuntime !== undefined) {
+        const sessionStart = await options.hookRuntime.runEvent({
+          schemaVersion: 1,
+          event: 'SessionStart',
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          workspacePath: hookRunContext.workspacePath,
+          cwd: hookRunContext.cwd,
+          triggeredAt: new Date().toISOString(),
+          payload: {
+            source: hookRunContext.source,
+            modelId: input.modelHandle.modelId,
+            workflowHint: hookRunContext.workflowHint
+          }
+        });
+        for (const event of sessionStart.events) {
+          eventQueue.push(event);
+        }
+        if (sessionStart.blocked) {
+          eventQueue.fail(new Error(sessionStart.blockReason === null ? 'Blocked by SessionStart hook.' : sessionStart.blockReason));
+          for await (const event of eventQueue) {
+            yield event;
+          }
+          return;
+        }
+        initialHookContexts.push(...sessionStart.additionalContexts);
+      }
       const agent = buildDeepAgent({
         model: handle.model,
         systemPrompt: contextHarness.systemPrompt,
@@ -112,7 +152,16 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         checkpointer,
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
-        contextBudgetTokens: handle.runtime.contextBudgetTokens
+        contextBudgetTokens: handle.runtime.contextBudgetTokens,
+        hookMiddleware:
+          options.hookRuntime === undefined
+            ? undefined
+            : {
+                hookRuntime: options.hookRuntime,
+                runContext: hookRunContext,
+                emitHookEvent: eventQueue.push,
+                initialContexts: initialHookContexts
+              }
       });
       const runInput =
         input.resumePayload === undefined
@@ -128,7 +177,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         },
         signal: input.abortSignal
       });
-      const eventQueue = createChatRunEventQueue();
       const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
         emitRuntimeEvent: eventQueue.push
