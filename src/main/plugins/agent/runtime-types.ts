@@ -4,6 +4,7 @@ export type DeepAgentExecutionResult =
   | {
       status: 'completed';
       assistantMessage: string;
+      successfulToolNames: string[];
     }
   | {
       status: 'interrupted';

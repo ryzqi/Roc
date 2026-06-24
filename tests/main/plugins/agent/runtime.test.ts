@@ -6,6 +6,7 @@ import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agen
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { buildWorkspaceHash } from '../../../../src/main/services/paths';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 
 let db: Database.Database;
@@ -167,6 +168,58 @@ describe('AgentPluginRuntime', () => {
         assistantMessage: 'Static agent response.'
       }
     ]);
+  });
+
+  it('records assistant session messages with workspace hash on completion', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      eventBus,
+      modelFactory,
+      repository
+    });
+    const run = repository.createTaskRun({
+      enabledCapabilities: startRequest.enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Summarize'
+    });
+
+    const result = await runtime.completeRun({
+      runId: run.id,
+      assistantMessage: 'Done',
+      summary: 'Done',
+      durationMs: 10,
+      providerId: 'openai',
+      modelId: 'gpt-4.1',
+      workspacePath: 'F:\\Code\\Roc'
+    });
+
+    expect(result.message.workspaceHash).toBe(buildWorkspaceHash('F:\\Code\\Roc'));
+  });
+
+  it('publishes deterministic completion summary instead of slicing assistant text at 120 characters', async () => {
+    const assistantMessage = [
+      'Implemented workspace scoped session search and verified focused tests.',
+      'Production prompt markers now flow through the context harness.',
+      'Memory promotion remains scoped to MEMORY.md only.'
+    ].join(' ');
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(assistantMessage),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    await runtime.startRun({
+      ...startRequest,
+      mode: 'chat'
+    });
+    await waitForEvent(() => events.some((event) => event.type === 'agent.run.completed'));
+
+    const completedEvent = events.find((event) => event.type === 'agent.run.completed');
+    const completedPayload = completedEvent?.payload as { summary: string } | undefined;
+    expect(completedPayload?.summary).toBe(assistantMessage);
   });
 
 

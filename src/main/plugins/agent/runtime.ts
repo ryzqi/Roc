@@ -4,6 +4,7 @@ import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
   ChatApprovalRequest,
+  ChatAssistantBlock,
   ChatCancelRunResult,
   ChatRunEvent,
   ChatResumeRunRequest,
@@ -15,9 +16,12 @@ import type {
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
   TaskEvent,
-  TaskRun
+  TaskRun,
+  WorkflowHint
 } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
+import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
+import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentSessionRepository } from './session-repository';
 import type { DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
@@ -290,10 +294,12 @@ export class AgentPluginRuntime {
     this.activeRuns.delete(input.runId);
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
+    const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
     const message = this.options.repository.recordSessionMessage({
       content: input.assistantMessage,
       role: 'assistant',
-      threadId: run.threadId
+      threadId: run.threadId,
+      workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
     const event = this.options.repository.recordEvent({
       payload: {
@@ -396,7 +402,11 @@ export class AgentPluginRuntime {
       await this.completeRun({
         runId: input.runId,
         assistantMessage: execution.assistantMessage,
-        summary: execution.assistantMessage.slice(0, 120),
+        summary: buildCompletionSummary({
+          assistantMessage: execution.assistantMessage,
+          successfulToolNames: execution.successfulToolNames,
+          workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
+        }),
         durationMs: Date.now() - startedAtMs,
         providerId: input.providerId,
         modelId: input.modelId,
@@ -444,11 +454,13 @@ export class AgentPluginRuntime {
   }): Promise<DeepAgentExecutionResult> {
     const assistantChunks: string[] = [];
     const successfulToolBlockIds = new Set<string>();
+    const successfulToolNamesByBlockId = new Map<string, string>();
     for await (const event of await this.options.deepAgentExecutor!.execute(input)) {
       if (!this.activeRuns.has(input.run.id)) {
         return {
           status: 'completed',
-          assistantMessage: ''
+          assistantMessage: '',
+          successfulToolNames: []
         };
       }
       await this.publishChatRunEvent(event);
@@ -471,6 +483,7 @@ export class AgentPluginRuntime {
           assistantChunks.push(event.block.text);
         }
         updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
+        updateSuccessfulToolNames(successfulToolNamesByBlockId, event.block);
         const taskEvent = createTaskEventFromAssistantBlock(event.block);
         await this.publish('agent.run.task-event', {
           runId: input.run.id,
@@ -499,7 +512,8 @@ export class AgentPluginRuntime {
     }
     return {
       status: 'completed',
-      assistantMessage
+      assistantMessage,
+      successfulToolNames: [...successfulToolNamesByBlockId.values()]
     };
   }
 
@@ -532,5 +546,30 @@ export class AgentPluginRuntime {
         ...input.payload
       }
     });
+  }
+}
+
+function buildCompletionSummary(input: {
+  assistantMessage: string;
+  successfulToolNames: readonly string[];
+  workflowHint: WorkflowHint;
+}): string {
+  const summary = buildRunSummary(input);
+  if (summary === null) {
+    return '';
+  }
+  return summary;
+}
+
+function updateSuccessfulToolNames(namesByBlockId: Map<string, string>, block: ChatAssistantBlock): void {
+  if (block.kind !== 'tool_call') {
+    return;
+  }
+  if (block.phase === 'end') {
+    namesByBlockId.set(block.blockId, block.name);
+    return;
+  }
+  if (block.phase === 'error') {
+    namesByBlockId.delete(block.blockId);
   }
 }
