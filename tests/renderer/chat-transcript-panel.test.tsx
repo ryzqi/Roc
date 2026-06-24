@@ -106,6 +106,39 @@ describe('chat transcript panel', () => {
 
     expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 1000 });
   });
+
+  it('renders user image attachment metadata', async () => {
+    const scrollContainer = document.createElement('div');
+    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
+    scrollContainer.scrollTo = vi.fn();
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: [
+            {
+              ...createMessage('user-image', '描述图片'),
+              role: 'user',
+              isStreaming: false,
+              attachments: [
+                {
+                  kind: 'image',
+                  name: 'chart.png',
+                  mediaType: 'image/png',
+                  sizeBytes: 123
+                }
+              ]
+            }
+          ],
+          liveSignal: 'run_1|0|0',
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await flushAnimationFrame();
+
+    expect(container.querySelector('[data-testid="chat-message-attachments"]')?.textContent).toContain('chart.png');
+  });
 });
 
 function createMessages(): ChatTranscriptMessage[] {
@@ -119,6 +152,7 @@ function createMessage(key: string, content: string): ChatTranscriptMessage {
     key,
     role: 'assistant',
     content,
+    attachments: [],
     reasoning: null,
     blocks: [],
     approval: null,

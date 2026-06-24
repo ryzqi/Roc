@@ -1,6 +1,7 @@
 import type {
   ChatAssistantBlock,
   ChatPendingApproval,
+  ChatPersistedAttachment,
   SubagentEventPayload,
   SubagentIdentity,
   SubagentStatus,
@@ -72,6 +73,7 @@ export type ChatTranscriptMessage = {
   key: string;
   role: 'user' | 'assistant';
   content: string;
+  attachments?: ChatPersistedAttachment[];
   reasoning: string | null;
   blocks: ChatTranscriptActivityBlock[];
   approval: ChatPendingApproval | null;
@@ -81,6 +83,7 @@ export type ChatTranscriptMessage = {
 type MessagePayload = {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: ChatPersistedAttachment[];
 };
 
 type SubagentEventRecord = {
@@ -119,7 +122,28 @@ function isMessagePayload(payload: unknown): payload is MessagePayload {
   }
   const role = Reflect.get(payload, 'role');
   const content = Reflect.get(payload, 'content');
-  return (role === 'user' || role === 'assistant') && typeof content === 'string';
+  const attachments = Reflect.get(payload, 'attachments');
+  return (
+    (role === 'user' || role === 'assistant') &&
+    typeof content === 'string' &&
+    (attachments === undefined || (Array.isArray(attachments) && attachments.every(isPersistedAttachment)))
+  );
+}
+
+function isPersistedAttachment(value: unknown): value is ChatPersistedAttachment {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const kind = Reflect.get(value, 'kind');
+  const name = Reflect.get(value, 'name');
+  const mediaType = Reflect.get(value, 'mediaType');
+  const sizeBytes = Reflect.get(value, 'sizeBytes');
+  return (
+    kind === 'image' &&
+    typeof name === 'string' &&
+    (mediaType === 'image/png' || mediaType === 'image/jpeg' || mediaType === 'image/webp') &&
+    typeof sizeBytes === 'number'
+  );
 }
 
 function isMessageTaskEvent(event: TaskEvent, threadId: string): event is MessageTaskEvent {
@@ -274,6 +298,7 @@ function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
     key: event.id,
     role: 'user',
     content: event.payload.content,
+    attachments: event.payload.attachments === undefined ? [] : event.payload.attachments,
     reasoning: null,
     blocks: [],
     approval: null,
@@ -287,6 +312,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
       key: `assistant-${runId}`,
       role: 'assistant',
       content: '',
+      attachments: [],
       reasoning: null,
       blocks: [],
       approval: null,
@@ -732,6 +758,7 @@ function createPendingUserMessage(content: string): ChatTranscriptMessage {
     key: 'pending-user-message',
     role: 'user',
     content,
+    attachments: [],
     reasoning: null,
     blocks: [],
     approval: null,
@@ -752,6 +779,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
     key: `live-${chatRunState.runId ?? 'assistant'}`,
     role: 'assistant',
     content: liveContent,
+    attachments: [],
     reasoning: liveReasoning.length === 0 ? null : liveReasoning,
     blocks: liveBlocks,
     approval: chatRunState.pendingApprovals[0] ?? null,

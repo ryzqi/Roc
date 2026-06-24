@@ -179,6 +179,33 @@
   color: inherit;
 }
 
+.chat-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chat-message-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.chat-message-attachment small {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
 .chat-bubble--assistant.is-streaming {
   opacity: 0.92;
 }

@@ -26,6 +26,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
   const approval = message.approval;
   const isAssistant = message.role === 'assistant';
   const blocks = message.blocks ?? [];
+  const attachments = message.attachments === undefined ? [] : message.attachments;
   const activityBlocks =
     blocks.length > 0
       ? blocks
@@ -147,7 +148,19 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
             {!message.isStreaming && message.content.length > 0 ? <CopyAnswerButton content={message.content} /> : null}
           </div>
         ) : (
-          <p>{message.content}</p>
+          <>
+            <p>{message.content}</p>
+            {attachments.length === 0 ? null : (
+              <div className="chat-message-attachments" data-testid="chat-message-attachments">
+                {attachments.map((attachment) => (
+                  <span className="chat-message-attachment" key={`${attachment.name}-${attachment.sizeBytes}`}>
+                    <span>{attachment.name}</span>
+                    <small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </article>
     </motion.div>
@@ -160,6 +173,7 @@ export const ChatMessageRow = memo(
     prev.message.key === next.message.key &&
     prev.message.role === next.message.role &&
     prev.message.content === next.message.content &&
+    prev.message.attachments === next.message.attachments &&
     prev.message.reasoning === next.message.reasoning &&
     prev.message.blocks === next.message.blocks &&
     prev.message.approval === next.message.approval &&

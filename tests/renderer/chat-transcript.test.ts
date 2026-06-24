@@ -54,11 +54,52 @@ function createIdleRunState(): ChatRunState {
 
 
 describe('chat transcript helpers', () => {
+  it('projects persisted user image attachment metadata into transcript messages', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'event-1',
+          threadId: 'thread-1',
+          runId: 'run-1',
+          type: 'message',
+          payload: {
+            role: 'user',
+            content: '描述图片',
+            attachments: [
+              {
+                kind: 'image',
+                name: 'chart.png',
+                mediaType: 'image/png',
+                sizeBytes: 123
+              }
+            ]
+          },
+          createdAt: '2026-06-24T00:00:00.000Z'
+        }
+      ],
+      'thread-1'
+    );
+
+    expect(messages[0]).toMatchObject({
+      role: 'user',
+      content: '描述图片',
+      attachments: [
+        {
+          kind: 'image',
+          name: 'chart.png',
+          mediaType: 'image/png',
+          sizeBytes: 123
+        }
+      ]
+    });
+  });
+
   it('keeps persisted message object references stable while appending live output', () => {
     const persistedMessage = {
       key: 'user-current',
       role: 'user' as const,
       content: '请总结当前变更',
+      attachments: [],
       reasoning: null,
       blocks: [],
       approval: null,
@@ -167,6 +208,7 @@ describe('chat transcript helpers', () => {
         key: 'user-current',
         role: 'user',
         content: '请整理一下当前变更',
+        attachments: [],
         reasoning: null,
         blocks: [],
         approval: null,
@@ -176,6 +218,7 @@ describe('chat transcript helpers', () => {
         key: 'live-run-current',
         role: 'assistant',
         content: '我先检查当前变更。',
+        attachments: [],
         reasoning: '先读取当前工作区和最近提交。',
         blocks: [
           {
@@ -576,6 +619,7 @@ describe('chat transcript helpers', () => {
         key: 'user-current',
         role: 'user',
         content: '整理一下结果',
+        attachments: [],
         reasoning: null,
         blocks: [],
         approval: null,
@@ -585,6 +629,7 @@ describe('chat transcript helpers', () => {
         key: 'assistant-current',
         role: 'assistant',
         content: '已经整理完成。',
+        attachments: [],
         reasoning: '先归纳，再输出最终结论。',
         blocks: [
           {
@@ -719,6 +764,7 @@ describe('chat transcript helpers', () => {
         key: 'user-current',
         role: 'user',
         content: '请读取文件并总结',
+        attachments: [],
         reasoning: null,
         blocks: [],
         approval: null,
@@ -728,6 +774,7 @@ describe('chat transcript helpers', () => {
         key: 'assistant-run-current',
         role: 'assistant',
         content: '总结完成。',
+        attachments: [],
         reasoning: '先确认目标文件。再提炼结论。',
         blocks: [
           {
