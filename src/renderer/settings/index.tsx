@@ -5,7 +5,10 @@ import type {
   ProviderConfig,
   ProviderSecretStatus,
   ProviderTestResult,
+  RocHookConfigSnapshot,
   SettingsSnapshot,
+  SettingsSaveHookConfigRequest,
+  SettingsTrustHookRequest,
   SkillSnapshot,
   PermissionsConfig,
   AppSettings
@@ -35,6 +38,7 @@ import { ProvidersSection } from './sections/providers-section';
 import { DefaultModelSection } from './sections/default-model-section';
 import { AppBasicsSection } from './sections/app-basics-section';
 import { AuthSecuritySection } from './sections/auth-security-section';
+import { HooksSection } from './sections/hooks-section';
 import { MemorySection } from './sections/memory-section';
 import { TaskSettingsSection } from './sections/task-settings-section';
 
@@ -46,6 +50,7 @@ export type SettingsViewState = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hookSettings: RocHookConfigSnapshot;
   hostIntegration: LoadedSettingsState['hostIntegration'];
   providerTestStatus: ProviderTestResult | null;
 };
@@ -212,6 +217,33 @@ export function SettingsView({
     [client, updateLoadedState]
   );
 
+  const refreshHooks = useCallback(async (): Promise<void> => {
+    const refreshed = unwrap<RocHookConfigSnapshot>('settings hooks get', await resolveClient().api.settings.getHooks());
+    updateLoadedState({ hookSettings: refreshed });
+  }, [client, updateLoadedState]);
+
+  const saveHooks = useCallback(
+    async (request: SettingsSaveHookConfigRequest): Promise<void> => {
+      const refreshed = unwrap<RocHookConfigSnapshot>(
+        'settings hooks save',
+        await resolveClient().api.settings.saveHooks(request)
+      );
+      updateLoadedState({ hookSettings: refreshed });
+    },
+    [client, updateLoadedState]
+  );
+
+  const trustHook = useCallback(
+    async (request: SettingsTrustHookRequest): Promise<void> => {
+      const refreshed = unwrap<RocHookConfigSnapshot>(
+        'settings hooks trust',
+        await resolveClient().api.settings.trustHook(request)
+      );
+      updateLoadedState({ hookSettings: refreshed });
+    },
+    [client, updateLoadedState]
+  );
+
   async function saveProviderSecret(providerId: string, plaintext: string): Promise<SettingsSnapshot> {
     setSecretBusyProviderId(providerId);
     try {
@@ -357,6 +389,14 @@ export function SettingsView({
             ) : null}
             {activeSection === 'auth-security' ? (
               <AuthSecuritySection draft={draft.permissions} onChange={draft.setPermissions} />
+            ) : null}
+            {activeSection === 'hooks' ? (
+              <HooksSection
+                snapshot={state.hookSettings}
+                onRefresh={refreshHooks}
+                onSave={saveHooks}
+                onTrust={trustHook}
+              />
             ) : null}
             {activeSection === 'memory' ? (
               <MemorySection draft={draft.settings} onChange={draft.setSettings} />

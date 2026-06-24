@@ -1,30 +1,23 @@
 import type {
-  AppSettings,
   AppStatus,
   ActiveTaskItem,
   ApprovalMode,
   BackgroundTask,
-  HostIntegrationStatus,
   FilePreviewRequest,
   DiagnosticPackage,
   FilesWorkbenchPdfPreviewResult,
   FilePreviewResult,
   FileTreeResult,
-  McpServerSnapshot,
   MemoryStatus,
   PerformanceSample,
-  PermissionsConfig,
-  ProviderConfig,
-  ProviderSecretStatus,
-  ProviderTestResult,
   SettingsSnapshot,
-  SkillSnapshot,
   TraySummary,
   Workspace
 } from '../../shared/types';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
+import type { LoadedSettingsState } from '../settings-model';
 import { applySettingsSnapshot } from '../settings-model';
 import { findNextGitSelection } from '../workbench/git-helpers';
 import { emptyWorkspaceData } from './empty-states';
@@ -200,19 +193,9 @@ export async function loadMemoryData(_mode: AppStatus['mode'], client: RocClient
   };
 }
 
-export async function loadSettingsState(client: RocClient = createRocClient()): Promise<{
-  settings: AppSettings;
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  providerSecretStatus: ProviderSecretStatus[];
-  permissions: PermissionsConfig;
-  mcpApprovalMode: ApprovalMode;
-  mcpServers: McpServerSnapshot[];
-  skills: SkillSnapshot[];
-  hostIntegration: HostIntegrationStatus;
-  providerTestStatus: ProviderTestResult | null;
-  mcpTestStatus: null;
-}> {
+export async function loadSettingsState(
+  client: RocClient = createRocClient()
+): Promise<LoadedSettingsState & { mcpApprovalMode: ApprovalMode }> {
   const [settingsResult, mcpConfigResult] = await Promise.all([client.api.settings.get(), client.api.mcp.getConfig()]);
   const snapshot = unwrap<SettingsSnapshot>('settings snapshot', settingsResult);
   const mcpConfig = unwrap('mcp config', mcpConfigResult);

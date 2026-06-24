@@ -1,4 +1,5 @@
 import type { LoadedState } from '../../src/renderer/loaded-state';
+import { emptyRocHookConfigSnapshot } from '../../src/shared/types';
 
 export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
   return {
@@ -118,6 +119,7 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
     mcpServers: [],
     mcpTestStatus: null,
     skills: [],
+    hookSettings: emptyRocHookConfigSnapshot,
     selectedMcpServers: [],
     selectedSkills: [],
     activeTasks: [],

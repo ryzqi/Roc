@@ -2,10 +2,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { HostIntegrationStatus, PermissionsConfig, ProviderConfig } from '../../src/shared/types';
+import { emptyRocHookConfigSnapshot } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 import { AppBasicsSection } from '../../src/renderer/settings/sections/app-basics-section';
 import { AuthSecuritySection } from '../../src/renderer/settings/sections/auth-security-section';
 import { DefaultModelSection } from '../../src/renderer/settings/sections/default-model-section';
+import { HooksSection } from '../../src/renderer/settings/sections/hooks-section';
 import { MemorySection } from '../../src/renderer/settings/sections/memory-section';
 import { ProvidersSection } from '../../src/renderer/settings/sections/providers-section';
 import { TaskSettingsSection } from '../../src/renderer/settings/sections/task-settings-section';
@@ -100,6 +102,14 @@ describe('settings surfaces', () => {
         React.createElement(TaskSettingsSection, {
           draft: settings,
           onChange: vi.fn()
+        })
+      ),
+      renderToStaticMarkup(
+        React.createElement(HooksSection, {
+          snapshot: emptyRocHookConfigSnapshot,
+          onRefresh: vi.fn(),
+          onSave: vi.fn(),
+          onTrust: vi.fn()
         })
       )
     ].join('\n');

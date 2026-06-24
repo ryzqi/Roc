@@ -69,6 +69,7 @@ describe('SettingsView provider save', () => {
             permissions: snapshot.permissions,
             mcpServers: snapshot.mcpServers,
             skills: snapshot.skills,
+            hookSettings: snapshot.hooks,
             hostIntegration: snapshot.hostIntegration,
             providerTestStatus: null
           },
@@ -136,6 +137,7 @@ describe('SettingsView provider save', () => {
             permissions: snapshot.permissions,
             mcpServers: snapshot.mcpServers,
             skills: snapshot.skills,
+            hookSettings: snapshot.hooks,
             hostIntegration: snapshot.hostIntegration,
             providerTestStatus: null
           },

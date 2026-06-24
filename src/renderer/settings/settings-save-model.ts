@@ -7,6 +7,7 @@ import type {
   ProviderConfig,
   ProviderSecretStatus,
   ProviderTestResult,
+  RocHookConfigSnapshot,
   SettingsSaveRequest,
   SettingsSnapshot,
   SkillSnapshot
@@ -24,6 +25,7 @@ export type LoadedSettingsState = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hookSettings: RocHookConfigSnapshot;
   hostIntegration: HostIntegrationStatus;
   providerTestStatus: ProviderTestResult | null;
   mcpTestStatus: null;
@@ -38,6 +40,7 @@ export function applySettingsSnapshot(snapshot: SettingsSnapshot): LoadedSetting
     permissions: snapshot.permissions,
     mcpServers: snapshot.mcpServers,
     skills: snapshot.skills,
+    hookSettings: snapshot.hooks,
     hostIntegration: snapshot.hostIntegration,
     providerTestStatus: null,
     mcpTestStatus: null

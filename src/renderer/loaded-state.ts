@@ -25,6 +25,7 @@ import type {
   HostIntegrationStatus,
   ProviderSecretStatus,
   ProviderTestResult,
+  RocHookConfigSnapshot,
   RtkStatus,
   SchedulerStatus,
   ScheduledTaskRun,
@@ -52,6 +53,7 @@ export type LoadedState = {
   mcpServers: McpServerSnapshot[];
   mcpTestStatus: McpServerTestResult | null;
   skills: SkillSnapshot[];
+  hookSettings: RocHookConfigSnapshot;
   selectedMcpServers: string[];
   selectedSkills: string[];
   activeTasks: ActiveTaskItem[];

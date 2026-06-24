@@ -367,6 +367,7 @@ describe('settings model helpers', () => {
       permissions,
       mcpServers,
       skills,
+      hookSettings: emptyRocHookConfigSnapshot,
       hostIntegration: defaultHostIntegration(),
       providerTestStatus: null,
       mcpTestStatus: null
