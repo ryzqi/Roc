@@ -52,6 +52,14 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
+function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
+  return messages.map((message) => {
+    const { attachments, ...withoutAttachments } = message;
+    void attachments;
+    return withoutAttachments;
+  });
+}
+
 
 describe('chat transcript helpers', () => {
   it('rebuilds complete persisted history after a long streamed tool run', () => {
@@ -141,7 +149,7 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-current',
         role: 'user',

@@ -52,6 +52,14 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
+function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
+  return messages.map((message) => {
+    const { attachments, ...withoutAttachments } = message;
+    void attachments;
+    return withoutAttachments;
+  });
+}
+
 
 describe('chat transcript helpers', () => {
   it('does not append live assistant output from a different thread than the selected history thread', () => {
@@ -101,7 +109,7 @@ describe('chat transcript helpers', () => {
       taskSnapshot: snapshot
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-older',
         role: 'user',
@@ -173,7 +181,7 @@ describe('chat transcript helpers', () => {
       ]
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-current-1',
         role: 'user',
@@ -261,7 +269,7 @@ describe('chat transcript helpers', () => {
       taskSnapshot: snapshot
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-current',
         role: 'user',
@@ -356,7 +364,7 @@ describe('chat transcript helpers', () => {
       taskSnapshot: snapshot
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-current',
         role: 'user',

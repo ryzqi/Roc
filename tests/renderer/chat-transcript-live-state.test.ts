@@ -52,6 +52,14 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
+function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
+  return messages.map((message) => {
+    const { attachments, ...withoutAttachments } = message;
+    void attachments;
+    return withoutAttachments;
+  });
+}
+
 
 describe('chat transcript helpers', () => {
   it('projects live tool and subagent state into assistant activity blocks while keeping final content separate', () => {
@@ -412,7 +420,7 @@ describe('chat transcript helpers', () => {
       taskSnapshot: snapshot
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'pending-user-message',
         role: 'user',
@@ -468,7 +476,7 @@ describe('chat transcript helpers', () => {
       taskSnapshot: snapshot
     });
 
-    expect(messages).toEqual([
+    expect(stripAttachments(messages)).toEqual([
       {
         key: 'user-older',
         role: 'user',

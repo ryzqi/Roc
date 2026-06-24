@@ -392,8 +392,11 @@ export class AgentPluginRuntime {
     }
     try {
       await this.options.lifecycleHooks.emitSessionEnd(input);
-    } catch {
-      // SessionEnd 是清理边界上的 best-effort hook，失败不能覆盖原始运行状态。
+    } catch (error) {
+      console.warn(
+        '[AgentPluginRuntime] SessionEnd hook failed:',
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
