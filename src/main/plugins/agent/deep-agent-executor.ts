@@ -12,6 +12,7 @@ import type {
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
   ChatStartRunRequest,
+  ChatValidatedImageAttachment,
   FileDeleteResult,
   TaskDetail,
   TaskRun,
@@ -115,7 +116,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       });
       const runInput =
         input.resumePayload === undefined
-          ? createInitialState(input.request.input)
+          ? createInitialState(input.request.input, input.validatedAttachments)
           : new Command({
               resume: input.resumePayload
             });
@@ -236,7 +237,24 @@ function createBackgroundTaskInterruptPolicy(
   };
 }
 
-function createInitialState(input: string): unknown {
+function createInitialState(input: string, attachments: readonly ChatValidatedImageAttachment[] | undefined): unknown {
+  if (attachments !== undefined && attachments.length > 0) {
+    return {
+      messages: [
+        new HumanMessage({
+          content: [
+            { type: 'text', text: input },
+            ...attachments.map((attachment) => ({
+              type: 'image' as const,
+              mimeType: attachment.mediaType,
+              data: attachment.base64
+            }))
+          ]
+        })
+      ],
+      forge_error_tracker: defaultErrorTracker()
+    };
+  }
   return {
     messages: [new HumanMessage(input)],
     forge_error_tracker: defaultErrorTracker()

@@ -4,12 +4,13 @@ import { InMemoryStore } from '@langchain/langgraph';
 import { z } from 'zod';
 import { vi } from 'vitest';
 import type {
+  AppSettings,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
   ChatStartRunRequest,
-  AppSettings,
+  ChatValidatedImageAttachment,
   FileDeleteResult,
   RecoveryPoint,
   ShellExecutionResult,
@@ -25,6 +26,7 @@ import { RocPaths } from '../../../../src/main/services/paths';
 const mocked = vi.hoisted(() => ({
   buildDeepAgent: vi.fn()
 }));
+let lastStreamEventsCall: { input: unknown; config: unknown } | null = null;
 
 vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
   buildDeepAgent: mocked.buildDeepAgent
@@ -40,15 +42,18 @@ interface ExecutorEventsInput {
   requestOverride?: Partial<ChatStartRunRequest>;
   subagents?: AsyncIterable<unknown>;
   toolCalls?: AsyncIterable<unknown>;
+  validatedAttachments?: ChatValidatedImageAttachment[];
 }
 
 export async function buildExecutorOnce(
   capabilities: RocCapabilityRegistry,
-  requestOverride: Partial<ChatStartRunRequest> = {}
+  requestOverride: Partial<ChatStartRunRequest> = {},
+  validatedAttachments?: ChatValidatedImageAttachment[]
 ): Promise<void> {
   await collectExecutorEvents({
     capabilities,
     requestOverride,
+    validatedAttachments,
     output: {
       messages: [
         {
@@ -66,13 +71,17 @@ export async function collectExecutorEvents(input: ExecutorEventsInput): Promise
 
 export async function startExecutorExecution(input: ExecutorEventsInput): Promise<AsyncIterable<ChatRunEvent>> {
   mocked.buildDeepAgent.mockReset();
+  lastStreamEventsCall = null;
   mocked.buildDeepAgent.mockReturnValue({
-    streamEvents: vi.fn(async () => ({
-      toolCalls: input.toolCalls ?? emptyAsyncIterable(),
-      messages: input.messages ?? emptyAsyncIterable(),
-      subagents: input.subagents ?? emptyAsyncIterable(),
-      output: input.output ?? { messages: [] }
-    }))
+    streamEvents: vi.fn(async (runInput: unknown, config: unknown) => {
+      lastStreamEventsCall = { input: runInput, config };
+      return {
+        toolCalls: input.toolCalls ?? emptyAsyncIterable(),
+        messages: input.messages ?? emptyAsyncIterable(),
+        subagents: input.subagents ?? emptyAsyncIterable(),
+        output: input.output ?? { messages: [] }
+      };
+    })
   });
   const executor = createAgentDeepAgentExecutor({
     capabilities: input.capabilities,
@@ -115,7 +124,8 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
       },
       ...input.requestOverride
     },
-    run: createRun()
+    run: createRun(),
+    validatedAttachments: input.validatedAttachments
   });
   return execution;
 }
@@ -315,6 +325,13 @@ export function readBuildInput(): DeepAgentBuildInput {
     throw new Error('expected_build_deep_agent_call');
   }
   return input;
+}
+
+export function readStreamEventsCall(): { input: unknown; config: unknown } {
+  if (lastStreamEventsCall === null) {
+    throw new Error('stream_events_call_missing');
+  }
+  return lastStreamEventsCall;
 }
 
 export function findTool(tools: ClientTool[], name: string): ClientTool {

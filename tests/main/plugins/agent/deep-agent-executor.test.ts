@@ -11,6 +11,7 @@ import {
   readBuildInput,
   readBuiltTools,
   readJson,
+  readStreamEventsCall,
   workspacePath
 } from './deep-agent-executor-test-helpers';
 
@@ -52,6 +53,31 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=exa-hosted;skills=deep-review;');
     expect(buildInput.systemPrompt).toContain('本轮后台任务继承当前主聊天已启用的 MCP 和 skills');
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent', 'mcp.tools.get']);
+  });
+
+  it('passes image attachments to DeepAgents as LangChain multimodal content blocks', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      input: '描述图片'
+    }, [
+      {
+        kind: 'image',
+        name: 'chart.png',
+        mediaType: 'image/png',
+        sizeBytes: 3,
+        base64: Buffer.from([1, 2, 3]).toString('base64')
+      }
+    ]);
+
+    const streamEvents = readStreamEventsCall();
+    const initialState = streamEvents.input as { messages: Array<{ content: unknown }> };
+    expect(initialState.messages[0]?.content).toEqual([
+      { type: 'text', text: '描述图片' },
+      {
+        type: 'image',
+        mimeType: 'image/png',
+        data: Buffer.from([1, 2, 3]).toString('base64')
+      }
+    ]);
   });
 
 
