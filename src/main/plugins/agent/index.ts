@@ -37,6 +37,19 @@ const enabledCapabilitiesSchema = z.object({
   skills: z.array(z.string())
 });
 
+const chatImageAttachmentSchema = z.object({
+  kind: z.literal('image'),
+  source: z.enum(['file', 'clipboard', 'drop']),
+  name: z.string().min(1),
+  mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+  sizeBytes: z.number().int().positive(),
+  path: z.string().min(1).optional(),
+  data: z.string().min(1).optional()
+}).refine(
+  (value) => (value.path === undefined) !== (value.data === undefined),
+  'Image attachment must provide exactly one source.'
+);
+
 const chatStartRunRequestSchema = z.object({
   input: z.string(),
   mode: z.enum(['chat', 'task']),
@@ -44,7 +57,8 @@ const chatStartRunRequestSchema = z.object({
   threadId: z.string().nullable().optional(),
   workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
   taskSource: z.enum(['workbench']).nullable().optional(),
-  workspacePath: z.string().nullable().optional()
+  workspacePath: z.string().nullable().optional(),
+  attachments: z.array(chatImageAttachmentSchema).max(4).optional()
 }) satisfies z.ZodType<ChatStartRunRequest>;
 
 const chatStartRunResultSchema = z.object({
