@@ -13,6 +13,7 @@ import {
   setDefaultModelInSettingsSaveRequest,
   upsertProviderInSettingsSaveRequest
 } from '../../src/renderer/settings/settings-save-model';
+import { emptyRocHookConfigSnapshot } from '../../src/shared/types';
 import type {
   AppSettings,
   HostIntegrationStatus,
@@ -355,6 +356,7 @@ describe('settings model helpers', () => {
         permissions,
         mcpServers,
         skills,
+        hooks: emptyRocHookConfigSnapshot,
         hostIntegration: defaultHostIntegration()
       })
     ).toEqual({

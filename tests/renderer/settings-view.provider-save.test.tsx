@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import { SettingsView } from '../../src/renderer/settings';
+import { emptyRocHookConfigSnapshot } from '../../src/shared/types';
 import type { AgentRuntimeStatus, SettingsSnapshot } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
@@ -199,6 +200,7 @@ function buildSettingsSnapshot(input: { defaultModelId?: string | null } = {}): 
     permissions: state.permissions,
     mcpServers: state.mcpServers,
     skills: state.skills,
+    hooks: emptyRocHookConfigSnapshot,
     hostIntegration: state.hostIntegration
   };
 }

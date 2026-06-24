@@ -1,6 +1,7 @@
 import type { AsyncTaskStatus } from 'deepagents';
 import type { HITLRequest, HITLResponse } from 'langchain';
 import type { EnabledCapabilities } from './agent';
+import type { RocHookRunEvent } from './hooks';
 
 export type ChatRunMode = 'chat' | 'task';
 
@@ -147,6 +148,7 @@ export type ChatRunEvent =
       identity: SubagentIdentity;
       event: SubagentEventPayload;
     }
+  | RocHookRunEvent
   | {
       type: 'run_completed';
       runId: string;

@@ -7,6 +7,7 @@ import { createChatFeatureActions } from '../../../src/renderer/features/chat/us
 import type { LoadedState } from '../../../src/renderer/loaded-state';
 import type { RocClient } from '../../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../../src/shared/ipc';
+import { emptyRocHookConfigSnapshot } from '../../../src/shared/types';
 import type { AgentRuntimeStatus, ProviderConfig, SettingsSnapshot } from '../../../src/shared/types';
 import { createLoadedState } from '../view-test-helpers';
 
@@ -336,6 +337,7 @@ function createSettingsSnapshot(state: LoadedState, defaultModelId: string | nul
     permissions: state.permissions,
     mcpServers: state.mcpServers,
     skills: state.skills,
+    hooks: emptyRocHookConfigSnapshot,
     hostIntegration: state.hostIntegration
   };
 }

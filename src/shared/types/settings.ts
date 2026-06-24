@@ -1,3 +1,4 @@
+import type { RocHookConfigSnapshot, RocHookSaveConfigRequest, RocHookTrustRequest } from './hooks';
 import type { McpServerConfig, McpServerSnapshot } from './mcp';
 import type { SkillSnapshot } from './skill';
 
@@ -262,8 +263,13 @@ export type SettingsSnapshot = {
   permissions: PermissionsConfig;
   mcpServers: McpServerSnapshot[];
   skills: SkillSnapshot[];
+  hooks: RocHookConfigSnapshot;
   hostIntegration: HostIntegrationStatus;
 };
+
+export type SettingsSaveHookConfigRequest = RocHookSaveConfigRequest;
+
+export type SettingsTrustHookRequest = RocHookTrustRequest;
 
 export type SettingsSaveRequest = {
   settings: AppSettings;

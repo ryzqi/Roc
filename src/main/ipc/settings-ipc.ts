@@ -1,4 +1,5 @@
 import { ipcChannels } from '../../shared/ipc';
+import { emptyRocHookConfigSnapshot } from '../../shared/types';
 import type {
   McpServerSnapshot,
   ProviderSecretSetRequest,
@@ -82,6 +83,7 @@ async function buildSettingsSnapshotAsync(
     permissions: await configService.getPermissionsAsync(),
     mcpServers,
     skills,
+    hooks: emptyRocHookConfigSnapshot,
     hostIntegration: controls.getHostIntegrationStatus()
   };
 }
