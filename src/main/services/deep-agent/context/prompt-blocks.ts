@@ -15,7 +15,7 @@ export type PromptBlockType = 'static' | 'workspace' | 'tools' | 'capability' | 
 
 export type PromptToolDescriptor = {
   name: string;
-  description: string;
+  description?: string;
 };
 
 export type PromptBlock = {
@@ -80,7 +80,14 @@ function buildToolsPrompt(tools: readonly PromptToolDescriptor[]): string {
   if (tools.length === 0) {
     return 'Available Tools: provided by runtime tool schema.';
   }
-  return ['Available Tools:', ...tools.map((tool) => `- ${tool.name}: ${tool.description}`)].join('\n');
+  return ['Available Tools:', ...tools.map(formatToolDescriptor)].join('\n');
+}
+
+function formatToolDescriptor(tool: PromptToolDescriptor): string {
+  if (tool.description === undefined || tool.description.trim().length === 0) {
+    return `- ${tool.name}`;
+  }
+  return `- ${tool.name}: ${tool.description}`;
 }
 
 function buildContextRecallPrompt(workspacePath: string | null): string {

@@ -55,6 +55,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const toolNames = readBuiltTools().map((tool) => tool.name);
 
+    expect(toolNames).toContain('session_search');
     expect(toolNames).not.toContain('resolve_background_task_time');
     expect(toolNames).not.toContain('propose_background_task');
     expect(toolNames).not.toContain('schedule_background_task');

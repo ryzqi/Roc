@@ -54,4 +54,22 @@ describe('prompt blocks', () => {
     expect(prompt).toContain('session_search');
     expect(prompt).toContain('F:\\Code\\Roc');
   });
+
+  it('formats tools without descriptions without leaking undefined into the prompt', () => {
+    const prompt = serializePromptBlocks(
+      buildPromptBlocks({
+        enabledCapabilities,
+        workspacePath: 'F:\\Code\\Roc',
+        workflowHint: null,
+        tools: [
+          {
+            name: 'runtime_tool'
+          }
+        ]
+      })
+    );
+
+    expect(prompt).toContain('- runtime_tool');
+    expect(prompt).not.toContain('undefined');
+  });
 });
