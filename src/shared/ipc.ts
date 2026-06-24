@@ -61,13 +61,16 @@ import type {
   ProviderSecretSetRequest,
   ProviderSecretSetResult,
   ProviderTestResult,
+  RocHookConfigSnapshot,
   RtkStatus,
   ShellConfirmationRequest,
   ShellConfirmationResult,
   ShellExecutionRequest,
   ShellExecutionResult,
   SettingsSaveRequest,
+  SettingsSaveHookConfigRequest,
   SettingsSnapshot,
+  SettingsTrustHookRequest,
   SkillFilePreviewRequest,
   SkillFilePreviewResult,
   SkillFileTreeRequest,
@@ -190,6 +193,9 @@ export type RocPreloadApi = {
     testProvider: (id: string) => Promise<IpcResult<ProviderTestResult>>;
     setProviderSecret: (request: ProviderSecretSetRequest) => Promise<IpcResult<ProviderSecretSetResult>>;
     clearProviderSecret: (providerId: string) => Promise<IpcResult<ProviderSecretClearResult>>;
+    getHooks: () => Promise<IpcResult<RocHookConfigSnapshot>>;
+    saveHooks: (request: SettingsSaveHookConfigRequest) => Promise<IpcResult<RocHookConfigSnapshot>>;
+    trustHook: (request: SettingsTrustHookRequest) => Promise<IpcResult<RocHookConfigSnapshot>>;
   };
   agent: {
     getStatus: () => Promise<IpcResult<AgentRuntimeStatus>>;

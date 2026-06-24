@@ -18,6 +18,7 @@ import { createSkillsPlugin } from './plugins/skills';
 import { createTaskPlugin } from './plugins/task';
 import { createWorkspacePlugin } from './plugins/workspace';
 import { ConfigService } from './services/config-service';
+import { HookCommandRunner, HookConfigService, HookRuntime, HookTrustService } from './services/hooks';
 import { LangChainModelFactory } from './services/langchain-model-factory';
 import { LogService } from './services/log-service';
 import { MetricsService } from './services/metrics-service';
@@ -41,6 +42,8 @@ export type MainKernelBootstrap = {
   readonly paths: RocPaths;
   readonly runtime: KernelRuntime;
   readonly configService: ConfigService;
+  readonly hookConfigService: HookConfigService;
+  readonly hookTrustService: HookTrustService;
   readonly logService: LogService;
   readonly secretService: SecretService;
   readonly providerRuntimeService: ProviderRuntimeService;
@@ -62,6 +65,13 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   paths.ensureTree();
   const configService = new ConfigService(paths);
   configService.initialize();
+  const hookTrustService = new HookTrustService(paths);
+  const hookConfigService = new HookConfigService(paths, hookTrustService);
+  const hookRuntime = new HookRuntime({
+    configService: hookConfigService,
+    trustService: hookTrustService,
+    commandRunner: new HookCommandRunner()
+  });
   const logService = new LogService(paths);
   logService.initialize();
   setLogService(logService);
@@ -73,6 +83,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     options.plugins ??
     createDefaultMainKernelPlugins({
       configService,
+      hookRuntime,
       modelFactory,
       paths,
       performanceObserverService,
@@ -94,6 +105,8 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     paths,
     runtime,
     configService,
+    hookConfigService,
+    hookTrustService,
     logService,
     secretService,
     providerRuntimeService,
@@ -129,6 +142,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 function createDefaultMainKernelPlugins(input: {
   paths: RocPaths;
   configService: ConfigService;
+  hookRuntime: HookRuntime;
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
@@ -169,6 +183,7 @@ function createDefaultMainKernelPlugins(input: {
           configService.reloadSettingsDocument();
           return configService.getSettings().memory;
         },
+        hookRuntime: input.hookRuntime,
         paths: input.paths
       },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {

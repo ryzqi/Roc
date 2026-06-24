@@ -19,6 +19,7 @@ import type {
   SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import type { HookRuntime } from '../../services/hooks';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
@@ -26,6 +27,7 @@ import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
 import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
 import { AgentPluginRuntime } from './runtime';
+import type { AgentLifecycleHookEmitter } from './runtime-types';
 import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
@@ -168,7 +170,7 @@ export type AgentPluginOptions = {
     deleteFileApprovalModeProvider: () => ApprovalMode;
     mcpApprovalModeProvider: () => ApprovalMode;
   };
-  deepAgentExecutor?: { paths: RocPaths; getMemorySettings?: () => AppSettings['memory'] } | AgentDeepAgentExecutor;
+  deepAgentExecutor?: { paths: RocPaths; getMemorySettings?: () => AppSettings['memory']; hookRuntime?: Pick<HookRuntime, 'runEvent'> } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
@@ -200,6 +202,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
         eventBus: context.eventBus,
+        lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
         modelFactory,
         pluginId,
         repository: new AgentSessionRepository(db),
@@ -250,9 +253,46 @@ function resolveDeepAgentExecutor(
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
     getMemorySettings: option.getMemorySettings,
+    hookRuntime: option.hookRuntime,
     paths: option.paths,
     store: new RocSqliteStore(context.database.getCoreConnection())
   });
+}
+
+function resolveLifecycleHooks(
+  context: RocPluginContext,
+  option: AgentPluginOptions['deepAgentExecutor']
+): AgentLifecycleHookEmitter | undefined {
+  if (option === undefined || 'execute' in option || option.hookRuntime === undefined) {
+    return undefined;
+  }
+  const hookRuntime = option.hookRuntime;
+  return {
+    emitSessionEnd: async (input) => {
+      const workspacePath = input.request.workspacePath === undefined ? null : input.request.workspacePath;
+      const outcome = await hookRuntime.runEvent({
+        schemaVersion: 1,
+        event: 'SessionEnd',
+        runId: input.runId,
+        threadId: input.threadId,
+        workspacePath,
+        cwd: workspacePath === null ? option.paths.root : workspacePath,
+        triggeredAt: new Date().toISOString(),
+        payload: {
+          status: input.status,
+          error: input.error
+        }
+      });
+      for (const event of outcome.events) {
+        await context.eventBus.publish({
+          type: 'agent.chat.run-event',
+          source: pluginId,
+          payload: event,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+  };
 }
 
 function resolveDependencies(options: AgentPluginOptions): string[] {

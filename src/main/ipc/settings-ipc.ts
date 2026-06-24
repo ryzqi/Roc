@@ -1,10 +1,11 @@
 import { ipcChannels } from '../../shared/ipc';
-import { emptyRocHookConfigSnapshot } from '../../shared/types';
 import type {
   McpServerSnapshot,
   ProviderSecretSetRequest,
+  SettingsSaveHookConfigRequest,
   SettingsSaveRequest,
   SettingsSnapshot,
+  SettingsTrustHookRequest,
   SkillSnapshot
 } from '../../shared/types';
 import type { ConfigService } from '../services/config-service';
@@ -20,23 +21,34 @@ export type KernelSettingsBridge = {
   syncSettingsSnapshot(request: SettingsSaveRequest): Promise<void> | void;
 };
 
+export type HookSettingsBridge = {
+  hookConfigService: {
+    loadConfigSnapshot(): Promise<SettingsSnapshot['hooks']>;
+    saveConfig(config: SettingsSaveHookConfigRequest['config']): Promise<SettingsSnapshot['hooks']>;
+  };
+  hookTrustService: {
+    trust(request: SettingsTrustHookRequest): Promise<void>;
+  };
+};
+
 export function registerSettingsIpc(
   timedHandle: TimedHandle,
   configService: ConfigService,
   secretService: SecretService,
   providerRuntimeService: ProviderRuntimeService,
   kernelSettings: KernelSettingsBridge,
-  controls: Pick<AppWindowControls, 'getHostIntegrationStatus' | 'syncHostSettings'>
+  controls: Pick<AppWindowControls, 'getHostIntegrationStatus' | 'syncHostSettings'>,
+  hooks?: HookSettingsBridge
 ): void {
   timedHandle(ipcChannels.settingsGet, () =>
-    wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls))
+    wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls, hooks))
   );
   timedHandle(ipcChannels.settingsSave, (_event, settings) =>
     wrapIpc(async () => {
       const savedSettings = await configService.saveSettingsSnapshotAsync(settings);
       await kernelSettings.syncSettingsSnapshot(savedSettings);
       controls.syncHostSettings(savedSettings.settings);
-      return await buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls);
+      return await buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls, hooks);
     })
   );
   timedHandle(ipcChannels.settingsTestProvider, (_event, id: string) =>
@@ -61,13 +73,39 @@ export function registerSettingsIpc(
       return { providerId, stored: false as const };
     })
   );
+  timedHandle(ipcChannels.settingsHooksGet, () =>
+    wrapIpc(async () => {
+      if (hooks === undefined) {
+        throw new Error('hook_settings_unavailable');
+      }
+      return await hooks.hookConfigService.loadConfigSnapshot();
+    })
+  );
+  timedHandle(ipcChannels.settingsHooksSave, (_event, request: SettingsSaveHookConfigRequest) =>
+    wrapIpc(async () => {
+      if (hooks === undefined) {
+        throw new Error('hook_settings_unavailable');
+      }
+      return await hooks.hookConfigService.saveConfig(request.config);
+    })
+  );
+  timedHandle(ipcChannels.settingsHooksTrust, (_event, request: SettingsTrustHookRequest) =>
+    wrapIpc(async () => {
+      if (hooks === undefined) {
+        throw new Error('hook_settings_unavailable');
+      }
+      await hooks.hookTrustService.trust(request);
+      return await hooks.hookConfigService.loadConfigSnapshot();
+    })
+  );
 }
 
 async function buildSettingsSnapshotAsync(
   configService: ConfigService,
   secretService: SecretService,
   kernelSettings: Pick<KernelSettingsBridge, 'listMcpServers' | 'listSkills'>,
-  controls: Pick<AppWindowControls, 'getHostIntegrationStatus'>
+  controls: Pick<AppWindowControls, 'getHostIntegrationStatus'>,
+  hooks?: HookSettingsBridge
 ): Promise<SettingsSnapshot> {
   const providersConfig = await configService.getProvidersAsync();
   const providerSecretStatus = secretService.listSecretStatuses(providersConfig.providers.map((provider) => provider.id));
@@ -83,7 +121,20 @@ async function buildSettingsSnapshotAsync(
     permissions: await configService.getPermissionsAsync(),
     mcpServers,
     skills,
-    hooks: emptyRocHookConfigSnapshot,
+    hooks: hooks === undefined ? unavailableHookConfigSnapshot() : await hooks.hookConfigService.loadConfigSnapshot(),
     hostIntegration: controls.getHostIntegrationStatus()
+  };
+}
+
+function unavailableHookConfigSnapshot(): SettingsSnapshot['hooks'] {
+  return {
+    configPath: '',
+    exists: false,
+    config: {
+      schemaVersion: 1,
+      hooks: {}
+    },
+    handlers: [],
+    validationErrors: ['hook_settings_unavailable']
   };
 }

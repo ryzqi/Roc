@@ -116,7 +116,11 @@ export function registerIpc(
         kernel.syncSettingsSnapshot(request);
       }
     },
-    controls
+    controls,
+    {
+      hookConfigService: kernel.hookConfigService,
+      hookTrustService: kernel.hookTrustService
+    }
   );
   registerWorkspaceDialogIpc(timedHandle, mainWindow, {
     selectWorkspace: (path) => kernel.invokeCapability('workspace.select', { path })
