@@ -316,7 +316,7 @@ describe('ConfigService unified settings document', () => {
     configService.saveSettingsSnapshot({
       settings: configService.getSettings(),
       providers: [provider],
-      defaultModelId: 'provider-openai-model',
+      defaultModelId: 'provider-openai:provider-openai-model',
       permissions: configService.getPermissions()
     });
 
@@ -379,7 +379,7 @@ describe('ConfigService unified settings document', () => {
 
     configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen3.5-4b',
+      defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
           id: 'llama_cpp',

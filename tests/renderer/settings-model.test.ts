@@ -111,9 +111,9 @@ describe('settings model helpers', () => {
       apiKey: '',
       enabled: true,
       modelsText:
-        '~openai/gpt-latest | OpenAI GPT Latest\n' +
-        '~anthropic/claude-sonnet-latest | Claude Sonnet Latest\n' +
-        '~google/gemini-pro-latest | Gemini Pro Latest',
+        '~openai/gpt-latest | OpenAI GPT Latest | image\n' +
+        '~anthropic/claude-sonnet-latest | Claude Sonnet Latest | image\n' +
+        '~google/gemini-pro-latest | Gemini Pro Latest | image',
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
@@ -254,6 +254,73 @@ describe('settings model helpers', () => {
         supportsImages: false
       }
     ]);
+  });
+
+
+  it('parses model image capability metadata from model lines', () => {
+    expect(parseProviderModelDraft('gpt-4o | GPT 4o | image\ngpt-4.1 | GPT 4.1 | text')).toEqual([
+      {
+        id: 'gpt-4o',
+        displayName: 'GPT 4o',
+        enabled: true,
+        supportsStreaming: true,
+        supportsToolCalls: true,
+        supportsImages: true
+      },
+      {
+        id: 'gpt-4.1',
+        displayName: 'GPT 4.1',
+        enabled: true,
+        supportsStreaming: true,
+        supportsToolCalls: true,
+        supportsImages: false
+      }
+    ]);
+  });
+
+
+  it('rejects model lines outside the current three-column format', () => {
+    expect(() => parseProviderModelDraft('gpt-4o | GPT 4o | image | extra')).toThrow(
+      'Provider model 格式应为 modelId | displayName | image。'
+    );
+    expect(() => parseProviderModelDraft('gpt-4o | GPT 4o | vision')).toThrow(
+      'Provider model 图片能力仅支持 image 或 text。'
+    );
+  });
+
+
+  it('preserves model image capability metadata when editing provider drafts', () => {
+    const provider: ProviderConfig = {
+      id: 'vision-provider',
+      name: 'Vision Provider',
+      type: 'openai_compatible',
+      endpoint: 'https://vision.example.test/v1',
+      credentialRef: 'secret:vision-provider',
+      enabled: true,
+      models: [
+        {
+          id: 'gpt-4o',
+          displayName: 'GPT 4o',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: true
+        },
+        {
+          id: 'gpt-4.1',
+          displayName: 'GPT 4.1',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: false
+        }
+      ]
+    };
+
+    const draft = createProviderDraft('openai_compatible', provider);
+
+    expect(draft.modelsText).toBe('gpt-4o | GPT 4o | image\ngpt-4.1 | GPT 4.1');
+    expect(buildProviderConfigFromDraft(draft).models).toEqual(provider.models);
   });
 
 

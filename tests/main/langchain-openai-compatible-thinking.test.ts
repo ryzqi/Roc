@@ -71,7 +71,7 @@ function configureOpenAiCompatibleProvider(): void {
   services.secretService.setProviderSecret('openai-compatible', 'sk-openai-compatible-test');
   services.configService.saveProviders({
     schemaVersion: 1,
-    defaultModelId: 'agnes-2.0-flash',
+    defaultModelId: 'openai-compatible:agnes-2.0-flash',
     providers: [
       {
         id: 'openai-compatible',

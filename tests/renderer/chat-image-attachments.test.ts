@@ -42,7 +42,7 @@ describe('chat image attachment helpers', () => {
 
   it('requires the selected default model to support images', () => {
     const supported = createLoadedState({
-      defaultModelId: 'vision-model',
+      defaultModelId: 'provider-1:vision-model',
       providers: [
         {
           id: 'provider-1',
@@ -65,7 +65,7 @@ describe('chat image attachment helpers', () => {
       ]
     });
     const unsupported = createLoadedState({
-      defaultModelId: 'text-model',
+      defaultModelId: 'provider-1:text-model',
       providers: [
         {
           id: 'provider-1',
@@ -90,5 +90,51 @@ describe('chat image attachment helpers', () => {
 
     expect(isImageInputSupported(supported)).toBe(true);
     expect(isImageInputSupported(unsupported)).toBe(false);
+  });
+
+  it('checks image support on the selected provider when model ids overlap', () => {
+    const state = createLoadedState({
+      defaultModelId: 'text-provider:shared-model',
+      providers: [
+        {
+          id: 'vision-provider',
+          name: 'Vision Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://vision.example.test',
+          credentialRef: null,
+          enabled: true,
+          models: [
+            {
+              id: 'shared-model',
+              displayName: 'Shared Model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: true
+            }
+          ]
+        },
+        {
+          id: 'text-provider',
+          name: 'Text Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://text.example.test',
+          credentialRef: null,
+          enabled: true,
+          models: [
+            {
+              id: 'shared-model',
+              displayName: 'Shared Model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: false
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(isImageInputSupported(state)).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import {
   normalizeFixedNvidiaProvider,
   normalizeFixedOpenRouterProvider
 } from '../../shared/provider-defaults';
+import { buildProviderModelKey } from '../../shared/provider-model-key';
 import {
   type OpenAiReasoningEffort,
   type OpenAiReasoningSummary,
@@ -82,6 +83,7 @@ export type ProviderDraft = {
 };
 
 export type EnabledModelOption = {
+  modelKey: string;
   modelId: string;
   providerId: string;
   label: string;
@@ -115,7 +117,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       endpoint: fixedNvidiaBaseUrl,
       apiKey: '',
       enabled: normalized.enabled,
-      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      modelsText: normalized.models.map(formatProviderModelDraft).join('\n'),
       temperature:
         typeof normalized.options?.temperature === 'number' ? String(normalized.options.temperature) : '',
       maxTokens:
@@ -134,7 +136,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       endpoint: fixedOpenRouterBaseUrl,
       apiKey: '',
       enabled: normalized.enabled,
-      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      modelsText: normalized.models.map(formatProviderModelDraft).join('\n'),
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
@@ -151,7 +153,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
       endpoint: normalized.endpoint,
       apiKey: '',
       enabled: normalized.enabled,
-      modelsText: normalized.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+      modelsText: normalized.models.map(formatProviderModelDraft).join('\n'),
       temperature: '',
       maxTokens: '',
       thinking: 'unset',
@@ -191,7 +193,7 @@ export function createProviderDraft(type: EditableProviderType, provider?: Provi
     endpoint: provider.endpoint,
     apiKey: '',
     enabled: provider.enabled,
-    modelsText: provider.models.map((model) => `${model.id} | ${model.displayName}`).join('\n'),
+    modelsText: provider.models.map(formatProviderModelDraft).join('\n'),
     temperature: typeof provider.options?.temperature === 'number' ? String(provider.options.temperature) : '',
     maxTokens: typeof provider.options?.maxTokens === 'number' ? String(provider.options.maxTokens) : '',
     thinking: booleanDraftValue(provider.options?.thinking),
@@ -205,24 +207,52 @@ export function parseProviderModelDraft(modelsText: string): ProviderModel[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => {
-      const separatorIndex = line.indexOf('|');
-      const id = separatorIndex === -1 ? line.trim() : line.slice(0, separatorIndex).trim();
-      const displayName = separatorIndex === -1 ? id : line.slice(separatorIndex + 1).trim();
+      const parts = line.split('|').map((part) => part.trim());
+      if (parts.length > 3) {
+        throw new Error('Provider model 格式应为 modelId | displayName | image。');
+      }
+      const firstPart = parts[0];
+      if (firstPart === undefined) {
+        throw new Error('Provider model ID 不能为空。');
+      }
+      const secondPart = parts[1];
+      const thirdPart = parts[2];
+      const id = firstPart;
+      const displayName = secondPart === undefined ? id : secondPart;
       if (id.length === 0) {
         throw new Error('Provider model ID 不能为空。');
       }
       if (displayName.length === 0) {
         throw new Error('Provider model displayName 不能为空。');
       }
+      const supportsImages = parseProviderModelImageCapability(thirdPart);
       return {
         id,
         displayName,
         enabled: true,
         supportsStreaming: true,
         supportsToolCalls: true,
-        supportsImages: false
+        supportsImages
       };
     });
+}
+
+function formatProviderModelDraft(model: ProviderModel): string {
+  const baseLine = `${model.id} | ${model.displayName}`;
+  if (model.supportsImages) {
+    return `${baseLine} | image`;
+  }
+  return baseLine;
+}
+
+function parseProviderModelImageCapability(value: string | undefined): boolean {
+  if (value === undefined || value.length === 0 || value === 'text') {
+    return false;
+  }
+  if (value === 'image') {
+    return true;
+  }
+  throw new Error('Provider model 图片能力仅支持 image 或 text。');
 }
 
 export function buildProviderIdFromName(name: string): string {
@@ -348,6 +378,7 @@ export function buildEnabledModelOptions(providers: ProviderConfig[]): EnabledMo
       provider.models
         .filter((model) => model.enabled)
         .map((model) => ({
+          modelKey: buildProviderModelKey(provider.id, model.id),
           modelId: model.id,
           providerId: provider.id,
           label: `${provider.name} / ${model.displayName}`

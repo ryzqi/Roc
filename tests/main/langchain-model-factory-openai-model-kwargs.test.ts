@@ -20,7 +20,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen-local',
+      defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
           id: 'openai-local',
@@ -95,7 +95,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-thinking-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'thinking-local',
+      defaultModelId: 'openai-thinking-local:thinking-local',
       providers: [
         {
           id: 'openai-thinking-local',
@@ -142,7 +142,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen-local',
+      defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
           id: 'openai-local',

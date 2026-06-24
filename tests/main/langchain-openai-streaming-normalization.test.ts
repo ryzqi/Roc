@@ -330,7 +330,7 @@ function configureOpenAiCompatibleProvider(): void {
   services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
   services.configService.saveProviders({
     schemaVersion: 1,
-    defaultModelId: 'qwen-local',
+    defaultModelId: 'openai-local:qwen-local',
     providers: [
       {
         id: 'openai-local',

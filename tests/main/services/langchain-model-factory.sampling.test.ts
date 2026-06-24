@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderTestServices, type ProviderTestServices } from '../provider-test-fixture';
 import { LangChainModelFactory } from '../../../src/main/services/langchain-model-factory';
+import { buildProviderModelKey } from '../../../src/shared/provider-model-key';
 import type { ProviderConfig } from '../../../src/shared/types';
 
 let services: ProviderTestServices;
@@ -136,7 +137,7 @@ describe('LangChainModelFactory llama.cpp sampling defaults', () => {
 function saveProviders(providers: ProviderConfig[]): void {
   services.configService.saveProviders({
     schemaVersion: 1,
-    defaultModelId: providers[0]!.models[0]!.id,
+    defaultModelId: buildProviderModelKey(providers[0]!.id, providers[0]!.models[0]!.id),
     providers
   });
 }

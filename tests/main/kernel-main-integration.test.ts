@@ -139,7 +139,7 @@ describe('main kernel bootstrap integration', () => {
             ]
           }
         ],
-        defaultModelId: 'smoke-model'
+        defaultModelId: 'smoke-provider:smoke-model'
       });
 
       await expect(bootstrap.invokeCapability<{}, AgentRuntimeStatus>('agent.status.get', {})).resolves.toMatchObject({

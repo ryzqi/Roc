@@ -17,7 +17,7 @@ describe('LangChainModelFactory', () => {
   it('builds a fixed llama.cpp ChatOpenAI model with cache_prompt and no API key requirement', async () => {
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen3.5-4b',
+      defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
           id: 'llama_cpp',
@@ -66,7 +66,7 @@ describe('LangChainModelFactory', () => {
   it('keeps llama.cpp free of OpenAI-only reasoning, organization, service tier, and response fields', async () => {
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen3.5-4b',
+      defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
           id: 'llama_cpp',
@@ -126,4 +126,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

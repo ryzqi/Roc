@@ -198,6 +198,7 @@ describe('providers section', () => {
     expect(html).not.toContain('data-testid="provider-draft-name"');
     expect(html).not.toContain('data-testid="provider-draft-endpoint"');
     expect(html).toContain('data-testid="provider-draft-models"');
+    expect(html).toContain('第三列填 image 表示该模型支持图片输入');
     expect(html).toContain('~openai/gpt-latest | OpenAI GPT Latest');
     expect(html).not.toContain(`data-testid="provider-delete-${provider.id}"`);
   });

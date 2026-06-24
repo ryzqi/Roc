@@ -44,12 +44,12 @@ export function DefaultModelSection({
                 {option.providerId}:{option.modelId}
               </div>
             </div>
-            <span className={defaultModelId === option.modelId ? 'pill ok' : 'pill info'}>
-              {defaultModelId === option.modelId ? '默认' : '可选'}
+            <span className={defaultModelId === option.modelKey ? 'pill ok' : 'pill info'}>
+              {defaultModelId === option.modelKey ? '默认' : '可选'}
             </span>
             <button
-              data-testid={`default-model-${option.modelId}`}
-              onClick={() => void onSelectDefaultModel(option.modelId)}
+              data-testid={`default-model-${option.providerId}-${option.modelId}`}
+              onClick={() => void onSelectDefaultModel(option.modelKey)}
               type="button"
             >
               设为默认

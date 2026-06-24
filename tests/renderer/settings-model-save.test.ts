@@ -168,6 +168,7 @@ describe('settings model helpers', () => {
 
     expect(buildEnabledModelOptions(providers)).toEqual([
       {
+        modelKey: 'openai-a:gpt-a',
         modelId: 'gpt-a',
         providerId: 'openai-a',
         label: 'OpenAI A / GPT A'
@@ -219,21 +220,21 @@ describe('settings model helpers', () => {
     const draft = buildSettingsSaveRequest({
       settings,
       providers: [firstProvider],
-      defaultModelId: 'gpt-a',
+      defaultModelId: 'openai-a:gpt-a',
       permissions
     });
     const withSecondProvider = upsertProviderInSettingsSaveRequest(draft, secondProvider);
-    const changedDefaultModel = setDefaultModelInSettingsSaveRequest(withSecondProvider, 'claude-a');
+    const changedDefaultModel = setDefaultModelInSettingsSaveRequest(withSecondProvider, 'anthropic-a:claude-a');
     const afterDelete = deleteProviderFromSettingsSaveRequest(changedDefaultModel, secondProvider.id);
 
     expect(draft).toEqual({
       settings,
       providers: [firstProvider],
-      defaultModelId: 'gpt-a',
+      defaultModelId: 'openai-a:gpt-a',
       permissions
     });
     expect(withSecondProvider.providers.map((provider) => provider.id)).toEqual(['openai-a', 'anthropic-a']);
-    expect(changedDefaultModel.defaultModelId).toBe('claude-a');
+    expect(changedDefaultModel.defaultModelId).toBe('anthropic-a:claude-a');
     expect(afterDelete).toEqual({
       settings,
       providers: [firstProvider],
@@ -268,7 +269,7 @@ describe('settings model helpers', () => {
     const request = buildSettingsSaveRequest({
       settings,
       providers: [provider],
-      defaultModelId: 'gpt-a',
+      defaultModelId: 'openai-a:gpt-a',
       permissions
     });
 
@@ -349,7 +350,7 @@ describe('settings model helpers', () => {
       applySettingsSnapshot({
         settings,
         providers: [provider],
-        defaultModelId: 'gpt-a',
+        defaultModelId: 'openai-a:gpt-a',
         providerSecretStatus,
         permissions,
         mcpServers,
@@ -359,7 +360,7 @@ describe('settings model helpers', () => {
     ).toEqual({
       settings,
       providers: [provider],
-      defaultModelId: 'gpt-a',
+      defaultModelId: 'openai-a:gpt-a',
       providerSecretStatus,
       permissions,
       mcpServers,
@@ -404,7 +405,7 @@ describe('settings model helpers', () => {
 
     const rows = buildImpactRows(
       { settings: baseSettings, permissions: basePermissions, defaultModelId: null },
-      { settings: draftSettings, permissions: draftPermissions, defaultModelId: 'model-y' }
+      { settings: draftSettings, permissions: draftPermissions, defaultModelId: 'provider-y:model-y' }
     );
 
     expect(rows.map((row) => row.field)).toEqual([

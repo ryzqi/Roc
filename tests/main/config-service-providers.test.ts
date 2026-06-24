@@ -47,7 +47,7 @@ describe('ConfigService unified settings document', () => {
       },
       providers: {
         schemaVersion: 1,
-        defaultModelId: 'kept-model',
+        defaultModelId: 'kept-provider:kept-model',
         providers: [
           {
             id: 'kept-provider',
@@ -162,13 +162,13 @@ describe('ConfigService unified settings document', () => {
     };
 
     configService.upsertProvider(provider);
-    configService.setDefaultModel('anthropic-model');
+    configService.setDefaultModel('provider-anthropic:anthropic-model');
     mcpService.upsertServer(mcpServer);
 
     expect(readSettingsDocument()).toMatchObject({
       schemaVersion: 4,
       providers: {
-        defaultModelId: 'anthropic-model',
+        defaultModelId: 'provider-anthropic:anthropic-model',
         providers: [
           expect.objectContaining({
             id: 'nvidia',

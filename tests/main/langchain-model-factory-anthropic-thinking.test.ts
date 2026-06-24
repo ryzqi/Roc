@@ -18,7 +18,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-opus-4-6',
+      defaultModelId: 'anthropic-phase1:claude-opus-4-6',
       providers: [
         {
           id: 'anthropic-phase1',
@@ -75,7 +75,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-reasoning-none', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'gpt-5.1',
+      defaultModelId: 'openai-reasoning-none:gpt-5.1',
       providers: [
         {
           id: 'openai-reasoning-none',
@@ -174,7 +174,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-disabled', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-opus-4-6',
+      defaultModelId: 'anthropic-disabled:claude-opus-4-6',
       providers: [
         {
           id: 'anthropic-disabled',
@@ -211,4 +211,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

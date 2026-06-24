@@ -30,7 +30,7 @@ describe('ConfigStore', () => {
       },
       providers: {
         schemaVersion: 1,
-        defaultModelId: 'provider-model',
+        defaultModelId: 'provider:provider-model',
         providers: []
       },
       mcp: {

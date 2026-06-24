@@ -33,7 +33,7 @@ describe('ConfigService unified settings document', () => {
 
     configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'gpt-openai-1',
+      defaultModelId: 'openai-advanced:gpt-openai-1',
       providers: [
         {
           id: 'openai-advanced',
@@ -175,7 +175,7 @@ describe('ConfigService unified settings document', () => {
 
     expect(readSettingsDocument()).toMatchObject({
       providers: {
-        defaultModelId: 'gpt-openai-1',
+        defaultModelId: 'openai-advanced:gpt-openai-1',
         providers: expect.arrayContaining([
           expect.objectContaining({
             id: 'openai-advanced',
@@ -225,7 +225,7 @@ describe('ConfigService unified settings document', () => {
     try {
       configService.saveProviders({
         schemaVersion: 1,
-        defaultModelId: 'claude-invalid-missing-budget',
+        defaultModelId: 'anthropic-invalid-missing-budget:claude-invalid-missing-budget',
         providers: [
           {
             id: 'anthropic-invalid-missing-budget',
@@ -270,7 +270,7 @@ describe('ConfigService unified settings document', () => {
     try {
       configService.saveProviders({
         schemaVersion: 1,
-        defaultModelId: 'claude-invalid-small-budget',
+        defaultModelId: 'anthropic-invalid-small-budget:claude-invalid-small-budget',
         providers: [
           {
             id: 'anthropic-invalid-small-budget',
@@ -316,7 +316,7 @@ describe('ConfigService unified settings document', () => {
     try {
       configService.saveProviders({
         schemaVersion: 1,
-        defaultModelId: 'claude-invalid-oversized-budget',
+        defaultModelId: 'anthropic-invalid-oversized-budget:claude-invalid-oversized-budget',
         providers: [
           {
             id: 'anthropic-invalid-oversized-budget',
@@ -366,7 +366,7 @@ describe('ConfigService unified settings document', () => {
 
     configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-disabled-thinking',
+      defaultModelId: 'anthropic-disabled-thinking:claude-disabled-thinking',
       providers: [
         {
           id: 'anthropic-disabled-thinking',
@@ -409,7 +409,7 @@ describe('ConfigService unified settings document', () => {
 
     expect(readSettingsDocument()).toMatchObject({
       providers: {
-        defaultModelId: 'claude-disabled-thinking',
+        defaultModelId: 'anthropic-disabled-thinking:claude-disabled-thinking',
         providers: expect.arrayContaining([
           expect.objectContaining({
             id: 'anthropic-disabled-thinking',

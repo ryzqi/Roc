@@ -189,7 +189,7 @@ describe('ChatFeature', () => {
     const submit = vi.fn().mockResolvedValue({ ok: true as const });
     const state = createLoadedState({
       providers: [provider],
-      defaultModelId: provider.models[0]!.id
+      defaultModelId: `${provider.id}:${provider.models[0]!.id}`
     });
     const client = createChatClient();
     vi.mocked(client.api.files.selectFromDialog).mockResolvedValue({

@@ -3,6 +3,7 @@ import { unwrap } from '../loaded-state';
 import { useState } from 'react';
 import type { ClipboardEvent, Dispatch, DragEvent, SetStateAction } from 'react';
 import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
+import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
 import type { RocClient } from '../shared/roc-client';
 import { ComposerActionIcon } from '../chat-composer-icons';
@@ -115,13 +116,14 @@ export function ChatComposer({
         .filter((model) => model.enabled)
         .map((model) => ({
           id: model.id,
+          key: buildProviderModelKey(provider.id, model.id),
           shortLabel: model.displayName,
           label: `${provider.name} / ${model.displayName}`
         }))
     );
   let composerModelLabel = '未配置';
   if (state.defaultModelId !== null) {
-    const selectedModel = enabledModels.find((model) => model.id === state.defaultModelId);
+    const selectedModel = enabledModels.find((model) => model.key === state.defaultModelId);
     if (selectedModel !== undefined) {
       composerModelLabel = selectedModel.shortLabel;
     } else {
@@ -459,8 +461,8 @@ export function ChatComposer({
                 <div className="composer-popover-list">
                   {enabledModels.map((model) => (
                     <button
-                      className={state.defaultModelId === model.id ? 'composer-choice active' : 'composer-choice'}
-                      key={model.id}
+                      className={state.defaultModelId === model.key ? 'composer-choice active' : 'composer-choice'}
+                      key={model.key}
                       type="button"
                       onClick={() => {
                         void client.api.settings
@@ -472,7 +474,7 @@ export function ChatComposer({
                                 defaultModelId: state.defaultModelId,
                                 permissions: state.permissions
                               }),
-                              model.id
+                              model.key
                             )
                           )
                           .then(async (result) => {

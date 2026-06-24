@@ -23,7 +23,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen-local',
+      defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
           id: 'openai-local',
@@ -58,7 +58,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openrouter', 'sk-or-v1-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: '~openai/gpt-latest',
+      defaultModelId: 'openrouter:~openai/gpt-latest',
       providers: [
         {
           id: 'openrouter',
@@ -103,7 +103,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openrouter', 'sk-or-v1-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: '~openai/gpt-latest',
+      defaultModelId: 'openrouter:~openai/gpt-latest',
       providers: [
         {
           id: 'openrouter',
@@ -164,7 +164,7 @@ describe('LangChainModelFactory', () => {
   it('sanitizes llama.cpp tool schemas before grammar generation', async () => {
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen3.5-4b',
+      defaultModelId: 'llama_cpp:qwen3.5-4b',
       providers: [
         {
           id: 'llama_cpp',
@@ -267,7 +267,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen-local',
+      defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
           id: 'openai-local',
@@ -332,7 +332,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen-local',
+      defaultModelId: 'openai-local:qwen-local',
       providers: [
         {
           id: 'openai-local',
@@ -420,4 +420,3 @@ describe('LangChainModelFactory', () => {
 
 
 });
-

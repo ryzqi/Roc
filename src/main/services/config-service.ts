@@ -10,6 +10,7 @@ import type {
   RocSettingsDocument,
   SettingsSaveRequest
 } from '../../shared/types';
+import { parseProviderModelKey } from '../../shared/provider-model-key';
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import { requireText } from './validation';
@@ -258,8 +259,18 @@ export class ConfigService {
     }
 
     const id = requireText(modelId, 'default_model_id_empty', '默认模型 ID 不能为空。', '请选择一个默认模型。');
+    const modelKey = parseProviderModelKey(id);
+    if (modelKey === null) {
+      throw new RocDomainError({
+        code: 'default_model_not_found',
+        message: '默认模型不存在。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请从已配置 provider 的模型列表中选择默认模型。'
+      });
+    }
     const config = this.getProviders();
-    const targetProvider = config.providers.find((provider) => provider.models.some((model) => model.id === id));
+    const targetProvider = config.providers.find((provider) => provider.id === modelKey.providerId);
     if (targetProvider === undefined) {
       throw new RocDomainError({
         code: 'default_model_not_found',
@@ -269,7 +280,7 @@ export class ConfigService {
         userAction: '请从已配置 provider 的模型列表中选择默认模型。'
       });
     }
-    const targetModel = targetProvider.models.find((model) => model.id === id);
+    const targetModel = targetProvider.models.find((model) => model.id === modelKey.modelId);
     if (targetModel === undefined) {
       throw new RocDomainError({
         code: 'default_model_not_found',

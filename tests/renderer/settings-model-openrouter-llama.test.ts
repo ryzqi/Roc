@@ -76,7 +76,7 @@ describe('settings model helpers', () => {
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true,
-          supportsImages: false
+          supportsImages: true
         },
         {
           id: '~anthropic/claude-sonnet-latest',
@@ -84,7 +84,7 @@ describe('settings model helpers', () => {
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true,
-          supportsImages: false
+          supportsImages: true
         },
         {
           id: '~google/gemini-pro-latest',
@@ -92,7 +92,7 @@ describe('settings model helpers', () => {
           enabled: true,
           supportsStreaming: true,
           supportsToolCalls: true,
-          supportsImages: false
+          supportsImages: true
         }
       ],
       options: undefined
@@ -184,7 +184,7 @@ describe('settings model helpers', () => {
           ]
         }
       ],
-      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      defaultModelId: 'llama_cpp:Qwen3.5-4B-UD-Q5_K_XL.gguf',
       permissions
     });
 
@@ -198,7 +198,7 @@ describe('settings model helpers', () => {
     expect(upsertProviderInSettingsSaveRequest(request, savedProvider)).toEqual({
       settings,
       providers: [savedProvider],
-      defaultModelId: 'Qwen3.5-4B-UD-Q5_K_XL.gguf',
+      defaultModelId: 'llama_cpp:Qwen3.5-4B-UD-Q5_K_XL.gguf',
       permissions
     });
     expect(savedProvider.credentialRef).toBeNull();

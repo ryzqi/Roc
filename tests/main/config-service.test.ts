@@ -134,7 +134,7 @@ describe('ConfigService unified settings document', () => {
     };
     const legacyProviders = {
       schemaVersion: 1 as const,
-      defaultModelId: 'provider-openai-model',
+      defaultModelId: 'provider-openai:provider-openai-model',
       providers: [
         {
           id: 'provider-openai',
@@ -201,7 +201,7 @@ describe('ConfigService unified settings document', () => {
     });
     expect(document.providers).toMatchObject({
       schemaVersion: 1,
-      defaultModelId: 'provider-openai-model'
+      defaultModelId: 'provider-openai:provider-openai-model'
     });
     expect((document.providers as { providers: unknown[] }).providers).toEqual(
       expect.arrayContaining([

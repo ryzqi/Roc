@@ -64,7 +64,7 @@ describe('config helper modules', () => {
   it('normalizes fixed providers and derives default-model state via provider rules helpers', () => {
     const normalized = normalizeProvidersConfig({
       schemaVersion: 1,
-      defaultModelId: 'custom-model',
+      defaultModelId: 'custom-provider:custom-model',
       providers: [
         {
           id: 'custom-provider',
@@ -99,6 +99,59 @@ describe('config helper modules', () => {
       modelId: null,
       providerId: null,
       reason: '未配置默认模型。'
+    });
+  });
+
+
+  it('resolves provider-qualified default model keys when model ids overlap', () => {
+    const state = defaultModelStateForProviders({
+      schemaVersion: 1,
+      defaultModelId: 'second-provider:shared-model',
+      providers: [
+        {
+          id: 'first-provider',
+          name: 'First Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://first.example.test/v1',
+          credentialRef: 'secret:first-provider',
+          enabled: true,
+          models: [
+            {
+              id: 'shared-model',
+              displayName: 'Shared Model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: true
+            }
+          ]
+        },
+        {
+          id: 'second-provider',
+          name: 'Second Provider',
+          type: 'openai_compatible',
+          endpoint: 'https://second.example.test/v1',
+          credentialRef: 'secret:second-provider',
+          enabled: true,
+          models: [
+            {
+              id: 'shared-model',
+              displayName: 'Shared Model',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: false
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(state).toEqual({
+      status: 'ready',
+      modelId: 'shared-model',
+      providerId: 'second-provider',
+      reason: '默认模型可用。'
     });
   });
 

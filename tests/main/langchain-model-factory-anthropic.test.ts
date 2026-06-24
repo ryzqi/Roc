@@ -19,7 +19,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'moonshotai/kimi-k2.6',
+      defaultModelId: 'nvidia:moonshotai/kimi-k2.6',
       providers: [
         {
           id: 'nvidia',
@@ -91,7 +91,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-local-empty', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'empty-local',
+      defaultModelId: 'openai-local-empty:empty-local',
       providers: [
         {
           id: 'openai-local-empty',
@@ -126,7 +126,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('openai-responses', 'sk-openai-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'gpt-5',
+      defaultModelId: 'openai-responses:gpt-5',
       providers: [
         {
           id: 'openai-responses',
@@ -191,7 +191,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-5',
+      defaultModelId: 'anthropic-local:claude-sonnet-4-5',
       providers: [
         {
           id: 'anthropic-local',
@@ -267,7 +267,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-6',
+      defaultModelId: 'anthropic-phase1:claude-sonnet-4-6',
       providers: [
         {
           id: 'anthropic-phase1',
@@ -312,7 +312,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-6',
+      defaultModelId: 'anthropic-phase1:claude-sonnet-4-6',
       providers: [
         {
           id: 'anthropic-phase1',
@@ -345,4 +345,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

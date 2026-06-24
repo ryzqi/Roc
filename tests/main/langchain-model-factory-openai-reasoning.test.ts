@@ -17,7 +17,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-phase1', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-6',
+      defaultModelId: 'anthropic-phase1:claude-sonnet-4-6',
       providers: [
         {
           id: 'anthropic-phase1',
@@ -65,7 +65,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-5',
+      defaultModelId: 'anthropic-local:claude-sonnet-4-5',
       providers: [
         {
           id: 'anthropic-local',
@@ -95,4 +95,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

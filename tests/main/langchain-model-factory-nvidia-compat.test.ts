@@ -19,7 +19,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'moonshotai/kimi-k2.6',
+      defaultModelId: 'nvidia:moonshotai/kimi-k2.6',
       providers: [
         {
           id: 'nvidia',
@@ -69,7 +69,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'moonshotai/kimi-k2.6',
+      defaultModelId: 'nvidia:moonshotai/kimi-k2.6',
       providers: [
         {
           id: 'nvidia',
@@ -171,7 +171,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('anthropic-local', 'sk-ant-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'claude-sonnet-4-5',
+      defaultModelId: 'anthropic-local:claude-sonnet-4-5',
       providers: [
         {
           id: 'anthropic-local',
@@ -206,4 +206,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

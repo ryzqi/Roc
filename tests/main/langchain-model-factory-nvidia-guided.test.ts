@@ -18,7 +18,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      defaultModelId: 'nvidia:meta/llama-3.3-70b-instruct',
       providers: [
         {
           id: 'nvidia',
@@ -79,7 +79,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      defaultModelId: 'nvidia:meta/llama-3.3-70b-instruct',
       providers: [
         {
           id: 'nvidia',
@@ -115,7 +115,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'qwen/qwen3-235b-a22b',
+      defaultModelId: 'nvidia:qwen/qwen3-235b-a22b',
       providers: [
         {
           id: 'nvidia',
@@ -152,7 +152,7 @@ describe('LangChainModelFactory', () => {
     services.secretService.setProviderSecret('nvidia', 'nvapi-test');
     services.configService.saveProviders({
       schemaVersion: 1,
-      defaultModelId: 'meta/llama-3.3-70b-instruct',
+      defaultModelId: 'nvidia:meta/llama-3.3-70b-instruct',
       providers: [
         {
           id: 'nvidia',
@@ -195,4 +195,3 @@ describe('LangChainModelFactory', () => {
   });
 
 });
-

@@ -96,6 +96,7 @@ describe('SettingsView provider save', () => {
 
   it('refreshes agent runtime after selecting a default model in settings', async () => {
     const modelId = 'Qwen3.5-4B-UD-Q5_K_XL.gguf';
+    const modelKey = `llama_cpp:${modelId}`;
     const snapshot = buildSettingsSnapshot({ defaultModelId: null });
     const agentStatus = createReadyAgentStatus('llama_cpp', modelId);
     const save = vi.fn(async (request: unknown) => ({
@@ -146,15 +147,15 @@ describe('SettingsView provider save', () => {
       queryByTestId('settings-section-default-model')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await act(async () => {
-      queryByTestId(`default-model-${modelId}`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      queryByTestId(`default-model-llama_cpp-${modelId}`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushPromises();
 
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: modelId }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: modelKey }));
     expect(getStatus).toHaveBeenCalled();
     expect(updateLoadedState).toHaveBeenCalledWith(
       expect.objectContaining({
-        defaultModelId: modelId,
+        defaultModelId: modelKey,
         agent: agentStatus,
         agentCapabilityPreview: null
       })
@@ -164,7 +165,7 @@ describe('SettingsView provider save', () => {
 
 function buildSettingsSnapshot(input: { defaultModelId?: string | null } = {}): SettingsSnapshot {
   const defaultModelId =
-    input.defaultModelId === undefined ? 'Qwen3.5-4B-UD-Q5_K_XL.gguf' : input.defaultModelId;
+    input.defaultModelId === undefined ? 'llama_cpp:Qwen3.5-4B-UD-Q5_K_XL.gguf' : input.defaultModelId;
   const state = createLoadedState({
     providers: [
       {

@@ -11,6 +11,7 @@ import type {
   SettingsSnapshot,
   SkillSnapshot
 } from '../../shared/types';
+import { buildProviderModelKey, parseProviderModelKey } from '../../shared/provider-model-key';
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
@@ -70,10 +71,12 @@ export function upsertProviderInSettingsSaveRequest(
   provider: ProviderConfig
 ): SettingsSaveRequest {
   const existingIndex = request.providers.findIndex((item) => item.id === provider.id);
+  const defaultModelKey = request.defaultModelId === null ? null : parseProviderModelKey(request.defaultModelId);
   const clearsDefaultModel =
     !provider.enabled &&
-    request.defaultModelId !== null &&
-    provider.models.some((model) => model.id === request.defaultModelId);
+    defaultModelKey !== null &&
+    defaultModelKey.providerId === provider.id &&
+    provider.models.some((model) => model.id === defaultModelKey.modelId);
   return {
     ...request,
     defaultModelId: clearsDefaultModel ? null : request.defaultModelId,
@@ -92,14 +95,15 @@ export function deleteProviderFromSettingsSaveRequest(
   if (deletedProvider === undefined) {
     return request;
   }
-  const deletedModelIds = new Set(deletedProvider.models.map((model) => model.id));
+  const defaultModelKey = request.defaultModelId === null ? null : parseProviderModelKey(request.defaultModelId);
+  const clearsDefaultModel =
+    defaultModelKey !== null &&
+    defaultModelKey.providerId === deletedProvider.id &&
+    deletedProvider.models.some((model) => buildProviderModelKey(deletedProvider.id, model.id) === request.defaultModelId);
   return {
     ...request,
     providers: request.providers.filter((provider) => provider.id !== providerId),
-    defaultModelId:
-      request.defaultModelId !== null && deletedModelIds.has(request.defaultModelId)
-        ? null
-        : request.defaultModelId
+    defaultModelId: clearsDefaultModel ? null : request.defaultModelId
   };
 }
 

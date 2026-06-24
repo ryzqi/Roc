@@ -6,6 +6,7 @@ import {
   normalizeFixedProvider,
   resolveFixedProviderType
 } from '../../../shared/provider-defaults';
+import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
 import type { DefaultModelState, ProviderConfig, ProvidersConfig } from '../../../shared/types';
 
 function sanitizeDefaultModelIdForDisabledProviders(
@@ -15,9 +16,16 @@ function sanitizeDefaultModelIdForDisabledProviders(
   if (defaultModelId === null) {
     return null;
   }
+  const defaultModelKey = parseProviderModelKey(defaultModelId);
+  if (defaultModelKey === null) {
+    return defaultModelId;
+  }
   if (
     providers.some(
-      (provider) => !provider.enabled && provider.models.some((model) => model.id === defaultModelId)
+      (provider) =>
+        !provider.enabled &&
+        provider.id === defaultModelKey.providerId &&
+        provider.models.some((model) => model.id === defaultModelKey.modelId)
     )
   ) {
     return null;
@@ -61,9 +69,21 @@ export function defaultModelStateForProviders(providersConfig: ProvidersConfig):
       reason: '未配置默认模型。'
     };
   }
+  const defaultModelKey = parseProviderModelKey(providersConfig.defaultModelId);
+  if (defaultModelKey === null) {
+    return {
+      status: 'invalid',
+      modelId: providersConfig.defaultModelId,
+      providerId: null,
+      reason: '默认模型不存在。'
+    };
+  }
 
   for (const provider of providersConfig.providers) {
-    const model = provider.models.find((candidate) => candidate.id === providersConfig.defaultModelId);
+    if (provider.id !== defaultModelKey.providerId) {
+      continue;
+    }
+    const model = provider.models.find((candidate) => candidate.id === defaultModelKey.modelId);
     if (model === undefined) {
       continue;
     }
@@ -106,10 +126,14 @@ export function deleteProviderFromConfig(config: ProvidersConfig, providerId: st
   }
 
   if (isFixedProvider(providerId)) {
+    const defaultModelKey = config.defaultModelId === null ? null : parseProviderModelKey(config.defaultModelId);
     return {
       schemaVersion: 1,
       defaultModelId:
-        config.defaultModelId !== null && provider.models.some((model) => model.id === config.defaultModelId)
+        config.defaultModelId !== null &&
+        defaultModelKey !== null &&
+        defaultModelKey.providerId === providerId &&
+        provider.models.some((model) => buildProviderModelKey(providerId, model.id) === config.defaultModelId)
           ? null
           : config.defaultModelId,
       providers: config.providers.map((item) =>
@@ -118,11 +142,15 @@ export function deleteProviderFromConfig(config: ProvidersConfig, providerId: st
     };
   }
 
-  const deletedModelIds = new Set(provider.models.map((model) => model.id));
+  const defaultModelKey = config.defaultModelId === null ? null : parseProviderModelKey(config.defaultModelId);
+  const clearsDefaultModel =
+    config.defaultModelId !== null &&
+    defaultModelKey !== null &&
+    defaultModelKey.providerId === providerId &&
+    provider.models.some((model) => buildProviderModelKey(providerId, model.id) === config.defaultModelId);
   return {
     schemaVersion: 1,
-    defaultModelId:
-      config.defaultModelId !== null && deletedModelIds.has(config.defaultModelId) ? null : config.defaultModelId,
+    defaultModelId: clearsDefaultModel ? null : config.defaultModelId,
     providers: config.providers.filter((item) => item.id !== providerId)
   };
 }

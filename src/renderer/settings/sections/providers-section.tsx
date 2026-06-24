@@ -353,10 +353,11 @@ export function ProvidersSection({
             <textarea
               data-testid="provider-draft-models"
               onChange={(event) => onUpdateDraft({ modelsText: event.currentTarget.value })}
-              placeholder="一行一个,格式:modelId | displayName"
+              placeholder="一行一个,格式:modelId | displayName | image"
               rows={4}
               value={draft.modelsText}
             />
+            <span className="field-hint">第三列填 image 表示该模型支持图片输入；留空或填 text 表示仅文本。</span>
           </label>
           {customProtocolDraft ? (
             <ProviderCustomProtocolFields

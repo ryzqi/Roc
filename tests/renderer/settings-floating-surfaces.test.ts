@@ -84,7 +84,7 @@ describe('settings surfaces', () => {
       ),
       renderToStaticMarkup(
         React.createElement(DefaultModelSection, {
-          defaultModelId: 'gpt-test',
+          defaultModelId: 'provider-test:gpt-test',
           onClearDefaultModel: async () => {},
           onSelectDefaultModel: async () => {},
           providers: [provider]

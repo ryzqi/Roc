@@ -1,4 +1,5 @@
 import type { ChatImageAttachment, ChatImageAttachmentMediaType } from '../../shared/types';
+import { parseProviderModelKey } from '../../shared/provider-model-key';
 import type { LoadedState } from '../loaded-state';
 
 export type RendererImageAttachment = ChatImageAttachment & {
@@ -39,8 +40,15 @@ export function isImageInputSupported(state: LoadedState): boolean {
   if (state.defaultModelId === null) {
     return false;
   }
+  const modelKey = parseProviderModelKey(state.defaultModelId);
+  if (modelKey === null) {
+    return false;
+  }
   for (const provider of state.providers) {
-    const model = provider.models.find((item) => item.id === state.defaultModelId);
+    if (provider.id !== modelKey.providerId) {
+      continue;
+    }
+    const model = provider.models.find((item) => item.id === modelKey.modelId);
     if (model !== undefined) {
       return model.supportsImages;
     }
