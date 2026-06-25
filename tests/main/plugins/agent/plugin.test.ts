@@ -96,6 +96,40 @@ describe('agent plugin manifest', () => {
   });
 });
 
+describe('agent run schema explicit skills', () => {
+  it('accepts explicit skill ids on chat start requests', () => {
+    const plugin = createAgentPlugin();
+    const startDescriptor = plugin.manifest.capabilities.find((capability) => capability.name === 'agent.run.start');
+    const parsed = startDescriptor?.inputSchema.safeParse({
+      input: '优化这段代码',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['existing-skill']
+      },
+      explicitSkillIds: ['python-expert']
+    });
+
+    expect(parsed?.success).toBe(true);
+  });
+
+  it('rejects empty explicit skill ids', () => {
+    const plugin = createAgentPlugin();
+    const startDescriptor = plugin.manifest.capabilities.find((capability) => capability.name === 'agent.run.start');
+    const parsed = startDescriptor?.inputSchema.safeParse({
+      input: '优化这段代码',
+      mode: 'chat',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      explicitSkillIds: ['']
+    });
+
+    expect(parsed?.success).toBe(false);
+  });
+});
+
 function createContext(pluginDb: Database.Database, coreDb: Database.Database): RocPluginContext {
   return {
     pluginId: '@roc/plugin-agent',

@@ -236,6 +236,9 @@ export class AgentPluginRuntime {
       workspacePath: pendingInterrupt.workspacePath,
       workflowHint: pendingInterrupt.workflowHint
     };
+    if (pendingInterrupt.explicitSkillIds !== undefined) {
+      resumedRequest.explicitSkillIds = pendingInterrupt.explicitSkillIds;
+    }
     this.activeRunMetadata.set(run.id, {
       request: resumedRequest,
       threadId: run.threadId
@@ -540,7 +543,8 @@ export class AgentPluginRuntime {
           threadId: input.run.threadId,
           taskSource: input.request.taskSource === undefined ? null : input.request.taskSource,
           workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
-          workspacePath: input.request.workspacePath
+          workspacePath: input.request.workspacePath,
+          explicitSkillIds: input.request.explicitSkillIds
         });
         return {
           status: 'interrupted'
@@ -593,6 +597,7 @@ export class AgentPluginRuntime {
     taskSource: ChatStartRunRequest['taskSource'] | null;
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
     workspacePath: ChatStartRunRequest['workspacePath'];
+    explicitSkillIds: ChatStartRunRequest['explicitSkillIds'];
   }): Promise<void> {
     this.options.repository.updateRunStatus({
       runId: input.runId,
@@ -603,7 +608,8 @@ export class AgentPluginRuntime {
       payload: input.payload,
       taskSource: input.taskSource,
       workflowHint: input.workflowHint,
-      workspacePath: input.workspacePath
+      workspacePath: input.workspacePath,
+      explicitSkillIds: input.explicitSkillIds
     });
     await this.publish('agent.run.task-event', {
       runId: input.runId,

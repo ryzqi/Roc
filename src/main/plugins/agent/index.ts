@@ -60,7 +60,8 @@ const chatStartRunRequestSchema = z.object({
   workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
   taskSource: z.enum(['workbench']).nullable().optional(),
   workspacePath: z.string().nullable().optional(),
-  attachments: z.array(chatImageAttachmentSchema).max(4).optional()
+  attachments: z.array(chatImageAttachmentSchema).max(4).optional(),
+  explicitSkillIds: z.array(z.string().trim().min(1)).optional()
 }) satisfies z.ZodType<ChatStartRunRequest>;
 
 const chatStartRunResultSchema = z.object({

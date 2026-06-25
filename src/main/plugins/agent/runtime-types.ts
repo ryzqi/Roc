@@ -16,6 +16,7 @@ export type PendingInterrupt = {
   taskSource: ChatStartRunRequest['taskSource'] | null;
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
   workspacePath: ChatStartRunRequest['workspacePath'];
+  explicitSkillIds: ChatStartRunRequest['explicitSkillIds'];
 };
 
 export type AgentLifecycleHookEmitter = {
