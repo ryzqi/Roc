@@ -3,9 +3,9 @@ import type { HITLResponse } from 'langchain';
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
-  ChatApprovalRequest,
   ChatAssistantBlock,
   ChatCancelRunResult,
+  ChatInterruptPayload,
   ChatRunEvent,
   ChatResumeRunRequest,
   ChatResumeRunResult,
@@ -41,10 +41,12 @@ export type AgentCapabilityPreviewProvider = (input: {
   runtimeStatus: AgentRuntimeStatus;
 }) => Promise<AgentCapabilityPreview>;
 
+type AgentResumePayload = HITLResponse | { answer: string };
+
 export type AgentDeepAgentExecutor = {
   execute(input: {
     request: ChatStartRunRequest;
-    resumePayload?: HITLResponse;
+    resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
@@ -215,8 +217,11 @@ export class AgentPluginRuntime {
     if (pendingInterrupt === undefined) {
       throw new Error('chat_resume_no_pending_interrupt');
     }
-    if (request.interruptId !== undefined && request.interruptId !== pendingInterrupt.interruptId) {
+    if (request.interruptId !== pendingInterrupt.interruptId) {
       throw new Error('chat_resume_interrupt_mismatch');
+    }
+    if (request.kind !== pendingInterrupt.payload.kind) {
+      throw new Error('chat_resume_interrupt_kind_mismatch');
     }
     const run = this.options.repository.getRun(request.runId);
     if (run.threadId !== request.threadId) {
@@ -229,7 +234,7 @@ export class AgentPluginRuntime {
     this.activeRuns.add(run.id);
     const resumedRequest: ChatStartRunRequest = {
       input: run.userInput,
-      mode: 'task',
+      mode: pendingInterrupt.mode,
       threadId: run.threadId,
       enabledCapabilities: run.enabledCapabilities,
       taskSource: pendingInterrupt.taskSource,
@@ -262,7 +267,7 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       interruptId: pendingInterrupt.interruptId
     });
-    if (typeof request.interruptId === 'string') {
+    if (request.kind === 'approval') {
       await this.publish('agent.run.task-event', {
         runId: run.id,
         threadId: run.threadId,
@@ -273,18 +278,45 @@ export class AgentPluginRuntime {
         }
       });
     }
+    if (request.kind === 'question') {
+      this.options.repository.recordEvent({
+        runId: run.id,
+        threadId: run.threadId,
+        type: 'message',
+        payload: {
+          role: 'user',
+          content: request.answer
+        }
+      });
+      this.options.repository.recordSessionMessage({
+        threadId: run.threadId,
+        role: 'user',
+        content: request.answer
+      });
+      await this.publish('agent.run.task-event', {
+        runId: run.id,
+        threadId: run.threadId,
+        type: 'human_question_answered',
+        payload: {
+          interruptId: request.interruptId,
+          answer: request.answer
+        }
+      });
+    }
+    const resumePayload: AgentResumePayload =
+      request.kind === 'approval'
+        ? { decisions: request.decisions }
+        : { answer: request.answer };
     const pendingRun = this.executeRun({
       abortSignal: abortController.signal,
       enabledCapabilities: run.enabledCapabilities,
       input: run.userInput,
-      mode: 'task',
+      mode: pendingInterrupt.mode,
       modelHandle,
       modelId: modelHandle.modelId,
       providerId: modelHandle.providerId,
       request: resumedRequest,
-      resumePayload: {
-        decisions: request.decisions
-      },
+      resumePayload,
       run,
       runId: run.id,
       threadId: run.threadId,
@@ -423,7 +455,7 @@ export class AgentPluginRuntime {
     mode: ChatStartRunRequest['mode'];
     input: string;
     request: ChatStartRunRequest;
-    resumePayload?: HITLResponse;
+    resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
@@ -517,7 +549,7 @@ export class AgentPluginRuntime {
 
   private async executeDeepAgentRun(input: {
     request: ChatStartRunRequest;
-    resumePayload?: HITLResponse;
+    resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
@@ -539,6 +571,7 @@ export class AgentPluginRuntime {
         await this.handleRunInterrupted({
           interruptId: event.interruptId,
           payload: event.payload,
+          mode: input.request.mode,
           runId: input.run.id,
           threadId: input.run.threadId,
           taskSource: input.request.taskSource === undefined ? null : input.request.taskSource,
@@ -593,7 +626,8 @@ export class AgentPluginRuntime {
     runId: string;
     threadId: string;
     interruptId: string;
-    payload: ChatApprovalRequest;
+    payload: ChatInterruptPayload;
+    mode: ChatStartRunRequest['mode'];
     taskSource: ChatStartRunRequest['taskSource'] | null;
     workflowHint: ChatStartRunRequest['workflowHint'] | null;
     workspacePath: ChatStartRunRequest['workspacePath'];
@@ -606,18 +640,34 @@ export class AgentPluginRuntime {
     this.pendingInterrupts.set(input.runId, {
       interruptId: input.interruptId,
       payload: input.payload,
+      mode: input.mode,
       taskSource: input.taskSource,
       workflowHint: input.workflowHint,
       workspacePath: input.workspacePath,
       explicitSkillIds: input.explicitSkillIds
     });
+    if (input.payload.kind === 'approval') {
+      await this.publish('agent.run.task-event', {
+        runId: input.runId,
+        threadId: input.threadId,
+        type: 'approval_requested',
+        payload: {
+          interruptId: input.interruptId,
+          ...input.payload.request
+        }
+      });
+      return;
+    }
+
     await this.publish('agent.run.task-event', {
       runId: input.runId,
       threadId: input.threadId,
-      type: 'approval_requested',
+      type: 'human_question_requested',
       payload: {
         interruptId: input.interruptId,
-        ...input.payload
+        question: input.payload.question,
+        context: input.payload.context ?? null,
+        suggestedResponses: input.payload.suggestedResponses ?? []
       }
     });
   }

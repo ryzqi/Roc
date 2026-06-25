@@ -264,22 +264,7 @@ describe('AgentPluginRuntime', () => {
             runId: input.run.id,
             threadId: input.run.threadId,
             interruptId: 'interrupt_approval_1',
-            payload: {
-              actionRequests: [
-                {
-                  name: 'run_shell_command',
-                  args: {
-                    command: 'git status'
-                  }
-                }
-              ],
-              reviewConfigs: [
-                {
-                  actionName: 'run_shell_command',
-                  allowedDecisions: ['approve', 'reject']
-                }
-              ]
-            }
+            payload: approvalPayload()
           } satisfies ChatRunEvent;
         }
       },
@@ -330,6 +315,72 @@ describe('AgentPluginRuntime', () => {
     expect(events.some((event) => event.type === 'agent.run.failed' && readPayloadRunId(event.payload) === result.runId)).toBe(false);
   });
 
+  it('resumes question interrupts with answer payload and preserves run context', async () => {
+    const repository = new AgentSessionRepository(db);
+    const requests: ChatStartRunRequest[] = [];
+    const resumePayloads: unknown[] = [];
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          requests.push(input.request);
+          resumePayloads.push(input.resumePayload);
+          if (input.resumePayload === undefined) {
+            yield {
+              type: 'run_interrupted',
+              runId: input.run.id,
+              threadId: input.run.threadId,
+              interruptId: 'interrupt-question',
+              payload: {
+                kind: 'question',
+                question: 'Which path should I inspect?',
+                context: 'Two paths match.'
+              }
+            } satisfies ChatRunEvent;
+            return;
+          }
+          yield createTextBlock(input.run.id, 'continued');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const start = await runtime.startRun({
+      input: 'Investigate',
+      mode: 'plan',
+      enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
+      threadId: null,
+      workflowHint: null,
+      taskSource: null,
+      workspacePath: 'F:\\Code\\Roc',
+      explicitSkillIds: ['typescript']
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+
+    await runtime.resumeRun({
+      kind: 'question',
+      runId: start.runId,
+      threadId: start.threadId!,
+      interruptId: 'interrupt-question',
+      answer: 'Use F:\\Code\\Roc.'
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(requests.map((request) => request.mode)).toEqual(['plan', 'plan']);
+    expect(requests[1]).toMatchObject({
+      workflowHint: null,
+      taskSource: null,
+      workspacePath: 'F:\\Code\\Roc',
+      explicitSkillIds: ['typescript']
+    });
+    expect(resumePayloads[1]).toEqual({ answer: 'Use F:\\Code\\Roc.' });
+  });
+
 });
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
@@ -358,6 +409,28 @@ function createToolBlock(runId: string, block: Extract<ChatRunEvent, { type: 'as
     type: 'assistant_block',
     runId,
     block
+  };
+}
+
+function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['payload'] {
+  return {
+    kind: 'approval',
+    request: {
+      actionRequests: [
+        {
+          name: 'run_shell_command',
+          args: {
+            command: 'git status'
+          }
+        }
+      ],
+      reviewConfigs: [
+        {
+          actionName: 'run_shell_command',
+          allowedDecisions: ['approve', 'reject']
+        }
+      ]
+    }
   };
 }
 

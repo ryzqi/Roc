@@ -1,6 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
+import type { HITLRequest } from 'langchain';
 
-import type { ChatRunEvent } from '../../../shared/types';
+import type { ChatInterruptPayload, ChatQuestionInterruptPayload, ChatRunEvent } from '../../../shared/types';
 import { readForgeMessageTag } from '../../services/forge-guardrails';
 import * as recordUtils from '../../services/deep-agent/record-utils';
 
@@ -30,7 +31,7 @@ export function readRunInterruptedEvent(run: unknown, runId: string, threadId: s
   }
   const interruptId = Reflect.get(firstInterrupt, 'interruptId');
   const payload = Reflect.get(firstInterrupt, 'payload');
-  if (typeof interruptId !== 'string' || typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+  if (typeof interruptId !== 'string') {
     throw new Error('agent_interrupt_payload_invalid');
   }
   return {
@@ -38,8 +39,38 @@ export function readRunInterruptedEvent(run: unknown, runId: string, threadId: s
     runId,
     threadId,
     interruptId,
-    payload: payload as never
+    payload: normalizeInterruptPayload(payload)
   };
+}
+
+function normalizeInterruptPayload(payload: unknown): ChatInterruptPayload {
+  if (isQuestionInterruptPayload(payload)) {
+    return payload;
+  }
+  if (isApprovalRequest(payload)) {
+    return {
+      kind: 'approval',
+      request: payload
+    };
+  }
+  throw new Error('agent_interrupt_payload_invalid');
+}
+
+function isQuestionInterruptPayload(value: unknown): value is ChatQuestionInterruptPayload {
+  if (!recordUtils.isRecord(value)) {
+    return false;
+  }
+  if (recordUtils.readRecordValue(value, 'kind') !== 'question') {
+    return false;
+  }
+  return typeof recordUtils.readRecordValue(value, 'question') === 'string';
+}
+
+function isApprovalRequest(value: unknown): value is HITLRequest {
+  if (!recordUtils.isRecord(value)) {
+    return false;
+  }
+  return Array.isArray(recordUtils.readRecordValue(value, 'actionRequests')) && Array.isArray(recordUtils.readRecordValue(value, 'reviewConfigs'));
 }
 
 export function readFinalAssistantText(output: unknown): string | null {

@@ -65,22 +65,7 @@ describe('AgentPluginRuntime', () => {
               runId: input.run.id,
               threadId: input.run.threadId,
               interruptId: 'interrupt_resume_1',
-              payload: {
-                actionRequests: [
-                  {
-                    name: 'run_shell_command',
-                    args: {
-                      command: 'git status'
-                    }
-                  }
-                ],
-                reviewConfigs: [
-                  {
-                    actionName: 'run_shell_command',
-                    allowedDecisions: ['approve', 'reject']
-                  }
-                ]
-              }
+              payload: approvalPayload()
             } satisfies ChatRunEvent;
             return;
           }
@@ -160,6 +145,63 @@ describe('AgentPluginRuntime', () => {
         content: 'Approved command finished.'
       }
     ]);
+  });
+
+  it('resumes plan approval interrupts with the original plan mode', async () => {
+    const repository = new AgentSessionRepository(db);
+    const executedModes: Array<ChatStartRunRequest['mode']> = [];
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          executedModes.push(input.request.mode);
+          if (input.resumePayload === undefined) {
+            yield {
+              type: 'run_interrupted',
+              runId: input.run.id,
+              threadId: input.run.threadId,
+              interruptId: 'interrupt-plan-approval',
+              payload: approvalPayload()
+            } satisfies ChatRunEvent;
+            return;
+          }
+          yield createTextBlock(input.run.id, 'done');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const start = await runtime.startRun({
+      input: 'Plan risky work',
+      mode: 'plan',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      threadId: null
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+    await expect(
+      runtime.resumeRun({
+        kind: 'question',
+        runId: start.runId,
+        threadId: start.threadId!,
+        interruptId: 'interrupt-plan-approval',
+        answer: 'Use Roc.'
+      })
+    ).rejects.toThrow('chat_resume_interrupt_kind_mismatch');
+    await runtime.resumeRun({
+      kind: 'approval',
+      runId: start.runId,
+      threadId: start.threadId!,
+      interruptId: 'interrupt-plan-approval',
+      decisions: [{ type: 'approve' }]
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(executedModes).toEqual(['plan', 'plan']);
   });
 
 
@@ -257,6 +299,28 @@ function createTextBlock(runId: string, text: string): ChatRunEvent {
       blockId: `text-${runId}`,
       phase: 'delta',
       text
+    }
+  };
+}
+
+function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['payload'] {
+  return {
+    kind: 'approval',
+    request: {
+      actionRequests: [
+        {
+          name: 'run_shell_command',
+          args: {
+            command: 'git status'
+          }
+        }
+      ],
+      reviewConfigs: [
+        {
+          actionName: 'run_shell_command',
+          allowedDecisions: ['approve', 'reject']
+        }
+      ]
     }
   };
 }
