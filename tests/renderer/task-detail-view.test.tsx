@@ -11,6 +11,7 @@ describe('TaskDetailView', () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -113,7 +114,7 @@ describe('TaskDetailView', () => {
 
     const subagent = container.querySelector<HTMLDetailsElement>('[data-testid="chat-activity-subagent"]');
     expect(subagent).not.toBeNull();
-    expect(subagent?.open).toBe(false);
+    expect(subagent?.open).toBe(true);
     expect(container.textContent).toContain('Subagent · general-purpose');
     expect(container.textContent).toContain('正在调查仓库状态');
     expect(container.textContent).toContain('读取关键文件');

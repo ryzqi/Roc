@@ -77,8 +77,12 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
     block.summary !== null ||
     block.blocks.length > 0 ||
     block.children.length > 0;
+  const autoCloseDelayMs = block.status === 'completed' || block.status === 'cancelled' ? 1000 : undefined;
   const { open, setOpen } = useActivityBlockState({
-    defaultOpen: block.status === 'failed'
+    defaultOpen: block.status === 'failed',
+    forceOpenWhileStreaming: true,
+    isStreaming,
+    autoCloseDelayMs
   });
   const className = [
     'subagent-card',

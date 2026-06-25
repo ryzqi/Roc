@@ -260,6 +260,51 @@ describe('chat message row', () => {
     expect(html).not.toContain('Nested task input should also stay hidden');
   });
 
+  it('opens running subagent work cards with streaming text content', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'assistant-subagent-streaming',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          approval: null,
+          isStreaming: true,
+          blocks: [
+            {
+              id: 'subagent-streaming',
+              kind: 'subagent',
+              identity: {
+                subagentId: 'subagent-streaming',
+                parentSubagentId: null,
+                name: 'research',
+                depth: 0,
+                path: ['research#0'],
+                execution: 'sync',
+                taskInput: null
+              },
+              status: 'running',
+              summary: null,
+              error: null,
+              blocks: [
+                {
+                  id: 'subagent-streaming-text',
+                  kind: 'text',
+                  content: '正在检索资料。'
+                }
+              ],
+              children: []
+            }
+          ]
+        }
+      })
+    );
+
+    expect(html).toMatch(/subagent-card--running" data-testid="chat-activity-subagent" open="">/);
+    expect(html).toMatch(/data-testid="chat-activity-subagent" open="">[\s\S]*data-testid="streaming-markdown"/);
+    expect(html).toContain('正在检索资料。');
+  });
+
   it('keeps non-failed subagent work cards collapsed by default', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {

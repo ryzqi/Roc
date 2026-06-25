@@ -241,6 +241,68 @@ describe('chat run state', () => {
       }
     ]);
   });
+
+  it('accumulates subagent text deltas with the same block id into one text block', () => {
+    let state = createEmptyChatRunState();
+    const identity: Extract<ChatRunEvent, { type: 'subagent_event' }>['identity'] = {
+      subagentId: 'subagent-chat_text-0',
+      parentSubagentId: null,
+      name: 'research',
+      depth: 0,
+      path: ['research#0'],
+      execution: 'sync',
+      taskInput: 'Search docs'
+    };
+
+    state = applyChatRunEvent(state, runStarted('chat_text'));
+    state = applyChatRunEvent(state, {
+      type: 'subagent_event',
+      runId: 'chat_text',
+      sequence: 1,
+      identity,
+      event: {
+        kind: 'assistant_block',
+        block: {
+          kind: 'text',
+          blockId: 'subagent-text',
+          phase: 'delta',
+          text: '正在检索'
+        }
+      }
+    });
+    state = applyChatRunEvent(state, {
+      type: 'subagent_event',
+      runId: 'chat_text',
+      sequence: 2,
+      identity,
+      event: {
+        kind: 'assistant_block',
+        block: {
+          kind: 'text',
+          blockId: 'subagent-text',
+          phase: 'delta',
+          text: '资料。'
+        }
+      }
+    });
+
+    expect(state.subagents).toEqual([
+      {
+        identity,
+        status: 'running',
+        summary: null,
+        error: null,
+        blocks: [
+          {
+            id: 'subagent-text',
+            kind: 'text',
+            content: '正在检索资料。'
+          }
+        ],
+        children: []
+      }
+    ]);
+  });
 });
 
 function runStarted(runId: string, mode: 'chat' | 'task' = 'task'): ChatRunEvent {
