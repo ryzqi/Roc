@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -55,6 +55,37 @@ describe('main kernel bootstrap integration', () => {
 
     expect(calls).toEqual(['plugin-load', 'plugin-shutdown']);
     expect(bootstrap.runtime.getStatus().started).toBe(false);
+  });
+
+  it('creates only approved first-launch user data files before kernel start', () => {
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [],
+      safeStorage: safeStorage()
+    });
+
+    expect(bootstrap.paths.root).toBe(root);
+    expect(listRelativeFiles(root)).toEqual([
+      'config/settings.json',
+      'logs/app.jsonl',
+      'rtk/config.toml'
+    ]);
+    expect(JSON.parse(readFileSync(join(root, 'config', 'settings.json'), 'utf8'))).toMatchObject({
+      schemaVersion: 4,
+      settings: { schemaVersion: 2 },
+      providers: { schemaVersion: 1 },
+      mcp: { schemaVersion: 1 },
+      permissions: { schemaVersion: 3 },
+      shortcuts: { schemaVersion: 1 }
+    });
+    expect(readFileSync(join(root, 'rtk', 'config.toml'), 'utf8')).toContain('[tracking]');
+    expect(readFileSync(join(root, 'logs', 'app.jsonl'), 'utf8')).toBe('');
+    expect(existsSync(join(root, 'memory'))).toBe(false);
+    expect(existsSync(join(root, 'plugin-data'))).toBe(false);
+    expect(existsSync(join(root, 'hooks.json'))).toBe(false);
+    expect(existsSync(join(root, 'config', 'hooks-trust.json'))).toBe(false);
+    expect(existsSync(join(root, 'config', 'window-state.json'))).toBe(false);
+    expect(existsSync(join(root, 'rtk', 'history.db'))).toBe(false);
   });
 
   it('keeps existing Electron window, tray, app icon, protocol, and host integration code in main entry', () => {
@@ -203,6 +234,25 @@ describe('main kernel bootstrap integration', () => {
     }
   });
 });
+
+function listRelativeFiles(base: string): string[] {
+  const entries: string[] = [];
+  collectRelativeFiles(base, base, entries);
+  return entries.sort();
+}
+
+function collectRelativeFiles(base: string, current: string, entries: string[]): void {
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const absolutePath = join(current, entry.name);
+    if (entry.isDirectory()) {
+      collectRelativeFiles(base, absolutePath, entries);
+      continue;
+    }
+    if (statSync(absolutePath).isFile()) {
+      entries.push(relative(base, absolutePath).replaceAll('\\', '/'));
+    }
+  }
+}
 
 function writeMigrationMarker(): void {
   const pluginDataDir = join(root, 'plugin-data');
