@@ -5,13 +5,6 @@ const JSON_HANDOFF_FIELDS_BY_TOOL = {
   update_background_task: new Set(['patch.trigger'])
 } as const;
 
-type ToolProtocolRequest = {
-  toolCall: {
-    args?: unknown;
-    name: string;
-  };
-};
-
 export function createToolProtocolMiddleware() {
   return createMiddleware({
     name: 'RocToolProtocolMiddleware',
@@ -90,5 +83,3 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-
-export type { ToolProtocolRequest };

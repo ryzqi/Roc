@@ -21,7 +21,7 @@ const emptyRuntimeMetricsProvider: RuntimeMetricsProvider = {
   getProcessMetrics: () => []
 };
 
-export type CapabilityTimingInput = {
+type CapabilityTimingInput = {
   name: string;
   startedAtMs: number;
   durationMs: number;

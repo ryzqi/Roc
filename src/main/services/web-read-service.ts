@@ -8,20 +8,20 @@ export type WebReadResponseMode =
   | 'frontmatter'
   | 'readerlm-v2';
 export type WebReadSelector = string | string[];
-export type WebReadEngine = 'auto' | 'browser' | 'curl' | 'cf-browser-rendering';
-export type WebReadRespondTiming =
+type WebReadEngine = 'auto' | 'browser' | 'curl' | 'cf-browser-rendering';
+type WebReadRespondTiming =
   | 'html'
   | 'visible-content'
   | 'mutation-idle'
   | 'resource-idle'
   | 'media-idle'
   | 'network-idle';
-export type WebReadRetainLinks = 'none' | 'all' | 'text' | 'gpt-oss';
-export type WebReadRetainImages = 'none' | 'all' | 'alt' | 'all_p' | 'alt_p';
-export type WebReadRetainMedia = 'none' | 'text' | 'link' | 'image' | 'html';
-export type WebReadPreset = 'reader' | 'index' | 'research' | 'agent' | 'spider';
-export type WebReadBase = 'initial' | 'final';
-export type WebReadMarkdownChunking =
+type WebReadRetainLinks = 'none' | 'all' | 'text' | 'gpt-oss';
+type WebReadRetainImages = 'none' | 'all' | 'alt' | 'all_p' | 'alt_p';
+type WebReadRetainMedia = 'none' | 'text' | 'link' | 'image' | 'html';
+type WebReadPreset = 'reader' | 'index' | 'research' | 'agent' | 'spider';
+type WebReadBase = 'initial' | 'final';
+type WebReadMarkdownChunking =
   | 'true'
   | 'h1'
   | 'h2'
@@ -34,7 +34,7 @@ export type WebReadMarkdownChunking =
   | 's3'
   | 's4'
   | 's5';
-export type WebReadMarkdownOptions = {
+type WebReadMarkdownOptions = {
   headingStyle?: 'setext' | 'atx';
   hr?: string;
   bulletListMarker?: '-' | '+' | '*';

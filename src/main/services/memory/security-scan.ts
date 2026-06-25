@@ -1,6 +1,6 @@
 import type { MemorySecurityScanSettings, SecurityScanIssue } from '../../../shared/types';
 
-export type SecurityScanCategory =
+type SecurityScanCategory =
   | 'prompt_injection'
   | 'credential'
   | 'ssh_backdoor'

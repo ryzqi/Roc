@@ -63,7 +63,7 @@ const diagnosticsCapabilityDescriptors = [
   descriptor('lifecycle.resumeBackgroundExecution', emptyInputSchema, z.custom<TraySummary>())
 ] as const satisfies readonly CapabilityDescriptor[];
 
-export type DiagnosticsValueProvider<T> = () => T | Promise<T>;
+type DiagnosticsValueProvider<T> = () => T | Promise<T>;
 
 export type DiagnosticsPluginOptions = {
   rootDir?: string;

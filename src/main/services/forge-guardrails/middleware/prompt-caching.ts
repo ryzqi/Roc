@@ -4,7 +4,7 @@ import type { ProviderType } from '../../../../shared/types';
 import type { PromptBlock } from '../../deep-agent/context/prompt-blocks';
 import { BlockStability } from '../../deep-agent/context/prompt-blocks';
 
-export type PromptCachingStrategy = 'aggressive' | 'balanced' | 'conservative' | 'disabled';
+type PromptCachingStrategy = 'aggressive' | 'balanced' | 'conservative' | 'disabled';
 
 export interface PromptCachingOptions {
   enabled?: boolean;
@@ -12,7 +12,7 @@ export interface PromptCachingOptions {
   providerType: ProviderType;
 }
 
-export interface CacheSavings {
+interface CacheSavings {
   percentSaved: number;
   tokensSaved: number;
 }

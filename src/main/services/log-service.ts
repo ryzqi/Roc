@@ -5,9 +5,9 @@ import { createGzip } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import type { RocPaths } from './paths';
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
-export type LogEventError = {
+type LogEventError = {
   code: string;
   message: string;
   stack?: string;

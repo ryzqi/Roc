@@ -7,7 +7,6 @@ import {
   normalizeRocFileToolPath,
   validateRocFileToolPath
 } from './filesystem-tool-contract';
-import type { PathNormalizationResult, PathValidationResult } from './filesystem-tool-contract';
 
 type ToolCallNormalizationResult<TRequest extends ToolCallRequest> =
   | { ok: true; path: string; request: TRequest }
@@ -22,7 +21,6 @@ type ToolCallRequest = {
 };
 
 export { normalizeRocFileToolPath, validateRocFileToolPath };
-export type { PathNormalizationResult, PathValidationResult };
 
 export function createRocFilesystemPathPolicyMiddleware() {
   return createMiddleware({
