@@ -45,7 +45,7 @@ function createIdleRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
-    pendingApprovals: [],
+    pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
     subagents: []
@@ -94,6 +94,36 @@ describe('chat transcript helpers', () => {
     });
   });
 
+  it('adds persisted human question requests to the assistant transcript', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'event-question',
+          threadId: 'thread-1',
+          runId: 'run-1',
+          type: 'human_question_requested',
+          payload: {
+            interruptId: 'interrupt-question',
+            question: 'Which branch should I use?',
+            context: 'Current branch is main.',
+            suggestedResponses: ['main']
+          },
+          createdAt: '2026-06-25T00:00:00.000Z'
+        }
+      ],
+      'thread-1'
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.interrupt).toEqual({
+      kind: 'question',
+      interruptId: 'interrupt-question',
+      question: 'Which branch should I use?',
+      context: 'Current branch is main.',
+      suggestedResponses: ['main']
+    });
+  });
+
   it('keeps persisted message object references stable while appending live output', () => {
     const persistedMessage = {
       key: 'user-current',
@@ -102,7 +132,7 @@ describe('chat transcript helpers', () => {
       attachments: [],
       reasoning: null,
       blocks: [],
-      approval: null,
+      interrupt: null,
       isStreaming: false
     };
 
@@ -211,7 +241,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -228,7 +258,7 @@ describe('chat transcript helpers', () => {
             isStreaming: true
           }
         ],
-        approval: null,
+        interrupt: null,
         isStreaming: true
       }
     ]);
@@ -622,7 +652,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -639,7 +669,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       }
     ]);
@@ -767,7 +797,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -793,7 +823,7 @@ describe('chat transcript helpers', () => {
             error: null
           }
         ],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       }
     ]);

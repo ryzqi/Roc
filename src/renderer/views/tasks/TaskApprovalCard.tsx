@@ -191,6 +191,9 @@ export function TaskApprovalCard({
 }
 
 export function isTaskApproval(approval: ChatPendingApproval): boolean {
+  if (approval.kind !== 'approval') {
+    return false;
+  }
   if (approval.actionRequests.length !== 1) {
     return false;
   }

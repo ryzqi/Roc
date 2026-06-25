@@ -1,6 +1,6 @@
 import type {
   ChatAssistantBlock,
-  ChatPendingApproval,
+  ChatPendingInterrupt,
   ChatPersistedAttachment,
   SubagentEventPayload,
   SubagentIdentity,
@@ -86,7 +86,7 @@ export type ChatTranscriptMessage = {
   attachments?: ChatPersistedAttachment[];
   reasoning: string | null;
   blocks: ChatTranscriptActivityBlock[];
-  approval: ChatPendingApproval | null;
+  interrupt: ChatPendingInterrupt | null;
   isStreaming: boolean;
 };
 
@@ -112,6 +112,18 @@ type GuardrailPayload = {
 type ApprovalDecisionPayload = {
   interruptId: string;
   decisions: unknown[];
+};
+
+type ApprovalRequestedPayload = Omit<Extract<ChatPendingInterrupt, { kind: 'approval' }>, 'kind'>;
+
+type HumanQuestionRequestedEvent = TaskEvent & {
+  type: 'human_question_requested';
+  payload: {
+    interruptId: string;
+    question: string;
+    context: string | null;
+    suggestedResponses: string[];
+  };
 };
 
 type AssistantDraft = {
@@ -269,7 +281,7 @@ function isGuardrailPayload(payload: unknown): payload is GuardrailPayload {
   );
 }
 
-function isApprovalPayload(payload: unknown): payload is ChatPendingApproval {
+function isApprovalPayload(payload: unknown): payload is ApprovalRequestedPayload {
   if (typeof payload !== 'object' || payload === null) {
     return false;
   }
@@ -277,6 +289,16 @@ function isApprovalPayload(payload: unknown): payload is ChatPendingApproval {
   const actionRequests = Reflect.get(payload, 'actionRequests');
   const reviewConfigs = Reflect.get(payload, 'reviewConfigs');
   return typeof interruptId === 'string' && Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
+}
+
+function isHumanQuestionRequestedEvent(event: TaskEvent): event is HumanQuestionRequestedEvent {
+  if (event.type !== 'human_question_requested') {
+    return false;
+  }
+  if (typeof event.payload !== 'object' || event.payload === null) {
+    return false;
+  }
+  return typeof Reflect.get(event.payload, 'interruptId') === 'string' && typeof Reflect.get(event.payload, 'question') === 'string';
 }
 
 function isApprovalDecisionPayload(payload: unknown): payload is ApprovalDecisionPayload {
@@ -311,7 +333,7 @@ function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
     attachments: event.payload.attachments === undefined ? [] : event.payload.attachments,
     reasoning: null,
     blocks: [],
-    approval: null,
+    interrupt: null,
     isStreaming: false
   };
 }
@@ -325,7 +347,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
       attachments: [],
       reasoning: null,
       blocks: [],
-      approval: null,
+      interrupt: null,
       isStreaming: false
     },
     reasoningBlock: null,
@@ -685,19 +707,34 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
     }
 
     if (event.type === 'approval_requested' && isApprovalPayload(event.payload)) {
-      getAssistantDraft(drafts, messages, event.runId).message.approval = event.payload;
+      getAssistantDraft(drafts, messages, event.runId).message.interrupt = {
+        kind: 'approval',
+        ...event.payload
+      };
+      continue;
+    }
+
+    if (isHumanQuestionRequestedEvent(event)) {
+      const draft = getAssistantDraft(drafts, messages, event.runId);
+      draft.message.interrupt = {
+        kind: 'question',
+        interruptId: event.payload.interruptId,
+        question: event.payload.question,
+        ...(event.payload.context === null ? {} : { context: event.payload.context }),
+        suggestedResponses: event.payload.suggestedResponses
+      };
       continue;
     }
 
     if (event.type === 'approval_decision' && isApprovalDecisionPayload(event.payload)) {
-      getAssistantDraft(drafts, messages, event.runId).message.approval = null;
+      getAssistantDraft(drafts, messages, event.runId).message.interrupt = null;
     }
   }
 
   return messages
     .map((message) => (message.role === 'assistant' ? filterRedundantSubagentTaskBlocksFromMessage(message) : message))
     .filter(
-      (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.approval !== null
+      (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.interrupt !== null
     );
 }
 
@@ -783,7 +820,7 @@ function createPendingUserMessage(content: string): ChatTranscriptMessage {
     attachments: [],
     reasoning: null,
     blocks: [],
-    approval: null,
+    interrupt: null,
     isStreaming: false
   };
 }
@@ -793,7 +830,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
   const liveBlocks = buildLiveActivityBlocks(chatRunState);
   const liveReasoning = readReasoningFromBlocks(liveBlocks);
 
-  if (liveContent.length === 0 && liveBlocks.length === 0 && chatRunState.pendingApprovals.length === 0) {
+  if (liveContent.length === 0 && liveBlocks.length === 0 && chatRunState.pendingInterrupts.length === 0) {
     return null;
   }
 
@@ -804,7 +841,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
     attachments: [],
     reasoning: liveReasoning.length === 0 ? null : liveReasoning,
     blocks: liveBlocks,
-    approval: chatRunState.pendingApprovals[0] ?? null,
+    interrupt: chatRunState.pendingInterrupts[0] ?? null,
     isStreaming: chatRunState.status === 'running'
   };
 }
@@ -844,7 +881,7 @@ export function appendLiveTranscriptMessages(input: {
         ...messages[assistantIndex],
         reasoning: liveReasoning.length === 0 ? null : liveReasoning,
         blocks: liveBlocks.length === 0 ? messages[assistantIndex].blocks : liveBlocks,
-        approval: input.chatRunState.pendingApprovals[0] ?? null,
+        interrupt: input.chatRunState.pendingInterrupts[0] ?? null,
         isStreaming: false
       };
       return messages;

@@ -13,6 +13,7 @@ import type { ChatResumeDecision } from '../../shared/types';
 import { CopyAnswerButton } from './CopyAnswerButton';
 import { isTaskApproval, TaskApprovalCard } from '../views/tasks/TaskApprovalCard';
 import { HookCallBlock } from './hook-call/HookCallBlock';
+import { QuestionInterruptCard } from './QuestionInterruptCard';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
 import { StreamingMarkdownView } from './streaming-markdown-view';
@@ -24,7 +25,7 @@ type ChatMessageRowProps = {
 };
 
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
-  const approval = message.approval;
+  const interrupt = message.interrupt;
   const isAssistant = message.role === 'assistant';
   const blocks = message.blocks ?? [];
   const attachments = message.attachments === undefined ? [] : message.attachments;
@@ -67,9 +68,9 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
             {message.content.length === 0 ? null : (
               <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
             )}
-            {approval !== null && isTaskApproval(approval) ? (
-              <TaskApprovalCard approval={approval} onApprovalDecision={onApprovalDecision} />
-            ) : approval === null ? null : (
+            {interrupt !== null && interrupt.kind === 'approval' && isTaskApproval(interrupt) ? (
+              <TaskApprovalCard approval={interrupt} onApprovalDecision={onApprovalDecision} />
+            ) : interrupt !== null && interrupt.kind === 'approval' ? (
               <motion.div
                 className="chat-approval-card"
                 data-testid="chat-approval-card"
@@ -80,11 +81,11 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
               >
                 <header className="chat-approval-head">
                   等待审批
-                  <span className="chat-approval-count">{approval.actionRequests.length}</span>
+                  <span className="chat-approval-count">{interrupt.actionRequests.length}</span>
                 </header>
                 <ul className="chat-approval-actions">
-                  {approval.actionRequests.map((request, index) => {
-                    const reviewConfig = approval.reviewConfigs.find((config) => config.actionName === request.name);
+                  {interrupt.actionRequests.map((request, index) => {
+                    const reviewConfig = interrupt.reviewConfigs.find((config) => config.actionName === request.name);
                     return (
                       <li key={`${request.name}-${index}`} className="chat-approval-item">
                         <span className="chat-approval-tool" data-testid="chat-approval-tool-name">{request.name}</span>
@@ -102,8 +103,8 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                     className="approval-btn approval-btn--approve"
                     onClick={() =>
                       onApprovalDecision?.(
-                        approval.interruptId,
-                        approval.actionRequests.map(() => ({ type: 'approve' }))
+                        interrupt.interruptId,
+                        interrupt.actionRequests.map(() => ({ type: 'approve' }))
                       )
                     }
                   >
@@ -114,22 +115,22 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                     className="approval-btn approval-btn--reject"
                     onClick={() =>
                       onApprovalDecision?.(
-                        approval.interruptId,
-                        approval.actionRequests.map(() => ({ type: 'reject' }))
+                        interrupt.interruptId,
+                        interrupt.actionRequests.map(() => ({ type: 'reject' }))
                       )
                     }
                   >
                     reject
                   </button>
-                  {approval.actionRequests.length === 1 && approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
+                  {interrupt.actionRequests.length === 1 && interrupt.reviewConfigs.some((config) => config.allowedDecisions.includes('edit')) ? (
                     <button
                       type="button"
                       className="approval-btn approval-btn--edit"
                       onClick={() =>
-                        onApprovalDecision?.(approval.interruptId, [
+                        onApprovalDecision?.(interrupt.interruptId, [
                           {
                             type: 'edit',
-                            editedAction: approval.actionRequests[0] ?? {
+                            editedAction: interrupt.actionRequests[0] ?? {
                               name: 'unknown',
                               args: {}
                             }
@@ -142,7 +143,9 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
                   ) : null}
                 </div>
               </motion.div>
-            )}
+            ) : interrupt !== null ? (
+              <QuestionInterruptCard question={interrupt} />
+            ) : null}
             {message.isStreaming ? (
               <span className="chat-typing-cursor" aria-hidden="true" />
             ) : null}
@@ -177,7 +180,7 @@ export const ChatMessageRow = memo(
     prev.message.attachments === next.message.attachments &&
     prev.message.reasoning === next.message.reasoning &&
     prev.message.blocks === next.message.blocks &&
-    prev.message.approval === next.message.approval &&
+    prev.message.interrupt === next.message.interrupt &&
     prev.message.isStreaming === next.message.isStreaming
 );
 

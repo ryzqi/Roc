@@ -26,7 +26,7 @@ describe('chat message row', () => {
           content: '最终答案',
           reasoning: '第一段\n\n- 列表项\n\n```ts\nconst ok = true;\n```',
           blocks: [],
-          approval: null,
+          interrupt: null,
           isStreaming: false
         }
       })
@@ -53,7 +53,8 @@ describe('chat message row', () => {
           content: '最终答案',
           reasoning: '先整理上下文，再输出结论。',
           blocks: [],
-          approval: {
+          interrupt: {
+            kind: 'approval',
             interruptId: 'interrupt-1',
             actionRequests: [
               {
@@ -82,6 +83,32 @@ describe('chat message row', () => {
     expect(html).not.toContain('aria-label="复制回答"');
   });
 
+  it('renders question interrupt cards', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'question',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          blocks: [],
+          interrupt: {
+            kind: 'question',
+            interruptId: 'interrupt-question',
+            question: 'Which path should I inspect?',
+            context: 'Two paths match.',
+            suggestedResponses: ['F:\\Code\\Roc']
+          },
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-question-card"');
+    expect(html).toContain('Which path should I inspect?');
+    expect(html).toContain('F:\\Code\\Roc');
+  });
+
   it('renders reasoning and tool activity blocks separately from assistant Markdown content', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
@@ -107,7 +134,7 @@ describe('chat message row', () => {
               error: null
             }
           ],
-          approval: null,
+          interrupt: null,
           isStreaming: false
         }
       })
@@ -145,7 +172,7 @@ describe('chat message row', () => {
               commandDisplay: 'node hook.js'
             }
           ],
-          approval: null,
+          interrupt: null,
           isStreaming: false
         }
       })
@@ -174,7 +201,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          approval: null,
+          interrupt: null,
           isStreaming: false,
           blocks: [
             {
@@ -268,7 +295,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          approval: null,
+          interrupt: null,
           isStreaming: true,
           blocks: [
             {
@@ -313,7 +340,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          approval: null,
+          interrupt: null,
           isStreaming: true,
           blocks: [
             {
@@ -400,7 +427,7 @@ describe('chat message row', () => {
               error: null
             }
           ],
-          approval: null,
+          interrupt: null,
           isStreaming: true
         }
       })
@@ -440,7 +467,7 @@ describe('chat message row', () => {
               error: 'permission denied'
             }
           ],
-          approval: null,
+          interrupt: null,
           isStreaming: false
         }
       })
@@ -459,7 +486,8 @@ describe('chat message row', () => {
           content: '',
           reasoning: '需要你确认这一步。',
           blocks: [],
-          approval: {
+          interrupt: {
+            kind: 'approval',
             interruptId: 'interrupt-1',
             actionRequests: [
               {
@@ -497,7 +525,8 @@ describe('chat message row', () => {
           content: '',
           reasoning: null,
           blocks: [],
-          approval: {
+          interrupt: {
+            kind: 'approval',
             interruptId: 'interrupt-task-1',
             actionRequests: [
               {
@@ -548,7 +577,8 @@ describe('chat message row', () => {
           content: '',
           reasoning: null,
           blocks: [],
-          approval: {
+          interrupt: {
+            kind: 'approval',
             interruptId: 'interrupt-mixed-task',
             actionRequests: [
               {
