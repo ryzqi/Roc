@@ -3,6 +3,7 @@ import type { ChatImageAttachment, ChatRunMode, WorkflowHint } from '../../share
 export type ChatTaskSubmitPayload = {
   input: string;
   mode?: Extract<ChatRunMode, 'chat' | 'plan'>;
+  cleanThread?: boolean;
   attachments?: ChatImageAttachment[];
   explicitSkillIds?: string[];
   workflowHint?: WorkflowHint;

@@ -47,6 +47,34 @@
   min-height: 100%;
 }
 
+.chat-plan-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-plan-action-primary,
+.chat-plan-action-secondary {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-plan-action-primary {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft-strong);
+}
+
+.chat-plan-action-secondary {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface);
+}
+
 .chat-wait-indicator {
   display: inline-flex;
   align-items: center;

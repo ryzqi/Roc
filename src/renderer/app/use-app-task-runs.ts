@@ -60,10 +60,12 @@ export function useAppTaskRuns({
 } {
   const startChatRun = useCallback(
     async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const requestMode = payload.mode === 'plan' ? 'plan' : 'chat';
+      const requestThreadId = payload.cleanThread === true || payload.mode === 'plan' ? null : selectedThreadId;
       const request: ChatStartRunRequest = {
         input: payload.input,
-        mode: 'chat',
-        threadId: selectedThreadId,
+        mode: requestMode,
+        threadId: requestThreadId,
         enabledCapabilities: {
           mcpServers: currentSelectedMcpServers,
           skills: currentSelectedSkills

@@ -10,6 +10,7 @@ import type { ChatTaskSubmitPayload } from './task-run-payload';
 import type { RendererImageAttachment } from './image-attachments';
 import { isImageInputSupported, toChatImageAttachments } from './image-attachments';
 import { parseSlashSkillCommand } from './slash-skill-command';
+import { extractLastProposedPlan } from './proposed-plan';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 type ComposerMode = 'chat' | 'plan';
@@ -123,6 +124,12 @@ export function ChatView({
       selectedThreadId
     ]
   );
+  const executablePlanText = useMemo(() => {
+    if (chatRun.state.status !== 'completed' || chatRun.state.mode !== 'plan') {
+      return null;
+    }
+    return extractLastProposedPlan(chatRun.state.assistantMessage);
+  }, [chatRun.state.assistantMessage, chatRun.state.mode, chatRun.state.status]);
 
   useEffect(() => {
     if (pendingUserInput === null || selectedThreadId === null) {
@@ -252,6 +259,28 @@ export function ChatView({
     }
   }
 
+  async function executePlan(planText: string): Promise<void> {
+    if (submitting) {
+      return;
+    }
+    setSubmitting(true);
+    setComposerMode('chat');
+    try {
+      const result = await onSubmitChatTask({
+        input: planText,
+        mode: 'chat',
+        cleanThread: true
+      });
+      if (result.ok) {
+        setPendingUserInput(planText);
+      } else {
+        chatRun.setError(result.error);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const liveSignal = `${chatRun.state.runId ?? ''}|${deferredAssistantMessage.length}|${deferredActivityBlocks.length}`;
   const showEmptyState = chatTranscript.length === 0;
   const isAwaitingFirstByte =
@@ -281,6 +310,26 @@ export function ChatView({
                   void handleApprovalDecision(approvalId, decisions);
                 }}
               />
+              {executablePlanText === null ? null : (
+                <div className="chat-plan-actions" data-testid="chat-plan-actions">
+                  <button
+                    className="chat-plan-action-primary"
+                    data-testid="chat-plan-execute"
+                    type="button"
+                    onClick={() => void executePlan(executablePlanText)}
+                  >
+                    执行计划
+                  </button>
+                  <button
+                    className="chat-plan-action-secondary"
+                    data-testid="chat-plan-continue"
+                    type="button"
+                    onClick={() => setComposerMode('plan')}
+                  >
+                    继续规划
+                  </button>
+                </div>
+              )}
               <ChatWaitingIndicator visible={isAwaitingFirstByte} />
             </div>
           </div>

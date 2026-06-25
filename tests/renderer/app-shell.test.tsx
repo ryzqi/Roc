@@ -315,6 +315,90 @@ describe('AppShell', () => {
     }));
   });
 
+  it('executes a completed proposed plan as a clean chat run', async () => {
+    const client = createShellClient();
+    const runEventListeners: Array<(event: ChatRunEvent) => void> = [];
+    vi.mocked(client.api.chat.onRunEvent).mockImplementation((listener) => {
+      runEventListeners.push(listener);
+      return () => {
+        const index = runEventListeners.indexOf(listener);
+        if (index !== -1) {
+          runEventListeners.splice(index, 1);
+        }
+      };
+    });
+    vi.mocked(client.api.chat.startRun).mockImplementation(async (request) => ({
+      ok: true,
+      data: {
+        runId: request.mode === 'plan' ? 'run-plan' : 'run-execute',
+        mode: request.mode,
+        threadId: request.mode === 'plan' ? 'thread-plan' : 'thread-execute',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      }
+    }));
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+
+    const planModeButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Plan');
+    await act(async () => {
+      planModeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setTextareaValue('chat-input', 'Plan this');
+    await act(async () => {
+      queryButton('chat-task-submit').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(runEventListeners.length).toBeGreaterThan(0);
+    await act(async () => {
+      const startedEvent: ChatRunEvent = {
+        type: 'run_started',
+        runId: 'run-plan',
+        mode: 'plan',
+        threadId: 'thread-plan',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:00.000Z'
+      };
+      const completedEvent: ChatRunEvent = {
+        type: 'run_completed',
+        runId: 'run-plan',
+        threadId: 'thread-plan',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-05-21T00:00:01.000Z',
+        durationMs: 100,
+        summary: '完成计划。',
+        assistantMessage: 'notes\n<proposed_plan>\n# Plan\n- implement\n</proposed_plan>'
+      };
+      for (const listener of runEventListeners) {
+        listener(startedEvent);
+        listener(completedEvent);
+      }
+    });
+    await flushPromises();
+    await act(async () => {
+      queryButton('chat-plan-execute').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    const secondRequest = vi.mocked(client.api.chat.startRun).mock.calls[1]?.[0];
+    expect(secondRequest).toMatchObject({
+      input: '# Plan\n- implement',
+      mode: 'chat',
+      threadId: null,
+      workflowHint: null,
+      taskSource: null,
+      workspacePath: null
+    });
+    expect(secondRequest?.input).not.toContain('Plan this');
+  });
+
   it('continues task detail follow-up in the task background thread', async () => {
     const client = createShellClient();
     const waitingTask = createActiveTask({
