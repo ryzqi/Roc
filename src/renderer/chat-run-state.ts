@@ -1,6 +1,6 @@
 import type {
   ChatAssistantBlock,
-  ChatPendingApproval,
+  ChatPendingInterrupt,
   ChatRunEvent,
   ChatRunMode,
   ChatTodoItem,
@@ -72,7 +72,7 @@ export type ChatRunState = {
   errorCode: string | null;
   errorMessage: string | null;
   retryable: boolean;
-  pendingApprovals: ChatPendingApproval[];
+  pendingInterrupts: ChatPendingInterrupt[];
   resumeBusy: boolean;
   todos: ChatTodoItem[];
   subagents: ChatRunSubagentNode[];
@@ -94,7 +94,7 @@ export function createEmptyChatRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
-    pendingApprovals: [],
+    pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
     subagents: []
@@ -118,7 +118,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       errorCode: null,
       errorMessage: null,
       retryable: false,
-      pendingApprovals: [],
+      pendingInterrupts: [],
       resumeBusy: false,
       todos: [],
       subagents: []
@@ -166,7 +166,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       assistantMessage: completedEvent.assistantMessage,
       durationMs: completedEvent.durationMs,
       summary: completedEvent.summary,
-      pendingApprovals: [],
+      pendingInterrupts: [],
       resumeBusy: false
     };
   }
@@ -176,9 +176,21 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       ...state,
       threadId: event.threadId,
       status: 'waiting_user',
-      pendingApprovals: [
-        Object.assign({ interruptId: event.interruptId }, event.payload)
-      ],
+      pendingInterrupts:
+        event.payload.kind === 'approval'
+          ? [
+              {
+                kind: 'approval',
+                interruptId: event.interruptId,
+                ...event.payload.request
+              }
+            ]
+          : [
+              {
+                interruptId: event.interruptId,
+                ...event.payload
+              }
+            ],
       resumeBusy: false
     };
   }
@@ -188,7 +200,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       ...state,
       threadId: event.threadId,
       status: 'running',
-      pendingApprovals: state.pendingApprovals.filter((approval) => approval.interruptId !== event.interruptId),
+      pendingInterrupts: state.pendingInterrupts.filter((interrupt) => interrupt.interruptId !== event.interruptId),
       resumeBusy: false
     };
   }

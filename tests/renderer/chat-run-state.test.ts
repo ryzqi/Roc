@@ -61,8 +61,9 @@ describe('chat run state', () => {
     });
 
     expect(state.status).toBe('waiting_user');
-    expect(state.pendingApprovals).toEqual([
+    expect(state.pendingInterrupts).toEqual([
       expect.objectContaining({
+        kind: 'approval',
         interruptId: 'interrupt-1'
       })
     ]);
@@ -84,12 +85,48 @@ describe('chat run state', () => {
     state = applyChatRunEvent(state, runCompleted('chat_approval', '命令已执行。'));
 
     expect(state.status).toBe('completed');
-    expect(state.pendingApprovals).toEqual([]);
+    expect(state.pendingInterrupts).toEqual([]);
     expect(state.activityBlocks).toEqual([
       {
         id: 'reasoning-chat_approval',
         kind: 'reasoning',
         content: '先分析命令风险。\n审批通过，继续执行。'
+      }
+    ]);
+  });
+
+  it('stores question interrupts as waiting user state', () => {
+    let state = applyChatRunEvent(createEmptyChatRunState(), {
+      type: 'run_started',
+      runId: 'run-question',
+      mode: 'plan',
+      threadId: 'thread-question',
+      providerId: 'openai',
+      modelId: 'gpt-test',
+      createdAt: '2026-06-25T00:00:00.000Z'
+    });
+
+    state = applyChatRunEvent(state, {
+      type: 'run_interrupted',
+      runId: 'run-question',
+      threadId: 'thread-question',
+      interruptId: 'interrupt-question',
+      payload: {
+        kind: 'question',
+        question: 'Which workspace should I use?',
+        context: 'Two workspaces are available.',
+        suggestedResponses: ['F:\\Code\\Roc', 'G:\\问数']
+      }
+    });
+
+    expect(state.status).toBe('waiting_user');
+    expect(state.pendingInterrupts).toEqual([
+      {
+        kind: 'question',
+        interruptId: 'interrupt-question',
+        question: 'Which workspace should I use?',
+        context: 'Two workspaces are available.',
+        suggestedResponses: ['F:\\Code\\Roc', 'G:\\问数']
       }
     ]);
   });
@@ -104,35 +141,39 @@ describe('chat run state', () => {
       threadId: 'thread_chat_multi_approval',
       interruptId: 'interrupt-multi',
       payload: {
-        actionRequests: [
-          {
-            name: 'run_shell_command',
-            args: {
-              command: 'git status'
+        kind: 'approval',
+        request: {
+          actionRequests: [
+            {
+              name: 'run_shell_command',
+              args: {
+                command: 'git status'
+              }
+            },
+            {
+              name: 'web_search',
+              args: {
+                query: 'roc phase 6'
+              }
             }
-          },
-          {
-            name: 'web_search',
-            args: {
-              query: 'roc phase 6'
+          ],
+          reviewConfigs: [
+            {
+              actionName: 'run_shell_command',
+              allowedDecisions: ['approve', 'edit', 'reject']
+            },
+            {
+              actionName: 'web_search',
+              allowedDecisions: ['approve', 'reject']
             }
-          }
-        ],
-        reviewConfigs: [
-          {
-            actionName: 'run_shell_command',
-            allowedDecisions: ['approve', 'edit', 'reject']
-          },
-          {
-            actionName: 'web_search',
-            allowedDecisions: ['approve', 'reject']
-          }
-        ]
+          ]
+        }
       }
     });
 
     expect(state.status).toBe('waiting_user');
-    expect(state.pendingApprovals[0]?.actionRequests).toEqual([
+    expect(state.pendingInterrupts[0]?.kind).toBe('approval');
+    expect(state.pendingInterrupts[0]?.actionRequests).toEqual([
       {
         name: 'run_shell_command',
         args: {
@@ -154,7 +195,7 @@ describe('chat run state', () => {
       interruptId: 'interrupt-multi'
     });
 
-    expect(state.pendingApprovals).toEqual([]);
+    expect(state.pendingInterrupts).toEqual([]);
     expect(state.status).toBe('running');
   });
 
@@ -374,19 +415,22 @@ function toolBlock(runId: string, phase: 'start' | 'error', data: unknown): Chat
 
 function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['payload'] {
   return {
-    actionRequests: [
-      {
-        name: 'run_shell_command',
-        args: {
-          command: 'git status'
+    kind: 'approval',
+    request: {
+      actionRequests: [
+        {
+          name: 'run_shell_command',
+          args: {
+            command: 'git status'
+          }
         }
-      }
-    ],
-    reviewConfigs: [
-      {
-        actionName: 'run_shell_command',
-        allowedDecisions: ['approve', 'reject']
-      }
-    ]
+      ],
+      reviewConfigs: [
+        {
+          actionName: 'run_shell_command',
+          allowedDecisions: ['approve', 'reject']
+        }
+      ]
+    }
   };
 }

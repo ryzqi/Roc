@@ -6,6 +6,7 @@ import type {
   AppSettings,
   ApprovalMode,
   ChatCancelRunResult,
+  ChatResumeDecision,
   ChatResumeRunRequest,
   ChatResumeRunResult,
   ChatStartRunRequest,
@@ -73,12 +74,26 @@ const chatStartRunResultSchema = z.object({
   createdAt: z.string()
 }) satisfies z.ZodType<ChatStartRunResult>;
 
-const chatResumeRunRequestSchema = z.object({
-  runId: z.string(),
-  threadId: z.string(),
-  interruptId: z.string().optional(),
-  decisions: z.array(z.custom<ChatResumeRunRequest['decisions'][number]>())
-}) satisfies z.ZodType<ChatResumeRunRequest>;
+const approvalResumeRunRequestSchema = z.object({
+  kind: z.literal('approval'),
+  runId: z.string().trim().min(1),
+  threadId: z.string().trim().min(1),
+  interruptId: z.string().trim().min(1),
+  decisions: z.array(z.custom<ChatResumeDecision>())
+});
+
+const questionResumeRunRequestSchema = z.object({
+  kind: z.literal('question'),
+  runId: z.string().trim().min(1),
+  threadId: z.string().trim().min(1),
+  interruptId: z.string().trim().min(1),
+  answer: z.string().trim().min(1)
+});
+
+const chatResumeRunRequestSchema = z.discriminatedUnion('kind', [
+  approvalResumeRunRequestSchema,
+  questionResumeRunRequestSchema
+]) satisfies z.ZodType<ChatResumeRunRequest>;
 
 const chatResumeRunResultSchema = z.object({
   runId: z.string(),
@@ -328,7 +343,9 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) => runtime.startRun(input as ChatStartRunRequest));
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[3], async (input) => runtime.cancelRun(input as { runId: string }));
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[4], async (input) => runtime.resumeRun(input as ChatResumeRunRequest));
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[4], async (input) =>
+    runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
+  );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[5], async (input) =>
     runtime.listSessionMessages(input as { threadId: string; limit?: number })
   );

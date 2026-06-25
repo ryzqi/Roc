@@ -89,18 +89,48 @@ export type SubagentEventPayload =
 
 export type ChatApprovalRequest = HITLRequest;
 
+export type ChatApprovalInterruptPayload = {
+  kind: 'approval';
+  request: HITLRequest;
+};
+
+export type ChatQuestionInterruptPayload = {
+  kind: 'question';
+  question: string;
+  context?: string;
+  suggestedResponses?: string[];
+};
+
+export type ChatInterruptPayload = ChatApprovalInterruptPayload | ChatQuestionInterruptPayload;
+
 export type ChatPendingApproval = HITLRequest & {
+  kind: 'approval';
   interruptId: string;
 };
 
+export type ChatPendingQuestion = ChatQuestionInterruptPayload & {
+  interruptId: string;
+};
+
+export type ChatPendingInterrupt = ChatPendingApproval | ChatPendingQuestion;
+
 export type ChatResumeDecision = HITLResponse['decisions'][number];
 
-export type ChatResumeRunRequest = {
-  runId: string;
-  threadId: string;
-  interruptId?: string;
-  decisions: ChatResumeDecision[];
-};
+export type ChatResumeRunRequest =
+  | {
+      kind: 'approval';
+      runId: string;
+      threadId: string;
+      interruptId: string;
+      decisions: ChatResumeDecision[];
+    }
+  | {
+      kind: 'question';
+      runId: string;
+      threadId: string;
+      interruptId: string;
+      answer: string;
+    };
 
 export type ChatResumeRunResult = {
   runId: string;
@@ -128,7 +158,7 @@ export type ChatRunEvent =
       runId: string;
       threadId: string | null;
       interruptId: string;
-      payload: ChatApprovalRequest;
+      payload: ChatInterruptPayload;
     }
   | {
       type: 'run_resumed';

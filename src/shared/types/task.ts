@@ -43,6 +43,8 @@ export type TaskEvent = {
     | 'memory_operation'
     | 'approval_requested'
     | 'approval_decision'
+    | 'human_question_requested'
+    | 'human_question_answered'
     | 'recovery_point'
     | 'context_manifest'
     | 'background_task_created'

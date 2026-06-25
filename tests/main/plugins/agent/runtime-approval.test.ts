@@ -107,6 +107,7 @@ describe('AgentPluginRuntime', () => {
     );
 
     const resumed = await runtime.resumeRun({
+      kind: 'approval',
       runId: started.runId,
       threadId: started.threadId!,
       interruptId: 'interrupt_resume_1',
