@@ -11,7 +11,7 @@ export enum BlockStability {
   REQUEST = 'request'
 }
 
-export type PromptBlockType =
+type PromptBlockType =
   | 'static'
   | 'workspace'
   | 'tools'

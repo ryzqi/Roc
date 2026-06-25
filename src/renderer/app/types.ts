@@ -3,8 +3,6 @@ import type {
   ActiveTaskItem,
   DiagnosticCheck,
   DiagnosticPackage,
-  FileEntryShape,
-  FilePreviewLike,
   FilesWorkbenchPdfPreview,
   FilePreviewResult,
   FileSearchResult,
@@ -112,5 +110,4 @@ export type LazyLoadState = {
   key: string | null;
 };
 
-// Re-export so consumers can import everything from one place
-export type { HistorySidebarItem, FileEntryShape, FilePreviewLike };
+export type { HistorySidebarItem };

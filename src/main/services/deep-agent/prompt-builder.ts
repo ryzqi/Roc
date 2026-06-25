@@ -1,6 +1,5 @@
 export {
   BlockStability,
-  buildPromptBlocks,
-  type PromptBlock
+  buildPromptBlocks
 } from './context/prompt-blocks';
 export { serializePromptBlocks } from './context/prompt-serialization';
