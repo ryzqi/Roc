@@ -60,7 +60,7 @@ export function useAppTaskRuns({
 } {
   const startChatRun = useCallback(
     async (payload: ChatTaskSubmitPayload): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const result = await chatFeature.startRun({
+      const request: ChatStartRunRequest = {
         input: payload.input,
         mode: 'chat',
         threadId: selectedThreadId,
@@ -71,7 +71,11 @@ export function useAppTaskRuns({
         workflowHint: null,
         taskSource: null,
         workspacePath: null
-      });
+      };
+      if (payload.explicitSkillIds !== undefined) {
+        request.explicitSkillIds = payload.explicitSkillIds;
+      }
+      const result = await chatFeature.startRun(request);
       setPendingWorkflowHint(null);
       setPendingTaskSource(null);
       if (!result.ok) {
@@ -104,7 +108,7 @@ export function useAppTaskRuns({
       const requestWorkflowHint = workflowHint === undefined ? null : workflowHint;
       const requestTaskSource = taskSource === undefined ? null : taskSource;
       const requestWorkspacePath = payload.workspacePath === undefined ? null : payload.workspacePath;
-      const result = await chatFeature.startRun({
+      const request: ChatStartRunRequest = {
         input: payload.input,
         mode: 'task',
         threadId,
@@ -115,7 +119,11 @@ export function useAppTaskRuns({
         workflowHint: requestWorkflowHint,
         taskSource: requestTaskSource,
         workspacePath: requestWorkspacePath
-      });
+      };
+      if (payload.explicitSkillIds !== undefined) {
+        request.explicitSkillIds = payload.explicitSkillIds;
+      }
+      const result = await chatFeature.startRun(request);
       setPendingWorkflowHint(null);
       setPendingTaskSource(null);
       if (!result.ok) {

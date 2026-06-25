@@ -9,6 +9,7 @@ import type { RocClient } from '../shared/roc-client';
 import type { ChatTaskSubmitPayload } from './task-run-payload';
 import type { RendererImageAttachment } from './image-attachments';
 import { isImageInputSupported, toChatImageAttachments } from './image-attachments';
+import { parseSlashSkillCommand } from './slash-skill-command';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 
@@ -187,7 +188,13 @@ export function ChatView({
   }, [chatSelectionVersion]);
 
   async function submitCurrentInput(): Promise<void> {
-    const trimmedInput = chatInput.trim();
+    const parsedSkillCommand = parseSlashSkillCommand(chatInput);
+    if (parsedSkillCommand.kind === 'error') {
+      chatRun.setError(parsedSkillCommand.message);
+      return;
+    }
+    const submissionInput = parsedSkillCommand.kind === 'ok' ? parsedSkillCommand.input : chatInput;
+    const trimmedInput = submissionInput.trim();
     const imageInputSupported = isImageInputSupported(state);
     const sendDisabled =
       submitting ||
@@ -200,13 +207,15 @@ export function ChatView({
     setSubmitting(true);
     try {
       const attachments = toChatImageAttachments(selectedAttachments);
-      const payload: ChatTaskSubmitPayload =
-        attachments.length === 0
-          ? { input: trimmedInput }
-          : {
-              input: trimmedInput,
-              attachments
-            };
+      const payload: ChatTaskSubmitPayload = {
+        input: trimmedInput
+      };
+      if (attachments.length > 0) {
+        payload.attachments = attachments;
+      }
+      if (parsedSkillCommand.kind === 'ok') {
+        payload.explicitSkillIds = parsedSkillCommand.explicitSkillIds;
+      }
       const result = await onSubmitChatTask(payload);
       if (result.ok) {
         setPendingUserInput(trimmedInput);
