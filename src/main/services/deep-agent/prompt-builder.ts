@@ -1,8 +1,6 @@
 export {
   BlockStability,
   buildPromptBlocks,
-  type PromptBlock,
-  type PromptBlockType,
-  type PromptToolDescriptor
+  type PromptBlock
 } from './context/prompt-blocks';
 export { serializePromptBlocks } from './context/prompt-serialization';

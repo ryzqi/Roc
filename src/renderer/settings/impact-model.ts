@@ -1,7 +1,7 @@
 import type { ApprovalMode, AppSettings, PermissionsConfig } from '../../shared/types';
 import type { SettingsSectionId } from '../settings-model';
 
-export type ImpactSeverity = 'info' | 'high';
+type ImpactSeverity = 'info' | 'high';
 
 export type ImpactRow = {
   sectionId: SettingsSectionId;

@@ -10,7 +10,7 @@ import type {
   SubagentStatus
 } from '../shared/types';
 
-export type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
+type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
 
 export type ChatRunActivityBlock =
   | {

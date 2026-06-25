@@ -31,7 +31,7 @@ import type { SecretService } from './secret-service';
 
 export { resolveAnthropicBetas };
 
-export type LangChainModelRuntime = {
+type LangChainModelRuntime = {
   providerType: ProviderType;
   baseUrl: string | null;
   streaming: boolean;

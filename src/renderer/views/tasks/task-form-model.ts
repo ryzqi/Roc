@@ -1,6 +1,6 @@
 import type { BackgroundTaskPreviewRequest, BackgroundTaskTrigger, ChatResumeDecision, ChatPendingApproval } from '../../../shared/types';
 
-export type TaskTriggerMode = BackgroundTaskTrigger['type'];
+type TaskTriggerMode = BackgroundTaskTrigger['type'];
 
 export type TaskFormDraft = {
   goal: string;

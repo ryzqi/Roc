@@ -1,4 +1,4 @@
-export type StartupLoadViewId =
+type StartupLoadViewId =
   | 'chat'
   | 'tasks-board'
   | 'task-detail'
@@ -12,7 +12,7 @@ export type StartupLoadViewId =
   | 'settings'
   | 'diagnostics';
 
-export type StartupWorkbenchTool = 'files' | 'git' | 'terminal';
+type StartupWorkbenchTool = 'files' | 'git' | 'terminal';
 
 export type StartupLoadTarget = 'workspace' | 'memory' | 'operations' | 'taskSurface';
 

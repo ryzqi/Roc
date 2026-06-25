@@ -1,32 +1,7 @@
 import type { AnySubAgent, ExecuteResponse } from 'deepagents';
 import type {
-  ChatStartRunRequest,
   ShellExecutionResult,
-  TaskRun,
-  WorkflowHint
 } from '../../../shared/types';
-import type { PreviewStore } from '../forge-guardrails';
-import type { LangChainChatModelHandle } from '../langchain-model-factory';
-
-export type ActiveRun = {
-  abortController: AbortController;
-  createdAt: string;
-  enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
-  modelHandle: LangChainChatModelHandle;
-  mode: ChatStartRunRequest['mode'];
-  runId: string;
-  taskRun: TaskRun | null;
-  threadId: string;
-  workflowHint: WorkflowHint;
-};
-
-export type RunExecutionContext = ActiveRun & {
-  agentInput: string;
-  input: string;
-  previewStore?: PreviewStore;
-  startedAtMs: number;
-  traceId: string;
-};
 
 export type RunFailure = {
   code: string;

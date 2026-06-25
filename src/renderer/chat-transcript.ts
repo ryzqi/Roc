@@ -32,7 +32,7 @@ export type ChatTranscriptSubagentBlock =
       error: unknown;
     };
 
-export type ChatTranscriptSubagentActivityBlock = {
+type ChatTranscriptSubagentActivityBlock = {
   id: string;
   kind: 'subagent';
   identity: SubagentIdentity;

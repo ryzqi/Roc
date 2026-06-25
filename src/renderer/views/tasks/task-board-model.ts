@@ -1,6 +1,6 @@
 import type { ActiveTaskItem, TaskStatus } from '../../../shared/types';
 
-export type TaskBoardLaneId = 'todo' | 'running' | 'paused' | 'done';
+type TaskBoardLaneId = 'todo' | 'running' | 'paused' | 'done';
 
 export type TaskBoardLane = {
   id: TaskBoardLaneId;
