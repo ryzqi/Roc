@@ -1,6 +1,7 @@
 import type { ClientTool } from '@langchain/core/tools';
 
 import type { ChatStartRunRequest, WorkflowHint } from '../../../../shared/types';
+import type { ExplicitSkillContext } from './explicit-skills';
 import type { SessionSearchAdapter } from './session-search-tool';
 import type { RuntimeWorkspaceIdentity } from './workspace-scope';
 import { buildPromptBlocks } from './prompt-blocks';
@@ -23,6 +24,7 @@ export function assembleContextHarness(input: {
   memorySources: string[];
   baseTools: ClientTool[];
   searchSessions: SessionSearchAdapter;
+  explicitSkillContexts: readonly ExplicitSkillContext[];
 }): ContextHarness {
   const sessionSearchTool = createSessionSearchTool({
     runtimeWorkspacePath: input.workspacePath,
@@ -33,6 +35,7 @@ export function assembleContextHarness(input: {
     enabledCapabilities: input.enabledCapabilities,
     workspacePath: input.workspacePath,
     workflowHint: input.workflowHint,
+    explicitSkillContexts: input.explicitSkillContexts,
     tools: tools.map(tool => ({
       name: tool.name,
       description: tool.description

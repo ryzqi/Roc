@@ -11,11 +11,24 @@ export enum BlockStability {
   REQUEST = 'request'
 }
 
-export type PromptBlockType = 'static' | 'workspace' | 'tools' | 'capability' | 'context_recall' | 'workflow';
+export type PromptBlockType =
+  | 'static'
+  | 'workspace'
+  | 'tools'
+  | 'capability'
+  | 'explicit_skills'
+  | 'context_recall'
+  | 'workflow';
 
 export type PromptToolDescriptor = {
   name: string;
   description?: string;
+};
+
+export type ExplicitSkillPromptContext = {
+  name: string;
+  path: string;
+  content: string;
 };
 
 export type PromptBlock = {
@@ -30,12 +43,18 @@ export function buildPromptBlocks(input: {
   workspacePath: string | null;
   workflowHint: WorkflowHint;
   tools: readonly PromptToolDescriptor[];
+  explicitSkillContexts: readonly ExplicitSkillPromptContext[];
 }): PromptBlock[] {
   return [
     createBlock('static', BlockStability.STATIC, buildStaticPrompt()),
     createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath)),
     createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools)),
     createBlock('capability', BlockStability.CAPABILITY, `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`),
+    ...(
+      input.explicitSkillContexts.length === 0
+        ? []
+        : [createBlock('explicit_skills', BlockStability.REQUEST, buildExplicitSkillsPrompt(input.explicitSkillContexts))]
+    ),
     createBlock('context_recall', BlockStability.WORKSPACE, buildContextRecallPrompt(input.workspacePath)),
     createBlock('workflow', BlockStability.REQUEST, buildWorkflowPrompt(input.workflowHint))
   ];
@@ -98,6 +117,21 @@ function buildContextRecallPrompt(workspacePath: string | null): string {
     'Use scope=all only when the user asks for cross-workspace history or current scoped recall is insufficient.',
     'Session search returns snippets, not full transcript content.'
   ].join('\n');
+}
+
+function buildExplicitSkillsPrompt(skills: readonly ExplicitSkillPromptContext[]): string {
+  return [
+    'Explicitly loaded skills for this request:',
+    ...skills.map((skill) =>
+      [
+        '<skill>',
+        `<name>${skill.name}</name>`,
+        `<path>${skill.path}</path>`,
+        skill.content,
+        '</skill>'
+      ].join('\n')
+    )
+  ].join('\n\n');
 }
 
 function buildWorkflowPrompt(workflowHint: WorkflowHint): string {

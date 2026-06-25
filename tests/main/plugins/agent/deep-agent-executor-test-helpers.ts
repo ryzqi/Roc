@@ -14,6 +14,8 @@ import type {
   FileDeleteResult,
   RecoveryPoint,
   ShellExecutionResult,
+  SkillFilePreviewResult,
+  SkillSnapshot,
   TaskDetail,
   TaskRun,
   Workspace
@@ -135,7 +137,13 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
 
 export function createCapabilities(
   calls: Array<{ name: string; input: unknown }>,
-  options: { capabilityPreview?: boolean; mcpTools?: ClientTool[]; workspace?: Workspace | null } = {}
+  options: {
+    capabilityPreview?: boolean;
+    mcpTools?: ClientTool[];
+    workspace?: Workspace | null;
+    skills?: SkillSnapshot[];
+    skillFiles?: Record<string, string>;
+  } = {}
 ): RocCapabilityRegistry {
   const capabilityPreviewDescriptor: CapabilityDescriptor = {
     name: 'agent.capability.preview',
@@ -169,6 +177,26 @@ export function createCapabilities(
       }
       if (name === 'mcp.tools.get') {
         return (options.mcpTools === undefined ? [] : options.mcpTools) as TOutput;
+      }
+      if (name === 'skills.list') {
+        const skills = options.skills === undefined ? [] : options.skills;
+        return skills as TOutput;
+      }
+      if (name === 'skills.file.read') {
+        const request = input as { id: string; relativePath: string };
+        const files = options.skillFiles === undefined ? {} : options.skillFiles;
+        const content = files[request.id];
+        if (content === undefined) {
+          throw new Error(`skill_file_missing:${request.id}`);
+        }
+        return {
+          id: request.id,
+          relativePath: request.relativePath,
+          kind: 'text',
+          content,
+          truncated: false,
+          sizeBytes: Buffer.byteLength(content, 'utf8')
+        } satisfies SkillFilePreviewResult as TOutput;
       }
       if (name === 'task.background.preview') {
         return createPreview(input as BackgroundTaskPreviewRequest) as TOutput;

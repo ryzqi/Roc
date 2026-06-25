@@ -34,6 +34,7 @@ import { createBackend } from '../../services/deep-agent/backend';
 import { createRocFilesystemPermissions, toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
+import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
@@ -99,13 +100,18 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         store: options.store,
         workspace: runtimeWorkspace
       });
+      const explicitSkillContexts = await loadExplicitSkillContexts({
+        capabilities: options.capabilities,
+        explicitSkillIds: input.request.explicitSkillIds
+      });
       const contextHarness = assembleContextHarness({
         enabledCapabilities: input.request.enabledCapabilities,
         workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         memorySources: runtimeBackend.memorySources,
         baseTools: tools.runTools,
-        searchSessions: request => options.capabilities.invoke('agent.sessions.search', request)
+        searchSessions: request => options.capabilities.invoke('agent.sessions.search', request),
+        explicitSkillContexts
       });
       const initialHookContexts: string[] = [];
       if (options.hookRuntime !== undefined) {

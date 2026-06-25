@@ -55,6 +55,82 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent', 'mcp.tools.get']);
   });
 
+  it('loads explicit slash skill SKILL.md into request context without changing selected skills', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(
+      createCapabilities(capabilityCalls, {
+        skills: [
+          {
+            id: 'python-expert',
+            name: 'python-expert',
+            enabled: true,
+            path: 'F:\\Code\\Roc\\.roc\\skills\\python-expert',
+            description: 'Python expertise',
+            status: 'ready',
+            lastError: null
+          },
+          {
+            id: 'typescript',
+            name: 'typescript',
+            enabled: true,
+            path: 'F:\\Code\\Roc\\.roc\\skills\\typescript',
+            description: 'TypeScript expertise',
+            status: 'ready',
+            lastError: null
+          }
+        ],
+        skillFiles: {
+          'python-expert': '---\nname: python-expert\ndescription: Python expertise\n---\n# Python Expert\nUse pytest.'
+        }
+      }),
+      {
+        explicitSkillIds: ['python-expert'],
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: ['typescript']
+        }
+      }
+    );
+
+    const buildInput = readBuildInput();
+
+    expect(buildInput.skillSources).toEqual(['/skills/']);
+    expect(buildInput.systemPrompt).toContain('<skill>');
+    expect(buildInput.systemPrompt).toContain('<name>python-expert</name>');
+    expect(buildInput.systemPrompt).toContain('/skills/python-expert/SKILL.md');
+    expect(buildInput.systemPrompt).toContain('# Python Expert');
+    expect(buildInput.systemPrompt).toContain('Capabilities: mcp=none;skills=typescript;');
+    expect(buildInput.systemPrompt).not.toContain('<name>typescript</name>');
+    expect(capabilityCalls.map((call) => call.name)).toEqual([
+      'workspace.getCurrent',
+      'skills.list',
+      'skills.file.read'
+    ]);
+  });
+
+  it('rejects disabled explicit slash skill before building the agent', async () => {
+    await expect(
+      buildExecutorOnce(
+        createCapabilities([], {
+          skills: [
+            {
+              id: 'python-expert',
+              name: 'python-expert',
+              enabled: false,
+              path: 'F:\\Code\\Roc\\.roc\\skills\\python-expert',
+              description: 'Python expertise',
+              status: 'ready',
+              lastError: null
+            }
+          ]
+        }),
+        {
+          explicitSkillIds: ['python-expert']
+        }
+      )
+    ).rejects.toThrow('skill_disabled:python-expert');
+  });
+
   it('passes image attachments to DeepAgents as LangChain multimodal content blocks', async () => {
     await buildExecutorOnce(createCapabilities([]), {
       input: '描述图片'
