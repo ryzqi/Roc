@@ -5,6 +5,7 @@ import { assembleContextHarness } from '../../../../../src/main/services/deep-ag
 describe('assembleContextHarness', () => {
   it('adds session_search and serializes prompt markers', () => {
     const harness = assembleContextHarness({
+      mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
       workspacePath: 'F:\\Code\\Roc',
@@ -26,6 +27,7 @@ describe('assembleContextHarness', () => {
 
   it('exposes selected skills through /skills/', () => {
     const harness = assembleContextHarness({
+      mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
       workspacePath: null,

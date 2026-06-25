@@ -57,6 +57,7 @@ describe('createPromptCachingMiddleware', () => {
   it('injects cache_control from a production serialized prompt for Anthropic-compatible providers', async () => {
     const prompt = serializePromptBlocks(
       buildPromptBlocks({
+        mode: 'chat',
         enabledCapabilities: { mcpServers: [], skills: [] },
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,

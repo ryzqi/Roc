@@ -18,6 +18,7 @@ export type ContextHarness = {
 };
 
 export function assembleContextHarness(input: {
+  mode: ChatStartRunRequest['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workflowHint: WorkflowHint;
   workspacePath: string | null;
@@ -32,6 +33,7 @@ export function assembleContextHarness(input: {
   });
   const tools = [...input.baseTools, sessionSearchTool];
   const promptBlocks = buildPromptBlocks({
+    mode: input.mode,
     enabledCapabilities: input.enabledCapabilities,
     workspacePath: input.workspacePath,
     workflowHint: input.workflowHint,

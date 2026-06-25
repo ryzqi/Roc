@@ -110,6 +110,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         explicitSkillIds: input.request.explicitSkillIds
       });
       const contextHarness = assembleContextHarness({
+        mode: input.request.mode,
         enabledCapabilities: input.request.enabledCapabilities,
         workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,

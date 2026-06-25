@@ -4,6 +4,7 @@ import { BlockStability, buildPromptBlocks, serializePromptBlocks } from '../../
 describe('prompt-builder compatibility exports', () => {
   it('re-exports the production prompt block builder', () => {
     const blocks = buildPromptBlocks({
+      mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\TestProject',
       workflowHint: null,
@@ -28,6 +29,7 @@ describe('prompt-builder compatibility exports', () => {
   it('serializes block markers through the compatibility export', () => {
     const prompt = serializePromptBlocks(
       buildPromptBlocks({
+        mode: 'chat',
         enabledCapabilities: { mcpServers: [], skills: [] },
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,

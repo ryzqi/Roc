@@ -18,6 +18,7 @@ export type PromptBlockType =
   | 'capability'
   | 'explicit_skills'
   | 'context_recall'
+  | 'plan_mode'
   | 'workflow';
 
 export type PromptToolDescriptor = {
@@ -39,6 +40,7 @@ export type PromptBlock = {
 };
 
 export function buildPromptBlocks(input: {
+  mode: ChatStartRunRequest['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
   workflowHint: WorkflowHint;
@@ -47,7 +49,7 @@ export function buildPromptBlocks(input: {
 }): PromptBlock[] {
   return [
     createBlock('static', BlockStability.STATIC, buildStaticPrompt()),
-    createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath)),
+    createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath, input.mode)),
     createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools)),
     createBlock('capability', BlockStability.CAPABILITY, `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`),
     ...(
@@ -56,6 +58,11 @@ export function buildPromptBlocks(input: {
         : [createBlock('explicit_skills', BlockStability.REQUEST, buildExplicitSkillsPrompt(input.explicitSkillContexts))]
     ),
     createBlock('context_recall', BlockStability.WORKSPACE, buildContextRecallPrompt(input.workspacePath)),
+    ...(
+      input.mode === 'plan'
+        ? [createBlock('plan_mode', BlockStability.REQUEST, buildPlanModePrompt())]
+        : []
+    ),
     createBlock('workflow', BlockStability.REQUEST, buildWorkflowPrompt(input.workflowHint))
   ];
 }
@@ -81,11 +88,25 @@ function buildStaticPrompt(): string {
   ].join('\n');
 }
 
-function buildWorkspacePrompt(workspacePath: string | null): string {
+function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRequest['mode']): string {
   if (workspacePath === null) {
+    if (mode === 'plan') {
+      return [
+        'Workspace: not selected.',
+        'Plan Mode file inspection is unavailable until the user selects a workspace.'
+      ].join('\n');
+    }
     return [
       'Workspace: not selected.',
       'Default command cwd: unavailable; ask user to select workspace before local command operations.'
+    ].join('\n');
+  }
+  if (mode === 'plan') {
+    return [
+      `Workspace: ${workspacePath}`,
+      'Plan Mode file tools are read-only and use Roc virtual routes: /workspace/, /memory/, and /skills/.',
+      'Use only ls, read_file, glob, and grep for local inspection in Plan Mode.',
+      'Do not call write_file, edit_file, delete_file, or run_shell_command in Plan Mode.'
     ].join('\n');
   }
   return [
@@ -116,6 +137,19 @@ function buildContextRecallPrompt(workspacePath: string | null): string {
     `Default session_search scope: ${defaultScope}.`,
     'Use scope=all only when the user asks for cross-workspace history or current scoped recall is insufficient.',
     'Session search returns snippets, not full transcript content.'
+  ].join('\n');
+}
+
+function buildPlanModePrompt(): string {
+  return [
+    'Plan Mode: research, ask concise clarifying questions when needed, and do not implement changes.',
+    'When the plan is complete, output exactly one final proposed plan block.',
+    'Use this exact wrapper:',
+    '<proposed_plan>',
+    '# Title',
+    '- Implementation steps',
+    '- Verification',
+    '</proposed_plan>'
   ].join('\n');
 }
 
