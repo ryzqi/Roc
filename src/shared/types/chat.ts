@@ -184,6 +184,7 @@ export type ChatStartRunRequest = {
   taskSource?: 'workbench' | null;
   workspacePath?: string | null;
   attachments?: ChatImageAttachment[];
+  explicitSkillIds?: string[];
 };
 
 export type ChatStartRunResult = {
