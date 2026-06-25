@@ -175,6 +175,67 @@ describe('task plugin', () => {
     );
   });
 
+  it('mirrors plan mode run events into the task snapshot contract', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    await eventBus.publish({
+      type: 'agent.run.started',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-25T00:00:00.000Z',
+      payload: {
+        runId: 'run_plan_1',
+        threadId: 'thread_plan_1',
+        mode: 'plan',
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        userInput: 'Plan this change',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-25T00:00:01.000Z',
+      payload: {
+        runId: 'run_plan_1',
+        threadId: 'thread_plan_1',
+        type: 'assistant_block',
+        payload: {
+          kind: 'text',
+          blockId: 'text-run_plan_1',
+          phase: 'delta',
+          text: '<proposed_plan>Plan</proposed_plan>'
+        }
+      }
+    });
+
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
+
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_plan_1',
+        threadId: 'thread_plan_1',
+        type: 'assistant_block',
+        payload: {
+          kind: 'text',
+          blockId: 'text-run_plan_1',
+          phase: 'delta',
+          text: '<proposed_plan>Plan</proposed_plan>'
+        }
+      })
+    );
+  });
+
 });
 
 function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocEventBus }): RocPluginContext {

@@ -113,6 +113,39 @@ describe('agent run schema explicit skills', () => {
     expect(parsed?.success).toBe(true);
   });
 
+  it('accepts plan mode chat start requests', () => {
+    const plugin = createAgentPlugin();
+    const startDescriptor = plugin.manifest.capabilities.find((capability) => capability.name === 'agent.run.start');
+    const parsed = startDescriptor?.inputSchema.safeParse({
+      input: 'Plan this change',
+      mode: 'plan',
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: []
+      },
+      workflowHint: null,
+      taskSource: null,
+      workspacePath: null
+    });
+
+    expect(parsed?.success).toBe(true);
+  });
+
+  it('accepts plan mode chat start results', () => {
+    const plugin = createAgentPlugin();
+    const startDescriptor = plugin.manifest.capabilities.find((capability) => capability.name === 'agent.run.start');
+    const parsed = startDescriptor?.outputSchema.safeParse({
+      runId: 'run_plan_1',
+      mode: 'plan',
+      threadId: 'thread_plan_1',
+      providerId: 'smoke-provider',
+      modelId: 'smoke-model',
+      createdAt: '2026-06-25T00:00:00.000Z'
+    });
+
+    expect(parsed?.success).toBe(true);
+  });
+
   it('rejects empty explicit skill ids', () => {
     const plugin = createAgentPlugin();
     const startDescriptor = plugin.manifest.capabilities.find((capability) => capability.name === 'agent.run.start');

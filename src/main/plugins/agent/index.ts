@@ -54,7 +54,7 @@ const chatImageAttachmentSchema = z.object({
 
 const chatStartRunRequestSchema = z.object({
   input: z.string(),
-  mode: z.enum(['chat', 'task']),
+  mode: z.enum(['chat', 'task', 'plan']),
   enabledCapabilities: enabledCapabilitiesSchema,
   threadId: z.string().nullable().optional(),
   workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
@@ -66,7 +66,7 @@ const chatStartRunRequestSchema = z.object({
 
 const chatStartRunResultSchema = z.object({
   runId: z.string(),
-  mode: z.enum(['chat', 'task']),
+  mode: z.enum(['chat', 'task', 'plan']),
   threadId: z.string().nullable(),
   providerId: z.string(),
   modelId: z.string(),

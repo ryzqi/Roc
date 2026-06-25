@@ -197,7 +197,7 @@ function isAgentTaskEventType(value: unknown): value is TaskEvent['type'] {
 }
 
 function isChatRunMode(value: unknown): value is ChatStartRunRequest['mode'] {
-  return value === 'chat' || value === 'task';
+  return value === 'chat' || value === 'task' || value === 'plan';
 }
 
 function readWorkflowHint(value: unknown): ChatStartRunRequest['workflowHint'] | null | undefined {

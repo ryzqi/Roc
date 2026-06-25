@@ -1,7 +1,8 @@
-import type { ChatImageAttachment, WorkflowHint } from '../../shared/types';
+import type { ChatImageAttachment, ChatRunMode, WorkflowHint } from '../../shared/types';
 
 export type ChatTaskSubmitPayload = {
   input: string;
+  mode?: Extract<ChatRunMode, 'chat' | 'plan'>;
   attachments?: ChatImageAttachment[];
   explicitSkillIds?: string[];
   workflowHint?: WorkflowHint;
