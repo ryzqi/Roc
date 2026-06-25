@@ -100,8 +100,6 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
   };
 }
 
-export { runtimeToolsCapabilityDescriptors };
-
 async function confirmShell(
   request: ShellConfirmationRequest,
   confirmShellRequest: RuntimeToolsPluginOptions['confirmShellRequest']

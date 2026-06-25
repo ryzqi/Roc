@@ -76,7 +76,7 @@ export class HookConfigService {
   }
 }
 
-export async function buildHandlerSnapshots(
+async function buildHandlerSnapshots(
   config: RocHookConfig,
   trustService?: HookTrustReader,
   onTrustError?: (error: unknown) => void

@@ -152,8 +152,6 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
   };
 }
 
-export { diagnosticsCapabilityDescriptors };
-
 function registerDiagnosticsCapabilities(
   context: RocPluginContext,
   input: {

@@ -36,8 +36,6 @@ export function createAppPlugin(options: AppPluginOptions): RocPlugin {
   };
 }
 
-export { appCapabilityDescriptors };
-
 function descriptor<TInput, TOutput>(
   name: string,
   inputSchema: z.ZodType<TInput>,

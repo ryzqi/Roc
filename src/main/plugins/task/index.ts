@@ -41,7 +41,7 @@ const taskRunNowResultSchema = z.object({
   runId: z.string()
 });
 
-export const taskCapabilityDescriptors = [
+const taskCapabilityDescriptors = [
   descriptor('task.snapshot.get', z.object({}), z.custom<TaskSnapshot>()),
   descriptor('task.background.preview', z.custom<BackgroundTaskPreviewRequest>(), z.custom<BackgroundTaskPreview>()),
   descriptor('task.background.create', z.custom<BackgroundTaskPreview>(), z.custom<BackgroundTask>()),

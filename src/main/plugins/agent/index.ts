@@ -161,7 +161,7 @@ const agentCapabilityPreviewDescriptor = descriptor(
   agentCapabilityPreviewSchema
 );
 
-export const agentCapabilityDescriptors = [
+const agentCapabilityDescriptors = [
   ...baseAgentCapabilityDescriptors,
   agentCapabilityPreviewDescriptor
 ] as const satisfies readonly CapabilityDescriptor[];

@@ -91,8 +91,6 @@ export function createSkillsPlugin(options: SkillsPluginOptions = {}): RocPlugin
   };
 }
 
-export { skillsCapabilityDescriptors };
-
 function descriptor<TInput, TOutput>(
   name: string,
   inputSchema: z.ZodType<TInput>,

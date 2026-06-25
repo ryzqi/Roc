@@ -91,7 +91,7 @@ const snapshotPreviewSchema = z.object({
   text: z.string()
 });
 
-export const memoryCapabilityDescriptors = [
+const memoryCapabilityDescriptors = [
   descriptor('memory.status.get', z.object({}), memoryStatusSchema),
   descriptor('memory.file.read', memoryFileReadInputSchema, z.string().nullable()),
   descriptor('memory.file.write', memoryFileWriteInputSchema, memoryFileWriteOutcomeSchema),

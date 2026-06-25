@@ -260,8 +260,6 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
   };
 }
 
-export { workspaceCapabilityDescriptors };
-
 function createWorkspaceConfigAdapter(context: RocPluginContext): WorkspaceConfigService {
   return {
     getSettings: () => {
