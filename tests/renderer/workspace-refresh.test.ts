@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChatRunEvent, Workspace } from '../../src/shared/types';
+import type { ChatRunEvent, Workspace, WorkspaceChangedEvent } from '../../src/shared/types';
 import {
   createWorkspaceRefreshController,
   createWorkspaceRefreshSubscription,
   shouldRefreshWorkspaceForRunEvent,
-  type WorkspaceLiveData
+  type WorkspaceLiveData,
+  type WorkspaceRefreshSnapshot
 } from '../../src/renderer/app/workspace-refresh';
 
 const workspace: Workspace = {
@@ -170,6 +171,118 @@ describe('workspace refresh helpers', () => {
     expect(runEventListener).toBeNull();
   });
 
+  it('refreshes workspace data when the current workspace directory changes', async () => {
+    vi.useFakeTimers();
+    let workspaceChangeListener: ((event: WorkspaceChangedEvent) => void) | null = null;
+    const load = vi.fn(async () => refreshedWorkspaceData);
+    const apply = vi.fn();
+    const subscription = createWorkspaceRefreshSubscription({
+      initialSnapshot: {
+        workspace,
+        previewRelativePath: null,
+        fileWorkbenchPdfRelativePath: null,
+        gitSelectedPath: null
+      },
+      load,
+      apply,
+      onError: vi.fn(),
+      subscribe: () => () => {},
+      subscribeWorkspaceChanges: (listener) => {
+        workspaceChangeListener = listener;
+        return () => {
+          workspaceChangeListener = null;
+        };
+      }
+    });
+
+    const listener = workspaceChangeListener as ((event: WorkspaceChangedEvent) => void) | null;
+    if (listener === null) {
+      throw new Error('workspace change listener was not registered');
+    }
+
+    listener({
+      workspacePath: workspace.path,
+      relativePath: 'src/notes.md',
+      eventType: 'change'
+    });
+
+    await vi.advanceTimersByTimeAsync(150);
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledWith(workspace, {
+      previewRelativePath: null,
+      fileWorkbenchPdfRelativePath: null,
+      fallbackToFirstFilePreview: false,
+      gitSelectedPath: null
+    });
+    expect(apply).toHaveBeenCalledWith(workspace.path, refreshedWorkspaceData);
+
+    subscription.dispose();
+    expect(workspaceChangeListener).toBeNull();
+  });
+
+  it('queues workspace refreshes instead of running concurrent loads', async () => {
+    vi.useFakeTimers();
+    let snapshot: WorkspaceRefreshSnapshot = {
+      workspace,
+      previewRelativePath: 'before.md',
+      fileWorkbenchPdfRelativePath: null,
+      gitSelectedPath: null
+    };
+    const firstRefresh = createDeferred<WorkspaceLiveData>();
+    const secondRefresh = createDeferred<WorkspaceLiveData>();
+    const load = vi.fn()
+      .mockReturnValueOnce(firstRefresh.promise)
+      .mockReturnValueOnce(secondRefresh.promise);
+    const apply = vi.fn();
+    const controller = createWorkspaceRefreshController({
+      readSnapshot: () => snapshot,
+      load,
+      apply,
+      onError: vi.fn()
+    });
+
+    controller.handleWorkspaceChanged({
+      workspacePath: workspace.path,
+      relativePath: 'first.md',
+      eventType: 'change'
+    });
+    await vi.advanceTimersByTimeAsync(150);
+    await Promise.resolve();
+
+    snapshot = {
+      workspace,
+      previewRelativePath: 'after.md',
+      fileWorkbenchPdfRelativePath: null,
+      gitSelectedPath: 'after.md'
+    };
+    controller.handleWorkspaceChanged({
+      workspacePath: workspace.path,
+      relativePath: 'after.md',
+      eventType: 'change'
+    });
+    await vi.advanceTimersByTimeAsync(150);
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledTimes(1);
+
+    firstRefresh.resolve(refreshedWorkspaceData);
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenLastCalledWith(workspace, {
+      previewRelativePath: 'after.md',
+      fileWorkbenchPdfRelativePath: null,
+      fallbackToFirstFilePreview: false,
+      gitSelectedPath: 'after.md'
+    });
+
+    secondRefresh.resolve(refreshedWorkspaceData);
+    await Promise.resolve();
+
+    expect(apply).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves files workbench PDF selection separately from shared preview state', async () => {
     vi.useFakeTimers();
     const load = vi.fn(async () => ({
@@ -250,4 +363,18 @@ function toolEndEvent(runId: string, name: string, input: unknown): ChatRunEvent
       output: input
     }
   };
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  if (resolve === null) {
+    throw new Error('deferred promise resolver was not created');
+  }
+  return { promise, resolve };
 }

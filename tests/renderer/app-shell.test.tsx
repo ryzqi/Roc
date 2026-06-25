@@ -67,7 +67,7 @@ describe('AppShell', () => {
     expect(container.textContent).toContain('任务工作台');
   });
 
-  it('subscribes to task updates through the RocClient api', async () => {
+  it('subscribes to task and workspace updates through the RocClient api', async () => {
     const client = createShellClient();
     window.roc = client.api;
 
@@ -76,6 +76,7 @@ describe('AppShell', () => {
     });
 
     expect(client.api.tasks.onUpdated).toHaveBeenCalledTimes(1);
+    expect(client.api.workspace.onChanged).toHaveBeenCalledTimes(1);
   });
 
   it('opens the task workbench entry as the board page instead of chat', async () => {

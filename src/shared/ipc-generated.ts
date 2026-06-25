@@ -100,6 +100,7 @@ export const ipcChannels = {
   appearanceUpdated: 'roc:appearance:updated',
   navigate: 'roc:navigate',
   tasksUpdated: 'roc:tasks:updated',
+  workspaceChanged: 'roc:workspace:changed',
   terminalOutput: 'roc:terminal:output',
   terminalExit: 'roc:terminal:exit',
   chatRunEvent: 'roc:chat:run-event'
@@ -206,6 +207,7 @@ export const ipcEventChannelKeys = [
   'appearanceUpdated',
   'navigate',
   'tasksUpdated',
+  'workspaceChanged',
   'terminalOutput',
   'terminalExit',
   'chatRunEvent'

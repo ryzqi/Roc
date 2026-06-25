@@ -52,7 +52,8 @@ export function createShellClient(): RocClient {
       getCapabilityPreview: vi.fn().mockResolvedValue({ ok: true, data: state.agentCapabilityPreview })
     },
     workspace: {
-      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null })
+      selectFromDialog: vi.fn().mockResolvedValue({ ok: true, data: null }),
+      onChanged: vi.fn().mockReturnValue(() => {})
     },
     window: {
       close: vi.fn().mockResolvedValue({ ok: true, data: { closed: true } }),

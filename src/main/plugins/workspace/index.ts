@@ -39,6 +39,7 @@ import { FileService, type FileRecoveryPointDatabase } from '../../services/file
 import { GitService } from '../../services/git-service';
 import { RocPaths } from '../../services/paths';
 import { TerminalSessionService } from '../../services/terminal-session-service';
+import { WorkspaceChangeWatcherService } from '../../services/workspace-change-watcher-service';
 import { WorkspaceService, type WorkspaceConfigService } from '../../services/workspace-service';
 import { registerFileCapabilities } from './file-capabilities';
 import { registerGitCapabilities } from './git-capabilities';
@@ -50,6 +51,7 @@ import {
 
 const pluginId = '@roc/plugin-workspace';
 const capabilityVersion = '1.0.0';
+export const workspaceChangedEventType = 'workspace.changed';
 
 const workspaceSelectRequestSchema = z.object({
   path: z.string()
@@ -161,6 +163,7 @@ export type WorkspacePluginOptions = {
 
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
   let terminalService: TerminalSessionService | null = null;
+  let workspaceChangeWatcher: WorkspaceChangeWatcherService | null = null;
   let unsubscribeTerminalOutput: EventSubscription | null = null;
   let unsubscribeTerminalExit: EventSubscription | null = null;
   return {
@@ -182,6 +185,18 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
+      workspaceChangeWatcher = new WorkspaceChangeWatcherService({
+        logger: context.logger,
+        onChange: (event) =>
+          context.eventBus.publish({
+            type: workspaceChangedEventType,
+            source: pluginId,
+            payload: event,
+            createdAt: new Date().toISOString()
+          })
+      });
+      const currentWorkspace = workspaceService.getCurrentWorkspace();
+      workspaceChangeWatcher.setWorkspace(currentWorkspace === null ? null : currentWorkspace.path);
       terminalService = new TerminalSessionService(paths, workspaceService);
       unsubscribeTerminalOutput = terminalService.onOutput((payload) => {
         void context.eventBus.publish({
@@ -211,9 +226,11 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[0], async () =>
         workspaceService.getCurrentWorkspace()
       );
-      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[1], async (input) =>
-        workspaceService.selectWorkspace((input as WorkspaceSelectRequest).path)
-      );
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[1], async (input) => {
+        const workspace = workspaceService.selectWorkspace((input as WorkspaceSelectRequest).path);
+        workspaceChangeWatcher?.setWorkspace(workspace.path);
+        return workspace;
+      });
       registerFileCapabilities(context, workspaceCapabilityDescriptors.slice(2, 8), fileService);
       registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService);
       registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
@@ -234,6 +251,10 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
         terminalService.shutdown();
       }
       terminalService = null;
+      if (workspaceChangeWatcher !== null) {
+        workspaceChangeWatcher.shutdown();
+      }
+      workspaceChangeWatcher = null;
     },
     healthCheck: async () => ({ status: 'healthy' })
   };

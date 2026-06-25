@@ -100,6 +100,7 @@
     { "key": "appearanceUpdated", "channel": "roc:appearance:updated" },
     { "key": "navigate", "channel": "roc:navigate" },
     { "key": "tasksUpdated", "channel": "roc:tasks:updated" },
+    { "key": "workspaceChanged", "channel": "roc:workspace:changed" },
     { "key": "terminalOutput", "channel": "roc:terminal:output" },
     { "key": "terminalExit", "channel": "roc:terminal:exit" },
     { "key": "chatRunEvent", "channel": "roc:chat:run-event" }

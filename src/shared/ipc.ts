@@ -96,8 +96,9 @@ import type {
   TraySummary,
   SystemAppearanceSnapshot,
   UpdateBackgroundTaskRequest,
-  Workspace,
   FileDialogSelection,
+  Workspace,
+  WorkspaceChangedEvent,
   WorkspaceSelectRequest,
   WindowBoundsSnapshot,
   WindowStateSnapshot
@@ -212,6 +213,7 @@ export type RocPreloadApi = {
     getCurrent: () => Promise<IpcResult<Workspace | null>>;
     select: (request: WorkspaceSelectRequest) => Promise<IpcResult<Workspace>>;
     selectFromDialog: () => Promise<IpcResult<Workspace | null>>;
+    onChanged: (callback: (event: WorkspaceChangedEvent) => void) => () => void;
   };
   files: {
     selectFromDialog: () => Promise<IpcResult<FileDialogSelection | null>>;

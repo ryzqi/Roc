@@ -115,7 +115,12 @@ const rocApi: RocPreloadApi = {
   workspace: {
     getCurrent: () => ipcRenderer.invoke(ipcChannels.workspaceGetCurrent),
     select: (request) => ipcRenderer.invoke(ipcChannels.workspaceSelect, request),
-    selectFromDialog: () => ipcRenderer.invoke(ipcChannels.workspaceSelectFromDialog)
+    selectFromDialog: () => ipcRenderer.invoke(ipcChannels.workspaceSelectFromDialog),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.workspaceChanged, listener);
+      return () => ipcRenderer.off(ipcChannels.workspaceChanged, listener);
+    }
   },
   files: {
     selectFromDialog: () => ipcRenderer.invoke(ipcChannels.filesSelectFromDialog),

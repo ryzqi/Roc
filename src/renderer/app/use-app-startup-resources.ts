@@ -94,7 +94,8 @@ export function useAppStartupResources({
       onError: (message) => {
         setError(message);
       },
-      subscribe: (listener) => client.api.chat.onRunEvent(listener)
+      subscribe: (listener) => client.api.chat.onRunEvent(listener),
+      subscribeWorkspaceChanges: (listener) => client.api.workspace.onChanged(listener)
     });
     workspaceRefreshSubscriptionRef.current = subscription;
 

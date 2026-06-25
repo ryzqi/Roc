@@ -13,6 +13,12 @@ export type WorkspaceSelectRequest = {
   path: string;
 };
 
+export type WorkspaceChangedEvent = {
+  workspacePath: string;
+  relativePath: string | null;
+  eventType: 'rename' | 'change';
+};
+
 export type FileDialogSelection = {
   filePaths: string[];
 };

@@ -15,10 +15,11 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
-import type { ChatRunEvent, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary } from '../shared/types';
+import type { ChatRunEvent, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
 import { registerIpc } from './ipc/register-ipc';
 import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
 import { agentChatRunEventType } from './plugins/agent/runtime';
+import { workspaceChangedEventType } from './plugins/workspace';
 import {
   terminalSessionExitEventType,
   terminalSessionOutputEventType
@@ -319,6 +320,11 @@ async function createWindow(): Promise<void> {
   kernel.subscribeEvent<TerminalSessionExitEvent>(terminalSessionExitEventType, (event) => {
     terminalOutputBatcher.flush();
     broadcastToWindows([mainWindow], ipcChannels.terminalExit, event.payload, {
+      include: (_window, index) => index === 0
+    });
+  });
+  kernel.subscribeEvent<WorkspaceChangedEvent>(workspaceChangedEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.workspaceChanged, event.payload, {
       include: (_window, index) => index === 0
     });
   });

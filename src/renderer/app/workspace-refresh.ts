@@ -1,4 +1,4 @@
-import type { ChatRunEvent, Workspace } from '../../shared/types';
+import type { ChatRunEvent, Workspace, WorkspaceChangedEvent } from '../../shared/types';
 import type { WorkspaceData } from './types';
 
 const workspaceMutationToolNames = new Set(['delete_file', 'write_file', 'edit_file']);
@@ -84,32 +84,47 @@ export function createWorkspaceRefreshController(input: {
   onError: (message: string) => void;
 }): {
   dispose: () => void;
+  handleWorkspaceChanged: (event: WorkspaceChangedEvent) => void;
   handleRunEvent: (event: ChatRunEvent) => void;
 } {
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
+  let refreshInFlight = false;
+  let refreshRequested = false;
 
   async function runRefresh(): Promise<void> {
-    const snapshot = input.readSnapshot();
-    if (snapshot.workspace === null) {
+    if (refreshInFlight) {
+      refreshRequested = true;
       return;
     }
+    refreshInFlight = true;
     try {
-      const data = await input.load(snapshot.workspace, {
-        previewRelativePath: snapshot.previewRelativePath,
-        fileWorkbenchPdfRelativePath: snapshot.fileWorkbenchPdfRelativePath,
-        fallbackToFirstFilePreview: false,
-        gitSelectedPath: snapshot.gitSelectedPath
-      });
-      if (disposed) {
-        return;
-      }
-      input.apply(snapshot.workspace.path, data);
-    } catch (error) {
-      if (disposed) {
-        return;
-      }
-      input.onError(error instanceof Error ? error.message : '工作区刷新失败。');
+      do {
+        refreshRequested = false;
+        const snapshot = input.readSnapshot();
+        if (snapshot.workspace === null) {
+          return;
+        }
+        try {
+          const data = await input.load(snapshot.workspace, {
+            previewRelativePath: snapshot.previewRelativePath,
+            fileWorkbenchPdfRelativePath: snapshot.fileWorkbenchPdfRelativePath,
+            fallbackToFirstFilePreview: false,
+            gitSelectedPath: snapshot.gitSelectedPath
+          });
+          if (disposed) {
+            return;
+          }
+          input.apply(snapshot.workspace.path, data);
+        } catch (error) {
+          if (disposed) {
+            return;
+          }
+          input.onError(error instanceof Error ? error.message : '工作区刷新失败。');
+        }
+      } while (refreshRequested && !disposed);
+    } finally {
+      refreshInFlight = false;
     }
   }
 
@@ -136,6 +151,16 @@ export function createWorkspaceRefreshController(input: {
         return;
       }
       scheduleRefresh();
+    },
+    handleWorkspaceChanged(event: WorkspaceChangedEvent): void {
+      const snapshot = input.readSnapshot();
+      if (snapshot.workspace === null) {
+        return;
+      }
+      if (!isSameWorkspacePath(snapshot.workspace.path, event.workspacePath)) {
+        return;
+      }
+      scheduleRefresh();
     }
   };
 }
@@ -154,6 +179,7 @@ export function createWorkspaceRefreshSubscription(input: {
   apply: (workspacePath: string, data: WorkspaceLiveData) => void;
   onError: (message: string) => void;
   subscribe: (listener: (event: ChatRunEvent) => void) => () => void;
+  subscribeWorkspaceChanges?: (listener: (event: WorkspaceChangedEvent) => void) => () => void;
 }): {
   dispose: () => void;
   updateSnapshot: (snapshot: WorkspaceRefreshSnapshot) => void;
@@ -168,10 +194,19 @@ export function createWorkspaceRefreshSubscription(input: {
   const unsubscribe = input.subscribe((event) => {
     controller.handleRunEvent(event);
   });
+  const unsubscribeWorkspaceChanges =
+    input.subscribeWorkspaceChanges === undefined
+      ? null
+      : input.subscribeWorkspaceChanges((event) => {
+          controller.handleWorkspaceChanged(event);
+        });
 
   return {
     dispose(): void {
       unsubscribe();
+      if (unsubscribeWorkspaceChanges !== null) {
+        unsubscribeWorkspaceChanges();
+      }
       controller.dispose();
     },
     updateSnapshot(nextSnapshot: WorkspaceRefreshSnapshot): void {
@@ -194,4 +229,8 @@ function readExecuteCommand(data: unknown): string | null {
 function isMutatingExecuteCommand(command: string): boolean {
   const normalized = command.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
   return mutatingExecutePrefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix} `));
+}
+
+function isSameWorkspacePath(left: string, right: string): boolean {
+  return left.toLocaleLowerCase() === right.toLocaleLowerCase();
 }
