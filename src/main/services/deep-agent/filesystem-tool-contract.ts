@@ -52,6 +52,13 @@ export function createRocFilesystemPermissions(): FilesystemPermission[] {
   ];
 }
 
+export function createRocReadOnlyFilesystemPermissions(): FilesystemPermission[] {
+  return [
+    { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+    { operations: ['write'], paths: ['/**'], mode: 'deny' }
+  ];
+}
+
 export function isRocFileToolName(name: string): name is RocFileToolName {
   return ROC_FILE_TOOL_NAME_SET.has(name);
 }

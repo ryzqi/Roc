@@ -31,7 +31,11 @@ import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
 import { createBackend } from '../../services/deep-agent/backend';
-import { createRocFilesystemPermissions, toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
+import {
+  createRocFilesystemPermissions,
+  createRocReadOnlyFilesystemPermissions,
+  toWorkspaceRelativePath
+} from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
@@ -87,9 +91,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         enabledCapabilities: input.request.enabledCapabilities,
-        backgroundTaskToolMode: readBackgroundTaskToolMode(input.request),
+        backgroundTaskToolMode: input.request.mode === 'plan' ? null : readBackgroundTaskToolMode(input.request),
         runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        shellExecutionService
+        shellExecutionService,
+        mode: input.request.mode
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
@@ -152,7 +157,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           webReadTool: tools.webReadTool
         }),
         tools: contextHarness.tools,
-        filesystemPermissions: createRocFilesystemPermissions(),
+        filesystemPermissions:
+          input.request.mode === 'plan'
+            ? createRocReadOnlyFilesystemPermissions()
+            : createRocFilesystemPermissions(),
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
         checkpointer,
@@ -351,11 +359,18 @@ async function createExecutorTools(input: {
   backgroundTaskToolMode: 'all' | 'change' | null;
   runtimeWorkspacePath: string | null;
   shellExecutionService: AgentExecuteAdapter;
+  mode: ChatStartRunRequest['mode'];
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: DynamicStructuredTool<any, any, any, string>;
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
+  if (input.mode === 'plan') {
+    return {
+      runTools: [webReadTool],
+      webReadTool
+    };
+  }
   const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
   const runTools: ClientTool[] = [
     webReadTool,

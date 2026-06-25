@@ -64,6 +64,40 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).not.toContain('cancel_background_task');
   });
 
+  it('does not expose mutation tools in plan mode', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'plan',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    const toolNames = readBuiltTools().map((tool) => tool.name);
+
+    expect(toolNames).toContain('web_read');
+    expect(toolNames).toContain('session_search');
+    expect(toolNames).not.toContain('run_shell_command');
+    expect(toolNames).not.toContain('delete_file');
+    expect(toolNames).not.toContain('resolve_background_task_time');
+    expect(toolNames).not.toContain('propose_background_task');
+    expect(toolNames).not.toContain('schedule_background_task');
+    expect(toolNames).not.toContain('read_background_task');
+    expect(toolNames).not.toContain('update_background_task');
+    expect(toolNames).not.toContain('cancel_background_task');
+  });
+
+  it('uses read-only filesystem permissions in plan mode', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'plan',
+      workflowHint: null,
+      taskSource: null
+    });
+
+    expect(readBuildInput().filesystemPermissions).toEqual([
+      { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+      { operations: ['write'], paths: ['/**'], mode: 'deny' }
+    ]);
+  });
+
 
   it('exposes Roc Windows command tool instead of DeepAgents built-in execute', async () => {
     await buildExecutorOnce(createCapabilities([]), {
