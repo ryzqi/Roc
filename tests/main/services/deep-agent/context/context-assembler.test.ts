@@ -10,7 +10,8 @@ describe('assembleContextHarness', () => {
       workspacePath: 'F:\\Code\\Roc',
       memorySources: ['/memory/global/AGENTS.md'],
       baseTools: [],
-      searchSessions: () => ({ query: 'x', total: 0, items: [] })
+      searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      explicitSkillContexts: []
     });
 
     expect(harness.tools.map(tool => tool.name)).toContain('session_search');
@@ -30,7 +31,8 @@ describe('assembleContextHarness', () => {
       workspacePath: null,
       memorySources: [],
       baseTools: [],
-      searchSessions: () => ({ query: 'x', total: 0, items: [] })
+      searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      explicitSkillContexts: []
     });
 
     expect(harness.skillSources).toEqual(['/skills/']);

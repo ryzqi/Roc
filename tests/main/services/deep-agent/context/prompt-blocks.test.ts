@@ -19,7 +19,8 @@ describe('prompt blocks', () => {
           name: 'session_search',
           description: 'Search prior conversations'
         }
-      ]
+      ],
+      explicitSkillContexts: []
     });
 
     expect(blocks.map((block) => block.type)).toEqual([
@@ -39,11 +40,12 @@ describe('prompt blocks', () => {
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
         tools: [
-          {
-            name: 'session_search',
-            description: 'Search prior conversations'
-          }
-        ]
+        {
+          name: 'session_search',
+          description: 'Search prior conversations'
+        }
+      ],
+      explicitSkillContexts: []
       })
     );
 
@@ -62,11 +64,12 @@ describe('prompt blocks', () => {
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
         tools: [
-          {
-            name: 'runtime_tool'
-          }
-        ]
-      })
+        {
+          name: 'runtime_tool'
+        }
+      ],
+      explicitSkillContexts: []
+    })
     );
 
     expect(prompt).toContain('- runtime_tool');

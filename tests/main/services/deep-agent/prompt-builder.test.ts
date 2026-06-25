@@ -7,7 +7,8 @@ describe('prompt-builder compatibility exports', () => {
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\TestProject',
       workflowHint: null,
-      tools: []
+      tools: [],
+      explicitSkillContexts: []
     });
 
     expect(blocks.map((block) => block.type)).toEqual([
@@ -30,7 +31,8 @@ describe('prompt-builder compatibility exports', () => {
         enabledCapabilities: { mcpServers: [], skills: [] },
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
-        tools: []
+        tools: [],
+        explicitSkillContexts: []
       })
     );
 

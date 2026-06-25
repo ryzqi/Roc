@@ -28,7 +28,8 @@ export function buildSystemPrompt(input: {
       enabledCapabilities: input.enabledCapabilities,
       workspacePath: input.workspacePath,
       workflowHint: input.workflowHint,
-      tools: []
+      tools: [],
+      explicitSkillContexts: []
     })
   );
 }

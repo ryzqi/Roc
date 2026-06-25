@@ -60,7 +60,8 @@ describe('createPromptCachingMiddleware', () => {
         enabledCapabilities: { mcpServers: [], skills: [] },
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
-        tools: [{ name: 'session_search', description: 'Search prior conversations' }]
+        tools: [{ name: 'session_search', description: 'Search prior conversations' }],
+        explicitSkillContexts: []
       })
     );
     const middleware = createPromptCachingMiddleware({

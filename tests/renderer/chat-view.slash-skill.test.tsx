@@ -41,7 +41,7 @@ describe('chat view slash skill command', () => {
       files: {
         selectFromDialog: async () => ({ ok: true, data: null })
       }
-    } as RocPreloadApi;
+    } as unknown as RocPreloadApi;
   });
 
   afterEach(() => {
