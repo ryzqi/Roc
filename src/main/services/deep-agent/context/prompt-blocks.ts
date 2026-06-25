@@ -118,9 +118,13 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRe
 
 function buildToolsPrompt(tools: readonly PromptToolDescriptor[]): string {
   if (tools.length === 0) {
-    return 'Available Tools: provided by runtime tool schema.';
+    return [
+      'Available Tools: provided by runtime tool schema.',
+      '',
+      buildHumanClarificationPrompt()
+    ].join('\n');
   }
-  return ['Available Tools:', ...tools.map(formatToolDescriptor)].join('\n');
+  return ['Available Tools:', ...tools.map(formatToolDescriptor), '', buildHumanClarificationPrompt()].join('\n');
 }
 
 function formatToolDescriptor(tool: PromptToolDescriptor): string {
@@ -128,6 +132,16 @@ function formatToolDescriptor(tool: PromptToolDescriptor): string {
     return `- ${tool.name}`;
   }
   return `- ${tool.name}: ${tool.description}`;
+}
+
+function buildHumanClarificationPrompt(): string {
+  return [
+    'Human clarification:',
+    '- You may call ask_user when a user preference, scope decision, path choice, or clarification would improve the result.',
+    '- Ask one clear question at a time.',
+    '- Avoid fragmented repeated questions; gather enough context first when possible.',
+    '- Do not use ask_user for approval of tool calls.'
+  ].join('\n');
 }
 
 function buildContextRecallPrompt(workspacePath: string | null): string {

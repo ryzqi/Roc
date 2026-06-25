@@ -85,6 +85,25 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).not.toContain('cancel_background_task');
   });
 
+  it('exposes ask_user in chat and plan tool surfaces', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'chat',
+      workflowHint: null,
+      taskSource: null
+    });
+    expect(readBuiltTools().map((tool) => tool.name)).toContain('ask_user');
+
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'plan',
+      workflowHint: null,
+      taskSource: null
+    });
+    const planToolNames = readBuiltTools().map((tool) => tool.name);
+    expect(planToolNames).toContain('ask_user');
+    expect(planToolNames).not.toContain('run_shell_command');
+    expect(planToolNames).not.toContain('delete_file');
+  });
+
   it('uses read-only filesystem permissions in plan mode', async () => {
     await buildExecutorOnce(createCapabilities([]), {
       mode: 'plan',

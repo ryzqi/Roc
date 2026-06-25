@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
 import type { BackgroundTaskPreview } from '../../../../src/shared/types';
 import {
   buildExecutorOnce,
@@ -14,6 +15,14 @@ import {
   readStreamEventsCall,
   workspacePath
 } from './deep-agent-executor-test-helpers';
+
+vi.mock('@langchain/langgraph', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@langchain/langgraph')>();
+  return {
+    ...actual,
+    interrupt: vi.fn(() => ({ answer: 'Use the Roc workspace.' }))
+  };
+});
 
 describe('createAgentDeepAgentExecutor', () => {
   it('wires background task creation tools during workbench proposal runs', async () => {
@@ -154,6 +163,25 @@ describe('createAgentDeepAgentExecutor', () => {
         data: Buffer.from([1, 2, 3]).toString('base64')
       }
     ]);
+  });
+
+  it('ask_user interrupts with a question payload and returns the resumed answer', async () => {
+    const { interrupt } = await import('@langchain/langgraph');
+    const tool = createAskUserTool();
+
+    const result = await invokeTool(tool, {
+      question: 'Which workspace should I use?',
+      context: 'Two workspaces match.',
+      suggestedResponses: ['F:\\Code\\Roc']
+    });
+
+    expect(interrupt).toHaveBeenCalledWith({
+      kind: 'question',
+      question: 'Which workspace should I use?',
+      context: 'Two workspaces match.',
+      suggestedResponses: ['F:\\Code\\Roc']
+    });
+    expect(result).toBe('Use the Roc workspace.');
   });
 
 

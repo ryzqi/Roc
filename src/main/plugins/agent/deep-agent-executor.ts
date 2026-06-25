@@ -31,6 +31,7 @@ import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
 import { createResolveBackgroundTaskTimeTool } from '../../services/deep-agent/background-task-time-tool';
 import { createBackend } from '../../services/deep-agent/backend';
+import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import {
   createRocFilesystemPermissions,
   createRocReadOnlyFilesystemPermissions,
@@ -366,15 +367,17 @@ async function createExecutorTools(input: {
   webReadTool: DynamicStructuredTool<any, any, any, string>;
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
+  const askUserTool = createAskUserTool();
   if (input.mode === 'plan') {
     return {
-      runTools: [webReadTool],
+      runTools: [webReadTool, askUserTool],
       webReadTool
     };
   }
   const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
   const runTools: ClientTool[] = [
     webReadTool,
+    askUserTool,
     createDeleteFileTool(input.capabilities),
     createRocWindowsCommandTool(input.shellExecutionService),
     ...mcpTools
