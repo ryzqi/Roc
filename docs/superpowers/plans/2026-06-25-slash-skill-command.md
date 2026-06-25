@@ -238,7 +238,7 @@ git commit -m "feat: parse slash skill command"
 **Files:**
 - Modify: `src/renderer/chat/chat-view.tsx`
 - Modify: `src/renderer/app/use-app-task-runs.ts`
-- Test: `tests/renderer/chat-view.test.ts`
+- Test: `tests/renderer/chat-view.slash-skill.test.tsx`
 
 **Interfaces:**
 - Consumes: `parseSlashSkillCommand()` from Task 1.
@@ -246,74 +246,101 @@ git commit -m "feat: parse slash skill command"
 
 - [ ] **Step 1: Write renderer submit test**
 
-Add this directive as the first line of `tests/renderer/chat-view.test.ts`:
+Create `tests/renderer/chat-view.slash-skill.test.tsx` with this content:
 
 ```typescript
 // @vitest-environment jsdom
-```
-
-Add imports to `tests/renderer/chat-view.test.ts`:
-
-```typescript
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-```
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChatView } from '../../src/renderer/chat/chat-view';
+import type { RocClient } from '../../src/renderer/shared/roc-client';
+import type { RocPreloadApi } from '../../src/shared/ipc';
+import { createLoadedState } from './view-test-helpers';
 
-Append this test inside `describe('chat view', () => { ... })`:
+describe('chat view slash skill command', () => {
+  let container: HTMLDivElement;
+  let root: ReturnType<typeof createRoot>;
 
-```typescript
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    window.roc = {
+      chat: {
+        onRunEvent: () => () => {},
+        resumeRun: async () => ({ ok: true })
+      },
+      tasks: {
+        getThreadMessages: async () => ({ ok: true, data: [] })
+      },
+      files: {
+        selectFromDialog: async () => ({ ok: true, data: null })
+      }
+    } as RocPreloadApi;
+  });
+
+  afterEach(() => {
+    root.unmount();
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
   it('submits slash skill command as cleaned input plus explicit skill ids', async () => {
     const submissions: unknown[] = [];
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    try {
-      await act(async () => {
-        root.render(
-          React.createElement(ChatView, {
-            chatSelectionVersion: 1,
-            client: createChatClient(),
-            selectedThreadId: null,
-            state: createLoadedState({
-              selectedSkills: ['existing-skill']
-            }),
-            updateLoadedState: () => {},
-            onSubmitChatTask: async (payload) => {
-              submissions.push(payload);
-              return { ok: true as const };
-            }
-          })
-        );
-      });
+    await act(async () => {
+      root.render(
+        React.createElement(ChatView, {
+          chatSelectionVersion: 1,
+          client: createChatClient(),
+          selectedThreadId: null,
+          state: createLoadedState({
+            selectedSkills: ['existing-skill']
+          }),
+          updateLoadedState: () => {},
+          onSubmitChatTask: async (payload) => {
+            submissions.push(payload);
+            return { ok: true as const };
+          }
+        })
+      );
+    });
 
-      const input = container.querySelector<HTMLTextAreaElement>('[data-testid="chat-input"]');
-      if (input === null) {
-        throw new Error('chat_input_missing');
-      }
-      await act(async () => {
-        input.value = '/skill python-expert 优化这段代码';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-
-      const submit = container.querySelector<HTMLButtonElement>('[data-testid="chat-task-submit"]');
-      if (submit === null) {
-        throw new Error('chat_submit_missing');
-      }
-      await act(async () => {
-        submit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-
-      expect(submissions).toEqual([
-        {
-          input: '优化这段代码',
-          explicitSkillIds: ['python-expert']
-        }
-      ]);
-    } finally {
-      root.unmount();
-      container.remove();
+    const input = container.querySelector<HTMLTextAreaElement>('[data-testid="chat-input"]');
+    if (input === null) {
+      throw new Error('chat_input_missing');
     }
+    await act(async () => {
+      input.value = '/skill python-expert 优化这段代码';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const submit = container.querySelector<HTMLButtonElement>('[data-testid="chat-task-submit"]');
+    if (submit === null) {
+      throw new Error('chat_submit_missing');
+    }
+    await act(async () => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(submissions).toEqual([
+      {
+        input: '优化这段代码',
+        explicitSkillIds: ['python-expert']
+      }
+    ]);
   });
+
+  function createChatClient(): RocClient {
+    return { api: window.roc };
+  }
+});
 ```
 
 - [ ] **Step 2: Run renderer test and verify failure**
@@ -321,7 +348,7 @@ Append this test inside `describe('chat view', () => { ... })`:
 Run:
 
 ```powershell
-pnpm test -- tests/renderer/chat-view.test.ts
+pnpm test -- tests/renderer/chat-view.slash-skill.test.tsx
 ```
 
 Expected: FAIL because submitted payload still contains `/skill python-expert ...` and no `explicitSkillIds`.
@@ -411,7 +438,7 @@ For task mode, use the same pattern with `mode: 'task'`, `workflowHint`, `taskSo
 Run:
 
 ```powershell
-pnpm test -- tests/renderer/chat-composer.test.ts tests/renderer/chat-view.test.ts
+pnpm test -- tests/renderer/chat-composer.test.ts tests/renderer/chat-view.slash-skill.test.tsx
 ```
 
 Expected: PASS.
@@ -419,7 +446,7 @@ Expected: PASS.
 Commit:
 
 ```powershell
-git add src/renderer/chat/chat-view.tsx src/renderer/app/use-app-task-runs.ts tests/renderer/chat-view.test.ts
+git add src/renderer/chat/chat-view.tsx src/renderer/app/use-app-task-runs.ts tests/renderer/chat-view.slash-skill.test.tsx
 git commit -m "feat: send explicit slash skill ids"
 ```
 
@@ -910,7 +937,7 @@ git commit -m "feat: load explicit slash skills"
 Run:
 
 ```powershell
-pnpm test -- tests/renderer/chat-composer.test.ts tests/renderer/chat-view.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/plugin.test.ts
+pnpm test -- tests/renderer/chat-composer.test.ts tests/renderer/chat-view.slash-skill.test.tsx tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/plugin.test.ts
 ```
 
 Expected: PASS.
