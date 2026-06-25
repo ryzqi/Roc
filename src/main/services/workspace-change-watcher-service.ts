@@ -1,5 +1,4 @@
 import { watch as watchWorkspace } from 'node:fs';
-import type { FSWatcher } from 'node:fs';
 
 import type { WorkspaceChangedEvent } from '../../shared/types';
 
