@@ -45,7 +45,7 @@ function createIdleRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
-    pendingApprovals: [],
+    pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
     subagents: []
@@ -156,7 +156,7 @@ describe('chat transcript helpers', () => {
         content: '搜索今日成都天气？',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -175,11 +175,10 @@ describe('chat transcript helpers', () => {
             error: null
           }
         ],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       }
     ]);
   });
 
 });
-

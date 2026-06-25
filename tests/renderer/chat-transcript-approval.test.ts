@@ -45,7 +45,7 @@ function createIdleRunState(): ChatRunState {
     errorCode: null,
     errorMessage: null,
     retryable: false,
-    pendingApprovals: [],
+    pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
     subagents: []
@@ -116,7 +116,7 @@ describe('chat transcript helpers', () => {
         content: '请继续历史会话',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -125,7 +125,7 @@ describe('chat transcript helpers', () => {
         content: '历史线程回复',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       }
     ]);
@@ -188,7 +188,7 @@ describe('chat transcript helpers', () => {
         content: '第一轮输入',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -197,7 +197,7 @@ describe('chat transcript helpers', () => {
         content: '第一轮回复',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -206,7 +206,7 @@ describe('chat transcript helpers', () => {
         content: '第二轮输入',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       }
     ]);
@@ -243,8 +243,9 @@ describe('chat transcript helpers', () => {
             content: '先分析命令风险。'
           }
         ],
-        pendingApprovals: [
+        pendingInterrupts: [
           {
+            kind: 'approval',
             interruptId: 'interrupt-1',
             actionRequests: [
               {
@@ -276,7 +277,7 @@ describe('chat transcript helpers', () => {
         content: '请执行 git status',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -292,7 +293,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        approval: expect.objectContaining({
+        interrupt: expect.objectContaining({
           interruptId: 'interrupt-1'
         }),
         isStreaming: false
@@ -371,7 +372,7 @@ describe('chat transcript helpers', () => {
         content: '请执行 git status',
         reasoning: null,
         blocks: [],
-        approval: null,
+        interrupt: null,
         isStreaming: false
       },
       {
@@ -387,7 +388,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        approval: expect.objectContaining({
+        interrupt: expect.objectContaining({
           interruptId: 'interrupt-1'
         }),
         isStreaming: false
@@ -395,4 +396,3 @@ describe('chat transcript helpers', () => {
     ]);
   });
 });
-

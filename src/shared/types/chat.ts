@@ -87,8 +87,6 @@ export type SubagentEventPayload =
   | { kind: 'failed'; error: string }
   | { kind: 'cancelled'; reason?: string };
 
-export type ChatApprovalRequest = HITLRequest;
-
 export type ChatApprovalInterruptPayload = {
   kind: 'approval';
   request: HITLRequest;

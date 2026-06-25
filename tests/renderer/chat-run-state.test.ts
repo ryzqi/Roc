@@ -172,8 +172,11 @@ describe('chat run state', () => {
     });
 
     expect(state.status).toBe('waiting_user');
-    expect(state.pendingInterrupts[0]?.kind).toBe('approval');
-    expect(state.pendingInterrupts[0]?.actionRequests).toEqual([
+    const pendingInterrupt = state.pendingInterrupts[0];
+    if (pendingInterrupt?.kind !== 'approval') {
+      throw new Error('expected_approval_interrupt');
+    }
+    expect(pendingInterrupt.actionRequests).toEqual([
       {
         name: 'run_shell_command',
         args: {

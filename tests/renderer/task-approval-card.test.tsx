@@ -8,6 +8,7 @@ describe('TaskApprovalCard', () => {
     const html = renderToStaticMarkup(
       React.createElement(TaskApprovalCard, {
         approval: {
+          kind: 'approval',
           interruptId: 'interrupt-1',
           actionRequests: [
             {

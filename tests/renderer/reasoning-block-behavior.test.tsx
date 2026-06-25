@@ -63,7 +63,7 @@ beforeEach(() => {
                 error: 'permission denied'
               }
             ],
-            approval: null,
+            interrupt: null,
             isStreaming: true
           }}
         />
@@ -100,7 +100,7 @@ beforeEach(() => {
                 error: 'permission denied'
               }
             ],
-            approval: null,
+            interrupt: null,
             isStreaming: false
           }}
         />
@@ -137,7 +137,7 @@ beforeEach(() => {
                 isStreaming: true
               }
             ],
-            approval: null,
+            interrupt: null,
             isStreaming: true
           }}
         />
@@ -171,7 +171,7 @@ beforeEach(() => {
             content: '正式回答',
             reasoning: '内部推理',
             blocks: [],
-            approval: null,
+            interrupt: null,
             isStreaming: false
           }}
         />

@@ -25,6 +25,7 @@ describe('chat feature actions', () => {
       workflowHint: null
     });
     await actions.resumeRun({
+      kind: 'approval',
       decisions: [{ type: 'approve' }],
       interruptId: 'interrupt-1',
       runId: 'run-1',
@@ -41,6 +42,7 @@ describe('chat feature actions', () => {
       workflowHint: null
     });
     expect(client.api.chat.resumeRun).toHaveBeenCalledWith({
+      kind: 'approval',
       decisions: [{ type: 'approve' }],
       interruptId: 'interrupt-1',
       runId: 'run-1',

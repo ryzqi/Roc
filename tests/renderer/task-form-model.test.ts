@@ -50,6 +50,7 @@ describe('task form model', () => {
 
     const decision = buildTaskApprovalEditDecision({
       approval: {
+        kind: 'approval',
         interruptId: 'interrupt-1',
         actionRequests: [
           {

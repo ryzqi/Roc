@@ -155,7 +155,7 @@ function createMessage(key: string, content: string): ChatTranscriptMessage {
     attachments: [],
     reasoning: null,
     blocks: [],
-    approval: null,
+    interrupt: null,
     isStreaming: true
   };
 }
