@@ -21,6 +21,8 @@ describe('chat composer skills popover', () => {
         imageInputSupported: true,
         activeComposerPopover: 'skills',
         onActiveComposerPopoverChange: () => {},
+        composerMode: 'chat',
+        onComposerModeChange: () => {},
         submitting: false,
         state: createLoadedState({
           skills: [
@@ -60,6 +62,8 @@ describe('chat composer capability triggers', () => {
         imageInputSupported: true,
         activeComposerPopover: null,
         onActiveComposerPopoverChange: () => {},
+        composerMode: 'chat',
+        onComposerModeChange: () => {},
         submitting: false,
         state: createLoadedState({
           selectedMcpServers: ['exa-hosted'],
@@ -98,6 +102,8 @@ describe('chat composer capability triggers', () => {
         imageInputSupported: true,
         activeComposerPopover: null,
         onActiveComposerPopoverChange: () => {},
+        composerMode: 'chat',
+        onComposerModeChange: () => {},
         submitting: false,
         state: createLoadedState({}),
         updateLoadedState: () => {},
@@ -121,6 +127,8 @@ describe('chat composer capability triggers', () => {
         imageInputSupported: true,
         activeComposerPopover: 'tools',
         onActiveComposerPopoverChange: () => {},
+        composerMode: 'chat',
+        onComposerModeChange: () => {},
         submitting: false,
         state: createLoadedState({
           mcpServers: [
@@ -154,6 +162,8 @@ describe('chat composer capability triggers', () => {
         imageInputSupported: true,
         activeComposerPopover: 'models',
         onActiveComposerPopoverChange: () => {},
+        composerMode: 'chat',
+        onComposerModeChange: () => {},
         submitting: false,
         state: createLoadedState({}),
         updateLoadedState: () => {},
@@ -169,6 +179,31 @@ describe('chat composer capability triggers', () => {
     expect(modelsHtml).toContain('data-testid="chat-model-popover"');
     expect(modelsHtml).toContain('class="composer-popover-head"');
     expect(modelsHtml).toContain('class="composer-popover-list"');
+  });
+
+  it('renders chat and plan composer modes', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatComposer, {
+        client: testClient,
+        chatInput: '规划',
+        onChatInputChange: () => {},
+        selectedAttachments: [],
+        onSelectedAttachmentsChange: () => {},
+        imageInputSupported: true,
+        activeComposerPopover: null,
+        onActiveComposerPopoverChange: () => {},
+        composerMode: 'plan',
+        onComposerModeChange: () => {},
+        submitting: false,
+        state: createLoadedState({}),
+        updateLoadedState: () => {},
+        onSubmit: async () => {}
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-composer-mode"');
+    expect(html).toContain('Plan');
+    expect(html).toContain('composer-mode-option is-selected');
   });
 });
 

@@ -12,6 +12,7 @@ import { isImageInputSupported, toChatImageAttachments } from './image-attachmen
 import { parseSlashSkillCommand } from './slash-skill-command';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
+type ComposerMode = 'chat' | 'plan';
 
 function ChatWaitingIndicator({ visible }: { visible: boolean }): React.JSX.Element | null {
   if (!visible) {
@@ -62,6 +63,7 @@ export function ChatView({
   const [selectedAttachments, setSelectedAttachments] = useState<RendererImageAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
+  const [composerMode, setComposerMode] = useState<ComposerMode>('chat');
   const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const selectedAttachmentsRef = useRef<RendererImageAttachment[]>([]);
@@ -182,6 +184,7 @@ export function ChatView({
     setSelectedAttachments([]);
     setSubmitting(false);
     setActiveComposerPopover(null);
+    setComposerMode('chat');
     chatRun.reset();
     // chatRun.reset 引用每次渲染都会变；只依赖版本号触发重置
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,6 +213,9 @@ export function ChatView({
       const payload: ChatTaskSubmitPayload = {
         input: trimmedInput
       };
+      if (composerMode === 'plan') {
+        payload.mode = 'plan';
+      }
       if (attachments.length > 0) {
         payload.attachments = attachments;
       }
@@ -290,6 +296,8 @@ export function ChatView({
           imageInputSupported={isImageInputSupported(state)}
           activeComposerPopover={activeComposerPopover}
           onActiveComposerPopoverChange={setActiveComposerPopover}
+          composerMode={composerMode}
+          onComposerModeChange={setComposerMode}
           submitting={submitting}
           state={state}
           updateLoadedState={updateLoadedState}

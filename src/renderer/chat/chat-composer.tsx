@@ -11,6 +11,7 @@ import type { RendererImageAttachment } from './image-attachments';
 import { createFileImageAttachment, validateImageAttachmentSelection } from './image-attachments';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
+type ComposerMode = 'chat' | 'plan';
 
 type ChatComposerProps = {
   client: RocClient;
@@ -21,6 +22,8 @@ type ChatComposerProps = {
   imageInputSupported: boolean;
   activeComposerPopover: ComposerPopover;
   onActiveComposerPopoverChange: Dispatch<SetStateAction<ComposerPopover>>;
+  composerMode: ComposerMode;
+  onComposerModeChange: (next: ComposerMode) => void;
   submitting: boolean;
   state: LoadedState;
   updateLoadedState: (partial: Partial<LoadedState>) => void;
@@ -99,6 +102,8 @@ export function ChatComposer({
   imageInputSupported,
   activeComposerPopover,
   onActiveComposerPopoverChange,
+  composerMode,
+  onComposerModeChange,
   submitting,
   state,
   updateLoadedState,
@@ -275,6 +280,11 @@ export function ChatComposer({
           void addFileAttachments(event.clipboardData.files, 'clipboard');
         }}
         onKeyDown={(event) => {
+          if (event.key === 'Tab' && event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            onComposerModeChange(composerMode === 'chat' ? 'plan' : 'chat');
+            return;
+          }
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
             return;
           }
@@ -284,6 +294,18 @@ export function ChatComposer({
       />
       <div className="composer-bottom">
         <div className="composer-left">
+          <div className="composer-mode-toggle" data-testid="chat-composer-mode" aria-label="发送模式">
+            {(['chat', 'plan'] as const).map((mode) => (
+              <button
+                className={composerMode === mode ? 'composer-mode-option is-selected' : 'composer-mode-option'}
+                key={mode}
+                type="button"
+                onClick={() => onComposerModeChange(mode)}
+              >
+                {mode === 'chat' ? 'Chat' : 'Plan'}
+              </button>
+            ))}
+          </div>
           <button
             className={selectedAttachments.length > 0 ? 'composer-tool active' : 'composer-tool'}
             data-testid="chat-attachment-trigger"
