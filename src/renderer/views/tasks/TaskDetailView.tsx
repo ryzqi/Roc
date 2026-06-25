@@ -9,6 +9,7 @@ import type { RocClient } from '../../shared/roc-client';
 import type { TaskActions } from './use-task-actions';
 
 export type TaskDetailApprovalRequest = {
+  kind: 'approval';
   runId: string;
   threadId: string;
   interruptId: string;
@@ -133,6 +134,7 @@ export function TaskDetailView({
                     return;
                   }
                   void onApprovalDecision({
+                    kind: 'approval',
                     runId: loadedDetail.lastRunId,
                     threadId: loadedDetail.threadId,
                     interruptId,

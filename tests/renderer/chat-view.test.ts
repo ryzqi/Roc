@@ -2,7 +2,12 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildChatResumeRunRequest, ChatView } from '../../src/renderer/chat/chat-view';
+import {
+  buildChatApprovalResumeRunRequest,
+  buildChatQuestionResumeRunRequest,
+  ChatView,
+  selectPendingQuestion
+} from '../../src/renderer/chat/chat-view';
 import { buildManualScrollBottomOptions, buildStreamingAutoFollowScrollOptions } from '../../src/renderer/chat/chat-transcript-panel';
 import { applyChatRunEventBatch } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
@@ -135,7 +140,7 @@ describe('chat view', () => {
 
   it('builds approval resume IPC requests with a decisions array', () => {
     expect(
-      buildChatResumeRunRequest({
+      buildChatApprovalResumeRunRequest({
         runId: 'run_approval',
         threadId: 'thread_approval',
         interruptId: 'interrupt-approval',
@@ -146,6 +151,7 @@ describe('chat view', () => {
         ]
       })
     ).toEqual({
+      kind: 'approval',
       runId: 'run_approval',
       threadId: 'thread_approval',
       interruptId: 'interrupt-approval',
@@ -155,6 +161,50 @@ describe('chat view', () => {
         }
       ]
     });
+  });
+
+  it('builds question resume request for composer answers', () => {
+    expect(
+      buildChatQuestionResumeRunRequest({
+        runId: 'run-1',
+        threadId: 'thread-1',
+        interruptId: 'interrupt-question',
+        answer: 'Use F:\\Code\\Roc.'
+      })
+    ).toEqual({
+      kind: 'question',
+      runId: 'run-1',
+      threadId: 'thread-1',
+      interruptId: 'interrupt-question',
+      answer: 'Use F:\\Code\\Roc.'
+    });
+  });
+
+  it('selects the first pending question interrupt', () => {
+    expect(
+      selectPendingQuestion([
+        {
+          kind: 'question',
+          interruptId: 'interrupt-question',
+          question: 'Which path?'
+        }
+      ])
+    ).toEqual({
+      kind: 'question',
+      interruptId: 'interrupt-question',
+      question: 'Which path?'
+    });
+
+    expect(
+      selectPendingQuestion([
+        {
+          kind: 'approval',
+          interruptId: 'interrupt-approval',
+          actionRequests: [],
+          reviewConfigs: []
+        }
+      ])
+    ).toBeNull();
   });
 });
 

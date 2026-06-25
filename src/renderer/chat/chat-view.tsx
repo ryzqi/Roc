@@ -4,7 +4,13 @@ import { appendLiveTranscriptMessages, buildPersistedTranscriptMessages } from '
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
-import type { ChatResumeDecision, TaskEvent } from '../../shared/types';
+import type {
+  ChatPendingInterrupt,
+  ChatPendingQuestion,
+  ChatResumeDecision,
+  ChatResumeRunRequest,
+  TaskEvent
+} from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
 import type { ChatTaskSubmitPayload } from './task-run-payload';
 import type { RendererImageAttachment } from './image-attachments';
@@ -36,18 +42,39 @@ export type ChatViewProps = {
   onSubmitChatTask: (payload: ChatTaskSubmitPayload) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
-export function buildChatResumeRunRequest(input: {
+export function buildChatApprovalResumeRunRequest(input: {
   runId: string;
   threadId: string;
   interruptId: string;
   decisions: ChatResumeDecision[];
-}) {
+}): ChatResumeRunRequest {
   return {
+    kind: 'approval',
     runId: input.runId,
     threadId: input.threadId,
     interruptId: input.interruptId,
     decisions: input.decisions
   };
+}
+
+export function buildChatQuestionResumeRunRequest(input: {
+  runId: string;
+  threadId: string;
+  interruptId: string;
+  answer: string;
+}): ChatResumeRunRequest {
+  return {
+    kind: 'question',
+    runId: input.runId,
+    threadId: input.threadId,
+    interruptId: input.interruptId,
+    answer: input.answer
+  };
+}
+
+export function selectPendingQuestion(interrupts: readonly ChatPendingInterrupt[]): ChatPendingQuestion | null {
+  const interrupt = interrupts[0];
+  return interrupt?.kind === 'question' ? interrupt : null;
 }
 
 export function ChatView({
@@ -113,7 +140,7 @@ export function ChatView({
       chatRun.state.errorCode,
       chatRun.state.errorMessage,
       chatRun.state.retryable,
-      chatRun.state.pendingApprovals,
+      chatRun.state.pendingInterrupts,
       chatRun.state.resumeBusy,
       chatRun.state.todos,
       chatRun.state.subagents,
@@ -205,17 +232,41 @@ export function ChatView({
     }
     const submissionInput = parsedSkillCommand.kind === 'ok' ? parsedSkillCommand.input : chatInput;
     const trimmedInput = submissionInput.trim();
+    const pendingQuestion = selectPendingQuestion(chatRun.state.pendingInterrupts);
     const imageInputSupported = isImageInputSupported(state);
     const sendDisabled =
       submitting ||
       trimmedInput.length === 0 ||
       state.agent.execution !== 'ready' ||
-      (selectedAttachments.length > 0 && !imageInputSupported);
+      (pendingQuestion === null && selectedAttachments.length > 0 && !imageInputSupported);
     if (sendDisabled) {
       return;
     }
     setSubmitting(true);
     try {
+      if (pendingQuestion !== null) {
+        if (chatRun.state.runId === null || chatRun.state.threadId === null) {
+          chatRun.setError('当前没有可恢复的提问运行。');
+          return;
+        }
+        const result = await client.api.chat.resumeRun(
+          buildChatQuestionResumeRunRequest({
+            runId: chatRun.state.runId,
+            threadId: chatRun.state.threadId,
+            interruptId: pendingQuestion.interruptId,
+            answer: trimmedInput
+          })
+        );
+        if (result.ok) {
+          setPendingUserInput(trimmedInput);
+          setChatInput('');
+          revokeAttachmentPreviewUrls(selectedAttachments);
+          setSelectedAttachments([]);
+        } else {
+          chatRun.setError(result.error.message);
+        }
+        return;
+      }
       const attachments = toChatImageAttachments(selectedAttachments);
       const payload: ChatTaskSubmitPayload = {
         input: trimmedInput
@@ -248,12 +299,14 @@ export function ChatView({
       chatRun.setError('当前没有可恢复的审批运行。');
       return;
     }
-    const result = await client.api.chat.resumeRun(buildChatResumeRunRequest({
-      runId: chatRun.state.runId,
-      threadId: chatRun.state.threadId,
-      interruptId: approvalId,
-      decisions
-    }));
+    const result = await client.api.chat.resumeRun(
+      buildChatApprovalResumeRunRequest({
+        runId: chatRun.state.runId,
+        threadId: chatRun.state.threadId,
+        interruptId: approvalId,
+        decisions
+      })
+    );
     if (!result.ok) {
       chatRun.setError(result.error.message);
     }
