@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildExecutorOnce,
   createCapabilities,
+  createMcpTool,
   findTool,
   invokeTool,
   readBuildInput,
@@ -73,6 +74,7 @@ describe('createAgentDeepAgentExecutor', () => {
 
     const toolNames = readBuiltTools().map((tool) => tool.name);
 
+    expect(readBuildInput().mode).toBe('plan');
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('session_search');
     expect(toolNames).not.toContain('run_shell_command');
@@ -83,6 +85,31 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).not.toContain('read_background_task');
     expect(toolNames).not.toContain('update_background_task');
     expect(toolNames).not.toContain('cancel_background_task');
+  });
+
+  it('does not load selected MCP tools into plan mode custom tools', async () => {
+    await buildExecutorOnce(
+      createCapabilities([], {
+        mcpTools: [createMcpTool('filesystem__search')]
+      }),
+      {
+        mode: 'plan',
+        workflowHint: null,
+        taskSource: null,
+        enabledCapabilities: {
+          mcpServers: ['filesystem'],
+          skills: []
+        }
+      }
+    );
+
+    const toolNames = readBuiltTools().map((tool) => tool.name);
+
+    expect(readBuildInput().mode).toBe('plan');
+    expect(toolNames).toContain('web_read');
+    expect(toolNames).toContain('ask_user');
+    expect(toolNames).toContain('session_search');
+    expect(toolNames).not.toContain('filesystem__search');
   });
 
   it('exposes ask_user in chat and plan tool surfaces', async () => {

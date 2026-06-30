@@ -149,6 +149,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         initialHookContexts.push(...sessionStart.additionalContexts);
       }
       const agent = buildDeepAgent({
+        mode: input.request.mode,
         model: handle.model,
         systemPrompt: contextHarness.systemPrompt,
         backend: runtimeBackend.backend,
