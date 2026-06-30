@@ -52,6 +52,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
   mocked.createDeepAgentMock.mockClear();
   const { buildDeepAgent } = await import('../../../../../src/main/services/deep-agent/agent-builder');
   buildDeepAgent({
+    mode: 'chat',
     model: 'model-ready' as never,
     systemPrompt: 'system prompt',
     backend: { routePrefixes: ['/memory/'] } as RocCompositeBackend,

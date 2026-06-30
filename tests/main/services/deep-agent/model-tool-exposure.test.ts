@@ -45,6 +45,17 @@ describe('plan mode model tool exposure', () => {
     );
   });
 
+  it('does not expose tools without a string name', () => {
+    const tools: unknown[] = [
+      tool('ls'),
+      { type: 'server_tool' },
+      { name: 42 },
+      null
+    ];
+
+    expect(filterPlanModeModelTools(tools)).toEqual([tool('ls')]);
+  });
+
   it('filters request tools before the model call', async () => {
     const middleware = createRocPlanToolExposureMiddleware();
     const wrapModelCall = Reflect.get(middleware as object, 'wrapModelCall');

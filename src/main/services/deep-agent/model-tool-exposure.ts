@@ -12,12 +12,11 @@ export const PLAN_MODE_MODEL_VISIBLE_TOOL_NAMES = [
 
 const PLAN_MODE_MODEL_VISIBLE_TOOL_SET = new Set<string>(PLAN_MODE_MODEL_VISIBLE_TOOL_NAMES);
 
-type NamedTool = {
-  name: string;
-};
-
-export function filterPlanModeModelTools<TTool extends NamedTool>(tools: readonly TTool[]): TTool[] {
-  return tools.filter((tool) => PLAN_MODE_MODEL_VISIBLE_TOOL_SET.has(tool.name));
+export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[] {
+  return tools.filter((tool) => {
+    const name = readToolName(tool);
+    return name !== null && PLAN_MODE_MODEL_VISIBLE_TOOL_SET.has(name);
+  });
 }
 
 export function createRocPlanToolExposureMiddleware() {
@@ -33,4 +32,12 @@ export function createRocPlanToolExposureMiddleware() {
       });
     }
   });
+}
+
+function readToolName(tool: unknown): string | null {
+  if (tool === null || typeof tool !== 'object') {
+    return null;
+  }
+  const name = Reflect.get(tool, 'name');
+  return typeof name === 'string' ? name : null;
 }
