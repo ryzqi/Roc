@@ -15,8 +15,12 @@ const PLAN_MODE_MODEL_VISIBLE_TOOL_SET = new Set<string>(PLAN_MODE_MODEL_VISIBLE
 export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[] {
   return tools.filter((tool) => {
     const name = readToolName(tool);
-    return name !== null && PLAN_MODE_MODEL_VISIBLE_TOOL_SET.has(name);
+    return name !== null && isPlanModeModelVisibleToolName(name);
   });
+}
+
+export function isPlanModeModelVisibleToolName(name: string): boolean {
+  return PLAN_MODE_MODEL_VISIBLE_TOOL_SET.has(name);
 }
 
 export function createRocPlanToolExposureMiddleware() {

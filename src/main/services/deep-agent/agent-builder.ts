@@ -24,7 +24,10 @@ import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
-import { createRocPlanToolExposureMiddleware } from './model-tool-exposure';
+import {
+  createRocPlanToolExposureMiddleware,
+  isPlanModeModelVisibleToolName
+} from './model-tool-exposure';
 import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
 import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
@@ -55,7 +58,13 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   ensureRocHarnessProfilesRegistered();
   const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolCandidates = (): RescueToolCandidate[] => {
-    return [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
+    const candidates = [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
+    if (input.mode !== 'plan') {
+      return candidates;
+    }
+    return candidates.filter((candidate) =>
+      isPlanModeModelVisibleToolName(typeof candidate === 'string' ? candidate : candidate.name)
+    );
   };
   const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
   const planModeToolExposureMiddleware =

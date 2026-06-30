@@ -123,6 +123,77 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(middlewareNames).not.toContain('RocPlanToolExposureMiddleware');
   });
 
+  it('limits plan rescue candidates to plan-visible tools', async () => {
+    const input = {
+      mode: 'plan',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/**'], mode: 'deny' }
+      ],
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0] as
+      | { middleware?: unknown[] }
+      | undefined;
+    const rescue = createDeepAgentInput?.middleware?.find((middleware) => Reflect.get(middleware as object, 'name') === 'ForgeRescueParsingMiddleware') as
+      | { afterModel?: (state: unknown, runtime: unknown) => Promise<{ messages?: unknown[] } | undefined> | { messages?: unknown[] } | undefined }
+      | undefined;
+    if (typeof rescue?.afterModel !== 'function') {
+      throw new Error('Expected ForgeRescueParsingMiddleware to be passed into createDeepAgent.');
+    }
+
+    const hiddenUpdate = await rescue.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-plan-write',
+            content: '{"tool":"write_file","args":{"file_path":"/workspace/a.txt","content":"x"}}'
+          })
+        ]
+      },
+      {}
+    );
+    expect(hiddenUpdate).toBeUndefined();
+
+    const allowedUpdate = await rescue.afterModel(
+      {
+        messages: [
+          new AIMessage({
+            id: 'ai-plan-read',
+            content: '{"tool":"read_file","args":{"file_path":"/workspace/a.txt"}}'
+          })
+        ]
+      },
+      {}
+    );
+    const rebuilt = allowedUpdate?.messages?.[1] as AIMessage;
+
+    expect(rebuilt.tool_calls).toEqual([
+      {
+        name: 'read_file',
+        args: { file_path: '/workspace/a.txt' },
+        id: 'call_rescued_ai-plan-read_0',
+        type: 'tool_call'
+      }
+    ]);
+  });
+
   it('runs Roc shell path policy before RTK can rewrite or deny shell commands', () => {
     const input = {
       mode: 'chat',
