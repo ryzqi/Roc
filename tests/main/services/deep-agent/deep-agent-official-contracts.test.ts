@@ -8,6 +8,7 @@ import type {
   SubagentRunStream
 } from 'deepagents';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../../../src/main/services/deep-agent/types';
+import { createRocReadOnlyFilesystemPermissions } from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 
 describe('DeepAgents official contract assumptions', () => {
   it('accepts async subagents through CreateDeepAgentParams', () => {
@@ -91,6 +92,26 @@ describe('DeepAgents official contract assumptions', () => {
       'execute'
     ]));
     expect(DEEP_AGENT_BUILT_IN_TOOLS).not.toContain('execute');
+  });
+
+  it('documents that read-only permissions do not hide write tools from DeepAgents filesystem middleware', () => {
+    const middleware = createFilesystemMiddleware({
+      permissions: createRocReadOnlyFilesystemPermissions()
+    });
+    const tools = middleware.tools;
+    if (tools === undefined) {
+      throw new Error('expected_filesystem_tools');
+    }
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'ls',
+      'read_file',
+      'write_file',
+      'edit_file',
+      'glob',
+      'grep'
+    ]));
   });
 
   it('documents that empty DeepAgents permissions are permissive for file tools', async () => {
