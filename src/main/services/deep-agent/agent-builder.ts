@@ -5,7 +5,7 @@ import type { FilesystemPermission } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { toolRetryMiddleware } from 'langchain';
 import { z } from 'zod';
-import type { ProviderType, WorkflowHint } from '../../../shared/types';
+import type { ChatStartRunRequest, ProviderType, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
@@ -24,11 +24,13 @@ import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
+import { createRocPlanToolExposureMiddleware } from './model-tool-exposure';
 import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
 import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
+  mode: ChatStartRunRequest['mode'];
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -56,8 +58,11 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     return [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
   };
   const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
+  const planModeToolExposureMiddleware =
+    input.mode === 'plan' ? [createRocPlanToolExposureMiddleware()] : [];
   const guardrails = [
     ...hookMiddleware,
+    ...planModeToolExposureMiddleware,
     createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     rtkMiddleware,
     createPromptCachingMiddleware({

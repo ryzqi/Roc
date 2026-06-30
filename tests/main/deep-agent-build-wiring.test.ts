@@ -23,6 +23,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('registers Roc harness profiles before assembling the agent', () => {
     const input = {
+      mode: 'chat',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -59,8 +60,72 @@ describe('buildDeepAgent harness profile wiring', () => {
     );
   });
 
+  it('adds plan model tool exposure middleware only for plan mode', () => {
+    const input = {
+      mode: 'plan',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/**'], mode: 'deny' }
+      ],
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).toContain('RocPlanToolExposureMiddleware');
+  });
+
+  it('does not add plan model tool exposure middleware for chat mode', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).not.toContain('RocPlanToolExposureMiddleware');
+  });
+
   it('runs Roc shell path policy before RTK can rewrite or deny shell commands', () => {
     const input = {
+      mode: 'chat',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -88,6 +153,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires hook middleware before Roc guardrails when hook runtime is provided', () => {
     const input = {
+      mode: 'chat',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -142,6 +208,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       query: z.string()
     });
     const input = {
+      mode: 'chat',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -213,6 +280,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       schema: inspectSchema
     });
     const input = {
+      mode: 'chat',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
