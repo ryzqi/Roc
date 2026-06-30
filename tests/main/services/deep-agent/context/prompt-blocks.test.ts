@@ -95,9 +95,17 @@ describe('prompt blocks', () => {
     const prompt = blocks.map((block) => block.content).join('\n');
 
     expect(prompt).toContain('Plan Mode');
+    expect(prompt).toContain('Plan Mode exposes read-only inspection tools only.');
+    expect(prompt).toContain('Use ls, read_file, glob, and grep for local inspection in Plan Mode.');
+    expect(prompt).toContain('Use web_read for public web pages.');
+    expect(prompt).toContain('Use ask_user only for concise clarifying questions when needed.');
     expect(prompt).toContain('<proposed_plan>');
     expect(prompt).toContain('</proposed_plan>');
     expect(prompt).not.toContain('Use run_shell_command');
+    expect(prompt).not.toContain('Do not call write_file');
+    expect(prompt).not.toContain('Do not call edit_file');
+    expect(prompt).not.toContain('Do not call delete_file');
+    expect(prompt).not.toContain('Do not call run_shell_command');
     expect(prompt).not.toContain('After write_file or edit_file');
   });
 

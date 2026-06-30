@@ -104,9 +104,11 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRe
   if (mode === 'plan') {
     return [
       `Workspace: ${workspacePath}`,
-      'Plan Mode file tools are read-only and use Roc virtual routes: /workspace/, /memory/, and /skills/.',
-      'Use only ls, read_file, glob, and grep for local inspection in Plan Mode.',
-      'Do not call write_file, edit_file, delete_file, or run_shell_command in Plan Mode.'
+      'Plan Mode exposes read-only inspection tools only.',
+      'Local file inspection uses Roc virtual routes: /workspace/, /memory/, and /skills/.',
+      'Use ls, read_file, glob, and grep for local inspection in Plan Mode.',
+      'Use web_read for public web pages.',
+      'Use ask_user only for concise clarifying questions when needed.'
     ].join('\n');
   }
   return [
