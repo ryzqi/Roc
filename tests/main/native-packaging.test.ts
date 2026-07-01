@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const electronBuilderConfig = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
 const beforePackHook = readFileSync(new URL('../../scripts/builder-hooks/before-pack.mjs', import.meta.url), 'utf8');
+const afterExtractHook = readFileSync(new URL('../../scripts/builder-hooks/after-extract.mjs', import.meta.url), 'utf8');
 const afterPackHook = readFileSync(new URL('../../scripts/builder-hooks/after-pack.mjs', import.meta.url), 'utf8');
 const packageDirScript = readFileSync(new URL('../../scripts/package-dir.mjs', import.meta.url), 'utf8');
 const verifyNativePackagingScript = readFileSync(new URL('../../scripts/verify-native-packaging.mjs', import.meta.url), 'utf8');
@@ -23,10 +24,20 @@ describe('native packaging contract', () => {
     expect(getElectronVersion()).toBe(packageJson.devDependencies.electron);
   });
 
-  it('registers builder hooks for native prepare and packaged verify only', () => {
+  it('uses the installed Electron distribution instead of extracting the downloaded zip into release', () => {
+    expect(electronBuilderConfig).toContain('electronDist: node_modules/electron/dist');
+  });
+
+  it('registers builder hooks for native prepare, extracted runtime cleanup, and packaged verify only', () => {
     expect(electronBuilderConfig).toContain('beforePack: ./scripts/builder-hooks/before-pack.mjs');
+    expect(electronBuilderConfig).toContain('afterExtract: ./scripts/builder-hooks/after-extract.mjs');
     expect(electronBuilderConfig).toContain('afterPack: ./scripts/builder-hooks/after-pack.mjs');
     expect(electronBuilderConfig).not.toContain('afterAllArtifactBuild');
+  });
+
+  it('removes default Electron app artifacts left by the custom unpacked runtime', () => {
+    expect(afterExtractHook).toContain("rm(join(context.appOutDir, 'resources', 'default_app.asar')");
+    expect(afterExtractHook).toContain("rm(join(context.appOutDir, 'version')");
   });
 
   it('restores workspace better-sqlite3 after the package-dir command exits', () => {

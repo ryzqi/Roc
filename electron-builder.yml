@@ -1,6 +1,7 @@
 appId: com.roc.desktop
 productName: Roc
 npmRebuild: false
+electronDist: node_modules/electron/dist
 directories:
   output: release
 electronLanguages:
@@ -33,6 +34,7 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
 beforePack: ./scripts/builder-hooks/before-pack.mjs
+afterExtract: ./scripts/builder-hooks/after-extract.mjs
 afterPack: ./scripts/builder-hooks/after-pack.mjs
 win:
   icon: resources/icon.ico
