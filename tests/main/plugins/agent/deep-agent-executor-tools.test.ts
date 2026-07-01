@@ -87,17 +87,21 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).not.toContain('cancel_background_task');
   });
 
-  it('does not load selected MCP tools into plan mode custom tools', async () => {
+  it('loads selected MCP tools into plan mode custom tools without MCP-internal filtering', async () => {
     await buildExecutorOnce(
       createCapabilities([], {
-        mcpTools: [createMcpTool('filesystem__search')]
+        mcpTools: [
+          createMcpTool('filesystem__search'),
+          createMcpTool('filesystem__write_file'),
+          createMcpTool('exa-hosted__web_search_exa')
+        ]
       }),
       {
         mode: 'plan',
         workflowHint: null,
         taskSource: null,
         enabledCapabilities: {
-          mcpServers: ['filesystem'],
+          mcpServers: ['filesystem', 'exa-hosted'],
           skills: []
         }
       }
@@ -109,7 +113,11 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('ask_user');
     expect(toolNames).toContain('session_search');
-    expect(toolNames).not.toContain('filesystem__search');
+    expect(toolNames).toContain('filesystem__search');
+    expect(toolNames).toContain('filesystem__write_file');
+    expect(toolNames).toContain('web_search');
+    expect(toolNames).not.toContain('run_shell_command');
+    expect(toolNames).not.toContain('delete_file');
   });
 
   it('exposes ask_user in chat and plan tool surfaces', async () => {

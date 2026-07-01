@@ -95,9 +95,10 @@ describe('prompt blocks', () => {
     const prompt = blocks.map((block) => block.content).join('\n');
 
     expect(prompt).toContain('Plan Mode');
-    expect(prompt).toContain('Plan Mode exposes read-only inspection tools only.');
+    expect(prompt).toContain('Plan Mode blocks local file mutation tools but keeps read, search, and selected MCP tools available.');
     expect(prompt).toContain('Use ls, read_file, glob, and grep for local inspection in Plan Mode.');
-    expect(prompt).toContain('Use web_read for public web pages.');
+    expect(prompt).toContain('Use web_read for public web pages and web_search for current public search.');
+    expect(prompt).toContain('Use selected MCP tools when the enabled MCP configuration provides relevant context or search capabilities.');
     expect(prompt).toContain('Use ask_user only for concise clarifying questions when needed.');
     expect(prompt).toContain('<proposed_plan>');
     expect(prompt).toContain('</proposed_plan>');

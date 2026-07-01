@@ -1,9 +1,9 @@
-import { createDeepAgent } from 'deepagents';
+import { createDeepAgent, createSkillsMiddleware, createSubAgentMiddleware } from 'deepagents';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ClientTool } from '@langchain/core/tools';
-import type { FilesystemPermission } from 'deepagents';
+import type { CompiledSubAgent, FilesystemPermission, SubAgent, SubAgentMiddlewareOptions } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import { toolRetryMiddleware } from 'langchain';
+import { createAgent, todoListMiddleware, toolRetryMiddleware } from 'langchain';
 import { z } from 'zod';
 import type { ChatStartRunRequest, ProviderType, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
@@ -25,9 +25,11 @@ import type { RocCompositeBackend } from './backend';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import {
+  createRocPlanRuntimeToolGuardMiddleware,
   createRocPlanToolExposureMiddleware,
   isPlanModeModelVisibleToolName
 } from './model-tool-exposure';
+import { createRocPlanReadOnlyFilesystemTools, createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
 import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
@@ -53,8 +55,11 @@ export type DeepAgentBuildInput = {
 };
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
+const PLAN_MODE_READ_ONLY_FILESYSTEM_TOOL_NAMES = new Set(['ls', 'read_file', 'glob', 'grep']);
+type PlanModeSubagent = SubAgent | CompiledSubAgent;
+type SubAgentMiddlewareTools = NonNullable<SubAgentMiddlewareOptions['defaultTools']>;
 
-export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
+export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> | ReturnType<typeof createAgent> {
   ensureRocHarnessProfilesRegistered();
   const rtkMiddleware = createRTKMiddleware(new RTKBinaryManager());
   const knownToolCandidates = (): RescueToolCandidate[] => {
@@ -68,7 +73,9 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   };
   const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
   const planModeToolExposureMiddleware =
-    input.mode === 'plan' ? [createRocPlanToolExposureMiddleware()] : [];
+    input.mode === 'plan'
+      ? [createRocPlanToolExposureMiddleware(), createRocPlanRuntimeToolGuardMiddleware()]
+      : [];
   const guardrails = [
     ...hookMiddleware,
     ...planModeToolExposureMiddleware,
@@ -98,6 +105,31 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createForgeCleanupMiddleware()
   ];
 
+  if (input.mode === 'plan') {
+    const planTools = createPlanModeRegisteredTools(input);
+    return createAgent({
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      tools: planTools,
+      store: input.store,
+      checkpointer: input.checkpointer,
+      middleware: [
+        todoListMiddleware(),
+        createRocPlanReadOnlyMemoryMiddleware({
+          backend: input.backend,
+          memorySources: input.memorySources
+        }),
+        ...(
+          input.skillSources.length === 0
+            ? []
+            : [createSkillsMiddleware({ backend: input.backend, sources: input.skillSources })]
+        ),
+        createPlanModeTaskMiddleware(input, planTools),
+        ...guardrails
+      ]
+    });
+  }
+
   return createDeepAgent({
     model: input.model,
     systemPrompt: input.systemPrompt,
@@ -112,6 +144,53 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     checkpointer: input.checkpointer,
     middleware: guardrails
   });
+}
+
+function createPlanModeRegisteredTools(input: DeepAgentBuildInput): ClientTool[] {
+  const providedTools = input.tools.filter((tool) => {
+    if (!isPlanModeModelVisibleToolName(tool.name)) {
+      return false;
+    }
+    return !PLAN_MODE_READ_ONLY_FILESYSTEM_TOOL_NAMES.has(tool.name);
+  });
+  return [...providedTools, ...createRocPlanReadOnlyFilesystemTools(input.backend)];
+}
+
+function createPlanModeTaskMiddleware(input: DeepAgentBuildInput, planTools: ClientTool[]) {
+  return createSubAgentMiddleware({
+    defaultModel: input.model,
+    defaultTools: planTools as unknown as SubAgentMiddlewareTools,
+    defaultMiddleware: createPlanModeSubagentMiddleware(input),
+    subagents: input.subagents.filter(isPlanModeSubagent),
+    generalPurposeAgent: true
+  });
+}
+
+function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
+  return [
+    todoListMiddleware(),
+    createRocPlanReadOnlyMemoryMiddleware({
+      backend: input.backend,
+      memorySources: input.memorySources
+    }),
+    ...(
+      input.skillSources.length === 0
+        ? []
+        : [createSkillsMiddleware({ backend: input.backend, sources: input.skillSources })]
+    ),
+    createRocPlanToolExposureMiddleware(),
+    createRocPlanRuntimeToolGuardMiddleware(),
+    createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
+    createRocFilesystemPathPolicyMiddleware(),
+    createFilesystemToolErrorMiddleware(),
+    createToolProtocolMiddleware(),
+    createToolResolutionMiddleware(),
+    createToolRuntimeErrorMiddleware()
+  ];
+}
+
+function isPlanModeSubagent(subagent: RuntimeSubagent): subagent is PlanModeSubagent {
+  return !('graphId' in subagent);
 }
 
 function createRescueToolCandidate(tool: ClientTool): RescueToolCandidate {

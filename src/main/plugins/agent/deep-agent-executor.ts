@@ -369,13 +369,13 @@ async function createExecutorTools(input: {
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
+  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
   if (input.mode === 'plan') {
     return {
-      runTools: [webReadTool, askUserTool],
+      runTools: [webReadTool, askUserTool, ...mcpTools],
       webReadTool
     };
   }
-  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
   const runTools: ClientTool[] = [
     webReadTool,
     askUserTool,

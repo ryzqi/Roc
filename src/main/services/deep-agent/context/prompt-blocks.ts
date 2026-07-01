@@ -104,10 +104,11 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRe
   if (mode === 'plan') {
     return [
       `Workspace: ${workspacePath}`,
-      'Plan Mode exposes read-only inspection tools only.',
+      'Plan Mode blocks local file mutation tools but keeps read, search, and selected MCP tools available.',
       'Local file inspection uses Roc virtual routes: /workspace/, /memory/, and /skills/.',
       'Use ls, read_file, glob, and grep for local inspection in Plan Mode.',
-      'Use web_read for public web pages.',
+      'Use web_read for public web pages and web_search for current public search.',
+      'Use selected MCP tools when the enabled MCP configuration provides relevant context or search capabilities.',
       'Use ask_user only for concise clarifying questions when needed.'
     ].join('\n');
   }

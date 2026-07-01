@@ -1,16 +1,17 @@
+import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 
-export const PLAN_MODE_MODEL_VISIBLE_TOOL_NAMES = [
-  'ls',
-  'read_file',
-  'glob',
-  'grep',
-  'web_read',
-  'ask_user',
-  'session_search'
+export const PLAN_MODE_FILE_MUTATION_TOOL_NAMES = [
+  'write_file',
+  'edit_file',
+  'delete_file'
 ] as const;
 
-const PLAN_MODE_MODEL_VISIBLE_TOOL_SET = new Set<string>(PLAN_MODE_MODEL_VISIBLE_TOOL_NAMES);
+const PLAN_MODE_FILE_MUTATION_TOOL_SET = new Set<string>(PLAN_MODE_FILE_MUTATION_TOOL_NAMES);
+
+export function buildPlanModeBlockedToolMessage(toolName: string): string {
+  return `Plan Mode blocks file-mutating tool calls: ${toolName}.`;
+}
 
 export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[] {
   return tools.filter((tool) => {
@@ -20,7 +21,28 @@ export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[
 }
 
 export function isPlanModeModelVisibleToolName(name: string): boolean {
-  return PLAN_MODE_MODEL_VISIBLE_TOOL_SET.has(name);
+  return !isPlanModeFileMutationToolName(name);
+}
+
+export function isPlanModeFileMutationToolName(name: string): boolean {
+  return PLAN_MODE_FILE_MUTATION_TOOL_SET.has(name);
+}
+
+export function createRocPlanRuntimeToolGuardMiddleware() {
+  return createMiddleware({
+    name: 'RocPlanRuntimeToolGuardMiddleware',
+    wrapToolCall: async (request, handler) => {
+      if (isPlanModeModelVisibleToolName(request.toolCall.name)) {
+        return await handler(request);
+      }
+      return new ToolMessage({
+        tool_call_id: readToolCallId(request.toolCall.id),
+        name: request.toolCall.name,
+        content: buildPlanModeBlockedToolMessage(request.toolCall.name),
+        status: 'error'
+      });
+    }
+  });
 }
 
 export function createRocPlanToolExposureMiddleware() {
@@ -44,4 +66,11 @@ function readToolName(tool: unknown): string | null {
   }
   const name = Reflect.get(tool, 'name');
   return typeof name === 'string' ? name : null;
+}
+
+function readToolCallId(id: string | undefined): string {
+  if (id === undefined || id.length === 0) {
+    return 'unknown-tool-call';
+  }
+  return id;
 }
