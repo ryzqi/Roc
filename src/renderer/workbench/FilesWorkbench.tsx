@@ -39,12 +39,6 @@ export function FilesWorkbench({
     setFilePaneWidth(304);
   }, [state.workspace?.path]);
 
-  useEffect(() => {
-    setExpandedDirectories(new Set());
-    setDirectoryChildren({});
-    setDirectoryLoadingPath(null);
-  }, [state.fileTree]);
-
   async function openFilePreview(relativePath: string): Promise<void> {
     const filesClient = resolveClient();
     const preview = unwrap<FilePreviewResult>('file preview', await filesClient.api.files.preview({ relativePath }));

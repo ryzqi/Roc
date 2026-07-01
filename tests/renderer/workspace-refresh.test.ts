@@ -280,7 +280,71 @@ describe('workspace refresh helpers', () => {
     secondRefresh.resolve(refreshedWorkspaceData);
     await Promise.resolve();
 
-    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not apply stale refresh data when the preview selection changes during load', async () => {
+    vi.useFakeTimers();
+    let snapshot: WorkspaceRefreshSnapshot = {
+      workspace,
+      previewRelativePath: null,
+      fileWorkbenchPdfRelativePath: null,
+      gitSelectedPath: null
+    };
+    const staleRefresh = createDeferred<WorkspaceLiveData>();
+    const selectedRefresh = createDeferred<WorkspaceLiveData>();
+    const selectedWorkspaceData: WorkspaceLiveData = {
+      ...refreshedWorkspaceData,
+      filePreview: {
+        relativePath: 'docs/readme.md',
+        kind: 'text',
+        content: '# Readme',
+        truncated: false,
+        sizeBytes: 8
+      }
+    };
+    const load = vi.fn()
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(selectedRefresh.promise);
+    const apply = vi.fn();
+    const controller = createWorkspaceRefreshController({
+      readSnapshot: () => snapshot,
+      load,
+      apply,
+      onError: vi.fn()
+    });
+
+    controller.handleWorkspaceChanged({
+      workspacePath: workspace.path,
+      relativePath: 'docs/readme.md',
+      eventType: 'change'
+    });
+    await vi.advanceTimersByTimeAsync(150);
+    await Promise.resolve();
+
+    snapshot = {
+      workspace,
+      previewRelativePath: 'docs/readme.md',
+      fileWorkbenchPdfRelativePath: null,
+      gitSelectedPath: null
+    };
+    staleRefresh.resolve(refreshedWorkspaceData);
+    await Promise.resolve();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenLastCalledWith(workspace, {
+      previewRelativePath: 'docs/readme.md',
+      fileWorkbenchPdfRelativePath: null,
+      fallbackToFirstFilePreview: false,
+      gitSelectedPath: null
+    });
+
+    selectedRefresh.resolve(selectedWorkspaceData);
+    await Promise.resolve();
+
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith(workspace.path, selectedWorkspaceData);
   });
 
   it('preserves files workbench PDF selection separately from shared preview state', async () => {

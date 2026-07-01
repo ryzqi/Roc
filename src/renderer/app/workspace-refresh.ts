@@ -115,6 +115,11 @@ export function createWorkspaceRefreshController(input: {
           if (disposed) {
             return;
           }
+          const latestSnapshot = input.readSnapshot();
+          if (!isRefreshSnapshotStillCurrent(snapshot, latestSnapshot)) {
+            refreshRequested = true;
+            continue;
+          }
           input.apply(snapshot.workspace.path, data);
         } catch (error) {
           if (disposed) {
@@ -233,4 +238,16 @@ function isMutatingExecuteCommand(command: string): boolean {
 
 function isSameWorkspacePath(left: string, right: string): boolean {
   return left.toLocaleLowerCase() === right.toLocaleLowerCase();
+}
+
+function isRefreshSnapshotStillCurrent(previous: WorkspaceRefreshSnapshot, current: WorkspaceRefreshSnapshot): boolean {
+  if (previous.workspace === null || current.workspace === null) {
+    return previous.workspace === current.workspace;
+  }
+  return (
+    isSameWorkspacePath(previous.workspace.path, current.workspace.path) &&
+    previous.previewRelativePath === current.previewRelativePath &&
+    previous.fileWorkbenchPdfRelativePath === current.fileWorkbenchPdfRelativePath &&
+    previous.gitSelectedPath === current.gitSelectedPath
+  );
 }
