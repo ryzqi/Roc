@@ -17,6 +17,16 @@ interface CacheSavings {
   tokensSaved: number;
 }
 
+export const MAX_ANTHROPIC_CACHE_CONTROL_MARKERS = 4;
+
+const BALANCED_PRIORITY: ReadonlyArray<PromptBlock['type']> = [
+  'static',
+  'workspace',
+  'capability',
+  'context_recall',
+  'tools'
+];
+
 export interface CacheStrategy {
   detectBreakpoints(blocks: PromptBlock[], strategy: PromptCachingStrategy): number[];
   applyCacheControl(message: SystemMessage, breakpoints: number[]): SystemMessage;
@@ -27,22 +37,18 @@ class AnthropicStrategy implements CacheStrategy {
   detectBreakpoints(blocks: PromptBlock[], strategy: PromptCachingStrategy): number[] {
     switch (strategy) {
       case 'aggressive':
-        // 所有块都缓存
-        return blocks.map((_, i) => i);
+        return capBreakpoints(
+          blocks
+            .map((block, index) => ({ block, index }))
+            .filter(({ block }) => block.stability !== BlockStability.REQUEST)
+            .map(({ index }) => index)
+        );
 
       case 'balanced':
-        // 缓存 STATIC / WORKSPACE / CAPABILITY / SESSION，跳过 REQUEST
-        return blocks
-          .map((block, i) => ({ block, i }))
-          .filter(({ block }) => block.stability !== BlockStability.REQUEST)
-          .map(({ i }) => i);
+        return capBreakpoints(indexesByTypePriority(blocks, BALANCED_PRIORITY));
 
       case 'conservative':
-        // 仅缓存 STATIC
-        return blocks
-          .map((block, i) => ({ block, i }))
-          .filter(({ block }) => block.stability === BlockStability.STATIC)
-          .map(({ i }) => i);
+        return capBreakpoints(indexesForStability(blocks, BlockStability.STATIC));
 
       default:
         return [];
@@ -86,6 +92,30 @@ class AnthropicStrategy implements CacheStrategy {
 
     return { percentSaved, tokensSaved };
   }
+}
+
+function capBreakpoints(indexes: number[]): number[] {
+  return indexes.slice(0, MAX_ANTHROPIC_CACHE_CONTROL_MARKERS).sort((left, right) => left - right);
+}
+
+function indexesForStability(blocks: PromptBlock[], stability: BlockStability): number[] {
+  return blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.stability === stability)
+    .map(({ index }) => index);
+}
+
+function indexesByTypePriority(blocks: PromptBlock[], priority: ReadonlyArray<PromptBlock['type']>): number[] {
+  const selected: number[] = [];
+  for (const type of priority) {
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      if (block !== undefined && block.type === type && block.stability !== BlockStability.REQUEST) {
+        selected.push(index);
+      }
+    }
+  }
+  return selected;
 }
 
 class OpenAIStrategy implements CacheStrategy {
