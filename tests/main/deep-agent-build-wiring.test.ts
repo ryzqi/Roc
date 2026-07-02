@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { createDeepAgent } from 'deepagents';
+import type { SubAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { z } from 'zod';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
@@ -92,13 +93,13 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     buildDeepAgent(input);
 
-    const createAgentInput = vi.mocked(createAgent).mock.calls[0]?.[0];
-    const middlewareNames = createAgentInput?.middleware?.map((middleware) =>
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
       Reflect.get(middleware as object, 'name')
     ) ?? [];
 
-    expect(createDeepAgent).not.toHaveBeenCalled();
-    expect(createAgent).toHaveBeenCalledTimes(1);
+    expect(createDeepAgent).toHaveBeenCalledTimes(1);
+    expect(createAgent).not.toHaveBeenCalled();
     expect(middlewareNames).toContain('RocPlanToolExposureMiddleware');
     expect(middlewareNames).toContain('RocPlanRuntimeToolGuardMiddleware');
     expect(middlewareNames.indexOf('RocPlanRuntimeToolGuardMiddleware')).toBeLessThan(
@@ -162,14 +163,14 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     buildDeepAgent(input);
 
-    const createAgentInput = vi.mocked(createAgent).mock.calls[0]?.[0] as
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0] as
       | { middleware?: unknown[] }
       | undefined;
-    const rescue = createAgentInput?.middleware?.find((middleware) => Reflect.get(middleware as object, 'name') === 'ForgeRescueParsingMiddleware') as
+    const rescue = createDeepAgentInput?.middleware?.find((middleware) => Reflect.get(middleware as object, 'name') === 'ForgeRescueParsingMiddleware') as
       | { afterModel?: (state: unknown, runtime: unknown) => Promise<{ messages?: unknown[] } | undefined> | { messages?: unknown[] } | undefined }
       | undefined;
     if (typeof rescue?.afterModel !== 'function') {
-      throw new Error('Expected ForgeRescueParsingMiddleware to be passed into createAgent.');
+      throw new Error('Expected ForgeRescueParsingMiddleware to be passed into createDeepAgent.');
     }
 
     const hiddenUpdate = await rescue.afterModel(
@@ -429,7 +430,14 @@ describe('buildDeepAgent harness profile wiring', () => {
       store: {} as unknown,
       memorySources: ['/memory/global/AGENTS.md'],
       skillSources: ['/skills/'],
-      subagents: [],
+      subagents: [
+        {
+          name: 'research',
+          description: 'Research current context.',
+          systemPrompt: 'Research current context.',
+          tools: [createNamedTool('web_read')]
+        }
+      ],
       tools: [
         createNamedTool('web_read'),
         createNamedTool('web_search'),
@@ -458,24 +466,30 @@ describe('buildDeepAgent harness profile wiring', () => {
 
     buildDeepAgent(input);
 
-    expect(createDeepAgent).not.toHaveBeenCalled();
-    expect(createAgent).toHaveBeenCalledTimes(1);
-    const createAgentInput = vi.mocked(createAgent).mock.calls[0]?.[0];
-    if (createAgentInput === undefined) {
-      throw new Error('Expected plan agent input.');
+    expect(createDeepAgent).toHaveBeenCalledTimes(1);
+    expect(createAgent).not.toHaveBeenCalled();
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    if (createDeepAgentInput === undefined) {
+      throw new Error('Expected plan DeepAgents input.');
     }
-    const toolNames = createAgentInput.tools === undefined ? [] : createAgentInput.tools.map((tool) => tool.name);
-    const middleware = createAgentInput.middleware === undefined ? [] : createAgentInput.middleware;
+    const toolNames = createDeepAgentInput.tools === undefined ? [] : createDeepAgentInput.tools.map((tool) => tool.name);
+    const middleware = createDeepAgentInput.middleware === undefined ? [] : createDeepAgentInput.middleware;
     const middlewareNames = middleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
-    const middlewareToolNames = middleware.flatMap((middlewareItem) => {
-      const middlewareTools = Reflect.get(middlewareItem as object, 'tools');
-      if (!Array.isArray(middlewareTools)) {
-        return [];
-      }
-      return middlewareTools
-        .map((toolItem) => Reflect.get(toolItem as object, 'name'))
-        .filter((name): name is string => typeof name === 'string');
-    });
+    const generalPurposeSubagent = createDeepAgentInput.subagents?.find((subagent) => subagent.name === 'general-purpose');
+    const researchSubagent = createDeepAgentInput.subagents?.find((subagent) => subagent.name === 'research');
+    if (!isSubAgent(generalPurposeSubagent)) {
+      throw new Error('Expected plan general-purpose subagent.');
+    }
+    if (!isSubAgent(researchSubagent)) {
+      throw new Error('Expected plan research subagent.');
+    }
+    const generalPurposeMiddlewareNames = generalPurposeSubagent?.middleware?.map((middlewareItem) =>
+      Reflect.get(middlewareItem as object, 'name')
+    ) ?? [];
+    const generalPurposeToolNames = generalPurposeSubagent?.tools?.map((tool) => tool.name) ?? [];
+    const researchMiddlewareNames = researchSubagent?.middleware?.map((middlewareItem) =>
+      Reflect.get(middlewareItem as object, 'name')
+    ) ?? [];
 
     expect(toolNames).toEqual([
       'web_read',
@@ -486,18 +500,35 @@ describe('buildDeepAgent harness profile wiring', () => {
       'filesystem__search',
       'filesystem__write_file',
       'filesystem__edit_file',
-      'filesystem__delete_file',
-      'ls',
-      'read_file',
-      'glob',
-      'grep'
+      'filesystem__delete_file'
     ]);
-    expect(toolNames).not.toEqual(expect.arrayContaining(['write_file', 'edit_file', 'delete_file']));
-    expect(middlewareNames).not.toContain('FilesystemMiddleware');
-    expect(middlewareNames).toEqual(expect.arrayContaining(['todoListMiddleware', 'subAgentMiddleware']));
-    expect(middlewareToolNames).toEqual(expect.arrayContaining(['write_todos', 'task']));
-    expect(middlewareToolNames).not.toEqual(expect.arrayContaining(['write_file', 'edit_file', 'delete_file']));
-    expect(middlewareNames).toContain('SkillsMiddleware');
+    expect(toolNames).not.toEqual(expect.arrayContaining(['ls', 'read_file', 'glob', 'grep', 'write_file', 'edit_file', 'delete_file']));
+    expect(middlewareNames).toEqual(expect.arrayContaining([
+      'RocPlanReadOnlyMemoryMiddleware',
+      'RocPlanToolExposureMiddleware',
+      'RocPlanRuntimeToolGuardMiddleware',
+      'RocPlanFilesystemDefaultPathMiddleware'
+    ]));
+    expect(middlewareNames.indexOf('RocPlanFilesystemDefaultPathMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')
+    );
+    expect(generalPurposeToolNames).toEqual(toolNames);
+    expect(generalPurposeMiddlewareNames).toEqual(expect.arrayContaining([
+      'RocPlanReadOnlyMemoryMiddleware',
+      'RocPlanToolExposureMiddleware',
+      'RocPlanRuntimeToolGuardMiddleware',
+      'RocPlanFilesystemDefaultPathMiddleware'
+    ]));
+    expect(researchMiddlewareNames).toEqual(expect.arrayContaining([
+      'RocPlanReadOnlyMemoryMiddleware',
+      'RocPlanToolExposureMiddleware',
+      'RocPlanRuntimeToolGuardMiddleware',
+      'RocPlanFilesystemDefaultPathMiddleware'
+    ]));
+    expect(createDeepAgentInput).toMatchObject({
+      memory: [],
+      skills: ['/skills/']
+    });
   });
 });
 
@@ -507,4 +538,8 @@ function createNamedTool(name: string) {
     description: `${name} tool`,
     schema: z.object({})
   });
+}
+
+function isSubAgent(value: unknown): value is SubAgent {
+  return value !== null && typeof value === 'object' && Reflect.has(value, 'systemPrompt');
 }
