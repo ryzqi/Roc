@@ -338,6 +338,36 @@ describe('memory plugin', () => {
     );
   });
 
+  it('skips automatic memory writes when a different run has the same normalized summary', async () => {
+    const { capabilities, eventBus } = await initializePluginWithBus({ workspace: null });
+    const firstEvent = {
+      type: 'agent.run.completed',
+      source: '@roc/plugin-agent',
+      payload: {
+        runId: 'run_1',
+        threadId: null,
+        summary: 'Global memory updated.',
+        assistantMessage: 'done'
+      },
+      createdAt: '2026-06-18T10:00:00.000Z'
+    };
+    const secondEvent = {
+      ...firstEvent,
+      payload: {
+        ...firstEvent.payload,
+        runId: 'run_2',
+        summary: '  global   memory updated. '
+      }
+    };
+
+    await eventBus.publish(firstEvent);
+    await eventBus.publish(secondEvent);
+
+    await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'memory' })).resolves.toBe(
+      ['## 2026-06-18', '', '- run_1: Global memory updated.'].join('\n')
+    );
+  });
+
   it('skips automatic writes when security scan or capacity validation fails', async () => {
     const { capabilities, eventBus } = await initializePluginWithBus({
       workspace: null,

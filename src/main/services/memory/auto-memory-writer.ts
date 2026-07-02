@@ -1,7 +1,10 @@
 import type { RocPluginContext } from '../../kernel/types';
 import type { MemoryScope } from '../../../shared/types';
 import type { MemoryStoreRepository, MemoryWorkspaceContext } from '../../plugins/memory/memory-store-repository';
-import { buildMemoryPromotionBullet } from '../deep-agent/context/memory-promotion';
+import {
+  buildMemoryPromotionBullet,
+  memoryFileContainsPromotionSummary
+} from '../deep-agent/context/memory-promotion';
 
 export type AgentRunCompletedPayload = {
   runId: string;
@@ -27,6 +30,10 @@ export class AutoMemoryWriter {
     const workspaceOverride = resolveWorkspaceOverride(payload);
     const targetScope: MemoryScope = this.options.repository.hasWorkspace(workspaceOverride) ? 'workspace' : 'global';
     const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
+    const existing = current === null ? '' : current;
+    if (memoryFileContainsPromotionSummary(existing, summary)) {
+      return;
+    }
     const bullet = buildMemoryPromotionBullet({
       runId: payload.runId,
       summary
@@ -34,7 +41,7 @@ export class AutoMemoryWriter {
     if (bullet === null) {
       return;
     }
-    const next = appendBullet(current === null ? '' : current, resolveDate(createdAt), bullet);
+    const next = appendBullet(existing, resolveDate(createdAt), bullet);
     if (next === null) {
       return;
     }

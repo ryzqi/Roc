@@ -17,3 +17,26 @@ export function buildMemoryPromotionBullet(input: MemoryPromotionInput): string 
   }
   return `- ${runId}: ${summary}`;
 }
+
+export function normalizeMemoryPromotionSummary(summary: string): string {
+  return summary.replace(/\s+/gu, ' ').trim().toLocaleLowerCase();
+}
+
+export function memoryFileContainsPromotionSummary(existing: string, summary: string): boolean {
+  const normalizedSummary = normalizeMemoryPromotionSummary(summary);
+  if (normalizedSummary.length === 0) {
+    return false;
+  }
+  const lines = existing.split('\n');
+  for (const line of lines) {
+    const match = /^-\s+[^:]+:\s+(.*)$/u.exec(line.trim());
+    if (match === null) {
+      continue;
+    }
+    const existingSummary = match[1];
+    if (existingSummary !== undefined && normalizeMemoryPromotionSummary(existingSummary) === normalizedSummary) {
+      return true;
+    }
+  }
+  return false;
+}
