@@ -17,9 +17,10 @@ describe('AnthropicStrategy', () => {
     { type: 'capability', content: 'request', stability: BlockStability.REQUEST, hash: 'd' }
   ];
 
-  it('aggressive 模式应标记所有块', () => {
+  it('aggressive 模式应跳过 REQUEST', () => {
     const breakpoints = strategy.detectBreakpoints(mockBlocks, 'aggressive');
-    expect(breakpoints).toEqual([0, 1, 2, 3]);
+    expect(breakpoints).toEqual([0, 1, 2]);
+    expect(breakpoints).not.toContain(3);
   });
 
   it('balanced 模式应跳过 REQUEST', () => {

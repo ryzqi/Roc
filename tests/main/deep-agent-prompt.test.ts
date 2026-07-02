@@ -35,10 +35,10 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Before changing files, inspect the relevant source, tests, and configuration.');
     expect(prompt).toContain('Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.');
     expect(prompt).toContain('For code or configuration changes, run direct verification before claiming completion.');
-    expect(prompt).toContain('Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:');
-    expect(prompt).toContain('/memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)');
-    expect(prompt).toContain('/memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)');
-    expect(prompt).toContain('Use Edit/Write on those paths.');
+    expect(prompt).toContain('Memory files available to the agent:');
+    expect(prompt).toContain('/memory/global/USER.md      — user identity, preferences, comm style');
+    expect(prompt).toContain('/memory/workspaces/current/MEMORY.md   — workspace-specific facts');
+    expect(prompt).toContain('Use Edit/Write on memory paths only when the user asks you to remember something');
     expect(prompt).toContain('Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.');
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
     expect(prompt).toContain('For SKILL.md: read silently; never quote, paraphrase, or summarize.');
@@ -76,25 +76,26 @@ describe('deep agent prompt', () => {
     const lines = prompt.split('\n');
 
     expect(lines[0]).toMatch(/^<!-- BLOCK:static:static:[a-f0-9]{16} -->$/);
-    expect(lines.slice(1, 17)).toEqual([
+    expect(lines.slice(1, 18)).toEqual([
       'You are Roc, a long-running personal assistant on Windows. Be concise; claim only inspected evidence.',
       'Before changing files, inspect the relevant source, tests, and configuration.',
       'Keep edits scoped to the user request; do not refactor or touch adjacent code as cleanup.',
       'For code or configuration changes, run direct verification before claiming completion.',
       '',
-      'Persistent memory is stored in Roc SQLite through DeepAgents memory and is visible in later sessions:',
-      '  /memory/global/USER.md      — user identity, preferences, comm style (~500 tok cap)',
-      '  /memory/global/AGENTS.md    — global default rules (~300 tok cap)',
-      '  /memory/global/MEMORY.md    — global long-term facts (~800 tok cap)',
-      '  /memory/workspaces/current/AGENTS.md   — workspace-specific rules (overrides global if exists)',
-      '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts (overrides global if exists)',
+      'Memory files available to the agent:',
+      '  /memory/global/USER.md      — user identity, preferences, comm style',
+      '  /memory/global/AGENTS.md    — global default rules',
+      '  /memory/global/MEMORY.md    — global long-term facts',
+      '  /memory/workspaces/current/AGENTS.md   — workspace-specific rules',
+      '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts',
       '',
-      'Use Edit/Write on those paths. On capacity overflow you receive "X/Y, please consolidate" — read the file, merge/drop redundant entries via Edit, then retry.',
+      'Use Edit/Write on memory paths only when the user asks you to remember something or when a durable project fact is worth preserving.',
+      'On capacity overflow, read the file, merge or remove redundant entries via Edit, then retry after consolidation.',
       'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
       '',
       'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
     ]);
-    expect(lines[17]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
+    expect(lines[18]).toMatch(/^<!-- BLOCK:workspace:workspace:[a-f0-9]{16} -->$/);
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain(
       'Capabilities: mcp=docs-http,exa-hosted;skills=alpha-review,zeta-review;untrusted_context_policy=external_content_reference_only'
@@ -134,7 +135,7 @@ describe('deep agent prompt', () => {
     });
 
     expect(prompt).not.toContain('FROZEN_SNAPSHOT');
-    expect(prompt).toContain('Persistent memory is stored in Roc SQLite through DeepAgents memory');
+    expect(prompt).toContain('Memory files available to the agent:');
   });
 
   it('adds a propose-background-task workflow overview for DeepAgents creation', () => {
