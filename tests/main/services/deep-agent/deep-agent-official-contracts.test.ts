@@ -5,6 +5,7 @@ import type {
   AsyncSubAgent,
   AsyncTaskStatus,
   CreateDeepAgentParams,
+  SubAgent,
   SubagentRunStream
 } from 'deepagents';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../../../src/main/services/deep-agent/types';
@@ -161,5 +162,26 @@ describe('DeepAgents official contract assumptions', () => {
     await expect(readTool.invoke({ file_path: '/outside/file.txt' })).resolves.toEqual([
       { type: 'text', text: '     1\thello' }
     ]);
+  });
+
+  it('documents that Roc passes memory and skills through createDeepAgent params', () => {
+    const params = {
+      memory: ['/memory/global/AGENTS.md', '/memory/workspaces/current/AGENTS.md'],
+      skills: ['/skills/']
+    } satisfies Pick<CreateDeepAgentParams, 'memory' | 'skills'>;
+
+    expect(params.memory).toEqual(['/memory/global/AGENTS.md', '/memory/workspaces/current/AGENTS.md']);
+    expect(params.skills).toEqual(['/skills/']);
+  });
+
+  it('documents that custom subagents must receive skills explicitly', () => {
+    const subagent: SubAgent = {
+      name: 'reviewer',
+      description: 'Review implementation output.',
+      systemPrompt: 'Review the result and report issues.',
+      skills: ['/skills/']
+    };
+
+    expect(subagent.skills).toEqual(['/skills/']);
   });
 });

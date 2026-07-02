@@ -151,4 +151,22 @@ describe('prompt blocks', () => {
     expect(skillBlock?.content).toContain('Read the SKILL.md file through the /skills/ route before applying it.');
     expect(skillBlock?.content).not.toContain('# TypeScript Skill');
   });
+
+  it('keeps memory prompt model-actionable without explaining storage internals', () => {
+    const blocks = buildPromptBlocks({
+      mode: 'chat',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null,
+      tools: [],
+      explicitSkillContexts: []
+    });
+    const staticBlock = blocks.find((block) => block.type === 'static');
+
+    expect(staticBlock?.content).toContain('/memory/global/USER.md');
+    expect(staticBlock?.content).toContain('/memory/workspaces/current/MEMORY.md');
+    expect(staticBlock?.content).toContain('Automatic writes only append to MEMORY.md');
+    expect(staticBlock?.content).not.toContain('Roc SQLite');
+    expect(staticBlock?.content).not.toContain('DeepAgents memory');
+  });
 });
