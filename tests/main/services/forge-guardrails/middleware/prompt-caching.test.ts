@@ -139,9 +139,9 @@ describe('createPromptCachingMiddleware', () => {
         ],
         explicitSkillContexts: [
           {
+            id: 'typescript',
             name: 'typescript',
-            path: '/skills/typescript/SKILL.md',
-            content: '# TypeScript Skill'
+            path: '/skills/typescript/SKILL.md'
           }
         ]
       })

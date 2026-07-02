@@ -39,4 +39,28 @@ describe('assembleContextHarness', () => {
 
     expect(harness.skillSources).toEqual(['/skills/']);
   });
+
+  it('keeps explicit skill prompt context compact while exposing /skills/', () => {
+    const harness = assembleContextHarness({
+      mode: 'chat',
+      enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
+      workflowHint: null,
+      workspacePath: 'F:\\Code\\Roc',
+      memorySources: [],
+      baseTools: [],
+      searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      explicitSkillContexts: [
+        {
+          id: 'typescript',
+          name: 'typescript',
+          path: '/skills/typescript/SKILL.md'
+        }
+      ]
+    });
+
+    expect(harness.skillSources).toEqual(['/skills/']);
+    expect(harness.systemPrompt).toContain('<skill_index>');
+    expect(harness.systemPrompt).toContain('/skills/typescript/SKILL.md');
+    expect(harness.systemPrompt).not.toContain('# TypeScript Skill');
+  });
 });

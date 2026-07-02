@@ -127,4 +127,28 @@ describe('prompt blocks', () => {
 
     expect(prompt).not.toContain('<proposed_plan>');
   });
+
+  it('serializes explicit skills as an index without SKILL.md content', () => {
+    const blocks = buildPromptBlocks({
+      mode: 'chat',
+      enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null,
+      tools: [],
+      explicitSkillContexts: [
+        {
+          id: 'typescript',
+          name: 'typescript',
+          path: '/skills/typescript/SKILL.md'
+        }
+      ]
+    });
+
+    const skillBlock = blocks.find((block) => block.type === 'explicit_skills');
+    expect(skillBlock?.content).toContain('<skill_index>');
+    expect(skillBlock?.content).toContain('<id>typescript</id>');
+    expect(skillBlock?.content).toContain('<path>/skills/typescript/SKILL.md</path>');
+    expect(skillBlock?.content).toContain('Read the SKILL.md file through the /skills/ route before applying it.');
+    expect(skillBlock?.content).not.toContain('# TypeScript Skill');
+  });
 });

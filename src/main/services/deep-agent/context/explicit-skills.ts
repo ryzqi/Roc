@@ -1,11 +1,10 @@
-import type { SkillFilePreviewResult, SkillSnapshot } from '../../../../shared/types';
+import type { SkillSnapshot } from '../../../../shared/types';
 import type { RocCapabilityRegistry } from '../../../kernel/types';
 
 export type ExplicitSkillContext = {
   id: string;
   name: string;
   path: string;
-  content: string;
 };
 
 export async function loadExplicitSkillContexts(input: {
@@ -29,21 +28,10 @@ export async function loadExplicitSkillContexts(input: {
     if (skill.status !== 'ready') {
       throw new Error(`skill_invalid:${skillId}`);
     }
-    const file = await input.capabilities.invoke<{ id: string; relativePath: string }, SkillFilePreviewResult>(
-      'skills.file.read',
-      {
-        id: skillId,
-        relativePath: 'SKILL.md'
-      }
-    );
-    if (file.kind !== 'text' || file.truncated) {
-      throw new Error(`explicit_skill_read_failed:${skillId}`);
-    }
     contexts.push({
       id: skill.id,
       name: skill.name,
-      path: `/skills/${skill.id}/SKILL.md`,
-      content: file.content
+      path: `/skills/${skill.id}/SKILL.md`
     });
   }
   return contexts;

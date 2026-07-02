@@ -27,9 +27,9 @@ export type PromptToolDescriptor = {
 };
 
 export type ExplicitSkillPromptContext = {
+  id: string;
   name: string;
   path: string;
-  content: string;
 };
 
 export type PromptBlock = {
@@ -172,16 +172,19 @@ function buildPlanModePrompt(): string {
 
 function buildExplicitSkillsPrompt(skills: readonly ExplicitSkillPromptContext[]): string {
   return [
-    'Explicitly loaded skills for this request:',
+    'Explicitly enabled skills for this request:',
+    '<skill_index>',
     ...skills.map((skill) =>
       [
         '<skill>',
+        `<id>${skill.id}</id>`,
         `<name>${skill.name}</name>`,
         `<path>${skill.path}</path>`,
-        skill.content,
+        'Read the SKILL.md file through the /skills/ route before applying it.',
         '</skill>'
       ].join('\n')
-    )
+    ),
+    '</skill_index>'
   ].join('\n\n');
 }
 
