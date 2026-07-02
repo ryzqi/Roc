@@ -64,7 +64,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent', 'mcp.tools.get']);
   });
 
-  it('loads explicit slash skill SKILL.md into request context without changing selected skills', async () => {
+  it('loads explicit slash skill index into request context without changing selected skills', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(
       createCapabilities(capabilityCalls, {
@@ -87,10 +87,7 @@ describe('createAgentDeepAgentExecutor', () => {
             status: 'ready',
             lastError: null
           }
-        ],
-        skillFiles: {
-          'python-expert': '---\nname: python-expert\ndescription: Python expertise\n---\n# Python Expert\nUse pytest.'
-        }
+        ]
       }),
       {
         explicitSkillIds: ['python-expert'],
@@ -104,16 +101,18 @@ describe('createAgentDeepAgentExecutor', () => {
     const buildInput = readBuildInput();
 
     expect(buildInput.skillSources).toEqual(['/skills/']);
+    expect(buildInput.systemPrompt).toContain('<skill_index>');
     expect(buildInput.systemPrompt).toContain('<skill>');
+    expect(buildInput.systemPrompt).toContain('<id>python-expert</id>');
     expect(buildInput.systemPrompt).toContain('<name>python-expert</name>');
     expect(buildInput.systemPrompt).toContain('/skills/python-expert/SKILL.md');
-    expect(buildInput.systemPrompt).toContain('# Python Expert');
+    expect(buildInput.systemPrompt).toContain('Read the SKILL.md file through the /skills/ route before applying it.');
+    expect(buildInput.systemPrompt).not.toContain('# Python Expert');
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=none;skills=typescript;');
     expect(buildInput.systemPrompt).not.toContain('<name>typescript</name>');
     expect(capabilityCalls.map((call) => call.name)).toEqual([
       'workspace.getCurrent',
-      'skills.list',
-      'skills.file.read'
+      'skills.list'
     ]);
   });
 
