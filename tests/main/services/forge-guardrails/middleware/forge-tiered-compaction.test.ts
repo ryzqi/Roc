@@ -258,4 +258,24 @@ describe('ForgeTieredCompaction', () => {
     expect(ids(messages)).toEqual(beforeIds);
     expect(String((messages[3] as ToolMessage).content)).toBe('x'.repeat(260));
   });
+
+  it('preserves a context digest before dropping old messages', async () => {
+    const messages = [
+      ...headers(),
+      assistantText('old-decision', 1),
+      toolResult('old-tool', 1),
+      toolCallAi('recent-anchor', 5)
+    ];
+    const oldDecision = messages.find((message) => message.id === 'old-decision');
+    if (oldDecision !== undefined) {
+      oldDecision.content = 'Decision: preserve long-running context before deleting old results.';
+    }
+
+    await applyTieredCompaction(messages, 980);
+
+    const digest = messages.find((message) => message.additional_kwargs?.forge_message_type === 'forge:context_digest');
+    expect(digest).toBeDefined();
+    expect(String(digest?.content)).toContain('preserve long-running context');
+    expect(ids(messages)).not.toContain('old-decision');
+  });
 });

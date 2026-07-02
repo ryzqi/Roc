@@ -5,7 +5,8 @@ export type ForgeMessageType =
   | 'forge:unknown_tool_nudge'
   | 'forge:tool_resolution'
   | 'forge:reasoning'
-  | 'forge:context_warning';
+  | 'forge:context_warning'
+  | 'forge:context_digest';
 
 const TAG_KEY = 'forge_message_type';
 const NUDGE_VISIBILITY_KEY = 'forge_nudge_visibility';
@@ -39,7 +40,8 @@ function isForgeMessageType(value: unknown): value is ForgeMessageType {
     value === 'forge:unknown_tool_nudge' ||
     value === 'forge:tool_resolution' ||
     value === 'forge:reasoning' ||
-    value === 'forge:context_warning'
+    value === 'forge:context_warning' ||
+    value === 'forge:context_digest'
   );
 }
 
@@ -59,5 +61,6 @@ export const FORGE_COMPACTION_PRIORITY: Record<ForgeMessageType, number> = {
   'forge:unknown_tool_nudge': 1,
   'forge:context_warning': 1,
   'forge:tool_resolution': 2,
-  'forge:reasoning': 4
+  'forge:reasoning': 4,
+  'forge:context_digest': 0
 };

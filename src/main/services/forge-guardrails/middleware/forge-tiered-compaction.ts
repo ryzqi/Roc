@@ -1,5 +1,9 @@
 import { AIMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { contextEditingMiddleware, type ContextEdit } from 'langchain';
+import {
+  isContextDigestMessage,
+  refreshContextDigestMessage
+} from '../context-digest';
 import { isForgeTransientMessage, readForgeMessageTag } from '../message-tags';
 import { readIterationFromMessage } from '../state-schema';
 
@@ -31,14 +35,14 @@ export function createForgeTieredCompactionMiddleware(opts: ForgeTieredCompactio
 export function createForgeTieredCompactionEdits(opts: ForgeTieredCompactionOptions): ContextEdit[] {
   const resolved = resolveOptions(opts);
   return [
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[0], [
+    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[0], resolved.keepRecent, [
       new ForgeDropNudgesEdit(resolved.keepRecent),
       new ForgeTruncateToolResultsEdit(resolved.keepRecent)
     ]),
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[1], [
+    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[1], resolved.keepRecent, [
       new ForgeDropToolResultsEdit(resolved.keepRecent)
     ]),
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[2], [
+    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[2], resolved.keepRecent, [
       new ForgeDropReasoningTextEdit(resolved.keepRecent)
     ])
   ];
@@ -82,6 +86,7 @@ class ThresholdedEdit implements ContextEdit {
   constructor(
     private readonly budgetTokens: number,
     private readonly threshold: number,
+    private readonly keepRecent: number,
     private readonly edits: readonly ContextEdit[]
   ) {}
 
@@ -90,6 +95,7 @@ class ThresholdedEdit implements ContextEdit {
     if (tokens < this.budgetTokens * this.threshold) {
       return;
     }
+    refreshContextDigestMessage(params.messages, this.keepRecent);
     for (const edit of this.edits) {
       await edit.apply(params);
     }
@@ -116,6 +122,9 @@ class ForgeTruncateToolResultsEdit implements ContextEdit {
     const cutoff = findEligibleEnd(params.messages, this.keepRecent);
     for (let index = PROTECTED_HEADER_COUNT; index < cutoff; index += 1) {
       const message = params.messages[index]!;
+      if (isContextDigestMessage(message)) {
+        continue;
+      }
       if (!ToolMessage.isInstance(message)) {
         continue;
       }
@@ -159,6 +168,9 @@ class ForgeDropToolResultsEdit implements ContextEdit {
     const cutoff = findEligibleEnd(params.messages, this.keepRecent);
     for (let index = cutoff - 1; index >= PROTECTED_HEADER_COUNT; index -= 1) {
       const message = params.messages[index]!;
+      if (isContextDigestMessage(message)) {
+        continue;
+      }
       if (ToolMessage.isInstance(message) && readForgeMessageTag(message) !== 'forge:tool_resolution') {
         params.messages.splice(index, 1);
       }
@@ -173,6 +185,9 @@ class ForgeDropReasoningTextEdit implements ContextEdit {
     const cutoff = findEligibleEnd(params.messages, this.keepRecent);
     for (let index = cutoff - 1; index >= PROTECTED_HEADER_COUNT; index -= 1) {
       const message = params.messages[index]!;
+      if (isContextDigestMessage(message)) {
+        continue;
+      }
       const tag = readForgeMessageTag(message);
       if (tag === 'forge:reasoning') {
         params.messages.splice(index, 1);

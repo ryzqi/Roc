@@ -5,6 +5,7 @@ export * from './nudge-templates';
 export * from './rescue-parser';
 export * from './sampling-defaults';
 export * from './preview-store';
+export * from './context-digest';
 export * from './middleware/rescue-parsing';
 export * from './middleware/tool-resolution';
 export * from './middleware/error-budget';
