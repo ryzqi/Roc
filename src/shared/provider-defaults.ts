@@ -143,7 +143,7 @@ export function normalizeFixedLlamaCppProvider(provider?: ProviderConfig): Provi
   return {
     ...base,
     endpoint: normalizedEndpoint,
-    credentialRef: null,
+    credentialRef: provider.credentialRef,
     enabled: provider.enabled,
     models: provider.models,
     options: provider.options

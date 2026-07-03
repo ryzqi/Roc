@@ -61,7 +61,11 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
         },
-        external: ['electron']
+        external: ['electron'],
+        output: {
+          entryFileNames: '[name].cjs',
+          format: 'cjs'
+        }
       }
     }
   },

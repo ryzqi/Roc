@@ -222,7 +222,7 @@ describe('fixed NVIDIA provider config', () => {
     });
   });
 
-  it('drops stale saved llama.cpp credential references during normalization', () => {
+  it('preserves saved llama.cpp credential references during normalization', () => {
     services.configService.saveProviders({
       schemaVersion: 1,
       defaultModelId: null,
@@ -253,7 +253,7 @@ describe('fixed NVIDIA provider config', () => {
     expect(llamaCpp).toMatchObject({
       id: 'llama_cpp',
       endpoint: 'http://127.0.0.1:9090',
-      credentialRef: null
+      credentialRef: 'secret:llama_cpp'
     });
   });
 
@@ -286,6 +286,6 @@ describe('fixed NVIDIA provider config', () => {
     const llamaCpp = services.configService.getProviders().providers.find((provider) => provider.id === 'llama_cpp');
 
     expect(llamaCpp?.endpoint).toBe('http://127.0.0.1:8081/v1');
-    expect(llamaCpp?.credentialRef).toBeNull();
+    expect(llamaCpp?.credentialRef).toBe('secret:llama_cpp');
   });
 });

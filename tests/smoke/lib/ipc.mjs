@@ -63,12 +63,13 @@ export async function seedSmokeRuntimeData(
                   displayName: 'Smoke Model',
                   enabled: true,
                   supportsStreaming: true,
-                  supportsToolCalls: true
+                  supportsToolCalls: true,
+                  supportsImages: false
                 }
               ]
             }
           ],
-          defaultModelId: 'smoke-model'
+          defaultModelId: 'smoke-provider:smoke-model'
         }),
         'settings save'
       );

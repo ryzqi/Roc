@@ -170,9 +170,9 @@ export async function runSmokeSettingsChecks(ctx) {
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
   await page.waitForFunction(
     () => {
-      const kimi = document.querySelector('[data-testid="default-model-moonshotai/kimi-k2.6"]');
-      const llama = document.querySelector('[data-testid="default-model-meta/llama-3.3-70b-instruct"]');
-      const llamaCpp = document.querySelector('[data-testid="default-model-qwen3.5-4b"]');
+      const kimi = document.querySelector('[data-testid="default-model-nvidia-moonshotai/kimi-k2.6"]');
+      const llama = document.querySelector('[data-testid="default-model-nvidia-meta/llama-3.3-70b-instruct"]');
+      const llamaCpp = document.querySelector('[data-testid="default-model-llama_cpp-qwen3.5-4b"]');
       return kimi instanceof HTMLButtonElement && llama instanceof HTMLButtonElement && llamaCpp instanceof HTMLButtonElement;
     },
     undefined,
@@ -454,8 +454,8 @@ export async function runSmokeSettingsChecks(ctx) {
       '已测试 smoke-ui-openai-model 可用。'
     );
   await clickSmokeControl(page, '[data-testid="settings-section-default-model"]');
-  await page.waitForSelector('[data-testid="default-model-smoke-ui-openai-model"]', { timeout: 5000 });
-  await clickSmokeControl(page, '[data-testid="default-model-smoke-ui-openai-model"]');
+  await page.waitForSelector(`[data-testid="default-model-${openaiProviderId}-smoke-ui-openai-model"]`, { timeout: 5000 });
+  await clickSmokeControl(page, `[data-testid="default-model-${openaiProviderId}-smoke-ui-openai-model"]`);
   await waitForTextContent(page, '[data-testid="default-model-settings"]', 'smoke-ui-openai-model');
   providerSettingsEvidence.defaultModelSelectable = true;
   await clickSmokeControl(page, '[data-testid="settings-section-app-basics"]');

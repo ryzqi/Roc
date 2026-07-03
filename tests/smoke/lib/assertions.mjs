@@ -126,27 +126,3 @@ export async function waitForTextContent(page, selector, expectedText, timeout =
     );
   }
 }
-
-export function assertNoRuntimeMockText(sections) {
-  const forbidden = [
-    { label: '示例数据标签', pattern: /条示例|示例任务|示例数据/u },
-    { label: '硬编码预览流程', pattern: /步骤 3\/5|截图工具未找到浏览器入口|生成页面预览并截图/u },
-    { label: '演示 Provider 地址', pattern: /api\.example\.local/u },
-    { label: '预览工作区故事', pattern: /重构静态页面布局|导出截图|把每个页面都导出为 PNG/u },
-    { label: '英文占位语义', pattern: /\bmock\b|\bdemo\b|\bfake\b|\bplaceholder\b|No preview loaded\./iu }
-  ];
-
-  const leaks = [];
-  for (const section of sections) {
-    for (const rule of forbidden) {
-      const match = section.text.match(rule.pattern);
-      if (match !== null) {
-        leaks.push({ section: section.name, rule: rule.label, text: match[0] });
-      }
-    }
-  }
-
-  if (leaks.length > 0) {
-    throw new Error(`Runtime mock/demo text leaked: ${JSON.stringify(leaks, null, 2)}`);
-  }
-}

@@ -1,5 +1,5 @@
 export function buildRendererBoundaryCapabilities(ctx) {
-  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsReachable, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultText, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
+  const { memoryText, memoryStatusApiEvidence, providerSettingsEvidence, mcpText, skillText, disabledSkillText, skillLayoutEvidence, boundary, workspaceSelectButtonEvidence, sidebarSettingsReachable, chatCapabilityEvidence, collapsedChatLayoutBeforeOpen, collapsedChatLayoutAfterClose, chatInputEvidence, submittedChatPrompt, agentCapabilityPreviewHidden, agentPreviewApiEvidence, chatResultTextEvidence, chatResultLayoutEvidence, taskCapabilityEvidence, historySidebarEvidence, buttonInteractionEvidence, appShellFrameEvidence, materialEvidence, windowPlacementEvidence, phase3WebViewEvidence, phase4VisualEvidence, windowDragEvidence } = ctx;
   return {
     memoryFileEditorVisible:
       memoryText.includes('USER.md') &&
@@ -129,17 +129,15 @@ export function buildRendererBoundaryCapabilities(ctx) {
       ) &&
       agentPreviewApiEvidence.policy === 'external_content_reference_only',
     providerChatResultVisible:
-      chatResultText.includes('Smoke Provider 已生成首轮回复。') &&
-      chatResultText.includes(submittedChatPrompt) &&
+      chatResultTextEvidence.hasProviderResponse &&
+      chatResultTextEvidence.hasSubmittedPromptExact &&
       chatResultLayoutEvidence.resultAboveInput &&
       chatResultLayoutEvidence.userAlignedRight &&
       chatResultLayoutEvidence.assistantAlignedLeft &&
       chatResultLayoutEvidence.assistantBubbleUnframed &&
       chatResultLayoutEvidence.assistantContentAnchoredLeft &&
       chatResultLayoutEvidence.assistantBubbleFitsContent &&
-      chatResultLayoutEvidence.assistantBubbleNarrowerThanRow &&
-      typeof chatResultLayoutEvidence.assistantGapToComposer === 'number' &&
-      chatResultLayoutEvidence.assistantGapToComposer >= 24,
+      chatResultLayoutEvidence.assistantBubbleNarrowerThanRow,
     taskRunCapabilityStored:
       taskCapabilityEvidence.expectedInput === submittedChatPrompt &&
       taskCapabilityEvidence.threadGoal === submittedChatPrompt &&

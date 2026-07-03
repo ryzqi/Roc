@@ -112,7 +112,7 @@ describe('main kernel bootstrap integration', () => {
   it('loads the preload bundle filename emitted by electron-vite', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8');
 
-    expect(source).toContain("const preloadPath = join(mainModuleDir, '../preload/index.js');");
+    expect(source).toContain("const preloadPath = join(mainModuleDir, '../preload/index.cjs');");
     expect(source).not.toContain("../preload/index.mjs");
   });
 

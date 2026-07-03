@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { waitForCapabilitySelection, waitForTextContent } from './assertions.mjs';
 import { redactSmokeProviderRequest } from './electron-smoke-time.mjs';
 import { buildNativeFeelSummary, summarizeProcessMetrics } from './native-feel.mjs';
-import { clickComposerPopoverChoice, openChatView } from './ui-actions.mjs';
+import { clickComposerPopoverChoice, clickSmokeControl, openChatView } from './ui-actions.mjs';
 
 export async function runSmokeChatDiagnosticsChecks(ctx) {
   const { page, smokeProvider, providerSettingsEvidence, smokeTarget, packagedExe } = ctx;
@@ -12,9 +12,9 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
   await page.hover('[data-testid="chat-skill-trigger"]');
   await page.waitForSelector('[data-testid="turn-skill-smoke-skill"]', { timeout: 5000 });
   await page.hover('[data-testid="chat-tool-trigger"]');
-  await page.click('[data-testid="chat-tool-clear-all"]');
+  await clickSmokeControl(page, '[data-testid="chat-tool-clear-all"]');
   await page.hover('[data-testid="chat-skill-trigger"]');
-  await page.click('[data-testid="chat-skill-clear-all"]');
+  await clickSmokeControl(page, '[data-testid="chat-skill-clear-all"]');
   await waitForCapabilitySelection(page, { mcpCount: 0, skillCount: 0 });
   await clickComposerPopoverChoice(page, '[data-testid="chat-tool-trigger"]', '[data-testid="turn-mcp-smoke-mcp"]');
   await clickComposerPopoverChoice(page, '[data-testid="chat-skill-trigger"]', '[data-testid="turn-skill-smoke-skill"]');
@@ -166,14 +166,7 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
   });
   await page.keyboard.press('Enter');
   try {
-    await page.waitForFunction(
-      () => {
-        const assistantMessages = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]'));
-        const latestAssistant = assistantMessages.at(-1);
-        return (latestAssistant?.textContent ?? '').includes('Smoke Provider 已生成首轮回复。');
-      },
-      { timeout: 5000 }
-    );
+    await waitForTextContent(page, '[data-testid="chat-transcript"]', 'Smoke Provider 已生成首轮回复。', 15000);
   } catch (error) {
     const chatTimeoutDebug = await page.evaluate(async () => {
       const snapshot = await window.roc.tasks.getSnapshot();
@@ -210,6 +203,18 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
   }
+  const normalizeChatText = (value) => value.replace(/\s+/gu, ' ').trim();
+  const chatResultTextNormalized = normalizeChatText(chatResultText);
+  const submittedChatPromptNormalized = normalizeChatText(submittedChatPrompt);
+  const chatResultTextEvidence = {
+    hasProviderResponse: chatResultText.includes('Smoke Provider 已生成首轮回复。'),
+    hasSubmittedPromptExact: chatResultText.includes(submittedChatPrompt),
+    hasSubmittedPromptNormalized: chatResultTextNormalized.includes(submittedChatPromptNormalized),
+    submittedChatPrompt,
+    submittedChatPromptNormalized,
+    chatResultTextPreview: chatResultText.slice(0, 500),
+    chatResultTextNormalizedPreview: chatResultTextNormalized.slice(0, 500)
+  };
   providerSettingsEvidence.openaiRotatedSecretUsed = smokeProvider.requests.some(
     (request) => request.authorization === 'Bearer sk-smoke-ui-openai-rotated'
   );
@@ -244,6 +249,23 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
     const assistantContentRect = assistantContent instanceof HTMLElement ? assistantContent.getBoundingClientRect() : null;
     const composer = input.closest('.composer');
     const composerRect = composer instanceof HTMLElement ? composer.getBoundingClientRect() : null;
+    const bottomStack = document.querySelector('.chat-bottom-stack');
+    const bottomStackRect = bottomStack instanceof HTMLElement ? bottomStack.getBoundingClientRect() : null;
+    const chatView = document.querySelector('[data-testid="chat-view"]');
+    const chatViewRect = chatView instanceof HTMLElement ? chatView.getBoundingClientRect() : null;
+    const scrollPlane = document.querySelector('.chat-empty-plane');
+    const scrollPlaneRect = scrollPlane instanceof HTMLElement ? scrollPlane.getBoundingClientRect() : null;
+    const toRoundedRect = (rect) =>
+      rect === null
+        ? null
+        : {
+            top: Math.round(rect.top),
+            bottom: Math.round(rect.bottom),
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          };
     return {
       resultAboveInput: userRect.bottom <= inputRect.top && assistantRect.bottom <= inputRect.top,
       userAlignedRight: window.getComputedStyle(latestUser).justifyContent === 'flex-end',
@@ -263,6 +285,19 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
         assistantBubbleRect !== null && assistantBubbleRect.width <= assistantRect.width - 24,
       assistantGapToComposer:
         composerRect !== null ? Math.round(composerRect.top - assistantRect.bottom) : null,
+      assistantGapToBottomStack:
+        bottomStackRect !== null ? Math.round(bottomStackRect.top - assistantRect.bottom) : null,
+      rects: {
+        chatView: toRoundedRect(chatViewRect),
+        scrollPlane: toRoundedRect(scrollPlaneRect),
+        bottomStack: toRoundedRect(bottomStackRect),
+        composer: toRoundedRect(composerRect),
+        input: toRoundedRect(inputRect),
+        latestUser: toRoundedRect(userRect),
+        latestAssistant: toRoundedRect(assistantRect),
+        assistantBubble: toRoundedRect(assistantBubbleRect),
+        assistantContent: toRoundedRect(assistantContentRect)
+      },
       userMessageUserSelect: window.getComputedStyle(latestUser).userSelect,
       assistantMessageUserSelect: window.getComputedStyle(latestAssistant).userSelect,
       inputUserSelect: window.getComputedStyle(input).userSelect
@@ -392,6 +427,7 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
     submittedChatPrompt,
     chatInputEvidence,
     chatResultText,
+    chatResultTextEvidence,
     chatResultLayoutEvidence,
     taskCapabilityEvidence,
     historySidebarEvidence,

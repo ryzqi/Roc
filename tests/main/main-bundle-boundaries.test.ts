@@ -14,6 +14,14 @@ describe('main bundle boundaries', () => {
     expect(external).toEqual(expect.arrayContaining(['electron']));
   });
 
+  it('keeps the preload output filename aligned with the main process preload path', () => {
+    const output = config.preload?.build?.rollupOptions?.output;
+    const mainEntry = readFileSync(new URL('../../src/main/index.ts', import.meta.url), 'utf8');
+
+    expect(output).toMatchObject({ entryFileNames: '[name].cjs', format: 'cjs' });
+    expect(mainEntry).toContain("const preloadPath = join(mainModuleDir, '../preload/index.cjs');");
+  });
+
   it('does not rely on CommonJS __dirname in the ESM main process entry', () => {
     const mainEntry = readFileSync(new URL('../../src/main/index.ts', import.meta.url), 'utf8');
 

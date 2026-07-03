@@ -20,7 +20,7 @@ export function registerFilesDialogIpc(
         const smokeWorkspace = await workspaceProvider.getCurrentWorkspace();
         if (smokeWorkspace !== null) {
           return {
-            filePaths: [`${smokeWorkspace.path}\\phase-three-notes.txt`]
+            filePaths: [`${smokeWorkspace.path}\\assets\\smoke-image.png`]
           };
         }
       }

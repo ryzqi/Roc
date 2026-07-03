@@ -158,6 +158,21 @@ describe('settings model helpers', () => {
     });
   });
 
+  it('builds the fixed llama.cpp provider config with a credential ref when API key is provided', () => {
+    const draft = {
+      ...createProviderDraft('llama_cpp'),
+      endpoint: 'http://127.0.0.1:9090/v1',
+      modelsText: 'qwen3.5-4b | Qwen 3.5 4B',
+      apiKey: '123456'
+    };
+
+    expect(buildProviderConfigFromDraft(draft)).toMatchObject({
+      id: 'llama_cpp',
+      endpoint: 'http://127.0.0.1:9090/v1',
+      credentialRef: 'secret:llama_cpp'
+    });
+  });
+
 
   it('replaces a saved llama.cpp provider with a null credentialRef when API key is cleared before save', () => {
     const settings = defaultSettings();

@@ -39,6 +39,7 @@ export function ChatTranscriptPanel({
   onApprovalDecision
 }: ChatTranscriptPanelProps): React.JSX.Element {
   const rafHandleRef = useRef<number | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   const measureAtBottom = useCallback((): boolean => {
@@ -48,6 +49,23 @@ export function ChatTranscriptPanel({
     }
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     return distanceFromBottom <= BOTTOM_THRESHOLD_PX;
+  }, [scrollContainerRef]);
+
+  const scheduleAutoFollowScroll = useCallback((): void => {
+    const container = scrollContainerRef.current;
+    if (container === null) {
+      return;
+    }
+    if (rafHandleRef.current !== null) {
+      return;
+    }
+    rafHandleRef.current = requestAnimationFrame(() => {
+      rafHandleRef.current = null;
+      const node = scrollContainerRef.current;
+      if (node !== null) {
+        node.scrollTo(buildStreamingAutoFollowScrollOptions(node.scrollHeight));
+      }
+    });
   }, [scrollContainerRef]);
 
   useEffect(() => {
@@ -83,17 +101,27 @@ export function ChatTranscriptPanel({
     if (!isAtBottom) {
       return;
     }
-    if (rafHandleRef.current !== null) {
+    scheduleAutoFollowScroll();
+  }, [isAtBottom, liveSignal, messages, scheduleAutoFollowScroll]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (transcript === null) {
       return;
     }
-    rafHandleRef.current = requestAnimationFrame(() => {
-      rafHandleRef.current = null;
-      const node = scrollContainerRef.current;
-      if (node !== null) {
-        node.scrollTo(buildStreamingAutoFollowScrollOptions(node.scrollHeight));
+    if (typeof ResizeObserver !== 'function') {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (isAtBottom) {
+        scheduleAutoFollowScroll();
       }
     });
-  }, [isAtBottom, liveSignal, messages, scrollContainerRef]);
+    observer.observe(transcript);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isAtBottom, scheduleAutoFollowScroll]);
 
   useEffect(() => {
     return () => {
@@ -114,7 +142,7 @@ export function ChatTranscriptPanel({
 
   return (
     <>
-      <div className="chat-transcript" data-testid="chat-transcript">
+      <div className="chat-transcript" data-testid="chat-transcript" ref={transcriptRef}>
         {messages.map((message) => (
           <ChatMessageRow key={message.key} message={message} onApprovalDecision={onApprovalDecision} />
         ))}

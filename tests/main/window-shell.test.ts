@@ -9,7 +9,7 @@ import {
 
 describe('immersive window shell', () => {
   it('builds a frameless window with hidden system menu bar', () => {
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs', 'C:/roc/resources/icon.ico');
+    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico');
 
     expect(options.title).toBe('Roc');
     expect(options.icon).toBe('C:/roc/resources/icon.ico');
@@ -17,7 +17,7 @@ describe('immersive window shell', () => {
     expect(options.autoHideMenuBar).toBe(true);
     expect(options.show).toBe(false);
     expect(options.backgroundMaterial).toBe('mica');
-    expect(options.webPreferences?.preload).toBe('C:/roc/dist/preload/index.mjs');
+    expect(options.webPreferences?.preload).toBe('C:/roc/dist/preload/index.cjs');
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(false);
@@ -42,7 +42,7 @@ describe('immersive window shell', () => {
         }
       ]
     );
-    const options = buildMainWindowOptions('C:/roc/dist/preload/index.mjs', 'C:/roc/resources/icon.ico', restored);
+    const options = buildMainWindowOptions('C:/roc/dist/preload/index.cjs', 'C:/roc/resources/icon.ico', restored);
 
     expect(restored).toEqual({
       x: 1920,

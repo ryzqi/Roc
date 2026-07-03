@@ -107,6 +107,46 @@ describe('chat transcript panel', () => {
     expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 1000 });
   });
 
+  it('keeps following the bottom when rendered transcript content resizes', async () => {
+    const scrollContainer = document.createElement('div');
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class TestResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
+    scrollContainer.scrollTo = vi.fn();
+
+    await act(async () => {
+      root.render(
+        React.createElement(ChatTranscriptPanel, {
+          messages: createMessages(),
+          liveSignal: 'run_1|18|0',
+          scrollContainerRef: { current: scrollContainer }
+        })
+      );
+    });
+    await flushAnimationFrame();
+    vi.mocked(scrollContainer.scrollTo).mockClear();
+    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 1000, scrollTop: 400 });
+
+    expect(resizeCallback).not.toBeNull();
+    await act(async () => {
+      resizeCallback?.([], new TestResizeObserver(resizeCallback));
+    });
+    await flushAnimationFrame();
+
+    expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 1000 });
+  });
+
   it('renders user image attachment metadata', async () => {
     const scrollContainer = document.createElement('div');
     setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
