@@ -17,7 +17,7 @@ export function buildRendererBoundaryCapabilities(ctx) {
       providerSettingsEvidence.addProviderEntryVisible &&
       providerSettingsEvidence.headerChromeRemoved &&
       providerSettingsEvidence.apiKeyHelpRemoved &&
-      providerSettingsEvidence.createRequiresApiKey &&
+      providerSettingsEvidence.createWithoutApiKeyAllowed &&
       providerSettingsEvidence.editWithoutApiKeyAllowed &&
       providerSettingsEvidence.detailScrollReachable &&
       providerSettingsEvidence.searchMatchesNameAndId &&
@@ -31,6 +31,8 @@ export function buildRendererBoundaryCapabilities(ctx) {
       providerSettingsEvidence.anthropicCreated &&
       providerSettingsEvidence.anthropicSecretStored &&
       providerSettingsEvidence.anthropicSecretCleared &&
+      providerSettingsEvidence.chineseProviderNameVisible &&
+      providerSettingsEvidence.chineseProviderAsciiId &&
       providerSettingsEvidence.openaiReady &&
       providerSettingsEvidence.defaultModelSelectable &&
       providerSettingsEvidence.providerTestFeedbackVisible &&

@@ -90,6 +90,37 @@ describe('settings model helpers', () => {
   });
 
 
+  it('builds a create-mode provider save request without requiring an API key', () => {
+    const settings = defaultSettings();
+    const permissions = defaultPermissions();
+    const draft = {
+      ...createProviderDraft('openai_compatible'),
+      name: 'Provider Without Key',
+      endpoint: 'https://openai.example.test/v1',
+      apiKey: '',
+      modelsText: 'gpt-x | GPT X'
+    };
+
+    const provider = buildProviderConfigFromDraft(draft);
+    const request = upsertProviderInSettingsSaveRequest(
+      buildSettingsSaveRequest({
+        settings,
+        providers: [],
+        defaultModelId: null,
+        permissions
+      }),
+      provider
+    );
+
+    expect(provider).toMatchObject({
+      id: 'provider-without-key',
+      name: 'Provider Without Key',
+      credentialRef: 'secret:provider-without-key'
+    });
+    expect(request.providers).toEqual([provider]);
+  });
+
+
   it('rejects create-mode provider ids that would collide with an existing provider', () => {
     expect(() =>
       assertProviderCreateIdAvailable(

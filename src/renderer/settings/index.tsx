@@ -135,9 +135,6 @@ export function SettingsView({
       provider = buildProviderConfigFromDraft(providerDraft);
       if (providerDraft.mode === 'create') {
         assertProviderCreateIdAvailable(state.providers, provider.id);
-        if (apiKey.length === 0) {
-          throw new Error('新建 Provider 必须填写 API Key。');
-        }
       }
     } catch (error) {
       setProviderDraftError(error instanceof Error ? error.message : 'Provider 草稿无效。');

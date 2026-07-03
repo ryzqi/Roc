@@ -199,6 +199,21 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
     );
     throw error;
   }
+  await page.waitForFunction(
+    () => {
+      const input = document.querySelector('[data-testid="chat-input"]');
+      const latestUser = Array.from(document.querySelectorAll('[data-testid="chat-message-user"]')).at(-1);
+      const latestAssistant = Array.from(document.querySelectorAll('[data-testid="chat-message-assistant"]')).at(-1);
+      if (!(input instanceof HTMLElement) || !(latestUser instanceof HTMLElement) || !(latestAssistant instanceof HTMLElement)) {
+        return false;
+      }
+      const inputRect = input.getBoundingClientRect();
+      return latestUser.getBoundingClientRect().bottom <= inputRect.top &&
+        latestAssistant.getBoundingClientRect().bottom <= inputRect.top;
+    },
+    undefined,
+    { timeout: 5000 }
+  );
   const chatResultText = await page.textContent('[data-testid="chat-transcript"]');
   if (chatResultText === null) {
     throw new Error('Smoke could not read chat result text.');
@@ -400,13 +415,17 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
   };
   const processMetricsSummary = summarizeProcessMetrics(phase6ApiEvidence.sample);
   const ipcSummary = phase6ApiEvidence.sample.ipc;
-  const nativeConfirmIpcSamples = phase6ApiEvidence.sample.timing.samples.filter(
+  const diagnosticNativeConfirmIpcSamples = phase6ApiEvidence.sample.timing.samples.filter(
     (sample) =>
       sample.phase === 'ipc_call' &&
       sample.label === 'roc:shell:confirm' &&
       sample.metadata?.channel === 'roc:shell:confirm' &&
       sample.metadata?.ok === true
   );
+  const nativeConfirmIpcSamples = [
+    ...(Array.isArray(ctx.workbenchNativeConfirmIpcSamples) ? ctx.workbenchNativeConfirmIpcSamples : []),
+    ...diagnosticNativeConfirmIpcSamples
+  ];
   const nativeFeel = buildNativeFeelSummary({
     sample: phase6ApiEvidence.sample,
     smokeTarget: {

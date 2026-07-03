@@ -231,6 +231,22 @@ export async function runSmokeWorkbenchGitTerminalChecks(ctx) {
   await page.click('[data-testid="workbench-git-commit"]');
   await page.waitForFunction(() => document.querySelector('[data-testid="workbench-git-changes"]')?.textContent?.includes('工作区干净。') === true);
   const gitLastPushText = await page.textContent('.git-last-result');
+  const workbenchNativeConfirmIpcSamples = await page.evaluate(async () => {
+    const sample = await window.roc.diagnostics.samplePerformance({
+      mode: 'smoke',
+      memoryBudgetMb: 300
+    });
+    if (!sample.ok) {
+      throw new Error(sample.error.message);
+    }
+    return sample.data.timing.samples.filter(
+      (item) =>
+        item.phase === 'ipc_call' &&
+        item.label === 'roc:shell:confirm' &&
+        item.metadata?.channel === 'roc:shell:confirm' &&
+        item.metadata.ok === true
+    );
+  });
   await page.evaluate(() => {
     globalThis.__rocSmokeTerminalEvents = [];
     if (typeof globalThis.__rocSmokeTerminalOutputDispose === 'function') {
@@ -378,6 +394,7 @@ export async function runSmokeWorkbenchGitTerminalChecks(ctx) {
     gitLastCommitText,
     gitCommitResetState,
     gitLastPushText,
+    workbenchNativeConfirmIpcSamples,
     terminalWorkbenchStyleEvidence,
     terminalLiveOutput,
     terminalSecondOutput,

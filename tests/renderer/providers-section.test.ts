@@ -90,7 +90,7 @@ describe('providers section', () => {
     const html = renderToStaticMarkup(
       React.createElement(ProvidersSection, {
         draft: createProviderDraft('openai_compatible'),
-        draftError: 'API Key 是必填项。',
+        draftError: 'Provider endpoint 不能为空。',
         onClearProviderSecret: async () => {},
         onDeleteProvider: async () => {},
         onEditProvider: () => {},
@@ -106,7 +106,7 @@ describe('providers section', () => {
     );
 
     expect(html).toContain('data-testid="provider-draft-status"');
-    expect(html).toContain('API Key 是必填项。');
+    expect(html).toContain('Provider endpoint 不能为空。');
   });
 
   it('renders fixed NVIDIA details without Fixed chrome and uses the shared model list editor', () => {

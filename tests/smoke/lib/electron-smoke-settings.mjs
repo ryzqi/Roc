@@ -15,7 +15,7 @@ export async function runSmokeSettingsChecks(ctx) {
     addProviderEntryVisible: false,
     headerChromeRemoved: false,
     apiKeyHelpRemoved: false,
-    createRequiresApiKey: false,
+    createWithoutApiKeyAllowed: false,
     editWithoutApiKeyAllowed: false,
     detailScrollReachable: false,
     searchMatchesNameAndId: false,
@@ -29,6 +29,8 @@ export async function runSmokeSettingsChecks(ctx) {
     anthropicCreated: false,
     anthropicSecretStored: false,
     anthropicSecretCleared: false,
+    chineseProviderNameVisible: false,
+    chineseProviderAsciiId: false,
     openaiReady: false,
     defaultModelSelectable: false,
     providerTestFeedbackVisible: false,
@@ -227,20 +229,49 @@ export async function runSmokeSettingsChecks(ctx) {
   await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
   await page.fill('[data-testid="provider-draft-models"]', 'smoke-ui-openai-model');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
-  const openaiMissingKeyState = await page.evaluate(async (providerName) => {
+  await page.waitForFunction(
+    async (providerName) => {
+      const result = await window.roc.settings.get();
+      if (!result.ok) {
+        return false;
+      }
+      const provider = result.data.providers.find((entry) => entry.name === providerName);
+      const apiKeyInput = document.querySelector('[data-testid="provider-draft-api-key"]');
+      return (
+        provider !== undefined &&
+        result.data.providerSecretStatus.find((entry) => entry.providerId === provider.id)?.stored === false &&
+        apiKeyInput instanceof HTMLInputElement &&
+        apiKeyInput.value === '' &&
+        document.querySelector('[data-testid="provider-draft-status"]') === null
+      );
+    },
+    openaiProviderName,
+    { timeout: 5000 }
+  );
+  const openaiWithoutKeyState = await page.evaluate(async (providerName) => {
     const result = await window.roc.settings.get();
     if (!result.ok) {
       throw new Error(result.error.message);
     }
+    const provider = result.data.providers.find((entry) => entry.name === providerName);
+    const apiKeyInput = document.querySelector('[data-testid="provider-draft-api-key"]');
     return {
-      providerExists: result.data.providers.some((entry) => entry.name === providerName),
+      providerId: provider?.id ?? null,
+      providerExists: provider !== undefined,
+      secretStored:
+        provider === undefined
+          ? null
+          : result.data.providerSecretStatus.find((entry) => entry.providerId === provider.id)?.stored === true,
+      apiKeyValue: apiKeyInput instanceof HTMLInputElement ? apiKeyInput.value : null,
       statusText: document.querySelector('[data-testid="provider-draft-status"]')?.textContent ?? null
     };
   }, openaiProviderName);
-  providerSettingsEvidence.createRequiresApiKey =
-    openaiMissingKeyState.providerExists === false &&
-    typeof openaiMissingKeyState.statusText === 'string' &&
-    openaiMissingKeyState.statusText.includes('API Key');
+  providerSettingsEvidence.createWithoutApiKeyAllowed =
+    openaiWithoutKeyState.providerExists &&
+    openaiWithoutKeyState.providerId === 'smoke-ui-openai' &&
+    openaiWithoutKeyState.secretStored === false &&
+    openaiWithoutKeyState.apiKeyValue === '' &&
+    openaiWithoutKeyState.statusText === null;
   await page.fill('[data-testid="provider-draft-api-key"]', 'sk-smoke-ui-openai');
   await clickSmokeControl(page, '[data-testid="provider-save"]');
   await page.waitForFunction(
@@ -289,6 +320,55 @@ export async function runSmokeSettingsChecks(ctx) {
   providerSettingsEvidence.openaiSlugGenerated = openaiProviderId === 'smoke-ui-openai';
   providerSettingsEvidence.openaiSecretStored = openaiProviderState.secretStored;
   providerSettingsEvidence.openaiApiKeyCleared = openaiProviderState.apiKeyValue === '';
+  await clickSmokeControl(page, '[data-testid="provider-add-openai"]');
+  const chineseProviderName = '中文模型供应商';
+  await page.fill('[data-testid="provider-draft-name"]', chineseProviderName);
+  await page.fill('[data-testid="provider-draft-endpoint"]', smokeProvider.endpoint);
+  await page.fill('[data-testid="provider-draft-models"]', 'zh-smoke-model | 中文模型');
+  await clickSmokeControl(page, '[data-testid="provider-save"]');
+  await page.waitForFunction(
+    async (providerName) => {
+      const result = await window.roc.settings.get();
+      if (!result.ok) {
+        return false;
+      }
+      const provider = result.data.providers.find((entry) => entry.name === providerName);
+      return provider !== undefined && /^[A-Za-z0-9_-]+$/.test(provider.id) && provider.id.startsWith('provider-');
+    },
+    chineseProviderName,
+    { timeout: 5000 }
+  );
+  const chineseProviderState = await page.evaluate(async (providerName) => {
+    const result = await window.roc.settings.get();
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    const provider = result.data.providers.find((entry) => entry.name === providerName);
+    return {
+      providerId: provider?.id ?? null,
+      providerName: provider?.name ?? null,
+      providerIds: result.data.providers.map((entry) => `${entry.id}:${entry.name}`),
+      statusText: document.querySelector('[data-testid="provider-draft-status"]')?.textContent ?? null,
+      listText: document.querySelector('[data-testid="provider-list"]')?.textContent ?? ''
+    };
+  }, chineseProviderName);
+  if (chineseProviderState.providerId === null) {
+    throw new Error(
+      `missing Chinese provider for ${chineseProviderName}; status=${chineseProviderState.statusText}; providers=${chineseProviderState.providerIds.join(',')}`
+    );
+  }
+  const chineseProviderId = chineseProviderState.providerId;
+  providerSettingsEvidence.chineseProviderAsciiId =
+    /^[A-Za-z0-9_-]+$/.test(chineseProviderId) &&
+    /^provider-[a-f0-9]{8}$/.test(chineseProviderId);
+  await page.fill('[data-testid="provider-search"]', chineseProviderName);
+  await page.waitForSelector(`[data-testid="provider-list-item-${chineseProviderId}"]`, { timeout: 5000 });
+  providerSettingsEvidence.chineseProviderNameVisible =
+    chineseProviderState.providerName === chineseProviderName &&
+    chineseProviderState.listText.includes(chineseProviderName) &&
+    ((await page.textContent(`[data-testid="provider-list-item-${chineseProviderId}"]`)) ?? '').includes(chineseProviderName);
+  await page.fill('[data-testid="provider-search"]', '');
+  await clickSmokeControl(page, `[data-testid="provider-list-item-${openaiProviderId}"]`);
   const providerDetailText = await page.textContent('[data-testid="provider-detail"]');
   providerSettingsEvidence.apiKeyHelpRemoved =
     providerDetailText !== null &&

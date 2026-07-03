@@ -237,6 +237,30 @@ describe('settings model helpers', () => {
   });
 
 
+  it('builds stable ASCII provider ids while preserving Chinese provider names', () => {
+    const firstId = buildProviderIdFromName('硅基流动');
+    const secondId = buildProviderIdFromName('硅基流动');
+
+    expect(firstId).toBe(secondId);
+    expect(firstId).toMatch(/^provider-[a-f0-9]{8}$/u);
+
+    const draft = {
+      ...createProviderDraft('openai_compatible'),
+      name: '硅基流动',
+      endpoint: 'https://api.siliconflow.cn/v1',
+      apiKey: '',
+      modelsText: 'Qwen/Qwen3-32B | 通义千问 32B'
+    };
+
+    const provider = buildProviderConfigFromDraft(draft);
+
+    expect(provider.name).toBe('硅基流动');
+    expect(provider.id).toBe(firstId);
+    expect(provider.id).toMatch(/^[A-Za-z0-9_-]+$/u);
+    expect(provider.credentialRef).toBe(`secret:${firstId}`);
+  });
+
+
   it('parses model lines into enabled provider model configs', () => {
     expect(parseProviderModelDraft('gpt-4.1 | GPT 4.1\nclaude-sonnet-4-5')).toEqual([
       {

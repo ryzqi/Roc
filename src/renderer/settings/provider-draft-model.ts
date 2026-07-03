@@ -102,6 +102,7 @@ const editableProviderTypes: readonly EditableProviderType[] = [
 ];
 
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const PROVIDER_NAME_MEANINGFUL_PATTERN = /[\p{L}\p{N}]/u;
 
 export function createProviderDraft(type: EditableProviderType, provider?: ProviderConfig): ProviderDraft {
   if (!editableProviderTypes.includes(type)) {
@@ -266,10 +267,25 @@ export function buildProviderIdFromName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  if (id.length === 0 || !PROVIDER_ID_PATTERN.test(id)) {
+  if (id.length === 0) {
+    if (!PROVIDER_NAME_MEANINGFUL_PATTERN.test(normalizedName)) {
+      throw new Error('Provider 名称无法生成合法 ID，请使用字母或数字。');
+    }
+    return `provider-${hashProviderName(normalizedName)}`;
+  }
+  if (!PROVIDER_ID_PATTERN.test(id)) {
     throw new Error('Provider 名称无法生成合法 ID，请使用字母或数字。');
   }
   return id;
+}
+
+function hashProviderName(name: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < name.length; index += 1) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
 
 function resolveProviderDraftId(draft: ProviderDraft): string {

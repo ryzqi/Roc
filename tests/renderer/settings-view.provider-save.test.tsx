@@ -36,6 +36,103 @@ describe('SettingsView provider save', () => {
     vi.unstubAllGlobals();
   });
 
+  it('creates a custom provider without saving a secret when the API key is empty', async () => {
+    const snapshot = buildSettingsSnapshot({ defaultModelId: null });
+    const save = vi.fn(async (request: unknown) => {
+      const providers = (request as { providers: SettingsSnapshot['providers'] }).providers;
+      return {
+        ok: true as const,
+        data: {
+          ...snapshot,
+          providers,
+          providerSecretStatus: providers.map((provider) => ({
+            providerId: provider.id,
+            stored: provider.id === 'llama_cpp'
+          }))
+        }
+      };
+    });
+    const setProviderSecret = vi.fn();
+    const updateLoadedState = vi.fn();
+    const client: RocClient = {
+      api: {
+        settings: {
+          get: vi.fn(async () => ({ ok: true as const, data: snapshot })),
+          save,
+          testProvider: vi.fn(),
+          setProviderSecret,
+          clearProviderSecret: vi.fn()
+        }
+      }
+    } as unknown as RocClient;
+
+    await act(async () => {
+      root.render(
+        React.createElement(SettingsView, {
+          client,
+          state: {
+            settings: snapshot.settings,
+            providers: snapshot.providers,
+            defaultModelId: snapshot.defaultModelId,
+            providerSecretStatus: snapshot.providerSecretStatus,
+            permissions: snapshot.permissions,
+            mcpServers: snapshot.mcpServers,
+            skills: snapshot.skills,
+            hookSettings: snapshot.hooks,
+            hostIntegration: snapshot.hostIntegration,
+            providerTestStatus: null
+          },
+          updateLoadedState
+        })
+      );
+    });
+
+    await act(async () => {
+      queryByTestId('provider-add-openai')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    setInputValue('provider-draft-name', 'Provider Without Key');
+    setInputValue('provider-draft-endpoint', 'https://openai.example.test/v1');
+    setInputValue('provider-draft-models', 'gpt-x | GPT X');
+
+    await act(async () => {
+      queryByTestId('provider-save')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(setProviderSecret).not.toHaveBeenCalled();
+    const request = save.mock.calls[0]?.[0] as {
+      providers: Array<{ id: string; name: string; credentialRef: string | null }>;
+    };
+    expect(request.providers).toContainEqual(
+      expect.objectContaining({
+        id: 'provider-without-key',
+        name: 'Provider Without Key',
+        credentialRef: 'secret:provider-without-key'
+      })
+    );
+    expect(queryByTestId('provider-draft-status')).toBeNull();
+    const apiKeyInput = queryByTestId('provider-draft-api-key') as HTMLInputElement | null;
+    expect(apiKeyInput?.value).toBe('');
+    expect(updateLoadedState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providers: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'provider-without-key',
+            name: 'Provider Without Key',
+            credentialRef: 'secret:provider-without-key'
+          })
+        ]),
+        providerSecretStatus: expect.arrayContaining([
+          expect.objectContaining({
+            providerId: 'provider-without-key',
+            stored: false
+          })
+        ])
+      })
+    );
+  });
+
   it('does not preserve a stale llama.cpp credentialRef when saving with an empty API key', async () => {
     const snapshot = buildSettingsSnapshot();
     const save = vi.fn(async (request: unknown) => ({
