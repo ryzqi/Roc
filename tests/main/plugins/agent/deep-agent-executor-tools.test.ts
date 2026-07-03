@@ -22,6 +22,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('本轮工作流：创建后台任务。');
     expect(buildInput.systemPrompt).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
     expect(buildInput.systemPrompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
+    expect(buildInput.systemPrompt).toContain('write_file only creates new files. To change an existing file, read it first, then use edit_file with an exact replacement.');
     expect(buildInput.systemPrompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
     expect(buildInput.systemPrompt).toContain('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
     expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.');

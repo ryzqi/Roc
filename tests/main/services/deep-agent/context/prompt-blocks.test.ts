@@ -57,6 +57,7 @@ describe('prompt blocks', () => {
     expect(prompt).toContain('<!-- BLOCK:context_recall:workspace:');
     expect(prompt).toContain('session_search');
     expect(prompt).toContain('F:\\Code\\Roc');
+    expect(prompt).toContain('write_file only creates new files. To change an existing file, read it first, then use edit_file with an exact replacement.');
   });
 
   it('formats tools without descriptions without leaking undefined into the prompt', () => {
@@ -107,6 +108,7 @@ describe('prompt blocks', () => {
     expect(prompt).not.toContain('Do not call edit_file');
     expect(prompt).not.toContain('Do not call delete_file');
     expect(prompt).not.toContain('Do not call run_shell_command');
+    expect(prompt).not.toContain('write_file only creates new files.');
     expect(prompt).not.toContain('After write_file or edit_file');
   });
 
