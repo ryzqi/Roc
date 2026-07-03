@@ -8,11 +8,14 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatCancelRunResult,
+  ChatRunEventsReplayRequest,
+  ChatRunEventsReplayResult,
   ChatRunEvent,
   ChatResumeRunRequest,
   ChatResumeRunResult,
   ChatStartRunRequest,
   ChatStartRunResult,
+  ActiveChatRun,
   DeepAgentConfigPreview,
   DiagnosticPackage,
   DiagnosticPackageRequest,
@@ -207,6 +210,8 @@ export type RocPreloadApi = {
     startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;
     cancelRun: (runId: string) => Promise<IpcResult<ChatCancelRunResult>>;
     resumeRun: (request: ChatResumeRunRequest) => Promise<IpcResult<ChatResumeRunResult>>;
+    getRunEvents: (request: ChatRunEventsReplayRequest) => Promise<IpcResult<ChatRunEventsReplayResult>>;
+    getActiveRun: (request: { threadId: string }) => Promise<IpcResult<ActiveChatRun | null>>;
     onRunEvent: (callback: (event: ChatRunEvent) => void) => () => void;
   };
   workspace: {

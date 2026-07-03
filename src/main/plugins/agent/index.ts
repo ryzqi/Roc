@@ -5,7 +5,10 @@ import type {
   AgentRuntimeStatus,
   AppSettings,
   ApprovalMode,
+  ActiveChatRun,
   ChatCancelRunResult,
+  ChatRunEventsReplayRequest,
+  ChatRunEventsReplayResult,
   ChatResumeDecision,
   ChatResumeRunRequest,
   ChatResumeRunResult,
@@ -17,6 +20,7 @@ import type {
   SessionMessageEntry,
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
+  SequencedChatRunEvent,
   SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
@@ -27,6 +31,7 @@ import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
+import { AgentRunEventLog } from './run-event-log';
 import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
 import { AgentPluginRuntime } from './runtime';
 import type { AgentLifecycleHookEmitter } from './runtime-types';
@@ -107,6 +112,28 @@ const chatCancelRunResultSchema = z.object({
   cancelled: z.boolean()
 }) satisfies z.ZodType<ChatCancelRunResult>;
 
+const chatRunEventsReplayRequestSchema = z.object({
+  runId: z.string().trim().min(1),
+  afterSequence: z.number().int().min(0)
+}) satisfies z.ZodType<ChatRunEventsReplayRequest>;
+
+const sequencedChatRunEventSchema = z.custom<SequencedChatRunEvent>();
+
+const chatRunEventsReplayResultSchema = z.object({
+  runId: z.string(),
+  events: z.array(sequencedChatRunEventSchema)
+}) satisfies z.ZodType<ChatRunEventsReplayResult>;
+
+const activeChatRunSchema = z.object({
+  runId: z.string(),
+  threadId: z.string(),
+  status: z.enum(['running', 'recovering', 'waiting_user'])
+}) satisfies z.ZodType<ActiveChatRun>;
+
+const chatActiveRunRequestSchema = z.object({
+  threadId: z.string().trim().min(1)
+});
+
 const sessionListInputSchema = z.object({
   threadId: z.string(),
   limit: z.number().int().positive().optional()
@@ -167,6 +194,8 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.start', chatStartRunRequestSchema, chatStartRunResultSchema),
   descriptor('agent.run.cancel', z.object({ runId: z.string() }), chatCancelRunResultSchema),
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
+  descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
+  descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
   descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
   descriptor('agent.sessions.search', sessionSearchInputSchema, sessionSearchResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
@@ -220,12 +249,13 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
-        modelFactory,
-        pluginId,
-        repository: new AgentSessionRepository(db),
-        status: options.status,
-        statusProvider: options.statusProvider
-      });
+      modelFactory,
+      pluginId,
+      repository: new AgentSessionRepository(db),
+      runEventLog: new AgentRunEventLog(db),
+      status: options.status,
+      statusProvider: options.statusProvider
+    });
       registerAgentCapabilities(context, runtime, options);
     },
     shutdown: async () => {
@@ -350,9 +380,15 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
     runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[5], async (input) =>
-    runtime.listSessionMessages(input as { threadId: string; limit?: number })
+    runtime.listRunEvents(chatRunEventsReplayRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[6], async (input) =>
+    runtime.getActiveRun(chatActiveRunRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[7], async (input) =>
+    runtime.listSessionMessages(input as { threadId: string; limit?: number })
+  );
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[8], async (input) =>
     runtime.searchSessionMessages(input as SessionMessageSearchRequest)
   );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {

@@ -23,6 +23,8 @@ const agentCapabilities = [
   'agent.run.start',
   'agent.run.cancel',
   'agent.run.resume',
+  'agent.run.events.list',
+  'agent.run.active.get',
   'agent.sessions.list',
   'agent.sessions.search'
 ];

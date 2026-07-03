@@ -67,6 +67,8 @@
     { "key": "chatStartRun", "channel": "roc:chat:start-run" },
     { "key": "chatCancelRun", "channel": "roc:chat:cancel-run" },
     { "key": "chatResumeRun", "channel": "roc:chat:resume-run" },
+    { "key": "chatGetRunEvents", "channel": "roc:chat:get-run-events" },
+    { "key": "chatGetActiveRun", "channel": "roc:chat:get-active-run" },
     { "key": "workspaceGetCurrent", "channel": "roc:workspace:get-current" },
     { "key": "workspaceSelect", "channel": "roc:workspace:select" },
     { "key": "workspaceSelectFromDialog", "channel": "roc:workspace:select-from-dialog" },

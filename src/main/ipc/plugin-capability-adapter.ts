@@ -45,6 +45,8 @@ export const pluginCapabilityMappings = [
   mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', firstArg),
   mapping('chat', 'chat.cancelRun', ipcChannels.chatCancelRun, 'agent.run.cancel', idInput('runId')),
   mapping('chat', 'chat.resumeRun', ipcChannels.chatResumeRun, 'agent.run.resume', firstArg),
+  mapping('chat', 'chat.getRunEvents', ipcChannels.chatGetRunEvents, 'agent.run.events.list', firstArg),
+  mapping('chat', 'chat.getActiveRun', ipcChannels.chatGetActiveRun, 'agent.run.active.get', firstArg),
   mapping('sessions', 'sessions.list', ipcChannels.sessionMessagesList, 'agent.sessions.list', firstArg),
   mapping('sessions', 'sessions.search', ipcChannels.sessionMessagesSearch, 'agent.sessions.search', firstArg),
   mapping('tasks', 'tasks.getSnapshot', ipcChannels.tasksGetSnapshot, 'task.snapshot.get', emptyInput),

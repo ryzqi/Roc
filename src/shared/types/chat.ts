@@ -219,6 +219,29 @@ export type ChatRunEvent =
       suggestion?: string;
     };
 
+export type SequencedChatRunEvent = {
+  runId: string;
+  sequence: number;
+  event: ChatRunEvent;
+  createdAt: string;
+};
+
+export type ChatRunEventsReplayRequest = {
+  runId: string;
+  afterSequence: number;
+};
+
+export type ChatRunEventsReplayResult = {
+  runId: string;
+  events: SequencedChatRunEvent[];
+};
+
+export type ActiveChatRun = {
+  runId: string;
+  threadId: string;
+  status: 'running' | 'recovering' | 'waiting_user';
+};
+
 export type ChatStartRunRequest = {
   input: string;
   mode: ChatRunMode;

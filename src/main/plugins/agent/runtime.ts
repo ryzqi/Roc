@@ -6,6 +6,8 @@ import type {
   ChatAssistantBlock,
   ChatCancelRunResult,
   ChatInterruptPayload,
+  ChatRunEventsReplayRequest,
+  ChatRunEventsReplayResult,
   ChatRunEvent,
   ChatResumeRunRequest,
   ChatResumeRunResult,
@@ -20,6 +22,7 @@ import type {
   TaskRun,
   WorkflowHint
 } from '../../../shared/types';
+import type { ActiveChatRun } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
 import { buildRunSummary } from '../../services/deep-agent/context/run-summary';
 import { resolveRuntimeWorkspaceIdentity } from '../../services/deep-agent/context/workspace-scope';
@@ -27,6 +30,7 @@ import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
+import type { AgentRunEventLog } from './run-event-log';
 import type { AgentSessionRepository } from './session-repository';
 import { toRecoveryDecision } from './recovery-policy';
 import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
@@ -82,6 +86,7 @@ export type AgentPluginRuntimeOptions = {
   lifecycleHooks?: AgentLifecycleHookEmitter;
   capabilityPreviewProvider?: AgentCapabilityPreviewProvider;
   pluginId?: string;
+  runEventLog?: AgentRunEventLog;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
 };
@@ -357,6 +362,34 @@ export class AgentPluginRuntime {
     return this.options.repository.searchSessionMessages(input);
   }
 
+  listRunEvents(request: ChatRunEventsReplayRequest): ChatRunEventsReplayResult {
+    if (this.options.runEventLog === undefined) {
+      throw new Error('agent_run_event_log_unavailable');
+    }
+    return {
+      runId: request.runId,
+      events: this.options.runEventLog.listRunEvents(request)
+    };
+  }
+
+  getActiveRun(input: { threadId: string }): ActiveChatRun | null {
+    for (const runId of this.activeRuns) {
+      const metadata = this.activeRunMetadata.get(runId);
+      if (metadata === undefined) {
+        continue;
+      }
+      if (metadata.threadId !== input.threadId) {
+        continue;
+      }
+      return {
+        runId,
+        threadId: input.threadId,
+        status: this.pendingInterrupts.has(runId) ? 'waiting_user' : 'running'
+      };
+    }
+    return null;
+  }
+
   async shutdown(): Promise<void> {
     for (const timer of this.scheduledRuns) {
       clearTimeout(timer);
@@ -465,6 +498,7 @@ export class AgentPluginRuntime {
   }
 
   private async publishChatRunEvent(payload: ChatRunEvent): Promise<void> {
+    this.options.runEventLog?.recordRunEvent(payload);
     await this.publish(agentChatRunEventType, payload);
   }
 
