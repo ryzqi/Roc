@@ -107,6 +107,48 @@ describe('buildDeepAgent harness profile wiring', () => {
     );
   });
 
+  it('keeps Roc filesystem path policy before filesystem tool error classification', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: ['/memory/global/AGENTS.md'],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: [
+        { operations: ['read'], paths: ['/workspace/**', '/memory/**', '/skills/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/workspace/**', '/memory/**'], mode: 'allow' },
+        { operations: ['write'], paths: ['/skills/**'], mode: 'deny' },
+        { operations: ['read', 'write'], paths: ['/**'], mode: 'deny' }
+      ],
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    if (createDeepAgentInput === undefined) {
+      throw new Error('Expected DeepAgents input.');
+    }
+    const middlewareNames = createDeepAgentInput.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).toContain('RocFilesystemPathPolicyMiddleware');
+    expect(middlewareNames).toContain('ForgeFilesystemToolErrorMiddleware');
+    expect(middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('ForgeFilesystemToolErrorMiddleware')
+    );
+  });
+
   it('does not add plan model tool exposure middleware for chat mode', () => {
     const input = {
       mode: 'chat',
@@ -548,23 +590,32 @@ describe('buildDeepAgent harness profile wiring', () => {
       'RocPlanReadOnlyMemoryMiddleware',
       'RocPlanToolExposureMiddleware',
       'RocPlanRuntimeToolGuardMiddleware',
-      'RocPlanFilesystemDefaultPathMiddleware'
+      'RocPlanFilesystemDefaultPathMiddleware',
+      'RocFilesystemPathPolicyMiddleware',
+      'ForgeFilesystemToolErrorMiddleware'
     ]));
     expect(middlewareNames.indexOf('RocPlanFilesystemDefaultPathMiddleware')).toBeLessThan(
       middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')
+    );
+    expect(middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('ForgeFilesystemToolErrorMiddleware')
     );
     expect(generalPurposeToolNames).toEqual(toolNames);
     expect(generalPurposeMiddlewareNames).toEqual(expect.arrayContaining([
       'RocPlanReadOnlyMemoryMiddleware',
       'RocPlanToolExposureMiddleware',
       'RocPlanRuntimeToolGuardMiddleware',
-      'RocPlanFilesystemDefaultPathMiddleware'
+      'RocPlanFilesystemDefaultPathMiddleware',
+      'RocFilesystemPathPolicyMiddleware',
+      'ForgeFilesystemToolErrorMiddleware'
     ]));
     expect(researchMiddlewareNames).toEqual(expect.arrayContaining([
       'RocPlanReadOnlyMemoryMiddleware',
       'RocPlanToolExposureMiddleware',
       'RocPlanRuntimeToolGuardMiddleware',
-      'RocPlanFilesystemDefaultPathMiddleware'
+      'RocPlanFilesystemDefaultPathMiddleware',
+      'RocFilesystemPathPolicyMiddleware',
+      'ForgeFilesystemToolErrorMiddleware'
     ]));
     expect(createDeepAgentInput).toMatchObject({
       memory: [],
