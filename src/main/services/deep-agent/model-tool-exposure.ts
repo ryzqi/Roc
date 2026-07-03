@@ -1,16 +1,22 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 
-export const PLAN_MODE_FILE_MUTATION_TOOL_NAMES = [
+export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'write_file',
   'edit_file',
-  'delete_file'
+  'delete_file',
+  'run_shell_command',
+  'execute',
+  'propose_background_task',
+  'schedule_background_task',
+  'update_background_task',
+  'cancel_background_task'
 ] as const;
 
-const PLAN_MODE_FILE_MUTATION_TOOL_SET = new Set<string>(PLAN_MODE_FILE_MUTATION_TOOL_NAMES);
+const PLAN_MODE_BLOCKED_TOOL_SET = new Set<string>(PLAN_MODE_BLOCKED_TOOL_NAMES);
 
 export function buildPlanModeBlockedToolMessage(toolName: string): string {
-  return `Plan Mode blocks file-mutating tool calls: ${toolName}.`;
+  return `Plan Mode blocks local mutation, execution, or task-commit tool calls: ${toolName}.`;
 }
 
 export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[] {
@@ -21,11 +27,11 @@ export function filterPlanModeModelTools<TTool>(tools: readonly TTool[]): TTool[
 }
 
 export function isPlanModeModelVisibleToolName(name: string): boolean {
-  return !isPlanModeFileMutationToolName(name);
+  return !isPlanModeBlockedToolName(name);
 }
 
-export function isPlanModeFileMutationToolName(name: string): boolean {
-  return PLAN_MODE_FILE_MUTATION_TOOL_SET.has(name);
+export function isPlanModeBlockedToolName(name: string): boolean {
+  return PLAN_MODE_BLOCKED_TOOL_SET.has(name);
 }
 
 export function createRocPlanRuntimeToolGuardMiddleware() {

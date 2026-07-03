@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  PLAN_MODE_FILE_MUTATION_TOOL_NAMES,
+  PLAN_MODE_BLOCKED_TOOL_NAMES,
   createRocPlanRuntimeToolGuardMiddleware,
   createRocPlanToolExposureMiddleware,
   filterPlanModeModelTools
@@ -16,7 +16,7 @@ function tool(name: string): NamedTool {
 }
 
 describe('plan mode model tool exposure', () => {
-  it('filters only file mutation tools in plan mode', () => {
+  it('filters local mutation, execution, and task-commit tools while preserving MCP tools in plan mode', () => {
     const tools = [
       tool('ls'),
       tool('read_file'),
@@ -61,19 +61,23 @@ describe('plan mode model tool exposure', () => {
         'filesystem__write_file',
         'filesystem__edit_file',
         'filesystem__delete_file',
-        'run_shell_command',
-        'execute',
         'task',
         'write_todos',
         'resolve_background_task_time',
-        'propose_background_task',
-        'schedule_background_task',
-        'read_background_task',
-        'update_background_task',
-        'cancel_background_task'
+        'read_background_task'
       ]
     );
-    expect(PLAN_MODE_FILE_MUTATION_TOOL_NAMES).toEqual(['write_file', 'edit_file', 'delete_file']);
+    expect(PLAN_MODE_BLOCKED_TOOL_NAMES).toEqual([
+      'write_file',
+      'edit_file',
+      'delete_file',
+      'run_shell_command',
+      'execute',
+      'propose_background_task',
+      'schedule_background_task',
+      'update_background_task',
+      'cancel_background_task'
+    ]);
   });
 
   it('does not expose tools without a string name', () => {
@@ -109,6 +113,10 @@ describe('plan mode model tool exposure', () => {
           tool('filesystem__write_file'),
           tool('web_read'),
           tool('web_search'),
+          tool('run_shell_command'),
+          tool('execute'),
+          tool('schedule_background_task'),
+          tool('update_background_task'),
           tool('task'),
           tool('mcp_docs_lookup'),
           tool('session_search')
@@ -141,39 +149,42 @@ describe('plan mode model tool exposure', () => {
     });
   });
 
-  it('blocks hidden write tools at runtime in plan mode', async () => {
-    const middleware = createRocPlanRuntimeToolGuardMiddleware();
-    const wrapToolCall = Reflect.get(middleware as object, 'wrapToolCall');
-    if (typeof wrapToolCall !== 'function') {
-      throw new Error('expected_wrap_tool_call');
-    }
+  it.each(['write_file', 'run_shell_command', 'schedule_background_task'])(
+    'blocks hidden local %s calls at runtime in plan mode',
+    async (toolName) => {
+      const middleware = createRocPlanRuntimeToolGuardMiddleware();
+      const wrapToolCall = Reflect.get(middleware as object, 'wrapToolCall');
+      if (typeof wrapToolCall !== 'function') {
+        throw new Error('expected_wrap_tool_call');
+      }
 
-    const handler = vi.fn(async () => {
-      throw new Error('write_file_handler_should_not_run');
-    });
+      const handler = vi.fn(async () => {
+        throw new Error(`${toolName}_handler_should_not_run`);
+      });
 
-    const result = await wrapToolCall(
-      {
-        toolCall: {
-          id: 'call_write',
-          name: 'write_file',
-          args: {
-            file_path: '/workspace/plan.md',
-            content: 'mutating content'
+      const result = await wrapToolCall(
+        {
+          toolCall: {
+            id: `call_${toolName}`,
+            name: toolName,
+            args: {
+              file_path: '/workspace/plan.md',
+              content: 'mutating content'
+            }
           }
-        }
-      },
-      handler
-    );
+        },
+        handler
+      );
 
-    expect(handler).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      name: 'write_file',
-      tool_call_id: 'call_write',
-      status: 'error',
-      content: 'Plan Mode blocks file-mutating tool calls: write_file.'
-    });
-  });
+      expect(handler).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        name: toolName,
+        tool_call_id: `call_${toolName}`,
+        status: 'error',
+        content: `Plan Mode blocks local mutation, execution, or task-commit tool calls: ${toolName}.`
+      });
+    }
+  );
 
   it('allows non-file-mutating runtime tools through the guard', async () => {
     const middleware = createRocPlanRuntimeToolGuardMiddleware();
@@ -224,6 +235,33 @@ describe('plan mode model tool exposure', () => {
         handler
       )
     ).resolves.toBe('mcp result');
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows MCP namespaced tools through the plan guard', async () => {
+    const middleware = createRocPlanRuntimeToolGuardMiddleware();
+    const wrapToolCall = Reflect.get(middleware as object, 'wrapToolCall');
+    if (typeof wrapToolCall !== 'function') {
+      throw new Error('expected_wrap_tool_call');
+    }
+
+    const handler = vi.fn(async () => 'mcp namespaced result');
+
+    await expect(
+      wrapToolCall(
+        {
+          toolCall: {
+            id: 'call_mcp_filesystem',
+            name: 'filesystem__write_file',
+            args: {
+              path: '/workspace/plan.md',
+              content: 'delegated to MCP policy'
+            }
+          }
+        },
+        handler
+      )
+    ).resolves.toBe('mcp namespaced result');
     expect(handler).toHaveBeenCalledTimes(1);
   });
 });

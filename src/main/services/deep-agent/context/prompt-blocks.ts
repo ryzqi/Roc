@@ -105,7 +105,7 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRe
   if (mode === 'plan') {
     return [
       `Workspace: ${workspacePath}`,
-      'Plan Mode blocks local file mutation tools but keeps read, search, and selected MCP tools available.',
+      'Plan Mode blocks local mutation, execution, and task-commit tools while keeping read, search, and selected MCP tools available under MCP authorization policy.',
       'Local file inspection uses Roc virtual routes: /workspace/, /memory/, and /skills/.',
       'Use ls, read_file, glob, and grep for local inspection in Plan Mode.',
       'Use web_read for public web pages and web_search for current public search.',
