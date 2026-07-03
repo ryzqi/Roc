@@ -78,7 +78,7 @@ describe('AgentPluginRuntime', () => {
           type: 'run_failed',
           runId: result.runId,
           threadId: result.threadId,
-          code: 'agent_run_failed',
+          code: 'provider_execution_failed',
           message: 'agent_model_response_empty',
           retryable: true
         }
