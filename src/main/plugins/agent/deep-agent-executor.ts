@@ -1,6 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
-import { Command, MemorySaver } from '@langchain/langgraph';
-import type { BaseStore } from '@langchain/langgraph';
+import { Command } from '@langchain/langgraph';
+import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
@@ -56,6 +56,7 @@ import {
 
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
+  checkpointer: BaseCheckpointSaver;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   paths: RocPaths;
@@ -63,7 +64,6 @@ export type AgentDeepAgentExecutorOptions = {
 };
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
-  const checkpointer = new MemorySaver();
   return {
     execute: async function* (input) {
       const handle = input.modelHandle.langChainHandle;
@@ -166,7 +166,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             : createRocFilesystemPermissions(),
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
-        checkpointer,
+        checkpointer: options.checkpointer,
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
         contextBudgetTokens: handle.runtime.contextBudgetTokens,

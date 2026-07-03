@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { ClientTool } from '@langchain/core/tools';
-import { InMemoryStore } from '@langchain/langgraph';
+import { InMemoryStore, MemorySaver } from '@langchain/langgraph';
 import { z } from 'zod';
 import { vi } from 'vitest';
 import type {
@@ -89,6 +89,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   });
   const executor = createAgentDeepAgentExecutor({
     capabilities: input.capabilities,
+    checkpointer: new MemorySaver(),
     getMemorySettings: input.getMemorySettings,
     hookRuntime: input.hookRuntime,
     paths: new RocPaths(join(workspacePath, '.roc-test')),

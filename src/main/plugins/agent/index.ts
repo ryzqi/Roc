@@ -20,6 +20,7 @@ import type {
   SkillSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import type { HookRuntime } from '../../services/hooks';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
@@ -266,12 +267,14 @@ function resolveDeepAgentExecutor(
   if ('execute' in option) {
     return option;
   }
+  const coreDb = context.database.getCoreConnection();
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
+    checkpointer: new RocSqliteCheckpointer(coreDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
     paths: option.paths,
-    store: new RocSqliteStore(context.database.getCoreConnection())
+    store: new RocSqliteStore(coreDb)
   });
 }
 
