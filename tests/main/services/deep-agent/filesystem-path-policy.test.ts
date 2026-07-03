@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRocFilesystemPathPolicyMiddleware, normalizeRocFileToolPath, validateRocFileToolPath } from '../../../../src/main/services/deep-agent/filesystem-path-policy';
 import {
   ROC_FILE_TOOL_MISSING_PATH_ERROR,
+  ROC_FILE_TOOL_ROUTE_ERROR,
   ROC_FILE_TOOL_WINDOWS_PATH_ERROR
 } from '../../../../src/main/services/deep-agent/filesystem-tool-contract';
 
@@ -47,6 +48,39 @@ describe('normalizeRocFileToolPath', () => {
 });
 
 describe('createRocFilesystemPathPolicyMiddleware', () => {
+  it('rejects non-route absolute project paths before write_file reaches the handler', async () => {
+    const middleware = createRocFilesystemPathPolicyMiddleware();
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call-front-end',
+      name: 'write_file',
+      content: 'handler reached'
+    }));
+
+    const result = await middleware.wrapToolCall!(
+      {
+        toolCall: {
+          id: 'call-front-end',
+          name: 'write_file',
+          args: {
+            file_path: '/frontend/index.html',
+            content: '<!doctype html>'
+          }
+        },
+        state: { messages: [] }
+      } as never,
+      handler
+    );
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect(result).toMatchObject({
+      tool_call_id: 'call-front-end',
+      name: 'write_file',
+      status: 'error',
+      content: ROC_FILE_TOOL_ROUTE_ERROR
+    });
+  });
+
   it('returns an error ToolMessage before invalid write_file reaches the handler', async () => {
     const middleware = createRocFilesystemPathPolicyMiddleware();
     const handler = vi.fn(async () => new ToolMessage({

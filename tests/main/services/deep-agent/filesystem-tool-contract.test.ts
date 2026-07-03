@@ -57,6 +57,7 @@ describe('Roc DeepAgents file-tool contract', () => {
   it.each([
     ['/home/user/workarea/create_docx.py', ROC_FILE_TOOL_ROUTE_ERROR],
     ['/tmp/create_docx.py', ROC_FILE_TOOL_ROUTE_ERROR],
+    ['/frontend/index.html', ROC_FILE_TOOL_ROUTE_ERROR],
     ['F:\\Code\\Roc\\create_docx.py', ROC_FILE_TOOL_WINDOWS_PATH_ERROR],
     ['\\\\server\\share\\file.txt', ROC_FILE_TOOL_WINDOWS_PATH_ERROR],
     ['relative/file.txt', ROC_FILE_TOOL_ROUTE_ERROR],
