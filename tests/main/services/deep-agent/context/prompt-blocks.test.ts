@@ -34,6 +34,27 @@ describe('prompt blocks', () => {
     ]);
   });
 
+  it('keeps stable prompt block ordering independent of runtime context summaries', () => {
+    const blocks = buildPromptBlocks({
+      mode: 'chat',
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      workspacePath: 'F:\\Code\\Roc',
+      workflowHint: null,
+      tools: [{ name: 'session_search', description: 'Search prior conversations' }],
+      explicitSkillContexts: []
+    });
+
+    expect(blocks.map((block) => block.type)).toEqual([
+      'static',
+      'workspace',
+      'tools',
+      'capability',
+      'context_recall',
+      'workflow'
+    ]);
+    expect(blocks.some((block) => block.content.includes('roc_context_digest'))).toBe(false);
+  });
+
   it('serializes production prompt with block markers', () => {
     const prompt = serializePromptBlocks(
       buildPromptBlocks({

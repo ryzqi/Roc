@@ -589,7 +589,15 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       providerType: 'openai_compatible',
       workflowHint: null,
-      contextBudgetTokens: undefined
+      contextBudgetTokens: undefined,
+      contextCompaction: {
+        artifactStore: {} as never,
+        emitEvent: vi.fn(),
+        mode: 'plan',
+        runId: 'run_plan_context',
+        threadId: 'thread_plan_context',
+        workspaceHash: 'workspace_hash_plan'
+      }
     } as unknown as DeepAgentBuildInput;
 
     buildDeepAgent(input);
@@ -636,9 +644,13 @@ describe('buildDeepAgent harness profile wiring', () => {
       'RocPlanToolExposureMiddleware',
       'RocPlanRuntimeToolGuardMiddleware',
       'RocPlanFilesystemDefaultPathMiddleware',
+      'RocContextCompactionPipeline',
       'RocFilesystemPathPolicyMiddleware',
       'ForgeFilesystemToolErrorMiddleware'
     ]));
+    expect(middlewareNames).toContain('RocContextCompactionPipeline');
+    expect(middlewareNames).toContain('RocPlanRuntimeToolGuardMiddleware');
+    expect(toolNames).not.toEqual(expect.arrayContaining(['write_file', 'edit_file', 'delete_file']));
     expect(middlewareNames.indexOf('RocPlanFilesystemDefaultPathMiddleware')).toBeLessThan(
       middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')
     );

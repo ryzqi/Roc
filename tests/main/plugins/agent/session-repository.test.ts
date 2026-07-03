@@ -235,6 +235,44 @@ describe('AgentSessionRepository', () => {
       'alpha recall from workspace b'
     ]);
   });
+
+  it('includes pre-compaction flush rows in workspace-scoped session search', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Create a long context summary'
+    });
+
+    repository.recordSessionMessage({
+      content: 'summary index includes context artifact paymentserviceevidence',
+      phase: 'pre_compaction_flush',
+      role: 'system',
+      threadId: run.threadId,
+      tokenCount: 120,
+      workspaceHash: 'workspace_hash_summary'
+    });
+
+    const result = repository.searchSessionMessages({
+      query: 'paymentserviceevidence',
+      workspaceHash: 'workspace_hash_summary',
+      workspaceScope: 'current'
+    });
+
+    expect(result.items.map((item) => ({
+      content: item.content,
+      phase: item.phase,
+      workspaceHash: item.workspaceHash
+    }))).toEqual([
+      {
+        content: 'summary index includes context artifact paymentserviceevidence',
+        phase: 'pre_compaction_flush',
+        workspaceHash: 'workspace_hash_summary'
+      }
+    ]);
+  });
 });
 
 function columnNames(tableName: string): string[] {
