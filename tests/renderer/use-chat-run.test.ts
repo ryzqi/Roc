@@ -3,10 +3,12 @@ import {
   applyChatRunEventBatch,
   clearPendingChatRunEvents,
   coalesceChatRunEvents,
-  isTerminalChatRunEvent
+  isTerminalChatRunEvent,
+  normalizeSequencedChatRunEvent,
+  shouldApplySequencedRunEvent
 } from '../../src/renderer/chat/use-chat-run';
 import { createEmptyChatRunState } from '../../src/renderer/chat-run-state';
-import type { ChatRunEvent } from '../../src/shared/types';
+import type { ChatRunEvent, SequencedChatRunEvent } from '../../src/shared/types';
 
 function createRunStartedEvent(): ChatRunEvent {
   return {
@@ -249,6 +251,34 @@ describe('applyChatRunEventBatch', () => {
         content: 'R'
       }
     ]);
+  });
+});
+
+describe('sequenced chat run events', () => {
+  it('unwraps sequenced events and ignores duplicate or older sequence numbers', () => {
+    const seen = new Map<string, number>();
+    const sequenced: SequencedChatRunEvent = {
+      runId: 'chat_test',
+      sequence: 2,
+      event: createDeltaEvent('A'),
+      createdAt: '2026-07-03T00:00:00.000Z'
+    };
+
+    expect(normalizeSequencedChatRunEvent(sequenced)).toEqual(createDeltaEvent('A'));
+    expect(shouldApplySequencedRunEvent(seen, sequenced)).toBe(true);
+    expect(shouldApplySequencedRunEvent(seen, sequenced)).toBe(false);
+    expect(
+      shouldApplySequencedRunEvent(seen, {
+        ...sequenced,
+        sequence: 1
+      })
+    ).toBe(false);
+    expect(
+      shouldApplySequencedRunEvent(seen, {
+        ...sequenced,
+        sequence: 3
+      })
+    ).toBe(true);
   });
 });
 

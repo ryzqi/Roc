@@ -466,6 +466,7 @@ function createLiveTaskRun({ threadId }: { threadId: string }): ChatRunState {
     summary: null,
     errorCode: null,
     errorMessage: null,
+    recoveryAttempt: null,
     retryable: false,
     pendingInterrupts: [],
     resumeBusy: false,

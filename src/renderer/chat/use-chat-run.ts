@@ -4,7 +4,7 @@ import {
   createEmptyChatRunState,
   type ChatRunState
 } from '../chat-run-state';
-import type { ChatRunEvent } from '../../shared/types';
+import type { ChatRunEvent, SequencedChatRunEvent } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
 
 export function applyChatRunEventBatch(state: ChatRunState, events: ChatRunEvent[]): ChatRunState {
@@ -29,6 +29,29 @@ export function coalesceChatRunEvents(events: readonly ChatRunEvent[]): ChatRunE
 
 export function isTerminalChatRunEvent(event: ChatRunEvent): boolean {
   return event.type === 'run_started' || event.type === 'run_completed' || event.type === 'run_failed';
+}
+
+export function normalizeSequencedChatRunEvent(event: ChatRunEvent | SequencedChatRunEvent): ChatRunEvent {
+  if (isSequencedChatRunEvent(event)) {
+    return event.event;
+  }
+  return event;
+}
+
+export function shouldApplySequencedRunEvent(seen: Map<string, number>, event: SequencedChatRunEvent): boolean {
+  const previous = seen.get(event.runId);
+  if (previous !== undefined && event.sequence <= previous) {
+    return false;
+  }
+  seen.set(event.runId, event.sequence);
+  return true;
+}
+
+function isSequencedChatRunEvent(event: ChatRunEvent | SequencedChatRunEvent): event is SequencedChatRunEvent {
+  if (typeof event !== 'object' || event === null) {
+    return false;
+  }
+  return 'sequence' in event && 'event' in event;
 }
 
 function canMergeChatRunEvents(left: ChatRunEvent, right: ChatRunEvent): boolean {
@@ -104,6 +127,7 @@ export function useChatRun(client: RocClient): ChatRunController {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const pendingEventsRef = useRef<ChatRunEvent[]>([]);
   const rafHandleRef = useRef<number | null>(null);
+  const seenSequenceByRunIdRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     function flush(): void {
@@ -118,7 +142,13 @@ export function useChatRun(client: RocClient): ChatRunController {
       });
     }
 
-    const unsubscribe = client.api.chat.onRunEvent((event) => {
+    const unsubscribe = client.api.chat.onRunEvent((rawEvent) => {
+      if (isSequencedChatRunEvent(rawEvent)) {
+        if (!shouldApplySequencedRunEvent(seenSequenceByRunIdRef.current, rawEvent)) {
+          return;
+        }
+      }
+      const event = normalizeSequencedChatRunEvent(rawEvent);
       pendingEventsRef.current.push(event);
 
       if (event.type === 'run_started') {
@@ -149,6 +179,7 @@ export function useChatRun(client: RocClient): ChatRunController {
 
   const reset = (): void => {
     clearPendingChatRunEvents(pendingEventsRef, rafHandleRef);
+    seenSequenceByRunIdRef.current.clear();
     setState(createEmptyChatRunState());
     setErrorMessage(null);
   };

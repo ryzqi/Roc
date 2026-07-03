@@ -64,13 +64,14 @@ export type ChatRunState = {
   providerId: string | null;
   modelId: string | null;
   createdAt: string | null;
-  status: 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed';
+  status: 'idle' | 'running' | 'recovering' | 'waiting_user' | 'completed' | 'failed';
   assistantMessage: string;
   activityBlocks: ChatRunActivityBlock[];
   durationMs: number | null;
   summary: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  recoveryAttempt: number | null;
   retryable: boolean;
   pendingInterrupts: ChatPendingInterrupt[];
   resumeBusy: boolean;
@@ -93,6 +94,7 @@ export function createEmptyChatRunState(): ChatRunState {
     summary: null,
     errorCode: null,
     errorMessage: null,
+    recoveryAttempt: null,
     retryable: false,
     pendingInterrupts: [],
     resumeBusy: false,
@@ -117,6 +119,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       summary: null,
       errorCode: null,
       errorMessage: null,
+      recoveryAttempt: null,
       retryable: false,
       pendingInterrupts: [],
       resumeBusy: false,
@@ -205,6 +208,26 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     };
   }
 
+  if (event.type === 'run_recovering') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'recovering',
+      errorCode: event.code,
+      errorMessage: event.message,
+      recoveryAttempt: event.attempt
+    };
+  }
+
+  if (event.type === 'run_recovered') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'running',
+      recoveryAttempt: null
+    };
+  }
+
   if (event.type === 'run_failed') {
     return {
       ...state,
@@ -212,6 +235,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       status: 'failed',
       errorCode: event.code,
       errorMessage: event.message,
+      recoveryAttempt: null,
       retryable: event.retryable,
       resumeBusy: false
     };

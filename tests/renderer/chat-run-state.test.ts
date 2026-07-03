@@ -47,6 +47,39 @@ describe('chat run state', () => {
     expect(state.errorCode).toBe('provider_network_error');
   });
 
+  it('keeps partial assistant content while recovering and resumes running after recovery', () => {
+    let state = createEmptyChatRunState();
+
+    state = applyChatRunEvent(state, runStarted('chat_recovery', 'chat'));
+    state = applyChatRunEvent(state, textBlock('chat_recovery', 'partial'));
+    state = applyChatRunEvent(state, {
+      type: 'run_recovering',
+      runId: 'chat_recovery',
+      threadId: 'thread_chat_recovery',
+      code: 'provider_network_error',
+      message: 'Connection error.',
+      attempt: 1,
+      nextRetryAt: '2026-07-03T00:00:01.000Z'
+    });
+
+    expect(state.status).toBe('recovering');
+    expect(state.assistantMessage).toBe('partial');
+    expect(state.errorCode).toBe('provider_network_error');
+    expect(state.errorMessage).toBe('Connection error.');
+    expect(state.recoveryAttempt).toBe(1);
+
+    state = applyChatRunEvent(state, {
+      type: 'run_recovered',
+      runId: 'chat_recovery',
+      threadId: 'thread_chat_recovery',
+      attempt: 1,
+      recoveredAt: '2026-07-03T00:00:02.000Z'
+    });
+
+    expect(state.status).toBe('running');
+    expect(state.recoveryAttempt).toBe(null);
+  });
+
   it('enters waiting_user on interrupt and keeps reasoning updates through resume completion', () => {
     let state = createEmptyChatRunState();
 
