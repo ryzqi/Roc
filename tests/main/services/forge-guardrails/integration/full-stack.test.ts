@@ -65,7 +65,6 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,
     checkpointer: undefined,
-    providerType: 'llama_cpp',
     workflowHint: 'propose_background_task',
     contextBudgetTokens: 4096,
     ...input
@@ -170,7 +169,6 @@ describe('forge guardrails full stack', () => {
     expect(middlewareNames(middleware)).toEqual([
       'RocShellPathPolicyMiddleware',
       'RTKMiddleware',
-      'PromptCaching',
       'toolRetryMiddleware',
       'RocToolProtocolMiddleware',
       'ForgeErrorBudgetMiddleware',

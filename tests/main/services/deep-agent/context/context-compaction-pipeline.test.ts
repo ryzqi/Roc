@@ -135,7 +135,7 @@ describe('RocContextCompactionPipeline', () => {
           content: '',
           tool_calls: [{ id: 'call-1', name: 'read_file', args: { file_path: '/workspace/a.ts' }, type: 'tool_call' }]
         }),
-        1
+        5
       ),
       mark(
         new ToolMessage({
@@ -145,7 +145,7 @@ describe('RocContextCompactionPipeline', () => {
           content: 'x'.repeat(5000),
           status: 'success'
         }),
-        1
+        5
       ),
       mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
     ];
@@ -177,5 +177,98 @@ describe('RocContextCompactionPipeline', () => {
 
     expect(messages.some((message) => message.id === 'ai-tool-call')).toBe(true);
     expect(messages.some((message) => message.id === 'tool-result')).toBe(true);
+  });
+
+  it('does not duplicate a paired tool result when deterministic compaction truncates it', async () => {
+    const store = new ContextArtifactStore(db);
+    const messages: BaseMessage[] = [
+      new HumanMessage({ id: 'user', content: 'start' }),
+      mark(
+        new AIMessage({
+          id: 'ai-tool-call',
+          content: '',
+          tool_calls: [{ id: 'call-1', name: 'read_file', args: { file_path: '/workspace/a.ts' }, type: 'tool_call' }]
+        }),
+        1
+      ),
+      mark(
+        new ToolMessage({
+          id: 'tool-result',
+          tool_call_id: 'call-1',
+          name: 'read_file',
+          content: 'x'.repeat(5000),
+          status: 'success'
+        }),
+        1
+      ),
+      mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
+    ];
+
+    await runContextCompactionForTest({
+      artifactStore: store,
+      budgetTokens: 1000,
+      emitEvent: () => {},
+      mode: 'chat',
+      model: {} as never,
+      runId: 'run_ctx_pipeline_4',
+      summarize: vi.fn(),
+      threadId: 'thread_ctx_pipeline_4',
+      toolResultPersistChars: 1000,
+      workspaceHash: 'workspace_hash_boundary',
+      workspacePath: 'F:\\Code\\Roc',
+      messages,
+      countTokens: async () => 700
+    });
+
+    const toolResults = messages.filter(
+      (message): message is ToolMessage => ToolMessage.isInstance(message) && message.tool_call_id === 'call-1'
+    );
+    expect(toolResults).toHaveLength(1);
+    expect(String(toolResults[0]?.content)).toContain('<roc_context_artifact>');
+    expect(String(toolResults[0]?.content)).not.toContain('[Truncated');
+  });
+
+  it('removes old summarized messages after the summary stage keeps context above threshold', async () => {
+    const store = new ContextArtifactStore(db);
+    const messages: BaseMessage[] = [
+      new SystemMessage({ id: 'system', content: 'system' }),
+      new HumanMessage({ id: 'user', content: 'summarize old work' }),
+      mark(new AIMessage({ id: 'old-ai-1', content: 'old implementation details' }), 1),
+      mark(new HumanMessage({ id: 'old-user-2', content: 'old correction' }), 2),
+      mark(new AIMessage({ id: 'old-ai-3', content: 'old verification' }), 3),
+      mark(new HumanMessage({ id: 'recent-user', content: 'continue from here' }), 8),
+      mark(new AIMessage({ id: 'recent-ai', content: 'current next step' }), 8)
+    ];
+
+    await runContextCompactionForTest({
+      artifactStore: store,
+      budgetTokens: 100,
+      emitEvent: () => {},
+      mode: 'chat',
+      model: {} as never,
+      runId: 'run_ctx_pipeline_5',
+      summarize: async () => ({
+        goal: 'summarize old work',
+        facts: ['Old implementation details were summarized.'],
+        decisions: [],
+        filesTouched: [],
+        toolEvidence: [],
+        verification: [],
+        openQuestions: [],
+        nextActions: ['Continue from recent tail.']
+      }),
+      threadId: 'thread_ctx_pipeline_5',
+      workspaceHash: 'workspace_hash_summary',
+      workspacePath: 'F:\\Code\\Roc',
+      messages,
+      countTokens: async () => 1200
+    });
+
+    expect(messages.some(isContextDigestMessage)).toBe(true);
+    expect(messages[2] === undefined ? false : isContextDigestMessage(messages[2])).toBe(true);
+    expect(messages.map((message) => message.id)).toEqual(['system', 'user', 'roc-context-digest', 'recent-user', 'recent-ai']);
+    expect(messages.some((message) => message.id === 'old-ai-1')).toBe(false);
+    expect(messages.some((message) => message.id === 'old-user-2')).toBe(false);
+    expect(messages.some((message) => message.id === 'old-ai-3')).toBe(false);
   });
 });

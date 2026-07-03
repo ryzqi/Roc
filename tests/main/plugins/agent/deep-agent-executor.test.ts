@@ -164,6 +164,48 @@ describe('createAgentDeepAgentExecutor', () => {
     ]);
   });
 
+  it('records prompt cache usage from streamed provider metadata', async () => {
+    const recordPromptCacheMetrics = vi.fn();
+
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      metricsService: { recordPromptCacheMetrics },
+      messages: (async function* () {
+        yield {
+          usage_metadata: {
+            input_tokens: 600,
+            input_token_details: {
+              cache_creation: 300,
+              cache_read: 900
+            }
+          }
+        };
+      })(),
+      output: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'ok'
+          }
+        ]
+      }
+    });
+
+    expect(recordPromptCacheMetrics).toHaveBeenCalledWith(
+      {
+        input_tokens: 600,
+        cache_creation_tokens: 300,
+        cache_read_tokens: 900
+      },
+      {
+        mode: 'task',
+        modelId: 'test-model',
+        providerId: 'test-provider',
+        source: 'chat'
+      }
+    );
+  });
+
   it('ask_user interrupts with a question payload and returns the resumed answer', async () => {
     const { interrupt } = await import('@langchain/langgraph');
     const tool = createAskUserTool();

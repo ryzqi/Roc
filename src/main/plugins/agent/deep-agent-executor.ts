@@ -48,6 +48,7 @@ import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
+import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import {
@@ -63,6 +64,7 @@ export type AgentDeepAgentExecutorOptions = {
   contextArtifactStore: ContextArtifactStore;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+  metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
   paths: RocPaths;
   store: BaseStore;
   toolEffectStore: AgentToolEffectStore;
@@ -184,7 +186,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
         checkpointer: options.checkpointer,
-        providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
         contextBudgetTokens: handle.runtime.contextBudgetTokens,
         contextCompaction: {
@@ -259,6 +260,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               callbacks
             })
           ]);
+          recordPromptCacheMetrics({
+            metricsService: options.metricsService,
+            modelId: input.modelHandle.modelId,
+            mode: input.request.mode,
+            providerId: input.modelHandle.providerId,
+            source: hookRunContext.source,
+            usageAccumulator
+          });
           if (readInterrupted(run)) {
             eventQueue.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
           } else {
@@ -292,6 +301,34 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       await consumeRun;
     }
   };
+}
+
+function recordPromptCacheMetrics(input: {
+  metricsService: Pick<MetricsService, 'recordPromptCacheMetrics'> | undefined;
+  usageAccumulator: ReturnType<typeof createUsageAccumulator>;
+  mode: ChatStartRunRequest['mode'];
+  source: 'chat' | 'background_task';
+  providerId: string;
+  modelId: string;
+}): void {
+  if (input.metricsService === undefined || input.usageAccumulator.promptTokens === null) {
+    return;
+  }
+  const usage: Parameters<MetricsService['recordPromptCacheMetrics']>[0] = {
+    input_tokens: input.usageAccumulator.promptTokens
+  };
+  if (input.usageAccumulator.cacheReadTokens !== null) {
+    usage.cache_read_tokens = input.usageAccumulator.cacheReadTokens;
+  }
+  if (input.usageAccumulator.cacheCreationTokens !== null) {
+    usage.cache_creation_tokens = input.usageAccumulator.cacheCreationTokens;
+  }
+  input.metricsService.recordPromptCacheMetrics(usage, {
+    mode: input.mode,
+    source: input.source,
+    providerId: input.providerId,
+    modelId: input.modelId
+  });
 }
 
 async function readInterruptPolicy(

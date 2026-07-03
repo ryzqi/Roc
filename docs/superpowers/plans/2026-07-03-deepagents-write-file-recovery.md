@@ -316,7 +316,6 @@ In `tests/main/deep-agent-build-wiring.test.ts`, add this test near the existing
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;

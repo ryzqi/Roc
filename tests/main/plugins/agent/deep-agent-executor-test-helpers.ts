@@ -52,6 +52,13 @@ interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+  metricsService?: {
+    recordPromptCacheMetrics: (usage: {
+      input_tokens: number;
+      cache_read_tokens?: number;
+      cache_creation_tokens?: number;
+    }, labels?: Record<string, string>) => void;
+  };
   contextMaintenanceEvent?: ContextMaintenanceEvent;
   messages?: AsyncIterable<unknown>;
   output?: unknown;
@@ -111,6 +118,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     checkpointer: new MemorySaver(),
     getMemorySettings: input.getMemorySettings,
     hookRuntime: input.hookRuntime,
+    metricsService: input.metricsService,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore(),
     contextArtifactStore: new ContextArtifactStore(toolEffectDb),

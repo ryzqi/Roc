@@ -5,7 +5,7 @@ import type { FilesystemPermission, SubAgent } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { toolRetryMiddleware } from 'langchain';
 import { z } from 'zod';
-import type { ChatStartRunRequest, ProviderType, WorkflowHint } from '../../../shared/types';
+import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
@@ -17,8 +17,7 @@ import {
   createRescueParsingMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
-  createToolRuntimeErrorMiddleware,
-  createPromptCachingMiddleware
+  createToolRuntimeErrorMiddleware
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -57,7 +56,6 @@ export type DeepAgentBuildInput = {
   workspacePath: string | null;
   interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
   checkpointer: BaseCheckpointSaver | undefined;
-  providerType: ProviderType;
   workflowHint: WorkflowHint;
   contextBudgetTokens: number | undefined;
   hookMiddleware?: RocHookMiddlewareOptions;
@@ -116,11 +114,6 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     ...planModeMiddleware,
     createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     rtkMiddleware,
-    createPromptCachingMiddleware({
-      enabled: true,
-      strategy: 'balanced',
-      providerType: input.providerType
-    }),
     toolRetryMiddleware({
       maxRetries: 2,
       tools: [...NETWORK_SENSITIVE_TOOLS],

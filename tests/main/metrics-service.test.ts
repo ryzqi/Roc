@@ -116,6 +116,19 @@ describe('MetricsService', () => {
     });
   });
 
+  it('records prompt cache hit ratio from provider usage without estimated savings', () => {
+    metricsService.recordPromptCacheMetrics({
+      input_tokens: 600,
+      cache_creation_tokens: 300,
+      cache_read_tokens: 900
+    });
+
+    expect(metricsService.query({ name: 'prompt_cache_read_tokens' })[0]?.value).toBe(900);
+    expect(metricsService.query({ name: 'prompt_cache_creation_tokens' })[0]?.value).toBe(300);
+    expect(metricsService.query({ name: 'prompt_cache_hit_ratio' })[0]?.value).toBe(0.5);
+    expect(metricsService.query({ name: 'prompt_cache_tokens_saved' })).toHaveLength(0);
+  });
+
   it('queries one thousand samples within five milliseconds', () => {
     for (let value = 1; value <= 1000; value += 1) {
       metricsService.recordHistogram('provider.request.duration_ms', value, { providerId: 'nvidia' });

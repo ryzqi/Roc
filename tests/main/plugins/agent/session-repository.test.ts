@@ -273,6 +273,34 @@ describe('AgentSessionRepository', () => {
       }
     ]);
   });
+
+  it('treats punctuation-heavy session_search queries as plain text instead of FTS syntax', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Review service evidence'
+    });
+
+    repository.recordSessionMessage({
+      content: 'payment-service evidence lives under F:\\Code\\Roc\\src\\payments',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_query'
+    });
+
+    const result = repository.searchSessionMessages({
+      query: 'payment-service F:\\Code\\Roc',
+      workspaceHash: 'workspace_hash_query',
+      workspaceScope: 'current'
+    });
+
+    expect(result.items.map((item) => item.content)).toEqual([
+      'payment-service evidence lives under F:\\Code\\Roc\\src\\payments'
+    ]);
+  });
 });
 
 function columnNames(tableName: string): string[] {

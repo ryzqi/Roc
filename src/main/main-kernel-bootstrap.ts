@@ -84,6 +84,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     createDefaultMainKernelPlugins({
       configService,
       hookRuntime,
+      metricsService,
       modelFactory,
       paths,
       performanceObserverService,
@@ -143,6 +144,7 @@ function createDefaultMainKernelPlugins(input: {
   paths: RocPaths;
   configService: ConfigService;
   hookRuntime: HookRuntime;
+  metricsService: MetricsService;
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
@@ -184,6 +186,7 @@ function createDefaultMainKernelPlugins(input: {
           return configService.getSettings().memory;
         },
         hookRuntime: input.hookRuntime,
+        metricsService: input.metricsService,
         paths: input.paths
       },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {

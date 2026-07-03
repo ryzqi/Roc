@@ -1297,7 +1297,6 @@ Append this test to `tests/main/deep-agent-build-wiring.test.ts`:
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: 4096,
       contextCompaction: {
@@ -1585,14 +1584,13 @@ git commit -m "feat: wire context compaction into deepagents"
 - Modify: `tests/main/plugins/agent/session-repository.test.ts`
 - Modify: `tests/main/services/deep-agent/context/session-search-tool.test.ts`
 - Modify: `tests/main/services/deep-agent/context/prompt-blocks.test.ts`
-- Modify: `tests/main/services/forge-guardrails/middleware/prompt-caching.test.ts`
 - Modify: `tests/main/deep-agent-build-wiring.test.ts`
 
 **Interfaces:**
 - Consumes:
   - `ContextArtifactStore.recordPreCompactionFlush()`
   - existing `AgentSessionRepository.searchSessionMessages()`
-  - existing `serializePromptBlocks()` and `createPromptCachingMiddleware()`
+  - existing `serializePromptBlocks()` and DeepAgents native cache breakpoint middleware wiring
 
 - Produces:
   - Verification that `pre_compaction_flush` rows are searchable.
@@ -1748,7 +1746,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-pnpm test -- tests/main/plugins/agent/session-repository.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/services/forge-guardrails/middleware/prompt-caching.test.ts
+pnpm test -- tests/main/plugins/agent/session-repository.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/deep-agent-build-wiring.test.ts
 ```
 
 Expected: PASS.

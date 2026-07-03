@@ -58,7 +58,7 @@ Roc already has several pieces of the desired system:
 
 - `assembleContextHarness()` builds the system prompt, selected tools, memory sources, skill sources, and workspace identity.
 - `buildPromptBlocks()` emits stable prompt blocks with type, stability, and hash markers.
-- `createPromptCachingMiddleware()` uses those prompt block markers for Anthropic cache-control injection and leaves OpenAI-compatible providers to prefix caching.
+- DeepAgents native cache breakpoint middleware handles Anthropic cache-control injection; Roc keeps prompt block markers as a prefix-stability contract and leaves provider-specific caching to the native runtime.
 - `createForgeTieredCompactionMiddleware()` performs deterministic context editing through LangChain middleware.
 - `refreshContextDigestMessage()` can preserve key facts, decisions, touched files, verification, open questions, and next actions before older messages are dropped.
 - `RocSqliteCheckpointer` persists LangGraph checkpoints by `thread_id`.

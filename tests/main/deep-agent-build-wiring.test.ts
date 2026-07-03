@@ -47,7 +47,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: 'default',
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -86,7 +85,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -127,7 +125,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -164,7 +161,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -198,7 +194,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -288,7 +283,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: 'default',
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -299,6 +293,39 @@ describe('buildDeepAgent harness profile wiring', () => {
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
 
     expect(middlewareNames.indexOf('RocShellPathPolicyMiddleware')).toBeLessThan(middlewareNames.indexOf('RTKMiddleware'));
+  });
+
+  it('leaves prompt cache breakpoint injection to DeepAgents native middleware', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: ['/memory/global/AGENTS.md'],
+      skillSources: ['/skills/'],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      workflowHint: null,
+      contextBudgetTokens: undefined
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).not.toContain('PromptCaching');
+    expect(createDeepAgentInput).toMatchObject({
+      memory: ['/memory/global/AGENTS.md'],
+      skills: ['/skills/']
+    });
   });
 
   it('wires hook middleware before Roc guardrails when hook runtime is provided', () => {
@@ -316,7 +343,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined,
       hookMiddleware: {
@@ -368,7 +394,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined,
       toolEffectIdempotency: {
@@ -409,7 +434,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: 4096,
       contextCompaction: {
@@ -466,7 +490,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: 'default',
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -532,7 +555,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\\\Code\\\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: 'default',
       contextBudgetTokens: undefined
     } as unknown as DeepAgentBuildInput;
@@ -587,7 +609,6 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      providerType: 'openai_compatible',
       workflowHint: null,
       contextBudgetTokens: undefined,
       contextCompaction: {

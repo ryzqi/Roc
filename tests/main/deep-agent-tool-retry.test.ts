@@ -58,7 +58,6 @@ function createBuildInput(): DeepAgentBuildInput {
     workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,
     checkpointer: undefined,
-    providerType: 'openai_compatible',
     workflowHint: null,
     contextBudgetTokens: undefined
   };

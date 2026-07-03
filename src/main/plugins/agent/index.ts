@@ -28,6 +28,7 @@ import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpoi
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
+import type { MetricsService } from '../../services/metrics-service';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
@@ -218,7 +219,12 @@ export type AgentPluginOptions = {
     deleteFileApprovalModeProvider: () => ApprovalMode;
     mcpApprovalModeProvider: () => ApprovalMode;
   };
-  deepAgentExecutor?: { paths: RocPaths; getMemorySettings?: () => AppSettings['memory']; hookRuntime?: Pick<HookRuntime, 'runEvent'> } | AgentDeepAgentExecutor;
+  deepAgentExecutor?: {
+    paths: RocPaths;
+    getMemorySettings?: () => AppSettings['memory'];
+    hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+    metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
+  } | AgentDeepAgentExecutor;
   modelFactory?: AgentModelFactoryAdapter;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
@@ -307,6 +313,7 @@ function resolveDeepAgentExecutor(
     contextArtifactStore: new ContextArtifactStore(agentDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
+    metricsService: option.metricsService,
     paths: option.paths,
     store: new RocSqliteStore(coreDb),
     toolEffectStore: new AgentToolEffectStore(coreDb)

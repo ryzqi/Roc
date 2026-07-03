@@ -6,6 +6,7 @@ import {
   createForgeTieredCompactionEdits,
   type ForgeTieredCompactionOptions
 } from '../../forge-guardrails/middleware/forge-tiered-compaction';
+import { readIterationFromMessage } from '../../forge-guardrails/state-schema';
 import { isContextDigestMessage } from '../../forge-guardrails/context-digest';
 import {
   ContextArtifactStore,
@@ -20,7 +21,8 @@ import {
 
 const DEFAULT_TOOL_RESULT_PERSIST_CHARS = 30_000;
 const SUMMARY_THRESHOLD = 0.9;
-const DIGEST_INSERT_AFTER_SYSTEM = 1;
+const SUMMARY_RECENT_ITERATIONS = 2;
+const SUMMARY_RECENT_FALLBACK_MESSAGES = 6;
 
 export type ContextCompactionMode = 'chat' | 'task' | 'plan';
 
@@ -110,7 +112,7 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
     input.emitEvent(createEvent(input, 'context_summary_started', stage));
     const summary = await summarizeContext(input, artifactReferences, beforeDeterministicMessages);
     const digestMessage = contextSummaryToDigestMessage(summary);
-    upsertDigestMessage(input.messages, digestMessage);
+    compactToSummaryTail(input.messages, digestMessage);
     input.artifactStore.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
       runId: input.runId,
@@ -187,7 +189,7 @@ async function runDeterministicCompaction(input: RunCompactionInput): Promise<vo
   }
 }
 
-function snapshotToolPairs(messages: BaseMessage[]): ToolPairSnapshot[] {
+function snapshotToolPairs(messages: readonly BaseMessage[]): ToolPairSnapshot[] {
   const toolResults = new Map<string, ToolMessage>();
   for (const message of messages) {
     if (ToolMessage.isInstance(message)) {
@@ -220,10 +222,15 @@ function snapshotToolPairs(messages: BaseMessage[]): ToolPairSnapshot[] {
 function restoreIncompleteToolPairs(messages: BaseMessage[], pairs: readonly ToolPairSnapshot[]): void {
   for (const pair of pairs) {
     const aiIndex = messages.findIndex((message) => message === pair.aiMessage);
-    const toolIndex = messages.findIndex((message) => message === pair.toolMessage);
+    const toolIndex = messages.findIndex(
+      (message) => ToolMessage.isInstance(message) && message.tool_call_id === pair.toolMessage.tool_call_id
+    );
     if (aiIndex >= 0 && toolIndex === -1) {
       messages.splice(aiIndex + 1, 0, pair.toolMessage);
       continue;
+    }
+    if (toolIndex >= 0 && messages[toolIndex] !== pair.toolMessage) {
+      messages[toolIndex] = pair.toolMessage;
     }
     if (aiIndex === -1 && toolIndex >= 0) {
       messages.splice(toolIndex, 0, pair.aiMessage);
@@ -250,15 +257,67 @@ async function summarizeContext(
   });
 }
 
-function upsertDigestMessage(messages: BaseMessage[], digestMessage: AIMessage): void {
-  const existingIndex = messages.findIndex(isContextDigestMessage);
-  if (existingIndex >= 0) {
-    messages[existingIndex] = digestMessage;
-    return;
-  }
+function compactToSummaryTail(messages: BaseMessage[], digestMessage: AIMessage): void {
+  const head = selectProtectedHead(messages);
+  const tail = selectRecentSummaryTail(messages);
+  const compacted = [
+    ...head,
+    digestMessage,
+    ...tail.filter((message) => !head.includes(message) && !isContextDigestMessage(message))
+  ];
+  messages.splice(0, messages.length, ...compacted);
+}
+
+function selectProtectedHead(messages: readonly BaseMessage[]): BaseMessage[] {
+  const protectedMessages: BaseMessage[] = [];
   const first = messages[0];
-  const insertIndex = first !== undefined && first.getType() === 'system' ? DIGEST_INSERT_AFTER_SYSTEM : 0;
-  messages.splice(insertIndex, 0, digestMessage);
+  if (first !== undefined && first.getType() === 'system') {
+    protectedMessages.push(first);
+  }
+  const firstHuman = messages.find((message) => message.getType() === 'human');
+  if (firstHuman !== undefined && !protectedMessages.includes(firstHuman)) {
+    protectedMessages.push(firstHuman);
+  }
+  return protectedMessages;
+}
+
+function selectRecentSummaryTail(messages: readonly BaseMessage[]): BaseMessage[] {
+  const included = new Set<BaseMessage>();
+  const maxIteration = findMaxIteration(messages);
+  if (maxIteration >= 0) {
+    const keepAfter = maxIteration - SUMMARY_RECENT_ITERATIONS;
+    for (const message of messages) {
+      const iteration = readIterationFromMessage(message);
+      if (iteration !== null && iteration > keepAfter) {
+        included.add(message);
+      }
+    }
+  } else {
+    const start = Math.max(0, messages.length - SUMMARY_RECENT_FALLBACK_MESSAGES);
+    for (let index = start; index < messages.length; index += 1) {
+      included.add(messages[index]!);
+    }
+  }
+
+  for (const pair of snapshotToolPairs(messages)) {
+    if (included.has(pair.aiMessage) || included.has(pair.toolMessage)) {
+      included.add(pair.aiMessage);
+      included.add(pair.toolMessage);
+    }
+  }
+
+  return messages.filter((message) => included.has(message));
+}
+
+function findMaxIteration(messages: readonly BaseMessage[]): number {
+  let maxIteration = -1;
+  for (const message of messages) {
+    const iteration = readIterationFromMessage(message);
+    if (iteration !== null && iteration > maxIteration) {
+      maxIteration = iteration;
+    }
+  }
+  return maxIteration;
 }
 
 function inferGoal(messages: readonly BaseMessage[]): string {

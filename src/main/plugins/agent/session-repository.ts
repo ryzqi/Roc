@@ -241,8 +241,12 @@ export class AgentSessionRepository {
       return { query, total: 0, items: [] };
     }
     const limit = input.limit === undefined ? 10 : input.limit;
-    const rows = this.searchRows(query, input, limit);
-    const fallbackQuery = rows.length === 0 ? buildPlainPrefixFtsQuery(query) : null;
+    const primaryQuery = canUseRawFtsQuery(query) ? query : buildPlainPrefixFtsQuery(query);
+    if (primaryQuery === null) {
+      return { query, total: 0, items: [] };
+    }
+    const rows = this.searchRows(primaryQuery, input, limit);
+    const fallbackQuery = primaryQuery === query && rows.length === 0 ? buildPlainPrefixFtsQuery(query) : null;
     const finalRows = fallbackQuery === null ? rows : this.searchRows(fallbackQuery, input, limit);
     return {
       query,
@@ -364,15 +368,14 @@ function requireNonEmpty(value: string, code: string): string {
 }
 
 function buildPlainPrefixFtsQuery(query: string): string | null {
-  if (/[":*()^{}+\-]/.test(query) || /\b(?:OR|AND|NOT|NEAR)\b/i.test(query)) {
-    return null;
-  }
-  const tokens = query
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
+  const tokens = Array.from(query.matchAll(/[\p{L}\p{N}_]+/gu), (match) => match[0])
+    .filter((token) => !/^(?:OR|AND|NOT|NEAR)$/iu.test(token));
   if (tokens.length === 0) {
     return null;
   }
   return tokens.map((token) => `${token}*`).join(' ');
+}
+
+function canUseRawFtsQuery(query: string): boolean {
+  return /^[\p{L}\p{N}_\s]+$/u.test(query) && !/\b(?:OR|AND|NOT|NEAR)\b/iu.test(query);
 }
