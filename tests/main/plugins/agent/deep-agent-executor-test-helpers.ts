@@ -1,8 +1,9 @@
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import type { ClientTool } from '@langchain/core/tools';
 import { InMemoryStore, MemorySaver } from '@langchain/langgraph';
 import { z } from 'zod';
-import { vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
 import type {
   AppSettings,
   BackgroundTask,
@@ -23,6 +24,7 @@ import type {
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
+import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../../../src/main/services/hooks';
 import { RocPaths } from '../../../../src/main/services/paths';
 
@@ -36,6 +38,11 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 }));
 
 export const workspacePath = process.cwd();
+const toolEffectDb = new Database(':memory:');
+
+afterAll(() => {
+  toolEffectDb.close();
+});
 
 interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
@@ -93,7 +100,8 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     getMemorySettings: input.getMemorySettings,
     hookRuntime: input.hookRuntime,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
-    store: new InMemoryStore()
+    store: new InMemoryStore(),
+    toolEffectStore: new AgentToolEffectStore(toolEffectDb)
   });
   const execution = await executor.execute({
     abortSignal: new AbortController().signal,

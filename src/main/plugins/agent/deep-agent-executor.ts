@@ -40,6 +40,7 @@ import {
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
+import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
@@ -61,6 +62,7 @@ export type AgentDeepAgentExecutorOptions = {
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   paths: RocPaths;
   store: BaseStore;
+  toolEffectStore: AgentToolEffectStore;
 };
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
@@ -170,6 +172,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
         contextBudgetTokens: handle.runtime.contextBudgetTokens,
+        toolEffectIdempotency: {
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          store: options.toolEffectStore
+        },
         hookMiddleware:
           options.hookRuntime === undefined
             ? undefined

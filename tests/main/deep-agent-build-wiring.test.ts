@@ -311,6 +311,47 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(middlewareNames.indexOf('RocHookMiddleware')).toBeLessThan(middlewareNames.indexOf('RocShellPathPolicyMiddleware'));
   });
 
+  it('wires tool effect idempotency after tool protocol normalization when run context is provided', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: undefined,
+      toolEffectIdempotency: {
+        runId: 'run_1',
+        threadId: 'thread_1',
+        store: {} as never
+      }
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).toContain('RocToolEffectIdempotencyMiddleware');
+    expect(middlewareNames.indexOf('RocToolProtocolMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')
+    );
+    expect(middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('RocToolRuntimeErrorMiddleware')
+    );
+  });
+
   it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {
     const internetSearchSchema = z.object({
       query: z.string()

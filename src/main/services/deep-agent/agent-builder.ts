@@ -32,6 +32,8 @@ import {
 import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
 import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
+import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
+import type { AgentToolEffectStore } from './tool-effect-store';
 import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
@@ -53,6 +55,11 @@ export type DeepAgentBuildInput = {
   workflowHint: WorkflowHint;
   contextBudgetTokens: number | undefined;
   hookMiddleware?: RocHookMiddlewareOptions;
+  toolEffectIdempotency?: {
+    runId: string;
+    threadId: string;
+    store: AgentToolEffectStore;
+  };
 };
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
@@ -77,6 +84,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
   const tools = input.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
   const subagents = input.mode === 'plan' ? createPlanModeSubagents(input, tools) : input.subagents;
   const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
+  const toolEffectMiddleware = createToolEffectMiddleware(input);
   const planModeMiddleware =
     input.mode === 'plan'
       ? [
@@ -105,6 +113,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
       backoffFactor: 1.5
     }),
     createToolProtocolMiddleware(),
+    ...toolEffectMiddleware,
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
     createRocFilesystemPathPolicyMiddleware(),
@@ -168,6 +177,7 @@ function applyPlanModeSubagentMiddleware(input: DeepAgentBuildInput, subagent: R
 }
 
 function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
+  const toolEffectMiddleware = createToolEffectMiddleware(input);
   return [
     createRocPlanReadOnlyMemoryMiddleware({
       backend: input.backend,
@@ -180,8 +190,22 @@ function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
     createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware(),
     createToolProtocolMiddleware(),
+    ...toolEffectMiddleware,
     createToolResolutionMiddleware(),
     createToolRuntimeErrorMiddleware()
+  ];
+}
+
+function createToolEffectMiddleware(input: DeepAgentBuildInput) {
+  if (input.toolEffectIdempotency === undefined) {
+    return [];
+  }
+  return [
+    createToolEffectIdempotencyMiddleware({
+      runId: input.toolEffectIdempotency.runId,
+      threadId: input.toolEffectIdempotency.threadId,
+      store: input.toolEffectIdempotency.store
+    })
   ];
 }
 

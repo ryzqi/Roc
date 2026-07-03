@@ -25,6 +25,7 @@ import type {
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
@@ -304,7 +305,8 @@ function resolveDeepAgentExecutor(
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
     paths: option.paths,
-    store: new RocSqliteStore(coreDb)
+    store: new RocSqliteStore(coreDb),
+    toolEffectStore: new AgentToolEffectStore(coreDb)
   });
 }
 
