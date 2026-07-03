@@ -19,7 +19,7 @@ export type ForgeTieredCompactionOptions = {
   phaseThresholds?: readonly [number, number, number];
 };
 
-type RequiredForgeTieredCompactionOptions = {
+export type RequiredForgeTieredCompactionOptions = {
   budgetTokens: number;
   keepRecent: number;
   phaseThresholds: readonly [number, number, number];
