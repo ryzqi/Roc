@@ -394,6 +394,51 @@ describe('buildDeepAgent harness profile wiring', () => {
     );
   });
 
+  it('wires Roc context compaction pipeline in normal runs when context options are provided', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      providerType: 'openai_compatible',
+      workflowHint: null,
+      contextBudgetTokens: 4096,
+      contextCompaction: {
+        artifactStore: {} as never,
+        emitEvent: vi.fn(),
+        mode: 'chat',
+        runId: 'run_context_1',
+        threadId: 'thread_context_1',
+        workspaceHash: 'workspace_hash_context'
+      }
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).toContain('RocContextCompactionPipeline');
+    expect(middlewareNames.indexOf('ForgeIterationTrackingMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('RocContextCompactionPipeline')
+    );
+    expect(middlewareNames.indexOf('RocContextCompactionPipeline')).toBeLessThan(
+      middlewareNames.indexOf('ForgeRescueParsingMiddleware')
+    );
+    expect(middlewareNames.filter((name) => name === 'ContextEditingMiddleware')).toHaveLength(0);
+  });
+
   it('wires schema-validated bare argument rescue through createDeepAgent middleware', async () => {
     const internetSearchSchema = z.object({
       query: z.string()

@@ -22,6 +22,12 @@ import {
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
+import type { ContextArtifactStore } from './context/context-artifact-store';
+import {
+  createRocContextCompactionMiddleware,
+  type ContextCompactionMode,
+  type RocContextCompactionOptions
+} from './context/context-compaction-pipeline';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
 import {
@@ -59,6 +65,14 @@ export type DeepAgentBuildInput = {
     runId: string;
     threadId: string;
     store: AgentToolEffectStore;
+  };
+  contextCompaction?: {
+    artifactStore: ContextArtifactStore;
+    emitEvent: RocContextCompactionOptions['emitEvent'];
+    mode: ContextCompactionMode;
+    runId: string;
+    threadId: string;
+    workspaceHash: string | null;
   };
 };
 
@@ -118,9 +132,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     createForgeIterationTrackingMiddleware(),
     createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware(),
-    createForgeTieredCompactionMiddleware({
-      budgetTokens: input.contextBudgetTokens
-    }),
+    ...createContextCompactionMiddleware(input),
     createRescueParsingMiddleware({ availableTools: knownToolCandidates }),
     createToolResolutionMiddleware(),
     createToolRuntimeErrorMiddleware(),
@@ -205,6 +217,29 @@ function createToolEffectMiddleware(input: DeepAgentBuildInput) {
       runId: input.toolEffectIdempotency.runId,
       threadId: input.toolEffectIdempotency.threadId,
       store: input.toolEffectIdempotency.store
+    })
+  ];
+}
+
+function createContextCompactionMiddleware(input: DeepAgentBuildInput) {
+  if (input.contextCompaction === undefined) {
+    return [
+      createForgeTieredCompactionMiddleware({
+        budgetTokens: input.contextBudgetTokens
+      })
+    ];
+  }
+  return [
+    createRocContextCompactionMiddleware({
+      artifactStore: input.contextCompaction.artifactStore,
+      budgetTokens: input.contextBudgetTokens === undefined ? 7168 : input.contextBudgetTokens,
+      emitEvent: input.contextCompaction.emitEvent,
+      mode: input.contextCompaction.mode,
+      model: input.model,
+      runId: input.contextCompaction.runId,
+      threadId: input.contextCompaction.threadId,
+      workspaceHash: input.contextCompaction.workspaceHash,
+      workspacePath: input.workspacePath
     })
   ];
 }

@@ -23,7 +23,10 @@ import type {
 } from '../../../../src/shared/types';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
+import { ContextArtifactStore } from '../../../../src/main/services/deep-agent/context/context-artifact-store';
+import type { ContextMaintenanceEvent } from '../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../../../src/main/services/hooks';
 import { RocPaths } from '../../../../src/main/services/paths';
@@ -39,6 +42,7 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 
 export const workspacePath = process.cwd();
 const toolEffectDb = new Database(':memory:');
+applyAgentPluginSchema(toolEffectDb);
 
 afterAll(() => {
   toolEffectDb.close();
@@ -48,6 +52,7 @@ interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+  contextMaintenanceEvent?: ContextMaintenanceEvent;
   messages?: AsyncIterable<unknown>;
   output?: unknown;
   requestOverride?: Partial<ChatStartRunRequest>;
@@ -86,6 +91,13 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   mocked.buildDeepAgent.mockReturnValue({
     streamEvents: vi.fn(async (runInput: unknown, config: unknown) => {
       lastStreamEventsCall = { input: runInput, config };
+      if (input.contextMaintenanceEvent !== undefined) {
+        const buildInput = readBuildInput();
+        if (buildInput.contextCompaction === undefined) {
+          throw new Error('context_compaction_not_wired');
+        }
+        buildInput.contextCompaction.emitEvent(input.contextMaintenanceEvent);
+      }
       return {
         toolCalls: input.toolCalls ?? emptyAsyncIterable(),
         messages: input.messages ?? emptyAsyncIterable(),
@@ -101,6 +113,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     hookRuntime: input.hookRuntime,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore(),
+    contextArtifactStore: new ContextArtifactStore(toolEffectDb),
     toolEffectStore: new AgentToolEffectStore(toolEffectDb)
   });
   const execution = await executor.execute({

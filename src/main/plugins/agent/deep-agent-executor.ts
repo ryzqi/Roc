@@ -39,6 +39,8 @@ import {
 } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocWindowsCommandTool } from '../../services/deep-agent/command-tool';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
+import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
+import type { ContextMaintenanceEvent } from '../../services/deep-agent/context/context-compaction-pipeline';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
@@ -58,6 +60,7 @@ import {
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
   checkpointer: BaseCheckpointSaver;
+  contextArtifactStore: ContextArtifactStore;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
   paths: RocPaths;
@@ -122,6 +125,18 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         searchSessions: request => options.capabilities.invoke('agent.sessions.search', request),
         explicitSkillContexts
       });
+      const emitContextMaintenanceEvent = (event: ContextMaintenanceEvent) => {
+        eventQueue.push({
+          type: 'context_maintenance',
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          event: event.type,
+          mode: input.request.mode,
+          stage: event.stage,
+          ...(event.persistedChars === undefined ? {} : { persistedChars: event.persistedChars }),
+          ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars })
+        });
+      };
       const initialHookContexts: string[] = [];
       if (options.hookRuntime !== undefined) {
         const sessionStart = await options.hookRuntime.runEvent({
@@ -172,6 +187,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         providerType: handle.runtime.providerType,
         workflowHint: input.request.workflowHint ?? null,
         contextBudgetTokens: handle.runtime.contextBudgetTokens,
+        contextCompaction: {
+          artifactStore: options.contextArtifactStore,
+          emitEvent: emitContextMaintenanceEvent,
+          mode: input.request.mode,
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
+        },
         toolEffectIdempotency: {
           runId: input.run.id,
           threadId: input.run.threadId,

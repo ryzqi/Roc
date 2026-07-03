@@ -25,6 +25,7 @@ import type {
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
@@ -298,10 +299,12 @@ function resolveDeepAgentExecutor(
   if ('execute' in option) {
     return option;
   }
+  const agentDb = context.database.getConnection();
   const coreDb = context.database.getCoreConnection();
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
     checkpointer: new RocSqliteCheckpointer(coreDb),
+    contextArtifactStore: new ContextArtifactStore(agentDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
     paths: option.paths,

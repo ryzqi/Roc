@@ -192,6 +192,23 @@ export type ChatRunEvent =
       identity: SubagentIdentity;
       event: SubagentEventPayload;
     }
+  | {
+      type: 'context_maintenance';
+      runId: string;
+      threadId: string | null;
+      event:
+        | 'context_compaction_started'
+        | 'context_tool_result_persisted'
+        | 'context_deterministic_compacted'
+        | 'context_summary_started'
+        | 'context_summary_completed'
+        | 'context_summary_skipped'
+        | 'context_compaction_failed';
+      mode: ChatRunMode;
+      stage: 'persist' | 'deterministic' | 'summary';
+      persistedChars?: number;
+      removedChars?: number;
+    }
   | RocHookRunEvent
   | {
       type: 'run_completed';

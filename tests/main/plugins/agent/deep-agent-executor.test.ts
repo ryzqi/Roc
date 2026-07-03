@@ -383,6 +383,40 @@ describe('createAgentDeepAgentExecutor', () => {
     });
   });
 
+  it('passes context maintenance events through the chat run event stream', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      contextMaintenanceEvent: {
+        type: 'context_summary_completed',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        mode: 'task',
+        stage: 'summary',
+        removedChars: 128
+      },
+      output: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'ok'
+          }
+        ]
+      }
+    });
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'context_maintenance',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        event: 'context_summary_completed',
+        mode: 'task',
+        stage: 'summary',
+        removedChars: 128
+      })
+    ]));
+  });
+
 
   it('wires background task change tools to task capabilities', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
