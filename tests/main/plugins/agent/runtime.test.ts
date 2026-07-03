@@ -301,12 +301,49 @@ describe('AgentPluginRuntime', () => {
           type: 'run_failed',
           runId: result.runId,
           threadId: result.threadId,
-          code: 'agent_run_failed',
+          code: 'provider_execution_failed',
           message: 'provider_unavailable',
           retryable: true
         }
       })
     );
+  });
+
+  it('recovers transient provider connection errors before publishing final failure', async () => {
+    const repository = new AgentSessionRepository(db);
+    let calls = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          calls += 1;
+          if (calls === 1) {
+            yield createTextBlock(input.run.id, 'partial ');
+            throw new Error('Connection error.');
+          }
+          yield createTextBlock(input.run.id, 'done');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(
+      () =>
+        events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed'),
+      1500
+    );
+
+    const chatEvents = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload));
+
+    expect(chatEvents.map((event) => event?.type)).toContain('run_recovering');
+    expect(chatEvents.map((event) => event?.type)).toContain('run_recovered');
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(calls).toBe(2);
   });
 
 });
@@ -332,8 +369,8 @@ function createTextBlock(runId: string, text: string): ChatRunEvent {
   };
 }
 
-async function waitForEvent(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 250;
+async function waitForEvent(predicate: () => boolean, timeoutMs = 250): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error('expected_event_not_published');

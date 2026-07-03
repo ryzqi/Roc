@@ -165,6 +165,22 @@ export type ChatRunEvent =
       interruptId: string;
     }
   | {
+      type: 'run_recovering';
+      runId: string;
+      threadId: string | null;
+      code: string;
+      message: string;
+      attempt: number;
+      nextRetryAt: string;
+    }
+  | {
+      type: 'run_recovered';
+      runId: string;
+      threadId: string | null;
+      attempt: number;
+      recoveredAt: string;
+    }
+  | {
       type: 'todo_event';
       runId: string;
       todos: ChatTodoItem[];
