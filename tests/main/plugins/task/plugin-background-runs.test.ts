@@ -154,6 +154,103 @@ describe('task plugin', () => {
     );
   });
 
+  it('keeps background runs active during agent recovery and preserves saved run context', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    const startRequests: ChatStartRunRequest[] = [];
+    registerAgentRunStart(capabilities, eventBus, startRequests);
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', {
+      ...previewRequest,
+      enabledCapabilities: {
+        mcpServers: ['filesystem'],
+        skills: ['typescript']
+      }
+    });
+    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+
+    const runNow = await capabilities.invoke<{ id: string }, { taskId: string; runId: string }>('task.background.runNow', {
+      id: task.id
+    });
+    await eventBus.publish({
+      type: 'agent.chat.run-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:02.000Z',
+      payload: {
+        type: 'run_recovering',
+        runId: runNow.runId,
+        threadId: task.threadId,
+        code: 'provider_network_error',
+        message: 'Connection error.',
+        attempt: 1,
+        nextRetryAt: '2026-06-04T00:00:03.000Z'
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.chat.run-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:03.000Z',
+      payload: {
+        type: 'run_recovered',
+        runId: runNow.runId,
+        threadId: task.threadId,
+        attempt: 1,
+        recoveredAt: '2026-06-04T00:00:04.000Z'
+      }
+    });
+
+    const detailDuringRecovery = await capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId: task.id });
+    if (detailDuringRecovery.backgroundTask === null) {
+      throw new Error('expected_background_task_detail');
+    }
+
+    expect(startRequests[0]).toMatchObject({
+      enabledCapabilities: {
+        mcpServers: ['filesystem'],
+        skills: ['typescript']
+      },
+      taskSource: 'workbench',
+      threadId: task.threadId,
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    expect(detailDuringRecovery.backgroundTask.lastRunStatus).toBeNull();
+    expect(detailDuringRecovery.runHistory[0]).toMatchObject({
+      id: runNow.runId,
+      status: 'running'
+    });
+
+    await eventBus.publish({
+      type: 'agent.run.completed',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:05.000Z',
+      payload: {
+        runId: runNow.runId,
+        threadId: task.threadId,
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        finishReason: 'stop',
+        durationMs: 42,
+        summary: 'Recovered run completed.',
+        assistantMessage: 'Recovered run completed.'
+      }
+    });
+
+    const detailAfterCompletion = await capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId: task.id });
+    if (detailAfterCompletion.backgroundTask === null) {
+      throw new Error('expected_background_task_detail');
+    }
+
+    expect(detailAfterCompletion.backgroundTask.lastRunStatus).toBe('success');
+    expect(detailAfterCompletion.runHistory[0]).toMatchObject({
+      id: runNow.runId,
+      status: 'completed'
+    });
+  });
+
 });
 
 function registerAgentRunStart(
