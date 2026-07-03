@@ -64,7 +64,6 @@ type RunCompactionInput = RocContextCompactionOptions & {
 
 type ToolPairSnapshot = {
   aiMessage: AIMessage;
-  toolCallId: string;
   toolMessage: ToolMessage;
 };
 
@@ -202,13 +201,15 @@ function snapshotToolPairs(messages: BaseMessage[]): ToolPairSnapshot[] {
       continue;
     }
     for (const toolCall of message.tool_calls) {
+      if (toolCall.id === undefined) {
+        continue;
+      }
       const toolResult = toolResults.get(toolCall.id);
       if (toolResult === undefined) {
         continue;
       }
       pairs.push({
         aiMessage: message,
-        toolCallId: toolCall.id,
         toolMessage: toolResult
       });
     }
