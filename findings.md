@@ -132,6 +132,9 @@
 - Phase 6 Forge/guardrails batch read and tabled `src/main/services/forge-guardrails/**`, `src/main/services/deep-agent/error-mapping.ts`, and tool retry wiring in `agent-builder.ts`.
 - Forge batch evidence: guardrail behavior is installed as LangChain middleware in `buildDeepAgent()`; `toolRetryMiddleware` is limited to `web_read`/`web_search`; network/abort/GraphInterrupt failures bubble instead of being swallowed; recoverable `RocToolResolutionError` becomes a tagged soft `ToolMessage`; hard tool failures consume `forge_error_tracker` budget through LangGraph `Command`; transient nudge messages are cleaned up and old context is summarized before destructive compaction.
 - Phase 6 Forge focused verification passed: `pnpm test -- tests/main/services/forge-guardrails tests/main/deep-agent-error-mapping.test.ts tests/main/deep-agent-tool-retry.test.ts tests/main/deep-agent-build-wiring.test.ts` ran 20 files / 120 tests.
+- Phase 6 IPC/capability batch read and tabled `src/main/ipc/*`, `src/main/kernel/capability-registry.ts`, and `scripts/generate-ipc-schema.mjs`.
+- IPC/capability evidence: plugin-backed IPC is explicit generated-channel mapping with no wildcard raw capability IPC; boundary supplements remain only for settings/dialog/window/shell confirmation; `CapabilityRegistry` is the zod input/output validation boundary; `generate-ipc-schema.mjs --check` is the drift gate for `ipc-schema.json` and `ipc-generated.ts`.
+- Phase 6 IPC/capability verification passed: `pnpm test -- tests/main/files-ipc.test.ts tests/main/ipc-domain-structure.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/ipc-schema-generation.test.ts tests/main/kernel/capability-registry.test.ts` ran 5 files / 16 tests; `pnpm check:ipc` printed `IPC generated files are current.`
 
 ## Resources
 - `C:\Users\任彦舟\.codex\skills\agent-development\references\coverage-map.md`

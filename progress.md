@@ -341,6 +341,13 @@
   - Read matching Forge/error tests: `tests/main/services/forge-guardrails/**`, `deep-agent-error-mapping.test.ts`, `deep-agent-tool-retry.test.ts`, and relevant `deep-agent-build-wiring.test.ts` sections.
   - Ran Forge focused verification; 20 files and 120 tests passed.
   - Updated `agent_harness_audit.md` and `findings.md` with Forge guardrails/error mapping evidence.
+  - Committed Forge coverage batch as `0098004 docs(agent): record phase 6 forge audit`.
+  - Re-ran reverse coverage scan after the first three Phase 6 commits: audit table has 119 paths, candidate scan still has 390, with 273 missing candidates left to group or audit.
+  - Read IPC/capability batch source: `src/main/ipc/*`, `src/main/kernel/capability-registry.ts`, and `scripts/generate-ipc-schema.mjs`.
+  - Read matching tests: `files-ipc.test.ts`, `ipc-domain-structure.test.ts`, `ipc-plugin-adapter.test.ts`, `ipc-schema-generation.test.ts`, and `kernel/capability-registry.test.ts`.
+  - Ran IPC/capability focused tests; 5 files and 16 tests passed.
+  - Ran `pnpm check:ipc`; generated IPC files are current.
+  - Updated `agent_harness_audit.md` and `findings.md` with IPC/capability batch evidence.
 
 ## Phase 6 Test Results
 | Test | Input | Expected | Actual | Status |
@@ -350,6 +357,9 @@
 | Phase 6 agent support focused tests | `pnpm test -- tests/main/plugins/agent/plugin.test.ts tests/main/plugins/agent/capability-preview.test.ts tests/main/plugins/agent/chat-image-attachments.test.ts tests/main/plugins/agent/model-factory-adapter.test.ts tests/main/plugins/agent/recovery-policy.test.ts tests/main/plugins/agent/deep-agent-executor-final-output.test.ts tests/main/plugins/agent/runtime-streaming.test.ts tests/main/plugins/agent/runtime-tool-blocks.test.ts` | First agent support coverage batch passes | 8 files and 33 tests passed | pass |
 | Phase 6 context focused tests | `pnpm test -- tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/services/deep-agent/context/context-compaction-pipeline.test.ts tests/main/services/deep-agent/context/context-artifact-store.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/workspace-scope.test.ts tests/main/services/deep-agent/context/run-summary.test.ts tests/main/services/deep-agent/context/context-summary.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/services/deep-agent/prompt-builder.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/session-repository.test.ts` | Context coverage batch passes | 11 files and 63 tests passed | pass |
 | Phase 6 Forge focused tests | `pnpm test -- tests/main/services/forge-guardrails tests/main/deep-agent-error-mapping.test.ts tests/main/deep-agent-tool-retry.test.ts tests/main/deep-agent-build-wiring.test.ts` | Forge guardrails/error mapping coverage batch passes | 20 files and 120 tests passed | pass |
+| Phase 6 reverse coverage rescan | PowerShell over `rg --files` candidate paths vs audit table paths after three Phase 6 commits | Recount remaining unrepresented candidates | audit=119, candidates=390, missing=273 | needs follow-up |
+| Phase 6 IPC/capability focused tests | `pnpm test -- tests/main/files-ipc.test.ts tests/main/ipc-domain-structure.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/ipc-schema-generation.test.ts tests/main/kernel/capability-registry.test.ts` | IPC/capability coverage batch passes | 5 files and 16 tests passed | pass |
+| Phase 6 IPC drift check | `pnpm check:ipc` | Generated IPC files are current | Printed `IPC generated files are current.` | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
