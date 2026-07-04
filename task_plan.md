@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 1 inventory continues; AHA-001 runtime continuity segment verified and ready to commit
+Phase 1 inventory continues; AHA-001 runtime continuity segment committed as `e7302d1`
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -75,6 +75,8 @@ Phase 1 inventory continues; AHA-001 runtime continuity segment verified and rea
 | RED stale pending interrupt test resolved instead of rejecting | 1 | Added run status guard in `resumeRun()` and stale pending cleanup. |
 | RED repository interrupt transaction test failed with `repository.markRunInterrupted is not a function` | 1 | Added `markRunInterrupted()` to persist `waiting_user` state and pending interrupt metadata in one repository transaction. |
 | `pnpm typecheck` failed because repository test approval payload used `actionRequests` outside `request` | 1 | Read `src/shared/types/chat.ts` and corrected the test payload shape. |
+| `rg` over pnpm scoped package glob paths failed with `os error 123` | 1 | Resolved package directories with `Get-ChildItem` and read nested package files directly. |
+| RED checkpointer special writes test preserved stale `__interrupt__` value | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
 
 ## Notes
 - 状态词：`Located`、`Changed, unverified`、`Verified passing`、`Blocked, not run`。

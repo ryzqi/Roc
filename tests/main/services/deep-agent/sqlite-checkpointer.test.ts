@@ -50,4 +50,47 @@ describe('RocSqliteCheckpointer', () => {
     expect(loaded?.config.configurable?.checkpoint_id).toBe('checkpoint_1');
     expect(loaded?.parentConfig?.configurable?.checkpoint_id).toBe('parent_checkpoint_1');
   });
+
+  it('overwrites repeated special pending writes while preserving regular writes', async () => {
+    const checkpointer = new RocSqliteCheckpointer(db);
+    const checkpoint = {
+      v: 4,
+      id: 'checkpoint_writes_1',
+      ts: '2026-07-03T00:00:00.000Z',
+      channel_values: {},
+      channel_versions: {},
+      versions_seen: {}
+    };
+    const config = await checkpointer.put(
+      {
+        configurable: {
+          thread_id: 'thread_writes_1',
+          checkpoint_ns: ''
+        }
+      },
+      checkpoint,
+      {
+        source: 'input',
+        step: 1,
+        parents: {}
+      },
+      {}
+    );
+
+    await checkpointer.putWrites(config, [
+      ['messages', 'regular-first'],
+      ['__interrupt__', { value: 'interrupt-first' }]
+    ], 'task-writes-1');
+    await checkpointer.putWrites(config, [
+      ['messages', 'regular-second'],
+      ['__interrupt__', { value: 'interrupt-second' }]
+    ], 'task-writes-1');
+
+    const loaded = await checkpointer.getTuple(config);
+
+    expect(loaded?.pendingWrites).toEqual([
+      ['task-writes-1', '__interrupt__', { value: 'interrupt-second' }],
+      ['task-writes-1', 'messages', 'regular-first']
+    ]);
+  });
 });

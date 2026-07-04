@@ -143,6 +143,16 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING`
     );
+    const upsertSpecialWrite = this.db.prepare(
+      `INSERT INTO langgraph_checkpoint_writes
+       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
+         channel = excluded.channel,
+         value_type = excluded.value_type,
+         value_blob = excluded.value_blob,
+         created_at = excluded.created_at`
+    );
     const serializedWrites = await Promise.all(
       writes.map(async ([channel, value], index) => {
         const [valueType, valueBytes] = await this.serde.dumpsTyped(value);
@@ -150,6 +160,7 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
         return {
           channel,
           index: mappedIndex === undefined ? index : mappedIndex,
+          special: mappedIndex !== undefined,
           valueType,
           valueBytes
         };
@@ -157,7 +168,8 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     );
     this.db.transaction(() => {
       for (const write of serializedWrites) {
-        insert.run(
+        const statement = write.special ? upsertSpecialWrite : insert;
+        statement.run(
           key.threadId,
           key.checkpointNs,
           key.checkpointId,

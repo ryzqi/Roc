@@ -61,6 +61,22 @@
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; exit code 0 with only Git's CRLF normalization warning for `tests/main/plugins/agent/runtime-approval.test.ts`.
   - Final AHA-001 review of current diff found no blocking issue.
+  - Committed AHA-001 as `e7302d1 fix(agent): persist pending interrupts across runtime rebuild`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Continued runtime/orchestration audit by re-reading `task_plan.md`, `findings.md`, `agent_harness_audit.md`, `deep-agents-core.md`, and `deep-agents-memory.md`.
+  - Read runtime/orchestration source files: `agent-builder.ts`, `deep-agent-executor.ts`, `sqlite-checkpointer.ts`, `stream-consumers.ts`, and `stream-usage-accumulator.ts`.
+  - Read related tests: `sqlite-checkpointer.test.ts`, `deep-agent-executor.test.ts`, `deep-agent-executor-streaming.test.ts`, `deep-agent-build-wiring.test.ts`, and `stream-consumers.test.ts`.
+  - Resolved local `@langchain/langgraph-checkpoint@1.1.3` files through nested `@langchain/langgraph` package and read `BaseCheckpointSaver`, `WRITES_IDX_MAP`, and `MemorySaver.putWrites()` behavior.
+  - Confirmed `@langchain/langgraph` top-level does not export `WRITES_IDX_MAP`; Roc cannot import it through the existing direct package surface without adding a dependency.
+  - Added RED `RocSqliteCheckpointer` test for repeated pending writes: regular writes should remain first-write-wins and special writes should overwrite.
+  - RED test failed because repeated `__interrupt__` preserved `interrupt-first`.
+  - Changed `RocSqliteCheckpointer.putWrites()` so special negative-index writes upsert and regular writes still use `DO NOTHING`.
+  - Re-ran `pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts`; 1 file and 2 tests passed.
+  - Ran runtime/orchestration test group: `sqlite-checkpointer.test.ts`, `deep-agent-build-wiring.test.ts`, `deep-agent-executor.test.ts`, `deep-agent-executor-streaming.test.ts`, `stream-consumers.test.ts`, and `deep-agent-official-contracts.test.ts`; 6 files and 49 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Ran `git diff --check`; passed with no output.
+  - Reviewed AHA-002 current diff; no blocking issue found.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -92,6 +108,12 @@
 | Typecheck after review fix | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | Strict unused after review fix | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | Whitespace after review fix | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `tests/main/plugins/agent/runtime-approval.test.ts` | pass |
+| RED checkpointer special writes | `pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts` | Repeated `__interrupt__` write overwrites old value; regular write keeps first value | Failed because pending write kept `interrupt-first` | expected fail |
+| GREEN checkpointer special writes | `pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts` | Checkpointer tests pass after special write upsert | 1 file, 2 tests passed | pass |
+| Runtime/orchestration audit tests | `pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts tests/main/deep-agent-build-wiring.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/deep-agent-executor-streaming.test.ts tests/main/services/deep-agent/stream-consumers.test.ts tests/main/services/deep-agent/deep-agent-official-contracts.test.ts` | Builder/executor/checkpointer/stream contract tests pass | 6 files, 49 tests passed | pass |
+| AHA-002 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-002 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-002 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -102,6 +124,8 @@
 | 2026-07-04 | `Get-Content` for `.codex\skills\.system\using-superpowers\SKILL.md` failed because the listed source path was under `.codex\skills\using-superpowers` | 1 | Read the correct skill path. |
 | 2026-07-04 | `Get-ChildItem -Filter` with three filenames failed because PowerShell `-Filter` accepts a single string | 1 | Used direct file reads/root listing instead. |
 | 2026-07-04 | `pnpm typecheck` and strict unused scan failed on `tests/main/plugins/agent/session-repository.test.ts` because approval payload fields were not nested under `request` | 1 | Read `src/shared/types/chat.ts` and corrected the test payload shape. |
+| 2026-07-04 | `rg` over pnpm scoped package glob paths failed with `os error 123` | 1 | Resolved package directories with `Get-ChildItem` and read nested package files directly. |
+| 2026-07-04 | RED checkpointer special writes test kept `interrupt-first` instead of latest special write | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
 
 ## 5-Question Reboot Check
 | Question | Answer |
