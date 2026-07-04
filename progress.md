@@ -131,6 +131,25 @@
   - Committed prompt/context/memory plugin audit record as `85e0d01 docs(agent): record phase 3 memory prompt audit`.
   - After commit, `git status --short --branch` showed clean `main`.
   - Marked Phase 3 complete and moved current phase to Phase 4 contracts/IPC/persistence/tests audit.
+  - Committed Phase 3 closeout as `86c18eb docs(agent): close phase 3 audit`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Continuation loaded process/domain skills and active tracking files for Phase 4.
+  - Ran `git status --short --branch`, `git diff --stat`, and `git diff --check`; only tracking-file updates are present and there is no business-code diff.
+  - Ran planning catchup; it detected only current continuation skill/planning reads and recommended updating tracking files before continuing.
+  - Re-read Phase 4 LangGraph/DeepAgents references for persistence, HITL, backend routing, orchestration, and graph fundamentals.
+  - Read shared IPC/types contracts: `ipc.ts`, `types/chat.ts`, `types/task.ts`, `types/agent.ts`, `background-task-tool-contract.ts`, and generated IPC channel matches.
+  - Read task persistence/runtime source: `schema.ts`, repository/mutation/query/mapper files, `index.ts`, `scheduler.ts`, `background-task-tools.ts`, `agent-run-payloads.ts`, and `task-repository-events.ts`.
+  - Located candidate scheduler persistence gap: when automatic scheduled fire calls `agent.run.start` and that boundary throws, `TaskScheduler.fire()` only stores in-memory `lastError`; it does not record a failed scheduled run or apply `pause_and_report`.
+  - Added RED scheduler test for automatic `agent.run.start` failure; it failed because `repository.listScheduledRuns()` returned `[]`.
+  - Added `TaskRepository.recordBackgroundTaskStartFailure()` and wired `TaskScheduler.fire()` catch path to record a failed scheduled run, pause the task, and refresh scheduler registration.
+  - Re-ran focused scheduler test; 1 file and 3 tests passed.
+  - Ran task/shared focused tests; 9 files and 30 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Ran `git diff --check`; passed.
+  - Ran `pnpm check:ipc`; generated IPC files are current.
+  - Reviewed current AHA-005 diff; no blocking risk found.
+  - Committed AHA-005 code/test fix as `34799cc fix(task): persist scheduled start failures`.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -182,6 +201,13 @@
 | AHA-004 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-004 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 | Phase 3 prompt/context/memory plugin tests | `pnpm test -- tests/main/deep-agent-prompt.test.ts tests/main/services/deep-agent/prompt-builder.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/plugins/memory/plugin.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/workspace-scope.test.ts` | Prompt/context/memory plugin tests pass | 7 files, 45 tests passed | pass |
+| RED scheduler startup failure | `pnpm test -- tests/main/plugins/task/scheduler.test.ts` | New scheduler test fails because startup failure is not persisted | Failed with `repository.listScheduledRuns()` returning `[]` | expected fail |
+| GREEN scheduler startup failure | `pnpm test -- tests/main/plugins/task/scheduler.test.ts` | Scheduler tests pass after durable startup-failure persistence | 1 file, 3 tests passed | pass |
+| AHA-005 task/shared focused tests | `pnpm test -- tests/main/plugins/task tests/shared/background-task-contract.test.ts` | Task plugin and shared background task contract tests pass | 9 files, 30 tests passed | pass |
+| AHA-005 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-005 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-005 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
+| Phase 4 IPC drift check | `pnpm check:ipc` | IPC generated files are current | Passed: `IPC generated files are current.` | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -196,12 +222,13 @@
 | 2026-07-04 | RED checkpointer special writes test kept `interrupt-first` instead of latest special write | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
 | 2026-07-04 | `rg` over `node_modules\.pnpm\deepagents@1.10.5*` failed with Windows `os error 123` | 1 | Resolved the exact pnpm package directory with `Get-ChildItem` and searched the resolved path. |
 | 2026-07-04 | Attempted to append to `progress.md` via `Add-Content`; PowerShell quoting failed and manual shell writes are not the required edit path | 1 | No file was changed; continued using `apply_patch` for tracking-file edits. |
+| 2026-07-04 | `Get-Content` for `src/main/plugins/task/tools.ts` failed because that file does not exist | 1 | Read the actual background task tool implementation at `src/main/services/deep-agent/background-task-tools.ts`. |
 
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 1: Requirements, Sources, And Inventory |
-| Where am I going? | Build file inventory, audit runtime/tools/contracts, then fix verified issues. |
+| Where am I? | Phase 4: Contracts, IPC, Persistence, Tests Audit |
+| Where am I going? | Audit shared IPC/types, task persistence/runtime, agent persistence contracts, then fix only verified issues. |
 | What's the goal? | Production-grade Roc agent harness audit with DeepAgents/LangChain native-first evidence. |
 | What have I learned? | See `findings.md`. |
 | What have I done? | Created persistent tracking and loaded first authoritative references. |
