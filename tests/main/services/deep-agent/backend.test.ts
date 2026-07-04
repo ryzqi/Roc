@@ -1,5 +1,8 @@
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { InMemoryStore } from '@langchain/langgraph';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createBackend } from '../../../../src/main/services/deep-agent/backend';
 import {
   ROC_FILE_TOOL_ROUTE_ERROR,
@@ -12,6 +15,7 @@ import { SecurityScanService } from '../../../../src/main/services/memory/securi
 import { RocPaths } from '../../../../src/main/services/paths';
 
 const workspacePath = 'F:\\Code\\Roc';
+const cleanupRoots: string[] = [];
 
 type TestBackend = ReturnType<typeof createBackend>['backend'] & {
   ls: (path: string) => Promise<unknown>;
@@ -23,17 +27,36 @@ type TestBackend = ReturnType<typeof createBackend>['backend'] & {
   grep: (pattern: string, path?: string | null, glob?: string | null) => Promise<unknown>;
 };
 
-function createTestBackend() {
+afterEach(async () => {
+  const roots = cleanupRoots.splice(0);
+  await Promise.all(roots.map(async (root) => await rm(root, { recursive: true, force: true })));
+});
+
+function createTestBackend(input: { paths?: RocPaths; selectedSkillIds?: readonly string[] } = {}) {
+  const paths = input.paths === undefined ? new RocPaths('F:\\Code\\Roc\\.test-data') : input.paths;
+  const selectedSkillIds = input.selectedSkillIds === undefined ? [] : input.selectedSkillIds;
   return createBackend({
     workspaceService: {
       getCurrentWorkspace: () => ({ path: workspacePath, label: 'Roc' })
     } as unknown as Parameters<typeof createBackend>[0]['workspaceService'],
-    paths: new RocPaths('F:\\Code\\Roc\\.test-data'),
+    paths,
     store: new InMemoryStore(),
     securityScan: new SecurityScanService(defaultSettings.memory.securityScan),
     capacity: new CapacityService(defaultSettings.memory.charLimits),
-    selectedSkillIds: []
+    selectedSkillIds
   });
+}
+
+async function createSkillsFixture(skillIds: readonly string[]): Promise<RocPaths> {
+  const root = await mkdtemp(join(tmpdir(), 'roc-backend-'));
+  cleanupRoots.push(root);
+  const paths = new RocPaths(root);
+  for (const skillId of skillIds) {
+    const skillDir = join(paths.skillsDir, skillId);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, 'SKILL.md'), `---\nname: ${skillId}\ndescription: ${skillId}\n---\n# ${skillId}\n`, 'utf8');
+  }
+  return paths;
 }
 
 describe('DeepAgents Roc backend', () => {
@@ -98,6 +121,16 @@ describe('DeepAgents Roc backend', () => {
     const { backend } = createTestBackend();
 
     await expect((backend as TestBackend).ls('/workspace/')).resolves.toHaveProperty('files');
+  });
+
+  it('denies skill files when no skills are enabled for the run', async () => {
+    const paths = await createSkillsFixture(['typescript']);
+    const { backend } = createTestBackend({ paths, selectedSkillIds: [] });
+
+    await expect((backend as TestBackend).ls('/skills/')).resolves.toEqual({ files: [] });
+    await expect((backend as TestBackend).read('/skills/typescript/SKILL.md')).resolves.toEqual({
+      error: 'Roc 当前回合未启用这个 skill。'
+    });
   });
 
   it('uses an explicit final deny rule because DeepAgents permissions default to allow', () => {

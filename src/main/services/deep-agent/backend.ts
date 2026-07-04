@@ -414,11 +414,10 @@ function createRouteBackends(input: {
     rootDir: input.paths.skillsDir,
     virtualMode: true
   });
-  const selectedSkillIds = input.selectedSkillIds ?? [];
   const skillsBackend =
-    selectedSkillIds.length === 0
+    input.selectedSkillIds === undefined
       ? new ReadOnlyFilesystemBackend(skillsBackendBase, READ_ONLY_SKILLS_ERROR)
-      : new SelectedSkillsFilesystemBackend(skillsBackendBase, selectedSkillIds, READ_ONLY_SKILLS_ERROR);
+      : new SelectedSkillsFilesystemBackend(skillsBackendBase, input.selectedSkillIds, READ_ONLY_SKILLS_ERROR);
   const slots = listMemorySlots(workspaceHash);
   const globalSlots = slots.filter((slot) => slot.scope === 'global');
   const workspaceSlots = slots.filter((slot) => slot.scope === 'workspace');

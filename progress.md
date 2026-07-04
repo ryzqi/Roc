@@ -77,6 +77,32 @@
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
   - Reviewed AHA-002 current diff; no blocking issue found.
+  - Committed AHA-002 as `c1158e3 fix(agent): align sqlite checkpointer pending writes`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Continuation loaded required skills for the Phase 3 tools/filesystem/shell audit: `using-superpowers`, `planning-with-files`, `risk-review`, `agent-development`, and `maintaining-agents-md`.
+  - Re-read Deep Agents core/memory references, local memory guidance for Roc `/workspace/` and shell/file-tool boundaries, active tracking files, and current tracking-file diff.
+  - Ran planning catchup; it surfaced only this continuation's skill/reference/memory/tracking reads, with no business-code changes.
+  - Ran `git status --short --branch`; only `task_plan.md`, `findings.md`, and `progress.md` are modified.
+  - Read Phase 3 core source files: `backend.ts`, `filesystem-tool-contract.ts`, `filesystem-path-policy.ts`, `command-tool.ts`, `shell-path-guard.ts`, `tool-effect-store.ts`, and `tool-effect-idempotency.ts`.
+  - Initial boundary read found Roc uses native DeepAgents `CompositeBackend`/`FilesystemBackend`/`StoreBackend` for file routes, keeps shell execution in `run_shell_command`, and wraps side-effecting tools with a Roc idempotency middleware.
+  - Located focused Phase 3 tests for backend, filesystem contract/path policy, command tool, shell path guard, and tool-effect store/idempotency.
+  - Located key callers: `agent-builder.ts` wires filesystem path policy and idempotency middleware; `deep-agent-executor.ts` builds `run_shell_command`, `delete_file`, and the routed backend; `plugins/agent/index.ts` constructs `AgentToolEffectStore`.
+  - Read focused Phase 3 tests: `backend.test.ts`, `filesystem-tool-contract.test.ts`, `filesystem-path-policy.test.ts`, `command-tool.test.ts`, `shell-path-policy.test.ts`, `tool-effect-store.test.ts`, and `tool-effect-idempotency.test.ts`.
+  - Tests cover route rejection, Windows path rejection, `/frontend/index.html`, missing/non-string path fields, delete_file path policy, shell `/workspace` leakage in command/cwd, Linux local paths, and tool-effect replay/drift/in-progress cases.
+  - Read `shell-path-policy.ts`, `agent-builder.ts` middleware ordering, `deep-agent-executor.ts` tool/backend/shell adapter sections, `plugins/agent/index.ts` executor initialization, executor tools tests, and build wiring tests.
+  - Confirmed `RocShellPathPolicyMiddleware` runs before RTK middleware and `RocFilesystemPathPolicyMiddleware` runs before filesystem error classification; `run_shell_command` and `delete_file` also enforce their contracts in the concrete tool functions.
+  - Resolved installed `deepagents@1.10.5` package path and read `CompositeBackend` implementation in `dist/langsmith-wdF8zG42.js`; it uses longest-prefix routing and route-under-path handling for list/search methods.
+  - Focused test probe: `pnpm exec vitest run tests/main/services/deep-agent/backend.test.ts --testNamePattern "allows routed workspace paths"` passed for existing `/workspace/` backend coverage.
+  - Investigated selected skill routing. `assembleContextHarness()` exposes `skillSources: []` when no skills are enabled, but `backend.ts` used the unfiltered read-only `/skills/` backend when `selectedSkillIds` was an empty array.
+  - Added RED test in `backend.test.ts` proving `selectedSkillIds: []` still listed `/skills/typescript/`; RED failed with the expected visible skill directory.
+  - Changed `backend.ts` so `selectedSkillIds === undefined` preserves unfiltered read-only behavior, while any provided array, including `[]`, uses `SelectedSkillsFilesystemBackend`.
+  - Re-ran `pnpm test -- tests/main/services/deep-agent/backend.test.ts`; 1 file and 17 tests passed.
+  - Ran Phase 3 focused tests: backend, store-memory backend, filesystem contract/policy, command tool, shell path policy, tool-effect store/idempotency, context assembler, and executor skill tests; 10 files and 102 tests passed.
+  - Ran boundary wiring/contract tests: `deep-agent-build-wiring.test.ts`, `deep-agent-official-contracts.test.ts`, `plan-filesystem-defaults.test.ts`, and `deep-agent-executor-tools.test.ts`; 4 files and 41 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Ran `git diff --check`; passed with no output.
+  - Reviewed AHA-003 diff; no blocking issue found. Compatibility note: `selectedSkillIds === undefined` keeps the previous unfiltered read-only backend behavior, while runtime-provided arrays now enforce selection.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -114,6 +140,13 @@
 | AHA-002 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-002 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-002 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
+| RED selected skills backend | `pnpm test -- tests/main/services/deep-agent/backend.test.ts` | New no-skills test fails because `/skills/typescript/` remains visible | Failed with `files: [{ path: "/skills/typescript/" }]` instead of `files: []` | expected fail |
+| GREEN selected skills backend | `pnpm test -- tests/main/services/deep-agent/backend.test.ts` | Backend tests pass after explicit empty skill selection filters `/skills/` | 1 file, 17 tests passed | pass |
+| AHA-003 Phase 3 focused tests | `pnpm test -- tests/main/services/deep-agent/backend.test.ts tests/main/deep-agent/store-memory-backend.test.ts tests/main/services/deep-agent/filesystem-tool-contract.test.ts tests/main/services/deep-agent/filesystem-path-policy.test.ts tests/main/services/deep-agent/command-tool.test.ts tests/main/services/deep-agent/shell-path-policy.test.ts tests/main/services/deep-agent/tool-effect-store.test.ts tests/main/services/deep-agent/tool-effect-idempotency.test.ts tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts` | Focused tools/filesystem/shell/skills tests pass | 10 files, 102 tests passed | pass |
+| AHA-003 boundary wiring tests | `pnpm test -- tests/main/deep-agent-build-wiring.test.ts tests/main/services/deep-agent/deep-agent-official-contracts.test.ts tests/main/services/deep-agent/plan-filesystem-defaults.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts` | Higher-level wiring and contract tests pass | 4 files, 41 tests passed | pass |
+| AHA-003 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-003 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-003 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -126,6 +159,8 @@
 | 2026-07-04 | `pnpm typecheck` and strict unused scan failed on `tests/main/plugins/agent/session-repository.test.ts` because approval payload fields were not nested under `request` | 1 | Read `src/shared/types/chat.ts` and corrected the test payload shape. |
 | 2026-07-04 | `rg` over pnpm scoped package glob paths failed with `os error 123` | 1 | Resolved package directories with `Get-ChildItem` and read nested package files directly. |
 | 2026-07-04 | RED checkpointer special writes test kept `interrupt-first` instead of latest special write | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
+| 2026-07-04 | `rg` over `node_modules\.pnpm\deepagents@1.10.5*` failed with Windows `os error 123` | 1 | Resolved the exact pnpm package directory with `Get-ChildItem` and searched the resolved path. |
+| 2026-07-04 | Attempted to append to `progress.md` via `Add-Content`; PowerShell quoting failed and manual shell writes are not the required edit path | 1 | No file was changed; continued using `apply_patch` for tracking-file edits. |
 
 ## 5-Question Reboot Check
 | Question | Answer |

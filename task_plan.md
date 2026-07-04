@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 1 inventory continues; AHA-001 runtime continuity segment committed as `e7302d1`
+Phase 3 tools/filesystem/shell boundary audit in progress; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -37,7 +37,7 @@ Phase 1 inventory continues; AHA-001 runtime continuity segment committed as `e7
 - [ ] 审计 file tools、shell tools、path guard、side-effect idempotency
 - [ ] 审计 memory、skills、AGENTS.md、backend routing、permissions
 - [ ] 对 `/workspace/`、Windows cwd、virtual route 做边界验证
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase 4: Contracts, IPC, Persistence, Tests Audit
 - [ ] 审计 shared schema、IPC、database/store、task state、migration/compatibility risks
