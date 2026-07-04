@@ -361,6 +361,11 @@
   - Ran strict unused scan; passed.
   - Updated `agent_harness_audit.md` and `findings.md` with execution-boundary batch evidence and AHA-008.
   - Ran `git diff --check`; exit code 0 with a CRLF normalization warning for `tests/rtk-integration/middleware.test.ts`.
+  - After commit `a736652`, re-ran reverse coverage scan: audit rows increased to 179, candidates 402, missing 237.
+  - Read Phase 6 DeepAgent tools/support batch: `ask-user-tool.ts`, `background-task-time-tool.ts`, `model-tool-exposure.ts`, `plan-filesystem-defaults.ts`, `plan-readonly-tools.ts`, `tool-protocol.ts`, `record-utils.ts`, `redact.ts`, `stream-tool-utils.ts`, `subagent-projection.ts`, `tools.ts`, and `types.ts`.
+  - Read matching tests/coverage sections for background task time resolving, tool protocol, subagent projection, plan filesystem defaults, model tool exposure, runtime subagents, record utils, executor tool surface, ask_user, runtime streaming, and tool blocks.
+  - Ran DeepAgent tools focused verification; 12 files and 105 tests passed.
+  - Updated `agent_harness_audit.md` and `findings.md` with DeepAgent tools batch evidence.
 
 ## Phase 6 Test Results
 | Test | Input | Expected | Actual | Status |
@@ -380,6 +385,8 @@
 | AHA-008 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-008 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-008 whitespace check | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `tests/rtk-integration/middleware.test.ts` | pass |
+| Phase 6 post-execution-boundary reverse scan | PowerShell over `rg --files` candidate paths vs audit table paths after `a736652` | Recount remaining unrepresented candidates | audit=179, candidates=402, missing=237 | needs follow-up |
+| Phase 6 DeepAgent tools focused tests | `pnpm test -- tests/main/background-task-time-tool.test.ts tests/main/services/deep-agent/tool-protocol.test.ts tests/main/services/deep-agent/subagent-projection.test.ts tests/main/services/deep-agent/plan-filesystem-defaults.test.ts tests/main/services/deep-agent/model-tool-exposure.test.ts tests/main/services/deep-agent/tools.test.ts tests/main/record-utils.test.ts tests/main/deep-agent-build-wiring.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts tests/main/plugins/agent/runtime-streaming.test.ts tests/main/plugins/agent/runtime-tool-blocks.test.ts` | DeepAgent tools/support batch passes | 12 files and 105 tests passed | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
