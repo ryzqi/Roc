@@ -46,6 +46,23 @@ export function applyAgentPluginSchema(db: DatabaseConnection): void {
       workspace_hash TEXT,
       created_at     TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS agent_pending_interrupts (
+      run_id                  TEXT PRIMARY KEY,
+      thread_id               TEXT NOT NULL,
+      interrupt_id            TEXT NOT NULL,
+      payload_json            TEXT NOT NULL,
+      mode                    TEXT NOT NULL,
+      task_source             TEXT,
+      workflow_hint           TEXT,
+      workspace_path_state    TEXT NOT NULL CHECK(workspace_path_state IN ('undefined','null','value')),
+      workspace_path          TEXT,
+      explicit_skill_ids_json TEXT,
+      created_at              TEXT NOT NULL,
+      updated_at              TEXT NOT NULL,
+      FOREIGN KEY(run_id) REFERENCES task_runs(id),
+      FOREIGN KEY(thread_id) REFERENCES task_threads(id)
+    );
   `);
 
   const sessionMessageColumns = db.prepare('PRAGMA table_info(session_messages)').all() as Array<{ name: string }>;
@@ -65,6 +82,9 @@ export function applyAgentPluginSchema(db: DatabaseConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_agent_session_messages_workspace_created
     ON session_messages(workspace_hash, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_agent_pending_interrupts_thread
+    ON agent_pending_interrupts(thread_id);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
       content,

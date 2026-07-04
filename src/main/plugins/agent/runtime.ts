@@ -217,6 +217,7 @@ export class AgentPluginRuntime {
     abortController?.abort();
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
+    this.options.repository.clearPendingInterrupt(input.runId);
     this.options.repository.updateRunStatus({
       endedAt: new Date().toISOString(),
       runId: input.runId,
@@ -238,7 +239,7 @@ export class AgentPluginRuntime {
   }
 
   async resumeRun(request: ChatResumeRunRequest): Promise<ChatResumeRunResult> {
-    const pendingInterrupt = this.pendingInterrupts.get(request.runId);
+    const pendingInterrupt = this.resolvePendingInterrupt(request.runId);
     if (pendingInterrupt === undefined) {
       throw new Error('chat_resume_no_pending_interrupt');
     }
@@ -251,6 +252,11 @@ export class AgentPluginRuntime {
     const run = this.options.repository.getRun(request.runId);
     if (run.threadId !== request.threadId) {
       throw new Error('chat_resume_thread_mismatch');
+    }
+    if (run.status !== 'waiting_user') {
+      this.pendingInterrupts.delete(request.runId);
+      this.options.repository.clearPendingInterrupt(request.runId);
+      throw new Error('chat_resume_run_not_waiting_user');
     }
     if (run.modelId === null) {
       throw new Error('chat_resume_run_missing');
@@ -285,6 +291,8 @@ export class AgentPluginRuntime {
       runId: run.id,
       status: 'running'
     });
+    this.pendingInterrupts.delete(run.id);
+    this.options.repository.clearPendingInterrupt(run.id);
     await this.publish('agent.run.resumed', result);
     await this.publishChatRunEvent({
       type: 'run_resumed',
@@ -418,6 +426,7 @@ export class AgentPluginRuntime {
     this.activeRunMetadata.delete(input.runId);
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
+    this.options.repository.clearPendingInterrupt(input.runId);
     const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
     const message = this.options.repository.recordSessionMessage({
       content: input.assistantMessage,
@@ -627,6 +636,7 @@ export class AgentPluginRuntime {
     this.activeRunMetadata.delete(input.input.runId);
     this.abortControllers.delete(input.input.runId);
     this.pendingInterrupts.delete(input.input.runId);
+    this.options.repository.clearPendingInterrupt(input.input.runId);
     this.options.repository.updateRunStatus({
       endedAt: new Date().toISOString(),
       runId: input.input.runId,
@@ -735,6 +745,19 @@ export class AgentPluginRuntime {
     };
   }
 
+  private resolvePendingInterrupt(runId: string): PendingInterrupt | undefined {
+    const pendingInterrupt = this.pendingInterrupts.get(runId);
+    if (pendingInterrupt !== undefined) {
+      return pendingInterrupt;
+    }
+    const persistedInterrupt = this.options.repository.getPendingInterrupt(runId);
+    if (persistedInterrupt === null) {
+      return undefined;
+    }
+    this.pendingInterrupts.set(runId, persistedInterrupt.interrupt);
+    return persistedInterrupt.interrupt;
+  }
+
   private async handleRunInterrupted(input: {
     runId: string;
     threadId: string;
@@ -746,11 +769,7 @@ export class AgentPluginRuntime {
     workspacePath: ChatStartRunRequest['workspacePath'];
     explicitSkillIds: ChatStartRunRequest['explicitSkillIds'];
   }): Promise<void> {
-    this.options.repository.updateRunStatus({
-      runId: input.runId,
-      status: 'waiting_user'
-    });
-    this.pendingInterrupts.set(input.runId, {
+    const pendingInterrupt: PendingInterrupt = {
       interruptId: input.interruptId,
       payload: input.payload,
       mode: input.mode,
@@ -758,7 +777,13 @@ export class AgentPluginRuntime {
       workflowHint: input.workflowHint,
       workspacePath: input.workspacePath,
       explicitSkillIds: input.explicitSkillIds
+    };
+    this.options.repository.markRunInterrupted({
+      runId: input.runId,
+      threadId: input.threadId,
+      interrupt: pendingInterrupt
     });
+    this.pendingInterrupts.set(input.runId, pendingInterrupt);
     if (input.payload.kind === 'approval') {
       await this.publish('agent.run.task-event', {
         runId: input.runId,

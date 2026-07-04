@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
+  ChatInterruptPayload,
   ChatPersistedAttachment,
   EnabledCapabilities,
   SessionMessageEntry,
@@ -14,6 +15,7 @@ import type {
   TaskRun,
   TaskStatus
 } from '../../../shared/types';
+import type { PendingInterrupt } from './runtime-types';
 
 type TaskRunRow = {
   id: string;
@@ -50,6 +52,21 @@ type SessionMessageRow = {
 
 type SessionMessageSearchRow = SessionMessageRow & {
   snippet: string;
+};
+
+type PendingInterruptRow = {
+  run_id: string;
+  thread_id: string;
+  interrupt_id: string;
+  payload_json: string;
+  mode: PendingInterrupt['mode'];
+  task_source: PendingInterrupt['taskSource'];
+  workflow_hint: PendingInterrupt['workflowHint'];
+  workspace_path_state: 'undefined' | 'null' | 'value';
+  workspace_path: string | null;
+  explicit_skill_ids_json: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export class AgentSessionRepository {
@@ -154,6 +171,81 @@ export class AgentSessionRepository {
         this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run(input.status, now, run.threadId);
       })();
     return this.getRun(input.runId);
+  }
+
+  markRunInterrupted(input: { runId: string; threadId: string; interrupt: PendingInterrupt }): TaskRun {
+    const run = this.getRun(input.runId);
+    if (run.threadId !== input.threadId) {
+      throw new Error('agent_pending_interrupt_thread_mismatch');
+    }
+    const now = new Date().toISOString();
+    const workspacePath = encodeWorkspacePath(input.interrupt.workspacePath);
+    const explicitSkillIdsJson =
+      input.interrupt.explicitSkillIds === undefined ? null : JSON.stringify(input.interrupt.explicitSkillIds);
+    this.db.transaction(() => {
+      this.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('waiting_user', null, input.runId);
+      this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('waiting_user', now, run.threadId);
+      this.db
+        .prepare(
+          `INSERT INTO agent_pending_interrupts
+           (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
+            workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(run_id) DO UPDATE SET
+             thread_id = excluded.thread_id,
+             interrupt_id = excluded.interrupt_id,
+             payload_json = excluded.payload_json,
+             mode = excluded.mode,
+             task_source = excluded.task_source,
+             workflow_hint = excluded.workflow_hint,
+             workspace_path_state = excluded.workspace_path_state,
+             workspace_path = excluded.workspace_path,
+             explicit_skill_ids_json = excluded.explicit_skill_ids_json,
+             updated_at = excluded.updated_at`
+        )
+        .run(
+          input.runId,
+          input.threadId,
+          input.interrupt.interruptId,
+          JSON.stringify(input.interrupt.payload),
+          input.interrupt.mode,
+          input.interrupt.taskSource,
+          input.interrupt.workflowHint,
+          workspacePath.state,
+          workspacePath.value,
+          explicitSkillIdsJson,
+          now,
+          now
+        );
+    })();
+    return this.getRun(input.runId);
+  }
+
+  getPendingInterrupt(runId: string): { runId: string; threadId: string; interrupt: PendingInterrupt } | null {
+    const row = this.db.prepare('SELECT * FROM agent_pending_interrupts WHERE run_id = ?').get(runId) as
+      | PendingInterruptRow
+      | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      runId: row.run_id,
+      threadId: row.thread_id,
+      interrupt: {
+        interruptId: row.interrupt_id,
+        payload: JSON.parse(row.payload_json) as ChatInterruptPayload,
+        mode: row.mode,
+        taskSource: row.task_source,
+        workflowHint: row.workflow_hint,
+        workspacePath: decodeWorkspacePath(row),
+        explicitSkillIds:
+          row.explicit_skill_ids_json === null ? undefined : JSON.parse(row.explicit_skill_ids_json) as string[]
+      }
+    };
+  }
+
+  clearPendingInterrupt(runId: string): void {
+    this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
   }
 
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent {
@@ -365,6 +457,32 @@ function requireNonEmpty(value: string, code: string): string {
     throw new Error(code);
   }
   return normalized;
+}
+
+function encodeWorkspacePath(workspacePath: PendingInterrupt['workspacePath']): { state: 'undefined' | 'null' | 'value'; value: string | null } {
+  if (workspacePath === undefined) {
+    return { state: 'undefined', value: null };
+  }
+  if (workspacePath === null) {
+    return { state: 'null', value: null };
+  }
+  return { state: 'value', value: workspacePath };
+}
+
+function decodeWorkspacePath(row: Pick<PendingInterruptRow, 'workspace_path_state' | 'workspace_path'>): PendingInterrupt['workspacePath'] {
+  if (row.workspace_path_state === 'undefined') {
+    return undefined;
+  }
+  if (row.workspace_path_state === 'null') {
+    return null;
+  }
+  if (row.workspace_path_state === 'value') {
+    if (row.workspace_path === null) {
+      throw new Error('agent_pending_interrupt_workspace_path_missing');
+    }
+    return row.workspace_path;
+  }
+  throw new Error('agent_pending_interrupt_workspace_path_state_invalid');
 }
 
 function buildPlainPrefixFtsQuery(query: string): string | null {

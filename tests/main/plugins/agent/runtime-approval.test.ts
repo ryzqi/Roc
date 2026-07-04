@@ -147,6 +147,145 @@ describe('AgentPluginRuntime', () => {
     ]);
   });
 
+  it('resumes an interrupted run after rebuilding the runtime from persisted state', async () => {
+    const repository = new AgentSessionRepository(db);
+    const firstRuntime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'run_interrupted',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            interruptId: 'interrupt_rebuilt_runtime',
+            payload: approvalPayload()
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const started = await firstRuntime.startRun({
+      input: 'Review a shell command.',
+      mode: 'plan',
+      enabledCapabilities: { mcpServers: ['filesystem'], skills: ['typescript'] },
+      threadId: null,
+      workflowHint: 'propose_background_task',
+      taskSource: 'workbench',
+      workspacePath: 'F:\\Code\\Roc',
+      explicitSkillIds: ['typescript']
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+    expect(repository.getRun(started.runId).status).toBe('waiting_user');
+
+    const rebuiltRepository = new AgentSessionRepository(db);
+    const resumedRequests: ChatStartRunRequest[] = [];
+    const resumePayloads: unknown[] = [];
+    const rebuiltRuntime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          resumedRequests.push(input.request);
+          resumePayloads.push(input.resumePayload);
+          yield createTextBlock(input.run.id, 'Rebuilt runtime approved.');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository: rebuiltRepository
+    });
+
+    await rebuiltRuntime.resumeRun({
+      kind: 'approval',
+      runId: started.runId,
+      threadId: started.threadId!,
+      interruptId: 'interrupt_rebuilt_runtime',
+      decisions: [{ type: 'approve' }]
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(resumedRequests).toEqual([
+      expect.objectContaining({
+        input: 'Review a shell command.',
+        mode: 'plan',
+        enabledCapabilities: { mcpServers: ['filesystem'], skills: ['typescript'] },
+        threadId: started.threadId,
+        workflowHint: 'propose_background_task',
+        taskSource: 'workbench',
+        workspacePath: 'F:\\Code\\Roc',
+        explicitSkillIds: ['typescript']
+      })
+    ]);
+    expect(resumePayloads).toEqual([
+      {
+        decisions: [{ type: 'approve' }]
+      }
+    ]);
+    expect(rebuiltRepository.getRun(started.runId).status).toBe('completed');
+  });
+
+  it('rejects a persisted interrupt when the run is no longer waiting for the user', async () => {
+    const repository = new AgentSessionRepository(db);
+    const firstRuntime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'run_interrupted',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            interruptId: 'interrupt_stale_runtime',
+            payload: approvalPayload()
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const started = await firstRuntime.startRun({
+      ...startRequest,
+      input: 'Review a stale approval.',
+      mode: 'plan'
+    });
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
+    );
+    repository.updateRunStatus({
+      runId: started.runId,
+      status: 'completed'
+    });
+
+    const rebuiltRepository = new AgentSessionRepository(db);
+    let resumed = false;
+    const rebuiltRuntime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* () {
+          resumed = true;
+          yield createTextBlock(started.runId, 'Should not resume.');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository: rebuiltRepository
+    });
+
+    await expect(
+      rebuiltRuntime.resumeRun({
+        kind: 'approval',
+        runId: started.runId,
+        threadId: started.threadId!,
+        interruptId: 'interrupt_stale_runtime',
+        decisions: [{ type: 'approve' }]
+      })
+    ).rejects.toThrow('chat_resume_run_not_waiting_user');
+    expect(resumed).toBe(false);
+  });
+
   it('resumes plan approval interrupts with the original plan mode', async () => {
     const repository = new AgentSessionRepository(db);
     const executedModes: Array<ChatStartRunRequest['mode']> = [];

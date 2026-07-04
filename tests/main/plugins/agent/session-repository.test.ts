@@ -97,6 +97,82 @@ describe('AgentSessionRepository', () => {
     });
   });
 
+  it('marks interrupted runs waiting for the user while persisting resume metadata', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = repository.createTaskRun({
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Review a pending command'
+    });
+
+    const interruptedRun = repository.markRunInterrupted({
+      runId: run.id,
+      threadId: run.threadId,
+      interrupt: {
+        interruptId: 'interrupt_repository_1',
+        payload: {
+          kind: 'approval',
+          request: {
+            actionRequests: [
+              {
+                name: 'run_shell_command',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'run_shell_command',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        },
+        mode: 'plan',
+        taskSource: 'workbench',
+        workflowHint: 'propose_background_task',
+        workspacePath: undefined,
+        explicitSkillIds: ['typescript']
+      }
+    });
+
+    expect(interruptedRun.status).toBe('waiting_user');
+    expect(repository.getPendingInterrupt(run.id)).toEqual({
+      runId: run.id,
+      threadId: run.threadId,
+      interrupt: {
+        interruptId: 'interrupt_repository_1',
+        payload: {
+          kind: 'approval',
+          request: {
+            actionRequests: [
+              {
+                name: 'run_shell_command',
+                args: {
+                  command: 'git status'
+                }
+              }
+            ],
+            reviewConfigs: [
+              {
+                actionName: 'run_shell_command',
+                allowedDecisions: ['approve', 'reject']
+              }
+            ]
+          }
+        },
+        mode: 'plan',
+        taskSource: 'workbench',
+        workflowHint: 'propose_background_task',
+        workspacePath: undefined,
+        explicitSkillIds: ['typescript']
+      }
+    });
+  });
+
   it('persists workspace hash on session messages', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
