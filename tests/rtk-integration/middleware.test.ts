@@ -123,9 +123,42 @@ describe('createRTKMiddleware', () => {
     const middleware = createRTKMiddleware(createAvailableManager() as never, {
       createRewriter: () => ({
         rewrite: vi.fn().mockResolvedValue({
+          rewritten: 'rtk git status',
+          rtkArgs: ['git', 'status'],
+          exitCode: 0
+        })
+      })
+    });
+    const handler = vi.fn().mockResolvedValue(new ToolMessage({
+      content: 'ok',
+      tool_call_id: 'call-shell'
+    }));
+
+    await middleware.wrapToolCall?.(
+      {
+        toolCall: {
+          id: 'call-shell',
+          name: 'shell',
+          args: 'git status'
+        }
+      } as never,
+      handler
+    );
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      toolCall: expect.objectContaining({
+        args: 'rtk git status'
+      })
+    }));
+  });
+
+  it('passes through rewritten Windows shell aliases that RTK cannot execute directly', async () => {
+    const middleware = createRTKMiddleware(createAvailableManager() as never, {
+      createRewriter: () => ({
+        rewrite: vi.fn().mockResolvedValue({
           rewritten: 'rtk ls',
           rtkArgs: ['ls'],
-          exitCode: 0
+          exitCode: 3
         })
       })
     });
@@ -147,7 +180,7 @@ describe('createRTKMiddleware', () => {
 
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
       toolCall: expect.objectContaining({
-        args: 'rtk ls'
+        args: 'ls'
       })
     }));
   });

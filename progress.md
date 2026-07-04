@@ -348,6 +348,19 @@
   - Ran IPC/capability focused tests; 5 files and 16 tests passed.
   - Ran `pnpm check:ipc`; generated IPC files are current.
   - Updated `agent_harness_audit.md` and `findings.md` with IPC/capability batch evidence.
+  - Continued Phase 6 execution-boundary batch from clean `main` after commit `ee33764`.
+  - Re-read active skills/rules/planning files and ran planning catchup; catchup only surfaced current-session skill/read context.
+  - Read MCP plugin/client/config service, runtime-tools plugin and adapters, shell execution service/helpers, RTK service/integration, web-read service/schema, workspace plugin/capability files, workspace/file/git/terminal services, and matching tests.
+  - Live RTK probes showed bundled `rtk.exe rewrite 'ls'` and `rtk.exe rewrite 'ls /workspace'` return rewritten `rtk ls...`, while prior shell service contract requires Windows alias commands to stay raw PowerShell fallback.
+  - Added RED regression in `tests/rtk-integration/middleware.test.ts`; RED failed because `createRTKMiddleware()` passed handler args `rtk ls` instead of original `ls`.
+  - Fixed `src/rtk-integration/middleware.ts` to pass through rewrite results whose parsed RTK args match `isWindowsRtkDeniedSubcommand()`.
+  - Re-ran RED file after fix; `tests/rtk-integration/middleware.test.ts` passed with 9 tests.
+  - Ran execution-boundary focused tests; 19 files and 65 tests passed. Known `node-pty AttachConsole failed` teardown noise printed after the passing Vitest summary with exit code 0.
+  - Ran adjacent DeepAgent wiring/shell/executor tests; 3 files and 35 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan; passed.
+  - Updated `agent_harness_audit.md` and `findings.md` with execution-boundary batch evidence and AHA-008.
+  - Ran `git diff --check`; exit code 0 with a CRLF normalization warning for `tests/rtk-integration/middleware.test.ts`.
 
 ## Phase 6 Test Results
 | Test | Input | Expected | Actual | Status |
@@ -360,6 +373,13 @@
 | Phase 6 reverse coverage rescan | PowerShell over `rg --files` candidate paths vs audit table paths after three Phase 6 commits | Recount remaining unrepresented candidates | audit=119, candidates=390, missing=273 | needs follow-up |
 | Phase 6 IPC/capability focused tests | `pnpm test -- tests/main/files-ipc.test.ts tests/main/ipc-domain-structure.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/ipc-schema-generation.test.ts tests/main/kernel/capability-registry.test.ts` | IPC/capability coverage batch passes | 5 files and 16 tests passed | pass |
 | Phase 6 IPC drift check | `pnpm check:ipc` | Generated IPC files are current | Printed `IPC generated files are current.` | pass |
+| AHA-008 RED RTK alias middleware | `pnpm test -- tests/rtk-integration/middleware.test.ts` | New alias passthrough test fails before production fix | Failed because handler received `rtk ls` instead of `ls` | expected fail |
+| AHA-008 GREEN RTK alias middleware | `pnpm test -- tests/rtk-integration/middleware.test.ts` | RTK middleware tests pass after alias passthrough fix | 1 file and 9 tests passed | pass |
+| Phase 6 execution-boundary focused tests | `pnpm test -- tests/main/plugins/mcp/plugin.test.ts tests/main/plugins/mcp/mcp-client-adapter.test.ts tests/main/plugins/runtime-tools/plugin.test.ts tests/main/plugins/runtime-tools/shell-adapter.test.ts tests/main/plugins/runtime-tools/rtk-adapter.test.ts tests/main/plugins/workspace/plugin.test.ts tests/main/plugins/workspace/file-capabilities.test.ts tests/main/plugins/workspace/git-capabilities.test.ts tests/main/plugins/workspace/terminal-capabilities.test.ts tests/main/services/workspace-change-watcher-service.test.ts tests/main/terminal-session-service.test.ts tests/main/terminal-session-service-late-output.test.ts tests/main/git-service-queue.test.ts tests/main/web-read-service.test.ts tests/rtk-integration/binary-manager.test.ts tests/rtk-integration/rewriter.test.ts tests/rtk-integration/middleware.test.ts tests/rtk-integration/integration.test.ts tests/rtk-integration/index.test.ts` | Execution-boundary source/test batch passes | 19 files and 65 tests passed; known `node-pty AttachConsole failed` teardown noise after successful summary; exit code 0 | pass |
+| AHA-008 adjacent DeepAgent boundary tests | `pnpm test -- tests/main/deep-agent-build-wiring.test.ts tests/main/services/deep-agent/shell-path-policy.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts` | DeepAgent middleware/tool wiring still passes | 3 files and 35 tests passed | pass |
+| AHA-008 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-008 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-008 whitespace check | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `tests/rtk-integration/middleware.test.ts` | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
