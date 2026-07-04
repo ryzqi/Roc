@@ -61,8 +61,8 @@ Phase 7 critical-surface expansion started after user correction: do not run fin
 
 ### Phase 7: Critical Surface Expansion Beyond Keyword Scan
 - [x] 从全仓文件清单反向对比 `agent_harness_audit.md`，找出 Phase 6 keyword scan 未纳入但可能影响 agent harness 的入口、配置、preload、manual/smoke、packaging、docs、feature bootstrap、generated contract 或 environment bridge。
-- [ ] 逐批读取并判断这些剩余关键面：证明 in-scope 后补入审计表，证明 out-of-scope 后写明原因；不凭文件名删除或改代码。
-- [ ] 对每批新增审计记录更新 `findings.md` / `progress.md`，运行与批次匹配的最小验证，并在 review 后提交。
+- [x] 逐批读取并判断这些剩余关键面：证明 in-scope 后补入审计表，证明 out-of-scope 后写明原因；不凭文件名删除或改代码。
+- [x] 对每批新增审计记录更新 `findings.md` / `progress.md`，运行与批次匹配的最小验证，并在 review 后提交。
 - [ ] Phase 7 穷尽后，再进入最终 completion audit、全量验证选择和最终提交。
 - **Status:** in_progress
 

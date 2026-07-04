@@ -46,6 +46,15 @@
   - Updated `agent_harness_audit.md` with 100 Phase 7 renderer settings/workbench/shared UI, style/font, shared type, and focused test rows.
   - Re-ran full-repo reverse coverage scan after the batch: `audit_rows=679 universe=727 missing=51`; remaining files are smoke/manual/test-support and forge-guardrails regression tests.
   - Ran `git diff --check`; passed with no output.
+  - Committed the Phase 7 renderer settings/workbench/shared UI audit batch as `bb12c26 docs(agent): record phase 7 renderer workbench audit`.
+  - Re-ran full-repo reverse coverage scan from clean `main`: `audit_rows=679 universe=727 missing=51`; remaining paths were test support, forge-guardrails regression tests, smoke/manual scripts, smoke helper libraries, and type declarations.
+  - Read remaining test-support batch: forge-guardrails regression test names, core/secondary plugin integration tests, code-quality and smoke-target tests, custom matcher setup, renderer loaded-state fixture helper, type drift check, smoke/manual entrypoint structure, and smoke helper library imports/functions.
+  - Ran final test-support focused verification: 21 Vitest files and 94 tests passed. Known `node-pty AttachConsole failed` teardown noise printed after the passing Vitest summary with exit code 0.
+  - Ran `node --check` for 23 smoke/manual `.mjs`/`.cjs` scripts; all passed.
+  - Ran `pnpm typecheck`; passed.
+  - Updated `agent_harness_audit.md` with the final 51 test-support/smoke/manual/type-declaration rows.
+  - Re-ran full-repo reverse coverage scan after the final rows: `audit_rows=730 universe=727 missing=0`.
+  - Ran `git diff --check`; passed with no output.
 
 ### Continuation: 2026-07-05 remaining Phase 6 support/tests batch
 - **Status:** complete
