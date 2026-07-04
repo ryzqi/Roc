@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 6 coverage completion audit verified through the support/tests reverse scan; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, final verification record committed as `c7e3cba`
+Phase 7 critical-surface expansion started after user correction: do not run final completion check yet; first exhaust key agent-harness-adjacent surfaces beyond the Phase 6 keyword candidate scan. Earlier commits include AHA-001 `e7302d1`, AHA-002 `c1158e3`, AHA-003 `7c178c1`, AHA-004 `de532da`, AHA-005 `34799cc`, AHA-006 `142a080`, AHA-007 `029c4ec`, AHA-008 `a736652`, and Phase 6 tracking through `dfd0b6b`.
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -59,6 +59,13 @@ Phase 6 coverage completion audit verified through the support/tests reverse sca
 - [x] 运行覆盖性收口所需的验证命令并提交追踪记录
 - **Status:** complete
 
+### Phase 7: Critical Surface Expansion Beyond Keyword Scan
+- [x] 从全仓文件清单反向对比 `agent_harness_audit.md`，找出 Phase 6 keyword scan 未纳入但可能影响 agent harness 的入口、配置、preload、manual/smoke、packaging、docs、feature bootstrap、generated contract 或 environment bridge。
+- [ ] 逐批读取并判断这些剩余关键面：证明 in-scope 后补入审计表，证明 out-of-scope 后写明原因；不凭文件名删除或改代码。
+- [ ] 对每批新增审计记录更新 `findings.md` / `progress.md`，运行与批次匹配的最小验证，并在 review 后提交。
+- [ ] Phase 7 穷尽后，再进入最终 completion audit、全量验证选择和最终提交。
+- **Status:** in_progress
+
 ## Key Questions
 1. 当前 Roc 哪些代码在自造 DeepAgents/LangChain 已有能力？
 2. 哪些自定义层是生产必要的边界适配，哪些只是重复实现？
@@ -86,6 +93,7 @@ Phase 6 coverage completion audit verified through the support/tests reverse sca
 | RED checkpointer special writes test preserved stale `__interrupt__` value | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
 | Coverage scan initially returned only `AGENTS.md` due to fragile `rg --files` argument/path filtering | 1 | Re-ran with full `rg --files`, normalized `\` separators, and compared explicit string arrays. |
 | `Select-String` regex for Windows paths failed on `\m` escape | 1 | Re-ran path checks with `-SimpleMatch` literal searches. |
+| PowerShell script parse check for `scripts/query-logs.ps1` emitted `= : The term '=' is not recognized` because `$null` expanded in the outer shell command | 1 | Re-ran with a native PowerShell scriptblock creation command and no nested `$null` expansion. |
 
 ## Notes
 - 状态词：`Located`、`Changed, unverified`、`Verified passing`、`Blocked, not run`。

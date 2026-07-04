@@ -14,6 +14,17 @@
 - Official DeepAgents/LangChain/LangGraph docs when local references or package signatures are insufficient.
 
 ## Research Findings
+- 2026-07-05 Phase 7 continuation: User clarified that the next action is not a completion check; the audit must first exhaust other critical portions beyond the Phase 6 keyword candidate scan, then run checks and commit.
+- Current workspace state before Phase 7 edits: `git status --short --branch` reported clean `main`, `git diff --stat` was empty, and the latest commit was `dfd0b6b docs(agent): record phase 6 support test audit`.
+- `planning-with-files` catchup found only current continuation handoff/skill/read context, not unsynced business-code changes.
+- Memory quick pass reaffirmed the high-risk Roc audit boundaries for Phase 7 gap selection: native-first DeepAgents/LangChain behavior, durable runtime continuity, background task workspace/capability propagation, and `/workspace/` virtual paths staying separate from real Windows shell cwd.
+- Re-read local official-mapped `agent-development` references; framework selection still routes Roc's harness to Deep Agents because planning, files, subagents, skills, memory, HITL, and long-running continuity are first-class.
+- Phase 7 full-repo reverse coverage scan found `audit_rows=435 universe=727 missing=295`; this proves Phase 6 keyword coverage is not the same as full codebase coverage. Missing clusters include bootstrap/config/preload/scripts, renderer chat/workbench, generic shared types, smoke/manual helpers, tests, docs/config/assets.
+- Phase 7 bootstrap read found `src/main/index.ts` creates one `MainKernelBootstrap`, registers typed IPC after `kernel.start()`, broadcasts agent/task/workspace/terminal events through `ipcChannels`, and keeps renderer access behind preload/capability boundaries.
+- `src/main/main-kernel-bootstrap.ts` wires the default plugin set (`app`, `agent`, `memory`, `task`, `workspace`, `mcp`, `skills`, `runtime-tools`, `diagnostics`) and passes DeepAgent dependencies through services/plugins: model factory adapter, hook runtime, metrics service, paths, and memory settings providers.
+- Kernel/infrastructure read found plugin dependency and capability ownership checks in `plugin-loader.ts`; plugin database and core database connections use WAL and foreign keys; schema versions are recorded by SQL hash; legacy monolith cleanup is gated by `.migration-complete.json`; provider secrets require safeStorage and validated provider IDs.
+- Config/script read found native packaging/dev/smoke entrypoints use the shared `scripts/lib/native-packaging.mjs` helpers to prepare Electron `better-sqlite3`, verify it with Electron, and restore Node ABI in `finally`; `electron.vite.config.ts` externalizes `better-sqlite3`, `electron`, and `node-pty`, and emits preload as CJS.
+- Phase 7 bootstrap/config/preload/scripts batch is verified passing: focused Vitest ran 26 files / 129 tests, `node --check` passed for 10 scripts, `scripts/query-logs.ps1` parsed successfully, `pnpm typecheck` passed, and post-batch reverse scan reports `audit_rows=503 universe=727 missing=227`.
 - `task_plan.md`、`progress.md`、`findings.md` initially missing in repository root; created for this long-running audit.
 - Memory quick pass found prior Roc guidance: DeepAgents native-first, no custom prompt cache middleware, recovery/idempotency and context compaction are high-risk audit areas.
 - `planning-with-files` requires persistent tracking files and updates after discoveries/actions.

@@ -2,6 +2,29 @@
 
 ## Session: 2026-07-04
 
+### Continuation: 2026-07-05 Phase 7 critical-surface expansion
+- **Status:** in_progress
+- Actions taken:
+  - Resumed from handoff summary and re-read `using-superpowers`, `planning-with-files`, `maintaining-agents-md`, and `agent-development`.
+  - Re-read `task_plan.md`, `progress.md`, `findings.md`, and `agent_harness_audit.md`; planning catchup reported only current continuation context and recommended status/diff/readback.
+  - Ran `git status --short --branch`, `git diff --stat`, and `git log --oneline -8`; branch is clean `main`, there is no tracked diff before Phase 7 edits, and latest commit is `dfd0b6b`.
+  - Checked active goal; objective remains active and still requires exhaustive code analysis with file tracking, review, and commits per completed portion.
+  - Re-read `AGENTS.md` and `package.json` for local command and verification rules.
+  - Ran memory quick pass for Roc/DeepAgents/native-first/workspace guidance; relevant reminders are native-first DeepAgents usage, runtime continuity, background workspace/capability snapshots, and `/workspace/` virtual path versus real Windows cwd boundaries.
+  - Re-read `agent-development` coverage map plus Deep Agents framework/core/memory/orchestration references; Deep Agents remains the expected top-level layer because Roc needs planning, files, subagents, skills, memory, HITL, and long session continuity.
+  - Updated `task_plan.md` with Phase 7 because the user explicitly corrected the next step: continue exhausting other critical parts before final checking/submission.
+  - Ran full-repo reverse coverage scan against `agent_harness_audit.md`: `audit_rows=435 universe=727 missing=295`. Missing paths are outside the Phase 6 keyword table and cluster around bootstrap/config/preload/scripts/renderer chat/workbench/tests/smoke/assets.
+  - Started Phase 7 bootstrap/config/preload/scripts batch and read `src/main/index.ts`, `src/main/main-kernel-bootstrap.ts`, `src/main/kernel/plugin-loader.ts`, `src/preload/index.ts`, kernel event/types, infrastructure config/database/schema/secret/logger, app plugin, errors/log/metrics/performance/path/secret/validation services, external link and PDF preview policy, native packaging/dev/package/smoke scripts, `electron-builder.yml`, `electron.vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, release checklist, and `resources/icon.ico` metadata.
+  - Located evidence so far: main startup constructs a single kernel, broadcasts agent/task/workspace/terminal events through typed IPC channels, and preload exposes typed `RocPreloadApi`; kernel bootstrap wires default plugins and passes DeepAgent dependencies through the plugin system rather than renderer-side direct access.
+  - Located bootstrap/support evidence so far: plugin loader enforces dependency/capability ownership; plugin DB/core DB use WAL and foreign keys; legacy monolith deletion requires a verified migration marker; provider secrets require safeStorage and validated provider IDs; native packaging/dev/smoke scripts prepare Electron `better-sqlite3` ABI and restore Node ABI in `finally`.
+  - Ran Phase 7 bootstrap focused verification: `pnpm test -- tests/main/kernel-main-integration.test.ts ... tests/main/validation.test.ts`; 26 files and 129 tests passed.
+  - Ran syntax checks for Phase 7 scripts: `node --check` passed for 10 `.mjs`/`.cjs` scripts, and `scripts/query-logs.ps1` parsed through `[scriptblock]::Create()`.
+  - Ran `pnpm typecheck`; passed.
+  - Updated `agent_harness_audit.md` with 68 Phase 7 bootstrap/config/preload/script/config/test rows.
+  - Re-ran full-repo reverse coverage scan after the batch: `audit_rows=503 universe=727 missing=227`.
+  - Ran `git diff --check`; passed with no output.
+  - Risk-reviewed the Phase 7 bootstrap/config/preload/scripts tracking-only diff; no issues found. Residual risk: full `pnpm smoke:electron` and `pnpm package:dir` were not run because this batch changed only audit tracking docs, while source/config paths were covered by focused tests, syntax checks, and typecheck.
+
 ### Continuation: 2026-07-05 remaining Phase 6 support/tests batch
 - **Status:** complete
 - Actions taken:
