@@ -73,7 +73,13 @@ export function createShellClient(): RocClient {
   return { api };
 }
 
-export function createActiveTask(partial: { taskId: string; threadId: string; goal: string; status?: TaskStatus }): ActiveTaskItem {
+export function createActiveTask(partial: {
+  taskId: string;
+  threadId: string;
+  goal: string;
+  status?: TaskStatus;
+  workspacePath?: string | null;
+}): ActiveTaskItem {
   return {
     kind: 'background',
     threadId: partial.threadId,
@@ -85,7 +91,7 @@ export function createActiveTask(partial: { taskId: string; threadId: string; go
     nextRunAt: null,
     lastRunAt: null,
     riskLevel: 'low',
-    workspacePath: 'F:\\Code\\Roc',
+    workspacePath: partial.workspacePath === undefined ? 'F:\\Code\\Roc' : partial.workspacePath,
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z'
   };

@@ -20,6 +20,7 @@ export type TaskDetailInputRequest = {
   input: string;
   taskId: string;
   threadId: string;
+  workspacePath: string | null;
 };
 
 type LoadedTaskDetail = NonNullable<LoadedState['taskDetail']>;
@@ -92,7 +93,13 @@ export function TaskDetailView({
       setInlineError('请输入继续任务的内容。');
       return;
     }
-    const result = await onSubmitTaskInput({ input, taskId, threadId: loadedDetail.threadId });
+    const workspacePath = loadedDetail.backgroundTask === null ? null : loadedDetail.backgroundTask.workspacePath;
+    const result = await onSubmitTaskInput({
+      input,
+      taskId,
+      threadId: loadedDetail.threadId,
+      workspacePath
+    });
     if (result.ok) {
       setFollowupInput('');
       setInlineError(null);

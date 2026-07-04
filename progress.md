@@ -150,6 +150,23 @@
   - Ran `pnpm check:ipc`; generated IPC files are current.
   - Reviewed current AHA-005 diff; no blocking risk found.
   - Committed AHA-005 code/test fix as `34799cc fix(task): persist scheduled start failures`.
+  - Continuation loaded process/domain skills, DeepAgents references, active planning files, `git status --short --branch`, `git diff --stat`, `git diff --check`, planning catchup, and targeted memory for `workspacePath`.
+  - Current continuation found only `findings.md` modified with two uncommitted Phase 4 notes; no business-code diff is present before the next candidate investigation.
+  - Memory lookup found the prior runtime workspace binding fix and reusable contract notes: background-task creation persists workspace/capabilities snapshots, while run-level `ChatStartRunRequest` and executor/shell cwd must consume the saved workspace rather than current UI workspace.
+  - Read renderer request construction and tests around `workspacePath`: `AppShell.tsx`, `use-app-task-runs.ts`, `TaskDetailView.tsx`, and relevant `app-shell.test.tsx` ranges.
+  - Read main/session workspace interpretation points: `plugins/agent/index.ts` SessionEnd hook, `deep-agent-executor.ts` `resolveRuntimeWorkspace()`, and `ChatStartRunRequest`.
+  - Located next candidate root cause: ordinary chat sends `workspacePath: null`; executor and lifecycle hook give that field different effects, so request construction should pass current workspace when one is selected.
+  - Added RED renderer assertions in `app-shell.test.tsx` for ordinary chat, plan execution, and task detail follow-up workspace propagation.
+  - Ran `pnpm test -- tests/renderer/app-shell.test.tsx`; RED failed with 3 expected failures where requests still carried `workspacePath: null` instead of `F:\\Code\\Roc` or saved task workspace `G:\\Saved\\Task`.
+  - Implemented AHA-006 renderer request fix in `AppShell.tsx`, `use-app-task-runs.ts`, and `TaskDetailView.tsx`; updated `app-shell-test-helpers.ts` to allow saved task workspace fixtures.
+  - Re-ran `pnpm test -- tests/renderer/app-shell.test.tsx`; 1 file and 12 tests passed.
+  - Ran adjacent renderer tests `pnpm test -- tests/renderer/app-shell.test.tsx tests/renderer/task-detail-view.test.tsx`; first run failed because the direct TaskDetailView test still expected no `workspacePath` field.
+  - Updated the direct TaskDetailView expectation to include `workspacePath: null` for its no-background-task fixture, then re-ran the adjacent tests; 2 files and 19 tests passed.
+  - Re-ran `pnpm typecheck`; passed.
+  - Re-ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Re-ran `git diff --check`; exit code 0 with only Git's CRLF normalization warning for `src/renderer/app/AppShell.tsx`.
+  - Reviewed the AHA-006 diff; no blocking issue found. The change keeps ordinary chat on current workspace and task detail follow-up on saved task workspace.
+  - Committed AHA-006 as `3425c67 fix(renderer): propagate chat workspace path`.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -208,6 +225,12 @@
 | AHA-005 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-005 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 | Phase 4 IPC drift check | `pnpm check:ipc` | IPC generated files are current | Passed: `IPC generated files are current.` | pass |
+| RED renderer workspacePath propagation | `pnpm test -- tests/renderer/app-shell.test.tsx` | Ordinary chat, plan execution, and task detail follow-up fail while sending `workspacePath: null` | 3 expected failures showed null instead of `F:\\Code\\Roc` / `G:\\Saved\\Task` | expected fail |
+| GREEN renderer workspacePath propagation | `pnpm test -- tests/renderer/app-shell.test.tsx` | AppShell renderer tests pass after request construction fix | 1 file, 12 tests passed | pass |
+| Adjacent renderer tests after AHA-006 | `pnpm test -- tests/renderer/app-shell.test.tsx tests/renderer/task-detail-view.test.tsx` | AppShell and TaskDetailView tests pass after request payload update | First run failed on stale TaskDetailView expectation; rerun passed with 2 files and 19 tests | pass |
+| AHA-006 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-006 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-006 whitespace check | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `src/renderer/app/AppShell.tsx` | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -223,6 +246,8 @@
 | 2026-07-04 | `rg` over `node_modules\.pnpm\deepagents@1.10.5*` failed with Windows `os error 123` | 1 | Resolved the exact pnpm package directory with `Get-ChildItem` and searched the resolved path. |
 | 2026-07-04 | Attempted to append to `progress.md` via `Add-Content`; PowerShell quoting failed and manual shell writes are not the required edit path | 1 | No file was changed; continued using `apply_patch` for tracking-file edits. |
 | 2026-07-04 | `Get-Content` for `src/main/plugins/task/tools.ts` failed because that file does not exist | 1 | Read the actual background task tool implementation at `src/main/services/deep-agent/background-task-tools.ts`. |
+| 2026-07-04 | `Get-Content` for `tests/renderer/app-shell-test-helpers.tsx` failed because the helper is `.ts` | 1 | Located the real helper with `rg --files tests/renderer | rg "app-shell-test-helpers"` and read `tests/renderer/app-shell-test-helpers.ts`. |
+| 2026-07-04 | `rg` pattern for `data-testid=\"chat-submit\"` was malformed | 1 | Re-ran a simpler literal search for `chat-submit`, `composer-submit`, and `data-testid`. |
 
 ## 5-Question Reboot Check
 | Question | Answer |

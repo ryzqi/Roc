@@ -270,7 +270,12 @@ describe('TaskDetailView', () => {
     });
     await flushPromises();
 
-    expect(onSubmitTaskInput).toHaveBeenCalledWith({ input: '继续处理', taskId: 'task-1', threadId: 'thread-1' });
+    expect(onSubmitTaskInput).toHaveBeenCalledWith({
+      input: '继续处理',
+      taskId: 'task-1',
+      threadId: 'thread-1',
+      workspacePath: null
+    });
   });
 
   it('renders task-domain controls and invokes task actions for the detail task', async () => {

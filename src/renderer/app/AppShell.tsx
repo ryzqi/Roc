@@ -189,6 +189,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [activeView, historySearchVisible]);
 
   const currentWorkspace = state?.workspace ?? null;
+  const currentWorkspacePath = resolveCurrentWorkspacePath(state);
   const currentAppMode = state?.appStatus.mode ?? null;
   const currentAgentExecution = state?.agent.execution ?? null;
   const currentSelectedMcpServers = state?.selectedMcpServers ?? [];
@@ -300,6 +301,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     client,
     currentSelectedMcpServers,
     currentSelectedSkills,
+    currentWorkspacePath,
     openTaskDetail,
     pendingTaskSource,
     pendingWorkflowHint,
@@ -523,4 +525,17 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       />
     </div>
   );
+}
+
+function resolveCurrentWorkspacePath(state: AppBootstrap['state']): string | null {
+  if (state === null) {
+    return null;
+  }
+  if (state.workspace !== null) {
+    return state.workspace.path;
+  }
+  if (state.appStatus.workspace.selectedPath !== null) {
+    return state.appStatus.workspace.selectedPath;
+  }
+  return null;
 }

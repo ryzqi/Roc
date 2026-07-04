@@ -311,7 +311,8 @@ describe('AppShell', () => {
       mode: 'chat',
       threadId: null,
       workflowHint: null,
-      taskSource: null
+      taskSource: null,
+      workspacePath: 'F:\\Code\\Roc'
     }));
   });
 
@@ -394,7 +395,7 @@ describe('AppShell', () => {
       threadId: null,
       workflowHint: null,
       taskSource: null,
-      workspacePath: null
+      workspacePath: 'F:\\Code\\Roc'
     });
     expect(secondRequest?.input).not.toContain('Plan this');
   });
@@ -405,9 +406,10 @@ describe('AppShell', () => {
       taskId: 'task-waiting',
       threadId: 'thread-background',
       goal: '等待补充输入',
-      status: 'waiting_user'
+      status: 'waiting_user',
+      workspacePath: 'G:\\Saved\\Task'
     });
-    const taskDetail = createTaskDetail(waitingTask);
+    const taskDetail = createBackgroundTaskDetail(waitingTask);
     vi.mocked(client.api.chat.startRun).mockResolvedValue({
       ok: true,
       data: {
@@ -451,7 +453,8 @@ describe('AppShell', () => {
       mode: 'task',
       threadId: 'thread-background',
       workflowHint: 'background_task_change',
-      taskSource: 'workbench'
+      taskSource: 'workbench',
+      workspacePath: 'G:\\Saved\\Task'
     }));
   });
 

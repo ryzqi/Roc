@@ -17,6 +17,7 @@ interface UseAppTaskRunsOptions {
   client: RocClient;
   currentSelectedMcpServers: string[];
   currentSelectedSkills: string[];
+  currentWorkspacePath: string | null;
   openTaskDetail: (taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }) => void;
   pendingTaskSource: ChatStartRunRequest['taskSource'] | null;
   pendingWorkflowHint: ChatStartRunRequest['workflowHint'];
@@ -40,6 +41,7 @@ export function useAppTaskRuns({
   client,
   currentSelectedMcpServers,
   currentSelectedSkills,
+  currentWorkspacePath,
   openTaskDetail,
   pendingTaskSource,
   pendingWorkflowHint,
@@ -72,7 +74,7 @@ export function useAppTaskRuns({
         },
         workflowHint: null,
         taskSource: null,
-        workspacePath: null
+        workspacePath: currentWorkspacePath
       };
       if (payload.explicitSkillIds !== undefined) {
         request.explicitSkillIds = payload.explicitSkillIds;
@@ -94,6 +96,7 @@ export function useAppTaskRuns({
       chatFeature,
       currentSelectedMcpServers,
       currentSelectedSkills,
+      currentWorkspacePath,
       selectedThreadId,
       setHistoryContextMenu,
       setPendingTaskSource,
@@ -185,12 +188,13 @@ export function useAppTaskRuns({
   );
 
   const submitTaskDetailInput = useCallback(
-    async ({ input, taskId, threadId }: TaskDetailInputRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
+    async ({ input, taskId, threadId, workspacePath }: TaskDetailInputRequest): Promise<{ ok: true } | { ok: false; error: string }> => {
       setSelectedTaskSurfaceTaskId(taskId);
       const result = await startTaskRun({
         input,
         workflowHint: 'background_task_change',
-        taskSource: 'workbench'
+        taskSource: 'workbench',
+        workspacePath
       }, { threadId });
       if (!result.ok) {
         return result;
