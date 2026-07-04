@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 6 coverage completion audit in progress; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, final verification record committed as `c7e3cba`
+Phase 6 coverage completion audit verified through the support/tests reverse scan; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, final verification record committed as `c7e3cba`
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -53,11 +53,11 @@ Phase 6 coverage completion audit in progress; AHA-001 committed as `e7302d1`, A
 - **Status:** complete
 
 ### Phase 6: Coverage Completion Audit
-- [ ] 对 `agent_harness_audit.md` 表格做反向覆盖扫描，找出 in-scope 但未逐项入表的文件/模块
-- [ ] 补读遗漏的高风险 agent harness 文件/测试，按文件或明确模块组写入审计清单
-- [ ] 更新 `findings.md` / `progress.md`，修正当前状态字段和 stale next-step 文案
-- [ ] 运行覆盖性收口所需的验证命令并提交追踪记录
-- **Status:** in_progress
+- [x] 对 `agent_harness_audit.md` 表格做反向覆盖扫描，找出 in-scope 但未逐项入表的文件/模块
+- [x] 补读遗漏的高风险 agent harness 文件/测试，按文件或明确模块组写入审计清单
+- [x] 更新 `findings.md` / `progress.md`，修正当前状态字段和 stale next-step 文案
+- [x] 运行覆盖性收口所需的验证命令并提交追踪记录
+- **Status:** complete
 
 ## Key Questions
 1. 当前 Roc 哪些代码在自造 DeepAgents/LangChain 已有能力？

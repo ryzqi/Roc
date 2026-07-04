@@ -2,6 +2,28 @@
 
 ## Session: 2026-07-04
 
+### Continuation: 2026-07-05 remaining Phase 6 support/tests batch
+- **Status:** complete
+- Actions taken:
+  - Re-read active skills and project rules: `using-superpowers`, `planning-with-files`, `agent-development`, `maintaining-agents-md`, `verification-before-completion`, `risk-review`, and `AGENTS.md`.
+  - Re-read `task_plan.md`, `findings.md`, `progress.md`, and `agent_harness_audit.md`; `git status --short --branch` showed clean `main`.
+  - Ran planning catchup; it surfaced only current continuation context and recommended the same plan/progress refresh already being performed.
+  - Re-read `agent-development` coverage and framework-selection references; Deep Agents remains the correct top-level audit target for planning/files/subagents/skills/memory.
+  - Ran expanded reverse scan with the current table-row parser: `audit=390 candidates=389 missing=45`.
+  - Classified remaining expanded missing: tracking docs (`agent_harness_audit.md`, `task_plan.md`), builder hooks (`scripts/builder-hooks/{before-pack,after-pack,after-extract}.mjs`), main tests/helpers (35 paths), and smoke libs (5 paths).
+  - Current continuation re-ran `git status --short --branch`, `git diff --stat`, planning catchup, active planning-file reads, audit table reads, and memory quick pass; only `progress.md` has a tracked diff so far.
+  - Re-ran the current PowerShell reverse scan against table rows: `audit=390 candidates=360 missing=45`; this scan includes 4 RTK binary resource files that need explicit out-of-scope/packaging-coverage rows rather than source-code review.
+  - Read builder hooks, `electron-builder.yml`, native packaging test coverage, smoke helper libraries, and remaining main regression tests/helpers.
+  - Extracted `describe`/`it` coverage names for remaining main tests after a first PowerShell regex quoting attempt failed; the retry succeeded.
+  - Ran support/tests focused verification: 32 Vitest files and 229 tests passed.
+  - Ran `node --check` on 3 builder hooks and 5 smoke helper libraries; all passed.
+  - Updated `agent_harness_audit.md` with remaining tracking docs, RTK binary resources, builder hooks, main tests/helpers, and smoke helper rows.
+  - Re-ran the current expanded reverse scan after support/tests rows: `audit=435 candidates=360 missing=0`.
+  - Ran `git diff --check`; passed with no output.
+  - Updated `task_plan.md` and the Phase 6 summary row in `findings.md` to reflect the completed coverage audit.
+  - Re-ran the current expanded reverse scan and `git diff --check` after final tracking edits; scan remained `audit=435 candidates=360 missing=0` and whitespace check still passed.
+  - Risk-reviewed the tracking-only diff; no issues found. Residual risk: full `pnpm smoke:electron` was not run because this batch changed only audit tracking docs and smoke helper syntax was checked separately.
+
 ### Continuation: 2026-07-05 renderer surface batch
 - **Status:** in_progress
 - Actions taken:
@@ -441,6 +463,10 @@
 | Phase 6 shared type contract focused tests | `pnpm test -- tests/main/plugins/mcp/plugin.test.ts tests/main/plugins/mcp/mcp-client-adapter.test.ts tests/main/plugins/runtime-tools/shell-adapter.test.ts tests/main/plugins/runtime-tools/rtk-adapter.test.ts tests/main/plugins/skills/plugin.test.ts tests/main/services/skill-service.test.ts tests/main/plugins/workspace/plugin.test.ts tests/main/plugins/workspace/file-capabilities.test.ts tests/main/plugins/workspace/terminal-capabilities.test.ts tests/main/services/workspace-change-watcher-service.test.ts tests/main/plugins/diagnostics/plugin.test.ts tests/main/plugins/memory/plugin.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/settings-ipc-hooks.test.ts tests/renderer/memory-view.test.tsx tests/renderer/mcp-management-panel.test.ts tests/renderer/skills-view.test.ts tests/renderer/terminal-workbench.test.tsx tests/renderer/workspace-refresh.test.ts tests/renderer/workspace-surfaces.test.ts tests/renderer/settings-hooks-section.test.tsx` | Shared type consumer batch passes | 21 files and 99 tests passed; known `node-pty AttachConsole failed` teardown noise after successful summary; exit code 0 | pass |
 | Phase 6 post-shared-types reverse scan | Original Phase 6 keyword set; expanded keyword set also including `diagnostics|hook` | Recount remaining unrepresented candidates | Original: audit=309, candidates=390, missing=136; expanded: audit=309, candidates=425, missing=150 | needs follow-up |
 | Phase 6 shared type whitespace check | `git diff --check` | No whitespace errors | Exit code 0 with no output | pass |
+| Phase 6 support/tests focused Vitest | `pnpm test -- tests/main/native-packaging.test.ts tests/rtk-integration/binary-manager.test.ts ... tests/main/services/skill-service.test.ts` | Remaining builder/resource/main regression batch passes | 32 files and 229 tests passed | pass |
+| Phase 6 support/tests syntax checks | `node --check` on builder hooks and smoke helper libraries | Remaining `.mjs` support files parse cleanly | 3 builder hooks and 5 smoke helper libraries passed | pass |
+| Phase 6 support/tests post-update reverse scan | Current expanded keyword set against `agent_harness_audit.md` table rows | No remaining keyword candidate is missing from the audit table | `audit=435 candidates=360 missing=0` | pass |
+| Phase 6 support/tests whitespace check | `git diff --check` | No whitespace errors | Exit code 0 with no output | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -449,3 +475,4 @@
 | 2026-07-05 | `Select-String` path regex failed with `Unrecognized escape sequence \m` | 1 | Re-ran literal path probes with `-SimpleMatch`. |
 | 2026-07-05 | `Select-Object -Index 135..175` failed because PowerShell treated the range as a string, not an integer array | 1 | Re-ran with `Select-Object -Skip 135 -First 50`. |
 | 2026-07-05 | `rg` test-name summary used `tests/main/langchain-model-factory*.test.ts`, which is an invalid Windows path argument | 1 | Used explicit file reads and `rg --files ... | rg ...` for Windows-safe test inventory. |
+| 2026-07-05 | PowerShell test-name extraction regex failed because quote escaping broke the method call parser | 1 | Re-ran with a single-quoted regex pattern and extracted `describe`/`it` names successfully. |
