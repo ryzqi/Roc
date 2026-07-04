@@ -336,6 +336,11 @@
   - Read matching tests/callers: context assembler/compaction/artifact/session-search/workspace/run-summary/context-summary/prompt-blocks/prompt-builder tests, executor explicit-skill tests, session repository search tests, `deep-agent-executor.ts`, `agent-builder.ts`, and runtime summary call sites.
   - Ran context focused verification; 11 files and 63 tests passed.
   - Updated `agent_harness_audit.md` and `findings.md` with context batch evidence.
+  - Committed context coverage batch as `d2f9d3a docs(agent): record phase 6 context audit`.
+  - Read Forge guardrails batch source: top-level `forge-guardrails` modules, all `forge-guardrails/middleware/*`, `src/main/services/deep-agent/error-mapping.ts`, and `agent-builder.ts` retry/middleware wiring.
+  - Read matching Forge/error tests: `tests/main/services/forge-guardrails/**`, `deep-agent-error-mapping.test.ts`, `deep-agent-tool-retry.test.ts`, and relevant `deep-agent-build-wiring.test.ts` sections.
+  - Ran Forge focused verification; 20 files and 120 tests passed.
+  - Updated `agent_harness_audit.md` and `findings.md` with Forge guardrails/error mapping evidence.
 
 ## Phase 6 Test Results
 | Test | Input | Expected | Actual | Status |
@@ -344,6 +349,7 @@
 | Coverage reverse scan | PowerShell over `rg --files` candidate paths vs audit table paths | Identify not-yet-table-covered candidates | 390 keyword candidates; 330 not represented as table rows | needs follow-up |
 | Phase 6 agent support focused tests | `pnpm test -- tests/main/plugins/agent/plugin.test.ts tests/main/plugins/agent/capability-preview.test.ts tests/main/plugins/agent/chat-image-attachments.test.ts tests/main/plugins/agent/model-factory-adapter.test.ts tests/main/plugins/agent/recovery-policy.test.ts tests/main/plugins/agent/deep-agent-executor-final-output.test.ts tests/main/plugins/agent/runtime-streaming.test.ts tests/main/plugins/agent/runtime-tool-blocks.test.ts` | First agent support coverage batch passes | 8 files and 33 tests passed | pass |
 | Phase 6 context focused tests | `pnpm test -- tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/services/deep-agent/context/context-compaction-pipeline.test.ts tests/main/services/deep-agent/context/context-artifact-store.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/workspace-scope.test.ts tests/main/services/deep-agent/context/run-summary.test.ts tests/main/services/deep-agent/context/context-summary.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/services/deep-agent/prompt-builder.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/session-repository.test.ts` | Context coverage batch passes | 11 files and 63 tests passed | pass |
+| Phase 6 Forge focused tests | `pnpm test -- tests/main/services/forge-guardrails tests/main/deep-agent-error-mapping.test.ts tests/main/deep-agent-tool-retry.test.ts tests/main/deep-agent-build-wiring.test.ts` | Forge guardrails/error mapping coverage batch passes | 20 files and 120 tests passed | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
