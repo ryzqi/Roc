@@ -120,6 +120,14 @@
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
   - Reviewed AHA-004 diff; no blocking issue found.
+  - Committed AHA-004 as `de532da fix(skills): reject dot-segment skill ids`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Read remaining Phase 3 prompt/context and memory plugin source: `prompt.ts`, `prompt-builder.ts`, `context/prompt-blocks.ts`, `context/prompt-serialization.ts`, `plugins/memory/index.ts`, `memory-store-repository.ts`, and memory plugin schema.
+  - Prompt/context source uses shared `ROC_FILE_TOOL_PROMPT_LINES`, serializes stable prompt blocks, exposes explicit skill indexes without embedding full SKILL.md content, and keeps memory writes tied to `/memory/...` paths.
+  - Memory plugin source exposes status/read/write/snapshot capabilities over `MemoryStoreRepository`, which reuses slot resolution, security scan, capacity checks, and `RocSqliteStore`.
+  - Read remaining prompt/context and memory plugin tests: `deep-agent-prompt.test.ts`, `prompt-builder.test.ts`, `prompt-blocks.test.ts`, `context-assembler.test.ts`, and `plugins/memory/plugin.test.ts`.
+  - Tests cover SKILL.md non-echo guidance, file-tool prompt line alignment, capability summary ordering, missing workspace prompt, background-task workflow guidance, prompt block ordering, explicit skill index shape, and memory plugin workspace/auto-memory/security/capacity behavior.
+  - Ran prompt/context/memory plugin focused tests: `deep-agent-prompt.test.ts`, `prompt-builder.test.ts`, `prompt-blocks.test.ts`, `context-assembler.test.ts`, `plugins/memory/plugin.test.ts`, `session-search-tool.test.ts`, and `workspace-scope.test.ts`; 7 files and 45 tests passed.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -170,6 +178,7 @@
 | AHA-004 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-004 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-004 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
+| Phase 3 prompt/context/memory plugin tests | `pnpm test -- tests/main/deep-agent-prompt.test.ts tests/main/services/deep-agent/prompt-builder.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/plugins/memory/plugin.test.ts tests/main/services/deep-agent/context/session-search-tool.test.ts tests/main/services/deep-agent/context/workspace-scope.test.ts` | Prompt/context/memory plugin tests pass | 7 files, 45 tests passed | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
