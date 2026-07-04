@@ -35,6 +35,17 @@
   - Read and tabled two adjacent regression files missed by the handoff summary: `tests/main/startup-load-policy.test.ts` and `tests/renderer/system-appearance.test.ts`.
   - Re-ran adjacent renderer/window verification for those and already-tabled related surfaces: 6 Vitest files and 28 tests passed.
   - Re-ran full-repo reverse coverage scan after the two extra rows: `audit_rows=579 universe=727 missing=151`.
+  - Committed the Phase 7 renderer app/chat/window audit batch as `cb0da9f docs(agent): record phase 7 renderer chat audit`.
+  - Re-ran full-repo reverse coverage scan from clean `main`: `audit_rows=579 universe=727 missing=151`; remaining clusters were renderer styles, smoke libs, forge-guardrails tests, renderer workbench/settings/shared helpers, and shared generic types.
+  - Selected the next Phase 7 renderer settings/workbench/shared UI batch.
+  - Read shared renderer atoms/helpers (`components/*`, `dialog-focus.ts`, `format-time.ts`, `history-sidebar.ts`, `shared/async-state.ts`, `utils/*`), settings source (`settings-model.ts`, `settings/*`, `features/settings/index.tsx`), workbench/Git/view source, shared generic types, renderer declarations, styles, and local font metadata.
+  - Located settings/workbench evidence: settings saves/default model/provider secret/hook trust route through typed `RocClient` settings APIs; Git/file workbench uses `RocClient` and workspace-relative paths; branch create/checkout waits for `api.shell.confirm()` before `api.git` mutation.
+  - Scanned renderer settings/workbench/shared tests for settings modal focus trap, settings feature `RocClient` boundary, provider draft/model validation, impact rows, workbench file/PDF/Git behavior, history filtering, renderer/bundle boundaries, and chat layout scaling.
+  - Ran renderer settings/workbench/shared focused verification: 25 Vitest files and 106 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Updated `agent_harness_audit.md` with 100 Phase 7 renderer settings/workbench/shared UI, style/font, shared type, and focused test rows.
+  - Re-ran full-repo reverse coverage scan after the batch: `audit_rows=679 universe=727 missing=51`; remaining files are smoke/manual/test-support and forge-guardrails regression tests.
+  - Ran `git diff --check`; passed with no output.
 
 ### Continuation: 2026-07-05 remaining Phase 6 support/tests batch
 - **Status:** complete
