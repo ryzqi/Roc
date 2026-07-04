@@ -366,6 +366,16 @@
   - Read matching tests/coverage sections for background task time resolving, tool protocol, subagent projection, plan filesystem defaults, model tool exposure, runtime subagents, record utils, executor tool surface, ask_user, runtime streaming, and tool blocks.
   - Ran DeepAgent tools focused verification; 12 files and 105 tests passed.
   - Updated `agent_harness_audit.md` and `findings.md` with DeepAgent tools batch evidence.
+  - Committed DeepAgent tools/support coverage batch as `3d4651f docs(agent): record phase 6 deep agent tools audit`.
+  - Current continuation re-read required skills, active planning files, audit table, and memory quick-pass hits before the provider/model batch.
+  - Ran planning catchup; it detected only current continuation skill/read context.
+  - Ran `git status --short --branch`, `git diff --stat`, and `git log --oneline -8`; branch is clean `main`, there is no tracked diff, and latest commit is `3d4651f`.
+  - Read Phase 6 provider/model batch source: `src/shared/types/settings.ts`, `provider-config.ts`, `provider-model-key.ts`, `provider-defaults.ts`, config schema/defaults/provider-rules/migration, `config-service.ts`, `provider-runtime-service.ts`, `provider-request-retry.ts`, LangChain provider/model helpers, OpenAI stream normalization, NVIDIA probe/family helpers, and `settings-ipc.ts`.
+  - Read matching provider/model tests for shared provider config, config service provider persistence, provider retry, fixed providers, settings IPC, LangChain model factory OpenAI/Anthropic/NVIDIA/llama.cpp branches, OpenAI-compatible streaming normalization, NVIDIA model family, and the provider fixture.
+  - Ran provider/model focused verification; 22 files and 127 tests passed.
+  - Updated `agent_harness_audit.md` with provider/model source and test rows, and updated `findings.md` with provider/model evidence.
+  - Re-ran Phase 6 reverse coverage scan after provider/model rows; audit rows increased to 253, candidate scan has 390, with 171 missing candidates left.
+  - Ran `git diff --check`; passed with no output.
 
 ## Phase 6 Test Results
 | Test | Input | Expected | Actual | Status |
@@ -387,9 +397,14 @@
 | AHA-008 whitespace check | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `tests/rtk-integration/middleware.test.ts` | pass |
 | Phase 6 post-execution-boundary reverse scan | PowerShell over `rg --files` candidate paths vs audit table paths after `a736652` | Recount remaining unrepresented candidates | audit=179, candidates=402, missing=237 | needs follow-up |
 | Phase 6 DeepAgent tools focused tests | `pnpm test -- tests/main/background-task-time-tool.test.ts tests/main/services/deep-agent/tool-protocol.test.ts tests/main/services/deep-agent/subagent-projection.test.ts tests/main/services/deep-agent/plan-filesystem-defaults.test.ts tests/main/services/deep-agent/model-tool-exposure.test.ts tests/main/services/deep-agent/tools.test.ts tests/main/record-utils.test.ts tests/main/deep-agent-build-wiring.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts tests/main/plugins/agent/runtime-streaming.test.ts tests/main/plugins/agent/runtime-tool-blocks.test.ts` | DeepAgent tools/support batch passes | 12 files and 105 tests passed | pass |
+| Phase 6 provider/model focused tests | `pnpm test -- tests/shared/provider-config.test.ts tests/main/provider-request-retry.test.ts tests/main/fixed-nvidia-provider-config.test.ts tests/main/config-service-providers.test.ts tests/main/config-service-advanced-providers.test.ts tests/main/config-service-helpers.test.ts tests/main/langchain-model-factory.test.ts tests/main/langchain-model-factory-openai.test.ts tests/main/langchain-model-factory-openai-reasoning.test.ts tests/main/langchain-model-factory-openai-model-kwargs.test.ts tests/main/langchain-model-factory-anthropic.test.ts tests/main/langchain-model-factory-anthropic-thinking.test.ts tests/main/langchain-model-factory-llama.test.ts tests/main/services/langchain-model-factory.sampling.test.ts tests/main/langchain-model-factory-nvidia-options.test.ts tests/main/langchain-model-factory-nvidia-guided.test.ts tests/main/langchain-model-factory-nvidia-compat.test.ts tests/main/nvidia-model-family.test.ts tests/main/langchain-openai-compatible-thinking.test.ts tests/main/langchain-openai-streaming-normalization.test.ts tests/main/settings-ipc.test.ts tests/main/settings-ipc-hooks.test.ts` | Provider shared/config/runtime/model factory batch passes | 22 files and 127 tests passed | pass |
+| Phase 6 post-provider/model reverse scan | PowerShell over `rg --files` candidate paths vs audit table paths after provider/model rows | Recount remaining unrepresented candidates | audit=253, candidates=390, missing=171 | needs follow-up |
+| Phase 6 provider/model whitespace check | `git diff --check` | No whitespace errors | Exit code 0 with no output | pass |
 
 ## Phase 6 Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
 | 2026-07-05 | Initial reverse coverage comparison returned only `AGENTS.md` because `rg --files` arguments/path separator filtering were fragile | 1 | Re-ran with full `rg --files`, normalized path separators, and explicit array comparison. |
 | 2026-07-05 | `Select-String` path regex failed with `Unrecognized escape sequence \m` | 1 | Re-ran literal path probes with `-SimpleMatch`. |
+| 2026-07-05 | `Select-Object -Index 135..175` failed because PowerShell treated the range as a string, not an integer array | 1 | Re-ran with `Select-Object -Skip 135 -First 50`. |
+| 2026-07-05 | `rg` test-name summary used `tests/main/langchain-model-factory*.test.ts`, which is an invalid Windows path argument | 1 | Used explicit file reads and `rg --files ... | rg ...` for Windows-safe test inventory. |
