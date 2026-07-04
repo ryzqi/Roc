@@ -24,6 +24,17 @@
   - Re-ran full-repo reverse coverage scan after the batch: `audit_rows=503 universe=727 missing=227`.
   - Ran `git diff --check`; passed with no output.
   - Risk-reviewed the Phase 7 bootstrap/config/preload/scripts tracking-only diff; no issues found. Residual risk: full `pnpm smoke:electron` and `pnpm package:dir` were not run because this batch changed only audit tracking docs, while source/config paths were covered by focused tests, syntax checks, and typecheck.
+  - Committed the Phase 7 bootstrap/config/preload/scripts audit batch as `d0c3000 docs(agent): record phase 7 bootstrap audit`.
+  - Continued Phase 7 renderer app/chat/window batch from clean `main`.
+  - Read main window/host support source: `system-appearance.ts`, `window-material.ts`, `window-messaging.ts`, `window-state-store.ts`, and `windows-host-service.ts`.
+  - Read renderer app/chat source: `App.tsx`, `main.tsx`, `loaded-state.ts`, `shared/roc-client.ts`, app bootstrap/startup/data-loading/routing/sidebar/workband files, `chat-view.tsx`, `use-chat-run.ts`, `chat-run-state.ts`, `chat-transcript.ts`, composer/message/transcript/attachment/reasoning/markdown/code/copy/question/proposed-plan files, and chat feature wrapper.
+  - Located renderer app/chat evidence: renderer access stays behind `RocClient`/preload; startup loads app/task/agent/workspace/RTK/settings through typed APIs; lazy resources use cache keys/request ids to avoid stale updates; chat run events are sequence-deduped and frame-coalesced; question/approval resumes build typed `ChatResumeRunRequest`; transcript rebuilding preserves persisted history, pending interrupts, tool/subagent/hook/guardrail blocks, and live run state.
+  - Scanned Phase 7 renderer/window focused test names for host/window behavior, chat state/transcript/HITL, image attachments, composer slash skills, use-chat-run batching/sequencing, startup load policy, and app navigation metadata.
+  - Current continuation re-ran planning catchup, `git status --short --branch`, `git diff --stat`, `git diff --check`, and reviewed the tracking-only diff for `agent_harness_audit.md`, `findings.md`, and `progress.md`; no risk findings.
+  - Re-ran Phase 7 renderer/window focused verification: 26 Vitest files and 128 tests passed.
+  - Read and tabled two adjacent regression files missed by the handoff summary: `tests/main/startup-load-policy.test.ts` and `tests/renderer/system-appearance.test.ts`.
+  - Re-ran adjacent renderer/window verification for those and already-tabled related surfaces: 6 Vitest files and 28 tests passed.
+  - Re-ran full-repo reverse coverage scan after the two extra rows: `audit_rows=579 universe=727 missing=151`.
 
 ### Continuation: 2026-07-05 remaining Phase 6 support/tests batch
 - **Status:** complete
