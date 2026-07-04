@@ -166,7 +166,7 @@
   - Re-ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Re-ran `git diff --check`; exit code 0 with only Git's CRLF normalization warning for `src/renderer/app/AppShell.tsx`.
   - Reviewed the AHA-006 diff; no blocking issue found. The change keeps ordinary chat on current workspace and task detail follow-up on saved task workspace.
-  - Committed AHA-006 as `3425c67 fix(renderer): propagate chat workspace path`.
+  - Committed AHA-006 as `142a080 fix(renderer): propagate chat workspace path`.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
