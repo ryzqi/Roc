@@ -79,7 +79,7 @@ const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
   ...DEEP_AGENT_BUILT_IN_TOOLS,
   'execute'
 ]);
-type PlanModeSubagentTools = NonNullable<SubAgent['tools']>;
+type SubagentTools = NonNullable<SubAgent['tools']>;
 
 export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof createDeepAgent> {
   ensureRocHarnessProfilesRegistered();
@@ -94,8 +94,8 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     );
   };
   const tools = input.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
-  const subagents = input.mode === 'plan' ? createPlanModeSubagents(input, tools) : input.subagents;
-  const hookMiddleware = input.hookMiddleware === undefined ? [] : [createRocHookMiddleware(input.hookMiddleware)];
+  const subagents = createDeepAgentSubagents(input, tools);
+  const hookMiddleware = createRunHookMiddleware(input);
   const toolEffectMiddleware = createToolEffectMiddleware(input);
   const planModeMiddleware =
     input.mode === 'plan'
@@ -157,10 +157,33 @@ function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
   });
 }
 
+function createDeepAgentSubagents(input: DeepAgentBuildInput, tools: ClientTool[]): RuntimeSubagent[] {
+  if (input.mode === 'plan') {
+    return createPlanModeSubagents(input, tools);
+  }
+  if (input.hookMiddleware === undefined) {
+    return input.subagents;
+  }
+  return createRunModeHookSubagents(input, tools);
+}
+
+function createRunModeHookSubagents(input: DeepAgentBuildInput, tools: ClientTool[]): RuntimeSubagent[] {
+  const generalPurposeSubagent: SubAgent = {
+    ...GENERAL_PURPOSE_SUBAGENT,
+    tools: tools as unknown as SubagentTools,
+    skills: [...input.skillSources],
+    middleware: createHookToolScopeMiddleware(input)
+  };
+  return [
+    generalPurposeSubagent,
+    ...input.subagents.map((subagent) => applyHookToolScopeMiddleware(input, subagent))
+  ];
+}
+
 function createPlanModeSubagents(input: DeepAgentBuildInput, planTools: ClientTool[]): RuntimeSubagent[] {
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
-    tools: planTools as unknown as PlanModeSubagentTools,
+    tools: planTools as unknown as SubagentTools,
     skills: [...input.skillSources],
     middleware: createPlanModeSubagentMiddleware(input)
   };
@@ -181,9 +204,21 @@ function applyPlanModeSubagentMiddleware(input: DeepAgentBuildInput, subagent: R
   };
 }
 
+function applyHookToolScopeMiddleware(input: DeepAgentBuildInput, subagent: RuntimeSubagent): RuntimeSubagent {
+  if (!isSubAgentSpec(subagent)) {
+    return subagent;
+  }
+  const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
+  return {
+    ...subagent,
+    middleware: [...middleware, ...createHookToolScopeMiddleware(input)]
+  };
+}
+
 function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
   const toolEffectMiddleware = createToolEffectMiddleware(input);
   return [
+    ...createHookToolScopeMiddleware(input),
     createRocPlanReadOnlyMemoryMiddleware({
       backend: input.backend,
       memorySources: input.memorySources
@@ -198,6 +233,30 @@ function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
     ...toolEffectMiddleware,
     createToolResolutionMiddleware(),
     createToolRuntimeErrorMiddleware()
+  ];
+}
+
+function createRunHookMiddleware(input: DeepAgentBuildInput) {
+  if (input.hookMiddleware === undefined) {
+    return [];
+  }
+  return [
+    createRocHookMiddleware({
+      ...input.hookMiddleware,
+      scope: 'run'
+    })
+  ];
+}
+
+function createHookToolScopeMiddleware(input: DeepAgentBuildInput) {
+  if (input.hookMiddleware === undefined) {
+    return [];
+  }
+  return [
+    createRocHookMiddleware({
+      ...input.hookMiddleware,
+      scope: 'tool'
+    })
   ];
 }
 

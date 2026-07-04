@@ -1,5 +1,7 @@
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { createAgent, FakeToolCallingModel, tool } from 'langchain';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { createRocHookMiddleware } from '../../../../src/main/services/hooks/middleware';
 import type { HookRuntimeOutcome } from '../../../../src/main/services/hooks/runtime';
 import type { ChatRunEvent, RocHookCommandInput, RocHookRunEvent } from '../../../../src/shared/types';
@@ -21,6 +23,7 @@ function createTestMiddleware(input: {
   runEvent: (hookInput: RocHookCommandInput) => Promise<HookRuntimeOutcome>;
   emitHookEvent?: (event: ChatRunEvent) => void;
   initialContexts?: string[];
+  scope?: 'run' | 'tool';
 }) {
   const emitHookEvent: (event: ChatRunEvent) => void = input.emitHookEvent === undefined ? () => undefined : input.emitHookEvent;
   return createRocHookMiddleware({
@@ -37,7 +40,8 @@ function createTestMiddleware(input: {
       workflowHint: null
     },
     emitHookEvent,
-    initialContexts: input.initialContexts
+    initialContexts: input.initialContexts,
+    scope: input.scope
   });
 }
 
@@ -98,6 +102,31 @@ describe('createRocHookMiddleware', () => {
     expect((update as { messages: unknown[] }).messages.map(contentOf)).toEqual(['SessionStart context.', 'Prompt context.']);
   });
 
+  it('delivers UserPromptSubmit add_context to the actual LangChain model input', async () => {
+    const middleware = createTestMiddleware({
+      runEvent: async (hookInput) => {
+        if (hookInput.event === 'UserPromptSubmit') {
+          return baseOutcome({ additionalContexts: ['Hook policy context.'] });
+        }
+        return baseOutcome();
+      }
+    });
+    const agent = createAgent({
+      model: new FakeToolCallingModel(),
+      tools: [],
+      middleware: [middleware]
+    });
+
+    const result = await agent.invoke({
+      messages: [new HumanMessage('Original request')]
+    });
+    const finalMessage = result.messages.at(-1);
+
+    expect(AIMessage.isInstance(finalMessage)).toBe(true);
+    expect(contentOf(finalMessage)).toContain('Original request');
+    expect(contentOf(finalMessage)).toContain('Hook policy context.');
+  });
+
   it('injects delayed PostToolUse add_context on the next beforeModel call', async () => {
     const middleware = createTestMiddleware({
       runEvent: async (hookInput) => {
@@ -121,6 +150,39 @@ describe('createRocHookMiddleware', () => {
     const update = await invokeBeforeModel(middleware, { messages: [new HumanMessage('continue')] });
 
     expect((update as { messages: unknown[] }).messages.map(contentOf)).toEqual(['Use the sanitized file path.']);
+  });
+
+  it('tool scope injects PostToolUse add_context without running lifecycle hook events', async () => {
+    const seenEvents: RocHookCommandInput['event'][] = [];
+    const middleware = createTestMiddleware({
+      scope: 'tool',
+      initialContexts: ['SessionStart context should not leak.'],
+      runEvent: async (hookInput) => {
+        seenEvents.push(hookInput.event);
+        if (hookInput.event === 'PostToolUse') {
+          return baseOutcome({ additionalContexts: ['Tool follow-up context.'] });
+        }
+        return baseOutcome();
+      }
+    });
+
+    const emptyUpdate = await invokeBeforeModel(middleware, { messages: [new HumanMessage('delegated task')] });
+    await middleware.wrapToolCall!(
+      {
+        toolCall: {
+          id: 'call_1',
+          name: 'read_file',
+          args: { path: 'README.md' }
+        }
+      } as never,
+      async () => new ToolMessage({ tool_call_id: 'call_1', content: 'ok' })
+    );
+    const contextUpdate = await invokeBeforeModel(middleware, { messages: [new HumanMessage('continue')] });
+
+    expect(emptyUpdate).toBeUndefined();
+    expect((contextUpdate as { messages: unknown[] }).messages.map(contentOf)).toEqual(['Tool follow-up context.']);
+    expect(seenEvents).toEqual(['PreToolUse', 'PostToolUse']);
+    expect(middleware.afterModel).toBeUndefined();
   });
 
   it('blocks PreToolUse with a ToolMessage error', async () => {
@@ -166,6 +228,84 @@ describe('createRocHookMiddleware', () => {
         handler
       )
     ).resolves.toEqual({ command: 'Get-Location' });
+  });
+
+  it('delivers PreToolUse replace_input to the actual LangChain tool execution', async () => {
+    const executedCommands: string[] = [];
+    const commandTool = tool(
+      async ({ command }: { command: string }) => {
+        executedCommands.push(command);
+        return `ran:${command}`;
+      },
+      {
+        name: 'run_shell_command',
+        description: 'Run command.',
+        schema: z.object({
+          command: z.string()
+        })
+      }
+    );
+    const seenEvents: RocHookCommandInput['event'][] = [];
+    const middleware = createTestMiddleware({
+      runEvent: async (hookInput) => {
+        seenEvents.push(hookInput.event);
+        if (hookInput.event === 'PreToolUse') {
+          return baseOutcome({ updatedInput: { command: 'Get-Location' } });
+        }
+        return baseOutcome();
+      }
+    });
+    const agent = createAgent({
+      model: new FakeToolCallingModel({
+        toolCalls: [
+          [
+            {
+              name: 'run_shell_command',
+              args: { command: 'dir' },
+              id: 'call_1'
+            }
+          ],
+          []
+        ]
+      }),
+      tools: [commandTool],
+      middleware: [middleware]
+    });
+
+    await agent.invoke({
+      messages: [new HumanMessage('Run a command')]
+    });
+
+    expect(executedCommands).toEqual(['Get-Location']);
+    expect(seenEvents).toEqual(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']);
+  });
+
+  it('does not run Stop while an assistant message still has pending tool calls', async () => {
+    const seenEvents: RocHookCommandInput['event'][] = [];
+    const middleware = createTestMiddleware({
+      runEvent: async (hookInput) => {
+        seenEvents.push(hookInput.event);
+        return baseOutcome();
+      }
+    });
+
+    await invokeAfterModel(middleware, {
+      messages: [
+        new AIMessage({
+          content: '',
+          tool_calls: [
+            {
+              name: 'run_shell_command',
+              args: { command: 'dir' },
+              id: 'call_1',
+              type: 'tool_call'
+            }
+          ]
+        })
+      ]
+    });
+
+    expect(seenEvents).toEqual([]);
   });
 
   it('caps Stop request_continue at three consecutive continuations', async () => {

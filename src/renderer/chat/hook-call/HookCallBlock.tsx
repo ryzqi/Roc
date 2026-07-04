@@ -87,8 +87,13 @@ export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element 
             <dt>duration</dt>
             <dd>{formatDuration(block.durationMs)}</dd>
           </div>
+          {block.message === null ? null : (
+            <div>
+              <dt>message</dt>
+              <dd>{block.message}</dd>
+            </div>
+          )}
         </dl>
-        {block.message === null ? null : <p className="hook-call-modern__message">{block.message}</p>}
       </ActivityBlockBody>
     </ActivityBlockShell>
   );

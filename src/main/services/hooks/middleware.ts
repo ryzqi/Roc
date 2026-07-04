@@ -27,12 +27,17 @@ export type RocHookMiddlewareOptions = {
   runContext: RocHookRunContext;
   emitHookEvent: (event: ChatRunEvent) => void;
   initialContexts?: string[];
+  scope?: 'run' | 'tool';
 };
 
 export function createRocHookMiddleware(options: RocHookMiddlewareOptions) {
+  const scope = options.scope === undefined ? 'run' : options.scope;
   let userPromptSubmitted = false;
   let stopContinuationCount = 0;
-  const queuedContexts: string[] = options.initialContexts === undefined ? [] : [...options.initialContexts];
+  const queuedContexts: string[] = [];
+  if (scope === 'run' && options.initialContexts !== undefined) {
+    queuedContexts.push(...options.initialContexts);
+  }
 
   const runHook = async (event: RocHookCommandInput['event'], payload: RocHookCommandInput['payload']): Promise<HookRuntimeOutcome> => {
     const outcome = await options.hookRuntime.runEvent(createHookInput(options.runContext, event, payload));
@@ -50,6 +55,61 @@ export function createRocHookMiddleware(options: RocHookMiddlewareOptions) {
     return messages;
   };
 
+  const drainQueuedContextsBeforeModel = () => {
+    const contextMessages = drainContextMessages();
+    if (contextMessages.length === 0) {
+      return undefined;
+    }
+    return {
+      messages: contextMessages
+    };
+  };
+
+  const wrapToolCall: NonNullable<Parameters<typeof createMiddleware>[0]['wrapToolCall']> = async (request, handler) => {
+    const toolCallId = request.toolCall.id === undefined ? 'unknown-tool-call' : request.toolCall.id;
+    const preOutcome = await runHook('PreToolUse', {
+      toolName: request.toolCall.name,
+      toolCallId,
+      toolInput: request.toolCall.args
+    });
+    if (preOutcome.blocked) {
+      return new ToolMessage({
+        tool_call_id: toolCallId,
+        name: request.toolCall.name,
+        content: preOutcome.blockReason === null ? 'Tool call blocked by hook.' : preOutcome.blockReason,
+        status: 'error'
+      });
+    }
+
+    const nextRequest =
+      preOutcome.updatedInput === undefined
+        ? request
+        : {
+            ...request,
+            toolCall: {
+              ...request.toolCall,
+              args: requireToolArgs(preOutcome.updatedInput)
+            }
+          };
+    const result = await handler(nextRequest);
+    const postOutcome = await runHook('PostToolUse', {
+      toolName: request.toolCall.name,
+      toolCallId,
+      toolInput: nextRequest.toolCall.args,
+      toolOutput: result
+    });
+    queueContexts(postOutcome.additionalContexts);
+    return result;
+  };
+
+  if (scope === 'tool') {
+    return createMiddleware({
+      name: 'RocHookMiddleware',
+      beforeModel: drainQueuedContextsBeforeModel,
+      wrapToolCall
+    });
+  }
+
   return createMiddleware({
     name: 'RocHookMiddleware',
     beforeModel: async (state) => {
@@ -65,53 +125,16 @@ export function createRocHookMiddleware(options: RocHookMiddlewareOptions) {
         queueContexts(outcome.additionalContexts);
       }
 
-      const contextMessages = drainContextMessages();
-      if (contextMessages.length === 0) {
+      return drainQueuedContextsBeforeModel();
+    },
+    wrapToolCall,
+    afterModel: async (state) => {
+      const messages = readMessages(state);
+      if (hasPendingToolCalls(messages)) {
         return undefined;
       }
-      return {
-        messages: contextMessages
-      };
-    },
-    wrapToolCall: async (request, handler) => {
-      const toolCallId = request.toolCall.id === undefined ? 'unknown-tool-call' : request.toolCall.id;
-      const preOutcome = await runHook('PreToolUse', {
-        toolName: request.toolCall.name,
-        toolCallId,
-        toolInput: request.toolCall.args
-      });
-      if (preOutcome.blocked) {
-        return new ToolMessage({
-          tool_call_id: toolCallId,
-          name: request.toolCall.name,
-          content: preOutcome.blockReason === null ? 'Tool call blocked by hook.' : preOutcome.blockReason,
-          status: 'error'
-        });
-      }
-
-      const nextRequest =
-        preOutcome.updatedInput === undefined
-          ? request
-          : {
-              ...request,
-              toolCall: {
-                ...request.toolCall,
-                args: requireToolArgs(preOutcome.updatedInput)
-              }
-            };
-      const result = await handler(nextRequest);
-      const postOutcome = await runHook('PostToolUse', {
-        toolName: request.toolCall.name,
-        toolCallId,
-        toolInput: nextRequest.toolCall.args,
-        toolOutput: result
-      });
-      queueContexts(postOutcome.additionalContexts);
-      return result;
-    },
-    afterModel: async (state) => {
       const outcome = await runHook('Stop', {
-        lastAssistantMessage: readLastAssistantMessage(readMessages(state)),
+        lastAssistantMessage: readLastAssistantMessage(messages),
         visibleOutput: true
       });
       if (outcome.blocked) {
@@ -182,6 +205,40 @@ function readLastAssistantMessage(messages: BaseMessage[]): string | null {
     }
   }
   return null;
+}
+
+function hasPendingToolCalls(messages: BaseMessage[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message !== undefined && AIMessage.isInstance(message)) {
+      const toolCalls = message.tool_calls;
+      if (toolCalls === undefined) {
+        return false;
+      }
+      if (toolCalls.length === 0) {
+        return false;
+      }
+
+      const completedToolCallIds = new Set<string>();
+      for (let toolMessageIndex = index + 1; toolMessageIndex < messages.length; toolMessageIndex += 1) {
+        const toolMessage = messages[toolMessageIndex];
+        if (toolMessage !== undefined && ToolMessage.isInstance(toolMessage)) {
+          completedToolCallIds.add(toolMessage.tool_call_id);
+        }
+      }
+
+      for (const toolCall of toolCalls) {
+        if (toolCall.id === undefined) {
+          return true;
+        }
+        if (!completedToolCallIds.has(toolCall.id)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+  return false;
 }
 
 function stringifyContent(content: BaseMessage['content']): string {

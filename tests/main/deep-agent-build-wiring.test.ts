@@ -379,6 +379,96 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(middlewareNames.indexOf('RocHookMiddleware')).toBeLessThan(middlewareNames.indexOf('RocShellPathPolicyMiddleware'));
   });
 
+  it('wires tool-scoped hook middleware into DeepAgents subagents when hooks are enabled', () => {
+    const inspectTool = createNamedTool('inspect_workspace');
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: ['/memory/global/AGENTS.md'],
+      skillSources: ['/skills/'],
+      subagents: [
+        {
+          name: 'research',
+          description: 'Research context.',
+          systemPrompt: 'Research context.',
+          tools: [inspectTool]
+        }
+      ],
+      tools: [inspectTool],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      workflowHint: null,
+      contextBudgetTokens: undefined,
+      hookMiddleware: {
+        hookRuntime: {
+          runEvent: vi.fn(async () => ({
+            blocked: false,
+            blockReason: null,
+            updatedInput: undefined,
+            additionalContexts: [],
+            requestContinue: null,
+            runs: [],
+            events: []
+          }))
+        },
+        runContext: {
+          runId: 'run_1',
+          threadId: 'thread_1',
+          workspacePath: 'F:\\Code\\Roc',
+          cwd: 'F:\\Code\\Roc',
+          source: 'chat',
+          modelId: 'model_1',
+          workflowHint: null
+        },
+        emitHookEvent: vi.fn()
+      }
+    } as unknown as DeepAgentBuildInput;
+
+    buildDeepAgent(input);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const generalPurposeSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'general-purpose');
+    const researchSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'research');
+    if (!isSubAgent(generalPurposeSubagent)) {
+      throw new Error('Expected general-purpose subagent.');
+    }
+    if (!isSubAgent(researchSubagent)) {
+      throw new Error('Expected research subagent.');
+    }
+    const generalPurposeMiddleware = generalPurposeSubagent.middleware;
+    const researchMiddleware = researchSubagent.middleware;
+    const generalPurposeMiddlewareNames =
+      generalPurposeMiddleware === undefined
+        ? []
+        : generalPurposeMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
+    const researchMiddlewareNames =
+      researchMiddleware === undefined
+        ? []
+        : researchMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
+    const generalPurposeHookMiddleware = generalPurposeSubagent.middleware?.find((middlewareItem) =>
+      Reflect.get(middlewareItem as object, 'name') === 'RocHookMiddleware'
+    );
+    const researchHookMiddleware = researchSubagent.middleware?.find((middlewareItem) =>
+      Reflect.get(middlewareItem as object, 'name') === 'RocHookMiddleware'
+    );
+
+    expect(generalPurposeSubagent.tools).toEqual([inspectTool]);
+    expect(generalPurposeSubagent.skills).toEqual(['/skills/']);
+    expect(generalPurposeMiddlewareNames).toContain('RocHookMiddleware');
+    expect(researchMiddlewareNames).toContain('RocHookMiddleware');
+    expect(typeof Reflect.get(generalPurposeHookMiddleware as object, 'beforeModel')).toBe('function');
+    expect(typeof Reflect.get(generalPurposeHookMiddleware as object, 'wrapToolCall')).toBe('function');
+    expect(Reflect.get(generalPurposeHookMiddleware as object, 'afterModel')).toBeUndefined();
+    expect(typeof Reflect.get(researchHookMiddleware as object, 'beforeModel')).toBe('function');
+    expect(typeof Reflect.get(researchHookMiddleware as object, 'wrapToolCall')).toBe('function');
+    expect(Reflect.get(researchHookMiddleware as object, 'afterModel')).toBeUndefined();
+  });
+
   it('wires tool effect idempotency after tool protocol normalization when run context is provided', () => {
     const input = {
       mode: 'chat',

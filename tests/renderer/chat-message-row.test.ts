@@ -186,11 +186,28 @@ describe('chat message row', () => {
     expect(html).toContain('node hook.js');
     expect(html).toContain('12ms');
     expect(html).toContain('Checking shell command');
+    expect(html).toContain('<dt>message</dt><dd>Checking shell command</dd>');
+    expect(html).not.toContain('hook-call-modern__message');
     expect(html).toContain('PreToolUse:0:0');
     expect(html).not.toContain('stdout');
     expect(html).not.toContain('stderr');
     expect(html).not.toContain('toolInput');
     expect(html).toContain('最终答案');
+  });
+
+  it('aligns hook metadata labels and values on each row', () => {
+    const css = readFileSync('src/renderer/styles/tool-call.css', 'utf8');
+
+    expect(css).toContain(
+      [
+        '.hook-call-modern__meta div {',
+        '  display: grid;',
+        '  grid-template-columns: 72px minmax(0, 1fr);',
+        '  align-items: baseline;',
+        '  gap: 8px;',
+        '}'
+      ].join('\n')
+    );
   });
 
   it('renders failed subagent work cards open with status, meta, nested children, and no task summary', () => {
