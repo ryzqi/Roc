@@ -153,7 +153,16 @@ export class TaskScheduler {
       });
       this.runNow(task.id, result.runId);
     } catch (error) {
+      const failedAt = new Date().toISOString();
       this.lastError = error instanceof Error ? error.message : String(error);
+      const scheduledAt = task.nextRunAt === null ? failedAt : task.nextRunAt;
+      const updated = this.repository.recordBackgroundTaskStartFailure({
+        taskId: task.id,
+        scheduledAt,
+        failedAt,
+        reason: 'agent_start_failed'
+      });
+      this.registerTask(updated);
     }
   }
 

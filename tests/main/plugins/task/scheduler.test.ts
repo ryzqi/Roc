@@ -113,4 +113,49 @@ describe('TaskScheduler', () => {
       })
     );
   });
+
+  it('records and pauses scheduled tasks when agent startup fails', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
+    const repository = new TaskRepository(db);
+    const nextRunAt = new Date(Date.now() + 1_000).toISOString();
+    const task = repository.createBackgroundTask(
+      repository.createBackgroundTaskPreview({
+        goal: 'Run an automatic scheduled check',
+        trigger: {
+          type: 'once',
+          description: 'One second from now',
+          nextRunAt
+        },
+        workspacePath: 'F:\\Code\\Roc',
+        allowedActions: [],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    );
+    const scheduler = new TaskScheduler(repository, {
+      startRun: async () => {
+        throw new Error('provider_unavailable');
+      }
+    });
+
+    scheduler.start();
+    scheduler.registerAllFromDatabase();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(scheduler.getStatus().lastError).toBe('provider_unavailable');
+    expect(repository.listScheduledRuns({ taskId: task.id })).toContainEqual(
+      expect.objectContaining({
+        backgroundTaskId: task.id,
+        taskRunId: null,
+        scheduledAt: nextRunAt,
+        status: 'failed',
+        skipReason: 'agent_start_failed'
+      })
+    );
+    expect(repository.findBackgroundTask(task.id)).toMatchObject({
+      status: 'paused',
+      lastRunStatus: 'failed'
+    });
+  });
 });

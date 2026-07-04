@@ -199,6 +199,27 @@ export class TaskRepository {
     return insertScheduledTaskRun(this.db, input);
   }
 
+  recordBackgroundTaskStartFailure(input: {
+    taskId: string;
+    scheduledAt: string;
+    failedAt: string;
+    reason: string;
+  }): BackgroundTask {
+    const task = this.requireBackgroundTask(input.taskId);
+    this.db.transaction(() => {
+      insertScheduledTaskRun(this.db, {
+        backgroundTaskId: task.id,
+        scheduledAt: input.scheduledAt,
+        status: 'failed',
+        taskRunId: null,
+        triggeredAt: input.failedAt,
+        skipReason: input.reason
+      });
+      pauseBackgroundTaskAfterRunFailure(this.db, task.id, input.failedAt);
+    })();
+    return this.requireBackgroundTask(task.id);
+  }
+
   countRecentSkippedScheduledRuns(): number {
     const row = this.db.prepare("SELECT COUNT(*) AS total FROM scheduled_task_runs WHERE status = 'skipped'").get() as
       | { total: number }
