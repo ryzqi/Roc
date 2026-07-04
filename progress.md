@@ -128,6 +128,9 @@
   - Read remaining prompt/context and memory plugin tests: `deep-agent-prompt.test.ts`, `prompt-builder.test.ts`, `prompt-blocks.test.ts`, `context-assembler.test.ts`, and `plugins/memory/plugin.test.ts`.
   - Tests cover SKILL.md non-echo guidance, file-tool prompt line alignment, capability summary ordering, missing workspace prompt, background-task workflow guidance, prompt block ordering, explicit skill index shape, and memory plugin workspace/auto-memory/security/capacity behavior.
   - Ran prompt/context/memory plugin focused tests: `deep-agent-prompt.test.ts`, `prompt-builder.test.ts`, `prompt-blocks.test.ts`, `context-assembler.test.ts`, `plugins/memory/plugin.test.ts`, `session-search-tool.test.ts`, and `workspace-scope.test.ts`; 7 files and 45 tests passed.
+  - Committed prompt/context/memory plugin audit record as `85e0d01 docs(agent): record phase 3 memory prompt audit`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Marked Phase 3 complete and moved current phase to Phase 4 contracts/IPC/persistence/tests audit.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
