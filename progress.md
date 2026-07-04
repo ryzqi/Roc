@@ -2,6 +2,25 @@
 
 ## Session: 2026-07-04
 
+### Continuation: 2026-07-05 renderer surface batch
+- **Status:** in_progress
+- Actions taken:
+  - Re-read active skills and project rules: `using-superpowers`, `planning-with-files`, `verification-before-completion`, `maintaining-agents-md`, `agent-development`, and `AGENTS.md`.
+  - Re-read `task_plan.md`, `findings.md`, `progress.md`, and `agent_harness_audit.md` before continuing Phase 6.
+  - Ran planning catchup; it surfaced only current continuation read/skill context, not business-code changes.
+  - Ran `git status --short --branch`, `git diff --stat`, and `git log --oneline -10`; branch is clean `main`, there is no tracked diff, and latest commit is `ff40a19`.
+  - Confirmed Phase 6 acceptance criteria remain reverse coverage scan, missing in-scope file/test readback, tracking-file updates, focused verification, reverse rescan, whitespace check, and commit.
+  - Re-ran expanded renderer-focused reverse scan. Missing renderer candidates include app shell/workspace refresh, chat hook/tool/subagent/slash-skill components, task board/detail/create/action helpers, MCP/memory/skills/workspace/terminal/diagnostics views, settings provider/hooks/memory/task sections, styles, feature barrels, and renderer tests.
+  - Read the remaining renderer source files from the handoff list: memory snapshot tab, skills host/drawer/view, workspace view, terminal workbench/view, provider draft helpers, provider field sections, hooks/memory/task settings sections.
+  - Scanned app/chat/task/MCP/memory/diagnostics source for `RocClient` capability use, workspace path propagation, HITL approval decisions, slash-skill parsing, and view test IDs.
+  - Scanned renderer tests for app shell/task creation, workspace refresh, task board/actions/forms/approvals/settings, chat hooks/queued task/slash skill/subagent/tool history, memory/MCP/skills/terminal/workspace surfaces, provider/settings hooks, and feature barrels.
+  - Scanned renderer styles for namespace-specific selectors and responsive breakpoints covering app shell, task, task dialog, MCP, memory, skills, terminal, tool-call, subagent, provider settings, and workspace shared surfaces.
+  - Ran renderer surface focused verification: `pnpm test -- tests/renderer/app-shell.test.tsx tests/renderer/workspace-refresh.test.ts tests/renderer/tasks-view.test.ts tests/renderer/tasks-view.interaction.test.ts tests/renderer/task-actions.test.ts tests/renderer/task-approval-card.test.tsx tests/renderer/task-create-dialog.test.ts tests/renderer/task-form-model.test.ts tests/renderer/task-settings-section.test.tsx tests/renderer/task-surface-data.test.ts tests/renderer/task-view-model.test.ts tests/renderer/chat-hook-events.test.tsx tests/renderer/chat-transcript-long-tool-history.test.ts tests/renderer/chat-view.queued-task.test.ts tests/renderer/chat-view.slash-skill.test.tsx tests/renderer/subagent-activity-card.test.tsx tests/renderer/memory-view.test.tsx tests/renderer/mcp-management-panel.test.ts tests/renderer/skills-view.test.ts tests/renderer/terminal-workbench.test.tsx tests/renderer/workspace-surfaces.test.ts tests/renderer/providers-section.test.ts tests/renderer/settings-hooks-section.test.tsx tests/renderer/settings-view.hooks.test.tsx tests/renderer/settings-view.provider-save.test.tsx tests/renderer/features/diagnostics-feature.test.tsx tests/renderer/features/mcp-feature.test.tsx tests/renderer/features/memory-feature.test.tsx tests/renderer/features/skills-feature.test.tsx tests/renderer/features/tasks-feature.test.tsx tests/renderer/features/workspace-feature.test.tsx`; 31 files / 108 tests passed.
+  - Updated `agent_harness_audit.md` with renderer app/chat/task/MCP/memory/skills/workspace/terminal/diagnostics/settings/style/source/test rows.
+  - Re-ran reverse coverage scan after renderer rows. Current table-row parser reports original keyword set `audit=390 candidates=354 missing=41`; expanded keyword set `audit=390 candidates=389 missing=45`; renderer missing is `0`.
+  - Ran `git diff --check`; passed with no output.
+  - Ran `git diff --stat` and `git status --short --branch`; diff is limited to `agent_harness_audit.md`, `findings.md`, and `progress.md` on `main`.
+
 ### Phase 1: Requirements, Sources, And Inventory
 - **Status:** in_progress
 - **Started:** 2026-07-04
