@@ -183,6 +183,25 @@
   - Ran `pnpm typecheck`; passed.
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
+  - Continuation handoff loaded required process/domain skills for Phase 4: `using-superpowers`, `planning-with-files`, `agent-development`, `maintaining-agents-md`; `risk-review` was read but deferred until there is a reviewable diff.
+  - Re-read `task_plan.md`, `findings.md`, `progress.md`, and `agent_harness_audit.md`; current phase remains Phase 4 contracts/IPC/persistence/tests audit.
+  - Ran planning catchup; it reported only current-session skill/reference/planning reads and recommended updating tracking files before continuing.
+  - Re-read DeepAgents/LangGraph/LangChain references for core, memory, orchestration, HITL, persistence, and middleware contracts.
+  - Memory quick pass reaffirmed the prior Roc contract: background-task creation saves `workspacePath`/`enabledCapabilities`, run-level `ChatStartRunRequest` must consume that snapshot, and `/workspace/` remains a DeepAgents file-tool virtual route rather than shell cwd.
+  - Ran `git status --short --branch` and `git diff --stat`; worktree is clean on `main` with no tracked diff before continuing Phase 4.
+  - Read `run-event-log.ts`, `task-repository-mappers.ts`, `task-repository.ts`, and `src/shared/types/task.ts` for remaining Phase 4 persistence contract candidates.
+  - Classified `AgentRunEventLog` as replay/history storage, with durable HITL resume metadata intentionally handled by `agent_pending_interrupts`.
+  - Classified `TaskThreadRow.kind` as a type-level accuracy issue without current runtime reproduction; left unchanged under the surgical-change rule.
+  - Re-searched `createBackgroundTaskProposalRequest()` and found no production caller; left it recorded as suspected stale helper because it was not made unused by this task.
+  - Read `deep-agent-build-wiring.test.ts`, `deep-agent-official-contracts.test.ts`, `langchain-model-factory.ts`, and `langchain-openai-compatible-models.ts`.
+  - Ran DeepAgents wiring/contract tests; 2 files and 23 tests passed.
+  - Ran LangChain model factory/OpenAI-compatible tests; 9 files and 46 tests passed.
+  - Confirmed `agent_harness_audit.md` has no remaining `located`, `pending`, `in_progress`, or `issue` table rows after the Phase 4 follow-up.
+  - Ran final drift/format checks: `pnpm check:ipc` passed with generated files current, and `git diff --check` passed with no output.
+  - Ran full test suite: `pnpm test` exited 0 with 264 files and 1337 tests passed; the known `node-pty AttachConsole failed` teardown noise appeared after the Vitest success summary.
+  - Ran `pnpm build`; it completed `pnpm typecheck` and main/preload/renderer production build successfully.
+  - Ran strict unused scan `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; it exited 0.
+  - Ran final `git status --short --branch`, `git diff --stat`, and `git diff --check`; only tracking markdown files are modified and whitespace check is clean.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -253,11 +272,21 @@
 | AHA-007 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-007 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-007 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
+| Continuation catchup | planning-with-files `session-catchup.py` | Recover unsynced context before continuing | Reported only current-session skill/reference/planning reads; tracking files updated before further audit | pass |
+| Continuation status check | `git status --short --branch`; `git diff --stat` | Clean `main`, no tracked diff before next audit candidate | `## main`; no diff stat output | pass |
+| DeepAgents wiring/contract tests | `pnpm test -- tests/main/deep-agent-build-wiring.test.ts tests/main/services/deep-agent/deep-agent-official-contracts.test.ts` | Previously located wiring/official-contract assumptions pass | 2 files, 23 tests passed | pass |
+| LangChain model factory focused tests | `pnpm test -- tests/main/langchain-model-factory.test.ts tests/main/langchain-model-factory-anthropic.test.ts tests/main/langchain-model-factory-openai.test.ts tests/main/langchain-model-factory-openai-reasoning.test.ts tests/main/langchain-model-factory-nvidia-compat.test.ts tests/main/langchain-model-factory-llama.test.ts tests/main/langchain-openai-compatible-thinking.test.ts tests/main/langchain-openai-streaming-normalization.test.ts tests/main/plugins/agent/model-factory-adapter.test.ts` | Provider/model construction and OpenAI-compatible subclass behavior pass | 9 files, 46 tests passed | pass |
+| Final IPC drift check | `pnpm check:ipc` | IPC generated files are current | Passed: `IPC generated files are current.` | pass |
+| Final full test suite | `pnpm test` | Full Vitest suite passes | 264 files and 1337 tests passed; command exit code 0; known `node-pty AttachConsole failed` teardown noise printed after success summary | pass |
+| Final build | `pnpm build` | TypeScript and production build pass | `pnpm typecheck` plus main/preload/renderer build completed with exit code 0 | pass |
+| Final strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters | Exit code 0 | pass |
+| Final whitespace/status check | `git diff --check`; `git status --short --branch`; `git diff --stat` | Tracking docs only, no whitespace errors | `git diff --check` had no output; status shows modified tracking markdown files only | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
 | 2026-07-04 | `rg: regex parse error ... unclosed group` during combined symbol search | 1 | Will rerun as split literal searches instead of one fragile regex. |
+| 2026-07-04 | PowerShell `rg` status search failed because the regex used backtick-sensitive table matching and produced `unclosed character class` | 1 | Replaced it with `Select-String` literal status searches for `located`, `pending`, `in_progress`, and `issue`. |
 | 2026-07-04 | `rg` over pnpm scoped package glob paths failed with `os error 123` | 1 | Replaced wildcard package paths with resolved package directories from `Get-ChildItem`. |
 | 2026-07-04 | `Get-Content` for `@langchain/openai\dist\chat_models.js` failed because the package now stores chat models under nested bundled paths | 1 | Used package `exports`, `rg`, and a runtime `node --input-type=module` probe instead. |
 | 2026-07-04 | `Get-Content` for `.codex\skills\.system\using-superpowers\SKILL.md` failed because the listed source path was under `.codex\skills\using-superpowers` | 1 | Read the correct skill path. |

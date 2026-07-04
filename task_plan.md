@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 4 contracts/IPC/persistence/tests audit in progress; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, Phase 3 audit records committed as `85e0d01` and `86c18eb`
+Phase 5 final verification complete; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, Phase 3 audit records committed as `85e0d01` and `86c18eb`
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -23,15 +23,15 @@ Phase 4 contracts/IPC/persistence/tests audit in progress; AHA-001 committed as 
 ### Phase 1: Requirements, Sources, And Inventory
 - [x] 恢复/创建持久追踪文件
 - [x] 读取 DeepAgents/LangChain 原生能力参考
-- [ ] 盘点 agent harness 相关文件、测试、配置入口
-- [ ] 建立 `agent_harness_audit.md` 文件级审计清单
-- **Status:** in_progress
+- [x] 盘点 agent harness 相关文件、测试、配置入口
+- [x] 建立 `agent_harness_audit.md` 文件级审计清单
+- **Status:** complete
 
 ### Phase 2: Runtime And Orchestration Audit
-- [ ] 审计 DeepAgents runtime 创建、thread continuity、checkpointer/store、recovery、streaming、metrics
-- [ ] 审计 subagent/task orchestration、todo/planning、HITL、background task 运行状态
-- [ ] 记录 native-first 偏差和生产风险
-- **Status:** in_progress
+- [x] 审计 DeepAgents runtime 创建、thread continuity、checkpointer/store、recovery、streaming、metrics
+- [x] 审计 subagent/task orchestration、todo/planning、HITL、background task 运行状态
+- [x] 记录 native-first 偏差和生产风险
+- **Status:** complete
 
 ### Phase 3: Tools, Filesystem, Shell, Memory, Skills Audit
 - [x] 审计 file tools、shell tools、path guard、side-effect idempotency
@@ -40,17 +40,17 @@ Phase 4 contracts/IPC/persistence/tests audit in progress; AHA-001 committed as 
 - **Status:** complete
 
 ### Phase 4: Contracts, IPC, Persistence, Tests Audit
-- [ ] 审计 shared schema、IPC、database/store、task state、migration/compatibility risks
-- [ ] 审计现有测试是否覆盖关键 contract、error branch、recovery branch
-- [ ] 补充或修复最小必要测试
-- **Status:** in_progress
+- [x] 审计 shared schema、IPC、database/store、task state、migration/compatibility risks
+- [x] 审计现有测试是否覆盖关键 contract、error branch、recovery branch
+- [x] 补充或修复最小必要测试
+- **Status:** complete
 
 ### Phase 5: Fixes And Verification
 - [x] 对 AHA-001 做最小修复
 - [x] 运行 AHA-001 focused tests
 - [x] 按 AHA-001 风险运行 `pnpm test -- tests/main/plugins/agent`、`pnpm typecheck`、strict unused scan、`git diff --check`
-- [ ] 按后续更大范围风险运行 `pnpm check:ipc`、`pnpm test`、`pnpm build`
-- **Status:** in_progress
+- [x] 按后续更大范围风险运行 `pnpm check:ipc`、`pnpm test`、`pnpm build`
+- **Status:** complete
 
 ## Key Questions
 1. 当前 Roc 哪些代码在自造 DeepAgents/LangChain 已有能力？
