@@ -259,6 +259,12 @@ describe('config helper modules', () => {
         credential: true,
         sshBackdoor: false,
         invisibleUnicode: true
+      },
+      autoMemory: {
+        enabled: true,
+        lowConfidenceTtlDays: 30,
+        auditRetentionDays: 30,
+        maxCandidatesPerRun: 8
       }
     });
   });

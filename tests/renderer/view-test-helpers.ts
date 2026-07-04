@@ -61,7 +61,8 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       files: [],
       snapshot: { enabled: false, totalChars: 0, totalLimit: 0 },
       sessionMessages: { totalRows: 0, retentionDays: 90, oldestAt: null },
-      fullTextIndex: { healthy: true, status: 'ready' }
+      fullTextIndex: { healthy: true, status: 'ready' },
+      autoMemory: { enabled: true, auditRetentionDays: 30, recent: [] }
     },
     memoryRecovery: null,
     settings: {
@@ -80,6 +81,12 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
           credential: true,
           sshBackdoor: true,
           invisibleUnicode: true
+        },
+        autoMemory: {
+          enabled: true,
+          lowConfidenceTtlDays: 30,
+          auditRetentionDays: 30,
+          maxCandidatesPerRun: 8
         }
       },
       tasks: {

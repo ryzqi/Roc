@@ -14,5 +14,22 @@ export function applyMemoryPluginSchema(db: DatabaseConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_memory_events_created
     ON memory_events(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS memory_auto_audit (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      memory_type TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      memory_key TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      source_run_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      workspace_path TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memory_auto_audit_created
+    ON memory_auto_audit(created_at DESC);
   `);
 }

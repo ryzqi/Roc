@@ -32,4 +32,34 @@ describe('buildRunSummary', () => {
 
     expect(summary).toHaveLength(240);
   });
+
+  it('preserves typed automatic memory candidate lines without visible completion text', () => {
+    const summary = buildRunSummary({
+      assistantMessage: [
+        'Completed the implementation.',
+        'workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.',
+        'decision: roc.memory.default | high | user confirmed automatic pipeline | Keep automatic memory writes enabled by default.'
+      ].join('\n'),
+      successfulToolNames: ['read_file'],
+      workflowHint: null
+    });
+
+    expect(summary).toBe([
+      'workspace_fact: roc.memory.pipeline | high | tests/main/services/deep-agent/context/run-summary.test.ts | Auto memory uses typed candidates.',
+      'decision: roc.memory.default | high | user confirmed automatic pipeline | Keep automatic memory writes enabled by default.'
+    ].join('\n'));
+  });
+
+  it('keeps malformed candidate-looking text as a normal summary', () => {
+    const summary = buildRunSummary({
+      assistantMessage: [
+        'Completed the review.',
+        'decision: use the smaller implementation path'
+      ].join('\n'),
+      successfulToolNames: [],
+      workflowHint: null
+    });
+
+    expect(summary).toBe('Completed the review. decision: use the smaller implementation path');
+  });
 });

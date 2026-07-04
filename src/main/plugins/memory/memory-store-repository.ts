@@ -10,6 +10,7 @@ import type {
   MemoryStatus
 } from '../../../shared/types';
 import { defaultSettings } from '../../services/config/defaults';
+import type { AutoMemoryAuditRepository } from '../../services/memory/auto-memory-audit-repository';
 import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import {
@@ -31,6 +32,7 @@ type MemoryStoreRepositoryOptions = {
   store: RocSqliteStore;
   getWorkspace: () => MemoryWorkspaceContext | null;
   getMemorySettings?: () => MemoryStoreRepositorySettings;
+  auditRepository?: AutoMemoryAuditRepository;
 };
 
 type MemoryRepositoryContext = {
@@ -139,7 +141,12 @@ export class MemoryStoreRepository {
         retentionDays: this.getMemorySettings().sessionRetentionDays,
         oldestAt: null
       },
-      fullTextIndex: { healthy: true, status: 'ready' }
+      fullTextIndex: { healthy: true, status: 'ready' },
+      autoMemory: {
+        enabled: this.getMemorySettings().autoMemory.enabled,
+        auditRetentionDays: this.getMemorySettings().autoMemory.auditRetentionDays,
+        recent: this.options.auditRepository === undefined ? [] : this.options.auditRepository.listRecent(20)
+      }
     };
   }
 

@@ -26,6 +26,12 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
         sshBackdoor: true,
         invisibleUnicode: true
       },
+      autoMemory: {
+        enabled: true,
+        lowConfidenceTtlDays: 30,
+        auditRetentionDays: 30,
+        maxCandidatesPerRun: 8
+      },
       ...overrides.memory
     },
     tasks: {

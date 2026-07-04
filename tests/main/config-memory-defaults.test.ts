@@ -11,6 +11,12 @@ describe('settings.memory defaults', () => {
         credential: true,
         sshBackdoor: true,
         invisibleUnicode: true
+      },
+      autoMemory: {
+        enabled: true,
+        lowConfidenceTtlDays: 30,
+        auditRetentionDays: 30,
+        maxCandidatesPerRun: 8
       }
     });
   });

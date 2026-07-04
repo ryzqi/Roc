@@ -408,6 +408,12 @@ describe('createAgentDeepAgentExecutor', () => {
           credential: false,
           sshBackdoor: false,
           invisibleUnicode: false
+        },
+        autoMemory: {
+          enabled: true,
+          lowConfidenceTtlDays: 30,
+          auditRetentionDays: 30,
+          maxCandidatesPerRun: 8
         }
       }),
       output: {

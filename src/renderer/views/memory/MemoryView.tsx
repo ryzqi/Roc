@@ -5,11 +5,12 @@ import type { LazyLoadState } from '../../app/types';
 import { visibleMemoryLabel } from '../../app/view-routing';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { AutoTab } from './auto-tab';
 import { FilesTab } from './files-tab';
 import { SessionsTab } from './sessions-tab';
 import { SnapshotTab } from './snapshot-tab';
 
-type MemoryTab = 'files' | 'sessions' | 'snapshot';
+type MemoryTab = 'files' | 'sessions' | 'snapshot' | 'auto';
 
 export function MemoryView({
   client,
@@ -76,10 +77,20 @@ export function MemoryView({
           >
             系统快照
           </button>
+          <button
+            aria-pressed={tab === 'auto'}
+            className={tab === 'auto' ? 'tab active' : 'tab'}
+            data-testid="memory-tab-auto"
+            onClick={() => setTab('auto')}
+            type="button"
+          >
+            自动写入
+          </button>
         </div>
         {tab === 'files' ? <FilesTab client={client} initialStatus={state.memoryStatus} /> : null}
         {tab === 'sessions' ? <SessionsTab client={client} workspaceHash={state.memoryStatus.workspaceHash} /> : null}
         {tab === 'snapshot' ? <SnapshotTab client={client} /> : null}
+        {tab === 'auto' ? <AutoTab status={state.memoryStatus} /> : null}
       </section>
     </>
   );

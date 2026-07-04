@@ -99,6 +99,10 @@ function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
     value.securityScan !== null && typeof value.securityScan === 'object'
       ? (value.securityScan as Record<string, unknown>)
       : {};
+  const autoMemory =
+    value.autoMemory !== null && typeof value.autoMemory === 'object'
+      ? (value.autoMemory as Record<string, unknown>)
+      : {};
 
   return {
     charLimits: {
@@ -112,6 +116,21 @@ function upgradeMemorySettings(raw: unknown): AppSettings['memory'] {
       credential: readBoolean(securityScan.credential, defaultSettings.memory.securityScan.credential),
       sshBackdoor: readBoolean(securityScan.sshBackdoor, defaultSettings.memory.securityScan.sshBackdoor),
       invisibleUnicode: readBoolean(securityScan.invisibleUnicode, defaultSettings.memory.securityScan.invisibleUnicode)
+    },
+    autoMemory: {
+      enabled: readBoolean(autoMemory.enabled, defaultSettings.memory.autoMemory.enabled),
+      lowConfidenceTtlDays: readPositiveInteger(
+        autoMemory.lowConfidenceTtlDays,
+        defaultSettings.memory.autoMemory.lowConfidenceTtlDays
+      ),
+      auditRetentionDays: readPositiveInteger(
+        autoMemory.auditRetentionDays,
+        defaultSettings.memory.autoMemory.auditRetentionDays
+      ),
+      maxCandidatesPerRun: readPositiveInteger(
+        autoMemory.maxCandidatesPerRun,
+        defaultSettings.memory.autoMemory.maxCandidatesPerRun
+      )
     }
   };
 }

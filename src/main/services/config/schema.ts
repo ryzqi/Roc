@@ -34,6 +34,12 @@ export const SettingsSchema: z.ZodType<AppSettings> = z.object({
       credential: z.boolean(),
       sshBackdoor: z.boolean(),
       invisibleUnicode: z.boolean()
+    }),
+    autoMemory: z.object({
+      enabled: z.boolean(),
+      lowConfidenceTtlDays: z.number().int().positive(),
+      auditRetentionDays: z.number().int().positive(),
+      maxCandidatesPerRun: z.number().int().positive()
     })
   }),
   tasks: z.object({

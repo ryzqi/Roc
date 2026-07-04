@@ -114,14 +114,17 @@ describe('core plugins integration', () => {
       payload: {
         runId: run.runId,
         threadId: run.threadId,
-        summary: 'Integration completion reached memory.',
+        summary: 'workspace_fact: roc.integration.memory | high | tests/main/plugins/core-plugins.integration.test.ts | Integration completion reached memory.',
         assistantMessage: 'Memory saw the agent completion.'
       },
       createdAt: new Date().toISOString()
     });
 
     await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toMatchObject({
-      text: expect.stringContaining('Integration completion reached memory.')
+      text: expect.stringContaining('key: roc.integration.memory')
+    });
+    await expect(runtime.invokeCapability('memory.snapshot.preview', {})).resolves.toMatchObject({
+      text: expect.stringContaining('summary: Integration completion reached memory.')
     });
   });
 });

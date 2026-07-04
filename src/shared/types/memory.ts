@@ -2,6 +2,39 @@ export type MemoryScope = 'global' | 'workspace';
 export type MemoryKind = 'user' | 'agents' | 'memory';
 export type SessionMessagePhase = 'visible' | 'pre_compaction_flush';
 
+export type AutoMemoryCandidateType =
+  | 'user_preference'
+  | 'workspace_fact'
+  | 'decision'
+  | 'pitfall'
+  | 'verification'
+  | 'transient_task_result';
+
+export type AutoMemoryConfidence = 'high' | 'medium' | 'low';
+
+export type AutoMemoryAuditAction =
+  | 'accepted'
+  | 'rejected'
+  | 'duplicate_skipped'
+  | 'conflict_rejected'
+  | 'maintenance_merged'
+  | 'maintenance_deleted'
+  | 'write_failed';
+
+export type AutoMemoryAuditRecord = {
+  id: string;
+  createdAt: string;
+  action: AutoMemoryAuditAction;
+  type: AutoMemoryCandidateType;
+  scope: MemoryScope;
+  confidence: AutoMemoryConfidence;
+  key: string;
+  summary: string;
+  sourceRunId: string;
+  reason: string;
+  workspacePath: string | null;
+};
+
 export type SecurityScanIssue = {
   category: 'prompt_injection' | 'credential' | 'ssh_backdoor' | 'invisible_unicode';
   pattern: string;
@@ -27,6 +60,11 @@ export type MemoryStatus = {
   snapshot: { enabled: boolean; totalChars: number; totalLimit: number };
   sessionMessages: { totalRows: number; retentionDays: number; oldestAt: string | null };
   fullTextIndex: { healthy: boolean; status: 'ready' };
+  autoMemory: {
+    enabled: boolean;
+    auditRetentionDays: number;
+    recent: AutoMemoryAuditRecord[];
+  };
 };
 
 export type MemoryFileWriteRequest = {

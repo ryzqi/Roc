@@ -15,6 +15,13 @@ export type MemorySecurityScanSettings = {
   invisibleUnicode: boolean;
 };
 
+export type AutoMemorySettings = {
+  enabled: boolean;
+  lowConfidenceTtlDays: number;
+  auditRetentionDays: number;
+  maxCandidatesPerRun: number;
+};
+
 export type AppSettings = {
   schemaVersion: 2;
   defaultWorkspace: string | null;
@@ -27,6 +34,7 @@ export type AppSettings = {
     charLimits: MemoryCharLimits;
     sessionRetentionDays: number;
     securityScan: MemorySecurityScanSettings;
+    autoMemory: AutoMemorySettings;
   };
   tasks: {
     longRunningThresholds: {

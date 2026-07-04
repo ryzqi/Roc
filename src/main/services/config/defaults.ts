@@ -27,6 +27,12 @@ export const defaultSettings: AppSettings = {
       credential: true,
       sshBackdoor: true,
       invisibleUnicode: true
+    },
+    autoMemory: {
+      enabled: true,
+      lowConfidenceTtlDays: 30,
+      auditRetentionDays: 30,
+      maxCandidatesPerRun: 8
     }
   },
   tasks: {

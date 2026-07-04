@@ -1,10 +1,16 @@
 import type { RocPluginContext } from '../../kernel/types';
-import type { MemoryScope } from '../../../shared/types';
+import type { AppSettings, MemoryScope } from '../../../shared/types';
 import type { MemoryStoreRepository, MemoryWorkspaceContext } from '../../plugins/memory/memory-store-repository';
+import { defaultSettings } from '../config/defaults';
+import type { AutoMemoryAuditRepository } from './auto-memory-audit-repository';
 import {
-  buildMemoryPromotionBullet,
-  memoryFileContainsPromotionSummary
-} from '../deep-agent/context/memory-promotion';
+  type AutoMemoryCandidate,
+  appendAutoMemoryEntry,
+  autoMemoryEntryExists,
+  extractAutoMemoryCandidates,
+  formatAutoMemoryEntry,
+  shouldRejectCandidate
+} from './auto-memory-candidates';
 
 export type AgentRunCompletedPayload = {
   runId: string;
@@ -16,6 +22,8 @@ export type AgentRunCompletedPayload = {
 
 type AutoMemoryWriterOptions = {
   repository: MemoryStoreRepository;
+  auditRepository?: AutoMemoryAuditRepository;
+  getMemorySettings?: () => AppSettings['memory'];
   logger: RocPluginContext['logger'];
 };
 
@@ -23,45 +31,123 @@ export class AutoMemoryWriter {
   constructor(private readonly options: AutoMemoryWriterOptions) {}
 
   async handleAgentRunCompleted(payload: AgentRunCompletedPayload, createdAt?: string): Promise<void> {
-    const summary = payload.summary.trim();
-    if (summary.length === 0) {
+    const settings = this.resolveMemorySettings().autoMemory;
+    if (!settings.enabled) {
       return;
     }
     const workspaceOverride = resolveWorkspaceOverride(payload);
-    const targetScope: MemoryScope = this.options.repository.hasWorkspace(workspaceOverride) ? 'workspace' : 'global';
-    const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
-    const existing = current === null ? '' : current;
-    if (memoryFileContainsPromotionSummary(existing, summary)) {
+    const date = resolveDate(createdAt);
+    const eventCreatedAt = createdAt === undefined ? new Date().toISOString() : createdAt;
+    const candidates = extractAutoMemoryCandidates(payload, settings, eventCreatedAt);
+    if (candidates.length === 0) {
+      this.recordAudit({
+        action: 'rejected',
+        type: 'transient_task_result',
+        scope: this.options.repository.hasWorkspace(workspaceOverride) ? 'workspace' : 'global',
+        confidence: 'low',
+        key: 'no_candidates',
+        summary: payload.summary.trim(),
+        sourceRunId: payload.runId,
+        reason: 'no_candidates',
+        workspacePath: readWorkspacePath(payload),
+        createdAt: eventCreatedAt
+      });
       return;
     }
-    const bullet = buildMemoryPromotionBullet({
-      runId: payload.runId,
-      summary
-    });
-    if (bullet === null) {
-      return;
-    }
-    const next = appendBullet(existing, resolveDate(createdAt), bullet);
-    if (next === null) {
-      return;
-    }
-    const result = await this.options.repository.writeFile({
-      scope: targetScope,
-      kind: 'memory',
-      content: next
-    }, workspaceOverride);
-    if (!result.ok) {
-      if (result.reason === 'capacity_exceeded') {
-        this.options.logger.warn('memory_auto_write_skipped_capacity', {
-          chars: result.chars,
-          limit: result.limit
+
+    for (const candidate of candidates) {
+      const rejection = shouldRejectCandidate(candidate);
+      if (rejection !== null) {
+        this.recordCandidateAudit(candidate, 'rejected', rejection);
+        continue;
+      }
+      const targetScope = resolveTargetScope(candidate.scope, workspaceOverride, this.options.repository);
+      try {
+        const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
+        const existing = current === null ? '' : current;
+        if (autoMemoryEntryExists(existing, candidate)) {
+          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate');
+          continue;
+        }
+        const entry = formatAutoMemoryEntry(candidate);
+        const next = appendAutoMemoryEntry(existing, date, entry);
+        const result = await this.options.repository.writeFile({
+          scope: targetScope,
+          kind: 'memory',
+          content: next
+        }, workspaceOverride);
+        if (!result.ok && result.reason === 'capacity_exceeded') {
+          const compacted = removeExactDuplicateStructuredEntries(existing);
+          const retryContent = appendAutoMemoryEntry(compacted, date, entry);
+          const retryResult = await this.options.repository.writeFile({
+            scope: targetScope,
+            kind: 'memory',
+            content: retryContent
+          }, workspaceOverride);
+          if (retryResult.ok) {
+            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry');
+            continue;
+          }
+          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason);
+          this.options.logger.warn('memory_auto_write_skipped', {
+            reason: retryResult.reason
+          });
+          continue;
+        }
+        if (!result.ok) {
+          this.recordCandidateAudit(candidate, 'write_failed', result.reason);
+          this.options.logger.warn('memory_auto_write_skipped', {
+            reason: result.reason
+          });
+          continue;
+        }
+        this.recordCandidateAudit(candidate, 'accepted', 'accepted');
+      } catch (error) {
+        this.recordCandidateAudit(candidate, 'write_failed', 'exception');
+        this.options.logger.warn('memory_auto_write_failed', {
+          error: error instanceof Error ? error.message : String(error)
         });
-        return;
-      }
-      if (result.reason === 'security_scan') {
-        this.options.logger.warn('memory_auto_write_skipped_security');
       }
     }
+  }
+
+  private recordCandidateAudit(
+    candidate: AutoMemoryCandidate,
+    action: Parameters<AutoMemoryAuditRepository['record']>[0]['action'],
+    reason: string
+  ): void {
+    this.recordAudit({
+      action,
+      type: candidate.type,
+      scope: candidate.scope,
+      confidence: candidate.confidence,
+      key: candidate.key,
+      summary: candidate.summary,
+      sourceRunId: candidate.sourceRunId,
+      reason,
+      workspacePath: candidate.workspacePath,
+      createdAt: candidate.createdAt
+    });
+  }
+
+  private recordAudit(input: Parameters<AutoMemoryAuditRepository['record']>[0]): void {
+    if (this.options.auditRepository === undefined) {
+      return;
+    }
+    try {
+      this.options.auditRepository.record(input);
+    } catch (error) {
+      this.options.logger.warn('memory_auto_audit_write_failed', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private resolveMemorySettings(): AppSettings['memory'] {
+    if (this.options.getMemorySettings === undefined) {
+      return defaultSettings.memory;
+    }
+    return this.options.getMemorySettings();
   }
 }
 
@@ -96,35 +182,11 @@ function resolveWorkspaceOverride(payload: AgentRunCompletedPayload): MemoryWork
   };
 }
 
-function appendBullet(existing: string, date: string, bullet: string): string | null {
-  if (existing.includes(bullet)) {
+function readWorkspacePath(payload: AgentRunCompletedPayload): string | null {
+  if (payload.workspacePath === undefined) {
     return null;
   }
-  const trimmed = existing.trimEnd();
-  const heading = `## ${date}`;
-  if (trimmed.length === 0) {
-    return [heading, '', bullet].join('\n');
-  }
-  const lines = trimmed.split('\n');
-  const headingIndex = lines.findIndex((line) => line.trim() === heading);
-  if (headingIndex === -1) {
-    return [trimmed, '', heading, '', bullet].join('\n');
-  }
-  const nextHeadingIndex = findNextDateHeading(lines, headingIndex + 1);
-  const insertIndex = nextHeadingIndex === -1 ? lines.length : nextHeadingIndex;
-  const before = lines.slice(0, insertIndex);
-  const after = lines.slice(insertIndex);
-  before.push(bullet);
-  return [...before, ...after].join('\n');
-}
-
-function findNextDateHeading(lines: string[], start: number): number {
-  for (let index = start; index < lines.length; index += 1) {
-    if (/^## \d{4}-\d{2}-\d{2}$/u.test(lines[index])) {
-      return index;
-    }
-  }
-  return -1;
+  return payload.workspacePath;
 }
 
 function resolveDate(createdAt: string | undefined): string {
@@ -135,4 +197,40 @@ function resolveDate(createdAt: string | undefined): string {
     }
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+function resolveTargetScope(
+  candidateScope: MemoryScope,
+  workspaceOverride: MemoryWorkspaceContext | null | undefined,
+  repository: MemoryStoreRepository
+): MemoryScope {
+  if (candidateScope === 'workspace' && repository.hasWorkspace(workspaceOverride)) {
+    return 'workspace';
+  }
+  return 'global';
+}
+
+function removeExactDuplicateStructuredEntries(existing: string): string {
+  const lines = existing.split('\n');
+  const result: string[] = [];
+  const seenEntries = new Set<string>();
+  let index = 0;
+  while (index < lines.length) {
+    if (!lines[index].startsWith('- type: ')) {
+      result.push(lines[index]);
+      index += 1;
+      continue;
+    }
+    const entry: string[] = [];
+    while (index < lines.length && (entry.length === 0 || !lines[index].startsWith('- type: '))) {
+      entry.push(lines[index]);
+      index += 1;
+    }
+    const normalized = entry.join('\n').replace(/\s+/gu, ' ').trim();
+    if (!seenEntries.has(normalized)) {
+      seenEntries.add(normalized);
+      result.push(...entry);
+    }
+  }
+  return result.join('\n').trimEnd();
 }

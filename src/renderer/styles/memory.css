@@ -462,3 +462,42 @@
   line-height: 1.65;
   white-space: pre-wrap;
 }
+
+.memory-auto-shell {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.memory-auto-records {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.memory-auto-record {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.memory-auto-meta,
+.memory-auto-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-auto-summary {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}

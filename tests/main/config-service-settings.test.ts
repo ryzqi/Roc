@@ -156,6 +156,12 @@ describe('ConfigService unified settings document', () => {
         credential: true,
         sshBackdoor: false,
         invisibleUnicode: true
+      },
+      autoMemory: {
+        enabled: true,
+        lowConfidenceTtlDays: 30,
+        auditRetentionDays: 30,
+        maxCandidatesPerRun: 8
       }
     });
     const persisted = readSettingsDocument() as { settings: { memory: unknown } };
@@ -167,6 +173,12 @@ describe('ConfigService unified settings document', () => {
         credential: true,
         sshBackdoor: false,
         invisibleUnicode: true
+      },
+      autoMemory: {
+        enabled: true,
+        lowConfidenceTtlDays: 30,
+        auditRetentionDays: 30,
+        maxCandidatesPerRun: 8
       }
     });
   });

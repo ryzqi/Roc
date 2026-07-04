@@ -103,7 +103,8 @@ function createMemoryStatus(): MemoryStatus {
     ],
     snapshot: { enabled: true, totalChars: 25, totalLimit: 3575 },
     sessionMessages: { totalRows: 1, retentionDays: 90, oldestAt: null },
-    fullTextIndex: { healthy: true, status: 'ready' }
+    fullTextIndex: { healthy: true, status: 'ready' },
+    autoMemory: { enabled: true, auditRetentionDays: 30, recent: [] }
   };
 }
 

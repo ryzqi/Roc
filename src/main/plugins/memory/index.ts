@@ -8,7 +8,9 @@ import type {
   MemoryStatus
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { defaultSettings } from '../../services/config/defaults';
 import { AutoMemoryWriter, isAgentRunCompletedPayload } from '../../services/memory/auto-memory-writer';
+import { AutoMemoryAuditRepository } from '../../services/memory/auto-memory-audit-repository';
 import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import {
   MemoryStoreRepository,
@@ -43,6 +45,35 @@ const memoryFileMetaSchema = z.object({
   absolutePath: z.string(),
   effective: z.boolean(),
   updatedAt: z.string().nullable()
+});
+
+const autoMemoryAuditRecordSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  action: z.enum([
+    'accepted',
+    'rejected',
+    'duplicate_skipped',
+    'conflict_rejected',
+    'maintenance_merged',
+    'maintenance_deleted',
+    'write_failed'
+  ]),
+  type: z.enum([
+    'user_preference',
+    'workspace_fact',
+    'decision',
+    'pitfall',
+    'verification',
+    'transient_task_result'
+  ]),
+  scope: memoryScopeSchema,
+  confidence: z.enum(['high', 'medium', 'low']),
+  key: z.string(),
+  summary: z.string(),
+  sourceRunId: z.string(),
+  reason: z.string(),
+  workspacePath: z.string().nullable()
 });
 
 const securityScanIssueSchema = z.object({
@@ -84,6 +115,11 @@ const memoryStatusSchema = z.object({
   fullTextIndex: z.object({
     healthy: z.boolean(),
     status: z.literal('ready')
+  }),
+  autoMemory: z.object({
+    enabled: z.boolean(),
+    auditRetentionDays: z.number().int(),
+    recent: z.array(autoMemoryAuditRecordSchema)
   })
 }) satisfies z.ZodType<MemoryStatus>;
 
@@ -124,14 +160,20 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
     initialize: async (context) => {
       const db = context.database.getConnection();
       applyMemoryPluginSchema(db);
+      const auditRepository = new AutoMemoryAuditRepository(db);
       const getWorkspace = createMemoryWorkspaceProvider(options);
+      const getMemorySettings =
+        options.getMemorySettings === undefined ? () => defaultSettings.memory : options.getMemorySettings;
       const repository = new MemoryStoreRepository({
         store: new RocSqliteStore(context.database.getCoreConnection()),
         getWorkspace,
-        getMemorySettings: options.getMemorySettings
+        getMemorySettings,
+        auditRepository
       });
       const autoMemoryWriter = new AutoMemoryWriter({
         repository,
+        auditRepository,
+        getMemorySettings,
         logger: context.logger
       });
       registerMemoryCapabilities(context, repository);
@@ -140,7 +182,14 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
           if (!isAgentRunCompletedPayload(event.payload)) {
             throw new Error('agent_run_completed_payload_invalid');
           }
-          await autoMemoryWriter.handleAgentRunCompleted(event.payload, event.createdAt);
+          try {
+            auditRepository.prune(getMemorySettings().autoMemory.auditRetentionDays);
+            await autoMemoryWriter.handleAgentRunCompleted(event.payload, event.createdAt);
+          } catch (error) {
+            context.logger.warn('memory_auto_write_failed', {
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
         })
       ];
     },

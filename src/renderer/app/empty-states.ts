@@ -28,7 +28,8 @@ export function emptyMemoryData(): MemoryData {
       files: [],
       snapshot: { enabled: false, totalChars: 0, totalLimit: 0 },
       sessionMessages: { totalRows: 0, retentionDays: 90, oldestAt: null },
-      fullTextIndex: { healthy: true, status: 'ready' }
+      fullTextIndex: { healthy: true, status: 'ready' },
+      autoMemory: { enabled: true, auditRetentionDays: 30, recent: [] }
     },
     memoryRecovery: null
   };

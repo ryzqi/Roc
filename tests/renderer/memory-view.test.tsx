@@ -164,6 +164,30 @@ describe('MemoryView file editor', () => {
       limit: 50
     });
   });
+
+  it('renders automatic memory audit records from Tab 4', async () => {
+    const memoryStatus = createMemoryStatus();
+    const preload = createMockPreloadApi(memoryStatus);
+    window.roc = preload as unknown as RocPreloadApi;
+
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryView, {
+          loadState: { status: 'ready', error: null, key: null },
+          state: createLoadedState({ memoryStatus })
+        })
+      );
+    });
+    await flushPromises();
+
+    await act(async () => {
+      queryButton('memory-tab-auto').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('workspace_fact');
+    expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('accepted');
+    expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('Auto memory writes use typed candidates.');
+  });
 });
 
 function createMemoryStatus(): MemoryStatus {
@@ -195,7 +219,26 @@ function createMemoryStatus(): MemoryStatus {
     ],
     snapshot: { enabled: true, totalChars: 25, totalLimit: 3575 },
     sessionMessages: { totalRows: 0, retentionDays: 90, oldestAt: null },
-    fullTextIndex: { healthy: true, status: 'ready' }
+    fullTextIndex: { healthy: true, status: 'ready' },
+    autoMemory: {
+      enabled: true,
+      auditRetentionDays: 30,
+      recent: [
+        {
+          id: 'audit-1',
+          createdAt: '2026-07-03T00:00:00.000Z',
+          action: 'accepted',
+          type: 'workspace_fact',
+          scope: 'workspace',
+          confidence: 'high',
+          key: 'roc.memory.auto_candidate',
+          summary: 'Auto memory writes use typed candidates.',
+          sourceRunId: 'run_1',
+          reason: 'accepted',
+          workspacePath: 'F:\\Code\\Roc'
+        }
+      ]
+    }
   };
 }
 

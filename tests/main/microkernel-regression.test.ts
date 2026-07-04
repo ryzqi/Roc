@@ -223,8 +223,9 @@ describe('microkernel regression', () => {
     expect(runNow).toMatchObject({ taskId: task.id });
     expect(runOutputEvents).toContainEqual(expect.objectContaining({ runId: runNow.runId, type: 'message', role: 'assistant' }));
     expect(memorySnapshot.text).toContain('# DeepAgents Memory Preview');
-    expect(memorySnapshot.text).toMatch(/- run_[^:\n]+: Static DeepAgent response\./u);
-    expect(memorySnapshot.text).toContain('Static DeepAgent response.');
+    expect(memorySnapshot.text).toContain('type: workspace_fact');
+    expect(memorySnapshot.text).toContain('key: roc.microkernel.static_response');
+    expect(memorySnapshot.text).toContain('summary: Static DeepAgent response.');
     expect(mcpServers).toContainEqual(expect.objectContaining({ id: 'exa-hosted' }));
     expect(rtkStatus).toMatchObject({ resourceState: 'ready' });
     expect(fileTree.entries).toContainEqual(expect.objectContaining({ name: 'README.md' }));
@@ -287,7 +288,7 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           kind: 'text',
           blockId: `text-${input.run.id}`,
           phase: 'delta',
-          text: 'Static DeepAgent response.'
+          text: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
         }
       } satisfies ChatRunEvent;
     }
