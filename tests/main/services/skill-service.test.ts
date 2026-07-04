@@ -1,5 +1,5 @@
 import { tmpdir } from 'node:os';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RocDomainError } from '../../../src/main/services/errors';
@@ -35,6 +35,13 @@ afterEach(() => {
 describe('SkillService.listFiles', () => {
   it('stores skills under the configured Roc data root', () => {
     expect(paths.skillsDir).toBe(join(root, 'skills'));
+  });
+
+  it('rejects dot-segment skill ids before resolving filesystem paths', () => {
+    expect(() => service.listFiles({ id: '..', relativePath: '' })).toThrowError(RocDomainError);
+    expect(() => service.deleteSkill('..')).toThrowError(RocDomainError);
+    expect(existsSync(root)).toBe(true);
+    expect(existsSync(paths.skillsDir)).toBe(true);
   });
 
   it('marks skills invalid when the directory name does not match the official skill name', () => {

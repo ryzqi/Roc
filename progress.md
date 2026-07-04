@@ -103,6 +103,23 @@
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
   - Reviewed AHA-003 diff; no blocking issue found. Compatibility note: `selectedSkillIds === undefined` keeps the previous unfiltered read-only backend behavior, while runtime-provided arrays now enforce selection.
+  - Committed AHA-003 as `7c178c1 fix(agent): restrict deep agent skill file routes`.
+  - After commit, `git status --short --branch` showed clean `main`.
+  - Continued Phase 3 memory/skills inventory. Source paths found across `store-memory-backend.ts`, `services/memory/*`, `skill-service.ts`, `plugins/memory`, `plugins/skills`, and deep-agent context prompt files.
+  - Located matching tests for store memory backend, memory slots/sqlite/security/capacity, skill service/plugin, memory plugin, prompt builder, prompt blocks, context assembler, and related context services.
+  - Read memory backend/policy source: `store-memory-backend.ts`, `store-slots.ts`, `capacity.ts`, `security-scan.ts`, and `sqlite-store.ts`.
+  - Initial memory read found `RocStoreMemoryBackend` validates memory keys against slot-derived allowlists, blocks uploads/downloads, applies security scan plus capacity on writes/edits, and delegates storage through DeepAgents `StoreBackend` backed by `RocSqliteStore`.
+  - Read memory focused tests: `store-memory-backend.test.ts`, `store-slots.test.ts`, `sqlite-store.test.ts`, `security-scan.test.ts`, and `capacity.test.ts`.
+  - Memory tests cover slot whitelist/workspace-required behavior, namespace/key validation, Store CRUD/search/list, security categories/redaction, and capacity boundaries.
+  - Read skills source/tests: `skill-service.ts`, `plugins/skills/index.ts`, `skill-service.test.ts`, and `plugins/skills/plugin.test.ts`.
+  - Found AHA-004: `SkillService.normalizeSkillId()` allowed `.` and `..` because `basename('..') === '..'`; this let skill file operations resolve outside the skill root and made `deleteSkill('..')` target the Roc data root.
+  - Added RED test in `skill-service.test.ts` for dot-segment skill IDs; RED failed because `listFiles({ id: '..' })` did not throw.
+  - Changed `normalizeSkillId()` to reject `.` and `..`; re-ran `pnpm test -- tests/main/services/skill-service.test.ts`; 1 file and 18 tests passed.
+  - Ran skills/memory focused tests covering SkillService, skills plugin, memory backend, memory services, prompt blocks, context assembler, and executor skill wiring; 10 files and 86 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Ran `git diff --check`; passed with no output.
+  - Reviewed AHA-004 diff; no blocking issue found.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -147,6 +164,12 @@
 | AHA-003 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-003 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-003 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
+| RED dot-segment skill id | `pnpm test -- tests/main/services/skill-service.test.ts` | New dot-segment skill id test fails because `..` is accepted | Failed because `listFiles({ id: '..' })` did not throw | expected fail |
+| GREEN dot-segment skill id | `pnpm test -- tests/main/services/skill-service.test.ts` | Skill service tests pass after rejecting `.` and `..` IDs | 1 file, 18 tests passed | pass |
+| AHA-004 skills/memory focused tests | `pnpm test -- tests/main/services/skill-service.test.ts tests/main/plugins/skills/plugin.test.ts tests/main/deep-agent/store-memory-backend.test.ts tests/main/memory/store-slots.test.ts tests/main/memory/sqlite-store.test.ts tests/main/memory/security-scan.test.ts tests/main/memory/capacity.test.ts tests/main/services/deep-agent/context/context-assembler.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts` | Skills/memory tests pass after dot-segment skill id fix | 10 files, 86 tests passed | pass |
+| AHA-004 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-004 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-004 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |

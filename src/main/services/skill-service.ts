@@ -372,7 +372,7 @@ export class SkillService {
   private normalizeSkillId(value: string): string {
     const trimmed = requireText(value, 'skill_id_empty', 'Skill ID 不能为空。', '请提供 Skill ID。');
     const normalized = basename(trimmed);
-    if (normalized !== trimmed) {
+    if (normalized !== trimmed || normalized === '.' || normalized === '..') {
       throw new RocDomainError({
         code: 'skill_id_invalid',
         message: 'Skill ID 不能包含路径分隔符。',
