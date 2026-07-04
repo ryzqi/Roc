@@ -76,6 +76,7 @@
   - Ran `pnpm typecheck`; passed.
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
+  - Reviewed the AHA-007 diff; no blocking issue found. Capability schema and repository boundary now enforce the same positive-limit contract.
   - Reviewed AHA-002 current diff; no blocking issue found.
   - Committed AHA-002 as `c1158e3 fix(agent): align sqlite checkpointer pending writes`.
   - After commit, `git status --short --branch` showed clean `main`.
@@ -167,6 +168,20 @@
   - Re-ran `git diff --check`; exit code 0 with only Git's CRLF normalization warning for `src/renderer/app/AppShell.tsx`.
   - Reviewed the AHA-006 diff; no blocking issue found. The change keeps ordinary chat on current workspace and task detail follow-up on saved task workspace.
   - Committed AHA-006 as `142a080 fix(renderer): propagate chat workspace path`.
+  - After AHA-006 commits, `git status --short --branch` showed clean `main`; recent log shows `7f9c044 docs(agent): record phase 4 renderer audit` on top of `142a080`.
+  - Continued Phase 4 by reading `task-repository-mappers.ts`, `task-repository-mutations.ts`, `task-repository-queries.ts`, and related task/capability test references.
+  - Classified `TaskThreadRow.kind` as a type-level audit note for now; continued investigating whether synthetic background task creation runs with empty capabilities affect user-visible run history or subsequent execution.
+  - Read `background-task-tools.ts`, `TaskRepository.getTaskDetail()`, background-run tests, repository tests, and TaskDetailView summary rendering to classify the synthetic initial run/capability note.
+  - Searched residual `workspacePath: null` and `chat.startRun` construction after AHA-006; no production renderer request construction still hardcodes null.
+  - Searched task capability descriptors and callers for `createBackgroundTaskProposalRequest()`; found no production call path, only its repository test.
+  - Added RED test in `tests/main/plugins/task/task-repository.test.ts` for non-positive scheduled-run limits.
+  - Ran `pnpm test -- tests/main/plugins/task/task-repository.test.ts`; RED failed because `limit: 0` did not throw.
+  - Fixed AHA-007 by validating positive scheduled-run limits in `TaskRepository.listScheduledRuns()` and tightening `task.scheduledRuns.list` capability schema to `z.number().int().positive().optional()`.
+  - Re-ran `pnpm test -- tests/main/plugins/task/task-repository.test.ts`; 1 file and 4 tests passed.
+  - Ran `pnpm test -- tests/main/plugins/task`; 8 files and 24 tests passed.
+  - Ran `pnpm typecheck`; passed.
+  - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
+  - Ran `git diff --check`; passed with no output.
 - Files created/modified:
   - `task_plan.md` (created)
   - `findings.md` (created)
@@ -231,6 +246,12 @@
 | AHA-006 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
 | AHA-006 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
 | AHA-006 whitespace check | `git diff --check` | No whitespace errors | Exit code 0; Git emitted CRLF normalization warning for `src/renderer/app/AppShell.tsx` | pass |
+| RED scheduled-run limit validation | `pnpm test -- tests/main/plugins/task/task-repository.test.ts` | Non-positive scheduled-run limits fail before SQLite query | Failed because `limit: 0` did not throw | expected fail |
+| GREEN scheduled-run limit validation | `pnpm test -- tests/main/plugins/task/task-repository.test.ts` | Repository tests pass after explicit limit validation | 1 file, 4 tests passed | pass |
+| AHA-007 task plugin tests | `pnpm test -- tests/main/plugins/task` | Task plugin tests pass after schema/repository validation change | 8 files, 24 tests passed | pass |
+| AHA-007 typecheck | `pnpm typecheck` | TypeScript project check passes | Passed | pass |
+| AHA-007 strict unused scan | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | No unused locals or parameters introduced | Passed | pass |
+| AHA-007 whitespace check | `git diff --check` | No whitespace errors | Passed with no output | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |

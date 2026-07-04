@@ -79,6 +79,15 @@ describe('TaskRepository', () => {
     });
   });
 
+  it('rejects non-positive scheduled run limits before querying sqlite', () => {
+    applyTaskPluginSchema(db);
+    const repository = new TaskRepository(db);
+    const task = repository.createBackgroundTask(repository.createBackgroundTaskPreview(manualPreviewRequest));
+
+    expect(() => repository.listScheduledRuns({ taskId: task.id, limit: 0 })).toThrow('scheduled_runs_limit_invalid');
+    expect(() => repository.listScheduledRuns({ taskId: task.id, limit: -1 })).toThrow('scheduled_runs_limit_invalid');
+  });
+
   it('preserves current background task status names across lifecycle mutations', () => {
     applyTaskPluginSchema(db);
     const repository = new TaskRepository(db);

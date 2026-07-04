@@ -305,6 +305,9 @@ export class TaskRepository {
   listScheduledRuns(input: { taskId: string; limit?: number }): ScheduledTaskRun[] {
     const task = this.requireBackgroundTask(input.taskId);
     const limit = input.limit === undefined ? 20 : input.limit;
+    if (limit <= 0) {
+      throw new Error('scheduled_runs_limit_invalid');
+    }
     return readScheduledRuns(this.db, task, limit);
   }
 

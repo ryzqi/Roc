@@ -61,7 +61,7 @@ const taskCapabilityDescriptors = [
   descriptor('task.thread.delete', z.object({ threadId: z.string() }), z.object({ deleted: z.literal(true), threadId: z.string() })),
   descriptor('task.active.list', z.object({}), z.array(z.custom<ActiveTaskItem>())),
   descriptor('task.detail.get', z.object({ taskId: z.string() }), z.custom<TaskDetail>()),
-  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().optional() }), z.array(z.custom<ScheduledTaskRun>()))
+  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().positive().optional() }), z.array(z.custom<ScheduledTaskRun>()))
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export function createTaskPlugin(): RocPlugin {
