@@ -4,7 +4,7 @@
 依次审计 Roc 当前代码，从 agent harness 角度达到生产环境要求，并确认优先使用 DeepAgents/LangChain 原生能力；不确定点先查权威来源，不靠猜测。
 
 ## Current Phase
-Phase 5 final verification complete; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, Phase 3 audit records committed as `85e0d01` and `86c18eb`
+Phase 6 coverage completion audit in progress; AHA-001 committed as `e7302d1`, AHA-002 committed as `c1158e3`, AHA-003 committed as `7c178c1`, AHA-004 committed as `de532da`, AHA-005 committed as `34799cc`, AHA-006 committed as `142a080`, AHA-007 committed as `029c4ec`, final verification record committed as `c7e3cba`
 
 ## Scope
 - 代码范围：`src/`、`tests/`、`scripts/`、`docs/`、配置文件中与 agent harness、DeepAgents、LangChain、LangGraph、工具调用、文件系统、shell、memory、skills、subagent、runtime、IPC/持久化边界有关的代码。
@@ -52,6 +52,13 @@ Phase 5 final verification complete; AHA-001 committed as `e7302d1`, AHA-002 com
 - [x] 按后续更大范围风险运行 `pnpm check:ipc`、`pnpm test`、`pnpm build`
 - **Status:** complete
 
+### Phase 6: Coverage Completion Audit
+- [ ] 对 `agent_harness_audit.md` 表格做反向覆盖扫描，找出 in-scope 但未逐项入表的文件/模块
+- [ ] 补读遗漏的高风险 agent harness 文件/测试，按文件或明确模块组写入审计清单
+- [ ] 更新 `findings.md` / `progress.md`，修正当前状态字段和 stale next-step 文案
+- [ ] 运行覆盖性收口所需的验证命令并提交追踪记录
+- **Status:** in_progress
+
 ## Key Questions
 1. 当前 Roc 哪些代码在自造 DeepAgents/LangChain 已有能力？
 2. 哪些自定义层是生产必要的边界适配，哪些只是重复实现？
@@ -77,6 +84,8 @@ Phase 5 final verification complete; AHA-001 committed as `e7302d1`, AHA-002 com
 | `pnpm typecheck` failed because repository test approval payload used `actionRequests` outside `request` | 1 | Read `src/shared/types/chat.ts` and corrected the test payload shape. |
 | `rg` over pnpm scoped package glob paths failed with `os error 123` | 1 | Resolved package directories with `Get-ChildItem` and read nested package files directly. |
 | RED checkpointer special writes test preserved stale `__interrupt__` value | 1 | Added special-write upsert path in `RocSqliteCheckpointer.putWrites()`. |
+| Coverage scan initially returned only `AGENTS.md` due to fragile `rg --files` argument/path filtering | 1 | Re-ran with full `rg --files`, normalized `\` separators, and compared explicit string arrays. |
+| `Select-String` regex for Windows paths failed on `\m` escape | 1 | Re-ran path checks with `-SimpleMatch` literal searches. |
 
 ## Notes
 - 状态词：`Located`、`Changed, unverified`、`Verified passing`、`Blocked, not run`。

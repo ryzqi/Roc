@@ -303,8 +303,44 @@
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 4: Contracts, IPC, Persistence, Tests Audit |
-| Where am I going? | Audit shared IPC/types, task persistence/runtime, agent persistence contracts, then fix only verified issues. |
+| Where am I? | Phase 6: Coverage Completion Audit |
+| Where am I going? | Close reverse coverage gaps by reading missing in-scope modules, adding audit table rows or explicit group classifications, and verifying each completed batch. |
 | What's the goal? | Production-grade Roc agent harness audit with DeepAgents/LangChain native-first evidence. |
 | What have I learned? | See `findings.md`. |
-| What have I done? | Created persistent tracking and loaded first authoritative references. |
+| What have I done? | Reopened the audit after a reverse coverage scan found unrepresented candidates; first agent support batch is now read, tabled, and focused-test verified. |
+
+## Session: 2026-07-05
+
+### Phase 6: Coverage Completion Audit
+- **Status:** in_progress
+- **Started:** 2026-07-05
+- Actions taken:
+  - Re-read required skills for completion audit: `using-superpowers`, `planning-with-files`, `agent-development`, `maintaining-agents-md`, and `verification-before-completion`.
+  - Re-read official-mapped LangChain/DeepAgents references for framework selection, DeepAgents core/memory/orchestration, LangGraph persistence/HITL, and LangChain middleware.
+  - Re-read `task_plan.md`, `findings.md`, `progress.md`, `agent_harness_audit.md`, `AGENTS.md`, and `package.json`.
+  - Ran planning catchup; it reported only current-session reads and the need to update planning files.
+  - Ran `git status --short --branch` and `git log --oneline -12`; current branch is clean `main`, latest commit is `c7e3cba docs(agent): close harness audit`.
+  - Ran memory quick pass for Roc agent harness/DeepAgents/workspace/context guidance.
+  - Performed reverse coverage scan against `agent_harness_audit.md`: broad keyword scan produced 390 candidate paths and 330 not represented as audit table rows.
+  - Reopened the goal as unproven because audit table coverage is not yet sufficient to support “所有代码都要分析”.
+  - Added Phase 6 to `task_plan.md` and recorded coverage findings.
+  - Current continuation re-read required skills, local rules, planning files, `agent_harness_audit.md`, and `package.json`.
+  - Ran planning catchup; it detected only current continuation skill/read context and recommended `git diff --stat` plus planning-file updates.
+  - Ran `git diff --stat`; current diff is tracking markdown only.
+  - Read Phase 6 first agent support batch: `src/main/plugins/agent/index.ts`, `capability-preview.ts`, `chat-run-event-queue.ts`, `deep-agent-final-output.ts`, `model-factory-adapter.ts`, `recovery-policy.ts`, `runtime-helpers.ts`, and `chat-image-attachments.ts`.
+  - Read matching tests and callers: plugin/capability/final-output/model/recovery/image tests, runtime streaming/tool-block tests, runtime helper call sites, executor event queue/final-output call sites, and `main-kernel-bootstrap.ts` model factory wiring.
+  - Ran first batch focused verification; 8 files and 33 tests passed.
+  - Updated `agent_harness_audit.md` with first batch source/test rows and updated `findings.md` with evidence.
+
+## Phase 6 Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| Current status check | `git status --short --branch` | Clean `main` before Phase 6 changes | `## main` before tracking-file edits | pass |
+| Coverage reverse scan | PowerShell over `rg --files` candidate paths vs audit table paths | Identify not-yet-table-covered candidates | 390 keyword candidates; 330 not represented as table rows | needs follow-up |
+| Phase 6 agent support focused tests | `pnpm test -- tests/main/plugins/agent/plugin.test.ts tests/main/plugins/agent/capability-preview.test.ts tests/main/plugins/agent/chat-image-attachments.test.ts tests/main/plugins/agent/model-factory-adapter.test.ts tests/main/plugins/agent/recovery-policy.test.ts tests/main/plugins/agent/deep-agent-executor-final-output.test.ts tests/main/plugins/agent/runtime-streaming.test.ts tests/main/plugins/agent/runtime-tool-blocks.test.ts` | First agent support coverage batch passes | 8 files and 33 tests passed | pass |
+
+## Phase 6 Error Log
+| Timestamp | Error | Attempt | Resolution |
+|-----------|-------|---------|------------|
+| 2026-07-05 | Initial reverse coverage comparison returned only `AGENTS.md` because `rg --files` arguments/path separator filtering were fragile | 1 | Re-ran with full `rg --files`, normalized path separators, and explicit array comparison. |
+| 2026-07-05 | `Select-String` path regex failed with `Unrecognized escape sequence \m` | 1 | Re-ran literal path probes with `-SimpleMatch`. |
