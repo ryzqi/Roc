@@ -77,6 +77,7 @@
   - Ran strict unused scan with `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters`; passed.
   - Ran `git diff --check`; passed with no output.
   - Reviewed the AHA-007 diff; no blocking issue found. Capability schema and repository boundary now enforce the same positive-limit contract.
+  - Committed AHA-007 as `029c4ec fix(task): validate scheduled run list limit`.
   - Reviewed AHA-002 current diff; no blocking issue found.
   - Committed AHA-002 as `c1158e3 fix(agent): align sqlite checkpointer pending writes`.
   - After commit, `git status --short --branch` showed clean `main`.
