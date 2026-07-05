@@ -126,6 +126,8 @@
   - Added a RED regression test with a task due after 10 seconds and `maxTimeoutDelayMs` set to 1 second.
   - Updated `TaskScheduler.fire()` to re-check `nextRunAt` and reschedule when a max-timeout slice elapses before the task is due.
   - Verified with scheduler/task focused tests, `pnpm typecheck`, strict unused scan, and diff review.
+  - Began the next timer/abort audit pass by reading terminal batching, workspace watcher, task scheduler, agent runtime startup timers, hook command timeout handling, and NVIDIA probe timeout handling.
+  - Found no proven terminal batcher or workspace watcher timer leak in the inspected lifecycle paths; continued to provider probe/caller coverage.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -164,6 +166,7 @@
 | 2026-07-05 | New terminal log persistence test failed with ENOENT while async stream had not created the file yet | 1 | Updated `waitFor` to treat transient predicate errors as not-yet-satisfied and retry until timeout |
 | 2026-07-05 | Initial PDF stream quality regex matched past `streamPdfPreviewResource` into later `readFileSync` recovery-point code after production fix | 1 | Replaced the regex with an AST helper that reads only the target class method source |
 | 2026-07-05 | `pnpm typecheck` rejected `Readable.toWeb()` because Node `stream/web` and DOM `ReadableStream` declarations are not assignable | 1 | Kept the runtime stream path and added a narrow local `BodyInit` cast at the Response boundary |
+| 2026-07-05 | Tried to read nonexistent `tests/main/langchain-nvidia-probe.test.ts` while locating NVIDIA probe coverage | 1 | Switched to `rg` over `probeNvidiaTtfb` and read the actual model-factory/provider-runtime caller tests |
 
 ## 5-Question Reboot Check
 | Question | Answer |
