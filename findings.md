@@ -117,3 +117,4 @@
 | scripts/docs/resources audit | complete | `verify:paths`, RTK command tests, RTK coverage command, binary version check, script reference tests, typecheck, strict unused, and diff check passed | Commit Phase 6 slice |
 | Phase 7 completion audit startup | in progress | Phase 6 committed as `9d3fca9`; post-commit status was clean before switching `task_plan.md` to Phase 7 | Run whole-repo verification set |
 | Phase 7 completion audit | complete | Strict unused scan, `pnpm typecheck`, `pnpm check:ipc`, `pnpm build`, full `pnpm test`, and `git diff --check` exited 0 on the current tree | Commit final planning closeout |
+| Goal continuation completion audit | complete | Current-state recheck found a clean tracked worktree before verification; cleanup anchor searches, strict unused scan, `pnpm typecheck`, `pnpm check:ipc`, `pnpm build`, full `pnpm test`, and `git diff --check` exited 0 | Mark active goal complete |
