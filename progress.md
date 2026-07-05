@@ -90,6 +90,13 @@
 | DeepAgent prompt-builder compatibility strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | DeepAgent prompt-builder compatibility reference search | `rg -n "prompt-builder" src tests package.json docs` | No references | `no prompt-builder references` | pass |
 | DeepAgent prompt-builder compatibility diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Infrastructure schema registry RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails while unused `schema-registry.ts` remains | 1 failed, 8 passed; assertion received `true` for file existence | fail-expected |
+| Infrastructure schema registry GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/infrastructure/database-pool.test.ts tests/main/infrastructure/config-store.test.ts` | Relevant quality and adjacent infrastructure tests pass | 3 files, 15 tests passed | pass |
+| Infrastructure schema registry typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Infrastructure schema registry strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Infrastructure schema registry reference search | `rg -n "SchemaRegistry|schema-registry" src tests package.json docs scripts --glob '!tests/main/code-quality-empty-catch.test.ts'` | No references outside quality guard | `no schema-registry references outside quality guard` | pass |
+| Infrastructure schema registry orphan scan | TypeScript AST import graph over `src/main` | No orphan source candidates after deletion | `no orphan src/main import graph candidates` | pass |
+| Infrastructure schema registry diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -183,6 +190,15 @@
   - Deleted `prompt-builder.ts`, deleted the test that only covered the compatibility re-export, and updated the remaining prompt caching test to import `BlockStability` from `context/prompt-blocks`.
   - Verified with focused quality/prompt tests, `pnpm typecheck`, strict unused scan, old-path source search, and `git diff --check`.
   - Reviewed the diff for prompt behavior loss and stale reference risk; no blocking issue found.
+  - Committed verified cleanup as `cb1caa5 refactor: remove prompt builder compatibility export`.
+  - Ran a high-signal legacy/compatibility and sync-I/O scan across `src/main` and `tests/main`.
+  - Reviewed `file-service.ts` remaining sync I/O and kept it unchanged because the remaining calls are inside synchronous capability contracts or recovery snapshot boundaries; converting them would widen the API change beyond the current cleanup slice.
+  - Reviewed `harness-profiles.ts`, `plan-filesystem-defaults.ts`, Forge cleanup middleware, and `subagent-projection.ts`; kept them because they are still in real build/middleware paths or lack enough evidence for deletion.
+  - Ran a TypeScript AST import graph over `src/main` and found `src/main/infrastructure/schema-registry.ts` as the only no-inbound production source candidate.
+  - Confirmed `SchemaRegistry` / `schema-registry` references existed only in that source file and its dedicated test before deletion.
+  - Added a RED quality test forbidding the unused schema registry file.
+  - Deleted `src/main/infrastructure/schema-registry.ts` and `tests/main/infrastructure/schema-registry.test.ts`.
+  - Verified with focused quality/infrastructure tests, `pnpm typecheck`, strict unused scan, reference search excluding the quality guard, AST orphan scan, and `git diff --check`.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -217,6 +233,8 @@
   - `src/main/services/deep-agent/prompt-builder.ts` (deleted)
   - `tests/main/services/deep-agent/prompt-builder.test.ts` (deleted)
   - `tests/main/services/deep-agent/prompt-caching-integration.test.ts` (updated)
+  - `src/main/infrastructure/schema-registry.ts` (deleted)
+  - `tests/main/infrastructure/schema-registry.test.ts` (deleted)
   - `findings.md` (updated)
   - `progress.md` (updated)
   - `task_plan.md` (updated)

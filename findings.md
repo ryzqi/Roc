@@ -42,6 +42,9 @@
 - `executeWithProviderRequestRetry()` checked abort before each attempt and while waiting for an abort event during backoff, but `delayWithAbort()` did not handle a signal already aborted before the listener was attached. If an operation aborted the signal while throwing a retryable provider failure, cancellation could wait for the full retry backoff before surfacing.
 - `src/main/plugins/agent/deep-agent-executor.ts` kept a `closers` cleanup registry that had no registration path (`closers.push` had no production match) and only performed an empty `Promise.allSettled` traversal after `consumeRun`. Removing it does not remove a real cleanup hook; `eventQueue.fail(error)` remains the error path.
 - `src/main/services/deep-agent/prompt-builder.ts` was only a compatibility re-export for prompt block helpers. Production code imports the real `context/prompt-blocks` and `context/prompt-serialization` modules directly; the old path was referenced only by tests.
+- Not deleted: `src/main/services/deep-agent/harness-profiles.ts`, `plan-filesystem-defaults.ts`, and Forge cleanup middleware remain in the real `buildDeepAgent()` middleware path or exported middleware path with focused behavior tests.
+- Not deleted: `subagent-projection.ts` still keeps a `taskId` fallback for async subagent identity. Current evidence does not prove DeepAgents runtime will never emit that field, so it remains a reported candidate rather than deleted code.
+- `src/main/infrastructure/schema-registry.ts` had no production import-graph inbound edge and full-text search found only the source file plus its dedicated test. Current plugin schemas are applied through active plugin/bootstrap paths instead, so the registry was unused infrastructure code.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -78,3 +81,4 @@
 | `src/main` provider retry abort backoff | complete | RED test showed an already-aborted signal stayed pending before retry backoff; GREEN provider retry tests, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |
 | `src/main` DeepAgent executor cleanup registry | complete | RED quality test found inert `closers`; GREEN focused executor tests/typecheck/strict unused pass; production source search has no `closers` registry matches | Continue `src/main` production audit |
 | `src/main` DeepAgent prompt-builder compatibility export | complete | RED quality test found the old re-export file; GREEN focused prompt tests/typecheck/strict unused pass; `rg prompt-builder` has no source/test/docs references | Continue `src/main` production audit |
+| `src/main` infrastructure schema registry | complete | RED quality test found unused registry file; GREEN focused infrastructure tests/typecheck/strict unused pass; AST import graph has no orphan candidates after deletion | Continue `src/main` production audit |

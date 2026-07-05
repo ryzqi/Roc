@@ -163,4 +163,8 @@ describe('source code quality', () => {
   it('does not keep the retired DeepAgent prompt-builder compatibility export', () => {
     expect(existsSync(join(process.cwd(), 'src', 'main', 'services', 'deep-agent', 'prompt-builder.ts'))).toBe(false);
   });
+
+  it('does not keep the unused infrastructure schema registry', () => {
+    expect(existsSync(join(process.cwd(), 'src', 'main', 'infrastructure', 'schema-registry.ts'))).toBe(false);
+  });
 });
