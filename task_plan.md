@@ -4,7 +4,7 @@
 Audit the whole Roc codebase section by section until current evidence supports: no proven redundant code remains, production standards are met, and performance, animation, and interaction risks have been reviewed and fixed where justified.
 
 ## Current Phase
-Phase 6
+Phase 7
 
 ## Acceptance Criteria
 - Every source area is inspected with local evidence: `src/main`, `src/preload`, `src/renderer`, `src/shared`, `src/rtk-integration`, `tests`, `scripts`, and relevant docs/config.
@@ -61,11 +61,11 @@ Phase 6
 - **Status:** complete
 
 ### Phase 7: Whole-Repo Completion Audit
-- [ ] Re-run high-value verification set for broad cleanup.
-- [ ] Reconcile all findings with current state.
-- [ ] Confirm every acceptance criterion has direct evidence.
-- [ ] Commit final verified cleanup if needed.
-- **Status:** pending
+- [x] Re-run high-value verification set for broad cleanup.
+- [x] Reconcile all findings with current state.
+- [x] Confirm every acceptance criterion has direct evidence.
+- [x] Commit final verified cleanup if needed.
+- **Status:** complete
 
 ## Key Questions
 1. What is the current authoritative command set for verification in this checkout?

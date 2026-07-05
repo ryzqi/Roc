@@ -115,3 +115,5 @@
 | tests/scripts/resources/docs audit startup | in progress | Recovery confirmed Phase 6 is the active phase; initial scans produced concrete weak-assertion, command-doc, and path-verification candidates | Audit candidates before editing |
 | test weak-assertion cleanup | complete | RED quality guard found two `toBeDefined()` assertions; GREEN quality and forge guardrails tests passed; source search has no remaining `.toBeDefined()` calls | Continue docs/scripts/resources audit |
 | scripts/docs/resources audit | complete | `verify:paths`, RTK command tests, RTK coverage command, binary version check, script reference tests, typecheck, strict unused, and diff check passed | Commit Phase 6 slice |
+| Phase 7 completion audit startup | in progress | Phase 6 committed as `9d3fca9`; post-commit status was clean before switching `task_plan.md` to Phase 7 | Run whole-repo verification set |
+| Phase 7 completion audit | complete | Strict unused scan, `pnpm typecheck`, `pnpm check:ipc`, `pnpm build`, full `pnpm test`, and `git diff --check` exited 0 on the current tree | Commit final planning closeout |

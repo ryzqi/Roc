@@ -161,6 +161,12 @@
 | Phase 6 typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Phase 6 strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Phase 6 diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Phase 7 strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Phase 7 typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Phase 7 IPC drift check | `pnpm check:ipc` | Generated IPC files current | `IPC generated files are current.` exit 0 | pass |
+| Phase 7 build | `pnpm build` | Production build succeeds | Main, preload, and renderer build completed; exit 0 | pass |
+| Phase 7 full test suite | `pnpm test` | Full Vitest suite passes | 264 files, 1364 tests passed; exit 0 with known Windows `node-pty AttachConsole failed` teardown noise after results | pass |
+| Phase 7 diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -410,6 +416,8 @@
   - Ran Phase 6 closeout `pnpm typecheck`, strict unused scan, and `git diff --check`; all exited 0.
   - Reviewed current diff for future maintenance, compatibility, security, performance, and test-coverage risks; no blocking issue found. No subagent dispatcher is available in this harness, so review was performed directly against the current diff.
   - Updated `task_plan.md` Phase 6 checklist to complete before committing this slice.
+  - Committed Phase 6 as `9d3fca9 test: tighten phase six audit coverage`.
+  - Confirmed `git status --short --branch` was clean after the Phase 6 commit.
 - Files created/modified:
   - `task_plan.md` (updated)
   - `findings.md` (updated)
@@ -418,6 +426,21 @@
   - `tests/main/services/forge-guardrails/context-digest.test.ts` (updated)
   - `tests/main/services/forge-guardrails/middleware/forge-tiered-compaction.test.ts` (updated)
   - `docs/rtk-integration.md` (updated)
+
+### Phase 7: Whole-Repo Completion Audit
+- **Status:** complete
+- **Started:** 2026-07-05
+- Actions taken:
+  - Updated `task_plan.md` current phase to Phase 7.
+  - Next verification target is the high-value whole-repo completion set: strict unused scan, `pnpm typecheck`, `pnpm check:ipc`, `pnpm build`, `pnpm test`, and `git diff --check`.
+  - Ran strict unused scan, `pnpm typecheck`, `pnpm check:ipc`, `pnpm build`, full `pnpm test`, and `git diff --check`; all exited 0.
+  - Recorded full test result: 264 test files and 1364 tests passed. The known Windows `node-pty AttachConsole failed` teardown noise appeared after the pass summary, but the command exit code was 0.
+  - Checked tracked status after verification; only planning files were modified before final plan closeout.
+  - Checked ignored generated artifacts after build/test; `dist/` and `release/` are ignored, and `coverage/` was not present after cleanup.
+- Files created/modified:
+  - `task_plan.md` (updated)
+  - `findings.md` (updated)
+  - `progress.md` (updated)
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
