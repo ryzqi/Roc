@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RocDomainError, setLogService, toRocError } from '../../src/main/services/errors';
+import { RocDomainError, setLogService, toLogError, toRocError } from '../../src/main/services/errors';
 
 function createLogServiceMock() {
   return {
@@ -101,6 +101,15 @@ describe('error logging', () => {
         channel: 'roc:test',
         error: 'string failure'
       }
+    });
+  });
+
+  it('normalizes unknown thrown values for boundary logging', () => {
+    const error = new Error('already normalized');
+
+    expect(toLogError(error)).toBe(error);
+    expect(toLogError('string failure')).toMatchObject({
+      message: 'string failure'
     });
   });
 });

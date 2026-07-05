@@ -1,4 +1,5 @@
 import type { AppSettings, HostIntegrationStatus, TraySummary } from '../shared/types';
+import { toLogError } from './services/errors';
 import type { LogService } from './services/log-service';
 
 type MainWindowLike = {
@@ -321,11 +322,4 @@ export class WindowsHostService {
     this.mainWindow.show();
     this.mainWindow.focus();
   }
-}
-
-function toLogError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
 }

@@ -11,7 +11,7 @@ import type {
   Workspace
 } from '../../shared/types';
 import type { MainKernelBootstrap } from '../main-kernel-bootstrap';
-import { wrapIpc } from '../services/errors';
+import { toLogError, wrapIpc } from '../services/errors';
 import { registerFilesDialogIpc } from './files-ipc';
 import type { IpcHandler, IpcMainHandler } from './ipc-common';
 import { registerPluginCapabilityIpc } from './plugin-capability-adapter';
@@ -128,13 +128,6 @@ export function registerIpc(
   registerFilesDialogIpc(timedHandle, mainWindow, {
     getCurrentWorkspace: () => kernel.invokeCapability<{}, Workspace | null>('workspace.getCurrent', {})
   });
-}
-
-function toLogError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
 }
 
 function registerLegacyAppSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, controls: AppWindowControls): void {

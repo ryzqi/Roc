@@ -40,6 +40,13 @@ export function setLogService(logService: ErrorLogService | null): void {
   logServiceInstance = logService;
 }
 
+export function toLogError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
+}
+
 export function toRocError(error: unknown, context: ErrorContext = {}): RocError {
   if (error instanceof RocDomainError) {
     logServiceInstance?.warn('Domain error occurred.', {
@@ -70,7 +77,7 @@ export function toRocError(error: unknown, context: ErrorContext = {}): RocError
     };
   }
 
-  logServiceInstance?.error('Unknown error type.', new Error(String(error)), {
+  logServiceInstance?.error('Unknown error type.', toLogError(error), {
     ...buildLogContext(context),
     metadata: {
       ...context.metadata,

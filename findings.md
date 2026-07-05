@@ -31,6 +31,7 @@
 - Empty catch handler scan has direct coverage in `tests/main/code-quality-empty-catch.test.ts`; current focused run passes.
 - Post-fix text search for `\bany\b` in `src/main` only reports `AbortSignal.any` API property references in `src/main/services/langchain-nvidia-probe.ts`, not explicit `any` type keywords.
 - `prepareChatImageAttachments()` was on the `AgentRuntime.startRun()` path and used `statSync/readFileSync` for image files. It now uses `fs/promises` and `startRun()` awaits the same prepared attachment contract.
+- `toLogError()` had duplicate implementations in IPC and Windows host code while `electron-runtime-adapters.ts` already exposed the same behavior. The single source is now `src/main/services/errors.ts`.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -58,3 +59,4 @@
 | Automated baseline scans | complete | Strict unused scan, typecheck, and IPC check exited 0 | Start `src/main` audit |
 | `src/main` explicit any audit | complete | RED quality test found 19 explicit `any` type keywords; GREEN test now passes | Continue `src/main` production audit |
 | `src/main` chat image attachment I/O | complete | Focused chat image/runtime tests, typecheck, strict unused pass; no `readFileSync/statSync` remains in attachment reader | Continue `src/main` production audit |
+| `src/main` error normalization duplication | complete | RED errors test failed before export; GREEN focused tests/typecheck/strict unused pass; only one `toLogError` implementation remains | Continue `src/main` production audit |

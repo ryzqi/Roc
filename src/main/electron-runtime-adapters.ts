@@ -18,13 +18,6 @@ export function createElectronRuntimeMetricsProvider(): RuntimeMetricsProvider {
   };
 }
 
-export function toLogError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
-}
-
 function toRuntimeProcessMetric(metric: ProcessMetric): RuntimeProcessMetric {
   return {
     pid: metric.pid,

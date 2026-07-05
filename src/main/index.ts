@@ -45,9 +45,9 @@ import { buildSystemAppearanceSnapshot } from './system-appearance';
 import { handleExternalWindowOpen } from './external-link-policy';
 import {
   createElectronRuntimeMetricsProvider,
-  createElectronSafeStorageBackend,
-  toLogError
+  createElectronSafeStorageBackend
 } from './electron-runtime-adapters';
+import { toLogError } from './services/errors';
 import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';
 
 const mainModuleDir = dirname(fileURLToPath(import.meta.url));

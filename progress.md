@@ -36,6 +36,11 @@
 | Chat image attachment typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Chat image attachment strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Chat image sync I/O search | `rg -n "readFileSync|statSync" src/main/plugins/agent/chat-image-attachments.ts` | No matches | No matches, exit 1 | pass |
+| toLogError RED | `pnpm test -- tests/main/errors.test.ts` | New test fails before shared export exists | Failed with `toLogError is not a function` | fail-expected |
+| toLogError GREEN | `pnpm test -- tests/main/errors.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/windows-host-service.test.ts tests/main/kernel-main-integration.test.ts` | Relevant tests pass | 4 files, 22 tests passed | pass |
+| toLogError typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| toLogError strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| toLogError duplicate search | `rg -n "function toLogError|export function toLogError|toLogError\\(" src/main` | One implementation, callers only elsewhere | One export in `services/errors.ts`; callers in `index.ts`, `windows-host-service.ts`, `register-ipc.ts`, and `toRocError` | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -72,6 +77,11 @@
   - Updated `AgentRuntime.startRun()` to await prepared attachments.
   - Updated chat image attachment tests to await the Promise API and use `rejects` for errors.
   - Verified equivalent behavior with focused tests, `pnpm typecheck`, strict unused scan, and sync I/O search.
+  - Committed verified I/O cleanup as `97a6c98 perf: avoid sync image attachment file reads`.
+  - Found duplicate `toLogError` implementations in IPC and Windows host code.
+  - Added RED test for shared `toLogError` export in `services/errors.ts`.
+  - Exported `toLogError` from `services/errors.ts`, reused it in `toRocError`, `register-ipc.ts`, `windows-host-service.ts`, and `index.ts`, and removed duplicate local implementations.
+  - Verified with focused tests, typecheck, strict unused scan, and duplicate search.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -84,6 +94,12 @@
   - `src/main/plugins/agent/chat-image-attachments.ts` (updated)
   - `src/main/plugins/agent/runtime.ts` (updated)
   - `tests/main/plugins/agent/chat-image-attachments.test.ts` (updated)
+  - `tests/main/errors.test.ts` (updated)
+  - `src/main/services/errors.ts` (updated)
+  - `src/main/electron-runtime-adapters.ts` (updated)
+  - `src/main/index.ts` (updated)
+  - `src/main/ipc/register-ipc.ts` (updated)
+  - `src/main/windows-host-service.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -98,5 +114,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment file reads no longer block via sync fs APIs |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, and optimized chat image attachment I/O |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment file reads no longer block via sync fs APIs; error normalization now has one implementation |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image attachment I/O, and removed duplicate error normalization helpers |
