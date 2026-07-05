@@ -9,6 +9,11 @@
   backdrop-filter: blur(10px);
 }
 
+:root[data-reduced-transparency='true'] .task-create-dialog-backdrop {
+  background: rgba(237, 242, 247, 0.95);
+  backdrop-filter: none;
+}
+
 .task-create-dialog-panel {
   width: min(980px, calc(100vw - 48px));
   max-height: calc(100vh - 56px);

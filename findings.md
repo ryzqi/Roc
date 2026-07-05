@@ -52,6 +52,7 @@
 - Renderer hover-only scan now only reports the fixed `ChatComposer` hover compatibility handlers; no other `onMouseEnter`/`onMouseLeave` popover or action triggers were found in `src/renderer`.
 - Production renderer stale task UI scan found no matches for `queuedTaskPrompt`, `openInChat`, `TaskDetailDrawer`, old task table/rail CSS, `json-view`, `reasoning-view`, or `reasoning-parser`.
 - Workbench resize splitters were focusable `role="separator"` controls without keyboard resizing. The right workbench panel, files tree pane, and Git change pane now handle horizontal arrow keys plus `Home`/`End` and expose `aria-orientation`, `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`.
+- `prefersReducedTransparency` was applied to the root dataset by `system-appearance.ts`, but `task-create-dialog.css` did not consume `data-reduced-transparency`; the task creation backdrop blur now disables under `:root[data-reduced-transparency='true']`.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -94,3 +95,4 @@
 | retired Anthropic cache-control option | complete | RED config test proved `anthropicCacheControl` was preserved; GREEN test proves validation now strips it while preserving supported Anthropic options | Start renderer audit |
 | `src/renderer` ChatComposer popover interaction | complete | RED click/focus/focus-leave tests reproduced hover-only and sticky-focus behavior; GREEN focused chat tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |
 | `src/renderer` workbench resize separator keyboard controls | complete | RED separator tests reproduced missing keyboard resize; GREEN focused workbench tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |
+| `src/renderer` reduced transparency backdrop | complete | RED CSS contract reproduced unused `data-reduced-transparency`; GREEN animation config tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |

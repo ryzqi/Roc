@@ -122,6 +122,12 @@
 | Workbench separator strict unused initial | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | New code has no unused symbols | Failed on unused default `React` import in `workbench-resize-keyboard.test.tsx` | fail |
 | Workbench separator strict unused GREEN | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Workbench separator diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Reduced transparency RED | `pnpm test -- tests/renderer/animation-config.test.ts` | New reduced-transparency CSS contract fails on current implementation | Failed because `task-create-dialog.css` lacked `:root[data-reduced-transparency='true'] .task-create-dialog-backdrop` | fail-expected |
+| Reduced transparency GREEN | `pnpm test -- tests/renderer/animation-config.test.ts` | Animation/style contract tests pass | 1 file, 5 tests passed | pass |
+| Renderer suite after reduced-transparency fix | `pnpm test -- tests/renderer` | Renderer tests pass | 78 files, 333 tests passed | pass |
+| Reduced transparency typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Reduced transparency strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Reduced transparency diff check | `git diff --check` | Exit 0 | Exit 0 with CRLF normalization warning for `task-create-dialog.css` | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -313,6 +319,10 @@
   - Added RED tests for the three separator keyboard paths.
   - Added shared keyboard width resolution for `ArrowLeft`, `ArrowRight`, `Home`, and `End`, wired it into all three existing splitters, and added `aria-orientation`/`aria-value*` to the separators.
   - Verified with focused separator tests, related workbench renderer tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
+  - Audited animation and transparency settings: reduced-motion CSS is globally covered; `prefersReducedTransparency` was written to the root dataset but not consumed by the task creation backdrop.
+  - Added a RED CSS contract test for task dialog reduced transparency.
+  - Added `:root[data-reduced-transparency='true'] .task-create-dialog-backdrop` to remove backdrop blur and use a more opaque backdrop.
+  - Verified with animation config tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
 - Files created/modified:
   - `task_plan.md` (updated)
   - `findings.md` (updated)
@@ -325,6 +335,8 @@
   - `src/renderer/workbench/WorkbenchPanel.tsx` (updated)
   - `src/renderer/workbench/resize-separator-keyboard.ts` (created)
   - `tests/renderer/workbench-resize-keyboard.test.tsx` (created)
+  - `src/renderer/styles/task-create-dialog.css` (updated)
+  - `tests/renderer/animation-config.test.ts` (updated)
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -347,6 +359,7 @@
 | 2026-07-05 | Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the interactive harness with `React.createElement` instead of JSX |
 | 2026-07-05 | Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
 | 2026-07-05 | Strict unused scan failed on unused default `React` import in `tests/renderer/workbench-resize-keyboard.test.tsx` | 1 | Removed the default import and re-ran strict unused successfully |
+| 2026-07-05 | `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Recorded as non-blocking because the command exited 0 and the project requires UTF-8/LF on touched files |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

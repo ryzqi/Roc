@@ -89,6 +89,7 @@ Phase 5
 | Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the harness with `React.createElement` to match the file extension |
 | Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler fixed-string searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
 | Strict unused scan found an unused default `React` import in the new workbench resize test | 1 | Removed the default import and kept only used React hooks/helpers |
+| `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Treated as non-blocking line-ending normalization warning because command exited 0 |
 
 ## Notes
 - Re-read this plan before each area transition.

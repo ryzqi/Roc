@@ -17,6 +17,13 @@ describe('renderer animation configuration', () => {
     expect(css).toContain('scroll-behavior: auto !important;');
   });
 
+  it('removes task dialog backdrop blur when reduced transparency is requested', () => {
+    const css = readFileSync('src/renderer/styles/task-create-dialog.css', 'utf8');
+
+    expect(css).toContain(":root[data-reduced-transparency='true'] .task-create-dialog-backdrop");
+    expect(css).toContain('backdrop-filter: none;');
+  });
+
   it('keeps Windows native-feel CSS rules from regressing into web defaults', () => {
     const baseCss = readFileSync('src/renderer/styles/base.css', 'utf8');
     const allCss = [
