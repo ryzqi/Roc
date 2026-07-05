@@ -336,6 +336,38 @@ describe('memory plugin', () => {
     });
   });
 
+  it('writes strict directly evidenced user preferences to global USER.md', async () => {
+    const { capabilities, eventBus } = await initializePluginWithBus({ workspace: null });
+
+    await eventBus.publish({
+      type: 'agent.run.completed',
+      source: '@roc/plugin-agent',
+      payload: {
+        runId: 'run_1',
+        threadId: 'thread_1',
+        summary: 'user_preference: user.cli.shell | high | user stated: prefer PowerShell | User prefers PowerShell.',
+        assistantMessage: 'done'
+      },
+      createdAt: '2026-07-05T10:00:00.000Z'
+    });
+
+    await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'user' })).resolves.toContain(
+      '<!-- key: user.cli.shell -->'
+    );
+    await expect(capabilities.invoke('memory.file.read', { scope: 'global', kind: 'memory' })).resolves.toBeNull();
+    await expect(capabilities.invoke<{}, MemoryStatus>('memory.status.get', {})).resolves.toMatchObject({
+      autoMemory: {
+        recent: [
+          expect.objectContaining({
+            action: 'accepted',
+            type: 'user_preference',
+            targetPath: '/memory/global/USER.md'
+          })
+        ]
+      }
+    });
+  });
+
   it('writes typed global decisions without a workspace and skips duplicates or empty summaries', async () => {
     const { capabilities, eventBus } = await initializePluginWithBus({ workspace: null });
     const event = {

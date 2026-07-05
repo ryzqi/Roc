@@ -104,7 +104,7 @@ describe('AutoMemoryWriter', () => {
     await expect(repository.readFile({ scope: 'global', kind: 'memory' })).resolves.toBeNull();
   });
 
-  it('writes directly evidenced user preferences to global memory', async () => {
+  it('writes directly evidenced user preferences to global USER.md', async () => {
     const repository = createRepository({ workspace: null });
     const writer = createWriter(repository);
 
@@ -115,10 +115,26 @@ describe('AutoMemoryWriter', () => {
       '2026-07-03T00:00:00.000Z'
     );
 
-    const content = await repository.readFile({ scope: 'global', kind: 'memory' });
-    expect(content).toContain('type: user_preference');
-    expect(content).toContain('key: user.cli.shell');
-    expect(content).toContain('summary: User prefers PowerShell.');
+    const content = await repository.readFile({ scope: 'global', kind: 'user' });
+    expect(content).toContain('## Preferences');
+    expect(content).toContain('<!-- key: user.cli.shell -->');
+    expect(content).toContain('- User prefers PowerShell.');
+    await expect(repository.readFile({ scope: 'global', kind: 'memory' })).resolves.toBeNull();
+  });
+
+  it('rejects non-high-confidence user preferences from USER.md', async () => {
+    const repository = createRepository({ workspace: null });
+    const writer = createWriter(repository);
+
+    await writer.handleAgentRunCompleted(
+      createPayload({
+        summary: 'user_preference: user.cli.shell | medium | user stated: prefer PowerShell | User prefers PowerShell.'
+      }),
+      '2026-07-03T00:00:00.000Z'
+    );
+
+    await expect(repository.readFile({ scope: 'global', kind: 'user' })).resolves.toBeNull();
+    await expect(repository.readFile({ scope: 'global', kind: 'memory' })).resolves.toBeNull();
   });
 
   it('rejects model-inferred user preferences even when evidence text exists', async () => {
@@ -152,9 +168,81 @@ describe('AutoMemoryWriter', () => {
       '2026-07-03T00:00:00.000Z'
     );
 
-    const content = await repository.readFile({ scope: 'global', kind: 'memory' });
-    expect(content).toContain('summary: User prefers PowerShell.');
-    expect(content).not.toContain('summary: User prefers Bash.');
+    const content = await repository.readFile({ scope: 'global', kind: 'user' });
+    expect(content).toContain('- User prefers PowerShell.');
+    expect(content).not.toContain('- User prefers Bash.');
+  });
+
+  it('skips duplicate USER.md preferences by key and summary', async () => {
+    const repository = createRepository({ workspace: null });
+    const writer = createWriter(repository);
+    const payload = createPayload({
+      summary: 'user_preference: user.cli.shell | high | user stated: prefer PowerShell | User prefers PowerShell.'
+    });
+
+    await writer.handleAgentRunCompleted(payload, '2026-07-03T00:00:00.000Z');
+    await writer.handleAgentRunCompleted({ ...payload, runId: 'run_2' }, '2026-07-03T00:00:00.000Z');
+
+    const content = await repository.readFile({ scope: 'global', kind: 'user' });
+    expect(content?.match(/<!-- key: user\.cli\.shell -->/gu)).toHaveLength(1);
+  });
+
+  it('rejects conflicting USER.md preferences with the same key', async () => {
+    const repository = createRepository({ workspace: null });
+    const writer = createWriter(repository);
+
+    await writer.handleAgentRunCompleted(
+      createPayload({
+        summary: 'user_preference: user.cli.shell | high | user stated: prefer PowerShell | User prefers PowerShell.'
+      }),
+      '2026-07-03T00:00:00.000Z'
+    );
+    await writer.handleAgentRunCompleted(
+      createPayload({
+        summary: 'user_preference: user.cli.shell | high | user stated: prefer Bash | User prefers Bash.'
+      }),
+      '2026-07-03T00:00:00.000Z'
+    );
+
+    const content = await repository.readFile({ scope: 'global', kind: 'user' });
+    expect(content).toContain('- User prefers PowerShell.');
+    expect(content).not.toContain('- User prefers Bash.');
+  });
+
+  it('keeps automatic USER.md preferences inside the Preferences section', async () => {
+    const repository = createRepository({ workspace: null });
+    const writer = createWriter(repository);
+    await repository.writeFile({
+      scope: 'global',
+      kind: 'user',
+      content: [
+        '## Preferences',
+        '',
+        '<!-- key: user.editor -->',
+        '- User prefers concise diffs.',
+        '',
+        '## Other',
+        '',
+        '- Keep this section separate.'
+      ].join('\n')
+    });
+
+    await writer.handleAgentRunCompleted(
+      createPayload({
+        summary: 'user_preference: user.cli.shell | high | user stated: prefer PowerShell | User prefers PowerShell.'
+      }),
+      '2026-07-03T00:00:00.000Z'
+    );
+
+    const content = await repository.readFile({ scope: 'global', kind: 'user' });
+    expect(content).toContain(
+      [
+        '<!-- key: user.cli.shell -->',
+        '- User prefers PowerShell.',
+        '',
+        '## Other'
+      ].join('\n')
+    );
   });
 
   it('skips duplicate candidate keys and summaries', async () => {

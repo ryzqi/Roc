@@ -64,6 +64,12 @@ export function shouldRejectCandidate(candidate: AutoMemoryCandidate): string | 
   if (candidate.type === 'transient_task_result') {
     return 'transient_task_result';
   }
+  if (candidate.type === 'user_preference' && candidate.confidence !== 'high') {
+    return 'user_preference_high_confidence_required';
+  }
+  if (candidate.type === 'user_preference' && !isSafeUserPreferenceKey(candidate.key)) {
+    return 'user_preference_key_unsafe';
+  }
   if (candidate.type === 'user_preference' && candidate.evidence.length === 0) {
     return 'user_preference_evidence_required';
   }
@@ -103,6 +109,49 @@ export function autoMemoryEntryExists(existing: string, candidate: AutoMemoryCan
     }
   }
   return false;
+}
+
+export function formatUserPreferenceEntry(candidate: AutoMemoryCandidate): string {
+  return [`<!-- key: ${candidate.key} -->`, `- ${candidate.summary}`].join('\n');
+}
+
+export function appendUserPreferenceEntry(existing: string, entry: string): string {
+  const trimmed = existing.trimEnd();
+  const heading = '## Preferences';
+  if (trimmed.length === 0) {
+    return [heading, '', entry].join('\n');
+  }
+  const lines = trimmed.split('\n');
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex === -1) {
+    return [trimmed, '', heading, '', entry].join('\n');
+  }
+  const nextHeadingIndex = findNextSecondLevelHeading(lines, headingIndex + 1);
+  const insertIndex = nextHeadingIndex === -1 ? lines.length : nextHeadingIndex;
+  const before = lines.slice(0, insertIndex);
+  while (before.length > 0 && before[before.length - 1].trim().length === 0) {
+    before.pop();
+  }
+  const after = lines.slice(insertIndex);
+  if (after.length === 0) {
+    return [...before, '', entry].join('\n');
+  }
+  return [...before, '', entry, '', ...after].join('\n');
+}
+
+export function userPreferenceEntryStatus(
+  existing: string,
+  candidate: AutoMemoryCandidate
+): 'duplicate' | 'conflict' | null {
+  const entries = parseUserPreferenceEntries(existing);
+  const existingEntry = entries.find((entry) => entry.key === candidate.key);
+  if (existingEntry === undefined) {
+    return null;
+  }
+  if (normalizeMemoryText(existingEntry.summary) === normalizeMemoryText(candidate.summary)) {
+    return 'duplicate';
+  }
+  return 'conflict';
 }
 
 export function formatAutoMemoryEntry(candidate: AutoMemoryCandidate): string {
@@ -244,6 +293,28 @@ function hasDirectUserEvidence(evidence: string[]): boolean {
   });
 }
 
+function parseUserPreferenceEntries(existing: string): Array<{ key: string; summary: string }> {
+  const entries: Array<{ key: string; summary: string }> = [];
+  const lines = existing.split('\n');
+  let pendingKey: string | null = null;
+  for (const line of lines) {
+    const keyMatch = /^<!--\s*key:\s*([a-z0-9._:-]+)\s*-->\s*$/u.exec(line.trim());
+    if (keyMatch !== null) {
+      pendingKey = keyMatch[1];
+      continue;
+    }
+    if (pendingKey !== null && line.trim().startsWith('- ')) {
+      entries.push({ key: pendingKey, summary: line.trim().slice(2).trim() });
+      pendingKey = null;
+    }
+  }
+  return entries;
+}
+
+function isSafeUserPreferenceKey(key: string): boolean {
+  return /^[a-z0-9._:-]+$/u.test(key);
+}
+
 function normalizeMemoryText(value: string): string {
   return value.replace(/\s+/gu, ' ').trim().toLocaleLowerCase();
 }
@@ -251,6 +322,15 @@ function normalizeMemoryText(value: string): string {
 function findNextDateHeading(lines: string[], start: number): number {
   for (let index = start; index < lines.length; index += 1) {
     if (/^## \d{4}-\d{2}-\d{2}$/u.test(lines[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findNextSecondLevelHeading(lines: string[], start: number): number {
+  for (let index = start; index < lines.length; index += 1) {
+    if (/^##\s+\S/u.test(lines[index])) {
       return index;
     }
   }

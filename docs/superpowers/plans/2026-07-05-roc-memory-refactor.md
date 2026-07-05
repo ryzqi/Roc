@@ -289,6 +289,46 @@ it('rejects conflicting USER.md preferences with the same key', async () => {
 });
 ```
 
+Add a section-boundary test:
+
+```ts
+it('keeps automatic USER.md preferences inside the Preferences section', async () => {
+  const repository = createRepository({ workspace: null });
+  const writer = createWriter(repository);
+  await repository.writeFile({
+    scope: 'global',
+    kind: 'user',
+    content: [
+      '## Preferences',
+      '',
+      '<!-- key: user.editor -->',
+      '- User prefers concise diffs.',
+      '',
+      '## Other',
+      '',
+      '- Keep this section separate.'
+    ].join('\n')
+  });
+
+  await writer.handleAgentRunCompleted(
+    createPayload({
+      summary: 'user_preference: user.cli.shell | high | user stated: prefer PowerShell | User prefers PowerShell.'
+    }),
+    '2026-07-03T00:00:00.000Z'
+  );
+
+  const content = await repository.readFile({ scope: 'global', kind: 'user' });
+  expect(content).toContain(
+    [
+      '<!-- key: user.cli.shell -->',
+      '- User prefers PowerShell.',
+      '',
+      '## Other'
+    ].join('\n')
+  );
+});
+```
+
 - [ ] **Step 2: Add failing plugin integration test for USER.md**
 
 In `tests/main/plugins/memory/plugin.test.ts`, add:

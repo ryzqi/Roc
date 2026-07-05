@@ -6,12 +6,16 @@ import type { AutoMemoryAuditRepository } from './auto-memory-audit-repository';
 import {
   type AutoMemoryCandidate,
   appendAutoMemoryEntry,
+  appendUserPreferenceEntry,
   autoMemoryEntryExists,
   extractAutoMemoryCandidates,
   formatAutoMemoryEntry,
+  formatUserPreferenceEntry,
+  userPreferenceEntryStatus,
   shouldRejectCandidate
 } from './auto-memory-candidates';
 
+const GLOBAL_USER_TARGET_PATH = '/memory/global/USER.md';
 const GLOBAL_MEMORY_TARGET_PATH = '/memory/global/MEMORY.md';
 const WORKSPACE_MEMORY_TARGET_PATH = '/memory/workspaces/current/MEMORY.md';
 
@@ -28,6 +32,12 @@ type AutoMemoryWriterOptions = {
   auditRepository?: AutoMemoryAuditRepository;
   getMemorySettings?: () => AppSettings['memory'];
   logger: RocPluginContext['logger'];
+};
+
+type AutoMemoryTarget = {
+  scope: MemoryScope;
+  kind: 'user' | 'memory';
+  targetPath: string;
 };
 
 export class AutoMemoryWriter {
@@ -60,60 +70,96 @@ export class AutoMemoryWriter {
     }
 
     for (const candidate of candidates) {
-      const targetScope = resolveTargetScope(candidate.scope, workspaceOverride, this.options.repository);
-      const targetPath = resolveMemoryTargetPath(targetScope);
+      const target = resolveCandidateTarget(candidate, workspaceOverride, this.options.repository);
       const rejection = shouldRejectCandidate(candidate);
       if (rejection !== null) {
-        this.recordCandidateAudit(candidate, 'rejected', rejection, targetPath);
+        this.recordCandidateAudit(candidate, 'rejected', rejection, target.targetPath);
         continue;
       }
       try {
-        const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
+        if (target.kind === 'user') {
+          await this.writeUserPreference(candidate, target, workspaceOverride);
+          continue;
+        }
+        const current = await this.options.repository.readFile({ scope: target.scope, kind: target.kind }, workspaceOverride);
         const existing = current === null ? '' : current;
         if (autoMemoryEntryExists(existing, candidate)) {
-          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', targetPath);
+          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', target.targetPath);
           continue;
         }
         const entry = formatAutoMemoryEntry(candidate);
         const next = appendAutoMemoryEntry(existing, date, entry);
         const result = await this.options.repository.writeFile({
-          scope: targetScope,
-          kind: 'memory',
+          scope: target.scope,
+          kind: target.kind,
           content: next
         }, workspaceOverride);
         if (!result.ok && result.reason === 'capacity_exceeded') {
           const compacted = removeExactDuplicateStructuredEntries(existing);
           const retryContent = appendAutoMemoryEntry(compacted, date, entry);
           const retryResult = await this.options.repository.writeFile({
-            scope: targetScope,
-            kind: 'memory',
+            scope: target.scope,
+            kind: target.kind,
             content: retryContent
           }, workspaceOverride);
           if (retryResult.ok) {
-            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry', targetPath);
+            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry', target.targetPath);
             continue;
           }
-          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason, targetPath);
+          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason, target.targetPath);
           this.options.logger.warn('memory_auto_write_skipped', {
             reason: retryResult.reason
           });
           continue;
         }
         if (!result.ok) {
-          this.recordCandidateAudit(candidate, 'write_failed', result.reason, targetPath);
+          this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
           this.options.logger.warn('memory_auto_write_skipped', {
             reason: result.reason
           });
           continue;
         }
-        this.recordCandidateAudit(candidate, 'accepted', 'accepted', targetPath);
+        this.recordCandidateAudit(candidate, 'accepted', 'accepted', target.targetPath);
       } catch (error) {
-        this.recordCandidateAudit(candidate, 'write_failed', 'exception', targetPath);
+        this.recordCandidateAudit(candidate, 'write_failed', 'exception', target.targetPath);
         this.options.logger.warn('memory_auto_write_failed', {
           error: error instanceof Error ? error.message : String(error)
         });
       }
     }
+  }
+
+  private async writeUserPreference(
+    candidate: AutoMemoryCandidate,
+    target: AutoMemoryTarget,
+    workspaceOverride: MemoryWorkspaceContext | null | undefined
+  ): Promise<void> {
+    const current = await this.options.repository.readFile({ scope: target.scope, kind: target.kind }, workspaceOverride);
+    const existing = current === null ? '' : current;
+    const status = userPreferenceEntryStatus(existing, candidate);
+    if (status === 'duplicate') {
+      this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', target.targetPath);
+      return;
+    }
+    if (status === 'conflict') {
+      this.recordCandidateAudit(candidate, 'conflict_rejected', 'conflict', target.targetPath);
+      return;
+    }
+    const entry = formatUserPreferenceEntry(candidate);
+    const next = appendUserPreferenceEntry(existing, entry);
+    const result = await this.options.repository.writeFile({
+      scope: target.scope,
+      kind: target.kind,
+      content: next
+    }, workspaceOverride);
+    if (!result.ok) {
+      this.recordCandidateAudit(candidate, 'write_failed', result.reason, target.targetPath);
+      this.options.logger.warn('memory_auto_write_skipped', {
+        reason: result.reason
+      });
+      return;
+    }
+    this.recordCandidateAudit(candidate, 'accepted', 'accepted', target.targetPath);
   }
 
   private recordCandidateAudit(
@@ -217,11 +263,19 @@ function resolveTargetScope(
   return 'global';
 }
 
-function resolveMemoryTargetPath(scope: MemoryScope): string {
-  if (scope === 'workspace') {
-    return WORKSPACE_MEMORY_TARGET_PATH;
+function resolveCandidateTarget(
+  candidate: AutoMemoryCandidate,
+  workspaceOverride: MemoryWorkspaceContext | null | undefined,
+  repository: MemoryStoreRepository
+): AutoMemoryTarget {
+  if (candidate.type === 'user_preference') {
+    return { scope: 'global', kind: 'user', targetPath: GLOBAL_USER_TARGET_PATH };
   }
-  return GLOBAL_MEMORY_TARGET_PATH;
+  const targetScope = resolveTargetScope(candidate.scope, workspaceOverride, repository);
+  if (targetScope === 'workspace') {
+    return { scope: 'workspace', kind: 'memory', targetPath: WORKSPACE_MEMORY_TARGET_PATH };
+  }
+  return { scope: 'global', kind: 'memory', targetPath: GLOBAL_MEMORY_TARGET_PATH };
 }
 
 function removeExactDuplicateStructuredEntries(existing: string): string {
