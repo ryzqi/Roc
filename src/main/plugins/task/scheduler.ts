@@ -138,6 +138,14 @@ export class TaskScheduler {
       this.unregisterTask(taskId);
       return;
     }
+    if (task.nextRunAt === null) {
+      this.unregisterTask(taskId);
+      return;
+    }
+    if (new Date(task.nextRunAt).getTime() > Date.now()) {
+      this.scheduleTask(task);
+      return;
+    }
     if (this.options.startRun === undefined) {
       this.lastError = 'task_scheduler_starter_missing';
       return;

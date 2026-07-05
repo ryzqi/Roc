@@ -114,6 +114,61 @@ describe('TaskScheduler', () => {
     );
   });
 
+  it('reschedules future tasks when the maximum timeout slice elapses before nextRunAt', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
+    const repository = new TaskRepository(db);
+    const nextRunAt = new Date(Date.now() + 10_000).toISOString();
+    const task = repository.createBackgroundTask(
+      repository.createBackgroundTaskPreview({
+        goal: 'Run later without early firing',
+        trigger: {
+          type: 'once',
+          description: 'Ten seconds from now',
+          nextRunAt
+        },
+        workspacePath: 'F:\\Code\\Roc',
+        allowedActions: [],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      })
+    );
+    const startRequests: unknown[] = [];
+    const scheduler = new TaskScheduler(repository, {
+      maxTimeoutDelayMs: 1_000,
+      startRun: async (request) => {
+        startRequests.push(request);
+        return {
+          runId: 'run_scheduled_later',
+          mode: 'task',
+          threadId: request.threadId ?? null,
+          providerId: 'smoke-provider',
+          modelId: 'smoke-model',
+          createdAt: new Date().toISOString()
+        };
+      }
+    });
+
+    scheduler.start();
+    scheduler.registerAllFromDatabase();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(startRequests).toEqual([]);
+    expect(repository.listScheduledRuns({ taskId: task.id })).toEqual([]);
+    expect(scheduler.getStatus().nextFireAt).toBe(nextRunAt);
+
+    await vi.advanceTimersByTimeAsync(9_000);
+
+    expect(startRequests).toEqual([
+      expect.objectContaining({
+        input: task.goal,
+        mode: 'task',
+        taskSource: 'workbench',
+        workspacePath: task.workspacePath
+      })
+    ]);
+  });
+
   it('records and pauses scheduled tasks when agent startup fails', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const repository = new TaskRepository(db);

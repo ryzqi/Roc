@@ -57,6 +57,12 @@
 | Infrastructure logger append typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Infrastructure logger append strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Infrastructure logger append source search | `rg -n "appendFileSync|createWriteStream|close\\(\\): Promise<void>|InfrastructureLogger" src/main/infrastructure/logger.ts src/main/kernel/kernel-runtime.ts tests/main/code-quality-empty-catch.test.ts tests/main/infrastructure/logger.test.ts tests/main/kernel/kernel-runtime.test.ts` | No production `appendFileSync`; stream close path present | No `appendFileSync` in production files; logger close is called by kernel runtime | pass |
+| Task scheduler long-delay RED | `pnpm test -- tests/main/plugins/task/scheduler.test.ts` | New regression test fails when a future task reaches only the first max-timeout slice | Failed because `startRun` was called after 1s for a task due after 10s | fail-expected |
+| Task scheduler long-delay GREEN | `pnpm test -- tests/main/plugins/task/scheduler.test.ts` | Scheduler regression passes | 1 file, 4 tests passed | pass |
+| Task scheduler focused tests | `pnpm test -- tests/main/plugins/task/scheduler.test.ts tests/main/plugins/task/plugin.test.ts tests/main/background-task-time-tool.test.ts` | Related task scheduler tests pass | 3 files, 20 tests passed | pass |
+| Task scheduler typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Task scheduler strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Task scheduler diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -116,6 +122,10 @@
   - Added `InfrastructureLogger.close()` and wired `KernelRuntime` to close it on start failure and shutdown.
   - Updated logger and kernel runtime tests to use `close()`/shutdown as the log flush boundary.
   - Verified with focused tests, `pnpm typecheck`, strict unused scan, source search, and diff review.
+  - Found `TaskScheduler` could fire long-horizon tasks early when `maxTimeoutDelayMs` split the wait into slices.
+  - Added a RED regression test with a task due after 10 seconds and `maxTimeoutDelayMs` set to 1 second.
+  - Updated `TaskScheduler.fire()` to re-check `nextRunAt` and reschedule when a max-timeout slice elapses before the task is due.
+  - Verified with scheduler/task focused tests, `pnpm typecheck`, strict unused scan, and diff review.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -141,6 +151,8 @@
   - `tests/main/plugins/workspace/file-capabilities.test.ts` (updated)
   - `tests/main/infrastructure/logger.test.ts` (updated)
   - `tests/main/kernel/kernel-runtime.test.ts` (updated)
+  - `src/main/plugins/task/scheduler.ts` (updated)
+  - `tests/main/plugins/task/scheduler.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -159,5 +171,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, and removed duplicate error normalization helpers |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt` |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, and removed duplicate error normalization helpers |
