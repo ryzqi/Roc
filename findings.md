@@ -45,6 +45,8 @@
 - Not deleted: `src/main/services/deep-agent/harness-profiles.ts`, `plan-filesystem-defaults.ts`, and Forge cleanup middleware remain in the real `buildDeepAgent()` middleware path or exported middleware path with focused behavior tests.
 - Not deleted: `subagent-projection.ts` still keeps a `taskId` fallback for async subagent identity. Current evidence does not prove DeepAgents runtime will never emit that field, so it remains a reported candidate rather than deleted code.
 - `src/main/infrastructure/schema-registry.ts` had no production import-graph inbound edge and full-text search found only the source file plus its dedicated test. Current plugin schemas are applied through active plugin/bootstrap paths instead, so the registry was unused infrastructure code.
+- Phase 4 IPC/preload/RTK scan found no generated IPC drift, no raw preload wildcard/capability exposure, and RTK integration behavior was already covered by dedicated `tests/rtk-integration` tests.
+- `ProviderOptions.anthropicCacheControl` was a retired prompt-cache constructor option with no runtime/UI reader; references existed only in the shared type and config Zod schema. Keeping it allowed stale provider settings to persist unused config.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -83,3 +85,5 @@
 | `src/main` DeepAgent prompt-builder compatibility export | complete | RED quality test found the old re-export file; GREEN focused prompt tests/typecheck/strict unused pass; `rg prompt-builder` has no source/test/docs references | Continue `src/main` production audit |
 | `src/main` infrastructure schema registry | complete | RED quality test found unused registry file; GREEN focused infrastructure tests/typecheck/strict unused pass; AST import graph has no orphan candidates after deletion | Continue `src/main` production audit |
 | `src/main` area closeout | complete | `pnpm test -- tests/main` passed 178 files and 986 tests on the current worktree; exit 0 with known Windows `node-pty AttachConsole failed` teardown noise | Start shared/preload/RTK audit |
+| shared/preload/RTK boundary audit | complete | `pnpm check:ipc` passed; focused shared/RTK/preload/config tests passed; no raw preload wildcard IPC or RTK contract drift found | Start renderer audit |
+| retired Anthropic cache-control option | complete | RED config test proved `anthropicCacheControl` was preserved; GREEN test proves validation now strips it while preserving supported Anthropic options | Start renderer audit |

@@ -423,4 +423,54 @@ describe('ConfigService unified settings document', () => {
       }
     });
   });
+
+  it('drops retired Anthropic cache-control provider options during config validation', () => {
+    const configService = new ConfigService(paths);
+    configService.initialize();
+
+    configService.saveProviders({
+      schemaVersion: 1,
+      defaultModelId: 'anthropic-cache-control:claude-cache-control',
+      providers: [
+        {
+          id: 'anthropic-cache-control',
+          name: 'Anthropic Cache Control',
+          type: 'anthropic_compatible',
+          endpoint: 'https://anthropic.example.test',
+          credentialRef: 'secret:anthropic-cache-control',
+          enabled: true,
+          models: [
+            {
+              id: 'claude-cache-control',
+              displayName: 'Claude Cache Control',
+              enabled: true,
+              supportsStreaming: true,
+              supportsToolCalls: true,
+              supportsImages: false
+            }
+          ],
+          options: {
+            anthropicThinking: {
+              mode: 'adaptive'
+            },
+            anthropicCacheControl: {
+              type: 'ephemeral',
+              ttl: '5m'
+            }
+          } as unknown as ProviderConfig['options']
+        }
+      ]
+    });
+
+    const provider = configService
+      .getProviders()
+      .providers.find((item) => item.id === 'anthropic-cache-control');
+
+    expect(provider?.options).toEqual({
+      anthropicThinking: {
+        mode: 'adaptive'
+      }
+    });
+    expect(JSON.stringify(readSettingsDocument())).not.toContain('anthropicCacheControl');
+  });
 });

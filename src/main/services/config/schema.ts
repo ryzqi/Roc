@@ -150,11 +150,7 @@ const ProviderOptionsSchema = z
     contextBudgetTokens: z.number().int().positive().optional(),
     samplingProfileOverrides: SamplingProfileOverridesSchema.optional(),
     invocationKwargs: z.record(z.string(), z.unknown()).optional(),
-    anthropicBetas: z.array(z.string()).optional(),
-    anthropicCacheControl: z.object({
-      type: z.literal('ephemeral'),
-      ttl: z.enum(['5m', '1h']).optional()
-    }).optional()
+    anthropicBetas: z.array(z.string()).optional()
   })
   .superRefine((options, ctx) => {
     if (

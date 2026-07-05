@@ -156,14 +156,6 @@ export type ProviderOptions = {
    * 例如: ['prompt-caching-2024-07-31', 'pdfs-2024-09-25']。
    */
   anthropicBetas?: string[];
-  /**
-   * 自动缓存控制配置。
-   * @deprecated 这是 CallOptions，应在运行时传递而非构造参数。
-   */
-  anthropicCacheControl?: {
-    type: 'ephemeral';
-    ttl?: '5m' | '1h';
-  };
 };
 
 export type ProviderModel = {

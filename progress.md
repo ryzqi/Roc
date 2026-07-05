@@ -98,6 +98,13 @@
 | Infrastructure schema registry orphan scan | TypeScript AST import graph over `src/main` | No orphan source candidates after deletion | `no orphan src/main import graph candidates` | pass |
 | Infrastructure schema registry diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 | Main area test suite | `pnpm test -- tests/main` | All main tests pass | 178 files, 986 tests passed; exit 0 with known Windows `node-pty AttachConsole failed` teardown noise after results | pass |
+| Anthropic cache-control RED | `pnpm test -- tests/main/config-service-advanced-providers.test.ts` | New regression fails on stale provider option persistence | Failed because `anthropicCacheControl` remained in provider options | fail-expected |
+| Anthropic cache-control GREEN | `pnpm test -- tests/main/config-service-advanced-providers.test.ts` | Config validation strips retired option | 1 file, 4 tests passed | pass |
+| Phase 4 focused tests | `pnpm test -- tests/shared tests/rtk-integration tests/main/preload-contract.test.ts tests/main/ipc-schema-generation.test.ts tests/main/plugins/runtime-tools/rtk-adapter.test.ts tests/main/config-service-advanced-providers.test.ts tests/main/config-service-providers.test.ts tests/main/config-service-settings.test.ts` | Relevant shared/preload/RTK/config tests pass | 14 files, 63 tests passed | pass |
+| Phase 4 typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Phase 4 strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Phase 4 IPC drift check | `pnpm check:ipc` | Generated IPC files current | `IPC generated files are current.` exit 0 | pass |
+| Phase 4 diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -114,7 +121,7 @@
   - `progress.md` (updated)
 
 ### Phase 3: Main Process And Services Audit
-- **Status:** in_progress
+- **Status:** complete
 - **Started:** 2026-07-05
 - Actions taken:
   - Mapped `src/main` and `tests/main` files and identified the largest main-process modules.
@@ -242,6 +249,29 @@
   - `progress.md` (updated)
   - `task_plan.md` (updated)
 
+### Phase 4: Shared, Preload, RTK Integration Audit
+- **Status:** complete
+- **Started:** 2026-07-05
+- Actions taken:
+  - Read `src/shared/ipc.ts`, generated IPC metadata, preload bridge, RTK integration modules, shared contracts, and corresponding tests.
+  - Scanned Phase 4 sources for explicit `any`, broad casts, stale markers, dangerous defaults, sync I/O, IPC wildcard exposure, and `/workspace` path misuse.
+  - Verified `provider-defaults.ts`, `provider-model-key.ts`, `chat-layout.ts`, and background-task shared contracts have real production/test callers.
+  - Confirmed `tests/rtk-integration` covers RTK binary resolution, command rewrite parsing, middleware rewrite/pass-through/deny behavior, and public exports.
+  - Ran `pnpm check:ipc`; generated IPC files are current.
+  - Ran Phase 4 focused tests before the stale-option fix; 11 files and 49 tests passed.
+  - Found retired `anthropicCacheControl` provider option was still accepted by shared/config schema even though runtime/UI no longer read it.
+  - Added a RED config validation test proving the stale option was preserved.
+  - Removed `anthropicCacheControl` from `ProviderOptions` and `ProviderOptionsSchema`, letting validation strip the retired field.
+  - Verified with focused config test, Phase 4 focused tests, `pnpm typecheck`, strict unused scan, `pnpm check:ipc`, and `git diff --check`.
+  - Reviewed current diff for compatibility, hidden persistence side effects, schema drift, and test coverage risks; no blocking issue found.
+- Files created/modified:
+  - `src/shared/types/settings.ts` (updated)
+  - `src/main/services/config/schema.ts` (updated)
+  - `tests/main/config-service-advanced-providers.test.ts` (updated)
+  - `findings.md` (updated)
+  - `progress.md` (updated)
+  - `task_plan.md` (updated)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
@@ -257,6 +287,8 @@
 | 2026-07-05 | A PowerShell `rg` command used a glob-style path `tests\main\plugins\agent\deep-agent-executor*.test.ts`, which produced `os error 123` | 1 | Re-ran searches and tests with explicit file paths instead of shell glob path syntax |
 | 2026-07-05 | Session catchup detected 63 unsynced messages after resume | 1 | Re-read planning files, ran catchup, `git status --short --branch`, and `git diff --stat` before continuing |
 | 2026-07-05 | Repeated the unsupported PowerShell glob path form in a broader `rg` command and hit `os error 123` again | 2 | Switched to `rg --glob` and explicit paths for subsequent searches |
+| 2026-07-05 | First Anthropic cache-control RED test read the first normalized provider and failed on `undefined` options instead of the stale field | 1 | Updated the test to find the provider by id before asserting stale option stripping |
+| 2026-07-05 | Used unsupported PowerShell glob path `tests/main/config-service*.test.ts` in an `rg` command and hit `os error 123` | 3 | Stopped using path globs directly in PowerShell arguments; used explicit files or `rg --glob` |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).
@@ -266,8 +298,8 @@
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 3: Main Process And Services Audit |
-| Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
+| Where am I? | Phase 5: Renderer UI, Animation, Interaction Audit |
+| Where am I going? | Audit `src/renderer`, then tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt`; NVIDIA probe cancellation can use native `AbortSignal.any` without local fallback; provider retry backoff must reject immediately when its signal is already aborted |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, removed duplicate error normalization helpers, replaced NVIDIA probe abort composition fallback with the native API, and fixed provider retry abort-before-backoff latency |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; audited main hot-path sync I/O and scheduler/provider retry issues are fixed; Phase 4 IPC/preload/RTK contracts are current; retired `anthropicCacheControl` was stale schema/type residue and is now stripped by config validation |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed and committed `src/main` audit slices, completed Phase 4 shared/preload/RTK audit, removed the retired Anthropic cache-control provider option, and verified focused tests/typecheck/strict unused/IPC/diff checks |
