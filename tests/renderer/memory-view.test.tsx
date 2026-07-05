@@ -235,7 +235,8 @@ function createMemoryStatus(): MemoryStatus {
           summary: 'Auto memory writes use typed candidates.',
           sourceRunId: 'run_1',
           reason: 'accepted',
-          workspacePath: 'F:\\Code\\Roc'
+          workspacePath: 'F:\\Code\\Roc',
+          targetPath: '/memory/workspaces/current/MEMORY.md'
         }
       ]
     }

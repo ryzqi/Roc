@@ -298,7 +298,8 @@ describe('memory plugin', () => {
           expect.objectContaining({
             action: 'accepted',
             type: 'workspace_fact',
-            sourceRunId: 'run_1'
+            sourceRunId: 'run_1',
+            targetPath: '/memory/workspaces/current/MEMORY.md'
           })
         ]
       }

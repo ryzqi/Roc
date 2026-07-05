@@ -20,6 +20,7 @@ export type AutoMemoryAuditInsert = {
   sourceRunId: string;
   reason: string;
   workspacePath: string | null;
+  targetPath: string | null;
   createdAt: string;
 };
 
@@ -34,6 +35,7 @@ type AuditRow = {
   source_run_id: string;
   reason: string;
   workspace_path: string | null;
+  target_path: string | null;
   created_at: string;
 };
 
@@ -54,9 +56,10 @@ export class AutoMemoryAuditRepository {
         source_run_id,
         reason,
         workspace_path,
+        target_path,
         created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.action,
@@ -68,6 +71,7 @@ export class AutoMemoryAuditRepository {
       input.sourceRunId,
       input.reason,
       input.workspacePath,
+      input.targetPath,
       input.createdAt
     );
     return {
@@ -81,7 +85,8 @@ export class AutoMemoryAuditRepository {
       summary: input.summary,
       sourceRunId: input.sourceRunId,
       reason: input.reason,
-      workspacePath: input.workspacePath
+      workspacePath: input.workspacePath,
+      targetPath: input.targetPath
     };
   }
 
@@ -98,6 +103,7 @@ export class AutoMemoryAuditRepository {
         source_run_id,
         reason,
         workspace_path,
+        target_path,
         created_at
       FROM memory_auto_audit
       ORDER BY created_at DESC, id DESC
@@ -114,7 +120,8 @@ export class AutoMemoryAuditRepository {
       summary: row.summary,
       sourceRunId: row.source_run_id,
       reason: row.reason,
-      workspacePath: row.workspace_path
+      workspacePath: row.workspace_path,
+      targetPath: row.target_path
     }));
   }
 

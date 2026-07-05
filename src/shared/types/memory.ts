@@ -33,6 +33,7 @@ export type AutoMemoryAuditRecord = {
   sourceRunId: string;
   reason: string;
   workspacePath: string | null;
+  targetPath: string | null;
 };
 
 export type SecurityScanIssue = {

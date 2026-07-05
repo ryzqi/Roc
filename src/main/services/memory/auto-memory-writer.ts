@@ -12,6 +12,9 @@ import {
   shouldRejectCandidate
 } from './auto-memory-candidates';
 
+const GLOBAL_MEMORY_TARGET_PATH = '/memory/global/MEMORY.md';
+const WORKSPACE_MEMORY_TARGET_PATH = '/memory/workspaces/current/MEMORY.md';
+
 export type AgentRunCompletedPayload = {
   runId: string;
   threadId: string | null;
@@ -50,23 +53,25 @@ export class AutoMemoryWriter {
         sourceRunId: payload.runId,
         reason: 'no_candidates',
         workspacePath: readWorkspacePath(payload),
+        targetPath: null,
         createdAt: eventCreatedAt
       });
       return;
     }
 
     for (const candidate of candidates) {
+      const targetScope = resolveTargetScope(candidate.scope, workspaceOverride, this.options.repository);
+      const targetPath = resolveMemoryTargetPath(targetScope);
       const rejection = shouldRejectCandidate(candidate);
       if (rejection !== null) {
-        this.recordCandidateAudit(candidate, 'rejected', rejection);
+        this.recordCandidateAudit(candidate, 'rejected', rejection, targetPath);
         continue;
       }
-      const targetScope = resolveTargetScope(candidate.scope, workspaceOverride, this.options.repository);
       try {
         const current = await this.options.repository.readFile({ scope: targetScope, kind: 'memory' }, workspaceOverride);
         const existing = current === null ? '' : current;
         if (autoMemoryEntryExists(existing, candidate)) {
-          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate');
+          this.recordCandidateAudit(candidate, 'duplicate_skipped', 'duplicate', targetPath);
           continue;
         }
         const entry = formatAutoMemoryEntry(candidate);
@@ -85,25 +90,25 @@ export class AutoMemoryWriter {
             content: retryContent
           }, workspaceOverride);
           if (retryResult.ok) {
-            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry');
+            this.recordCandidateAudit(candidate, 'accepted', 'accepted_after_capacity_retry', targetPath);
             continue;
           }
-          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason);
+          this.recordCandidateAudit(candidate, 'write_failed', retryResult.reason, targetPath);
           this.options.logger.warn('memory_auto_write_skipped', {
             reason: retryResult.reason
           });
           continue;
         }
         if (!result.ok) {
-          this.recordCandidateAudit(candidate, 'write_failed', result.reason);
+          this.recordCandidateAudit(candidate, 'write_failed', result.reason, targetPath);
           this.options.logger.warn('memory_auto_write_skipped', {
             reason: result.reason
           });
           continue;
         }
-        this.recordCandidateAudit(candidate, 'accepted', 'accepted');
+        this.recordCandidateAudit(candidate, 'accepted', 'accepted', targetPath);
       } catch (error) {
-        this.recordCandidateAudit(candidate, 'write_failed', 'exception');
+        this.recordCandidateAudit(candidate, 'write_failed', 'exception', targetPath);
         this.options.logger.warn('memory_auto_write_failed', {
           error: error instanceof Error ? error.message : String(error)
         });
@@ -114,7 +119,8 @@ export class AutoMemoryWriter {
   private recordCandidateAudit(
     candidate: AutoMemoryCandidate,
     action: Parameters<AutoMemoryAuditRepository['record']>[0]['action'],
-    reason: string
+    reason: string,
+    targetPath: string | null
   ): void {
     this.recordAudit({
       action,
@@ -126,6 +132,7 @@ export class AutoMemoryWriter {
       sourceRunId: candidate.sourceRunId,
       reason,
       workspacePath: candidate.workspacePath,
+      targetPath,
       createdAt: candidate.createdAt
     });
   }
@@ -208,6 +215,13 @@ function resolveTargetScope(
     return 'workspace';
   }
   return 'global';
+}
+
+function resolveMemoryTargetPath(scope: MemoryScope): string {
+  if (scope === 'workspace') {
+    return WORKSPACE_MEMORY_TARGET_PATH;
+  }
+  return GLOBAL_MEMORY_TARGET_PATH;
 }
 
 function removeExactDuplicateStructuredEntries(existing: string): string {

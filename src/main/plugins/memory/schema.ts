@@ -26,10 +26,21 @@ export function applyMemoryPluginSchema(db: DatabaseConnection): void {
       source_run_id TEXT NOT NULL,
       reason TEXT NOT NULL,
       workspace_path TEXT,
+      target_path TEXT,
       created_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_memory_auto_audit_created
     ON memory_auto_audit(created_at DESC);
   `);
+  ensureMemoryAutoAuditTargetPathColumn(db);
+}
+
+function ensureMemoryAutoAuditTargetPathColumn(db: DatabaseConnection): void {
+  const columns = db.prepare('PRAGMA table_info(memory_auto_audit)').all() as Array<{ name: string }>;
+  const hasTargetPath = columns.some((column) => column.name === 'target_path');
+  if (hasTargetPath) {
+    return;
+  }
+  db.exec('ALTER TABLE memory_auto_audit ADD COLUMN target_path TEXT');
 }

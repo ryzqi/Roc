@@ -73,7 +73,8 @@ const autoMemoryAuditRecordSchema = z.object({
   summary: z.string(),
   sourceRunId: z.string(),
   reason: z.string(),
-  workspacePath: z.string().nullable()
+  workspacePath: z.string().nullable(),
+  targetPath: z.string().nullable()
 });
 
 const securityScanIssueSchema = z.object({
