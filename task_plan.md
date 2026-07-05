@@ -83,6 +83,7 @@ Phase 3
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
+| PowerShell `rg` path used unsupported glob form `tests\main\plugins\agent\deep-agent-executor*.test.ts` and returned `os error 123` | 1 | Re-ran with explicit file paths instead of shell glob path syntax |
 
 ## Notes
 - Re-read this plan before each area transition.

@@ -78,6 +78,12 @@
 | Provider retry abort strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Provider retry abort source search | `rg -n "function delayWithAbort|signal\\?\\.aborted|addEventListener\\(\\s*'abort'|aborts immediately when the signal" src\main\services\provider-request-retry.ts tests\main\provider-request-retry.test.ts` | Backoff helper has explicit already-aborted guard and test anchor | Guard present in `delayWithAbort`; test anchor present | pass |
 | Provider retry abort diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| DeepAgent executor cleanup RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails while inert `closers` registry remains | Resume context recorded failure on `const closers` and `Promise.allSettled(closers.map` | fail-expected |
+| DeepAgent executor cleanup GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/plugins/agent/deep-agent-executor.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts` | Relevant quality and executor tests pass | 3 files, 36 tests passed | pass |
+| DeepAgent executor cleanup typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| DeepAgent executor cleanup strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| DeepAgent executor cleanup production search | `rg -n "const closers|Promise\\.allSettled\\(closers|closers\\.push" src\main\plugins\agent\deep-agent-executor.ts` | No production matches | No production closers registry matches | pass |
+| DeepAgent executor cleanup diff check | `git diff --check` | No whitespace errors | Exit 0; Git warned `deep-agent-executor.ts` CRLF will be replaced by LF next time Git touches it | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -157,6 +163,13 @@
   - Updated `delayWithAbort()` to reject immediately when the signal is already aborted.
   - Verified with provider retry tests, `pnpm typecheck`, strict unused scan, source search, and `git diff --check`.
   - Reviewed the provider retry diff for normal retry regression, metrics coverage, cancellation semantics, and test cleanup risks; no blocking issue found.
+  - Resumed from session catchup; it detected 63 unsynced messages and recommended `git diff --stat` plus planning file readback.
+  - Read current planning files, AGENTS rules, git status, and git diff stat before continuing.
+  - Confirmed the DeepAgent executor cleanup quality test was the current RED and that production code still contained an inert `closers` array plus empty `Promise.allSettled(closers.map(...))` traversal.
+  - Confirmed no `closers.push` registration path exists in `src/main` or `tests/main`.
+  - Removed the inert executor cleanup registry while preserving `consumeRun` error behavior through `eventQueue.fail(error)`.
+  - Verified with focused quality/executor tests, `pnpm typecheck`, strict unused scan, production source search, and `git diff --check`.
+  - Reviewed the diff for lost cleanup behavior, error handling regression, and test-scope risk; no blocking issue found.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -190,6 +203,7 @@
   - `tests/main/provider-request-retry.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
+  - `task_plan.md` (updated)
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -203,6 +217,8 @@
 | 2026-07-05 | Session catchup detected 83 unsynced messages after resume | 1 | Re-read `task_plan.md`, `progress.md`, and `findings.md`; ran catchup, `git status --short --branch`, and `git diff --stat` before continuing |
 | 2026-07-05 | New NVIDIA timeout behavior test produced a Vitest unhandled rejection because `.rejects` was attached after fake timers triggered rejection | 1 | Bound `expect(resultPromise).rejects` before `vi.advanceTimersByTimeAsync()` and re-ran the focused test |
 | 2026-07-05 | Tried to read nonexistent `tests/main/provider-runtime-service.test.ts` while reviewing provider runtime coverage | 1 | Used `rg --files`/`rg` to identify the real provider retry coverage in `tests/main/provider-request-retry.test.ts` |
+| 2026-07-05 | A PowerShell `rg` command used a glob-style path `tests\main\plugins\agent\deep-agent-executor*.test.ts`, which produced `os error 123` | 1 | Re-ran searches and tests with explicit file paths instead of shell glob path syntax |
+| 2026-07-05 | Session catchup detected 63 unsynced messages after resume | 1 | Re-read planning files, ran catchup, `git status --short --branch`, and `git diff --stat` before continuing |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

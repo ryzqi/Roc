@@ -77,7 +77,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       if (handle === undefined) {
         throw new Error('agent_deep_agent_model_handle_missing');
       }
-      const closers: Array<() => Promise<void>> = [];
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
       const usageAccumulator = createUsageAccumulator();
@@ -291,8 +290,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           eventQueue.close();
         } catch (error) {
           eventQueue.fail(error);
-        } finally {
-          await Promise.allSettled(closers.map(async (close) => close()));
         }
       })();
       for await (const event of eventQueue) {

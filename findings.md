@@ -40,6 +40,7 @@
 - NVIDIA probe cancellation now uses native `AbortSignal.any` directly. Behavior coverage proves first SSE delta returns and cancels the reader, internal hard timeout maps to `provider_request_timeout`, and caller abort remains an `AbortError` instead of being misclassified as provider timeout.
 - DeepAgents reference check for this runtime/recovery pass: continuity-sensitive paths should preserve a stable `thread_id`, use the framework checkpointer/backend semantics instead of ad hoc state, and keep tool/backend routing boundaries explicit.
 - `executeWithProviderRequestRetry()` checked abort before each attempt and while waiting for an abort event during backoff, but `delayWithAbort()` did not handle a signal already aborted before the listener was attached. If an operation aborted the signal while throwing a retryable provider failure, cancellation could wait for the full retry backoff before surfacing.
+- `src/main/plugins/agent/deep-agent-executor.ts` kept a `closers` cleanup registry that had no registration path (`closers.push` had no production match) and only performed an empty `Promise.allSettled` traversal after `consumeRun`. Removing it does not remove a real cleanup hook; `eventQueue.fail(error)` remains the error path.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -74,3 +75,4 @@
 | `src/main` task scheduler long-delay timers | complete | RED scheduler test proved a future task fired after the first max-timeout slice; GREEN focused tests/typecheck/strict unused pass | Continue `src/main` production audit |
 | `src/main` NVIDIA probe abort composition | complete | RED quality test found local `function anySignal`; GREEN direct probe tests, retry-layer test, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |
 | `src/main` provider retry abort backoff | complete | RED test showed an already-aborted signal stayed pending before retry backoff; GREEN provider retry tests, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |
+| `src/main` DeepAgent executor cleanup registry | complete | RED quality test found inert `closers`; GREEN focused executor tests/typecheck/strict unused pass; production source search has no `closers` registry matches | Continue `src/main` production audit |

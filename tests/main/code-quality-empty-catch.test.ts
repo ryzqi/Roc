@@ -152,4 +152,11 @@ describe('source code quality', () => {
 
     expect(source).not.toContain('function anySignal');
   });
+
+  it('does not keep an inert DeepAgent executor cleanup registry', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'main', 'plugins', 'agent', 'deep-agent-executor.ts'), 'utf8');
+
+    expect(source).not.toContain('const closers: Array<() => Promise<void>> = []');
+    expect(source).not.toContain('Promise.allSettled(closers.map');
+  });
 });
