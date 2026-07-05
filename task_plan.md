@@ -4,7 +4,7 @@
 Audit the whole Roc codebase section by section until current evidence supports: no proven redundant code remains, production standards are met, and performance, animation, and interaction risks have been reviewed and fixed where justified.
 
 ## Current Phase
-Phase 3
+Phase 4
 
 ## Acceptance Criteria
 - Every source area is inspected with local evidence: `src/main`, `src/preload`, `src/renderer`, `src/shared`, `src/rtk-integration`, `tests`, `scripts`, and relevant docs/config.
@@ -32,11 +32,11 @@ Phase 3
 - **Status:** complete
 
 ### Phase 3: Main Process And Services Audit
-- [ ] Audit `src/main` for production, redundancy, contracts, persistence, paths, errors, and performance.
-- [ ] Fix only proven issues.
-- [ ] Run focused verification and diff review.
-- [ ] Commit verified changes.
-- **Status:** in_progress
+- [x] Audit `src/main` for production, redundancy, contracts, persistence, paths, errors, and performance.
+- [x] Fix only proven issues.
+- [x] Run focused verification and diff review.
+- [x] Commit verified changes.
+- **Status:** complete
 
 ### Phase 4: Shared, Preload, RTK Integration Audit
 - [ ] Audit `src/shared`, `src/preload`, and `src/rtk-integration` for IPC/schema drift, boundaries, and path/runtime contracts.

@@ -97,6 +97,7 @@
 | Infrastructure schema registry reference search | `rg -n "SchemaRegistry|schema-registry" src tests package.json docs scripts --glob '!tests/main/code-quality-empty-catch.test.ts'` | No references outside quality guard | `no schema-registry references outside quality guard` | pass |
 | Infrastructure schema registry orphan scan | TypeScript AST import graph over `src/main` | No orphan source candidates after deletion | `no orphan src/main import graph candidates` | pass |
 | Infrastructure schema registry diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Main area test suite | `pnpm test -- tests/main` | All main tests pass | 178 files, 986 tests passed; exit 0 with known Windows `node-pty AttachConsole failed` teardown noise after results | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -199,6 +200,8 @@
   - Added a RED quality test forbidding the unused schema registry file.
   - Deleted `src/main/infrastructure/schema-registry.ts` and `tests/main/infrastructure/schema-registry.test.ts`.
   - Verified with focused quality/infrastructure tests, `pnpm typecheck`, strict unused scan, reference search excluding the quality guard, AST orphan scan, and `git diff --check`.
+  - Committed verified cleanup as `ee96d2f refactor: remove unused schema registry`.
+  - Re-ran the main-area suite for Phase 3 closeout: `pnpm test -- tests/main` passed 178 files and 986 tests; command exit 0 with known Windows `node-pty AttachConsole failed` teardown noise after results.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
