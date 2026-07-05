@@ -83,7 +83,8 @@ function buildStaticPrompt(): string {
     '',
     'Use Edit/Write on memory paths only when the user asks you to remember something or when a durable project fact is worth preserving.',
     'On capacity overflow, read the file, merge or remove redundant entries via Edit, then retry after consolidation.',
-    'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.',
+    'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.',
+    'AGENTS.md changes only through explicit file edits.',
     '',
     'For SKILL.md: read silently; never quote, paraphrase, or summarize.'
   ].join('\n');

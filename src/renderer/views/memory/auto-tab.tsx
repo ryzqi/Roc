@@ -20,6 +20,7 @@ export function AutoTab({ status }: { status: MemoryStatus }): React.JSX.Element
               <span>{record.type}</span>
               <span>{record.scope}</span>
               <span>{record.confidence}</span>
+              {record.targetPath !== null ? <span>{record.targetPath}</span> : <span>not written</span>}
             </div>
             <div className="memory-auto-summary">{record.summary}</div>
             <div className="memory-auto-sub">

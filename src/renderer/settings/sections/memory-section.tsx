@@ -49,7 +49,7 @@ export function MemorySection({
       </div>
       <div className="settings-form">
         <p className="card-hint">
-          这里只管理 DeepAgents native memory 的容量、安全扫描和会话回忆保留期；具体文件在记忆中心编辑。
+          这里只管理 DeepAgents native memory 的容量、安全扫描、自动记忆和会话回忆保留期；USER.md 仅接受高置信直接用户偏好自动写入，具体文件在记忆中心编辑。
         </p>
         <div className="settings-section-group">
           <h3 className="settings-group-title">会话回忆</h3>

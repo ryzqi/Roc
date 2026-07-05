@@ -186,6 +186,7 @@ describe('MemoryView file editor', () => {
 
     expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('workspace_fact');
     expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('accepted');
+    expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('/memory/workspaces/current/MEMORY.md');
     expect(container.querySelector('[data-testid="memory-auto-records"]')?.textContent).toContain('Auto memory writes use typed candidates.');
   });
 });
