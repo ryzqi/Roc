@@ -105,6 +105,15 @@
 | Phase 4 strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Phase 4 IPC drift check | `pnpm check:ipc` | Generated IPC files current | `IPC generated files are current.` exit 0 | pass |
 | Phase 4 diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| ChatComposer click RED | `pnpm test -- tests/renderer/chat-composer.test.ts` | New click interaction test fails on current implementation | Failed because `aria-expanded` was `null` before trigger click path existed | fail-expected |
+| ChatComposer focus RED | `pnpm test -- tests/renderer/chat-composer.test.ts` | New focus interaction test fails on current implementation | Failed because tool popover stayed `null` after trigger focus | fail-expected |
+| ChatComposer focus-leave RED | `pnpm test -- tests/renderer/chat-composer.test.ts` | New focus-leave test fails before blur close handling | Failed because `chat-tool-popover` remained after focus moved to submit | fail-expected |
+| ChatComposer interaction GREEN | `pnpm test -- tests/renderer/chat-composer.test.ts` | Composer tests pass | 1 file, 12 tests passed | pass |
+| Chat renderer interaction slice | `pnpm test -- tests/renderer/chat-composer.test.ts tests/renderer/chat-composer-icons.test.ts tests/renderer/chat-view.test.ts tests/renderer/chat-view.slash-skill.test.tsx tests/renderer/features/chat-feature.test.tsx` | Related chat renderer tests pass | 5 files, 28 tests passed | pass |
+| Renderer suite after ChatComposer interaction fix | `pnpm test -- tests/renderer` | Renderer tests pass | 77 files, 329 tests passed | pass |
+| Phase 5 ChatComposer typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Phase 5 ChatComposer strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Phase 5 ChatComposer diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -272,6 +281,30 @@
   - `progress.md` (updated)
   - `task_plan.md` (updated)
 
+### Phase 5: Renderer UI, Animation, Interaction Audit
+- **Status:** in_progress
+- **Started:** 2026-07-05
+- Actions taken:
+  - Resumed from session catchup; it detected 58 unsynced messages and recommended `git diff --stat` plus planning file readback.
+  - Re-read `task_plan.md`, `progress.md`, and `findings.md`.
+  - Confirmed `git status --short --branch` reports branch `main` with no changed files before Phase 5 edits.
+  - Confirmed `git diff --stat` produced no output before Phase 5 edits.
+  - Recorded the Phase 5 path correction: `src/renderer/styles.css` does not exist; the renderer style entry is `src/renderer/styles/index.css`.
+  - Found `ChatComposer` tool, skill, and model popovers opened from hover only; trigger buttons had no click/focus opening path or expanded state.
+  - Added RED tests for click opening, focus opening, and focus-leave closing.
+  - Added shared `openComposerPopover()` / focus-leave close handling in `ChatComposer`, preserving hover behavior and refreshing tools/skills only when opening a different capability popover.
+  - Added `aria-expanded` to tool, skill, and model trigger buttons.
+  - Removed an inaccurate draft `aria-haspopup="dialog"` during risk review because the popovers are not dialog surfaces.
+  - Verified with focused composer tests, related chat renderer tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
+  - Responsive smoke not run for this slice because no CSS, layout sizing, or responsive breakpoint code changed.
+  - Self-review found no blocking issue: no `aria-haspopup` remains, `aria-expanded` is covered, same-popover reopen does not repeat refresh calls, and focus-leave close is covered.
+- Files created/modified:
+  - `task_plan.md` (updated)
+  - `findings.md` (updated)
+  - `progress.md` (updated)
+  - `src/renderer/chat/chat-composer.tsx` (updated)
+  - `tests/renderer/chat-composer.test.ts` (updated)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
@@ -289,6 +322,8 @@
 | 2026-07-05 | Repeated the unsupported PowerShell glob path form in a broader `rg` command and hit `os error 123` again | 2 | Switched to `rg --glob` and explicit paths for subsequent searches |
 | 2026-07-05 | First Anthropic cache-control RED test read the first normalized provider and failed on `undefined` options instead of the stale field | 1 | Updated the test to find the provider by id before asserting stale option stripping |
 | 2026-07-05 | Used unsupported PowerShell glob path `tests/main/config-service*.test.ts` in an `rg` command and hit `os error 123` | 3 | Stopped using path globs directly in PowerShell arguments; used explicit files or `rg --glob` |
+| 2026-07-05 | Phase 5 initially tried to read nonexistent `src/renderer/styles.css` | 1 | Confirmed the real renderer style entry is `src/renderer/styles/index.css` |
+| 2026-07-05 | Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the interactive harness with `React.createElement` instead of JSX |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

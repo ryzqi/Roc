@@ -47,6 +47,8 @@
 - `src/main/infrastructure/schema-registry.ts` had no production import-graph inbound edge and full-text search found only the source file plus its dedicated test. Current plugin schemas are applied through active plugin/bootstrap paths instead, so the registry was unused infrastructure code.
 - Phase 4 IPC/preload/RTK scan found no generated IPC drift, no raw preload wildcard/capability exposure, and RTK integration behavior was already covered by dedicated `tests/rtk-integration` tests.
 - `ProviderOptions.anthropicCacheControl` was a retired prompt-cache constructor option with no runtime/UI reader; references existed only in the shared type and config Zod schema. Keeping it allowed stale provider settings to persist unused config.
+- Phase 5 renderer style entry is `src/renderer/styles/index.css`; `src/renderer/styles.css` does not exist.
+- `ChatComposer` tool, skill, and model popovers were hover-only: the trigger buttons lacked click/focus opening paths and `aria-expanded`. The triggers now open on click/focus, keep focus inside the anchor, close after focus leaves, and still refresh tool/skill options when a different capability popover opens.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -87,3 +89,4 @@
 | `src/main` area closeout | complete | `pnpm test -- tests/main` passed 178 files and 986 tests on the current worktree; exit 0 with known Windows `node-pty AttachConsole failed` teardown noise | Start shared/preload/RTK audit |
 | shared/preload/RTK boundary audit | complete | `pnpm check:ipc` passed; focused shared/RTK/preload/config tests passed; no raw preload wildcard IPC or RTK contract drift found | Start renderer audit |
 | retired Anthropic cache-control option | complete | RED config test proved `anthropicCacheControl` was preserved; GREEN test proves validation now strips it while preserving supported Anthropic options | Start renderer audit |
+| `src/renderer` ChatComposer popover interaction | complete | RED click/focus/focus-leave tests reproduced hover-only and sticky-focus behavior; GREEN focused chat tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |

@@ -1,7 +1,7 @@
 import type { LoadedState } from '../loaded-state';
 import { unwrap } from '../loaded-state';
 import { useState } from 'react';
-import type { ClipboardEvent, Dispatch, DragEvent, SetStateAction } from 'react';
+import type { ClipboardEvent, Dispatch, DragEvent, FocusEvent, SetStateAction } from 'react';
 import type { McpServerSnapshot, SettingsSnapshot, SkillSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { buildSettingsSaveRequest, buildSettingsStateUpdate, setDefaultModelInSettingsSaveRequest } from '../settings-model';
@@ -168,6 +168,25 @@ export function ChatComposer({
       });
   }
 
+  function openComposerPopover(popover: Exclude<ComposerPopover, null>): void {
+    if ((popover === 'tools' || popover === 'skills') && activeComposerPopover !== popover) {
+      refreshCapabilityOptions();
+    }
+    if (activeComposerPopover !== popover) {
+      onActiveComposerPopoverChange(popover);
+    }
+  }
+
+  function closeComposerPopoverAfterFocusLeaves(
+    event: FocusEvent<HTMLDivElement>,
+    popover: Exclude<ComposerPopover, null>
+  ): void {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    onActiveComposerPopoverChange((current) => (current === popover ? null : current));
+  }
+
   async function selectAttachmentsFromDialog(): Promise<void> {
     try {
       const selection = await client.api.files.selectFromDialog();
@@ -318,17 +337,18 @@ export function ChatComposer({
           </button>
           <div
             className="composer-popover-anchor"
-            onMouseEnter={() => {
-              refreshCapabilityOptions();
-              onActiveComposerPopoverChange('tools');
-            }}
+            onMouseEnter={() => openComposerPopover('tools')}
             onMouseLeave={() => onActiveComposerPopoverChange((current) => (current === 'tools' ? null : current))}
+            onBlur={(event) => closeComposerPopoverAfterFocusLeaves(event, 'tools')}
           >
             <button
               className={state.selectedMcpServers.length > 0 ? 'composer-tool composer-tool--tools active' : 'composer-tool composer-tool--tools'}
               data-testid="chat-tool-trigger"
               type="button"
               aria-label="工具"
+              aria-expanded={activeComposerPopover === 'tools'}
+              onClick={() => openComposerPopover('tools')}
+              onFocus={() => openComposerPopover('tools')}
             >
               <ComposerActionIcon kind="tools" />
             </button>
@@ -390,17 +410,18 @@ export function ChatComposer({
           </div>
           <div
             className="composer-popover-anchor"
-            onMouseEnter={() => {
-              refreshCapabilityOptions();
-              onActiveComposerPopoverChange('skills');
-            }}
+            onMouseEnter={() => openComposerPopover('skills')}
             onMouseLeave={() => onActiveComposerPopoverChange((current) => (current === 'skills' ? null : current))}
+            onBlur={(event) => closeComposerPopoverAfterFocusLeaves(event, 'skills')}
           >
             <button
               className={state.selectedSkills.length > 0 ? 'composer-tool composer-tool--skills active' : 'composer-tool composer-tool--skills'}
               data-testid="chat-skill-trigger"
               type="button"
               aria-label="技能"
+              aria-expanded={activeComposerPopover === 'skills'}
+              onClick={() => openComposerPopover('skills')}
+              onFocus={() => openComposerPopover('skills')}
             >
               <ComposerActionIcon kind="skills" />
             </button>
@@ -464,10 +485,19 @@ export function ChatComposer({
           </div>
           <div
             className="composer-popover-anchor"
-            onMouseEnter={() => onActiveComposerPopoverChange('models')}
+            onMouseEnter={() => openComposerPopover('models')}
             onMouseLeave={() => onActiveComposerPopoverChange((current) => (current === 'models' ? null : current))}
+            onBlur={(event) => closeComposerPopoverAfterFocusLeaves(event, 'models')}
           >
-            <button className="model-pill model-pill--composer" data-testid="chat-model-trigger" type="button" aria-label="模型">
+            <button
+              className="model-pill model-pill--composer"
+              data-testid="chat-model-trigger"
+              type="button"
+              aria-label="模型"
+              aria-expanded={activeComposerPopover === 'models'}
+              onClick={() => openComposerPopover('models')}
+              onFocus={() => openComposerPopover('models')}
+            >
               <ComposerActionIcon kind="model" />
               <span className="model-pill-copy">{composerModelLabel}</span>
               <span aria-hidden="true" className="model-pill-chevron">

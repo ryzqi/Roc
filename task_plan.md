@@ -50,7 +50,7 @@ Phase 5
 - [ ] Fix only proven issues without adding unrelated workflow or fields.
 - [ ] Run focused renderer verification and responsive smoke when needed.
 - [ ] Commit verified changes.
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase 6: Tests, Scripts, Resources, Docs Audit
 - [ ] Audit tests for stale assertions, weak coverage, duplicates, and obsolete fixtures.
@@ -85,6 +85,8 @@ Phase 5
 |-------|---------|------------|
 | PowerShell `rg` path used unsupported glob form `tests\main\plugins\agent\deep-agent-executor*.test.ts` and returned `os error 123` | 1 | Re-ran with explicit file paths instead of shell glob path syntax |
 | Repeated the unsupported PowerShell glob path form in a broader `rg` command and hit `os error 123` again | 2 | Switched to `rg --glob` and explicit paths for subsequent searches |
+| Phase 5 initially tried to read nonexistent `src/renderer/styles.css` | 1 | Confirmed the real renderer style entry is `src/renderer/styles/index.css` |
+| Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the harness with `React.createElement` to match the file extension |
 
 ## Notes
 - Re-read this plan before each area transition.
