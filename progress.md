@@ -136,6 +136,10 @@
 | Async-state cleanup typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Async-state cleanup strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Async-state cleanup diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Phase 5 renderer closeout suite | `pnpm test -- tests/renderer` | Renderer tests pass on current HEAD | 78 files, 332 tests passed | pass |
+| Phase 5 renderer closeout typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Phase 5 renderer closeout strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Phase 5 renderer closeout diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -304,7 +308,7 @@
   - `task_plan.md` (updated)
 
 ### Phase 5: Renderer UI, Animation, Interaction Audit
-- **Status:** in_progress
+- **Status:** complete
 - **Started:** 2026-07-05
 - Actions taken:
   - Resumed from session catchup; it detected 58 unsynced messages and recommended `git diff --stat` plus planning file readback.
@@ -335,6 +339,8 @@
   - Confirmed `async-state.ts` had no production references; only `tests/renderer/shared/async-state.test.ts` imported it.
   - Added a RED cleanup guard for the unused async-state helper, then deleted the helper and its dedicated test.
   - Re-ran old symbol search, renderer import graph, renderer tests, `pnpm typecheck`, strict unused scan, and `git diff --check`.
+  - Phase 5 closeout verification passed on current HEAD: renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
+  - Responsive smoke was not run in Phase 5 because completed fixes did not alter responsive breakpoints, fixed-format layout dimensions, or viewport-dependent placement; renderer Vitest covered the interaction and CSS contracts directly.
 - Files created/modified:
   - `task_plan.md` (updated)
   - `findings.md` (updated)

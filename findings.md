@@ -98,3 +98,4 @@
 | `src/renderer` workbench resize separator keyboard controls | complete | RED separator tests reproduced missing keyboard resize; GREEN focused workbench tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |
 | `src/renderer` reduced transparency backdrop | complete | RED CSS contract reproduced unused `data-reduced-transparency`; GREEN animation config tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |
 | `src/renderer` async-state cleanup | complete | Import graph and full-text search proved no production inbound references; RED cleanup guard, GREEN renderer tests/typecheck/strict unused/diff check pass | Continue renderer audit |
+| `src/renderer` area closeout | complete | `pnpm test -- tests/renderer`, `pnpm typecheck`, strict unused scan, and `git diff --check` pass on current HEAD | Start tests/scripts/resources/docs audit |

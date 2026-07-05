@@ -46,11 +46,11 @@ Phase 5
 - **Status:** complete
 
 ### Phase 5: Renderer UI, Animation, Interaction Audit
-- [ ] Audit `src/renderer` for layout, interaction, animation, rendering cost, global style risk, and stale UI paths.
-- [ ] Fix only proven issues without adding unrelated workflow or fields.
-- [ ] Run focused renderer verification and responsive smoke when needed.
-- [ ] Commit verified changes.
-- **Status:** in_progress
+- [x] Audit `src/renderer` for layout, interaction, animation, rendering cost, global style risk, and stale UI paths.
+- [x] Fix only proven issues without adding unrelated workflow or fields.
+- [x] Run focused renderer verification and responsive smoke when needed.
+- [x] Commit verified changes.
+- **Status:** complete
 
 ### Phase 6: Tests, Scripts, Resources, Docs Audit
 - [ ] Audit tests for stale assertions, weak coverage, duplicates, and obsolete fixtures.
