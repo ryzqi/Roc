@@ -38,6 +38,8 @@
 - `TaskScheduler` capped long timers with `maxTimeoutDelayMs` but did not re-check `nextRunAt` when an intermediate timer slice elapsed. Long-horizon tasks could start early; the fire path now reschedules until the task is actually due.
 - `src/main/services/langchain-nvidia-probe.ts` had a local `anySignal()` fallback and double assertion around `AbortSignal.any`. Current runtime check reports Node `v25.7.0` with native `AbortSignal.any` and `AbortSignal.timeout`; `package.json` pins `@types/node` `26.1.0`, Electron `42.4.1`, and TypeScript `6.0.3`.
 - NVIDIA probe cancellation now uses native `AbortSignal.any` directly. Behavior coverage proves first SSE delta returns and cancels the reader, internal hard timeout maps to `provider_request_timeout`, and caller abort remains an `AbortError` instead of being misclassified as provider timeout.
+- DeepAgents reference check for this runtime/recovery pass: continuity-sensitive paths should preserve a stable `thread_id`, use the framework checkpointer/backend semantics instead of ad hoc state, and keep tool/backend routing boundaries explicit.
+- `executeWithProviderRequestRetry()` checked abort before each attempt and while waiting for an abort event during backoff, but `delayWithAbort()` did not handle a signal already aborted before the listener was attached. If an operation aborted the signal while throwing a retryable provider failure, cancellation could wait for the full retry backoff before surfacing.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -71,3 +73,4 @@
 | `src/main` infrastructure plugin logging | complete | RED quality test found `appendFileSync` in `InfrastructureLogger.append`; GREEN focused tests/typecheck/strict unused pass; kernel runtime closes logger on shutdown | Continue `src/main` production audit |
 | `src/main` task scheduler long-delay timers | complete | RED scheduler test proved a future task fired after the first max-timeout slice; GREEN focused tests/typecheck/strict unused pass | Continue `src/main` production audit |
 | `src/main` NVIDIA probe abort composition | complete | RED quality test found local `function anySignal`; GREEN direct probe tests, retry-layer test, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |
+| `src/main` provider retry abort backoff | complete | RED test showed an already-aborted signal stayed pending before retry backoff; GREEN provider retry tests, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |

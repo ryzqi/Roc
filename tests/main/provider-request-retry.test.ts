@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderTestServices, type ProviderTestServices } from './provider-test-fixture';
 import { RocDomainError } from '../../src/main/services/errors';
+import { executeWithProviderRequestRetry } from '../../src/main/services/provider-request-retry';
 
 let services: ProviderTestServices;
 
@@ -177,5 +178,38 @@ describe('Provider request retry behavior', () => {
       modelId: 'model-tools',
       error: null
     });
+  });
+
+  it('aborts immediately when the signal is aborted before retry backoff', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let capturedError: unknown = null;
+    const operation = vi.fn(async () => {
+      controller.abort();
+      throw new Error('Connection error.');
+    });
+
+    const resultPromise = executeWithProviderRequestRetry(operation, {
+      signal: controller.signal
+    });
+    const observedResult = resultPromise.then(
+      () => {
+        throw new Error('expected_retry_to_abort');
+      },
+      (error: unknown) => {
+        capturedError = error;
+      }
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(capturedError).toMatchObject({ name: 'AbortError' });
+      expect(operation).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await vi.runAllTimersAsync();
+      await observedResult.catch(() => undefined);
+    }
   });
 });

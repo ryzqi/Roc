@@ -72,6 +72,12 @@
 | NVIDIA probe strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | NVIDIA probe source search | `rg -n "function anySignal|AbortSignal as unknown as|AbortSignal\\.any|AbortSignal\\.timeout" src\main\services\langchain-nvidia-probe.ts tests\main\code-quality-empty-catch.test.ts tests\main\langchain-nvidia-probe.test.ts` | No local fallback or double assertion; native API call remains | Only native `AbortSignal.any` and quality-test anchor matched | pass |
 | NVIDIA probe diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Provider retry abort RED | `pnpm test -- tests/main/provider-request-retry.test.ts` | New abort-before-backoff test fails on current implementation | 1 failed, 6 passed; captured error remained `null` after 0 ms | fail-expected |
+| Provider retry abort GREEN | `pnpm test -- tests/main/provider-request-retry.test.ts` | Provider retry suite passes | 1 file, 7 tests passed | pass |
+| Provider retry abort typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Provider retry abort strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Provider retry abort source search | `rg -n "function delayWithAbort|signal\\?\\.aborted|addEventListener\\(\\s*'abort'|aborts immediately when the signal" src\main\services\provider-request-retry.ts tests\main\provider-request-retry.test.ts` | Backoff helper has explicit already-aborted guard and test anchor | Guard present in `delayWithAbort`; test anchor present | pass |
+| Provider retry abort diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -144,6 +150,13 @@
   - Replaced the local `anySignal()` helper with native `AbortSignal.any()` and removed the double assertion fallback.
   - Verified with direct probe tests, quality test, provider retry test, `pnpm typecheck`, strict unused scan, source search, and `git diff --check`.
   - Reviewed the diff for abort classification, retry-layer behavior, source compatibility, and test quality risks; no blocking issue found.
+  - Loaded DeepAgents core/memory/orchestration references for the next runtime continuity audit, focusing on thread continuity, checkpointer/backend semantics, and explicit filesystem/tool routing boundaries.
+  - Read provider retry, recovery policy, runtime recovery, provider runtime, and related tests.
+  - Found `executeWithProviderRequestRetry()` could enter retry backoff when its `AbortSignal` had already been aborted by the failed attempt.
+  - Added a RED test proving abort-before-backoff stayed pending instead of surfacing `AbortError` immediately.
+  - Updated `delayWithAbort()` to reject immediately when the signal is already aborted.
+  - Verified with provider retry tests, `pnpm typecheck`, strict unused scan, source search, and `git diff --check`.
+  - Reviewed the provider retry diff for normal retry regression, metrics coverage, cancellation semantics, and test cleanup risks; no blocking issue found.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -173,6 +186,8 @@
   - `tests/main/plugins/task/scheduler.test.ts` (updated)
   - `src/main/services/langchain-nvidia-probe.ts` (updated)
   - `tests/main/langchain-nvidia-probe.test.ts` (created)
+  - `src/main/services/provider-request-retry.ts` (updated)
+  - `tests/main/provider-request-retry.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -200,5 +215,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt`; NVIDIA probe cancellation can use native `AbortSignal.any` without local fallback |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, removed duplicate error normalization helpers, and replaced NVIDIA probe abort composition fallback with the native API |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt`; NVIDIA probe cancellation can use native `AbortSignal.any` without local fallback; provider retry backoff must reject immediately when its signal is already aborted |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, removed duplicate error normalization helpers, replaced NVIDIA probe abort composition fallback with the native API, and fixed provider retry abort-before-backoff latency |

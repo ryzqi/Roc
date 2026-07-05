@@ -213,6 +213,9 @@ function delayWithAbort(delayMs: number, signal: AbortSignal | undefined): Promi
   if (delayMs <= 0) {
     return Promise.resolve();
   }
+  if (signal?.aborted === true) {
+    return Promise.reject(createAbortError());
+  }
 
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
