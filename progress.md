@@ -41,6 +41,11 @@
 | toLogError typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | toLogError strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | toLogError duplicate search | `rg -n "function toLogError|export function toLogError|toLogError\\(" src/main` | One implementation, callers only elsewhere | One export in `services/errors.ts`; callers in `index.ts`, `windows-host-service.ts`, `register-ipc.ts`, and `toRocError` | pass |
+| Terminal append RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails on sync terminal output append | Failed because `terminal-session-service.ts` contained `appendFileSync` | fail-expected |
+| Terminal append GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/terminal-session-service.test.ts tests/main/terminal-session-service-late-output.test.ts` | Relevant tests pass | 3 files, 9 tests passed; command exit 0 with `node-pty AttachConsole failed` teardown noise after results | pass |
+| Terminal append typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Terminal append strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Terminal append production search | `rg -n "appendFileSync" src/main/services/terminal-session-service.ts` | No matches | No matches, exit 1 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -82,6 +87,12 @@
   - Added RED test for shared `toLogError` export in `services/errors.ts`.
   - Exported `toLogError` from `services/errors.ts`, reused it in `toRocError`, `register-ipc.ts`, `windows-host-service.ts`, and `index.ts`, and removed duplicate local implementations.
   - Verified with focused tests, typecheck, strict unused scan, and duplicate search.
+  - Committed verified error-normalization cleanup as `0fd8e3e refactor: centralize main error normalization`.
+  - Found terminal output logging used `appendFileSync` inside the PTY output callback.
+  - Added RED quality test that forbids synchronous terminal output log appends.
+  - Replaced per-chunk `appendFileSync` with a per-session `WriteStream`, and closed it on exit, explicit close, and shutdown.
+  - Added behavior coverage proving active PTY output still emits an event and persists into the session log.
+  - Verified with focused tests, typecheck, strict unused scan, and production source search.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -100,6 +111,7 @@
   - `src/main/index.ts` (updated)
   - `src/main/ipc/register-ipc.ts` (updated)
   - `src/main/windows-host-service.ts` (updated)
+  - `src/main/services/terminal-session-service.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -107,6 +119,8 @@
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
 | 2026-07-05 | First type cleanup made `unknown[]` handler and `unknown` tool alias too strict; `pnpm typecheck` failed on IPC handlers and DynamicStructuredTool variance | 1 | Switched IPC handler to no-`any` bivariant boundary type and erased tool schema output with `never` while keeping invoke input `unknown`; added `SettingsSaveRequest` annotation |
+| 2026-07-05 | Focused terminal tests printed `node-pty AttachConsole failed` after Vitest reported pass | 1 | Treated as known Windows node-pty teardown noise because command exit code was 0 and tests passed |
+| 2026-07-05 | New terminal log persistence test failed with ENOENT while async stream had not created the file yet | 1 | Updated `waitFor` to treat transient predicate errors as not-yet-satisfied and retry until timeout |
 
 ## 5-Question Reboot Check
 | Question | Answer |
@@ -114,5 +128,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment file reads no longer block via sync fs APIs; error normalization now has one implementation |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image attachment I/O, and removed duplicate error normalization helpers |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment and terminal output file writes no longer use sync fs APIs on hot paths; error normalization now has one implementation |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image and terminal output I/O, and removed duplicate error normalization helpers |

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,6 +46,35 @@ afterEach(() => {
 });
 
 describe('terminal session service late output handling', () => {
+  it('writes active PTY output to the session log and emits the output event', async () => {
+    const paths = new RocPaths(root);
+    paths.ensureTree();
+    const configService = new ConfigService(paths);
+    configService.initialize();
+    const workspaceService = new WorkspaceService(configService);
+    workspaceService.selectWorkspace(workspaceRoot);
+    const service = new TerminalSessionService(paths, workspaceService);
+    const outputEvents: string[] = [];
+    const dispose = service.onOutput((event) => {
+      outputEvents.push(event.data);
+    });
+    const session = service.createSession({
+      cwd: workspaceRoot,
+      cols: 80,
+      rows: 24
+    });
+    if (onDataHandler === null) {
+      throw new Error('on_data_handler_missing');
+    }
+
+    onDataHandler('active output');
+
+    expect(outputEvents).toEqual(['active output']);
+    await waitFor(() => readFileSync(join(paths.terminalDir, 'logs', `${session.id}.log`), 'utf8') === 'active output');
+    dispose();
+    service.closeSession({ sessionId: session.id });
+  });
+
   it('ignores PTY output that arrives after a session is closed', () => {
     const paths = new RocPaths(root);
     paths.ensureTree();
@@ -66,3 +95,22 @@ describe('terminal session service late output handling', () => {
     expect(() => onDataHandler?.('late output')).not.toThrow();
   });
 });
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  let lastError: unknown = null;
+  while (Date.now() < deadline) {
+    try {
+      if (predicate()) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  if (lastError !== null) {
+    throw lastError;
+  }
+  expect(predicate()).toBe(true);
+}

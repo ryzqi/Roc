@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
-import { appendFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { spawn } from 'node-pty';
@@ -20,9 +19,10 @@ import type { WorkspaceService } from './workspace-service';
 type PtyInstance = ReturnType<typeof spawn>;
 
 type SessionRecord = {
+  logStream: WriteStream;
+  logStreamClosed: boolean;
   pty: PtyInstance;
   snapshot: TerminalSessionSnapshot;
-  logPath: string;
 };
 
 export class TerminalSessionService {
@@ -52,6 +52,7 @@ export class TerminalSessionService {
     const sessionId = randomUUID();
     const logPath = join(this.paths.terminalDir, 'logs', `${sessionId}.log`);
     mkdirSync(join(this.paths.terminalDir, 'logs'), { recursive: true });
+    const logStream = createWriteStream(logPath, { flags: 'a', encoding: 'utf8' });
     const pty = spawn(shell.file, shell.args, {
       name: 'xterm-color',
       cols: this.validCols(request.cols),
@@ -72,16 +73,23 @@ export class TerminalSessionService {
       exitCode: null
     };
     const record: SessionRecord = {
+      logStream,
+      logStreamClosed: false,
       pty,
-      snapshot,
-      logPath
+      snapshot
     };
+    logStream.on('error', () => {
+      record.logStreamClosed = true;
+    });
 
     pty.onData((data) => {
-      if (!this.sessions.has(sessionId)) {
+      const activeRecord = this.sessions.get(sessionId);
+      if (activeRecord === undefined) {
         return;
       }
-      appendFileSync(logPath, data, 'utf8');
+      if (!activeRecord.logStreamClosed) {
+        activeRecord.logStream.write(data, 'utf8');
+      }
       const payload: TerminalSessionOutputEvent = { sessionId, data };
       this.events.emit('output', payload);
     });
@@ -93,6 +101,7 @@ export class TerminalSessionService {
       };
       const payload: TerminalSessionExitEvent = { sessionId, exitCode };
       this.events.emit('exit', payload);
+      this.closeLogStream(record);
       this.sessions.delete(sessionId);
     });
 
@@ -118,6 +127,7 @@ export class TerminalSessionService {
   closeSession(request: TerminalSessionCloseRequest): { closed: true } {
     const record = this.requireSession(request.sessionId);
     record.pty.kill();
+    this.closeLogStream(record);
     this.sessions.delete(request.sessionId);
     return { closed: true };
   }
@@ -125,6 +135,7 @@ export class TerminalSessionService {
   shutdown(): void {
     for (const [sessionId, record] of this.sessions.entries()) {
       record.pty.kill();
+      this.closeLogStream(record);
       this.sessions.delete(sessionId);
     }
   }
@@ -151,6 +162,14 @@ export class TerminalSessionService {
       });
     }
     return record;
+  }
+
+  private closeLogStream(record: SessionRecord): void {
+    if (record.logStreamClosed) {
+      return;
+    }
+    record.logStreamClosed = true;
+    record.logStream.end();
   }
 
   private resolveShell(): { file: string; args: string[]; label: string } {

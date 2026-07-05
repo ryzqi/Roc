@@ -97,4 +97,10 @@ describe('source code quality', () => {
   it('does not use explicit any types in main-process production source', () => {
     expect(findExplicitAnyTypes()).toEqual([]);
   });
+
+  it('does not synchronously append terminal output logs on the PTY output path', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'main', 'services', 'terminal-session-service.ts'), 'utf8');
+
+    expect(source).not.toContain('appendFileSync');
+  });
 });
