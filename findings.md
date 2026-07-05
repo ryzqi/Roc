@@ -30,6 +30,7 @@
 - `src/main` production source had explicit `any` type keywords in IPC handler and LangChain dynamic tool boundary types. A new AST-based quality test reproduced the issue before the fix.
 - Empty catch handler scan has direct coverage in `tests/main/code-quality-empty-catch.test.ts`; current focused run passes.
 - Post-fix text search for `\bany\b` in `src/main` only reports `AbortSignal.any` API property references in `src/main/services/langchain-nvidia-probe.ts`, not explicit `any` type keywords.
+- `prepareChatImageAttachments()` was on the `AgentRuntime.startRun()` path and used `statSync/readFileSync` for image files. It now uses `fs/promises` and `startRun()` awaits the same prepared attachment contract.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -56,3 +57,4 @@
 | Recovery/planning | complete | Planning files created because none existed; rules and command sources read | Commit baseline tracking |
 | Automated baseline scans | complete | Strict unused scan, typecheck, and IPC check exited 0 | Start `src/main` audit |
 | `src/main` explicit any audit | complete | RED quality test found 19 explicit `any` type keywords; GREEN test now passes | Continue `src/main` production audit |
+| `src/main` chat image attachment I/O | complete | Focused chat image/runtime tests, typecheck, strict unused pass; no `readFileSync/statSync` remains in attachment reader | Continue `src/main` production audit |

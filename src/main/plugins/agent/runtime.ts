@@ -138,7 +138,7 @@ export class AgentPluginRuntime {
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
     const capabilityPreview =
       this.options.capabilityPreviewProvider === undefined ? undefined : await this.getCapabilityPreview(request.enabledCapabilities);
-    const preparedAttachments = prepareChatImageAttachments(request.attachments);
+    const preparedAttachments = await prepareChatImageAttachments(request.attachments);
     const run = this.options.repository.createTaskRun({
       attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
       enabledCapabilities: request.enabledCapabilities,

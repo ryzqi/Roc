@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
 
 import type {
@@ -24,9 +24,9 @@ export type ChatPreparedImageAttachments = {
   images: ChatValidatedImageAttachment[];
 };
 
-export function prepareChatImageAttachments(
+export async function prepareChatImageAttachments(
   attachments: readonly ChatImageAttachment[] | undefined
-): ChatPreparedImageAttachments {
+): Promise<ChatPreparedImageAttachments> {
   if (attachments === undefined || attachments.length === 0) {
     return { metadata: [], images: [] };
   }
@@ -34,14 +34,17 @@ export function prepareChatImageAttachments(
     throw new Error('chat_image_too_many');
   }
 
-  const images = attachments.map(prepareOneAttachment);
+  const images: ChatValidatedImageAttachment[] = [];
+  for (const attachment of attachments) {
+    images.push(await prepareOneAttachment(attachment));
+  }
   return {
     metadata: images.map(({ base64: _base64, ...metadata }) => metadata),
     images
   };
 }
 
-function prepareOneAttachment(attachment: ChatImageAttachment): ChatValidatedImageAttachment {
+async function prepareOneAttachment(attachment: ChatImageAttachment): Promise<ChatValidatedImageAttachment> {
   if (attachment.kind !== 'image') {
     throw new Error('chat_image_unsupported_type');
   }
@@ -57,32 +60,32 @@ function prepareOneAttachment(attachment: ChatImageAttachment): ChatValidatedIma
     throw new Error('chat_image_source_invalid');
   }
   if (hasPath) {
-    return readPathAttachment(attachment as ChatImageAttachment & { path: string });
+    return await readPathAttachment(attachment as ChatImageAttachment & { path: string });
   }
   return readDataAttachment(attachment as ChatImageAttachment & { data: string });
 }
 
-function readPathAttachment(attachment: ChatImageAttachment & { path: string }): ChatValidatedImageAttachment {
+async function readPathAttachment(attachment: ChatImageAttachment & { path: string }): Promise<ChatValidatedImageAttachment> {
   const mediaType = extensionMediaTypes.get(extname(attachment.path).toLowerCase());
   if (mediaType === undefined || mediaType !== attachment.mediaType) {
     throw new Error('chat_image_unsupported_type');
   }
-  const stat = statSync(attachment.path);
-  if (!stat.isFile()) {
+  const fileStat = await stat(attachment.path);
+  if (!fileStat.isFile()) {
     throw new Error('chat_image_unreadable');
   }
-  if (stat.size === 0) {
+  if (fileStat.size === 0) {
     throw new Error('chat_image_empty');
   }
-  if (stat.size > maxImageAttachmentBytes) {
+  if (fileStat.size > maxImageAttachmentBytes) {
     throw new Error('chat_image_too_large');
   }
-  const buffer = readFileSync(attachment.path);
+  const buffer = await readFile(attachment.path);
   return {
     kind: 'image',
     name: attachment.name,
     mediaType: attachment.mediaType,
-    sizeBytes: stat.size,
+    sizeBytes: fileStat.size,
     base64: buffer.toString('base64')
   };
 }

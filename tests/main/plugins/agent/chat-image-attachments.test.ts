@@ -5,13 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { prepareChatImageAttachments } from '../../../../src/main/plugins/agent/chat-image-attachments';
 
 describe('prepareChatImageAttachments', () => {
-  it('reads file attachments and returns metadata plus base64', () => {
+  it('reads file attachments and returns metadata plus base64', async () => {
     const root = mkdtempSync(join(tmpdir(), 'roc-image-'));
     try {
       const filePath = join(root, 'sample.png');
       writeFileSync(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
-      const result = prepareChatImageAttachments([
+      const result = await prepareChatImageAttachments([
         {
           kind: 'image',
           source: 'file',
@@ -44,8 +44,8 @@ describe('prepareChatImageAttachments', () => {
     }
   });
 
-  it('accepts clipboard base64 data without persisting bytes', () => {
-    const result = prepareChatImageAttachments([
+  it('accepts clipboard base64 data without persisting bytes', async () => {
+    const result = await prepareChatImageAttachments([
       {
         kind: 'image',
         source: 'clipboard',
@@ -65,7 +65,7 @@ describe('prepareChatImageAttachments', () => {
     expect(result.images[0]?.base64).toBe(Buffer.from([1, 2, 3]).toString('base64'));
   });
 
-  it('rejects more than four images', () => {
+  it('rejects more than four images', async () => {
     const attachments = Array.from({ length: 5 }, (_, index) => ({
       kind: 'image' as const,
       source: 'clipboard' as const,
@@ -75,11 +75,11 @@ describe('prepareChatImageAttachments', () => {
       data: Buffer.from([index]).toString('base64')
     }));
 
-    expect(() => prepareChatImageAttachments(attachments)).toThrow('chat_image_too_many');
+    await expect(prepareChatImageAttachments(attachments)).rejects.toThrow('chat_image_too_many');
   });
 
-  it('rejects unsupported media types', () => {
-    expect(() =>
+  it('rejects unsupported media types', async () => {
+    await expect(
       prepareChatImageAttachments([
         {
           kind: 'image',
@@ -90,11 +90,11 @@ describe('prepareChatImageAttachments', () => {
           data: Buffer.from([1]).toString('base64')
         }
       ])
-    ).toThrow('chat_image_unsupported_type');
+    ).rejects.toThrow('chat_image_unsupported_type');
   });
 
-  it('rejects images over five megabytes', () => {
-    expect(() =>
+  it('rejects images over five megabytes', async () => {
+    await expect(
       prepareChatImageAttachments([
         {
           kind: 'image',
@@ -105,11 +105,11 @@ describe('prepareChatImageAttachments', () => {
           data: Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64')
         }
       ])
-    ).toThrow('chat_image_too_large');
+    ).rejects.toThrow('chat_image_too_large');
   });
 
-  it('rejects attachments with both path and data', () => {
-    expect(() =>
+  it('rejects attachments with both path and data', async () => {
+    await expect(
       prepareChatImageAttachments([
         {
           kind: 'image',
@@ -121,6 +121,6 @@ describe('prepareChatImageAttachments', () => {
           data: Buffer.from([1]).toString('base64')
         }
       ])
-    ).toThrow('chat_image_source_invalid');
+    ).rejects.toThrow('chat_image_source_invalid');
   });
 });

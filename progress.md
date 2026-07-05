@@ -31,6 +31,11 @@
 | Main typecheck after type cleanup | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Main strict unused after type cleanup | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Main focused tests after type cleanup | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/files-ipc.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/settings-ipc.test.ts tests/main/settings-ipc-hooks.test.ts tests/main/background-task-time-tool.test.ts tests/main/services/deep-agent/tools.test.ts tests/main/services/deep-agent/tool-protocol.test.ts tests/main/plugins/agent/deep-agent-executor-tools.test.ts` | Relevant tests pass | 9 files, 41 tests passed | pass |
+| Chat image attachment baseline | `pnpm test -- tests/main/plugins/agent/chat-image-attachments.test.ts tests/main/plugins/agent/runtime.test.ts` | Existing behavior passes before refactor | 2 files, 14 tests passed | pass |
+| Chat image attachment async I/O | `pnpm test -- tests/main/plugins/agent/chat-image-attachments.test.ts tests/main/plugins/agent/runtime.test.ts` | Behavior remains equivalent after async fs refactor | 2 files, 14 tests passed | pass |
+| Chat image attachment typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Chat image attachment strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Chat image sync I/O search | `rg -n "readFileSync|statSync" src/main/plugins/agent/chat-image-attachments.ts` | No matches | No matches, exit 1 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -60,6 +65,13 @@
   - Added short comments explaining the no-`any` IPC and tool boundary types after self-review.
   - Verified GREEN with code quality test, focused tests, typecheck, and strict unused scan.
   - Re-ran pre-commit verification after comments: focused tests, typecheck, strict unused scan, and `git diff --check`.
+  - Committed verified cleanup as `7fcec61 refactor: remove explicit any from main tool boundaries`.
+  - Audited sync I/O in `src/main`; selected chat image attachment file reads because they run inside `AgentRuntime.startRun()` and can read up to four 5 MB images.
+  - Ran baseline chat image/runtime tests before refactor.
+  - Replaced `statSync/readFileSync` in `chat-image-attachments.ts` with `fs/promises` `stat/readFile`.
+  - Updated `AgentRuntime.startRun()` to await prepared attachments.
+  - Updated chat image attachment tests to await the Promise API and use `rejects` for errors.
+  - Verified equivalent behavior with focused tests, `pnpm typecheck`, strict unused scan, and sync I/O search.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -69,6 +81,9 @@
   - `src/main/services/deep-agent/tools.ts` (updated)
   - `src/main/services/deep-agent/background-task-tools.ts` (updated)
   - `src/main/services/deep-agent/background-task-time-tool.ts` (updated)
+  - `src/main/plugins/agent/chat-image-attachments.ts` (updated)
+  - `src/main/plugins/agent/runtime.ts` (updated)
+  - `tests/main/plugins/agent/chat-image-attachments.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -83,5 +98,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, and completed the first `src/main` type-safety cleanup |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment file reads no longer block via sync fs APIs |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, and optimized chat image attachment I/O |
