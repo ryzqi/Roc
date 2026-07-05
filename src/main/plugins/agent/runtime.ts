@@ -679,6 +679,7 @@ export class AgentPluginRuntime {
     validatedAttachments?: ChatValidatedImageAttachment[];
   }): Promise<DeepAgentExecutionResult> {
     const assistantChunks: string[] = [];
+    const hookDisplayTexts: string[] = [];
     const successfulToolBlockIds = new Set<string>();
     const successfulToolNamesByBlockId = new Map<string, string>();
     for await (const event of await this.options.deepAgentExecutor!.execute(input)) {
@@ -690,6 +691,17 @@ export class AgentPluginRuntime {
         };
       }
       await this.publishChatRunEvent(event);
+      if (event.type === 'hook_started' || event.type === 'hook_completed') {
+        collectHookDisplayText(hookDisplayTexts, event.hook.additionalContext);
+        collectHookDisplayText(hookDisplayTexts, event.hook.requestContinue);
+        await this.publish('agent.run.task-event', {
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          type: event.type,
+          payload: event.hook
+        });
+        continue;
+      }
       if (event.type === 'run_interrupted') {
         await this.handleRunInterrupted({
           interruptId: event.interruptId,
@@ -734,8 +746,8 @@ export class AgentPluginRuntime {
         });
       }
     }
-    const assistantMessage = assistantChunks.join('').trim();
-    if (assistantMessage.length === 0 && successfulToolBlockIds.size === 0) {
+    const assistantMessage = stripHookDisplayText(assistantChunks.join('').trim(), hookDisplayTexts);
+    if (assistantMessage.length === 0 && successfulToolBlockIds.size === 0 && hookDisplayTexts.length === 0) {
       throw new Error('agent_model_response_empty');
     }
     return {
@@ -821,6 +833,20 @@ function buildCompletionSummary(input: {
     return '';
   }
   return summary;
+}
+
+function collectHookDisplayText(texts: string[], value: string | null | undefined): void {
+  if (typeof value === 'string' && value.length > 0 && !texts.includes(value)) {
+    texts.push(value);
+  }
+}
+
+function stripHookDisplayText(content: string, hookDisplayTexts: readonly string[]): string {
+  let nextContent = content;
+  for (const text of [...hookDisplayTexts].sort((left, right) => right.length - left.length)) {
+    nextContent = nextContent.split(text).join('');
+  }
+  return nextContent === content ? content : nextContent.trimStart();
 }
 
 function updateSuccessfulToolNames(namesByBlockId: Map<string, string>, block: ChatAssistantBlock): void {

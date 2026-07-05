@@ -337,6 +337,8 @@ describe('createRocHookMiddleware', () => {
         status: 'running',
         durationMs: null,
         message: null,
+        additionalContext: null,
+        requestContinue: null,
         commandDisplay: 'node hook.js'
       }
     };
@@ -350,6 +352,8 @@ describe('createRocHookMiddleware', () => {
         status: 'completed',
         durationMs: 3,
         message: null,
+        additionalContext: null,
+        requestContinue: null,
         commandDisplay: 'node hook.js'
       }
     };

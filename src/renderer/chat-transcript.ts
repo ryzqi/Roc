@@ -2,6 +2,7 @@ import type {
   ChatAssistantBlock,
   ChatPendingInterrupt,
   ChatPersistedAttachment,
+  RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
   SubagentStatus,
@@ -67,6 +68,8 @@ export type ChatTranscriptActivityBlock =
       status: Extract<ChatRunActivityBlock, { kind: 'hook_call' }>['status'];
       durationMs: number | null;
       message: string | null;
+      additionalContext: string | null;
+      requestContinue: string | null;
       commandDisplay: string;
     }
   | ChatTranscriptSubagentActivityBlock
@@ -130,6 +133,7 @@ type AssistantDraft = {
   message: ChatTranscriptMessage;
   reasoningBlock: Extract<ChatTranscriptActivityBlock, { kind: 'reasoning' }> | null;
   toolBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>>;
+  hookBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'hook_call' }>>;
   subagentBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }>>;
 };
 
@@ -196,6 +200,62 @@ function isAssistantBlockPayload(payload: unknown): payload is ChatAssistantBloc
 
 function isToolPhase(value: unknown): value is Extract<ChatRunActivityBlock, { kind: 'tool_call' }>['status'] {
   return value === 'start' || value === 'progress' || value === 'end' || value === 'error';
+}
+
+function isHookRunStatus(value: unknown): value is RocHookRunSummary['status'] {
+  return value === 'skipped' || value === 'running' || value === 'completed' || value === 'failed' || value === 'blocked';
+}
+
+function isHookEventName(value: unknown): value is RocHookRunSummary['event'] {
+  return value === 'SessionStart' || value === 'UserPromptSubmit' || value === 'PreToolUse' || value === 'PostToolUse' || value === 'Stop' || value === 'SessionEnd';
+}
+
+function readNullableString(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value === null || typeof value === 'string' ? value : undefined;
+}
+
+function readHookRunSummary(payload: unknown): RocHookRunSummary | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+  const runId = Reflect.get(payload, 'runId');
+  const handlerId = Reflect.get(payload, 'handlerId');
+  const event = Reflect.get(payload, 'event');
+  const status = Reflect.get(payload, 'status');
+  const durationMs = Reflect.get(payload, 'durationMs');
+  const message = Reflect.get(payload, 'message');
+  const rawAdditionalContext = readNullableString(Reflect.get(payload, 'additionalContext'));
+  const rawRequestContinue = readNullableString(Reflect.get(payload, 'requestContinue'));
+  const commandDisplay = Reflect.get(payload, 'commandDisplay');
+  if (
+    typeof runId !== 'string' ||
+    typeof handlerId !== 'string' ||
+    !isHookEventName(event) ||
+    !isHookRunStatus(status) ||
+    (durationMs !== null && typeof durationMs !== 'number') ||
+    (message !== null && typeof message !== 'string') ||
+    (rawAdditionalContext === undefined && Reflect.has(payload, 'additionalContext')) ||
+    (rawRequestContinue === undefined && Reflect.has(payload, 'requestContinue')) ||
+    typeof commandDisplay !== 'string'
+  ) {
+    return null;
+  }
+  const additionalContext = rawAdditionalContext === undefined ? null : rawAdditionalContext;
+  const requestContinue = rawRequestContinue === undefined ? null : rawRequestContinue;
+  return {
+    runId,
+    handlerId,
+    event,
+    status,
+    durationMs,
+    message,
+    additionalContext,
+    requestContinue,
+    commandDisplay
+  };
 }
 
 function isSubagentEventRecord(payload: unknown): payload is SubagentEventRecord {
@@ -352,6 +412,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
     },
     reasoningBlock: null,
     toolBlocks: [],
+    hookBlocks: [],
     subagentBlocks: []
   };
 }
@@ -435,6 +496,29 @@ function applyToolCallBlock(draft: AssistantDraft, payload: Extract<ChatAssistan
   }
 }
 
+function applyHookBlock(draft: AssistantDraft, hook: RocHookRunSummary): void {
+  const existing = draft.hookBlocks.find((block) => block.id === hook.runId);
+  const nextBlock: Extract<ChatTranscriptActivityBlock, { kind: 'hook_call' }> = {
+    id: hook.runId,
+    kind: 'hook_call',
+    event: hook.event,
+    handlerId: hook.handlerId,
+    status: hook.status,
+    durationMs: hook.durationMs,
+    message: hook.message,
+    additionalContext: hook.additionalContext,
+    requestContinue: hook.requestContinue,
+    commandDisplay: hook.commandDisplay
+  };
+  if (existing === undefined) {
+    draft.hookBlocks.push(nextBlock);
+    draft.message.blocks.push(nextBlock);
+    return;
+  }
+  draft.hookBlocks = draft.hookBlocks.map((block) => (block === existing ? nextBlock : block));
+  draft.message.blocks = draft.message.blocks.map((block) => (block === existing ? nextBlock : block));
+}
+
 function applyStructuredSubagentBlock(draft: AssistantDraft, payload: SubagentEventRecord): void {
   draft.subagentBlocks = upsertTranscriptSubagentBlock(
     draft.subagentBlocks,
@@ -502,12 +586,38 @@ function filterRedundantSubagentTaskBlocks(blocks: ChatTranscriptActivityBlock[]
 
 function filterRedundantSubagentTaskBlocksFromMessage(message: ChatTranscriptMessage): ChatTranscriptMessage {
   const blocks = filterRedundantSubagentTaskBlocks(message.blocks);
-  return blocks === message.blocks
+  const content = stripHookDisplayText(message.content, blocks);
+  return blocks === message.blocks && content === message.content
     ? message
     : {
         ...message,
+        content,
         blocks
       };
+}
+
+function hookDisplayTexts(blocks: readonly ChatTranscriptActivityBlock[]): string[] {
+  const texts: string[] = [];
+  for (const block of blocks) {
+    if (block.kind !== 'hook_call') {
+      continue;
+    }
+    if (block.additionalContext !== null && block.additionalContext.length > 0 && !texts.includes(block.additionalContext)) {
+      texts.push(block.additionalContext);
+    }
+    if (block.requestContinue !== null && block.requestContinue.length > 0 && !texts.includes(block.requestContinue)) {
+      texts.push(block.requestContinue);
+    }
+  }
+  return texts;
+}
+
+function stripHookDisplayText(content: string, blocks: readonly ChatTranscriptActivityBlock[]): string {
+  let nextContent = content;
+  for (const text of hookDisplayTexts(blocks).sort((left, right) => right.length - left.length)) {
+    nextContent = nextContent.split(text).join('');
+  }
+  return nextContent === content ? content : nextContent.trimStart();
 }
 
 function upsertTranscriptSubagentBlock(
@@ -696,6 +806,14 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
       continue;
     }
 
+    if (event.type === 'hook_started' || event.type === 'hook_completed') {
+      const hook = readHookRunSummary(event.payload);
+      if (hook !== null) {
+        applyHookBlock(getAssistantDraft(drafts, messages, event.runId), hook);
+      }
+      continue;
+    }
+
     if (event.type === 'subagent_event' && isSubagentEventRecord(event.payload)) {
       applyStructuredSubagentBlock(getAssistantDraft(drafts, messages, event.runId), event.payload);
       continue;
@@ -757,6 +875,8 @@ function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActi
         status: block.status,
         durationMs: block.durationMs,
         message: block.message,
+        additionalContext: block.additionalContext,
+        requestContinue: block.requestContinue,
         commandDisplay: block.commandDisplay
       };
     }
@@ -826,8 +946,8 @@ function createPendingUserMessage(content: string): ChatTranscriptMessage {
 }
 
 function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMessage | null {
-  const liveContent = chatRunState.assistantMessage;
   const liveBlocks = buildLiveActivityBlocks(chatRunState);
+  const liveContent = stripHookDisplayText(chatRunState.assistantMessage, liveBlocks);
   const liveReasoning = readReasoningFromBlocks(liveBlocks);
 
   if (liveContent.length === 0 && liveBlocks.length === 0 && chatRunState.pendingInterrupts.length === 0) {
@@ -869,8 +989,8 @@ export function appendLiveTranscriptMessages(input: {
   const lastAssistantIndex = [...messages].reverse().findIndex((message) => message.role === 'assistant');
   const assistantIndex = lastAssistantIndex === -1 ? -1 : messages.length - 1 - lastAssistantIndex;
   if (assistantIndex !== -1) {
-    const liveContent = input.chatRunState.assistantMessage;
     const liveBlocks = buildLiveActivityBlocks(input.chatRunState);
+    const liveContent = stripHookDisplayText(input.chatRunState.assistantMessage, liveBlocks);
     const liveReasoning = readReasoningFromBlocks(liveBlocks);
     const matchesPersistedAssistant =
       messages[assistantIndex].content === liveContent &&

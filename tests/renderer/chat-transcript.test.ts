@@ -830,4 +830,224 @@ describe('chat transcript helpers', () => {
     ]);
   });
 
+  it('rebuilds persisted hook activity blocks without merging hook messages into the assistant answer', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'hook-start',
+          threadId: 'thread-hook',
+          runId: 'run-hook',
+          type: 'hook_started',
+          payload: {
+            runId: 'hook-run-1',
+            handlerId: 'PreToolUse:0:0',
+            event: 'PreToolUse',
+            status: 'running',
+            durationMs: null,
+            message: 'Checking shell command',
+            additionalContext: null,
+            requestContinue: null,
+            commandDisplay: 'node hook.js'
+          },
+          createdAt: '2026-06-24T00:00:01.000Z',
+          sequence: 1
+        },
+        {
+          id: 'assistant-delta',
+          threadId: 'thread-hook',
+          runId: 'run-hook',
+          type: 'assistant_block',
+          payload: {
+            kind: 'text',
+            blockId: 'text-run-hook',
+            phase: 'delta',
+            text: 'Visible answer'
+          },
+          createdAt: '2026-06-24T00:00:02.000Z',
+          sequence: 2
+        },
+        {
+          id: 'hook-completed',
+          threadId: 'thread-hook',
+          runId: 'run-hook',
+          type: 'hook_completed',
+          payload: {
+            runId: 'hook-run-1',
+            handlerId: 'PreToolUse:0:0',
+            event: 'PreToolUse',
+            status: 'completed',
+            durationMs: 12,
+            message: 'Hook completed',
+            additionalContext: null,
+            requestContinue: null,
+            commandDisplay: 'node hook.js'
+          },
+          createdAt: '2026-06-24T00:00:03.000Z',
+          sequence: 3
+        }
+      ],
+      'thread-hook'
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: 'Visible answer',
+      blocks: [
+        {
+          id: 'hook-run-1',
+          kind: 'hook_call',
+          event: 'PreToolUse',
+          handlerId: 'PreToolUse:0:0',
+          status: 'completed',
+          durationMs: 12,
+          message: 'Hook completed',
+          additionalContext: null,
+          requestContinue: null,
+          commandDisplay: 'node hook.js'
+        }
+      ]
+    });
+    expect(messages[0]?.content).not.toContain('Hook completed');
+  });
+
+  it('moves echoed SessionStart add_context text into the hook block instead of assistant content', () => {
+    const sessionStartContext =
+      '<EXTREMELY_IMPORTANT>\nYou have superpowers.\n\nBelow is the full content of your skill.\n</EXTREMELY_IMPORTANT>';
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'hook-start',
+          threadId: 'thread-session-start',
+          runId: 'run-session-start',
+          type: 'hook_started',
+          payload: {
+            runId: 'hook-run-session-start',
+            handlerId: 'SessionStart:0:0',
+            event: 'SessionStart',
+            status: 'running',
+            durationMs: null,
+            message: 'Loading superpowers',
+            commandDisplay: 'node session-start.js',
+            additionalContext: null,
+            requestContinue: null
+          },
+          createdAt: '2026-06-24T00:00:01.000Z',
+          sequence: 1
+        },
+        {
+          id: 'assistant-delta',
+          threadId: 'thread-session-start',
+          runId: 'run-session-start',
+          type: 'assistant_block',
+          payload: {
+            kind: 'text',
+            blockId: 'text-run-session-start',
+            phase: 'delta',
+            text: `${sessionStartContext}\n\n你好！有什么我可以帮你的吗？`
+          },
+          createdAt: '2026-06-24T00:00:02.000Z',
+          sequence: 2
+        },
+        {
+          id: 'hook-completed',
+          threadId: 'thread-session-start',
+          runId: 'run-session-start',
+          type: 'hook_completed',
+          payload: {
+            runId: 'hook-run-session-start',
+            handlerId: 'SessionStart:0:0',
+            event: 'SessionStart',
+            status: 'completed',
+            durationMs: 8,
+            message: 'Superpowers loaded',
+            commandDisplay: 'node session-start.js',
+            additionalContext: sessionStartContext,
+            requestContinue: null
+          },
+          createdAt: '2026-06-24T00:00:03.000Z',
+          sequence: 3
+        }
+      ],
+      'thread-session-start'
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '你好！有什么我可以帮你的吗？',
+      blocks: [
+        {
+          id: 'hook-run-session-start',
+          kind: 'hook_call',
+          event: 'SessionStart',
+          handlerId: 'SessionStart:0:0',
+          status: 'completed',
+          durationMs: 8,
+          message: 'Superpowers loaded',
+          commandDisplay: 'node session-start.js',
+          additionalContext: sessionStartContext,
+          requestContinue: null
+        }
+      ]
+    });
+    expect(messages[0]?.content).not.toContain('<EXTREMELY_IMPORTANT>');
+  });
+
+  it('keeps hook-only assistant rows when echoed hook context is stripped', () => {
+    const sessionStartContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'assistant-delta',
+          threadId: 'thread-hook-only',
+          runId: 'run-hook-only',
+          type: 'assistant_block',
+          payload: {
+            kind: 'text',
+            blockId: 'text-hook-only',
+            phase: 'delta',
+            text: sessionStartContext
+          },
+          createdAt: '2026-06-24T00:00:01.000Z',
+          sequence: 1
+        },
+        {
+          id: 'hook-completed',
+          threadId: 'thread-hook-only',
+          runId: 'run-hook-only',
+          type: 'hook_completed',
+          payload: {
+            runId: 'hook-run-only',
+            handlerId: 'SessionStart:0:0',
+            event: 'SessionStart',
+            status: 'completed',
+            durationMs: 8,
+            message: 'Superpowers loaded',
+            commandDisplay: 'node session-start.js',
+            additionalContext: sessionStartContext,
+            requestContinue: null
+          },
+          createdAt: '2026-06-24T00:00:02.000Z',
+          sequence: 2
+        }
+      ],
+      'thread-hook-only'
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '',
+      blocks: [
+        {
+          id: 'hook-run-only',
+          kind: 'hook_call',
+          event: 'SessionStart',
+          additionalContext: sessionStartContext
+        }
+      ]
+    });
+  });
+
 });

@@ -191,6 +191,8 @@ function isAgentTaskEventType(value: unknown): value is TaskEvent['type'] {
     value === 'assistant_block' ||
     value === 'guardrail_nudge' ||
     value === 'subagent_event' ||
+    value === 'hook_started' ||
+    value === 'hook_completed' ||
     value === 'approval_requested' ||
     value === 'approval_decision'
   );

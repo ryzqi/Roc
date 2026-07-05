@@ -36,6 +36,8 @@ export type ChatRunActivityBlock =
       status: RocHookRunSummary['status'];
       durationMs: number | null;
       message: string | null;
+      additionalContext: string | null;
+      requestContinue: string | null;
       commandDisplay: string;
     };
 
@@ -333,6 +335,8 @@ function upsertHookActivityBlock(blocks: readonly ChatRunActivityBlock[], hook: 
     status: hook.status,
     durationMs: hook.durationMs,
     message: hook.message,
+    additionalContext: hook.additionalContext,
+    requestContinue: hook.requestContinue,
     commandDisplay: hook.commandDisplay
   };
   const existing = blocks.find((item): item is Extract<ChatRunActivityBlock, { kind: 'hook_call' }> => item.kind === 'hook_call' && item.id === hook.runId);

@@ -93,6 +93,18 @@ export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element 
               <dd>{block.message}</dd>
             </div>
           )}
+          {block.additionalContext === null ? null : (
+            <div>
+              <dt>context</dt>
+              <dd>{block.additionalContext}</dd>
+            </div>
+          )}
+          {block.requestContinue === null ? null : (
+            <div>
+              <dt>request</dt>
+              <dd>{block.requestContinue}</dd>
+            </div>
+          )}
         </dl>
       </ActivityBlockBody>
     </ActivityBlockShell>

@@ -144,6 +144,151 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
       })
     );
   });
+
+  it('records hook runtime events as task events for persisted transcripts', async () => {
+    const hookContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'hook_started',
+            runId: input.run.id,
+            hook: {
+              runId: 'hook-run-1',
+              handlerId: 'PreToolUse:0:0',
+              event: 'PreToolUse',
+              status: 'running',
+              durationMs: null,
+              message: 'Checking shell command',
+              additionalContext: null,
+              requestContinue: null,
+              commandDisplay: 'node hook.js'
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'assistant_block',
+            runId: input.run.id,
+            block: {
+              kind: 'text',
+              blockId: `text-${input.run.id}`,
+              phase: 'delta',
+              text: `${hookContext}\n\ndone`
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'hook_completed',
+            runId: input.run.id,
+            hook: {
+              runId: 'hook-run-1',
+              handlerId: 'PreToolUse:0:0',
+              event: 'PreToolUse',
+              status: 'completed',
+              durationMs: 12,
+              message: 'Hook completed',
+              additionalContext: hookContext,
+              requestContinue: null,
+              commandDisplay: 'node hook.js'
+            }
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.run.task-event',
+        payload: {
+          runId: result.runId,
+          threadId: result.threadId,
+          type: 'hook_completed',
+          payload: {
+            runId: 'hook-run-1',
+            handlerId: 'PreToolUse:0:0',
+            event: 'PreToolUse',
+            status: 'completed',
+            durationMs: 12,
+            message: 'Hook completed',
+            additionalContext: hookContext,
+            requestContinue: null,
+            commandDisplay: 'node hook.js'
+          }
+        }
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed',
+          assistantMessage: 'done'
+        })
+      })
+    );
+  });
+
+  it('completes hook-only responses after stripping echoed hook context', async () => {
+    const hookContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield {
+            type: 'assistant_block',
+            runId: input.run.id,
+            block: {
+              kind: 'text',
+              blockId: `text-${input.run.id}`,
+              phase: 'delta',
+              text: hookContext
+            }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'hook_completed',
+            runId: input.run.id,
+            hook: {
+              runId: 'hook-run-1',
+              handlerId: 'SessionStart:0:0',
+              event: 'SessionStart',
+              status: 'completed',
+              durationMs: 8,
+              message: 'Superpowers loaded',
+              additionalContext: hookContext,
+              requestContinue: null,
+              commandDisplay: 'node session-start.js'
+            }
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({
+          type: 'run_completed',
+          assistantMessage: ''
+        })
+      })
+    );
+    expect(repository.getRun(result.runId)?.status).toBe('completed');
+  });
 });
 
 function createTextDeepAgentExecutor(text: string): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {

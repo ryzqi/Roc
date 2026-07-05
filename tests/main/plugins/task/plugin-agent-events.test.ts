@@ -175,6 +175,77 @@ describe('task plugin', () => {
     );
   });
 
+  it('mirrors hook run events into the task snapshot contract', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = new CapabilityRegistry();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+
+    await eventBus.publish({
+      type: 'agent.run.started',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:00.000Z',
+      payload: {
+        runId: 'run_hook_1',
+        threadId: 'thread_hook_1',
+        mode: 'chat',
+        providerId: 'smoke-provider',
+        modelId: 'smoke-model',
+        createdAt: '2026-06-04T00:00:00.000Z',
+        userInput: 'Run a guarded command',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      }
+    });
+    await eventBus.publish({
+      type: 'agent.run.task-event',
+      source: '@roc/plugin-agent',
+      createdAt: '2026-06-04T00:00:01.000Z',
+      payload: {
+        runId: 'run_hook_1',
+        threadId: 'thread_hook_1',
+        type: 'hook_completed',
+        payload: {
+          runId: 'hook-run-1',
+          handlerId: 'PreToolUse:0:0',
+          event: 'PreToolUse',
+          status: 'completed',
+          durationMs: 12,
+          message: 'Hook completed',
+          additionalContext: null,
+          requestContinue: null,
+          commandDisplay: 'node hook.js'
+        }
+      }
+    });
+
+    const snapshot = await capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {});
+
+    expect(snapshot.recentEvents).toContainEqual(
+      expect.objectContaining({
+        runId: 'run_hook_1',
+        threadId: 'thread_hook_1',
+        type: 'hook_completed',
+        payload: {
+          runId: 'hook-run-1',
+          handlerId: 'PreToolUse:0:0',
+          event: 'PreToolUse',
+          status: 'completed',
+          durationMs: 12,
+          message: 'Hook completed',
+          additionalContext: null,
+          requestContinue: null,
+          commandDisplay: 'node hook.js'
+        }
+      })
+    );
+  });
+
   it('mirrors plan mode run events into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
     const plugin = createTaskPlugin();

@@ -169,7 +169,9 @@ describe('chat message row', () => {
               status: 'completed',
               durationMs: 12,
               message: 'Checking shell command',
-              commandDisplay: 'node hook.js'
+              commandDisplay: 'node hook.js',
+              additionalContext: '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>',
+              requestContinue: 'Please continue.'
             }
           ],
           interrupt: null,
@@ -187,6 +189,8 @@ describe('chat message row', () => {
     expect(html).toContain('12ms');
     expect(html).toContain('Checking shell command');
     expect(html).toContain('<dt>message</dt><dd>Checking shell command</dd>');
+    expect(html).toContain('<dt>context</dt><dd>&lt;EXTREMELY_IMPORTANT&gt;Use superpowers.&lt;/EXTREMELY_IMPORTANT&gt;</dd>');
+    expect(html).toContain('<dt>request</dt><dd>Please continue.</dd>');
     expect(html).not.toContain('hook-call-modern__message');
     expect(html).toContain('PreToolUse:0:0');
     expect(html).not.toContain('stdout');

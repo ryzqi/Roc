@@ -5,6 +5,7 @@ import type { ChatRunEvent } from '../../src/shared/types';
 
 describe('renderer chat hook events', () => {
   it('renders hook runtime activity without polluting assistant text', () => {
+    const sessionStartContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
     const runStarted: ChatRunEvent = {
       type: 'run_started',
       runId: 'run-1',
@@ -24,7 +25,9 @@ describe('renderer chat hook events', () => {
         status: 'running',
         durationMs: null,
         message: 'Checking shell command',
-        commandDisplay: 'node hook.js'
+        commandDisplay: 'node hook.js',
+        additionalContext: null,
+        requestContinue: null
       }
     };
     const assistantBlock: ChatRunEvent = {
@@ -34,7 +37,7 @@ describe('renderer chat hook events', () => {
         kind: 'text',
         blockId: 'text-1',
         phase: 'delta',
-        text: 'Visible answer'
+        text: `${sessionStartContext}\n\nVisible answer`
       }
     };
     const hookCompleted: ChatRunEvent = {
@@ -47,7 +50,9 @@ describe('renderer chat hook events', () => {
         status: 'completed',
         durationMs: 12,
         message: 'Hook completed',
-        commandDisplay: 'node hook.js'
+        commandDisplay: 'node hook.js',
+        additionalContext: sessionStartContext,
+        requestContinue: null
       }
     };
     const runCompleted: ChatRunEvent = {
@@ -84,10 +89,12 @@ describe('renderer chat hook events', () => {
         status: 'running',
         durationMs: null,
         message: 'Checking shell command',
-        commandDisplay: 'node hook.js'
+        commandDisplay: 'node hook.js',
+        additionalContext: null,
+        requestContinue: null
       }
     ]);
-    expect(afterHookCompleted.assistantMessage).toBe('Visible answer');
+    expect(afterHookCompleted.assistantMessage).toBe(`${sessionStartContext}\n\nVisible answer`);
     expect(afterHookCompleted.activityBlocks).toMatchObject([
       {
         id: 'hook-run-1',
@@ -97,7 +104,9 @@ describe('renderer chat hook events', () => {
         status: 'completed',
         durationMs: 12,
         message: 'Hook completed',
-        commandDisplay: 'node hook.js'
+        commandDisplay: 'node hook.js',
+        additionalContext: sessionStartContext,
+        requestContinue: null
       }
     ]);
     expect(completed.status).toBe('completed');
@@ -107,6 +116,7 @@ describe('renderer chat hook events', () => {
       role: 'assistant',
       content: 'Visible answer'
     });
+    expect(JSON.stringify(transcript)).toContain(sessionStartContext);
     expect(JSON.stringify(transcript)).toContain('Hook completed');
     expect(JSON.stringify(transcript)).toContain('node hook.js');
     expect(JSON.stringify(transcript)).not.toContain('stdout');

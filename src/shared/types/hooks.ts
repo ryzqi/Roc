@@ -81,6 +81,8 @@ export type RocHookRunSummary = {
   status: RocHookRunStatus;
   durationMs: number | null;
   message: string | null;
+  additionalContext: string | null;
+  requestContinue: string | null;
   commandDisplay: string;
 };
 

@@ -353,4 +353,102 @@ describe('HookRuntime', () => {
     expect(outcome.additionalContexts).toEqual(['first', 'second']);
     expect(outcome.runs.map((run) => run.handlerId)).toEqual(['PostToolUse:0:0', 'PostToolUse:0:1']);
   });
+
+  it('copies hook output context fields into completed run summaries', async () => {
+    const { runtime } = createRuntime(
+      {
+        schemaVersion: 1,
+        hooks: {
+          SessionStart: [
+            {
+              matcher: 'chat',
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node session-start.js',
+                  timeoutSeconds: 30,
+                  enabled: true,
+                  failureMode: 'continue'
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        run: async () => ({
+          status: 'completed',
+          durationMs: 7,
+          stdout: '{"action":"add_context","additionalContext":"<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>"}',
+          stderr: '',
+          output: {
+            action: 'add_context',
+            additionalContext: '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>'
+          }
+        })
+      }
+    );
+
+    const outcome = await runtime.runEvent(
+      input('SessionStart', {
+        source: 'chat',
+        modelId: 'openai:gpt-4.1',
+        workflowHint: null
+      })
+    );
+
+    expect(outcome.runs[0]).toMatchObject({
+      event: 'SessionStart',
+      status: 'completed',
+      additionalContext: '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>',
+      requestContinue: null
+    });
+    expect(outcome.events[1]?.hook).toMatchObject({
+      event: 'SessionStart',
+      additionalContext: '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>',
+      requestContinue: null
+    });
+  });
+
+  it('copies Stop request_continue text into completed run summaries', async () => {
+    const { runtime } = createRuntime(
+      {
+        schemaVersion: 1,
+        hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node stop.js',
+                  timeoutSeconds: 30,
+                  enabled: true,
+                  failureMode: 'continue'
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        run: async () => ({
+          status: 'completed',
+          durationMs: 9,
+          stdout: '{"action":"request_continue","message":"Please continue."}',
+          stderr: '',
+          output: { action: 'request_continue', message: 'Please continue.' }
+        })
+      }
+    );
+
+    const outcome = await runtime.runEvent(input('Stop', { lastAssistantMessage: 'partial', visibleOutput: true }));
+
+    expect(outcome.requestContinue).toBe('Please continue.');
+    expect(outcome.runs[0]).toMatchObject({
+      event: 'Stop',
+      status: 'completed',
+      additionalContext: null,
+      requestContinue: 'Please continue.'
+    });
+  });
 });

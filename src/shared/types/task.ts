@@ -37,6 +37,8 @@ export type TaskEvent = {
     | 'mcp_call'
     | 'skill_loaded'
     | 'subagent_event'
+    | 'hook_started'
+    | 'hook_completed'
     | 'agent_execute'
     | 'file_change'
     | 'git_operation'

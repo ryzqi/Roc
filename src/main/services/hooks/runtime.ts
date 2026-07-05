@@ -97,6 +97,8 @@ export class HookRuntime {
         status: 'running',
         durationMs: null,
         message: selectedHandler.handler.statusMessage === undefined ? null : selectedHandler.handler.statusMessage,
+        additionalContext: null,
+        requestContinue: null,
         commandDisplay: resolveCommand(selectedHandler.handler)
       })
     });
@@ -223,7 +225,7 @@ function mergeHookExecutions(event: RocHookEventName, executions: HookExecution[
       additionalContexts.push(processed.output.additionalContext);
     }
     if (processed.output?.action === 'request_continue') {
-      requestContinue = processed.output.message === undefined ? 'Continue after hook request.' : processed.output.message;
+      requestContinue = readRequestContinueMessage(processed.output);
     }
   }
 
@@ -256,6 +258,8 @@ function processExecution(
         status: 'skipped',
         durationMs: 0,
         message: execution.skippedMessage,
+        additionalContext: null,
+        requestContinue: null,
         commandDisplay: resolveCommand(execution.selectedHandler.handler)
       }),
       blocked: false,
@@ -283,6 +287,8 @@ function processExecution(
         status: 'blocked',
         durationMs: execution.result.durationMs,
         message: reason,
+        additionalContext: null,
+        requestContinue: null,
         commandDisplay: resolveCommand(execution.selectedHandler.handler)
       }),
       blocked: true,
@@ -299,6 +305,8 @@ function processExecution(
       status: 'completed',
       durationMs: execution.result.durationMs,
       message: output.message === undefined ? null : output.message,
+      additionalContext: readAdditionalContext(output),
+      requestContinue: output.action === 'request_continue' ? readRequestContinueMessage(output) : null,
       commandDisplay: resolveCommand(execution.selectedHandler.handler)
     }),
     blocked: false,
@@ -327,6 +335,8 @@ function failedExecutionToProcessed(
       status: blocked ? 'blocked' : 'failed',
       durationMs,
       message: error,
+      additionalContext: null,
+      requestContinue: null,
       commandDisplay: resolveCommand(execution.selectedHandler.handler)
     }),
     blocked,
@@ -374,6 +384,8 @@ function createRunSummary(input: {
   status: RocHookRunStatus;
   durationMs: number | null;
   message: string | null;
+  additionalContext: string | null;
+  requestContinue: string | null;
   commandDisplay: string;
 }): RocHookRunSummary {
   return {
@@ -383,8 +395,21 @@ function createRunSummary(input: {
     status: input.status,
     durationMs: input.durationMs,
     message: input.message,
+    additionalContext: input.additionalContext,
+    requestContinue: input.requestContinue,
     commandDisplay: input.commandDisplay
   };
+}
+
+function readAdditionalContext(output: RocHookCommandOutput): string | null {
+  if (output.action !== 'add_context') {
+    return null;
+  }
+  return typeof output.additionalContext === 'string' ? output.additionalContext : null;
+}
+
+function readRequestContinueMessage(output: RocHookCommandOutput): string {
+  return output.message === undefined ? 'Continue after hook request.' : output.message;
 }
 
 function createHookRunEvent(input: { type: RocHookRunEvent['type']; runId: string; hook: RocHookRunSummary }): RocHookRunEvent {
