@@ -43,7 +43,7 @@ export function registerSettingsIpc(
   timedHandle(ipcChannels.settingsGet, () =>
     wrapIpc(() => buildSettingsSnapshotAsync(configService, secretService, kernelSettings, controls, hooks))
   );
-  timedHandle(ipcChannels.settingsSave, (_event, settings) =>
+  timedHandle(ipcChannels.settingsSave, (_event, settings: SettingsSaveRequest) =>
     wrapIpc(async () => {
       const savedSettings = await configService.saveSettingsSnapshotAsync(settings);
       await kernelSettings.syncSettingsSnapshot(savedSettings);

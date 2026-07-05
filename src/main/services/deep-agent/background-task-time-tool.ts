@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { BackgroundTaskTrigger } from '../../../shared/types';
 import { RocDomainError } from '../errors';
 import { computeNextCronRunAt } from '../../plugins/task/cron-parser';
+import type { StringDynamicStructuredTool } from './types';
 
 const RESOLVE_BACKGROUND_TASK_TIME_TOOL_NAME = 'resolve_background_task_time';
 
@@ -61,7 +62,7 @@ const chineseWeekdays: Record<string, number> = {
 
 export function createResolveBackgroundTaskTimeTool(
   input: TimeToolDependencies = {}
-): DynamicStructuredTool<any, any, any, string> {
+): StringDynamicStructuredTool {
   return new DynamicStructuredTool<
     typeof timeToolInputSchema,
     z.infer<typeof timeToolInputSchema>,

@@ -71,8 +71,30 @@ function findEmptyCatchHandlers(): string[] {
   return findings;
 }
 
+function findExplicitAnyTypes(): string[] {
+  const findings: string[] = [];
+  for (const file of collectSourceFiles(join(process.cwd(), 'src', 'main'))) {
+    const source = readFileSync(file, 'utf8');
+    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
+
+    function visit(node: ts.Node): void {
+      if (node.kind === ts.SyntaxKind.AnyKeyword) {
+        findings.push(`${formatLocation(sourceFile, file, node.getStart(sourceFile))} explicit any type`);
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+  return findings;
+}
+
 describe('source code quality', () => {
   it('does not leave empty catch handlers in production source', () => {
     expect(findEmptyCatchHandlers()).toEqual([]);
+  });
+
+  it('does not use explicit any types in main-process production source', () => {
+    expect(findExplicitAnyTypes()).toEqual([]);
   });
 });

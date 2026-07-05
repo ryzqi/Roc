@@ -1,3 +1,4 @@
+import type { DynamicStructuredTool, ToolSchemaBase } from '@langchain/core/tools';
 import type { AnySubAgent, ExecuteResponse } from 'deepagents';
 import type {
   ShellExecutionResult,
@@ -16,6 +17,9 @@ export type RunFailure = {
 };
 
 export type RuntimeSubagent = AnySubAgent;
+
+// Erase concrete tool schema output at collection boundaries without widening to any.
+export type StringDynamicStructuredTool = DynamicStructuredTool<ToolSchemaBase, never, unknown, string>;
 
 export type AgentExecuteAdapter = {
   executeAgentCommand(input: { command: string; cwd?: string }): Promise<

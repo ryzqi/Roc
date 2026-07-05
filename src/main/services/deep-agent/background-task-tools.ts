@@ -8,6 +8,7 @@ import type {
   TaskDetail,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
+import type { StringDynamicStructuredTool } from './types';
 import { PROPOSE_TOOL_DESCRIPTION, PROPOSE_TOOL_NAME } from '../../../shared/background-task-tool-contract';
 import { RocDomainError } from '../errors';
 import { PreviewStore, RocToolResolutionError } from '../forge-guardrails';
@@ -131,7 +132,7 @@ type BackgroundTaskToolSchedulerAdapter = {
   unregisterTask(taskId: string): void;
 };
 
-export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): Array<DynamicStructuredTool<any, any, any, string>> {
+export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies): StringDynamicStructuredTool[] {
   const creationTools = [
     new DynamicStructuredTool<
       typeof proposeToolInputSchema,

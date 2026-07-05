@@ -1,5 +1,4 @@
-import type { DynamicStructuredTool } from '@langchain/core/tools';
-import type { RuntimeSubagent } from './types';
+import type { RuntimeSubagent, StringDynamicStructuredTool } from './types';
 
 const asyncTaskToolNames = [
   'start_async_task',
@@ -12,7 +11,7 @@ const asyncTaskToolNames = [
 const reservedSubagentNames = new Set<string>(asyncTaskToolNames);
 
 export function createRunSubagents(input: {
-  webReadTool: DynamicStructuredTool<any, any, any, string>;
+  webReadTool: StringDynamicStructuredTool;
   researchSkillSources?: readonly string[];
 }): RuntimeSubagent[] {
   const subagents: RuntimeSubagent[] = [];

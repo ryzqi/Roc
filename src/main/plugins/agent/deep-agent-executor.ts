@@ -43,7 +43,7 @@ import type { ContextArtifactStore } from '../../services/deep-agent/context/con
 import type { ContextMaintenanceEvent } from '../../services/deep-agent/context/context-compaction-pipeline';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
-import type { AgentExecuteAdapter } from '../../services/deep-agent/types';
+import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
 import { CapacityService } from '../../services/memory/capacity';
@@ -432,7 +432,7 @@ async function createExecutorTools(input: {
   mode: ChatStartRunRequest['mode'];
 }): Promise<{
   runTools: ClientTool[];
-  webReadTool: DynamicStructuredTool<any, any, any, string>;
+  webReadTool: StringDynamicStructuredTool;
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
@@ -548,7 +548,7 @@ function normalizeMcpToolName(name: string, enabledServerIds: readonly string[])
   return enabledServerIds.some((serverId) => name.startsWith(`${serverId}__`)) ? name : null;
 }
 
-function createWebReadTool(capabilities: RocCapabilityRegistry): DynamicStructuredTool<any, any, any, string> {
+function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {
   const schema = webReadToolSchema;
   return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
     name: 'web_read',
@@ -558,7 +558,7 @@ function createWebReadTool(capabilities: RocCapabilityRegistry): DynamicStructur
   });
 }
 
-function createDeleteFileTool(capabilities: RocCapabilityRegistry): DynamicStructuredTool<any, any, any, string> {
+function createDeleteFileTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {
   const schema = z.object({
     file_path: z.string().trim().min(1)
   });
