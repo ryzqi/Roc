@@ -607,13 +607,7 @@ git commit -m "feat(memory): route strict user preferences to USER.md"
 
 - [ ] **Step 1: Add failing prompt and UI expectations**
 
-In `tests/main/deep-agent-prompt.test.ts`, replace expectations for:
-
-```ts
-'Automatic writes only append to MEMORY.md; USER.md and AGENTS.md change only through explicit file edits.'
-```
-
-with expectations for:
+In `tests/main/deep-agent-prompt.test.ts`, replace the old MEMORY.md-only automatic-write expectation with expectations for:
 
 ```ts
 'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.'
@@ -720,7 +714,7 @@ git commit -m "feat(memory): show auto-memory targets"
 Run:
 
 ```powershell
-rg -n "Automatic writes only append to MEMORY.md|USER.md and AGENTS.md change only through explicit file edits|target_path|targetPath|user_preference_high_confidence_required|user_preference_key_unsafe" src tests docs
+rg -n --glob '!docs/superpowers/plans/**' "Automatic writes only append to MEMORY.md|USER.md and AGENTS.md change only through explicit file edits|target_path|targetPath|user_preference_high_confidence_required|user_preference_key_unsafe" src tests docs
 ```
 
 Expected:

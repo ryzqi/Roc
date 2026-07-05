@@ -188,7 +188,10 @@ describe('prompt blocks', () => {
 
     expect(staticBlock?.content).toContain('/memory/global/USER.md');
     expect(staticBlock?.content).toContain('/memory/workspaces/current/MEMORY.md');
-    expect(staticBlock?.content).toContain('Automatic writes only append to MEMORY.md');
+    expect(staticBlock?.content).toContain(
+      'Automatic writes may update USER.md only for high-confidence direct user preferences; other accepted facts append to MEMORY.md.'
+    );
+    expect(staticBlock?.content).toContain('AGENTS.md changes only through explicit file edits.');
     expect(staticBlock?.content).not.toContain('Roc SQLite');
     expect(staticBlock?.content).not.toContain('DeepAgents memory');
   });
