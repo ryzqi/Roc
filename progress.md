@@ -140,6 +140,27 @@
 | Phase 5 renderer closeout typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Phase 5 renderer closeout strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Phase 5 renderer closeout diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Weak toBeDefined assertion RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality guard fails on current weak assertions | Failed on `context-digest.test.ts:48` and `forge-tiered-compaction.test.ts:277` | fail-expected |
+| Weak toBeDefined assertion GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | Quality guard passes after concrete assertion rewrite | 1 file, 10 tests passed | pass |
+| Forge guardrails assertion slice | `pnpm test -- tests/main/services/forge-guardrails/context-digest.test.ts tests/main/services/forge-guardrails/middleware/forge-tiered-compaction.test.ts` | Related forge guardrails tests pass | 2 files, 12 tests passed | pass |
+| Weak toBeDefined residue search | `rg -n "\.toBeDefined\(\)" tests src --glob '!node_modules' --glob '!dist' --glob '!release'` | No matches | No matches, exit 1 | pass |
+| Test skip/only/todo scan | `rg -n "\.only\(|\.skip\(|test\.todo|describe\.todo|it\.todo" tests` | No focused or skipped tests | No matches, exit 1 | pass |
+| Test weak-null scan | `rg -n "\.not\.toBeNull\(\)|\.toBeNull\(\)|\.toBeTruthy\(\)|\.toBeFalsy\(\)|\.toBeDefined\(\)" tests` | Triage weak assertion candidates | Many concrete null-return and DOM guard matches; no `.toBeDefined()` remains | pass |
+| Stale marker scan | `rg -n "legacy|obsolete|deprecated|stale|unused|duplicate|backup|TODO|FIXME" tests scripts docs resources --glob '!node_modules' --glob '!dist' --glob '!release'` | Find executable stale tests/scripts/resources | Matches only historical docs plan/spec text | pass |
+| Phase 6 initial file counts | `rg --files <area> | Measure-Object` | Count current tests/scripts/docs/resources paths | tests 304, scripts 15, docs 3, resources 5; docs undercounted due `.gitignore` | pass |
+| Phase 6 tracked file counts | `git ls-files <area> | Measure-Object` | Count committed tests/scripts/docs/resources paths | tests 304, scripts 15, docs 4, resources 5 | pass |
+| Path verification | `pnpm verify:paths` | Required repo-contained paths exist | `Repo-contained development paths are present.` exit 0 | pass |
+| RTK directory tests | `pnpm test -- tests/rtk-integration` | Current documented RTK test command works | 5 files, 25 tests passed | pass |
+| RTK coverage command | `pnpm test -- --coverage tests/rtk-integration` | Current documented RTK coverage command works | 5 files, 25 tests passed; coverage report generated | pass |
+| RTK command readback | `rg -n -u "pnpm test( --coverage)? tests[\\/]rtk-integration|pnpm test --coverage tests[\\/]rtk-integration|pnpm test -- tests[\\/]rtk-integration|pnpm test -- --coverage tests[\\/]rtk-integration" docs\rtk-integration.md CLAUDE.md AGENTS.md` | Tracked doc has current commands; ignored docs boundary is visible | `docs\rtk-integration.md` has current commands; ignored `CLAUDE.md` still has old commands | pass |
+| RTK Windows binary version | `.\resources\rtk-binaries\win32-x64\rtk.exe --version` | Local bundled binary reports documented version | `rtk 0.42.4` | pass |
+| RTK release source check | GitHub releases API for `rtk-ai/rtk` tag `v0.42.4` | Official release tag and date available | `tag_name v0.42.4`, `published_at 2026-06-12T16:06:31Z`, release URL present | pass |
+| RTK version readback | `rg -n -u "0\.42\.0|0\.42\.4|pnpm test -- tests\\rtk-integration|pnpm test -- --coverage tests\\rtk-integration|Release date|Release source" docs\rtk-integration.md CLAUDE.md tests\rtk-integration\integration.test.ts` | Tracked doc and test align on v0.42.4 | Tracked doc/test show v0.42.4; ignored `CLAUDE.md` still has v0.42.0 | pass |
+| Phase 6 scripts/docs/resources focused tests | `pnpm test -- tests/main/package-scripts.test.ts tests/main/native-packaging.test.ts tests/main/query-logs-script.test.ts tests/rtk-integration` | Related script/doc/resource tests pass | 8 files, 56 tests passed | pass |
+| Phase 6 test-quality focused tests | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/services/forge-guardrails/context-digest.test.ts tests/main/services/forge-guardrails/middleware/forge-tiered-compaction.test.ts` | Quality guard and related forge tests pass | 3 files, 22 tests passed | pass |
+| Phase 6 typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Phase 6 strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Phase 6 diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -359,6 +380,45 @@
   - `tests/renderer/shared/async-state.test.ts` (deleted)
   - `tests/renderer/renderer-cleanup.test.ts` (created)
 
+### Phase 6: Tests, Scripts, Resources, Docs Audit
+- **Status:** complete
+- **Started:** 2026-07-05
+- Actions taken:
+  - Resumed from session catchup; it detected 25 unsynced messages and recommended `git diff --stat` plus planning file readback.
+  - Re-read `task_plan.md`, `findings.md`, and `progress.md`.
+  - Confirmed `git status --short --branch` reports branch `main` with only `task_plan.md` modified before continuing Phase 6.
+  - Confirmed `git diff --stat` reports only the Phase 6 transition in `task_plan.md`.
+  - Searched local memory for Roc full cleanup guidance; prior cleanup evidence reinforces the final high-value verification set: `pnpm typecheck`, strict unused scan, `pnpm check:ipc`, `pnpm build`, `pnpm test`, and `git diff --check`.
+  - Recorded the Phase 6 startup scan issues from unsynced context: nonexistent `.github` made the file-map command exit 1; nonexistent `README.md` made the command/doc scan report `os error 2`.
+  - Recorded Phase 6 candidate work: two `toBeDefined()` weak assertions in forge guardrails tests, possible stale RTK test command examples in `CLAUDE.md` and `docs/rtk-integration.md`, and `scripts/verify-paths.mjs` path requirements.
+  - Added an AST quality guard that rejects weak `expect(...).toBeDefined()` assertions in automated tests.
+  - Verified the guard RED on the two forge guardrails assertions, then replaced them with unique context-digest count checks, explicit failure messages, and concrete digest content assertions.
+  - Verified the quality guard, related forge guardrails tests, and residue search.
+  - Scanned tests for `.only()`, `.skip()`, and todo tests; no matches.
+  - Triaged weak-null assertions and stale marker hits; no evidence-backed deletion or broad rewrite target beyond the fixed `toBeDefined()` cases.
+  - Confirmed Phase 6 path counts with per-path `rg --files`; then corrected the docs count with `git ls-files` because `.gitignore` hides tracked `docs/rtk-integration.md` from ripgrep by default.
+  - Read `CLAUDE.md`, `package.json`, `docs/rtk-integration.md`, `.gitignore`, and tracked/ignored doc status.
+  - Confirmed `CLAUDE.md` is ignored and contains stale RTK test examples, so it is recorded but left unchanged as a non-commit target.
+  - Updated tracked `docs/rtk-integration.md` to use `pnpm test -- tests\rtk-integration` and `pnpm test -- --coverage tests\rtk-integration`.
+  - Verified `pnpm verify:paths`, the RTK directory test command, and the RTK coverage command.
+  - Removed the ignored `coverage/` directory generated by the coverage verification after checking it resolved to `F:\Code\Roc\coverage`.
+  - Found tracked `docs/rtk-integration.md` still documented RTK v0.42.0 while the bundled Windows binary and existing integration test use `rtk 0.42.4`.
+  - Verified the v0.42.4 release date and URL from the GitHub releases API, then updated the tracked RTK doc version, date, and source URL.
+  - Read back version references; only ignored `CLAUDE.md` remains stale.
+  - Audited script sync I/O hits and confirmed they are in CLI/codegen/smoke/native-packaging boundaries with existing focused tests.
+  - Ran focused script/doc/resource tests and focused test-quality/forge tests.
+  - Ran Phase 6 closeout `pnpm typecheck`, strict unused scan, and `git diff --check`; all exited 0.
+  - Reviewed current diff for future maintenance, compatibility, security, performance, and test-coverage risks; no blocking issue found. No subagent dispatcher is available in this harness, so review was performed directly against the current diff.
+  - Updated `task_plan.md` Phase 6 checklist to complete before committing this slice.
+- Files created/modified:
+  - `task_plan.md` (updated)
+  - `findings.md` (updated)
+  - `progress.md` (updated)
+  - `tests/main/code-quality-empty-catch.test.ts` (updated)
+  - `tests/main/services/forge-guardrails/context-digest.test.ts` (updated)
+  - `tests/main/services/forge-guardrails/middleware/forge-tiered-compaction.test.ts` (updated)
+  - `docs/rtk-integration.md` (updated)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
@@ -382,6 +442,9 @@
 | 2026-07-05 | Strict unused scan failed on unused default `React` import in `tests/renderer/workbench-resize-keyboard.test.tsx` | 1 | Removed the default import and re-ran strict unused successfully |
 | 2026-07-05 | `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Recorded as non-blocking because the command exited 0 and the project requires UTF-8/LF on touched files |
 | 2026-07-05 | Renderer async-state reference scan used another malformed regex and returned `unclosed group` | 1 | Re-ran with fixed-string searches instead of mixed quote alternation |
+| 2026-07-05 | Phase 6 file-map command included nonexistent `.github` and returned exit 1 | 1 | Recorded as scan-input error and continued with existing `tests`, `scripts`, `docs`, and `resources` paths |
+| 2026-07-05 | Phase 6 command/doc scan included nonexistent `README.md` and returned `os error 2` | 1 | Recorded that the checkout has no root README; use local rules/config/package files instead |
+| 2026-07-05 | Memory citation read used `Select-Object -Index 84..94`, which PowerShell parsed as a string | 1 | Will use array slicing or a line-number helper for exact citation ranges |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

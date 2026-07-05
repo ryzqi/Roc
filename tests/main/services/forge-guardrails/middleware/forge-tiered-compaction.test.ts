@@ -7,6 +7,7 @@ import {
 } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import {
+  isContextDigestMessage,
   markIterationOnMessage,
   tagForgeMessage
 } from '../../../../../src/main/services/forge-guardrails';
@@ -273,9 +274,13 @@ describe('ForgeTieredCompaction', () => {
 
     await applyTieredCompaction(messages, 980);
 
-    const digest = messages.find((message) => message.additional_kwargs?.forge_message_type === 'forge:context_digest');
-    expect(digest).toBeDefined();
-    expect(String(digest?.content)).toContain('preserve long-running context');
+    const digests = messages.filter(isContextDigestMessage);
+    expect(digests).toHaveLength(1);
+    const digest = digests[0];
+    if (digest === undefined) {
+      throw new Error('Expected tiered compaction to preserve one context digest');
+    }
+    expect(String(digest.content)).toContain('preserve long-running context');
     expect(ids(messages)).not.toContain('old-decision');
   });
 });

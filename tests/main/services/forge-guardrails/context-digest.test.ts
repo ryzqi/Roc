@@ -44,10 +44,14 @@ describe('RocContextDigest', () => {
 
     refreshContextDigestMessage(messages, 2);
 
-    const digest = messages.find(isContextDigestMessage);
-    expect(digest).toBeDefined();
-    expect(String(digest?.content)).toContain('use native DeepAgents memory');
-    expect(String(digest?.content)).toContain('update tests');
-    expect(String(digest?.content)).toContain('pnpm test -- tests/main/foo.test.ts');
+    const digests = messages.filter(isContextDigestMessage);
+    expect(digests).toHaveLength(1);
+    const digest = digests[0];
+    if (digest === undefined) {
+      throw new Error('Expected refreshContextDigestMessage to create one context digest');
+    }
+    expect(String(digest.content)).toContain('use native DeepAgents memory');
+    expect(String(digest.content)).toContain('update tests');
+    expect(String(digest.content)).toContain('pnpm test -- tests/main/foo.test.ts');
   });
 });

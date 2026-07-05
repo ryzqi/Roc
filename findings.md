@@ -54,6 +54,19 @@
 - Workbench resize splitters were focusable `role="separator"` controls without keyboard resizing. The right workbench panel, files tree pane, and Git change pane now handle horizontal arrow keys plus `Home`/`End` and expose `aria-orientation`, `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`.
 - `prefersReducedTransparency` was applied to the root dataset by `system-appearance.ts`, but `task-create-dialog.css` did not consume `data-reduced-transparency`; the task creation backdrop blur now disables under `:root[data-reduced-transparency='true']`.
 - Renderer import graph found `src/renderer/shared/async-state.ts` as the only no-inbound non-entry candidate. Full-text search showed only its dedicated test imported it, so the helper and test were unused residue and have been removed.
+- Phase 6 startup state: branch `main`; `git status --short --branch` shows only `task_plan.md` modified for the Phase 6 transition; `git diff --stat` shows 4 changed lines in that file.
+- Phase 6 initial file-map command included nonexistent `.github`, so it returned exit 1 even though the real target paths were listed. This is a scan-input error, not a source failure.
+- This checkout has no root `README.md`; command/doc scans that include `README.md` return `os error 2`. Current authoritative command sources remain `AGENTS.md`, `CLAUDE.md`, `package.json`, and local config files.
+- Phase 6 weak-assertion scan found many `not.toBeNull()` DOM guards that need case-by-case triage rather than broad replacement. The concrete `toBeDefined()` candidates in forge guardrails tests were weak existence guards and have been replaced with unique digest and content assertions.
+- A new AST quality guard in `tests/main/code-quality-empty-catch.test.ts` now rejects `expect(...).toBeDefined()` in automated tests. RED found the two forge guardrails weak assertions; GREEN passed after replacement, and a full source/test search found no remaining `.toBeDefined()` calls.
+- Phase 6 test-control scan found no `.only()`, `.skip()`, `test.todo`, `describe.todo`, or `it.todo` in `tests`.
+- Phase 6 weak-null scan found many `.not.toBeNull()` checks, mostly DOM query guards in renderer tests and concrete null-return assertions in main/shared behavior tests. Current evidence does not justify a broad rewrite; handle only future cases with a direct weak-assertion replacement target.
+- Phase 6 stale/legacy text scan in `tests`, `scripts`, `docs`, and `resources` only found historical design/plan text under `docs/superpowers`; no executable stale test or script candidate was proven by that scan.
+- Phase 6 tracked file count by `git ls-files`: `tests` 304, `scripts` 15, `docs` 4, `resources` 5. `rg --files docs` undercounts docs because `.gitignore` ignores `docs/*` while `docs/rtk-integration.md` remains tracked.
+- Phase 6 command drift candidates: ignored `CLAUDE.md` and tracked `docs/rtk-integration.md` contained older RTK test command examples. The tracked RTK doc now uses `pnpm test -- tests\rtk-integration` and `pnpm test -- --coverage tests\rtk-integration`; ignored `CLAUDE.md` is recorded but left unchanged because it is not a commit target.
+- Phase 6 RTK version drift: bundled Windows binary reports `rtk 0.42.4`, and `tests/rtk-integration/integration.test.ts` asserts the same version. Tracked `docs/rtk-integration.md` still said v0.42.0; it now records v0.42.4, release date 2026-06-12, and the v0.42.4 release URL. Ignored `CLAUDE.md` still says v0.42.0 and is recorded as local stale guidance outside the commit target.
+- `scripts/verify-paths.mjs` expects `.npmrc`, `.runtime`, `.artifacts`, `src`, and `tests`; all five paths exist in this checkout and `pnpm verify:paths` passes.
+- `resources` currently contains only `icon.ico` and four platform RTK binaries. No redundant tracked resource file was proven by Phase 6 scanning.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -99,3 +112,6 @@
 | `src/renderer` reduced transparency backdrop | complete | RED CSS contract reproduced unused `data-reduced-transparency`; GREEN animation config tests, full renderer suite, typecheck, strict unused, and diff check pass | Continue renderer audit |
 | `src/renderer` async-state cleanup | complete | Import graph and full-text search proved no production inbound references; RED cleanup guard, GREEN renderer tests/typecheck/strict unused/diff check pass | Continue renderer audit |
 | `src/renderer` area closeout | complete | `pnpm test -- tests/renderer`, `pnpm typecheck`, strict unused scan, and `git diff --check` pass on current HEAD | Start tests/scripts/resources/docs audit |
+| tests/scripts/resources/docs audit startup | in progress | Recovery confirmed Phase 6 is the active phase; initial scans produced concrete weak-assertion, command-doc, and path-verification candidates | Audit candidates before editing |
+| test weak-assertion cleanup | complete | RED quality guard found two `toBeDefined()` assertions; GREEN quality and forge guardrails tests passed; source search has no remaining `.toBeDefined()` calls | Continue docs/scripts/resources audit |
+| scripts/docs/resources audit | complete | `verify:paths`, RTK command tests, RTK coverage command, binary version check, script reference tests, typecheck, strict unused, and diff check passed | Commit Phase 6 slice |

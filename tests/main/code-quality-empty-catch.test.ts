@@ -89,6 +89,37 @@ function findExplicitAnyTypes(): string[] {
   return findings;
 }
 
+function findWeakToBeDefinedAssertions(): string[] {
+  const findings: string[] = [];
+  for (const file of collectSourceFiles(join(process.cwd(), 'tests'))) {
+    const source = readFileSync(file, 'utf8');
+    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
+
+    function visit(node: ts.Node): void {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const assertion = node.expression;
+        if (assertion.name.text === 'toBeDefined' && isExpectChain(assertion.expression)) {
+          findings.push(`${formatLocation(sourceFile, file, node.getStart(sourceFile))} weak toBeDefined assertion`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+  return findings;
+}
+
+function isExpectChain(expression: ts.Expression): boolean {
+  if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === 'expect') {
+    return true;
+  }
+  if (ts.isPropertyAccessExpression(expression)) {
+    return isExpectChain(expression.expression);
+  }
+  return false;
+}
+
 function readClassMethodSource(file: string, className: string, methodName: string): string {
   const source = readFileSync(file, 'utf8');
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
@@ -119,6 +150,10 @@ describe('source code quality', () => {
 
   it('does not use explicit any types in main-process production source', () => {
     expect(findExplicitAnyTypes()).toEqual([]);
+  });
+
+  it('does not use weak toBeDefined assertions in automated tests', () => {
+    expect(findWeakToBeDefinedAssertions()).toEqual([]);
   });
 
   it('does not synchronously append terminal output logs on the PTY output path', () => {

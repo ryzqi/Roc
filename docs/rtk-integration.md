@@ -2,7 +2,7 @@
 
 ## 概述
 
-Roc 集成 RTK v0.42.0，用于压缩 Roc `run_shell_command` 工具的 shell 输出。集成路径是：
+Roc 集成 RTK v0.42.4，用于压缩 Roc `run_shell_command` 工具的 shell 输出。集成路径是：
 
 1. `RTKMiddleware` 通过 LangChain `createMiddleware({ wrapToolCall })` 拦截 shell 工具调用。
 2. `CommandRewriter` 调用 bundled RTK binary 的 `rewrite` 子命令，把支持的命令改成 `rtk ...` 形式。
@@ -49,8 +49,8 @@ resources\rtk-binaries\linux-x64\rtk
 运行 RTK 测试：
 
 ```powershell
-pnpm test tests\rtk-integration\
-pnpm test --coverage tests\rtk-integration\
+pnpm test -- tests\rtk-integration
+pnpm test -- --coverage tests\rtk-integration
 ```
 
 运行完整验证：
@@ -71,7 +71,7 @@ pnpm smoke:electron
 
 ## 版本与来源
 
-- RTK version：v0.42.0
-- Release date：2026-05-24
-- Release source：`https://github.com/rtk-ai/rtk/releases/tag/v0.42.0`
+- RTK version：v0.42.4
+- Release date：2026-06-12
+- Release source：`https://github.com/rtk-ai/rtk/releases/tag/v0.42.4`
 - LangChain middleware API：`https://docs.langchain.com/oss/javascript/langchain/middleware`

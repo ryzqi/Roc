@@ -4,7 +4,7 @@
 Audit the whole Roc codebase section by section until current evidence supports: no proven redundant code remains, production standards are met, and performance, animation, and interaction risks have been reviewed and fixed where justified.
 
 ## Current Phase
-Phase 5
+Phase 6
 
 ## Acceptance Criteria
 - Every source area is inspected with local evidence: `src/main`, `src/preload`, `src/renderer`, `src/shared`, `src/rtk-integration`, `tests`, `scripts`, and relevant docs/config.
@@ -53,12 +53,12 @@ Phase 5
 - **Status:** complete
 
 ### Phase 6: Tests, Scripts, Resources, Docs Audit
-- [ ] Audit tests for stale assertions, weak coverage, duplicates, and obsolete fixtures.
-- [ ] Audit scripts/config/docs for stale commands, generated-code drift, and redundant maintenance paths.
-- [ ] Fix only proven issues.
-- [ ] Run focused verification and diff review.
-- [ ] Commit verified changes.
-- **Status:** pending
+- [x] Audit tests for stale assertions, weak coverage, duplicates, and obsolete fixtures.
+- [x] Audit scripts/config/docs for stale commands, generated-code drift, and redundant maintenance paths.
+- [x] Fix only proven issues.
+- [x] Run focused verification and diff review.
+- [x] Commit verified changes.
+- **Status:** complete
 
 ### Phase 7: Whole-Repo Completion Audit
 - [ ] Re-run high-value verification set for broad cleanup.
@@ -91,6 +91,9 @@ Phase 5
 | Strict unused scan found an unused default `React` import in the new workbench resize test | 1 | Removed the default import and kept only used React hooks/helpers |
 | `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Treated as non-blocking line-ending normalization warning because command exited 0 |
 | Renderer async-state reference scan used another malformed regex and returned `unclosed group` | 1 | Re-ran with fixed-string searches for async-state exports and status literals |
+| Phase 6 file-map command included nonexistent `.github` and returned exit 1 | 1 | Treat as scan-input error only; continue with existing `tests`, `scripts`, `docs`, and `resources` paths |
+| Phase 6 command/doc scan included nonexistent `README.md` and returned `os error 2` | 1 | Record that this checkout has no root README and avoid using it as an authoritative command source |
+| Memory citation line read used `Select-Object -Index 84..94`, which PowerShell parsed as a string | 1 | Re-read with array slicing or a line-number helper when exact memory citation ranges are needed |
 
 ## Notes
 - Re-read this plan before each area transition.
