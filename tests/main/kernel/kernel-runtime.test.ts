@@ -75,10 +75,10 @@ describe('KernelRuntime', () => {
         '@roc/plugin-agent': { status: 'healthy' }
       }
     });
-    expect(readFileSync(join(root, 'logs', 'app.jsonl'), 'utf8')).toContain('runtime initialized');
 
     await runtime.shutdown();
 
+    expect(readFileSync(join(root, 'logs', 'app.jsonl'), 'utf8')).toContain('runtime initialized');
     expect(calls).toEqual(['@roc/plugin-agent', 'shutdown']);
     expect(runtime.getStatus().started).toBe(false);
   });

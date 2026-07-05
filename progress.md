@@ -52,6 +52,11 @@
 | PDF preview stream strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | PDF preview stream source search | `rg -n "streamPdfPreviewResource|readFileSync|createReadStream|Readable\\.toWeb" src/main/services/file-service.ts tests/main/code-quality-empty-catch.test.ts tests/main/plugins/workspace/file-capabilities.test.ts` | No `readFileSync` inside `streamPdfPreviewResource`; stream code present | Stream method uses `Readable.toWeb(createReadStream(...))`; remaining `readFileSync` hits are image preview/recovery/test reads | pass |
 | PDF preview stream diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Infrastructure logger append RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails on sync plugin log append | Failed because `InfrastructureLogger.append()` contained `appendFileSync` | fail-expected |
+| Infrastructure logger append GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/infrastructure/logger.test.ts tests/main/kernel/kernel-runtime.test.ts` | Relevant tests pass | 3 files, 8 tests passed | pass |
+| Infrastructure logger append typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Infrastructure logger append strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Infrastructure logger append source search | `rg -n "appendFileSync|createWriteStream|close\\(\\): Promise<void>|InfrastructureLogger" src/main/infrastructure/logger.ts src/main/kernel/kernel-runtime.ts tests/main/code-quality-empty-catch.test.ts tests/main/infrastructure/logger.test.ts tests/main/kernel/kernel-runtime.test.ts` | No production `appendFileSync`; stream close path present | No `appendFileSync` in production files; logger close is called by kernel runtime | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -105,6 +110,12 @@
   - Added workspace capability coverage that consumes the streamed PDF `Response` body.
   - Verified with focused tests, `pnpm typecheck`, strict unused scan, and source search.
   - Reviewed the PDF preview diff for Response type-boundary, capability-contract, and test-coverage risks; no blocking issue found.
+  - Found live `InfrastructureLogger` plugin logging still used `appendFileSync` per log entry.
+  - Added a RED quality test scoped to `InfrastructureLogger.append()`.
+  - Replaced sync appends with a serialized `WriteStream` write chain.
+  - Added `InfrastructureLogger.close()` and wired `KernelRuntime` to close it on start failure and shutdown.
+  - Updated logger and kernel runtime tests to use `close()`/shutdown as the log flush boundary.
+  - Verified with focused tests, `pnpm typecheck`, strict unused scan, source search, and diff review.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -125,7 +136,11 @@
   - `src/main/windows-host-service.ts` (updated)
   - `src/main/services/terminal-session-service.ts` (updated)
   - `src/main/services/file-service.ts` (updated)
+  - `src/main/infrastructure/logger.ts` (updated)
+  - `src/main/kernel/kernel-runtime.ts` (updated)
   - `tests/main/plugins/workspace/file-capabilities.test.ts` (updated)
+  - `tests/main/infrastructure/logger.test.ts` (updated)
+  - `tests/main/kernel/kernel-runtime.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -144,5 +159,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, and PDF preview resource paths no longer use sync whole-file I/O on the audited hot paths; error normalization now has one implementation |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, and PDF preview resource I/O, and removed duplicate error normalization helpers |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, and removed duplicate error normalization helpers |

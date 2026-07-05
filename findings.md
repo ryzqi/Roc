@@ -34,6 +34,7 @@
 - `toLogError()` had duplicate implementations in IPC and Windows host code while `electron-runtime-adapters.ts` already exposed the same behavior. The single source is now `src/main/services/errors.ts`.
 - `TerminalSessionService` wrote every PTY output chunk with `appendFileSync`. It now uses a per-session `WriteStream`, closes the stream on exit/close/shutdown, and keeps late output ignored after session deletion.
 - `FileService.streamPdfPreviewResource()` used to read the entire PDF with `readFileSync` before returning a `Response`. It now returns a `createReadStream()` Web stream while keeping the same PDF path checks, media type, and cache headers.
+- `InfrastructureLogger` is live kernel infrastructure for plugin and event-bus logs. It used `appendFileSync` per plugin log entry; it now writes through a `WriteStream` and is closed by `KernelRuntime` on start failure and shutdown.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -64,3 +65,4 @@
 | `src/main` error normalization duplication | complete | RED errors test failed before export; GREEN focused tests/typecheck/strict unused pass; only one `toLogError` implementation remains | Continue `src/main` production audit |
 | `src/main` terminal output logging | complete | RED quality test found `appendFileSync`; GREEN focused tests/typecheck/strict unused pass; no `appendFileSync` remains in production terminal service | Continue `src/main` production audit |
 | `src/main` PDF preview resource I/O | complete | RED quality test found `readFileSync` in `streamPdfPreviewResource`; GREEN focused tests/typecheck/strict unused pass; behavior test consumes streamed PDF `Response` | Continue `src/main` production audit |
+| `src/main` infrastructure plugin logging | complete | RED quality test found `appendFileSync` in `InfrastructureLogger.append`; GREEN focused tests/typecheck/strict unused pass; kernel runtime closes logger on shutdown | Continue `src/main` production audit |

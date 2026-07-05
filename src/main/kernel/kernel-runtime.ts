@@ -26,6 +26,7 @@ type KernelInfrastructure = {
   databasePool: DatabasePool;
   eventBus: EventBus;
   loader: PluginLoader;
+  logger: InfrastructureLogger;
 };
 
 export class KernelRuntime {
@@ -63,11 +64,12 @@ export class KernelRuntime {
       })
     });
 
-    this.infrastructure = { capabilities, databasePool, eventBus, loader };
+    this.infrastructure = { capabilities, databasePool, eventBus, loader, logger };
     try {
       await loader.load(this.options.plugins);
       this.started = true;
     } catch (error) {
+      await logger.close();
       databasePool.closeAll();
       this.infrastructure = null;
       throw error;
@@ -80,6 +82,7 @@ export class KernelRuntime {
       return;
     }
     await this.infrastructure.loader.shutdown();
+    await this.infrastructure.logger.close();
     this.infrastructure.databasePool.closeAll();
     this.infrastructure = null;
     this.started = false;

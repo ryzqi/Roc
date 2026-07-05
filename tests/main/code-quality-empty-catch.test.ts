@@ -136,4 +136,14 @@ describe('source code quality', () => {
 
     expect(source).not.toContain('readFileSync');
   });
+
+  it('does not synchronously append infrastructure plugin logs', () => {
+    const source = readClassMethodSource(
+      join(process.cwd(), 'src', 'main', 'infrastructure', 'logger.ts'),
+      'InfrastructureLogger',
+      'append'
+    );
+
+    expect(source).not.toContain('appendFileSync');
+  });
 });
