@@ -84,6 +84,12 @@
 | DeepAgent executor cleanup strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | DeepAgent executor cleanup production search | `rg -n "const closers|Promise\\.allSettled\\(closers|closers\\.push" src\main\plugins\agent\deep-agent-executor.ts` | No production matches | No production closers registry matches | pass |
 | DeepAgent executor cleanup diff check | `git diff --check` | No whitespace errors | Exit 0; Git warned `deep-agent-executor.ts` CRLF will be replaced by LF next time Git touches it | pass |
+| DeepAgent prompt-builder compatibility RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails while `prompt-builder.ts` compatibility export remains | 1 failed, 7 passed; assertion received `true` for file existence | fail-expected |
+| DeepAgent prompt-builder compatibility GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/services/deep-agent/prompt-caching-integration.test.ts tests/main/services/deep-agent/context/prompt-blocks.test.ts` | Relevant quality and prompt tests pass | 3 files, 20 tests passed | pass |
+| DeepAgent prompt-builder compatibility typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| DeepAgent prompt-builder compatibility strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| DeepAgent prompt-builder compatibility reference search | `rg -n "prompt-builder" src tests package.json docs` | No references | `no prompt-builder references` | pass |
+| DeepAgent prompt-builder compatibility diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -170,6 +176,13 @@
   - Removed the inert executor cleanup registry while preserving `consumeRun` error behavior through `eventQueue.fail(error)`.
   - Verified with focused quality/executor tests, `pnpm typecheck`, strict unused scan, production source search, and `git diff --check`.
   - Reviewed the diff for lost cleanup behavior, error handling regression, and test-scope risk; no blocking issue found.
+  - Committed verified cleanup as `e2c309f refactor: remove inert executor cleanup registry`.
+  - Continued DeepAgent runtime/task boundary audit and checked task run thread-kind paths; the apparent `workflowHint` mismatch is not a current bug because real `AgentRuntime.startRun()` persists the run before the task plugin mirrors the started event, and manual background runs reuse an existing background thread.
+  - Found `src/main/services/deep-agent/prompt-builder.ts` was a compatibility re-export with no production imports; only tests referenced the old path.
+  - Added a RED quality test forbidding the retired prompt-builder compatibility export.
+  - Deleted `prompt-builder.ts`, deleted the test that only covered the compatibility re-export, and updated the remaining prompt caching test to import `BlockStability` from `context/prompt-blocks`.
+  - Verified with focused quality/prompt tests, `pnpm typecheck`, strict unused scan, old-path source search, and `git diff --check`.
+  - Reviewed the diff for prompt behavior loss and stale reference risk; no blocking issue found.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -201,6 +214,9 @@
   - `tests/main/langchain-nvidia-probe.test.ts` (created)
   - `src/main/services/provider-request-retry.ts` (updated)
   - `tests/main/provider-request-retry.test.ts` (updated)
+  - `src/main/services/deep-agent/prompt-builder.ts` (deleted)
+  - `tests/main/services/deep-agent/prompt-builder.test.ts` (deleted)
+  - `tests/main/services/deep-agent/prompt-caching-integration.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
   - `task_plan.md` (updated)
@@ -219,6 +235,7 @@
 | 2026-07-05 | Tried to read nonexistent `tests/main/provider-runtime-service.test.ts` while reviewing provider runtime coverage | 1 | Used `rg --files`/`rg` to identify the real provider retry coverage in `tests/main/provider-request-retry.test.ts` |
 | 2026-07-05 | A PowerShell `rg` command used a glob-style path `tests\main\plugins\agent\deep-agent-executor*.test.ts`, which produced `os error 123` | 1 | Re-ran searches and tests with explicit file paths instead of shell glob path syntax |
 | 2026-07-05 | Session catchup detected 63 unsynced messages after resume | 1 | Re-read planning files, ran catchup, `git status --short --branch`, and `git diff --stat` before continuing |
+| 2026-07-05 | Repeated the unsupported PowerShell glob path form in a broader `rg` command and hit `os error 123` again | 2 | Switched to `rg --glob` and explicit paths for subsequent searches |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -158,5 +158,9 @@ describe('source code quality', () => {
 
     expect(source).not.toContain('const closers: Array<() => Promise<void>> = []');
     expect(source).not.toContain('Promise.allSettled(closers.map');
+  });
+
+  it('does not keep the retired DeepAgent prompt-builder compatibility export', () => {
+    expect(existsSync(join(process.cwd(), 'src', 'main', 'services', 'deep-agent', 'prompt-builder.ts'))).toBe(false);
   });
 });

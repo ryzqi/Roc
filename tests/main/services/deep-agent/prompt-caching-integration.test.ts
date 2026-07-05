@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BlockStability } from '../../../../src/main/services/deep-agent/prompt-builder';
+import { BlockStability } from '../../../../src/main/services/deep-agent/context/prompt-blocks';
 
 describe('Prompt Caching Integration', () => {
   it('should parse blocks from marked content', () => {
