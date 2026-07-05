@@ -128,6 +128,14 @@
 | Reduced transparency typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Reduced transparency strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Reduced transparency diff check | `git diff --check` | Exit 0 | Exit 0 with CRLF normalization warning for `task-create-dialog.css` | pass |
+| Renderer async-state cleanup RED | `pnpm test -- tests/renderer/renderer-cleanup.test.ts` | New cleanup guard fails while unused helper file exists | Failed because `src/renderer/shared/async-state.ts` existed | fail-expected |
+| Renderer async-state cleanup GREEN | `pnpm test -- tests/renderer/renderer-cleanup.test.ts` | Cleanup guard passes after deletion | 1 file, 1 test passed | pass |
+| Renderer async-state reference search | `rg -n 'AsyncState|idleAsyncState|loadingAsyncState|loadedAsyncState|failedAsyncState|async-state' src tests docs package.json scripts` | No old references outside guard | Only `tests/renderer/renderer-cleanup.test.ts` matched | pass |
+| Renderer import graph after async-state cleanup | Inline Node import graph over `src/renderer` | No no-inbound candidates except allowed entry/ambient files | `no renderer no-inbound candidates` | pass |
+| Renderer suite after async-state cleanup | `pnpm test -- tests/renderer/renderer-cleanup.test.ts tests/renderer` | Renderer tests pass | 78 files, 332 tests passed | pass |
+| Async-state cleanup typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Async-state cleanup strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Async-state cleanup diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -323,6 +331,10 @@
   - Added a RED CSS contract test for task dialog reduced transparency.
   - Added `:root[data-reduced-transparency='true'] .task-create-dialog-backdrop` to remove backdrop blur and use a more opaque backdrop.
   - Verified with animation config tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
+  - Ran a renderer import graph; the only no-inbound candidates were ambient type entry files and `src/renderer/shared/async-state.ts`.
+  - Confirmed `async-state.ts` had no production references; only `tests/renderer/shared/async-state.test.ts` imported it.
+  - Added a RED cleanup guard for the unused async-state helper, then deleted the helper and its dedicated test.
+  - Re-ran old symbol search, renderer import graph, renderer tests, `pnpm typecheck`, strict unused scan, and `git diff --check`.
 - Files created/modified:
   - `task_plan.md` (updated)
   - `findings.md` (updated)
@@ -337,6 +349,9 @@
   - `tests/renderer/workbench-resize-keyboard.test.tsx` (created)
   - `src/renderer/styles/task-create-dialog.css` (updated)
   - `tests/renderer/animation-config.test.ts` (updated)
+  - `src/renderer/shared/async-state.ts` (deleted)
+  - `tests/renderer/shared/async-state.test.ts` (deleted)
+  - `tests/renderer/renderer-cleanup.test.ts` (created)
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -360,6 +375,7 @@
 | 2026-07-05 | Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
 | 2026-07-05 | Strict unused scan failed on unused default `React` import in `tests/renderer/workbench-resize-keyboard.test.tsx` | 1 | Removed the default import and re-ran strict unused successfully |
 | 2026-07-05 | `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Recorded as non-blocking because the command exited 0 and the project requires UTF-8/LF on touched files |
+| 2026-07-05 | Renderer async-state reference scan used another malformed regex and returned `unclosed group` | 1 | Re-ran with fixed-string searches instead of mixed quote alternation |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

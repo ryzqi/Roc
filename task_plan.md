@@ -90,6 +90,7 @@ Phase 5
 | Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler fixed-string searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
 | Strict unused scan found an unused default `React` import in the new workbench resize test | 1 | Removed the default import and kept only used React hooks/helpers |
 | `git diff --check` warned `task-create-dialog.css` CRLF will be replaced by LF | 1 | Treated as non-blocking line-ending normalization warning because command exited 0 |
+| Renderer async-state reference scan used another malformed regex and returned `unclosed group` | 1 | Re-ran with fixed-string searches for async-state exports and status literals |
 
 ## Notes
 - Re-read this plan before each area transition.
