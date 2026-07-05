@@ -835,8 +835,8 @@ function buildCompletionSummary(input: {
   return summary;
 }
 
-function collectHookDisplayText(texts: string[], value: string | null | undefined): void {
-  if (typeof value === 'string' && value.length > 0 && !texts.includes(value)) {
+function collectHookDisplayText(texts: string[], value: string | null): void {
+  if (value !== null && value.length > 0 && !texts.includes(value)) {
     texts.push(value);
   }
 }

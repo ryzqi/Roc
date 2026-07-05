@@ -911,6 +911,33 @@ describe('chat transcript helpers', () => {
     expect(messages[0]?.content).not.toContain('Hook completed');
   });
 
+  it('ignores persisted hook events that do not match the current hook summary contract', () => {
+    const messages = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'hook-completed-legacy',
+          threadId: 'thread-legacy-hook',
+          runId: 'run-legacy-hook',
+          type: 'hook_completed',
+          payload: {
+            runId: 'hook-run-legacy',
+            handlerId: 'PreToolUse:0:0',
+            event: 'PreToolUse',
+            status: 'completed',
+            durationMs: 12,
+            message: 'Legacy hook completed',
+            commandDisplay: 'node hook.js'
+          },
+          createdAt: '2026-06-24T00:00:01.000Z',
+          sequence: 1
+        }
+      ],
+      'thread-legacy-hook'
+    );
+
+    expect(messages).toEqual([]);
+  });
+
   it('moves echoed SessionStart add_context text into the hook block instead of assistant content', () => {
     const sessionStartContext =
       '<EXTREMELY_IMPORTANT>\nYou have superpowers.\n\nBelow is the full content of your skill.\n</EXTREMELY_IMPORTANT>';

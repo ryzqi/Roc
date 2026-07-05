@@ -210,13 +210,6 @@ function isHookEventName(value: unknown): value is RocHookRunSummary['event'] {
   return value === 'SessionStart' || value === 'UserPromptSubmit' || value === 'PreToolUse' || value === 'PostToolUse' || value === 'Stop' || value === 'SessionEnd';
 }
 
-function readNullableString(value: unknown): string | null | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return value === null || typeof value === 'string' ? value : undefined;
-}
-
 function readHookRunSummary(payload: unknown): RocHookRunSummary | null {
   if (typeof payload !== 'object' || payload === null) {
     return null;
@@ -227,8 +220,8 @@ function readHookRunSummary(payload: unknown): RocHookRunSummary | null {
   const status = Reflect.get(payload, 'status');
   const durationMs = Reflect.get(payload, 'durationMs');
   const message = Reflect.get(payload, 'message');
-  const rawAdditionalContext = readNullableString(Reflect.get(payload, 'additionalContext'));
-  const rawRequestContinue = readNullableString(Reflect.get(payload, 'requestContinue'));
+  const additionalContext = Reflect.get(payload, 'additionalContext');
+  const requestContinue = Reflect.get(payload, 'requestContinue');
   const commandDisplay = Reflect.get(payload, 'commandDisplay');
   if (
     typeof runId !== 'string' ||
@@ -237,14 +230,12 @@ function readHookRunSummary(payload: unknown): RocHookRunSummary | null {
     !isHookRunStatus(status) ||
     (durationMs !== null && typeof durationMs !== 'number') ||
     (message !== null && typeof message !== 'string') ||
-    (rawAdditionalContext === undefined && Reflect.has(payload, 'additionalContext')) ||
-    (rawRequestContinue === undefined && Reflect.has(payload, 'requestContinue')) ||
+    (additionalContext !== null && typeof additionalContext !== 'string') ||
+    (requestContinue !== null && typeof requestContinue !== 'string') ||
     typeof commandDisplay !== 'string'
   ) {
     return null;
   }
-  const additionalContext = rawAdditionalContext === undefined ? null : rawAdditionalContext;
-  const requestContinue = rawRequestContinue === undefined ? null : rawRequestContinue;
   return {
     runId,
     handlerId,
