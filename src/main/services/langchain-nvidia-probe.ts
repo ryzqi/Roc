@@ -35,7 +35,7 @@ export async function probeNvidiaTtfb(input: NvidiaProbeInput): Promise<{ latenc
   const linkedSignal =
     probeOptions.signal === undefined
       ? internalAbort.signal
-      : anySignal([probeOptions.signal, internalAbort.signal]);
+      : AbortSignal.any([probeOptions.signal, internalAbort.signal]);
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -190,23 +190,4 @@ function isAbortLikeError(error: unknown): boolean {
   }
   const named = error as { name?: unknown; code?: unknown };
   return named.name === 'AbortError' || named.code === 'ABORT_ERR' || named.code === 20;
-}
-
-function anySignal(signals: readonly AbortSignal[]): AbortSignal {
-  if (typeof (AbortSignal as unknown as { any?: (signals: readonly AbortSignal[]) => AbortSignal }).any === 'function') {
-    return (AbortSignal as unknown as { any: (signals: readonly AbortSignal[]) => AbortSignal }).any(signals);
-  }
-  const controller = new AbortController();
-  for (const signal of signals) {
-    if (signal.aborted) {
-      controller.abort(signal.reason);
-      break;
-    }
-    signal.addEventListener(
-      'abort',
-      () => controller.abort(signal.reason),
-      { once: true }
-    );
-  }
-  return controller.signal;
 }

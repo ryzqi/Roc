@@ -63,6 +63,15 @@
 | Task scheduler typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Task scheduler strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Task scheduler diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| NVIDIA probe behavior initial RED | `pnpm test -- tests/main/langchain-nvidia-probe.test.ts` | Tests expose current behavior without Vitest unhandled errors | 3 tests passed but Vitest reported 1 unhandled rejection from late `.rejects` binding; exit 1 | fail-expected |
+| NVIDIA probe behavior GREEN | `pnpm test -- tests/main/langchain-nvidia-probe.test.ts` | 3 tests pass with no unhandled errors | 1 file, 3 tests passed | pass |
+| NVIDIA probe native AbortSignal RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails while local `function anySignal` remains | 1 failed, 5 passed; failure matched `function anySignal` | fail-expected |
+| NVIDIA probe native AbortSignal GREEN | `pnpm test -- tests/main/langchain-nvidia-probe.test.ts tests/main/code-quality-empty-catch.test.ts` | Direct probe and quality tests pass | 2 files, 9 tests passed | pass |
+| NVIDIA probe provider retry check | `pnpm test -- tests/main/provider-request-retry.test.ts` | Provider timeout retry behavior remains covered | 1 file, 6 tests passed | pass |
+| NVIDIA probe typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| NVIDIA probe strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| NVIDIA probe source search | `rg -n "function anySignal|AbortSignal as unknown as|AbortSignal\\.any|AbortSignal\\.timeout" src\main\services\langchain-nvidia-probe.ts tests\main\code-quality-empty-catch.test.ts tests\main\langchain-nvidia-probe.test.ts` | No local fallback or double assertion; native API call remains | Only native `AbortSignal.any` and quality-test anchor matched | pass |
+| NVIDIA probe diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -128,6 +137,13 @@
   - Verified with scheduler/task focused tests, `pnpm typecheck`, strict unused scan, and diff review.
   - Began the next timer/abort audit pass by reading terminal batching, workspace watcher, task scheduler, agent runtime startup timers, hook command timeout handling, and NVIDIA probe timeout handling.
   - Found no proven terminal batcher or workspace watcher timer leak in the inspected lifecycle paths; continued to provider probe/caller coverage.
+  - Found `langchain-nvidia-probe.ts` reimplemented `AbortSignal.any` with a local fallback despite the current Node runtime exposing native `AbortSignal.any` and project types supporting it.
+  - Added a RED quality test forbidding local `function anySignal` in the NVIDIA probe.
+  - Added focused NVIDIA probe behavior coverage for first SSE content, internal hard timeout classification, and caller abort classification.
+  - Fixed an initial Vitest unhandled rejection in the new timeout test by binding `.rejects` before advancing fake timers.
+  - Replaced the local `anySignal()` helper with native `AbortSignal.any()` and removed the double assertion fallback.
+  - Verified with direct probe tests, quality test, provider retry test, `pnpm typecheck`, strict unused scan, source search, and `git diff --check`.
+  - Reviewed the diff for abort classification, retry-layer behavior, source compatibility, and test quality risks; no blocking issue found.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -155,6 +171,8 @@
   - `tests/main/kernel/kernel-runtime.test.ts` (updated)
   - `src/main/plugins/task/scheduler.ts` (updated)
   - `tests/main/plugins/task/scheduler.test.ts` (updated)
+  - `src/main/services/langchain-nvidia-probe.ts` (updated)
+  - `tests/main/langchain-nvidia-probe.test.ts` (created)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -167,6 +185,14 @@
 | 2026-07-05 | Initial PDF stream quality regex matched past `streamPdfPreviewResource` into later `readFileSync` recovery-point code after production fix | 1 | Replaced the regex with an AST helper that reads only the target class method source |
 | 2026-07-05 | `pnpm typecheck` rejected `Readable.toWeb()` because Node `stream/web` and DOM `ReadableStream` declarations are not assignable | 1 | Kept the runtime stream path and added a narrow local `BodyInit` cast at the Response boundary |
 | 2026-07-05 | Tried to read nonexistent `tests/main/langchain-nvidia-probe.test.ts` while locating NVIDIA probe coverage | 1 | Switched to `rg` over `probeNvidiaTtfb` and read the actual model-factory/provider-runtime caller tests |
+| 2026-07-05 | Session catchup detected 83 unsynced messages after resume | 1 | Re-read `task_plan.md`, `progress.md`, and `findings.md`; ran catchup, `git status --short --branch`, and `git diff --stat` before continuing |
+| 2026-07-05 | New NVIDIA timeout behavior test produced a Vitest unhandled rejection because `.rejects` was attached after fake timers triggered rejection | 1 | Bound `expect(resultPromise).rejects` before `vi.advanceTimersByTimeAsync()` and re-ran the focused test |
+| 2026-07-05 | Tried to read nonexistent `tests/main/provider-runtime-service.test.ts` while reviewing provider runtime coverage | 1 | Used `rg --files`/`rg` to identify the real provider retry coverage in `tests/main/provider-request-retry.test.ts` |
+
+## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
+- `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).
+- `git diff --stat` currently shows only the tracked quality-test addition because the NVIDIA behavior test file is still untracked.
+- Latest commits before resuming: `5ec33b9`, `000b8be`, `630ea60`, `e720cd7`, `d38913f`.
 
 ## 5-Question Reboot Check
 | Question | Answer |
@@ -174,5 +200,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt` |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, and removed duplicate error normalization helpers |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, PDF preview resource, and infrastructure plugin logging paths no longer use the audited sync hot-path I/O; error normalization now has one implementation; scheduler long-delay slicing no longer starts tasks before `nextRunAt`; NVIDIA probe cancellation can use native `AbortSignal.any` without local fallback |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, PDF preview resource, and infrastructure plugin logging I/O, fixed scheduler long-delay early firing, removed duplicate error normalization helpers, and replaced NVIDIA probe abort composition fallback with the native API |

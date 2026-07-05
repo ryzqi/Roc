@@ -36,6 +36,8 @@
 - `FileService.streamPdfPreviewResource()` used to read the entire PDF with `readFileSync` before returning a `Response`. It now returns a `createReadStream()` Web stream while keeping the same PDF path checks, media type, and cache headers.
 - `InfrastructureLogger` is live kernel infrastructure for plugin and event-bus logs. It used `appendFileSync` per plugin log entry; it now writes through a `WriteStream` and is closed by `KernelRuntime` on start failure and shutdown.
 - `TaskScheduler` capped long timers with `maxTimeoutDelayMs` but did not re-check `nextRunAt` when an intermediate timer slice elapsed. Long-horizon tasks could start early; the fire path now reschedules until the task is actually due.
+- `src/main/services/langchain-nvidia-probe.ts` had a local `anySignal()` fallback and double assertion around `AbortSignal.any`. Current runtime check reports Node `v25.7.0` with native `AbortSignal.any` and `AbortSignal.timeout`; `package.json` pins `@types/node` `26.1.0`, Electron `42.4.1`, and TypeScript `6.0.3`.
+- NVIDIA probe cancellation now uses native `AbortSignal.any` directly. Behavior coverage proves first SSE delta returns and cancels the reader, internal hard timeout maps to `provider_request_timeout`, and caller abort remains an `AbortError` instead of being misclassified as provider timeout.
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -68,3 +70,4 @@
 | `src/main` PDF preview resource I/O | complete | RED quality test found `readFileSync` in `streamPdfPreviewResource`; GREEN focused tests/typecheck/strict unused pass; behavior test consumes streamed PDF `Response` | Continue `src/main` production audit |
 | `src/main` infrastructure plugin logging | complete | RED quality test found `appendFileSync` in `InfrastructureLogger.append`; GREEN focused tests/typecheck/strict unused pass; kernel runtime closes logger on shutdown | Continue `src/main` production audit |
 | `src/main` task scheduler long-delay timers | complete | RED scheduler test proved a future task fired after the first max-timeout slice; GREEN focused tests/typecheck/strict unused pass | Continue `src/main` production audit |
+| `src/main` NVIDIA probe abort composition | complete | RED quality test found local `function anySignal`; GREEN direct probe tests, retry-layer test, typecheck, strict unused, source search, and diff check pass | Continue `src/main` production audit |

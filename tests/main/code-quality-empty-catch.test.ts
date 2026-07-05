@@ -146,4 +146,10 @@ describe('source code quality', () => {
 
     expect(source).not.toContain('appendFileSync');
   });
+
+  it('does not reimplement native AbortSignal.any for NVIDIA probe cancellation', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'main', 'services', 'langchain-nvidia-probe.ts'), 'utf8');
+
+    expect(source).not.toContain('function anySignal');
+  });
 });
