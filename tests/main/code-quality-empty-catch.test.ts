@@ -89,6 +89,29 @@ function findExplicitAnyTypes(): string[] {
   return findings;
 }
 
+function readClassMethodSource(file: string, className: string, methodName: string): string {
+  const source = readFileSync(file, 'utf8');
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
+  let methodSource: string | null = null;
+
+  function visit(node: ts.Node): void {
+    if (ts.isClassDeclaration(node) && node.name !== undefined && node.name.text === className) {
+      for (const member of node.members) {
+        if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name) && member.name.text === methodName) {
+          methodSource = member.getText(sourceFile);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  if (methodSource === null) {
+    throw new Error(`Could not find ${className}.${methodName}`);
+  }
+  return methodSource;
+}
+
 describe('source code quality', () => {
   it('does not leave empty catch handlers in production source', () => {
     expect(findEmptyCatchHandlers()).toEqual([]);
@@ -102,5 +125,15 @@ describe('source code quality', () => {
     const source = readFileSync(join(process.cwd(), 'src', 'main', 'services', 'terminal-session-service.ts'), 'utf8');
 
     expect(source).not.toContain('appendFileSync');
+  });
+
+  it('does not synchronously buffer PDF preview resources', () => {
+    const source = readClassMethodSource(
+      join(process.cwd(), 'src', 'main', 'services', 'file-service.ts'),
+      'FileService',
+      'streamPdfPreviewResource'
+    );
+
+    expect(source).not.toContain('readFileSync');
   });
 });

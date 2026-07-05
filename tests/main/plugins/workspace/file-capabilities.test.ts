@@ -20,6 +20,7 @@ beforeEach(() => {
   mkdirSync(join(workspaceRoot, 'src'), { recursive: true });
   mkdirSync(join(workspaceRoot, 'assets'), { recursive: true });
   writeFileSync(join(workspaceRoot, 'src', 'notes.md'), 'alpha\nphase three boundary\n', 'utf8');
+  writeFileSync(join(workspaceRoot, 'guide.pdf'), '%PDF-1.4\nbody\n%%EOF\n', 'utf8');
   writeFileSync(
     join(workspaceRoot, 'assets', 'pixel.png'),
     Buffer.from(
@@ -81,6 +82,26 @@ describe('workspace file capabilities', () => {
     });
     expect(readFileSync(writeResult.recoveryPoint.snapshotPath, 'utf8')).toBe('alpha\nphase three boundary\n');
     expect(readFileSync(join(workspaceRoot, 'src', 'notes.md'), 'utf8')).toBe('updated phase three boundary\n');
+  });
+
+  it('streams PDF preview resources through the workspace capability', async () => {
+    const capabilities = await initializePlugin();
+    await capabilities.invoke<WorkspaceSelectRequest, unknown>('workspace.select', { path: workspaceRoot });
+
+    const preview = await capabilities.invoke('files.previewPdf', { relativePath: 'guide.pdf' });
+    const response = await capabilities.invoke<{ relativePath: string }, Response>('files.streamPdfPreviewResource', {
+      relativePath: 'guide.pdf'
+    });
+
+    expect(preview).toMatchObject({
+      relativePath: 'guide.pdf',
+      resourceUrl: 'roc-preview://workspace/pdf/guide.pdf#toolbar=0&navpanes=0&scrollbar=0',
+      mediaType: 'application/pdf'
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/pdf');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    await expect(response.text()).resolves.toBe('%PDF-1.4\nbody\n%%EOF\n');
   });
 });
 

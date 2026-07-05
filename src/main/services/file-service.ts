@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
+  createReadStream,
   existsSync,
   mkdirSync,
   openSync,
@@ -13,6 +14,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { Readable } from 'node:stream';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
   FileDeleteResult,
@@ -329,8 +331,9 @@ export class FileService {
     if (!stat.isFile()) {
       return new Response('Not found', { status: 404 });
     }
-    const buffer = readFileSync(absolutePath);
-    return new Response(buffer, {
+    // Node 和 DOM 的 ReadableStream 类型声明不互通；Response 运行时接受这个 Web stream。
+    const stream = Readable.toWeb(createReadStream(absolutePath)) as unknown as BodyInit;
+    return new Response(stream, {
       status: 200,
       headers: {
         'content-type': 'application/pdf',

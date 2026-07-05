@@ -46,6 +46,12 @@
 | Terminal append typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Terminal append strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Terminal append production search | `rg -n "appendFileSync" src/main/services/terminal-session-service.ts` | No matches | No matches, exit 1 | pass |
+| PDF preview stream RED | `pnpm test -- tests/main/code-quality-empty-catch.test.ts` | New quality test fails on sync PDF resource buffering | Failed because `streamPdfPreviewResource` contained `readFileSync` | fail-expected |
+| PDF preview stream GREEN | `pnpm test -- tests/main/code-quality-empty-catch.test.ts tests/main/plugins/workspace/file-capabilities.test.ts tests/main/plugins/workspace/plugin.test.ts` | Relevant tests pass | 3 files, 8 tests passed | pass |
+| PDF preview stream typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| PDF preview stream strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| PDF preview stream source search | `rg -n "streamPdfPreviewResource|readFileSync|createReadStream|Readable\\.toWeb" src/main/services/file-service.ts tests/main/code-quality-empty-catch.test.ts tests/main/plugins/workspace/file-capabilities.test.ts` | No `readFileSync` inside `streamPdfPreviewResource`; stream code present | Stream method uses `Readable.toWeb(createReadStream(...))`; remaining `readFileSync` hits are image preview/recovery/test reads | pass |
+| PDF preview stream diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -93,6 +99,12 @@
   - Replaced per-chunk `appendFileSync` with a per-session `WriteStream`, and closed it on exit, explicit close, and shutdown.
   - Added behavior coverage proving active PTY output still emits an event and persists into the session log.
   - Verified with focused tests, typecheck, strict unused scan, and production source search.
+  - Found `FileService.streamPdfPreviewResource()` buffered the whole PDF with `readFileSync` before returning a `Response`.
+  - Added a RED quality test scoped to the `streamPdfPreviewResource` method.
+  - Replaced the PDF resource body with `Readable.toWeb(createReadStream(...))`, keeping existing path validation and response headers.
+  - Added workspace capability coverage that consumes the streamed PDF `Response` body.
+  - Verified with focused tests, `pnpm typecheck`, strict unused scan, and source search.
+  - Reviewed the PDF preview diff for Response type-boundary, capability-contract, and test-coverage risks; no blocking issue found.
 - Files created/modified:
   - `tests/main/code-quality-empty-catch.test.ts` (updated)
   - `src/main/ipc/ipc-common.ts` (updated)
@@ -112,6 +124,8 @@
   - `src/main/ipc/register-ipc.ts` (updated)
   - `src/main/windows-host-service.ts` (updated)
   - `src/main/services/terminal-session-service.ts` (updated)
+  - `src/main/services/file-service.ts` (updated)
+  - `tests/main/plugins/workspace/file-capabilities.test.ts` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
 
@@ -121,6 +135,8 @@
 | 2026-07-05 | First type cleanup made `unknown[]` handler and `unknown` tool alias too strict; `pnpm typecheck` failed on IPC handlers and DynamicStructuredTool variance | 1 | Switched IPC handler to no-`any` bivariant boundary type and erased tool schema output with `never` while keeping invoke input `unknown`; added `SettingsSaveRequest` annotation |
 | 2026-07-05 | Focused terminal tests printed `node-pty AttachConsole failed` after Vitest reported pass | 1 | Treated as known Windows node-pty teardown noise because command exit code was 0 and tests passed |
 | 2026-07-05 | New terminal log persistence test failed with ENOENT while async stream had not created the file yet | 1 | Updated `waitFor` to treat transient predicate errors as not-yet-satisfied and retry until timeout |
+| 2026-07-05 | Initial PDF stream quality regex matched past `streamPdfPreviewResource` into later `readFileSync` recovery-point code after production fix | 1 | Replaced the regex with an AST helper that reads only the target class method source |
+| 2026-07-05 | `pnpm typecheck` rejected `Readable.toWeb()` because Node `stream/web` and DOM `ReadableStream` declarations are not assignable | 1 | Kept the runtime stream path and added a narrow local `BodyInit` cast at the Response boundary |
 
 ## 5-Question Reboot Check
 | Question | Answer |
@@ -128,5 +144,5 @@
 | Where am I? | Phase 3: Main Process And Services Audit |
 | Where am I going? | Audit `src/main`, then shared/preload/RTK, renderer, tests/scripts/docs, final whole-repo audit |
 | What's the goal? | Whole-repo production audit with evidence-backed cleanup and optimization |
-| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment and terminal output file writes no longer use sync fs APIs on hot paths; error normalization now has one implementation |
-| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image and terminal output I/O, and removed duplicate error normalization helpers |
+| What have I learned? | Root planning files were absent; command baselines are clean; `src/main` no longer has explicit `any` type keywords under AST scan; chat image attachment, terminal output, and PDF preview resource paths no longer use sync whole-file I/O on the audited hot paths; error normalization now has one implementation |
+| What have I done? | Created persistent tracking files, completed Phase 1 and Phase 2 baseline checks, completed `src/main` type-safety cleanup, optimized chat image, terminal output, and PDF preview resource I/O, and removed duplicate error normalization helpers |
