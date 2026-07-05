@@ -114,6 +114,14 @@
 | Phase 5 ChatComposer typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
 | Phase 5 ChatComposer strict unused | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
 | Phase 5 ChatComposer diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
+| Workbench separator keyboard RED | `pnpm test -- tests/renderer/workbench-resize-keyboard.test.tsx` | New keyboard resize tests fail on current implementation | 3 failed: no width update for right/files/git separators | fail-expected |
+| Workbench separator keyboard GREEN | `pnpm test -- tests/renderer/workbench-resize-keyboard.test.tsx` | Separator keyboard tests pass | 1 file, 3 tests passed | pass |
+| Workbench renderer slice | `pnpm test -- tests/renderer/workbench-resize-keyboard.test.tsx tests/renderer/files-workbench-interaction.test.tsx tests/renderer/workbench-surfaces.test.ts tests/renderer/bundle-splitting.test.ts tests/renderer/bundle-boundaries.test.ts` | Related workbench tests pass | 5 files, 21 tests passed | pass |
+| Renderer suite after workbench separator fix | `pnpm test -- tests/renderer` | Renderer tests pass | 78 files, 332 tests passed | pass |
+| Workbench separator typecheck | `pnpm typecheck` | Exit 0 | Exit 0 | pass |
+| Workbench separator strict unused initial | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | New code has no unused symbols | Failed on unused default `React` import in `workbench-resize-keyboard.test.tsx` | fail |
+| Workbench separator strict unused GREEN | `pnpm exec tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` | Exit 0 | No output, exit 0 | pass |
+| Workbench separator diff check | `git diff --check` | No whitespace errors | No output, exit 0 | pass |
 
 ### Phase 2: Automated Baseline Scans
 - **Status:** complete
@@ -298,12 +306,25 @@
   - Verified with focused composer tests, related chat renderer tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
   - Responsive smoke not run for this slice because no CSS, layout sizing, or responsive breakpoint code changed.
   - Self-review found no blocking issue: no `aria-haspopup` remains, `aria-expanded` is covered, same-popover reopen does not repeat refresh calls, and focus-leave close is covered.
+  - Continued Phase 5 scans for hover-only handlers, clickable non-buttons, stale task UI strings, dangerous HTML, observers/timers, animations/reduced-motion, and broad renderer casts.
+  - Found no remaining hover-only popover triggers outside the already-fixed composer controls.
+  - Found no production matches for old task UI residue such as `queuedTaskPrompt`, `openInChat`, `TaskDetailDrawer`, old task table/rail CSS, `json-view`, or retired reasoning view/parser paths.
+  - Found three focusable resize separators with `role="separator"` but no keyboard controls: the right workbench panel, files tree pane, and Git change pane.
+  - Added RED tests for the three separator keyboard paths.
+  - Added shared keyboard width resolution for `ArrowLeft`, `ArrowRight`, `Home`, and `End`, wired it into all three existing splitters, and added `aria-orientation`/`aria-value*` to the separators.
+  - Verified with focused separator tests, related workbench renderer tests, the full renderer suite, `pnpm typecheck`, strict unused scan, and `git diff --check`.
 - Files created/modified:
   - `task_plan.md` (updated)
   - `findings.md` (updated)
   - `progress.md` (updated)
   - `src/renderer/chat/chat-composer.tsx` (updated)
   - `tests/renderer/chat-composer.test.ts` (updated)
+  - `src/renderer/git-workbench.ts` (updated)
+  - `src/renderer/workbench/FilesWorkbench.tsx` (updated)
+  - `src/renderer/workbench/GitWorkbench.tsx` (updated)
+  - `src/renderer/workbench/WorkbenchPanel.tsx` (updated)
+  - `src/renderer/workbench/resize-separator-keyboard.ts` (created)
+  - `tests/renderer/workbench-resize-keyboard.test.tsx` (created)
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -324,6 +345,8 @@
 | 2026-07-05 | Used unsupported PowerShell glob path `tests/main/config-service*.test.ts` in an `rg` command and hit `os error 123` | 3 | Stopped using path globs directly in PowerShell arguments; used explicit files or `rg --glob` |
 | 2026-07-05 | Phase 5 initially tried to read nonexistent `src/renderer/styles.css` | 1 | Confirmed the real renderer style entry is `src/renderer/styles/index.css` |
 | 2026-07-05 | Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the interactive harness with `React.createElement` instead of JSX |
+| 2026-07-05 | Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
+| 2026-07-05 | Strict unused scan failed on unused default `React` import in `tests/renderer/workbench-resize-keyboard.test.tsx` | 1 | Removed the default import and re-ran strict unused successfully |
 
 ## Resume Checkpoint: 2026-07-05 NVIDIA Probe Slice
 - `git status --short --branch` shows branch `main`, one modified tracked file (`tests/main/code-quality-empty-catch.test.ts`), and one untracked WIP test file (`tests/main/langchain-nvidia-probe.test.ts`).

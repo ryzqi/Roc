@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { FilePreviewResult, FileTreeResult, FilesWorkbenchPdfPreviewResult } from '../../shared/types';
 import { CompactStatusPill } from '../components/CompactStatusPill';
 import { EmptyState } from '../components/EmptyState';
@@ -9,6 +10,12 @@ import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { createRocClient } from '../shared/roc-client';
 import { flattenTreeEntries, isImagePreview, parentRelativePath, previewTextBody } from './file-tree-helpers';
+import { resolveResizeSeparatorKeyWidth } from './resize-separator-keyboard';
+
+const FILE_PANE_MIN_WIDTH = 228;
+const FILE_PANE_MAX_WIDTH = 440;
+const FILE_PANE_DEFAULT_WIDTH = 304;
+const RESIZE_KEY_STEP = 16;
 
 export function FilesWorkbench({
   client,
@@ -24,7 +31,7 @@ export function FilesWorkbench({
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set());
   const [directoryChildren, setDirectoryChildren] = useState<Record<string, FileTreeResult['entries']>>({});
   const [directoryLoadingPath, setDirectoryLoadingPath] = useState<string | null>(null);
-  const [filePaneWidth, setFilePaneWidth] = useState(304);
+  const [filePaneWidth, setFilePaneWidth] = useState(FILE_PANE_DEFAULT_WIDTH);
   const selectedPreviewRelativePath = state.fileWorkbenchPdfPreview?.relativePath ?? state.filePreview?.relativePath ?? null;
   const previewPath = selectedPreviewRelativePath ?? '当前没有可预览文件';
 
@@ -36,7 +43,7 @@ export function FilesWorkbench({
     setExpandedDirectories(new Set());
     setDirectoryChildren({});
     setDirectoryLoadingPath(null);
-    setFilePaneWidth(304);
+    setFilePaneWidth(FILE_PANE_DEFAULT_WIDTH);
   }, [state.workspace?.path]);
 
   async function openFilePreview(relativePath: string): Promise<void> {
@@ -154,7 +161,7 @@ export function FilesWorkbench({
     const startX = event.clientX;
     const startWidth = filePaneWidth;
     const onMove = (moveEvent: PointerEvent): void => {
-      const nextWidth = Math.min(440, Math.max(228, startWidth + moveEvent.clientX - startX));
+      const nextWidth = Math.min(FILE_PANE_MAX_WIDTH, Math.max(FILE_PANE_MIN_WIDTH, startWidth + moveEvent.clientX - startX));
       setFilePaneWidth(nextWidth);
     };
     const onUp = (): void => {
@@ -164,6 +171,22 @@ export function FilesWorkbench({
     event.currentTarget.setPointerCapture(event.pointerId);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp, { once: true });
+  }
+
+  function resizeFilePaneWithKeyboard(event: KeyboardEvent<HTMLDivElement>): void {
+    const nextWidth = resolveResizeSeparatorKeyWidth({
+      currentWidth: filePaneWidth,
+      direction: 'normal',
+      key: event.key,
+      maxWidth: FILE_PANE_MAX_WIDTH,
+      minWidth: FILE_PANE_MIN_WIDTH,
+      step: RESIZE_KEY_STEP
+    });
+    if (nextWidth === null) {
+      return;
+    }
+    event.preventDefault();
+    setFilePaneWidth(nextWidth);
   }
 
   return (
@@ -205,7 +228,12 @@ export function FilesWorkbench({
           className="workbench-file-splitter"
           data-testid="workbench-file-splitter"
           role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={FILE_PANE_MIN_WIDTH}
+          aria-valuemax={FILE_PANE_MAX_WIDTH}
+          aria-valuenow={filePaneWidth}
           tabIndex={0}
+          onKeyDown={resizeFilePaneWithKeyboard}
           onPointerDown={startFilePaneResize}
         />
         <section className="workbench-content-pane">

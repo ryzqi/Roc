@@ -1,5 +1,6 @@
 import { GitBranch, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { GitBranchMutationResult, GitStatusResult } from '../../shared/types';
 import type { LazyLoadState, WorkspaceData } from '../app/types';
 import {
@@ -9,6 +10,8 @@ import {
   buildGitCreateBranchConfirmationRequest,
   buildGitSelectionModel,
   GIT_SPLIT_DEFAULT_WIDTH,
+  GIT_SPLIT_MAX_WIDTH,
+  GIT_SPLIT_MIN_WIDTH,
   selectAllGitChanges
 } from '../git-workbench';
 import type { LoadedState } from '../loaded-state';
@@ -24,7 +27,10 @@ import {
   gitStatusChanges
 } from './git-helpers';
 import { startGitPaneResize } from './git-pane-resize';
+import { resolveResizeSeparatorKeyWidth } from './resize-separator-keyboard';
 import { useGitDiffPreview } from './useGitDiffPreview';
+
+const RESIZE_KEY_STEP = 16;
 
 export function GitWorkbench({
   client,
@@ -138,6 +144,22 @@ export function GitWorkbench({
       return;
     }
     await loadGitDiffPreview(nextSelectedPath);
+  }
+
+  function resizeGitPaneWithKeyboard(event: KeyboardEvent<HTMLDivElement>): void {
+    const nextWidth = resolveResizeSeparatorKeyWidth({
+      currentWidth: gitPaneWidth,
+      direction: 'normal',
+      key: event.key,
+      maxWidth: GIT_SPLIT_MAX_WIDTH,
+      minWidth: GIT_SPLIT_MIN_WIDTH,
+      step: RESIZE_KEY_STEP
+    });
+    if (nextWidth === null) {
+      return;
+    }
+    event.preventDefault();
+    setGitPaneWidth(nextWidth);
   }
 
   function applyBranchMutationResult(result: GitBranchMutationResult): void {
@@ -461,7 +483,12 @@ export function GitWorkbench({
           className="workbench-git-splitter"
           data-testid="workbench-git-splitter"
           role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={GIT_SPLIT_MIN_WIDTH}
+          aria-valuemax={GIT_SPLIT_MAX_WIDTH}
+          aria-valuenow={gitPaneWidth}
           tabIndex={0}
+          onKeyDown={resizeGitPaneWithKeyboard}
           onPointerDown={(event) => startGitPaneResize(event, gitPaneWidth, setGitPaneWidth)}
         />
         <section className="git-detail-pane">

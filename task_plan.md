@@ -87,6 +87,8 @@ Phase 5
 | Repeated the unsupported PowerShell glob path form in a broader `rg` command and hit `os error 123` again | 2 | Switched to `rg --glob` and explicit paths for subsequent searches |
 | Phase 5 initially tried to read nonexistent `src/renderer/styles.css` | 1 | Confirmed the real renderer style entry is `src/renderer/styles/index.css` |
 | Added JSX to `.ts` renderer test file and esbuild failed with `Expected ">" but found "client"` | 1 | Rewrote the harness with `React.createElement` to match the file extension |
+| Phase 5 non-semantic click scan used a malformed regex and returned `unclosed group` | 1 | Re-ran with simpler fixed-string searches for `onClick`, `role="button"`, `tabIndex`, and `onKeyDown` |
+| Strict unused scan found an unused default `React` import in the new workbench resize test | 1 | Removed the default import and kept only used React hooks/helpers |
 
 ## Notes
 - Re-read this plan before each area transition.
