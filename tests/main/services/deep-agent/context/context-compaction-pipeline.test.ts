@@ -271,4 +271,42 @@ describe('RocContextCompactionPipeline', () => {
     expect(messages.some((message) => message.id === 'old-user-2')).toBe(false);
     expect(messages.some((message) => message.id === 'old-ai-3')).toBe(false);
   });
+
+  it('keeps the run alive when only the summary stage cannot produce a valid schema', async () => {
+    const store = new ContextArtifactStore(db);
+    const events: ContextMaintenanceEvent[] = [];
+    const messages: BaseMessage[] = [
+      new SystemMessage({ id: 'system', content: 'system' }),
+      new HumanMessage({ id: 'user', content: 'summarize old work' }),
+      mark(new AIMessage({ id: 'old-ai-1', content: 'old implementation details' }), 1),
+      mark(new HumanMessage({ id: 'recent-user', content: 'continue from here' }), 8),
+      mark(new AIMessage({ id: 'recent-ai', content: 'current next step' }), 8)
+    ];
+
+    await expect(runContextCompactionForTest({
+      artifactStore: store,
+      budgetTokens: 100,
+      emitEvent: (event) => events.push(event),
+      mode: 'chat',
+      model: {} as never,
+      runId: 'run_ctx_pipeline_summary_failure',
+      summarize: async () => {
+        throw new Error('context_summary_failed');
+      },
+      threadId: 'thread_ctx_pipeline_summary_failure',
+      workspaceHash: 'workspace_hash_summary_failure',
+      workspacePath: 'F:\\Code\\Roc',
+      messages,
+      countTokens: async () => 1200
+    })).resolves.toBeUndefined();
+
+    expect(events.map((event) => event.type)).toEqual([
+      'context_compaction_started',
+      'context_deterministic_compacted',
+      'context_summary_started',
+      'context_compaction_failed'
+    ]);
+    expect(messages.some(isContextDigestMessage)).toBe(false);
+    expect(messages.map((message) => message.id)).toEqual(['system', 'user', 'recent-user', 'recent-ai']);
+  });
 });

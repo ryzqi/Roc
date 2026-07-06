@@ -26,12 +26,27 @@ export type ContextSummaryInput = {
   workspacePath: string | null;
 };
 
+type ContextSummaryModel = Pick<BaseChatModel, 'invoke'> & {
+  withStructuredOutput?: BaseChatModel['withStructuredOutput'];
+};
+
 export type SummarizeWithCurrentModelInput = ContextSummaryInput & {
-  model: Pick<BaseChatModel, 'invoke'>;
+  model: ContextSummaryModel;
+};
+
+const contextSummaryInvokeConfig = {
+  metadata: {
+    lcSource: 'summarization'
+  },
+  tags: ['roc-context-summary']
 };
 
 export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModelInput): Promise<ContextSummary> {
   const prompt = buildContextSummaryPrompt(input);
+  const structuredSummary = await summarizeWithStructuredOutput(input.model, prompt);
+  if (structuredSummary !== null) {
+    return structuredSummary;
+  }
   const first = await invokeSummaryModel(input.model, prompt);
   try {
     return parseContextSummary(first);
@@ -48,6 +63,32 @@ export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModel
     } catch {
       throw new Error('context_summary_failed');
     }
+  }
+}
+
+async function summarizeWithStructuredOutput(model: ContextSummaryModel, prompt: string): Promise<ContextSummary | null> {
+  const withStructuredOutput = model.withStructuredOutput;
+  if (withStructuredOutput === undefined) {
+    return null;
+  }
+
+  let structuredModel: ReturnType<BaseChatModel['withStructuredOutput']>;
+  try {
+    structuredModel = withStructuredOutput.call(model, contextSummarySchema, {
+      name: 'roc_context_summary'
+    });
+  } catch (error) {
+    if (isStructuredOutputUnavailable(error)) {
+      return null;
+    }
+    throw error;
+  }
+
+  try {
+    const summary = await structuredModel.invoke(buildContextSummaryMessages(prompt), contextSummaryInvokeConfig);
+    return contextSummarySchema.parse(summary);
+  } catch {
+    throw new Error('context_summary_failed');
   }
 }
 
@@ -90,14 +131,29 @@ export function contextSummaryToDigestMessage(summary: ContextSummary): AIMessag
 }
 
 async function invokeSummaryModel(model: Pick<BaseChatModel, 'invoke'>, prompt: string): Promise<string> {
-  const response = await model.invoke([
-    new SystemMessage('You summarize old runtime context for Roc.'),
-    new HumanMessage(prompt)
-  ] as never);
+  const response = await model.invoke(buildContextSummaryMessages(prompt), contextSummaryInvokeConfig);
   if (typeof response.content === 'string') {
     return response.content;
   }
   return JSON.stringify(response.content);
+}
+
+function buildContextSummaryMessages(prompt: string): BaseMessage[] {
+  return [
+    new SystemMessage('You summarize old runtime context for Roc.'),
+    new HumanMessage(prompt)
+  ];
+}
+
+function isStructuredOutputUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.message.includes('withStructuredOutput') ||
+    error.message.includes('bindTools') ||
+    error.message.includes('structured output')
+  );
 }
 
 function formatList(values: readonly string[]): string[] {

@@ -105,4 +105,48 @@ describe('context-summary', () => {
     expect(summary.goal).toBe('Recovered summary.');
     expect(model.invoke).toHaveBeenCalledTimes(2);
   });
+
+  it('uses structured output and tags the summary call as internal', async () => {
+    const structuredInvoke = vi.fn(async () => ({
+      goal: 'Structured summary.',
+      facts: [],
+      decisions: [],
+      filesTouched: [],
+      toolEvidence: [],
+      verification: [],
+      openQuestions: [],
+      nextActions: ['Continue.']
+    }));
+    const model = {
+      invoke: vi.fn(async () => {
+        throw new Error('plain_summary_invoke_not_expected');
+      }),
+      withStructuredOutput: vi.fn(() => ({
+        invoke: structuredInvoke
+      }))
+    };
+
+    const summary = await summarizeWithCurrentModel({
+      artifactReferences: [],
+      goal: 'Summarize.',
+      messages: [new HumanMessage('old')],
+      model: model as never,
+      recentMessages: [],
+      userConstraints: [],
+      workspacePath: null
+    });
+
+    expect(summary.goal).toBe('Structured summary.');
+    expect(model.withStructuredOutput).toHaveBeenCalledTimes(1);
+    expect(model.invoke).not.toHaveBeenCalled();
+    expect(structuredInvoke).toHaveBeenCalledTimes(1);
+    expect(structuredInvoke).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        metadata: {
+          lcSource: 'summarization'
+        }
+      })
+    );
+  });
 });

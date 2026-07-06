@@ -110,7 +110,10 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
 
     stage = 'summary';
     input.emitEvent(createEvent(input, 'context_summary_started', stage));
-    const summary = await summarizeContext(input, artifactReferences, beforeDeterministicMessages);
+    const summary = await summarizeContextOrSkip(input, artifactReferences, beforeDeterministicMessages);
+    if (summary === null) {
+      return;
+    }
     const digestMessage = contextSummaryToDigestMessage(summary);
     compactToSummaryTail(input.messages, digestMessage);
     input.artifactStore.recordPreCompactionFlush({
@@ -124,6 +127,19 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
   } catch (error) {
     input.emitEvent(createEvent(input, 'context_compaction_failed', stage));
     throw error;
+  }
+}
+
+async function summarizeContextOrSkip(
+  input: RunCompactionInput,
+  artifactReferences: readonly string[],
+  beforeDeterministicMessages: readonly BaseMessage[]
+): Promise<ContextSummary | null> {
+  try {
+    return await summarizeContext(input, artifactReferences, beforeDeterministicMessages);
+  } catch {
+    input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
+    return null;
   }
 }
 
