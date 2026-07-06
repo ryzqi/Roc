@@ -11,6 +11,7 @@ import type {
   PerformanceSampleRequest,
   PerformanceTimingSample
 } from '../../../shared/types';
+import { applyDiagnosticsDatabaseSchema } from '../../infrastructure/database-schemas';
 import { RocDomainError } from '../../services/errors';
 import { MetricsService } from '../../services/metrics-service';
 import { PerformanceObserverService } from '../../services/performance-observer-service';
@@ -163,28 +164,7 @@ export function createDiagnosticsPerformanceAdapter(
 }
 
 export function applyDiagnosticsPluginSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS performance_samples (
-      id TEXT PRIMARY KEY,
-      sampled_at TEXT NOT NULL,
-      mode TEXT NOT NULL,
-      uptime_seconds REAL NOT NULL,
-      rss_mb REAL NOT NULL,
-      heap_used_mb REAL NOT NULL,
-      heap_total_mb REAL NOT NULL,
-      memory_budget_mb REAL NOT NULL,
-      exceeds_budget INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS diagnostic_packages (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL,
-      path TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      includes_json TEXT NOT NULL,
-      redacted INTEGER NOT NULL
-    );
-  `);
+  applyDiagnosticsDatabaseSchema(db);
 }
 
 function readElectronMetrics(runtimeMetricsProvider: RuntimeMetricsProvider): PerformanceElectronMetrics {

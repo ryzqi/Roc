@@ -27,7 +27,6 @@ type StoreRow = {
 export class RocSqliteStore extends BaseStore {
   constructor(private readonly db: DatabaseConnection) {
     super();
-    applyRocSqliteStoreSchema(db);
   }
 
   override async get(namespace: string[], key: string): Promise<Item | null> {
@@ -195,22 +194,6 @@ export class RocSqliteStore extends BaseStore {
     const sorted = [...unique.values()].sort(compareNamespaces);
     return applyPagination(sorted, operation.offset, operation.limit);
   }
-}
-
-function applyRocSqliteStoreSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS langgraph_store_items (
-      namespace_key TEXT NOT NULL,
-      namespace_json TEXT NOT NULL,
-      key TEXT NOT NULL,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (namespace_key, key)
-    );
-    CREATE INDEX IF NOT EXISTS idx_langgraph_store_items_namespace_key
-      ON langgraph_store_items(namespace_key);
-  `);
 }
 
 function isSearchOperation(operation: Operation): operation is SearchOperation {

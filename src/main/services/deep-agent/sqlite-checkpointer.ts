@@ -42,7 +42,6 @@ const writesIndexByChannel = new Map<string, number>([
 export class RocSqliteCheckpointer extends BaseCheckpointSaver {
   constructor(private readonly db: DatabaseConnection) {
     super();
-    applyRocSqliteCheckpointerSchema(db);
   }
 
   override async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
@@ -289,39 +288,6 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     }
     return pendingWrites;
   }
-}
-
-export function applyRocSqliteCheckpointerSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS langgraph_checkpoints (
-      thread_id TEXT NOT NULL,
-      checkpoint_ns TEXT NOT NULL,
-      checkpoint_id TEXT NOT NULL,
-      parent_checkpoint_id TEXT,
-      checkpoint_type TEXT NOT NULL,
-      checkpoint_blob BLOB NOT NULL,
-      metadata_type TEXT NOT NULL,
-      metadata_blob BLOB NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_langgraph_checkpoints_thread_checkpoint
-      ON langgraph_checkpoints(thread_id, checkpoint_ns, checkpoint_id DESC);
-
-    CREATE TABLE IF NOT EXISTS langgraph_checkpoint_writes (
-      thread_id TEXT NOT NULL,
-      checkpoint_ns TEXT NOT NULL,
-      checkpoint_id TEXT NOT NULL,
-      task_id TEXT NOT NULL,
-      idx INTEGER NOT NULL,
-      channel TEXT NOT NULL,
-      value_type TEXT NOT NULL,
-      value_blob BLOB NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
-    );
-  `);
 }
 
 function readCheckpointKeyForGet(config: RunnableConfig): {

@@ -33,6 +33,7 @@ import type {
   Workspace,
   WorkspaceSelectRequest
 } from '../../../shared/types';
+import { applyWorkspaceDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { defaultSettings } from '../../services/config/defaults';
 import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
@@ -181,7 +182,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
     initialize: async (context) => {
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
-      applyWorkspacePluginSchema(context.database.getConnection());
+      applyWorkspaceDatabaseSchema(context.database.getConnection());
       const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);
@@ -285,20 +286,6 @@ function createFileDatabaseAdapter(context: RocPluginContext): FileRecoveryPoint
       return context.database.getConnection();
     }
   };
-}
-
-function applyWorkspacePluginSchema(db: ReturnType<RocPluginContext['database']['getConnection']>): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS recovery_points (
-      id TEXT PRIMARY KEY,
-      relative_path TEXT NOT NULL,
-      snapshot_path TEXT NOT NULL,
-      content_sha256 TEXT NOT NULL,
-      source TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      restored INTEGER NOT NULL
-    );
-  `);
 }
 
 function descriptor<TInput, TOutput>(

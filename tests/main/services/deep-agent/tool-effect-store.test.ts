@@ -16,6 +16,17 @@ afterEach(() => {
 });
 
 describe('AgentToolEffectStore', () => {
+  it('does not create tool effect tables during construction', () => {
+    const isolatedDb = new Database(':memory:');
+    try {
+      new AgentToolEffectStore(isolatedDb);
+
+      expect(tableExists(isolatedDb, 'agent_tool_effects')).toBe(false);
+    } finally {
+      isolatedDb.close();
+    }
+  });
+
   it('returns a stored successful result for the same tool call and input hash', () => {
     const store = new AgentToolEffectStore(db);
     store.start({
@@ -63,3 +74,10 @@ describe('AgentToolEffectStore', () => {
     );
   });
 });
+
+function tableExists(connection: Database.Database, tableName: string): boolean {
+  const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}

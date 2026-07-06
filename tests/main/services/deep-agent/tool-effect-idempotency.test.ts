@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { ToolMessage } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import { createToolEffectIdempotencyMiddleware } from '../../../../src/main/services/deep-agent/tool-effect-idempotency';
 
@@ -10,6 +11,7 @@ let store: AgentToolEffectStore;
 
 beforeEach(() => {
   db = new Database(':memory:');
+  applyAgentPluginSchema(db);
   store = new AgentToolEffectStore(db);
 });
 

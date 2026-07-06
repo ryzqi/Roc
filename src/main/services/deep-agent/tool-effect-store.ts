@@ -10,9 +10,7 @@ type ToolEffectRow = {
 export type ReusableToolEffect = { status: 'success'; result: unknown };
 
 export class AgentToolEffectStore {
-  constructor(private readonly db: DatabaseConnection) {
-    applyAgentToolEffectSchema(db);
-  }
+  constructor(private readonly db: DatabaseConnection) {}
 
   start(input: {
     runId: string;
@@ -127,27 +125,6 @@ export class AgentToolEffectStore {
 
 export function hashToolInput(input: unknown): string {
   return createHash('sha256').update(stableStringify(input)).digest('hex');
-}
-
-export function applyAgentToolEffectSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_tool_effects (
-      run_id TEXT NOT NULL,
-      thread_id TEXT NOT NULL,
-      tool_call_id TEXT NOT NULL,
-      tool_name TEXT NOT NULL,
-      input_hash TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('in_progress','success','error','unknown')),
-      result_json TEXT,
-      error_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (run_id, tool_call_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_agent_tool_effects_thread_updated
-      ON agent_tool_effects(thread_id, updated_at DESC);
-  `);
 }
 
 function stableStringify(value: unknown): string {

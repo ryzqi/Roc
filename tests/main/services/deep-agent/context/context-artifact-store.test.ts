@@ -19,6 +19,17 @@ afterEach(() => {
 });
 
 describe('ContextArtifactStore', () => {
+  it('does not create context artifact tables during construction', () => {
+    const isolatedDb = new Database(':memory:');
+    try {
+      new ContextArtifactStore(isolatedDb);
+
+      expect(tableExists(isolatedDb, 'context_artifacts')).toBe(false);
+    } finally {
+      isolatedDb.close();
+    }
+  });
+
   it('persists a large tool result with hash, preview, and full readback', () => {
     const store = new ContextArtifactStore(db);
     const content = `${'alpha '.repeat(100)}final evidence`;
@@ -139,3 +150,10 @@ describe('ContextArtifactStore', () => {
     ]);
   });
 });
+
+function tableExists(connection: Database.Database, tableName: string): boolean {
+  const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}

@@ -1,12 +1,14 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 
 let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
+  applyAgentPluginSchema(db);
 });
 
 afterEach(() => {
@@ -14,6 +16,18 @@ afterEach(() => {
 });
 
 describe('RocSqliteCheckpointer', () => {
+  it('does not create checkpoint tables during construction', () => {
+    const isolatedDb = new Database(':memory:');
+    try {
+      new RocSqliteCheckpointer(isolatedDb);
+
+      expect(tableExists(isolatedDb, 'langgraph_checkpoints')).toBe(false);
+      expect(tableExists(isolatedDb, 'langgraph_checkpoint_writes')).toBe(false);
+    } finally {
+      isolatedDb.close();
+    }
+  });
+
   it('persists checkpoint data so another instance can read the same thread state', async () => {
     const first = new RocSqliteCheckpointer(db);
     const checkpoint = {
@@ -94,3 +108,10 @@ describe('RocSqliteCheckpointer', () => {
     ]);
   });
 });
+
+function tableExists(connection: Database.Database, tableName: string): boolean {
+  const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}

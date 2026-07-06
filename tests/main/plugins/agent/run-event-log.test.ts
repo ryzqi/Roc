@@ -1,13 +1,14 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AgentRunEventLog, applyAgentRunEventLogSchema } from '../../../../src/main/plugins/agent/run-event-log';
+import { AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
+import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 
 let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  applyAgentRunEventLogSchema(db);
+  applyAgentPluginSchema(db);
 });
 
 afterEach(() => {
@@ -15,6 +16,17 @@ afterEach(() => {
 });
 
 describe('AgentRunEventLog', () => {
+  it('does not create run event tables during construction', () => {
+    const isolatedDb = new Database(':memory:');
+    try {
+      new AgentRunEventLog(isolatedDb);
+
+      expect(tableExists(isolatedDb, 'agent_run_events')).toBe(false);
+    } finally {
+      isolatedDb.close();
+    }
+  });
+
   it('assigns increasing per-run sequence numbers and replays after a sequence', () => {
     const log = new AgentRunEventLog(db);
     const first = log.recordRunEvent({
@@ -42,3 +54,10 @@ describe('AgentRunEventLog', () => {
     expect(log.listRunEvents({ runId: 'run_1', afterSequence: 1 })).toEqual([second]);
   });
 });
+
+function tableExists(connection: Database.Database, tableName: string): boolean {
+  const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}

@@ -23,6 +23,7 @@ import type {
   SequencedChatRunEvent,
   SkillSnapshot
 } from '../../../shared/types';
+import { applyMemoryDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
@@ -307,6 +308,7 @@ function resolveDeepAgentExecutor(
   }
   const agentDb = context.database.getAgentConnection();
   const memoryDb = context.database.getMemoryConnection();
+  applyMemoryDatabaseSchema(memoryDb);
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
     checkpointer: new RocSqliteCheckpointer(agentDb),

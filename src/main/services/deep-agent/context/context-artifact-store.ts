@@ -43,9 +43,7 @@ type ContextArtifactRow = {
 };
 
 export class ContextArtifactStore {
-  constructor(private readonly db: DatabaseConnection) {
-    applyContextArtifactStoreSchema(db);
-  }
+  constructor(private readonly db: DatabaseConnection) {}
 
   persistArtifact(input: PersistContextArtifactInput): PersistedContextArtifact {
     const content = requireNonEmpty(input.content, 'context_artifact_content_empty');
@@ -143,28 +141,6 @@ export class ContextArtifactStore {
         new Date().toISOString()
       );
   }
-}
-
-export function applyContextArtifactStoreSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS context_artifacts (
-      id             TEXT PRIMARY KEY,
-      run_id         TEXT NOT NULL,
-      thread_id      TEXT NOT NULL,
-      kind           TEXT NOT NULL CHECK(kind IN ('tool_result','transcript','summary_index')),
-      tool_call_id   TEXT,
-      tool_name      TEXT,
-      sha256         TEXT NOT NULL,
-      original_chars INTEGER NOT NULL,
-      preview        TEXT NOT NULL,
-      content        TEXT NOT NULL,
-      workspace_hash TEXT,
-      created_at     TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_context_artifacts_thread_created
-      ON context_artifacts(thread_id, created_at);
-  `);
 }
 
 export function formatContextArtifactReference(artifact: PersistedContextArtifact): string {

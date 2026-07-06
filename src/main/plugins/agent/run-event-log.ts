@@ -10,9 +10,7 @@ type EventRow = {
 };
 
 export class AgentRunEventLog {
-  constructor(private readonly db: DatabaseConnection) {
-    applyAgentRunEventLogSchema(db);
-  }
+  constructor(private readonly db: DatabaseConnection) {}
 
   recordRunEvent(event: ChatRunEvent): SequencedChatRunEvent {
     const sequence = this.nextSequence(event.runId);
@@ -55,21 +53,6 @@ export class AgentRunEventLog {
     }
     return row.max_sequence + 1;
   }
-}
-
-export function applyAgentRunEventLogSchema(db: DatabaseConnection): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_run_events (
-      run_id TEXT NOT NULL,
-      sequence INTEGER NOT NULL,
-      event_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (run_id, sequence)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_agent_run_events_run_sequence
-      ON agent_run_events(run_id, sequence);
-  `);
 }
 
 function rowToSequencedEvent(row: EventRow): SequencedChatRunEvent {

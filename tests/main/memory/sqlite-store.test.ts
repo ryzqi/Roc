@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import type { Item } from '@langchain/langgraph';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { applyMemoryDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { RocSqliteStore } from '../../../src/main/services/memory/sqlite-store';
 
 let db: Database.Database;
@@ -9,6 +10,7 @@ let store: RocSqliteStore;
 
 beforeEach(() => {
   db = new Database(':memory:');
+  applyMemoryDatabaseSchema(db);
   store = new RocSqliteStore(db);
 });
 
@@ -17,6 +19,17 @@ afterEach(() => {
 });
 
 describe('RocSqliteStore', () => {
+  it('does not create memory tables during construction', () => {
+    const isolatedDb = new Database(':memory:');
+    try {
+      new RocSqliteStore(isolatedDb);
+
+      expect(tableExists(isolatedDb, 'langgraph_store_items')).toBe(false);
+    } finally {
+      isolatedDb.close();
+    }
+  });
+
   it('puts and gets an item with timestamps', async () => {
     await store.put(['roc', 'memory', 'global'], '/USER.md', { content: '# User' });
 
@@ -112,3 +125,10 @@ describe('RocSqliteStore', () => {
     await expect(store.get(['roc', 'memory'], '')).rejects.toThrow('invalid_store_key');
   });
 });
+
+function tableExists(connection: Database.Database, tableName: string): boolean {
+  const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}
