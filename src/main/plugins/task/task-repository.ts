@@ -18,11 +18,7 @@ import type {
   TaskSnapshot,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
-import {
-  recordAgentRunCompleted as recordAgentRunCompletedEvent,
-  recordAgentRunFailed as recordAgentRunFailedEvent,
-  recordAgentTaskEvent as recordAgentTaskRunEvent
-} from './task-repository-events';
+import { AgentTaskHistoryReader } from './agent-task-history';
 import {
   inferBackgroundRisk,
   mergeTaskEvents,
@@ -30,7 +26,6 @@ import {
   requireText
 } from './task-repository-mappers';
 import {
-  recordAgentRunStarted as createAgentRun,
   createBackgroundTaskRecord,
   createPreviewRequestFromTask,
   recordScheduledTaskRun as insertScheduledTaskRun,
@@ -40,27 +35,22 @@ import {
   updateBackgroundTaskRecord
 } from './task-repository-mutations';
 import {
-  listEventsForRun,
-  listEventsForThread,
-  listRecentEventsForThread,
-  listRunsForThread,
   getActiveTasks as readActiveTasks,
   findBackgroundTask as readBackgroundTask,
   findBackgroundTaskByRunId as readBackgroundTaskByRunId,
   listBackgroundTasks as readBackgroundTasks,
-  getBackgroundTaskSummary as readBackgroundTaskSummary,
-  readRecentEvents,
   listSchedulableBackgroundTasks as readSchedulableBackgroundTasks,
   listScheduledRuns as readScheduledRuns,
-  readThreads,
-  requireActiveThread
 } from './task-repository-queries';
 
 const taskDetailRunHistoryLimit = 20;
 const taskDetailRecentEventLimit = 20;
 
 export class TaskRepository {
-  constructor(private readonly db: DatabaseConnection) {}
+  constructor(
+    private readonly db: DatabaseConnection,
+    private readonly agentHistory: AgentTaskHistoryReader
+  ) {}
 
   createBackgroundTaskProposalRequest(input: {
     description: string;
@@ -100,19 +90,27 @@ export class TaskRepository {
   }
 
   createBackgroundTask(preview: BackgroundTaskPreview): BackgroundTask {
-    return createBackgroundTaskRecord(this.db, preview);
+    const task = createBackgroundTaskRecord(this.db, preview);
+    this.agentHistory.ensureBackgroundTaskThread(task);
+    this.agentHistory.recordBackgroundTaskEvent(task, 'background_task_created', {
+      taskId: task.id,
+      status: task.status
+    });
+    return task;
   }
 
   updateBackgroundTask(request: UpdateBackgroundTaskRequest): BackgroundTask {
     const task = this.requireBackgroundTask(request.taskId);
     const previewRequest = createPreviewRequestFromTask(task, request.patch);
     const preview = this.createBackgroundTaskPreview(previewRequest);
-    return updateBackgroundTaskRecord({
+    const updatedTask = updateBackgroundTaskRecord({
       db: this.db,
       task,
       preview,
       reason: request.reason
     });
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    return updatedTask;
   }
 
   findBackgroundTask(id: string): BackgroundTask | null {
@@ -128,12 +126,12 @@ export class TaskRepository {
   }
 
   archiveThread(threadId: string): TaskDeleteThreadResult {
-    const thread = requireActiveThread(this.db, threadId);
+    const thread = this.agentHistory.requireActiveThread(threadId);
     const now = new Date().toISOString();
     this.db
       .transaction(() => {
         this.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE thread_id = ?').run('archived', now, thread.id);
-        this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?').run('archived', now, now, thread.id);
+        this.agentHistory.archiveThread(thread.id, now);
       })();
     return {
       deleted: true,
@@ -142,7 +140,7 @@ export class TaskRepository {
   }
 
   listSchedulableBackgroundTasks(): BackgroundTask[] {
-    return readSchedulableBackgroundTasks(this.db);
+    return readSchedulableBackgroundTasks(this.db).filter((task) => this.hasActiveThread(task.threadId));
   }
 
   pauseBackgroundTask(id: string): BackgroundTask {
@@ -150,7 +148,13 @@ export class TaskRepository {
     if (task.status !== 'running' && task.status !== 'pending_confirmation') {
       throw new Error('background_task_invalid_transition');
     }
-    return transitionBackgroundTask(this.db, task, 'paused', 'background_task_paused');
+    const updatedTask = transitionBackgroundTask(this.db, task, 'paused');
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
+      taskId: updatedTask.id,
+      status: updatedTask.status
+    });
+    return updatedTask;
   }
 
   resumeBackgroundTask(id: string): BackgroundTask {
@@ -158,7 +162,13 @@ export class TaskRepository {
     if (task.status !== 'paused') {
       throw new Error('background_task_invalid_transition');
     }
-    return transitionBackgroundTask(this.db, task, 'running', 'background_task_resumed');
+    const updatedTask = transitionBackgroundTask(this.db, task, 'running');
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_resumed', {
+      taskId: updatedTask.id,
+      status: updatedTask.status
+    });
+    return updatedTask;
   }
 
   cancelBackgroundTask(id: string): BackgroundTask {
@@ -166,7 +176,13 @@ export class TaskRepository {
     if (task.status === 'completed' || task.status === 'cancelled' || task.status === 'archived') {
       throw new Error('background_task_invalid_transition');
     }
-    return transitionBackgroundTask(this.db, task, 'cancelled', 'background_task_cancelled');
+    const updatedTask = transitionBackgroundTask(this.db, task, 'cancelled');
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_cancelled', {
+      taskId: updatedTask.id,
+      status: updatedTask.status
+    });
+    return updatedTask;
   }
 
   deleteBackgroundTask(id: string): { deleted: true; taskId: string } {
@@ -178,9 +194,7 @@ export class TaskRepository {
     this.db
       .transaction(() => {
         this.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE id = ?').run('archived', now, task.id);
-        this.db
-          .prepare('UPDATE task_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
-          .run('archived', now, now, task.threadId);
+        this.agentHistory.archiveThread(task.threadId, now);
       })();
     return {
       deleted: true,
@@ -217,7 +231,13 @@ export class TaskRepository {
       });
       pauseBackgroundTaskAfterRunFailure(this.db, task.id, input.failedAt);
     })();
-    return this.requireBackgroundTask(task.id);
+    const updatedTask = this.requireBackgroundTask(task.id);
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
+      taskId: updatedTask.id,
+      status: updatedTask.status
+    });
+    return updatedTask;
   }
 
   countRecentSkippedScheduledRuns(): number {
@@ -239,7 +259,9 @@ export class TaskRepository {
          WHERE id = ?`
       )
       .run(input.runId, input.firedAt, null, input.nextRunAt, input.firedAt, task.id);
-    return this.requireBackgroundTask(task.id);
+    const updatedTask = this.requireBackgroundTask(task.id);
+    this.agentHistory.updateBackgroundTaskThread(updatedTask);
+    return updatedTask;
   }
 
   recordAgentRunStarted(input: {
@@ -253,17 +275,42 @@ export class TaskRepository {
     capabilityPreview?: AgentCapabilityPreview;
     createdAt: string;
   }): TaskRun {
-    return createAgentRun(this.db, input);
+    const run = this.agentHistory.findRun(input.runId);
+    if (run !== null) {
+      return run;
+    }
+    return {
+      id: input.runId,
+      threadId: input.threadId,
+      runNumber: 1,
+      userInput: input.userInput,
+      status: 'running',
+      startedAt: input.createdAt,
+      endedAt: null,
+      modelId: input.modelId,
+      enabledCapabilities: input.enabledCapabilities
+    };
   }
 
   getBackgroundTaskSummary(): BackgroundTaskSummary {
-    return readBackgroundTaskSummary(this.db);
+    const tasks = this.listVisibleBackgroundTasks();
+    const futureRuns = tasks
+      .map((task) => task.nextRunAt)
+      .filter((value): value is string => value !== null)
+      .sort();
+    return {
+      total: tasks.length,
+      running: tasks.filter((task) => task.status === 'running').length,
+      failed: tasks.filter((task) => task.status === 'failed').length,
+      pendingConfirmation: tasks.filter((task) => task.status === 'pending_confirmation').length,
+      nextRunAt: futureRuns.length === 0 ? null : futureRuns[0]
+    };
   }
 
   getSnapshot(): TaskSnapshot {
-    const tasks = this.listBackgroundTasks().filter((task) => task.status !== 'archived');
-    const threads = readThreads(this.db);
-    const recentEvents = readRecentEvents(this.db);
+    const tasks = this.listVisibleBackgroundTasks();
+    const threads = this.agentHistory.readThreads();
+    const recentEvents = this.agentHistory.readRecentEvents();
     return {
       generatedAt: new Date().toISOString(),
       counts: {
@@ -278,17 +325,18 @@ export class TaskRepository {
   }
 
   getActiveTasks(): ActiveTaskItem[] {
-    return readActiveTasks(this.db);
+    return readActiveTasks(this.db).filter((task) => this.hasActiveThread(task.threadId));
   }
 
   getTaskDetail(input: { taskId: string; schedulerRegistered: boolean }): TaskDetail {
     const task = this.requireBackgroundTask(input.taskId);
-    const thread = requireActiveThread(this.db, task.threadId);
-    const runHistory = listRunsForThread(this.db, task.threadId, taskDetailRunHistoryLimit);
-    const lastRunId = runHistory[0]?.id ?? null;
+    const thread = this.agentHistory.requireActiveThread(task.threadId);
+    const runHistory = this.agentHistory.listRunsForThread(task.threadId, taskDetailRunHistoryLimit);
+    const firstRun = runHistory[0];
+    const lastRunId = firstRun === undefined ? null : firstRun.id;
     const recentEvents = mergeTaskEvents([
-      listRecentEventsForThread(this.db, task.threadId, taskDetailRecentEventLimit),
-      lastRunId === null ? [] : listEventsForRun(this.db, task.threadId, lastRunId)
+      this.agentHistory.listRecentEventsForThread(task.threadId, taskDetailRecentEventLimit),
+      lastRunId === null ? [] : this.agentHistory.listEventsForRun(task.threadId, lastRunId)
     ]);
     return {
       threadId: task.threadId,
@@ -312,8 +360,8 @@ export class TaskRepository {
   }
 
   listThreadMessages(threadId: string): TaskEvent[] {
-    requireActiveThread(this.db, threadId);
-    return listEventsForThread(this.db, threadId);
+    this.agentHistory.requireActiveThread(threadId);
+    return this.agentHistory.listEventsForThread(threadId);
   }
 
   recordAgentRunCompleted(input: {
@@ -326,12 +374,11 @@ export class TaskRepository {
     summary: string;
     finishReason: string;
   }): TaskEvent | null {
-    return recordAgentRunCompletedEvent(
-      this.db,
-      input,
-      this.findBackgroundTaskByRunId(input.runId),
-      (taskId, status) => this.updateBackgroundTaskLastRunStatus(taskId, status)
-    );
+    const task = this.findBackgroundTaskByRunId(input.runId);
+    if (task !== null) {
+      this.updateBackgroundTaskLastRunStatus(task.id, 'success');
+    }
+    return null;
   }
   recordAgentRunFailed(input: {
     runId: string;
@@ -342,12 +389,17 @@ export class TaskRepository {
     code: string;
     retryable: boolean;
   }): TaskEvent | null {
-    return recordAgentRunFailedEvent(
-      this.db,
-      input,
-      this.findBackgroundTaskByRunId(input.runId),
-      (taskId, now) => this.pauseBackgroundTaskAfterRunFailure(taskId, now)
-    );
+    const task = this.findBackgroundTaskByRunId(input.runId);
+    if (task !== null) {
+      this.pauseBackgroundTaskAfterRunFailure(task.id, new Date().toISOString());
+      const updatedTask = this.requireBackgroundTask(task.id);
+      this.agentHistory.updateBackgroundTaskThread(updatedTask);
+      this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
+        taskId: updatedTask.id,
+        status: updatedTask.status
+      });
+    }
+    return null;
   }
   recordAgentTaskEvent(input: {
     runId: string;
@@ -356,7 +408,8 @@ export class TaskRepository {
     payload: Record<string, unknown>;
     createdAt: string;
   }): TaskEvent | null {
-    return recordAgentTaskRunEvent(this.db, input);
+    void input;
+    return null;
   }
   private requireBackgroundTask(id: string): BackgroundTask {
     const task = this.findBackgroundTask(id);
@@ -374,4 +427,11 @@ export class TaskRepository {
     pauseBackgroundTaskAfterRunFailure(this.db, taskId, now);
   }
 
+  private listVisibleBackgroundTasks(): BackgroundTask[] {
+    return this.listBackgroundTasks().filter((task) => task.status !== 'archived' && this.hasActiveThread(task.threadId));
+  }
+
+  private hasActiveThread(threadId: string): boolean {
+    return this.agentHistory.findActiveThread(threadId) !== null;
+  }
 }

@@ -3,19 +3,26 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   TaskSnapshot
 } from '../../../../src/shared/types';
+import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
 
 let db: Database.Database;
+let agentDb: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
+  agentDb = new Database(':memory:');
+  agentDb.pragma('foreign_keys = ON');
+  applyAgentDatabaseSchema(agentDb);
 });
 
 afterEach(() => {
+  agentDb.close();
   db.close();
 });
 
@@ -314,7 +321,7 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     pluginId: '@roc/plugin-task',
     eventBus: input.eventBus,
     capabilities: input.capabilities,
-    database: { getConnection: () => db, getCoreConnection: () => db },
+    database: createTaskPluginTestDatabaseFacade(db, agentDb),
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }
@@ -322,31 +329,6 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
 }
 
 function createTestEventBus(): RocEventBus & { published: RocEventEnvelope[] } {
-  const subscriptions: Array<{
-    type: string;
-    handler: (event: RocEventEnvelope) => void | Promise<void>;
-  }> = [];
-  return {
-    published: [],
-    publish: async function publish(event) {
-      this.published.push(event);
-      for (const subscription of subscriptions.filter((item) => item.type === event.type)) {
-        await subscription.handler(event);
-      }
-    },
-    subscribe: (type, handler) => {
-      const subscription = {
-        type,
-        handler: handler as (event: RocEventEnvelope) => void | Promise<void>
-      };
-      subscriptions.push(subscription);
-      return () => {
-        const index = subscriptions.indexOf(subscription);
-        if (index !== -1) {
-          subscriptions.splice(index, 1);
-        }
-      };
-    }
-  };
+  return createTaskPluginTestEventBus(agentDb);
 }
 

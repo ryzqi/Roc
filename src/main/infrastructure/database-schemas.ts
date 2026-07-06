@@ -10,6 +10,7 @@ export function applyCoreDatabaseSchema(db: DatabaseConnection, now?: Clock): vo
 }
 
 export function applyAgentDatabaseSchema(db: DatabaseConnection, now?: Clock): void {
+  ensureLegacyAgentTableCompatibility(db);
   applySchema(db, 'agent', agentMigrations, now);
 }
 
@@ -424,4 +425,25 @@ function applySchema(
     return;
   }
   applyDatabaseMigrations(db, { dbName, migrations, now });
+}
+
+function ensureLegacyAgentTableCompatibility(db: DatabaseConnection): void {
+  if (!tableExists(db, 'session_messages')) {
+    return;
+  }
+  if (!columnExists(db, 'session_messages', 'workspace_hash')) {
+    db.exec('ALTER TABLE session_messages ADD COLUMN workspace_hash TEXT;');
+  }
+}
+
+function tableExists(db: DatabaseConnection, tableName: string): boolean {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as
+    | { name: string }
+    | undefined;
+  return row !== undefined;
+}
+
+function columnExists(db: DatabaseConnection, tableName: string, columnName: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === columnName);
 }

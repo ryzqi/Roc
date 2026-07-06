@@ -249,7 +249,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       capabilities
     },
     initialize: async (context) => {
-      const db = context.database.getConnection();
+      const db = context.database.getAgentConnection();
       applyAgentPluginSchema(db);
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       runtime = new AgentPluginRuntime({
@@ -305,18 +305,18 @@ function resolveDeepAgentExecutor(
   if ('execute' in option) {
     return option;
   }
-  const agentDb = context.database.getConnection();
-  const coreDb = context.database.getCoreConnection();
+  const agentDb = context.database.getAgentConnection();
+  const memoryDb = context.database.getMemoryConnection();
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
-    checkpointer: new RocSqliteCheckpointer(coreDb),
+    checkpointer: new RocSqliteCheckpointer(agentDb),
     contextArtifactStore: new ContextArtifactStore(agentDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
     metricsService: option.metricsService,
     paths: option.paths,
-    store: new RocSqliteStore(coreDb),
-    toolEffectStore: new AgentToolEffectStore(coreDb)
+    store: new RocSqliteStore(memoryDb),
+    toolEffectStore: new AgentToolEffectStore(agentDb)
   });
 }
 

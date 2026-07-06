@@ -26,6 +26,21 @@ function mark<M extends BaseMessage>(message: M, iteration: number): M {
   return markIterationOnMessage(message, iteration) as M;
 }
 
+function seedAgentThread(threadId: string, kind: 'chat' | 'plan' | 'background'): void {
+  db.prepare(
+    `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    threadId,
+    kind,
+    threadId,
+    threadId,
+    'running',
+    '2026-06-24T00:00:00.000Z',
+    '2026-06-24T00:00:00.000Z'
+  );
+}
+
 describe('RocContextCompactionPipeline', () => {
   it('persists oversized tool results before deterministic compaction and summarization', async () => {
     const store = new ContextArtifactStore(db);
@@ -56,6 +71,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_1', 'chat');
     await runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 100,
@@ -106,6 +122,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_2', 'background');
     await runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 1000,
@@ -150,6 +167,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_3', 'plan');
     await runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 100,
@@ -204,6 +222,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'recent' }), 5)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_4', 'chat');
     await runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 1000,
@@ -240,6 +259,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'current next step' }), 8)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_5', 'chat');
     await runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 100,
@@ -283,6 +303,7 @@ describe('RocContextCompactionPipeline', () => {
       mark(new AIMessage({ id: 'recent-ai', content: 'current next step' }), 8)
     ];
 
+    seedAgentThread('thread_ctx_pipeline_summary_failure', 'chat');
     await expect(runContextCompactionForTest({
       artifactStore: store,
       budgetTokens: 100,

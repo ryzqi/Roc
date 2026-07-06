@@ -214,7 +214,13 @@ function createContext(capabilities: CapabilityRegistry): RocPluginContext {
     pluginId: '@roc/plugin-mcp',
     eventBus: createEventBus(),
     capabilities,
-    database: { getConnection: () => db, getCoreConnection: () => db },
+    database: {
+      getConnection: () => db,
+      getCoreConnection: () => db,
+      getAgentConnection: () => db,
+      getMemoryConnection: () => db,
+      getTaskConnection: () => db
+    },
     config: {
       get: <T>(key: string) => {
         if (key !== 'mcp') {

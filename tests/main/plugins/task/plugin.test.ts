@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   BackgroundTaskPreviewRequest,
   TaskSnapshot
 } from '../../../../src/shared/types';
+import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
 
 const taskCapabilities = [
   'task.snapshot.get',
@@ -33,6 +35,7 @@ const taskCapabilities = [
 ];
 
 let db: Database.Database;
+let agentDb: Database.Database;
 
 const previewRequest: BackgroundTaskPreviewRequest = {
   goal: 'Review plugin state',
@@ -50,9 +53,13 @@ const previewRequest: BackgroundTaskPreviewRequest = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
+  agentDb = new Database(':memory:');
+  agentDb.pragma('foreign_keys = ON');
+  applyAgentDatabaseSchema(agentDb);
 });
 
 afterEach(() => {
+  agentDb.close();
   db.close();
 });
 
@@ -68,7 +75,7 @@ describe('task plugin', () => {
   });
 
 
-  it('creates the thread history lookup index for persisted task events', async () => {
+  it('creates task projection tables without duplicating agent history tables', async () => {
     const plugin = createTaskPlugin();
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
@@ -76,16 +83,20 @@ describe('task plugin', () => {
     }
     await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
 
+    const tableRows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>;
     const indexColumns = db
-      .prepare("PRAGMA index_xinfo('idx_task_plugin_events_thread_created')")
+      .prepare("PRAGMA index_xinfo('idx_task_plugin_background_tasks_status_updated')")
       .all() as Array<{ name: string | null; desc: 0 | 1; key: 0 | 1 }>;
     const indexedColumns = indexColumns
       .filter((column) => column.key === 1)
       .map((column) => ({ name: column.name, desc: column.desc }));
 
+    expect(tableRows.map((row) => row.name)).not.toContain('task_events');
+    expect(tableRows.map((row) => row.name)).not.toContain('task_runs');
+    expect(tableRows.map((row) => row.name)).not.toContain('task_threads');
     expect(indexedColumns).toEqual([
-      { name: 'thread_id', desc: 0 },
-      { name: 'created_at', desc: 0 }
+      { name: 'status', desc: 0 },
+      { name: 'updated_at', desc: 1 }
     ]);
   });
 
@@ -300,7 +311,7 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     pluginId: '@roc/plugin-task',
     eventBus: input.eventBus,
     capabilities: input.capabilities,
-    database: { getConnection: () => db, getCoreConnection: () => db },
+    database: createTaskPluginTestDatabaseFacade(db, agentDb),
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }
@@ -308,30 +319,5 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
 }
 
 function createTestEventBus(): RocEventBus & { published: RocEventEnvelope[] } {
-  const subscriptions: Array<{
-    type: string;
-    handler: (event: RocEventEnvelope) => void | Promise<void>;
-  }> = [];
-  return {
-    published: [],
-    publish: async function publish(event) {
-      this.published.push(event);
-      for (const subscription of subscriptions.filter((item) => item.type === event.type)) {
-        await subscription.handler(event);
-      }
-    },
-    subscribe: (type, handler) => {
-      const subscription = {
-        type,
-        handler: handler as (event: RocEventEnvelope) => void | Promise<void>
-      };
-      subscriptions.push(subscription);
-      return () => {
-        const index = subscriptions.indexOf(subscription);
-        if (index !== -1) {
-          subscriptions.splice(index, 1);
-        }
-      };
-    }
-  };
+  return createTaskPluginTestEventBus(agentDb);
 }

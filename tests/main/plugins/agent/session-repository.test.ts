@@ -25,13 +25,13 @@ describe('AgentSessionRepository', () => {
   it('applies the migrated agent tables with current column names', () => {
     applyAgentPluginSchema(db);
 
-    expect(columnNames('task_runs')).toContain('thread_id');
-    expect(columnNames('task_events')).toContain('run_id');
-    expect(columnNames('task_events')).toContain('payload_json');
+    expect(columnNames('agent_runs')).toContain('thread_id');
+    expect(columnNames('agent_events')).toContain('run_id');
+    expect(columnNames('agent_events')).toContain('payload_json');
     expect(columnNames('session_messages')).toContain('phase');
   });
 
-  it('reads and writes task threads, task runs, task events, and session messages', () => {
+  it('reads and writes agent threads, agent runs, agent events, and session messages', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
 
@@ -75,12 +75,12 @@ describe('AgentSessionRepository', () => {
     });
     expect(events[1]).toEqual(event);
     expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
-    expect(rawRow('task_runs', run.id)).toMatchObject({
+    expect(rawRow('agent_runs', run.id)).toMatchObject({
       enabled_capabilities_json: JSON.stringify(enabledCapabilities),
       model_id: 'openai:gpt-4.1',
       thread_id: run.threadId
     });
-    expect(rawRow('task_events', event.id)).toMatchObject({
+    expect(rawRow('agent_events', event.id)).toMatchObject({
       payload_json: JSON.stringify({
         kind: 'text',
         blockId: `text-${run.id}`,

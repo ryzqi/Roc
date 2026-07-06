@@ -2,25 +2,32 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 
 let db: Database.Database;
+let agentDb: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
+  agentDb = new Database(':memory:');
+  agentDb.pragma('foreign_keys = ON');
+  applyAgentDatabaseSchema(agentDb);
   applyTaskPluginSchema(db);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  agentDb.close();
   db.close();
 });
 
 describe('TaskScheduler', () => {
   it('loads scheduled background tasks from plugin tables and reports scheduler status', () => {
-    const repository = new TaskRepository(db);
+    const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 60_000).toISOString();
     const task = repository.createBackgroundTask(
       repository.createBackgroundTaskPreview({
@@ -59,7 +66,7 @@ describe('TaskScheduler', () => {
 
   it('fires due scheduled background tasks through the agent capability starter', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
-    const repository = new TaskRepository(db);
+    const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 1_000).toISOString();
     const task = repository.createBackgroundTask(
       repository.createBackgroundTaskPreview({
@@ -116,7 +123,7 @@ describe('TaskScheduler', () => {
 
   it('reschedules future tasks when the maximum timeout slice elapses before nextRunAt', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
-    const repository = new TaskRepository(db);
+    const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 10_000).toISOString();
     const task = repository.createBackgroundTask(
       repository.createBackgroundTaskPreview({
@@ -171,7 +178,7 @@ describe('TaskScheduler', () => {
 
   it('records and pauses scheduled tasks when agent startup fails', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
-    const repository = new TaskRepository(db);
+    const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 1_000).toISOString();
     const task = repository.createBackgroundTask(
       repository.createBackgroundTaskPreview({
@@ -214,3 +221,7 @@ describe('TaskScheduler', () => {
     });
   });
 });
+
+function createRepository(): TaskRepository {
+  return new TaskRepository(db, new AgentTaskHistoryReader(agentDb));
+}

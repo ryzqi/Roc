@@ -69,8 +69,10 @@ describe('agent plugin manifest', () => {
     expect(Reflect.get(plugin.manifest, 'capabilityDependencies')).toEqual(['@roc/plugin-task']);
   });
 
-  it('creates the DeepAgent executor with a SQLite store on core.db', async () => {
-    const pluginDb = new Database(':memory:');
+  it('creates the DeepAgent executor with runtime stores outside core.db', async () => {
+    const agentDb = new Database(':memory:');
+    const memoryDb = new Database(':memory:');
+    const taskDb = new Database(':memory:');
     const coreDb = new Database(':memory:');
     try {
       const plugin = createAgentPlugin({
@@ -79,7 +81,7 @@ describe('agent plugin manifest', () => {
         }
       });
 
-      const context = createContext(pluginDb, coreDb);
+      const context = createContext(agentDb, memoryDb, taskDb, coreDb);
       for (const capability of plugin.manifest.capabilities) {
         context.capabilities.declare(plugin.manifest.id, capability);
       }
@@ -87,12 +89,20 @@ describe('agent plugin manifest', () => {
 
       const options = mocked.createAgentDeepAgentExecutor.mock.calls[0]?.[0] as { store: BaseStore } | undefined;
       expect(options?.store.constructor.name).toBe('RocSqliteStore');
-      await options?.store.put(['roc', 'memory', 'global'], '/MEMORY.md', { content: 'core' });
-      expect(coreDb.prepare('SELECT value_json FROM langgraph_store_items WHERE key = ?').pluck().get('/MEMORY.md')).toBe(
-        '{"content":"core"}'
+      expect(agentDb.prepare("SELECT name FROM sqlite_master WHERE name = 'langgraph_checkpoints'").pluck().get()).toBe(
+        'langgraph_checkpoints'
       );
+      expect(agentDb.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_tool_effects'").pluck().get()).toBe(
+        'agent_tool_effects'
+      );
+      expect(memoryDb.prepare("SELECT name FROM sqlite_master WHERE name = 'langgraph_store_items'").pluck().get()).toBe(
+        'langgraph_store_items'
+      );
+      expect(coreDb.prepare("SELECT name FROM sqlite_master WHERE name = 'langgraph_store_items'").pluck().get()).toBeUndefined();
     } finally {
-      pluginDb.close();
+      agentDb.close();
+      memoryDb.close();
+      taskDb.close();
       coreDb.close();
     }
   });
@@ -165,7 +175,12 @@ describe('agent run schema explicit skills', () => {
   });
 });
 
-function createContext(pluginDb: Database.Database, coreDb: Database.Database): RocPluginContext {
+function createContext(
+  agentDb: Database.Database,
+  memoryDb: Database.Database,
+  taskDb: Database.Database,
+  coreDb: Database.Database
+): RocPluginContext {
   return {
     pluginId: '@roc/plugin-agent',
     eventBus: {
@@ -174,8 +189,11 @@ function createContext(pluginDb: Database.Database, coreDb: Database.Database): 
     },
     capabilities: new CapabilityRegistry(),
     database: {
-      getConnection: () => pluginDb,
-      getCoreConnection: () => coreDb
+      getConnection: () => agentDb,
+      getCoreConnection: () => coreDb,
+      getAgentConnection: () => agentDb,
+      getMemoryConnection: () => memoryDb,
+      getTaskConnection: () => taskDb
     },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },

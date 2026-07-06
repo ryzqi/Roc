@@ -1,5 +1,4 @@
 import type {
-  ActiveTaskItem,
   AgentCapabilityManifest,
   AgentCapabilityPreview,
   BackgroundTask,
@@ -8,6 +7,7 @@ import type {
   EnabledCapabilities,
   ScheduledTaskRun,
   TaskEvent,
+  TaskKind,
   TaskRun,
   TaskStatus,
   TaskThread
@@ -49,7 +49,7 @@ export type TaskEventRow = {
 
 export type TaskThreadRow = {
   id: string;
-  kind: ActiveTaskItem['kind'];
+  kind: TaskKind;
   title: string;
   goal: string;
   status: TaskStatus;

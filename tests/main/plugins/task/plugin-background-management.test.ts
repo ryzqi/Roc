@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   ActiveTaskItem,
@@ -12,8 +13,10 @@ import type {
   TaskSnapshot,
   Workspace
 } from '../../../../src/shared/types';
+import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
 
 let db: Database.Database;
+let agentDb: Database.Database;
 
 const previewRequest: BackgroundTaskPreviewRequest = {
   goal: 'Review plugin state',
@@ -31,9 +34,13 @@ const previewRequest: BackgroundTaskPreviewRequest = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
+  agentDb = new Database(':memory:');
+  agentDb.pragma('foreign_keys = ON');
+  applyAgentDatabaseSchema(agentDb);
 });
 
 afterEach(() => {
+  agentDb.close();
   db.close();
 });
 
@@ -111,7 +118,7 @@ describe('task plugin', () => {
     const ghost = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', ghostPreview);
 
     // 模拟历史脏数据：thread 已归档（6/1 旧 archiveThread 只归档 thread），但 background_tasks.status 仍为 running。
-    db.prepare("UPDATE task_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
+    agentDb.prepare("UPDATE agent_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
       '2026-06-01T14:10:00.000Z',
       ghost.threadId
     );
@@ -135,7 +142,7 @@ describe('task plugin', () => {
     const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
     const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
 
-    db.prepare("UPDATE task_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
+    agentDb.prepare("UPDATE agent_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
       '2026-06-01T14:10:00.000Z',
       task.threadId
     );
@@ -189,7 +196,7 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     pluginId: '@roc/plugin-task',
     eventBus: input.eventBus,
     capabilities: input.capabilities,
-    database: { getConnection: () => db, getCoreConnection: () => db },
+    database: createTaskPluginTestDatabaseFacade(db, agentDb),
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }
@@ -197,31 +204,6 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
 }
 
 function createTestEventBus(): RocEventBus & { published: RocEventEnvelope[] } {
-  const subscriptions: Array<{
-    type: string;
-    handler: (event: RocEventEnvelope) => void | Promise<void>;
-  }> = [];
-  return {
-    published: [],
-    publish: async function publish(event) {
-      this.published.push(event);
-      for (const subscription of subscriptions.filter((item) => item.type === event.type)) {
-        await subscription.handler(event);
-      }
-    },
-    subscribe: (type, handler) => {
-      const subscription = {
-        type,
-        handler: handler as (event: RocEventEnvelope) => void | Promise<void>
-      };
-      subscriptions.push(subscription);
-      return () => {
-        const index = subscriptions.indexOf(subscription);
-        if (index !== -1) {
-          subscriptions.splice(index, 1);
-        }
-      };
-    }
-  };
+  return createTaskPluginTestEventBus(agentDb);
 }
 

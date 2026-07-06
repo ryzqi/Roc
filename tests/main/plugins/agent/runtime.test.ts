@@ -105,7 +105,7 @@ describe('AgentPluginRuntime', () => {
       workflowHint: 'propose_background_task'
     });
 
-    const thread = db.prepare('SELECT kind FROM task_threads WHERE id = ?').get(result.threadId) as { kind: string } | undefined;
+    const thread = db.prepare('SELECT kind FROM agent_threads WHERE id = ?').get(result.threadId) as { kind: string } | undefined;
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.runId === result.runId && readChatRunEvent(event.payload)?.type === 'run_completed')
     );

@@ -159,14 +159,14 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
       capabilities: memoryCapabilityDescriptors
     },
     initialize: async (context) => {
-      const db = context.database.getConnection();
+      const db = context.database.getMemoryConnection();
       applyMemoryPluginSchema(db);
       const auditRepository = new AutoMemoryAuditRepository(db);
       const getWorkspace = createMemoryWorkspaceProvider(options);
       const getMemorySettings =
         options.getMemorySettings === undefined ? () => defaultSettings.memory : options.getMemorySettings;
       const repository = new MemoryStoreRepository({
-        store: new RocSqliteStore(context.database.getCoreConnection()),
+        store: new RocSqliteStore(db),
         getWorkspace,
         getMemorySettings,
         auditRepository

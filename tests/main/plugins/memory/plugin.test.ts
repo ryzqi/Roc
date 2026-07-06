@@ -73,7 +73,7 @@ describe('memory plugin', () => {
     ]);
   });
 
-  it('writes and reads global USER.md through core.db Store records', async () => {
+  it('writes and reads global USER.md through memory.db Store records', async () => {
     const capabilities = await initializePlugin();
 
     await expect(
@@ -532,7 +532,13 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     pluginId: '@roc/plugin-memory',
     eventBus: input.eventBus,
     capabilities: input.capabilities,
-    database: { getConnection: () => pluginDb, getCoreConnection: () => coreDb },
+    database: {
+      getConnection: () => pluginDb,
+      getCoreConnection: () => coreDb,
+      getAgentConnection: () => pluginDb,
+      getMemoryConnection: () => pluginDb,
+      getTaskConnection: () => pluginDb
+    },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
     logger: { info: () => {}, warn: () => {}, error: () => {} }
@@ -540,7 +546,7 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
 }
 
 function readStoreValue(key: string): { namespace_json: string; value_json: string } | undefined {
-  return coreDb
+  return pluginDb
     .prepare('SELECT namespace_json, value_json FROM langgraph_store_items WHERE key = ?')
     .get(key) as { namespace_json: string; value_json: string } | undefined;
 }

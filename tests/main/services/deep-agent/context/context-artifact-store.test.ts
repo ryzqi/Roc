@@ -91,6 +91,18 @@ describe('ContextArtifactStore', () => {
 
   it('records a searchable pre-compaction flush row scoped to the workspace', () => {
     const store = new ContextArtifactStore(db);
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'thread_ctx_4',
+      'chat',
+      'Context flush',
+      'Context flush',
+      'running',
+      '2026-06-24T00:00:00.000Z',
+      '2026-06-24T00:00:00.000Z'
+    );
 
     store.recordPreCompactionFlush({
       content: 'Context summary mentions deterministic compaction and payment service evidence.',

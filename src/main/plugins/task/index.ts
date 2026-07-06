@@ -25,6 +25,7 @@ import {
   readAgentTaskEventPayload,
   resolveAgentRunThreadKind
 } from './agent-run-payloads';
+import { AgentTaskHistoryReader } from './agent-task-history';
 import { TaskScheduler } from './scheduler';
 import { applyTaskPluginSchema } from './schema';
 import { TaskRepository } from './task-repository';
@@ -83,9 +84,9 @@ export function createTaskPlugin(): RocPlugin {
       capabilities: taskCapabilityDescriptors
     },
     initialize: async (context) => {
-      const db = context.database.getConnection();
+      const db = context.database.getTaskConnection();
       applyTaskPluginSchema(db);
-      const repository = new TaskRepository(db);
+      const repository = new TaskRepository(db, new AgentTaskHistoryReader(context.database.getAgentConnection()));
       scheduler = new TaskScheduler(repository, {
         startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
       });

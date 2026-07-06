@@ -107,33 +107,49 @@ export class AgentSessionRepository {
         if (existingThreadId === null || !hasActiveThread) {
           this.db
             .prepare(
-              `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
+              `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
             .run(threadId, input.threadKind, input.userInput.trim().slice(0, 60), input.userInput, 'waiting_next_turn', now, now);
         } else {
           this.db
-            .prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?')
+            .prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?')
             .run('waiting_next_turn', now, threadId);
         }
 
         this.db
           .prepare(
-            `INSERT INTO task_runs
-             (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO agent_runs
+             (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+              enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
-          .run(runId, threadId, runNumber, input.userInput, 'waiting_next_turn', now, null, input.modelId, enabledCapabilitiesJson);
+          .run(
+            runId,
+            threadId,
+            runNumber,
+            input.userInput,
+            'waiting_next_turn',
+            now,
+            null,
+            null,
+            input.modelId,
+            enabledCapabilitiesJson,
+            null,
+            null,
+            null
+          );
 
         this.db
           .prepare(
-            `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
+            `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             eventId,
             threadId,
             runId,
+            this.nextEventSequence(threadId),
             'message',
             JSON.stringify(userMessagePayload),
             now
@@ -154,7 +170,7 @@ export class AgentSessionRepository {
   }
 
   getRun(id: string): TaskRun {
-    const row = this.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(id) as TaskRunRow | undefined;
+    const row = this.db.prepare('SELECT * FROM agent_runs WHERE id = ?').get(id) as TaskRunRow | undefined;
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
@@ -167,8 +183,8 @@ export class AgentSessionRepository {
     const endedAt = input.endedAt === undefined ? run.endedAt : input.endedAt;
     this.db
       .transaction(() => {
-        this.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run(input.status, endedAt, input.runId);
-        this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run(input.status, now, run.threadId);
+        this.db.prepare('UPDATE agent_runs SET status = ?, ended_at = ? WHERE id = ?').run(input.status, endedAt, input.runId);
+        this.db.prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?').run(input.status, now, run.threadId);
       })();
     return this.getRun(input.runId);
   }
@@ -183,8 +199,8 @@ export class AgentSessionRepository {
     const explicitSkillIdsJson =
       input.interrupt.explicitSkillIds === undefined ? null : JSON.stringify(input.interrupt.explicitSkillIds);
     this.db.transaction(() => {
-      this.db.prepare('UPDATE task_runs SET status = ?, ended_at = ? WHERE id = ?').run('waiting_user', null, input.runId);
-      this.db.prepare('UPDATE task_threads SET status = ?, updated_at = ? WHERE id = ?').run('waiting_user', now, run.threadId);
+      this.db.prepare('UPDATE agent_runs SET status = ?, ended_at = ? WHERE id = ?').run('waiting_user', null, input.runId);
+      this.db.prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?').run('waiting_user', now, run.threadId);
       this.db
         .prepare(
           `INSERT INTO agent_pending_interrupts
@@ -258,12 +274,13 @@ export class AgentSessionRepository {
       payload: input.payload,
       createdAt
     };
+    const sequence = this.nextEventSequence(input.threadId);
     this.db
       .prepare(
-        `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(event.id, event.threadId, event.runId, event.type, JSON.stringify(event.payload), event.createdAt);
+      .run(event.id, event.threadId, event.runId, sequence, event.type, JSON.stringify(event.payload), event.createdAt);
     return event;
   }
 
@@ -271,9 +288,9 @@ export class AgentSessionRepository {
     const rows = this.db
       .prepare(
         `SELECT id, thread_id, run_id, type, payload_json, created_at
-         FROM task_events
+         FROM agent_events
          WHERE thread_id = ?
-         ORDER BY created_at ASC, id ASC`
+         ORDER BY sequence ASC, created_at ASC, id ASC`
       )
       .all(threadId) as TaskEventRow[];
     return rows.map(mapTaskEvent);
@@ -318,7 +335,7 @@ export class AgentSessionRepository {
         `SELECT sm.id, sm.thread_id, sm.role, sm.content, sm.token_count, sm.phase, sm.workspace_hash, sm.created_at,
                 tt.title AS thread_title
          FROM session_messages sm
-         LEFT JOIN task_threads tt ON tt.id = sm.thread_id
+         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
          WHERE sm.thread_id = ?
          ORDER BY sm.created_at ASC, sm.id ASC
          LIMIT ?`
@@ -377,7 +394,7 @@ export class AgentSessionRepository {
                 snippet(session_messages_fts, 0, '**', '**', '...', 32) AS snippet
          FROM session_messages_fts
          JOIN session_messages sm ON sm.rowid = session_messages_fts.rowid
-         LEFT JOIN task_threads tt ON tt.id = sm.thread_id
+         LEFT JOIN agent_threads tt ON tt.id = sm.thread_id
          WHERE session_messages_fts MATCH ?
            ${whereClause}
          ORDER BY sm.created_at DESC
@@ -387,7 +404,7 @@ export class AgentSessionRepository {
   }
 
   private nextRunNumber(threadId: string): number {
-    const row = this.db.prepare('SELECT MAX(run_number) AS max_run_number FROM task_runs WHERE thread_id = ?').get(threadId) as
+    const row = this.db.prepare('SELECT MAX(run_number) AS max_run_number FROM agent_runs WHERE thread_id = ?').get(threadId) as
       | { max_run_number: number | null }
       | undefined;
     if (row === undefined || row.max_run_number === null) {
@@ -396,15 +413,28 @@ export class AgentSessionRepository {
     return row.max_run_number + 1;
   }
 
+  private nextEventSequence(threadId: string): number {
+    const row = this.db.prepare('SELECT MAX(sequence) AS max_sequence FROM agent_events WHERE thread_id = ?').get(threadId) as
+      | { max_sequence: number | null }
+      | undefined;
+    if (row === undefined) {
+      return 1;
+    }
+    if (row.max_sequence === null) {
+      return 1;
+    }
+    return row.max_sequence + 1;
+  }
+
   private hasActiveThread(threadId: string): boolean {
-    const row = this.db.prepare('SELECT id FROM task_threads WHERE id = ? AND archived_at IS NULL').get(threadId) as
+    const row = this.db.prepare('SELECT id FROM agent_threads WHERE id = ? AND archived_at IS NULL').get(threadId) as
       | { id: string }
       | undefined;
     return row !== undefined;
   }
 
   private findThreadTitle(threadId: string): string | null {
-    const row = this.db.prepare('SELECT title FROM task_threads WHERE id = ?').get(threadId) as { title: string } | undefined;
+    const row = this.db.prepare('SELECT title FROM agent_threads WHERE id = ?').get(threadId) as { title: string } | undefined;
     if (row === undefined) {
       return null;
     }
