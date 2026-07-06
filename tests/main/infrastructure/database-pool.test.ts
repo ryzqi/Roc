@@ -38,10 +38,15 @@ describe('DatabasePool', () => {
 
     expect(() => taskDb.prepare('SELECT * FROM parent').all()).toThrow();
     expect(agentDb.pragma('foreign_keys', { simple: true })).toBe(1);
+    expect(agentDb.pragma('busy_timeout', { simple: true })).toBe(5000);
     expect(String(agentDb.pragma('journal_mode', { simple: true })).toLowerCase()).toBe('wal');
     expect(existsSync(join(root, 'data', 'plugins', '@roc', 'plugin-agent.db'))).toBe(true);
     expect(existsSync(join(root, 'data', 'plugins', '@roc', 'plugin-task.db'))).toBe(true);
     expect(dirname(join(root, 'data', 'plugins', '@roc', 'plugin-agent.db'))).toBe(join(root, 'data', 'plugins', '@roc'));
+    expect(pool.getDatabasePath('core')).toBe(join(root, 'data', 'core.db'));
+    expect(pool.getDatabasePath('agent')).toBe(join(root, 'data', 'plugins', '@roc', 'plugin-agent.db'));
+    expect(pool.getDatabasePath('memory')).toBe(join(root, 'data', 'plugins', '@roc', 'plugin-memory.db'));
+    expect(pool.getDatabasePath('task')).toBe(join(root, 'data', 'plugins', '@roc', 'plugin-task.db'));
   });
 
   it('rejects invalid plugin ids without sanitizing them into filenames', () => {
@@ -49,6 +54,7 @@ describe('DatabasePool', () => {
 
     expect(() => pool.getConnection('@roc/plugin-agent/../../core')).toThrow(/invalid_plugin_id/u);
     expect(() => pool.getConnection('plugin-agent')).toThrow(/invalid_plugin_id/u);
+    expect(() => pool.getDatabasePath('plugin:@roc/plugin-agent/../../core')).toThrow(/invalid_plugin_id/u);
     expect(existsSync(join(root, 'data', 'plugins', 'core.db'))).toBe(false);
   });
 
