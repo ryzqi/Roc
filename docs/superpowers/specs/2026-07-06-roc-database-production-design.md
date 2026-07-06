@@ -15,6 +15,7 @@
 - DeepAgents/LangGraph 运行态目前部分放在 `core.db`：`langgraph_checkpoints`、`langgraph_checkpoint_writes`、`langgraph_store_items`、`agent_tool_effects`。
 - `context_artifacts` 当前放在 agent 插件 DB。
 - memory 插件自己的 audit/event 放在 memory 插件 DB，但长期 memory store 通过 `RocSqliteStore(context.database.getCoreConnection())` 放在 `core.db`。
+- workspace、diagnostics 等辅助插件也有插件私有表，例如 `recovery_points`、`performance_samples`、`diagnostic_packages`。
 - schema 主要由各插件 `apply*Schema()` 使用 `CREATE TABLE IF NOT EXISTS` 创建，部分新增列用 `PRAGMA table_info` 检查后 `ALTER TABLE` 补齐。
 - 当前没有统一 migration ledger、数据库版本声明、schema checksum、DB health 元数据、备份恢复策略、retention 策略或 query plan 验证。
 
@@ -125,6 +126,22 @@
 - task detail 的 thread/run/event 历史从 agent canonical 查询。
 - task DB 只保留任务定义、调度状态、调度投影、运行统计。
 
+### 辅助插件 DB
+
+职责：插件私有运行态，不参与 agent/task/memory 的 canonical 重整。
+
+范围：
+
+- `@roc/plugin-workspace.db` 保留 workspace 插件私有表，例如 `recovery_points`。
+- `@roc/plugin-diagnostics.db` 保留 diagnostics 插件私有表，例如 `performance_samples`、`diagnostic_packages`。
+- 其他插件如未来需要持久化，也必须通过统一 migration framework 注册 schema。
+
+规则：
+
+- 辅助插件 DB 不合并到 `core.db`。
+- 辅助插件 DB 不保存 agent runtime、long-term memory store 或 background task projection。
+- 辅助插件 DB 必须纳入连接 PRAGMA、versioned migrations、health check、backup/restore 和 retention/cleanup 审计。
+
 ## Canonical 模型
 
 `agent_threads` 替代重复的 `task_threads`：
@@ -201,6 +218,7 @@
 - background tasks
 - scheduled task runs
 - config and secrets
+- 辅助插件私有运行态，例如 workspace recovery points 和 diagnostics samples/packages
 
 不迁：
 
@@ -227,7 +245,7 @@
 
 新增统一 migration framework，替代散落 schema 自行演进。
 
-每个 DB 都有：
+每个 managed DB 都有：
 
 - `schema_migrations`
   - `id`
@@ -252,6 +270,7 @@
 - `CREATE TABLE IF NOT EXISTS` 可用于初始建表，但版本推进必须由 migration ledger 证明。
 - 禁止业务 repository 在运行时偷偷 `ALTER TABLE`。
 - 测试必须覆盖新库初始化和从旧结构重建。
+- 辅助插件 DB 也必须注册 migrations；没有迁移注册的插件 DB 不能在 production runtime 中执行私有 `CREATE TABLE`。
 
 ## Runtime Health
 
@@ -284,6 +303,7 @@
 - `@roc/plugin-agent.db`
 - `@roc/plugin-memory.db`
 - `@roc/plugin-task.db`
+- 所有注册过 migration 的辅助插件 DB
 
 备份规则：
 
@@ -483,6 +503,7 @@
 - agent DB 承载 agent runtime 所需恢复、幂等、artifact、session/search 数据。
 - memory DB 承载长期 memory store。
 - task DB 只承载 background task 定义和调度投影。
+- 辅助插件 DB 只承载插件私有运行态，并纳入 migration、health 和 backup。
 - 破坏性重建迁移按约定清理旧工作数据并保留一次迁移前备份。
 - 每个 DB 都有 versioned migration ledger。
 - 启动 health、backup/restore、retention、performance 验证都有自动测试。
