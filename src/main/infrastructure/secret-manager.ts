@@ -1,4 +1,5 @@
 import { assertPluginId, type DatabasePool } from './database-pool';
+import { applyCoreDatabaseSchema } from './database-schemas';
 
 export type SafeStorageBackend = {
   isEncryptionAvailable(): boolean;
@@ -70,15 +71,7 @@ export class SecretManager {
   }
 
   private ensureTable(): void {
-    this.databasePool.getCoreConnection().exec(`
-      CREATE TABLE IF NOT EXISTS plugin_secrets (
-        plugin_id TEXT NOT NULL,
-        key TEXT NOT NULL,
-        ciphertext_base64 TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(plugin_id, key)
-      );
-    `);
+    applyCoreDatabaseSchema(this.databasePool.getCoreConnection());
   }
 
   private requireEncryption(): void {

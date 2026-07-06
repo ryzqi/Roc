@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { assertPluginId, type DatabasePool } from './database-pool';
+import { applyCoreDatabaseSchema } from './database-schemas';
 
 type PluginConfigFacade = {
   get<T>(key: string): T | null;
@@ -57,14 +58,6 @@ export class ConfigStore {
   }
 
   private ensureTable(): void {
-    this.databasePool.getCoreConnection().exec(`
-      CREATE TABLE IF NOT EXISTS plugin_config (
-        plugin_id TEXT NOT NULL,
-        key TEXT NOT NULL,
-        value_json TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(plugin_id, key)
-      );
-    `);
+    applyCoreDatabaseSchema(this.databasePool.getCoreConnection());
   }
 }

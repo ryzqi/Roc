@@ -63,6 +63,13 @@ describe('ConfigStore', () => {
         .pluck()
         .get('@roc/plugin-agent', 'settingsDocument')
     ).toBe(JSON.stringify(document));
+    expect(
+      pool
+        .getCoreConnection()
+        .prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'")
+        .pluck()
+        .get()
+    ).toBe(1);
   });
 
   it('rejects invalid plugin ids instead of writing unscoped config', () => {

@@ -53,6 +53,13 @@ describe('SecretManager', () => {
         .pluck()
         .get('@roc/plugin-agent', 'apiKey')
     ).toBe(Buffer.from('enc:sk-test', 'utf8').toString('base64'));
+    expect(
+      pool
+        .getCoreConnection()
+        .prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'")
+        .pluck()
+        .get()
+    ).toBe(1);
   });
 
   it('fails secret calls when safeStorage encryption is unavailable', () => {
