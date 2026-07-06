@@ -82,4 +82,33 @@ describe('KernelRuntime', () => {
     expect(calls).toEqual(['@roc/plugin-agent', 'shutdown']);
     expect(runtime.getStatus().started).toBe(false);
   });
+
+  it('runs database health before loading plugins', async () => {
+    const plugin: RocPlugin = {
+      manifest: {
+        id: '@roc/plugin-agent',
+        version: '1.0.0',
+        displayName: 'Agent',
+        description: 'Agent plugin.',
+        loadPhase: 'critical',
+        required: true,
+        order: 0,
+        dependencies: [],
+        capabilities: []
+      },
+      initialize: async (context) => {
+        expect(context.database.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(6);
+      },
+      shutdown: async () => {},
+      healthCheck: async () => ({ status: 'healthy' })
+    };
+    const runtime = new KernelRuntime({
+      rootDir: root,
+      plugins: [plugin],
+      safeStorage: safeStorage()
+    });
+
+    await runtime.start();
+    await runtime.shutdown();
+  });
 });

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 
+import { checkRocDatabases } from '../infrastructure/database-health';
 import { ConfigStore } from '../infrastructure/config-store';
 import { DatabasePool } from '../infrastructure/database-pool';
 import { InfrastructureLogger } from '../infrastructure/logger';
@@ -45,6 +46,15 @@ export class KernelRuntime {
     }
 
     const databasePool = new DatabasePool(this.options.rootDir);
+    const databaseHealth = checkRocDatabases({
+      rootDir: this.options.rootDir,
+      now: () => new Date().toISOString()
+    });
+    if (databaseHealth.status === 'unhealthy') {
+      databasePool.closeAll();
+      throw new Error('database_health_unhealthy');
+    }
+
     const configStore = new ConfigStore(databasePool, join(this.options.rootDir, 'config'));
     const secretManager = new SecretManager(databasePool, this.options.safeStorage);
     const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
