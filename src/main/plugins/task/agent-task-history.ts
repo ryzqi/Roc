@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type { BackgroundTask, EnabledCapabilities, TaskEvent, TaskRun, TaskSnapshot, TaskThread } from '../../../shared/types';
+import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
 import {
   mapTaskEvent,
@@ -75,6 +76,10 @@ export class AgentTaskHistoryReader {
     this.agentDb
       .prepare('UPDATE agent_threads SET status = ?, updated_at = ?, archived_at = ? WHERE id = ?')
       .run('archived', archivedAt, archivedAt, threadId);
+  }
+
+  deleteThread(threadId: string): void {
+    deleteAgentThreadHistory(this.agentDb, threadId);
   }
 
   recordBackgroundTaskEvent(task: BackgroundTask, type: TaskEvent['type'], payload: Record<string, unknown>): TaskEvent {

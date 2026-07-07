@@ -235,7 +235,7 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     const linkedTaskIds = repository.listBackgroundTasks()
       .filter((task) => task.threadId === threadId)
       .map((task) => task.id);
-    const result = repository.archiveThread(threadId);
+    const result = repository.deleteThread(threadId);
     for (const taskId of linkedTaskIds) {
       scheduler.unregisterTask(taskId);
       await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });

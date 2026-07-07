@@ -109,6 +109,58 @@ describe('TaskRepository', () => {
     });
     expect(repository.findBackgroundTask(task.id)?.status).toBe('archived');
   });
+
+  it('physically deletes background thread history and task projection rows', () => {
+    applyTaskPluginSchema(db);
+    const repository = createRepository();
+    const task = repository.createBackgroundTask(repository.createBackgroundTaskPreview(manualPreviewRequest));
+    const now = '2026-07-06T00:00:00.000Z';
+    repository.recordScheduledTaskRun({
+      backgroundTaskId: task.id,
+      scheduledAt: now,
+      status: 'skipped',
+      skipReason: 'manual_delete_regression'
+    });
+    insertAgentThreadResidue({
+      runId: task.runId,
+      threadId: task.threadId,
+      createdAt: now
+    });
+
+    expect(countRows(db, 'background_tasks')).toBe(1);
+    expect(countRows(db, 'scheduled_task_runs')).toBe(1);
+    expect(countRows(agentDb, 'agent_threads')).toBe(1);
+    expect(countRows(agentDb, 'agent_runs')).toBe(1);
+    expect(countRows(agentDb, 'agent_events')).toBe(1);
+    expect(countRows(agentDb, 'session_messages')).toBe(1);
+    expect(countRows(agentDb, 'session_messages_fts')).toBe(1);
+    expect(countRows(agentDb, 'agent_pending_interrupts')).toBe(1);
+    expect(countRows(agentDb, 'agent_run_events')).toBe(1);
+    expect(countRows(agentDb, 'langgraph_checkpoints')).toBe(1);
+    expect(countRows(agentDb, 'langgraph_checkpoint_writes')).toBe(1);
+    expect(countRows(agentDb, 'agent_tool_effects')).toBe(1);
+    expect(countRows(agentDb, 'context_artifacts')).toBe(1);
+
+    expect(repository.deleteThread(task.threadId)).toEqual({
+      deleted: true,
+      threadId: task.threadId
+    });
+
+    expect(repository.findBackgroundTask(task.id)).toBeNull();
+    expect(countRows(db, 'scheduled_task_runs')).toBe(0);
+    expect(countRows(db, 'background_tasks')).toBe(0);
+    expect(countRows(agentDb, 'agent_threads')).toBe(0);
+    expect(countRows(agentDb, 'agent_runs')).toBe(0);
+    expect(countRows(agentDb, 'agent_events')).toBe(0);
+    expect(countRows(agentDb, 'session_messages')).toBe(0);
+    expect(countRows(agentDb, 'session_messages_fts')).toBe(0);
+    expect(countRows(agentDb, 'agent_pending_interrupts')).toBe(0);
+    expect(countRows(agentDb, 'agent_run_events')).toBe(0);
+    expect(countRows(agentDb, 'langgraph_checkpoints')).toBe(0);
+    expect(countRows(agentDb, 'langgraph_checkpoint_writes')).toBe(0);
+    expect(countRows(agentDb, 'agent_tool_effects')).toBe(0);
+    expect(countRows(agentDb, 'context_artifacts')).toBe(0);
+  });
 });
 
 function rawRow(tableName: string, id: string): Record<string, unknown> {
@@ -127,4 +179,82 @@ function tableNames(): string[] {
   return (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{ name: string }>)
     .map((row) => row.name)
     .filter((name) => !name.startsWith('sqlite_'));
+}
+
+function countRows(targetDb: Database.Database, tableName: string): number {
+  return targetDb.prepare(`SELECT COUNT(*) FROM ${tableName}`).pluck().get() as number;
+}
+
+function insertAgentThreadResidue(input: { runId: string; threadId: string; createdAt: string }): void {
+  agentDb
+    .prepare(
+      `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run('smsg_delete_thread', input.threadId, 'assistant', 'delete thread residue', 10, 'visible', 'workspace_hash', input.createdAt);
+  agentDb
+    .prepare(
+      `INSERT INTO agent_pending_interrupts
+       (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
+        workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.runId,
+      input.threadId,
+      'interrupt_delete_thread',
+      '{}',
+      'task',
+      'workbench',
+      'background_task',
+      'value',
+      'F:\\Code\\Roc',
+      '[]',
+      input.createdAt,
+      input.createdAt
+    );
+  agentDb
+    .prepare('INSERT INTO agent_run_events (run_id, sequence, event_json, created_at) VALUES (?, ?, ?, ?)')
+    .run(input.runId, 1, '{"type":"started"}', input.createdAt);
+  agentDb
+    .prepare(
+      `INSERT INTO langgraph_checkpoints
+       (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(input.threadId, '', 'checkpoint_delete_thread', null, 'json', Buffer.from('{}'), 'json', Buffer.from('{}'), input.createdAt);
+  agentDb
+    .prepare(
+      `INSERT INTO langgraph_checkpoint_writes
+       (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(input.threadId, '', 'checkpoint_delete_thread', 'task_delete_thread', 0, 'messages', 'json', Buffer.from('[]'), input.createdAt);
+  agentDb
+    .prepare(
+      `INSERT INTO agent_tool_effects
+       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(input.runId, input.threadId, 'tool_delete_thread', 'shell', 'hash_delete_thread', 'success', '{}', null, input.createdAt, input.createdAt);
+  agentDb
+    .prepare(
+      `INSERT INTO context_artifacts
+       (id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      'ctx_delete_thread',
+      input.runId,
+      input.threadId,
+      'tool_result',
+      'tool_delete_thread',
+      'shell',
+      'sha_delete_thread',
+      19,
+      'delete thread residue',
+      'delete thread residue',
+      'workspace_hash',
+      input.createdAt
+    );
 }

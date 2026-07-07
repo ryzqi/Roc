@@ -18,6 +18,7 @@ import type {
   TaskSnapshot,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
+import { deleteTaskProjectionForThread } from '../../infrastructure/agent-history-deletion';
 import { AgentTaskHistoryReader } from './agent-task-history';
 import {
   inferBackgroundRisk,
@@ -125,14 +126,10 @@ export class TaskRepository {
     return readBackgroundTasks(this.db);
   }
 
-  archiveThread(threadId: string): TaskDeleteThreadResult {
+  deleteThread(threadId: string): TaskDeleteThreadResult {
     const thread = this.agentHistory.requireActiveThread(threadId);
-    const now = new Date().toISOString();
-    this.db
-      .transaction(() => {
-        this.db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE thread_id = ?').run('archived', now, thread.id);
-        this.agentHistory.archiveThread(thread.id, now);
-      })();
+    deleteTaskProjectionForThread(this.db, thread.id);
+    this.agentHistory.deleteThread(thread.id);
     return {
       deleted: true,
       threadId: thread.id
