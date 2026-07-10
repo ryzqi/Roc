@@ -28,6 +28,7 @@
 - Modify: `src/renderer/chat/markdown-view.tsx:1-20`
 - Modify: `src/renderer/chat/streaming-markdown-view.tsx:1-28`
 - Modify: `tests/main/external-link-policy.test.ts`
+- Modify: `tests/main/kernel-main-integration.test.ts`
 - Create: `tests/renderer/markdown-link.test.tsx`
 
 **Interfaces:**
@@ -240,7 +241,12 @@ Expected: PASS; invalid and unsupported URLs never call `openExternal` or `windo
 - Modify: `tests/main/plugins/task/task-repository.test.ts`
 - Modify: `tests/main/services/forge-guardrails/preview-store.test.ts`
 - Modify: `tests/main/services/deep-agent/tool-protocol.test.ts`
-- Modify: `tests/main/plugins/agent/deep-agent-executor.test.ts`
+- Verify: `tests/main/plugins/agent/deep-agent-executor.test.ts`
+- Modify: `tests/main/plugins/agent/deep-agent-executor-test-helpers.ts`
+- Modify: `tests/main/plugins/task/plugin.test.ts`
+- Modify: `tests/main/plugins/task/plugin-background-management.test.ts`
+- Modify: `tests/main/plugins/task/plugin-background-runs.test.ts`
+- Modify: `tests/main/plugins/task/scheduler.test.ts`
 - Modify: `tests/main/microkernel-regression.test.ts`
 - Modify: `tests/smoke/lib/ipc.mjs`
 - Modify: `tests/smoke/lib/electron-smoke-task-flow.mjs`
@@ -519,7 +525,7 @@ Expected: PASS; forged derived fields are rejected before handler execution and 
 **Files:**
 - Modify: `src/main/plugins/agent/index.ts:44-105`
 - Modify: `tests/main/plugins/agent/plugin.test.ts`
-- Modify: `tests/main/ipc-plugin-adapter.test.ts`
+- Verify: `tests/main/ipc-plugin-adapter.test.ts`
 
 **Interfaces:**
 - Consumes: LangChain `ChatResumeDecision = HITLResponse['decisions'][number]`.
@@ -601,8 +607,8 @@ Expected: PASS; edit requires `editedAction`, approve rejects extra fields, reje
 ### Task 4: Generate IPC, review, verify, and commit the security batch
 
 **Files:**
-- Modify generated: `src/shared/ipc-schema.json`
-- Modify generated: `src/shared/ipc-generated.ts`
+- Verify generated: `src/shared/ipc-schema.json`
+- Verify generated: `src/shared/ipc-generated.ts`
 - Review: every file changed by Tasks 1-3
 
 **Interfaces:**
@@ -616,7 +622,7 @@ pnpm generate:ipc
 pnpm check:ipc
 ```
 
-Expected: both exit code `0`; generated schema exposes `BackgroundTaskPreviewRequest` for create and contains no old preview input.
+Expected: both exit code `0`; channel artifacts remain current. The typed create request is enforced by `src/shared/ipc.ts`, preload compilation, and main capability tests because the generator does not encode method payload types.
 
 - [ ] **Step 2: Run the complete security focused suite**
 
@@ -656,6 +662,7 @@ Expected: every command exit code `0`.
 
 ```powershell
 $batchFiles = @(
+  'docs/superpowers/plans/2026-07-10-roc-production-hardening-01-security.md'
   'src/main/external-link-policy.ts'
   'src/main/index.ts'
   'src/main/plugins/task/contracts.ts'
@@ -670,22 +677,20 @@ $batchFiles = @(
   'src/renderer/chat/markdown-view.tsx'
   'src/renderer/chat/streaming-markdown-view.tsx'
   'src/shared/ipc.ts'
-  'src/shared/ipc-schema.json'
-  'src/shared/ipc-generated.ts'
   'tests/main/background-task-schema.test.ts'
   'tests/main/external-link-policy.test.ts'
-  'tests/main/ipc-plugin-adapter.test.ts'
+  'tests/main/kernel-main-integration.test.ts'
   'tests/main/microkernel-regression.test.ts'
-  'tests/main/plugins/agent/deep-agent-executor.test.ts'
+  'tests/main/plugins/agent/deep-agent-executor-test-helpers.ts'
   'tests/main/plugins/agent/plugin.test.ts'
   'tests/main/plugins/task/plugin.test.ts'
   'tests/main/plugins/task/plugin-background-management.test.ts'
   'tests/main/plugins/task/plugin-background-runs.test.ts'
+  'tests/main/plugins/task/scheduler.test.ts'
   'tests/main/plugins/task/task-repository.test.ts'
   'tests/main/services/deep-agent/tool-protocol.test.ts'
   'tests/main/services/forge-guardrails/preview-store.test.ts'
   'tests/renderer/markdown-link.test.tsx'
-  'tests/renderer/task-approval-card.test.tsx'
   'tests/smoke/lib/ipc.mjs'
   'tests/smoke/lib/electron-smoke-task-flow.mjs'
 )

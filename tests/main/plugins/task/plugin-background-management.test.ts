@@ -112,10 +112,8 @@ describe('task plugin', () => {
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
 
-    const healthyPreview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const healthy = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', healthyPreview);
-    const ghostPreview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const ghost = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', ghostPreview);
+    const healthy = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', previewRequest);
+    const ghost = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', previewRequest);
 
     // 模拟历史脏数据：thread 已归档（6/1 旧 archiveThread 只归档 thread），但 background_tasks.status 仍为 running。
     agentDb.prepare("UPDATE agent_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
@@ -139,8 +137,7 @@ describe('task plugin', () => {
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
 
-    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', previewRequest);
 
     agentDb.prepare("UPDATE agent_threads SET status = 'archived', archived_at = ? WHERE id = ?").run(
       '2026-06-01T14:10:00.000Z',

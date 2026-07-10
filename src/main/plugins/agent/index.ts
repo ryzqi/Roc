@@ -84,21 +84,48 @@ const chatStartRunResultSchema = z.object({
   createdAt: z.string()
 }) satisfies z.ZodType<ChatStartRunResult>;
 
-const approvalResumeRunRequestSchema = z.object({
-  kind: z.literal('approval'),
-  runId: z.string().trim().min(1),
-  threadId: z.string().trim().min(1),
-  interruptId: z.string().trim().min(1),
-  decisions: z.array(z.custom<ChatResumeDecision>())
-});
+const hitlActionSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    args: z.record(z.string(), z.unknown())
+  })
+  .strict();
 
-const questionResumeRunRequestSchema = z.object({
-  kind: z.literal('question'),
-  runId: z.string().trim().min(1),
-  threadId: z.string().trim().min(1),
-  interruptId: z.string().trim().min(1),
-  answer: z.string().trim().min(1)
-});
+const chatResumeDecisionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('approve') }).strict(),
+  z
+    .object({
+      type: z.literal('reject'),
+      message: z.string().trim().min(1).optional()
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('edit'),
+      editedAction: hitlActionSchema
+    })
+    .strict()
+]) satisfies z.ZodType<ChatResumeDecision>;
+
+const approvalResumeRunRequestSchema = z
+  .object({
+    kind: z.literal('approval'),
+    runId: z.string().trim().min(1),
+    threadId: z.string().trim().min(1),
+    interruptId: z.string().trim().min(1),
+    decisions: z.array(chatResumeDecisionSchema).min(1)
+  })
+  .strict();
+
+const questionResumeRunRequestSchema = z
+  .object({
+    kind: z.literal('question'),
+    runId: z.string().trim().min(1),
+    threadId: z.string().trim().min(1),
+    interruptId: z.string().trim().min(1),
+    answer: z.string().trim().min(1)
+  })
+  .strict();
 
 const chatResumeRunRequestSchema = z.discriminatedUnion('kind', [
   approvalResumeRunRequestSchema,

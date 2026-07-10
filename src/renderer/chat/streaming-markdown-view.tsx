@@ -1,9 +1,10 @@
 import { memo } from 'react';
 import { Streamdown } from 'streamdown';
 import { CodeBlock } from './code-block';
+import { MarkdownLink } from './markdown-link';
 import { MarkdownView } from './markdown-view';
 
-const markdownComponents = { pre: CodeBlock };
+const markdownComponents = { a: MarkdownLink, pre: CodeBlock };
 
 type StreamingMarkdownViewProps = {
   text: string;

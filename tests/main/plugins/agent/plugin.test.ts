@@ -175,6 +175,73 @@ describe('agent run schema explicit skills', () => {
   });
 });
 
+describe('agent run resume schema', () => {
+  it.each([
+    { type: 'edit' },
+    { type: 'approve', message: 'forged' },
+    { type: 'reject', message: '' }
+  ])('rejects a malformed HITL decision before runtime execution', (decision) => {
+    const parsed = getResumeInputSchema().safeParse(approvalResumeRequest([decision]));
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects an empty HITL decision list', () => {
+    expect(getResumeInputSchema().safeParse(approvalResumeRequest([])).success).toBe(false);
+  });
+
+  it('accepts approve, reject, and edit decisions without changing their payloads', () => {
+    const decisions = [
+      { type: 'approve' as const },
+      { type: 'reject' as const, message: 'Do not run this command.' },
+      {
+        type: 'edit' as const,
+        editedAction: {
+          name: 'run_shell_command',
+          args: { command: 'git status' }
+        }
+      }
+    ];
+    const parsed = getResumeInputSchema().safeParse(approvalResumeRequest(decisions));
+
+    expect(parsed).toEqual({
+      success: true,
+      data: approvalResumeRequest(decisions)
+    });
+  });
+
+  it('rejects unknown fields on question and outer resume requests', () => {
+    expect(
+      getResumeInputSchema().safeParse({
+        kind: 'question',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        interruptId: 'interrupt-1',
+        answer: 'Use Roc.',
+        decisions: [{ type: 'approve' }]
+      }).success
+    ).toBe(false);
+  });
+});
+
+function getResumeInputSchema() {
+  const descriptor = createAgentPlugin().manifest.capabilities.find((capability) => capability.name === 'agent.run.resume');
+  if (descriptor === undefined) {
+    throw new Error('agent_run_resume_descriptor_missing');
+  }
+  return descriptor.inputSchema;
+}
+
+function approvalResumeRequest(decisions: unknown[]) {
+  return {
+    kind: 'approval' as const,
+    runId: 'run-1',
+    threadId: 'thread-1',
+    interruptId: 'interrupt-1',
+    decisions
+  };
+}
+
 function createContext(
   agentDb: Database.Database,
   memoryDb: Database.Database,

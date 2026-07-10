@@ -29,21 +29,19 @@ describe('TaskScheduler', () => {
   it('loads scheduled background tasks from plugin tables and reports scheduler status', () => {
     const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 60_000).toISOString();
-    const task = repository.createBackgroundTask(
-      repository.createBackgroundTaskPreview({
-        goal: 'Run a scheduled check',
-        trigger: {
-          type: 'once',
-          description: 'One minute from now',
-          nextRunAt
-        },
-        workspacePath: 'F:\\Code\\Roc',
-        allowedActions: [],
-        forbiddenActions: [],
-        failurePolicy: 'pause_and_report',
-        notificationPolicy: 'failures_and_confirmations'
-      })
-    );
+    const task = repository.createBackgroundTask({
+      goal: 'Run a scheduled check',
+      trigger: {
+        type: 'once',
+        description: 'One minute from now',
+        nextRunAt
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
     repository.recordScheduledTaskRun({
       backgroundTaskId: task.id,
       scheduledAt: nextRunAt,
@@ -68,21 +66,19 @@ describe('TaskScheduler', () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 1_000).toISOString();
-    const task = repository.createBackgroundTask(
-      repository.createBackgroundTaskPreview({
-        goal: 'Run an automatic scheduled check',
-        trigger: {
-          type: 'once',
-          description: 'One second from now',
-          nextRunAt
-        },
-        workspacePath: 'F:\\Code\\Roc',
-        allowedActions: [],
-        forbiddenActions: [],
-        failurePolicy: 'pause_and_report',
-        notificationPolicy: 'failures_and_confirmations'
-      })
-    );
+    const task = repository.createBackgroundTask({
+      goal: 'Run an automatic scheduled check',
+      trigger: {
+        type: 'once',
+        description: 'One second from now',
+        nextRunAt
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
     const startRequests: unknown[] = [];
     const scheduler = new TaskScheduler(repository, {
       startRun: async (request) => {
@@ -125,21 +121,19 @@ describe('TaskScheduler', () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 10_000).toISOString();
-    const task = repository.createBackgroundTask(
-      repository.createBackgroundTaskPreview({
-        goal: 'Run later without early firing',
-        trigger: {
-          type: 'once',
-          description: 'Ten seconds from now',
-          nextRunAt
-        },
-        workspacePath: 'F:\\Code\\Roc',
-        allowedActions: [],
-        forbiddenActions: [],
-        failurePolicy: 'pause_and_report',
-        notificationPolicy: 'failures_and_confirmations'
-      })
-    );
+    const task = repository.createBackgroundTask({
+      goal: 'Run later without early firing',
+      trigger: {
+        type: 'once',
+        description: 'Ten seconds from now',
+        nextRunAt
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
     const startRequests: unknown[] = [];
     const scheduler = new TaskScheduler(repository, {
       maxTimeoutDelayMs: 1_000,
@@ -180,21 +174,19 @@ describe('TaskScheduler', () => {
     vi.useFakeTimers({ now: new Date('2026-06-05T00:00:00.000Z') });
     const repository = createRepository();
     const nextRunAt = new Date(Date.now() + 1_000).toISOString();
-    const task = repository.createBackgroundTask(
-      repository.createBackgroundTaskPreview({
-        goal: 'Run an automatic scheduled check',
-        trigger: {
-          type: 'once',
-          description: 'One second from now',
-          nextRunAt
-        },
-        workspacePath: 'F:\\Code\\Roc',
-        allowedActions: [],
-        forbiddenActions: [],
-        failurePolicy: 'pause_and_report',
-        notificationPolicy: 'failures_and_confirmations'
-      })
-    );
+    const task = repository.createBackgroundTask({
+      goal: 'Run an automatic scheduled check',
+      trigger: {
+        type: 'once',
+        description: 'One second from now',
+        nextRunAt
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
     const scheduler = new TaskScheduler(repository, {
       startRun: async () => {
         throw new Error('provider_unavailable');

@@ -42,7 +42,7 @@ import { broadcastToWindows, sendToWindow } from './window-messaging';
 import { createTerminalOutputBatcher } from './terminal-output-batcher';
 import { bindNativeContextMenu } from './native-context-menu';
 import { buildSystemAppearanceSnapshot } from './system-appearance';
-import { handleExternalWindowOpen } from './external-link-policy';
+import { handleExternalNavigation } from './external-link-policy';
 import {
   createElectronRuntimeMetricsProvider,
   createElectronSafeStorageBackend
@@ -361,11 +361,16 @@ async function createWindow(): Promise<void> {
     });
   }
 
+  const externalNavigationInput = {
+    shell,
+    logService: kernel.logService
+  };
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return handleExternalWindowOpen(url, {
-      shell,
-      logService: kernel.logService
-    });
+    return handleExternalNavigation(url, externalNavigationInput);
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    handleExternalNavigation(url, externalNavigationInput);
   });
   bindNativeContextMenu(mainWindow.webContents);
 

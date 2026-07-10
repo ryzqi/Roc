@@ -110,8 +110,11 @@ describe('task plugin', () => {
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
 
-    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const task = await capabilities.invoke<unknown, { id: string }>('task.background.create', preview);
+    await expect(capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest)).resolves.toMatchObject({
+      goal: previewRequest.goal,
+      riskLevel: 'low'
+    });
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, { id: string }>('task.background.create', previewRequest);
     await expect(capabilities.invoke('task.active.list', {})).resolves.toContainEqual(expect.objectContaining({ taskId: task.id }));
     await capabilities.invoke('task.background.pause', { id: task.id });
     await capabilities.invoke('task.background.resume', { id: task.id });

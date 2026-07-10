@@ -177,20 +177,17 @@ describe('microkernel regression', () => {
         }
       ])
     );
-    const preview = await unwrap<BackgroundTaskPreview>(
-      adapter.invoke('tasks.createBackgroundTaskPreview', [
-        {
-          goal: 'Create a regression task',
-          trigger: { type: 'manual', description: 'Manual' },
-          workspacePath: workspaceRoot,
-          allowedActions: [],
-          forbiddenActions: [],
-          failurePolicy: 'pause_and_report',
-          notificationPolicy: 'failures_and_confirmations'
-        }
-      ])
-    );
-    const task = await unwrap<BackgroundTask>(adapter.invoke('tasks.createBackgroundTask', [preview]));
+    const backgroundTaskRequest = {
+      goal: 'Create a regression task',
+      trigger: { type: 'manual' as const, description: 'Manual' },
+      workspacePath: workspaceRoot,
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report' as const,
+      notificationPolicy: 'failures_and_confirmations' as const
+    };
+    await unwrap<BackgroundTaskPreview>(adapter.invoke('tasks.createBackgroundTaskPreview', [backgroundTaskRequest]));
+    const task = await unwrap<BackgroundTask>(adapter.invoke('tasks.createBackgroundTask', [backgroundTaskRequest]));
     const backgroundTasks = await unwrap<BackgroundTask[]>(adapter.invoke('tasks.listBackgroundTasks', []));
     const activeTasks = await unwrap<ActiveTaskItem[]>(adapter.invoke('tasks.getActiveTasks', []));
     const taskDetail = await unwrap<TaskDetail>(adapter.invoke('tasks.getTaskDetail', [{ taskId: task.id }]));

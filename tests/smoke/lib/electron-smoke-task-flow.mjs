@@ -50,22 +50,23 @@ export async function runSmokeTaskFlow(ctx) {
       return result.data;
     }
 
-    const preview = await unwrap(
-      await window.roc.tasks.createBackgroundTaskPreview({
-        goal: 'Smoke manual run-now diagnostic task',
-        trigger: {
-          type: 'manual',
-          description: 'manual smoke trigger'
-        },
-        workspacePath,
-        allowedActions: ['dir'],
-        forbiddenActions: [],
-        failurePolicy: 'pause_and_report',
-        notificationPolicy: 'failures_and_confirmations'
-      }),
+    const request = {
+      goal: 'Smoke manual run-now diagnostic task',
+      trigger: {
+        type: 'manual',
+        description: 'manual smoke trigger'
+      },
+      workspacePath,
+      allowedActions: ['dir'],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    };
+    await unwrap(
+      await window.roc.tasks.createBackgroundTaskPreview(request),
       'manual background task preview'
     );
-    const task = await unwrap(await window.roc.tasks.createBackgroundTask(preview), 'manual background task create');
+    const task = await unwrap(await window.roc.tasks.createBackgroundTask(request), 'manual background task create');
     const runNow = await unwrap(await window.roc.tasks.runBackgroundNow(task.id), 'manual background task run now');
     if (runNow.runId === task.id) {
       throw new Error('manual run-now returned task id instead of real run id');

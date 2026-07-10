@@ -119,7 +119,7 @@ type BackgroundTaskToolDependencies = {
 type Awaitable<T> = T | Promise<T>;
 
 type BackgroundTaskToolTaskAdapter = {
-  createBackgroundTask(preview: BackgroundTaskPreview): Awaitable<{ id: string; threadId: string; nextRunAt: string | null; status?: string }>;
+  createBackgroundTask(request: BackgroundTaskPreviewRequest): Awaitable<{ id: string; threadId: string; nextRunAt: string | null; status?: string }>;
   createBackgroundTaskPreview(request: BackgroundTaskPreviewRequest): Awaitable<BackgroundTaskPreview>;
   readBackgroundTask(taskId: string): Awaitable<TaskDetail>;
   updateBackgroundTask(request: UpdateBackgroundTaskRequest): Awaitable<{ id: string; threadId: string; nextRunAt: string | null }>;
@@ -185,12 +185,10 @@ export function createBackgroundTaskTools(input: BackgroundTaskToolDependencies)
 }
 
 async function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
-  const preview = {
-    ...(await normalizePreview(input, rawInput)),
-    requiresConfirmation: false
-  };
+  const request = normalizePreviewRequest(input, rawInput);
+  const preview = await input.taskAdapter.createBackgroundTaskPreview(request);
   const previewId = input.previewStore.generatePreviewId();
-  input.previewStore.put(previewId, preview);
+  input.previewStore.put(previewId, { request, preview });
   return {
     previewId,
     preview
@@ -199,13 +197,13 @@ async function createBackgroundTaskPreview(input: BackgroundTaskToolDependencies
 
 async function scheduleBackgroundTask(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<Record<string, unknown>> {
   const { previewId } = scheduleInputSchema.parse(rawInput);
-  const preview = input.previewStore.take(previewId);
-  if (preview === null) {
+  const stored = input.previewStore.take(previewId);
+  if (stored === null) {
     throw new RocToolResolutionError(`Unknown previewId ${previewId}. 请先调用 propose_background_task 生成新的 preview。`, {
       toolName: 'schedule_background_task'
     });
   }
-  const task = await input.taskAdapter.createBackgroundTask(preview);
+  const task = await input.taskAdapter.createBackgroundTask(stored.request);
   input.schedulerAdapter.registerTask(task);
   return {
     ok: true,
@@ -255,7 +253,7 @@ async function cancelBackgroundTask(input: BackgroundTaskToolDependencies, rawIn
   };
 }
 
-async function normalizePreview(input: BackgroundTaskToolDependencies, rawInput: unknown): Promise<BackgroundTaskPreview> {
+function normalizePreviewRequest(input: BackgroundTaskToolDependencies, rawInput: unknown): BackgroundTaskPreviewRequest {
   const parsed = proposeToolInputSchema.parse(rawInput);
   if (input.runtimeWorkspacePath === null) {
     throw new RocDomainError({
@@ -278,7 +276,7 @@ async function normalizePreview(input: BackgroundTaskToolDependencies, rawInput:
   };
   validateTrigger(request.trigger);
   validateWorkspacePath(request.workspacePath);
-  return await input.taskAdapter.createBackgroundTaskPreview(request);
+  return request;
 }
 
 function normalizeTriggerForPreview(trigger: z.infer<typeof modelTriggerSchema>): z.infer<typeof triggerSchema> {

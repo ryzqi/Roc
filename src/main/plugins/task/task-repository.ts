@@ -90,7 +90,8 @@ export class TaskRepository {
     };
   }
 
-  createBackgroundTask(preview: BackgroundTaskPreview): BackgroundTask {
+  createBackgroundTask(request: BackgroundTaskPreviewRequest): BackgroundTask {
+    const preview = this.createBackgroundTaskPreview(request);
     const task = createBackgroundTaskRecord(this.db, preview);
     this.agentHistory.ensureBackgroundTaskThread(task);
     this.agentHistory.recordBackgroundTaskEvent(task, 'background_task_created', {

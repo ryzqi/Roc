@@ -88,24 +88,25 @@ export async function seedSmokeRuntimeData(
       );
       await unwrap(await window.roc.mcp.ensureExaPreset(), 'exa preset');
 
-      const backgroundPreview = await unwrap(
-        await window.roc.tasks.createBackgroundTaskPreview({
-          goal: seededBackgroundTaskGoal,
-          trigger: {
-            type: 'cron',
-            description: 'smoke scheduled run',
-            cronExpression: seededBackgroundTaskCronExpression,
-            nextRunAt: seededBackgroundTaskNextRunAt
-          },
-          workspacePath: rootPath,
-          allowedActions: ['pnpm test'],
-          forbiddenActions: ['git push'],
-          failurePolicy: 'pause_and_report',
-          notificationPolicy: 'failures_and_confirmations'
-        }),
+      const backgroundRequest = {
+        goal: seededBackgroundTaskGoal,
+        trigger: {
+          type: 'cron',
+          description: 'smoke scheduled run',
+          cronExpression: seededBackgroundTaskCronExpression,
+          nextRunAt: seededBackgroundTaskNextRunAt
+        },
+        workspacePath: rootPath,
+        allowedActions: ['pnpm test'],
+        forbiddenActions: ['git push'],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations'
+      };
+      await unwrap(
+        await window.roc.tasks.createBackgroundTaskPreview(backgroundRequest),
         'background task preview'
       );
-      await unwrap(await window.roc.tasks.createBackgroundTask(backgroundPreview), 'background task create');
+      await unwrap(await window.roc.tasks.createBackgroundTask(backgroundRequest), 'background task create');
 
       await unwrap(await window.roc.memory.status(), 'memory status');
     },

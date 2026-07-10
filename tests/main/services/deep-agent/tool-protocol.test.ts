@@ -1,7 +1,7 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { BackgroundTaskPreview } from '../../../../src/shared/types';
+import type { BackgroundTaskPreview, BackgroundTaskPreviewRequest } from '../../../../src/shared/types';
 import { createToolProtocolMiddleware, normalizeToolCallArgs } from '../../../../src/main/services/deep-agent/tool-protocol';
 import { createBackgroundTaskTools, proposeToolInputSchema } from '../../../../src/main/services/deep-agent/background-task-tools';
 import { PreviewStore } from '../../../../src/main/services/forge-guardrails';
@@ -39,6 +39,74 @@ describe('deep agent tool protocol', () => {
     expect(proposeToolInputSchema.shape.trigger).toBeTypeOf('object');
     expect(proposeToolInputSchema.shape.trigger.constructor.name).not.toBe('ZodPipe');
     expect(tools.map((tool) => Reflect.get(tool, 'schema')).map((schema) => schema?.constructor.name)).not.toContain('ZodPipe');
+  });
+
+  it('preserves the raw request through preview and schedule without overriding main-derived fields', async () => {
+    const createBackgroundTask = vi.fn(async (_request: BackgroundTaskPreviewRequest) => ({
+      id: 'task-1',
+      threadId: 'thread-1',
+      nextRunAt: null
+    }));
+    const tools = createBackgroundTaskTools({
+      previewStore: new PreviewStore(),
+      runtimeWorkspacePath: process.cwd(),
+      taskAdapter: {
+        createBackgroundTaskPreview: async (request) => ({
+          ...request,
+          scheduled: false,
+          nextRunAt: null,
+          cronExpression: null,
+          riskLevel: 'medium',
+          requiresConfirmation: true,
+          enabledCapabilities: null
+        }),
+        createBackgroundTask,
+        readBackgroundTask: async () => {
+          throw new Error('unexpected_read');
+        },
+        updateBackgroundTask: async () => ({ id: 'task-1', threadId: 'thread-1', nextRunAt: null }),
+        cancelBackgroundTask: async () => ({ id: 'task-1', threadId: 'thread-1', status: 'cancelled' })
+      },
+      schedulerAdapter: {
+        refreshTask: () => {},
+        registerTask: () => {},
+        unregisterTask: () => {}
+      }
+    });
+    const proposeTool = tools.find((tool) => tool.name === 'propose_background_task');
+    const scheduleTool = tools.find((tool) => tool.name === 'schedule_background_task');
+    if (proposeTool === undefined || scheduleTool === undefined) {
+      throw new Error('background_task_tools_missing');
+    }
+
+    const proposed = JSON.parse(
+      await proposeTool.invoke({
+        goal: '检查测试',
+        trigger: {
+          type: 'manual',
+          description: '手动'
+        }
+      })
+    ) as { previewId: string; preview: BackgroundTaskPreview };
+    await scheduleTool.invoke({ previewId: proposed.previewId });
+
+    expect(proposed.preview).toMatchObject({
+      riskLevel: 'medium',
+      requiresConfirmation: true
+    });
+    expect(createBackgroundTask).toHaveBeenCalledWith({
+      goal: '检查测试',
+      trigger: {
+        type: 'manual',
+        description: '手动'
+      },
+      workspacePath: process.cwd(),
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      enabledCapabilities: null
+    });
   });
 
   it('normalizes stringified tool handoff in the protocol layer before schema parsing', async () => {

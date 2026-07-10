@@ -456,8 +456,8 @@ async function createExecutorTools(input: {
       taskAdapter: {
         createBackgroundTaskPreview: async (request) =>
           await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
-        createBackgroundTask: async (preview) =>
-          await input.capabilities.invoke<BackgroundTaskPreview, BackgroundTask>('task.background.create', preview),
+        createBackgroundTask: async (request) =>
+          await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', request),
         readBackgroundTask: async (taskId) =>
           await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
         updateBackgroundTask: async (request) =>

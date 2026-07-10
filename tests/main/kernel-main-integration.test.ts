@@ -104,6 +104,9 @@ describe('main kernel bootstrap integration', () => {
     expect(source).toContain('kernel.subscribeEvent<TerminalSessionOutputEvent>');
     expect(source).toContain('kernel.subscribeEvent<ChatRunEvent>');
     expect(source).toContain('agentChatRunEventType');
+    expect(source).toContain("mainWindow.webContents.on('will-navigate'");
+    expect(source).toContain('event.preventDefault();');
+    expect(source).toContain('handleExternalNavigation(url');
     expect(source).toContain('const performanceObserverService = new PerformanceObserverService();');
     expect(source).toContain('performanceObserverService,');
     expect(source).not.toContain('services.terminalSessionService.onOutput');

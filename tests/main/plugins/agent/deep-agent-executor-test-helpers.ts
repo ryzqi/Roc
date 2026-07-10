@@ -232,7 +232,7 @@ export function createCapabilities(
         return createPreview(input as BackgroundTaskPreviewRequest) as TOutput;
       }
       if (name === 'task.background.create') {
-        return createTask(input as BackgroundTaskPreview, 'running') as TOutput;
+        return createTask(createPreview(input as BackgroundTaskPreviewRequest), 'running') as TOutput;
       }
       if (name === 'task.detail.get') {
         return createTaskDetail() as TOutput;

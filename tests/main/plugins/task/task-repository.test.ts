@@ -65,8 +65,9 @@ describe('TaskRepository', () => {
     const repository = createRepository();
 
     const preview = repository.createBackgroundTaskPreview(manualPreviewRequest);
-    const task = repository.createBackgroundTask(preview);
+    const task = repository.createBackgroundTask(manualPreviewRequest);
 
+    expect(preview).toMatchObject({ riskLevel: 'low', requiresConfirmation: false });
     expect(task).toMatchObject({
       goal: 'Review the workspace every morning',
       scheduled: false,
@@ -86,10 +87,23 @@ describe('TaskRepository', () => {
     expect(tableNames()).not.toContain('task_events');
   });
 
+  it('re-derives risk fields from the raw create request', () => {
+    applyTaskPluginSchema(db);
+    const repository = createRepository();
+
+    const task = repository.createBackgroundTask({
+      ...manualPreviewRequest,
+      forbiddenActions: ['Remove-Item -Recurse release']
+    });
+
+    expect(task.riskLevel).toBe('medium');
+    expect(task.requiresConfirmation).toBe(true);
+  });
+
   it('rejects non-positive scheduled run limits before querying sqlite', () => {
     applyTaskPluginSchema(db);
     const repository = createRepository();
-    const task = repository.createBackgroundTask(repository.createBackgroundTaskPreview(manualPreviewRequest));
+    const task = repository.createBackgroundTask(manualPreviewRequest);
 
     expect(() => repository.listScheduledRuns({ taskId: task.id, limit: 0 })).toThrow('scheduled_runs_limit_invalid');
     expect(() => repository.listScheduledRuns({ taskId: task.id, limit: -1 })).toThrow('scheduled_runs_limit_invalid');
@@ -98,7 +112,7 @@ describe('TaskRepository', () => {
   it('preserves current background task status names across lifecycle mutations', () => {
     applyTaskPluginSchema(db);
     const repository = createRepository();
-    const task = repository.createBackgroundTask(repository.createBackgroundTaskPreview(manualPreviewRequest));
+    const task = repository.createBackgroundTask(manualPreviewRequest);
 
     expect(repository.pauseBackgroundTask(task.id).status).toBe('paused');
     expect(repository.resumeBackgroundTask(task.id).status).toBe('running');
@@ -113,7 +127,7 @@ describe('TaskRepository', () => {
   it('physically deletes background thread history and task projection rows', () => {
     applyTaskPluginSchema(db);
     const repository = createRepository();
-    const task = repository.createBackgroundTask(repository.createBackgroundTaskPreview(manualPreviewRequest));
+    const task = repository.createBackgroundTask(manualPreviewRequest);
     const now = '2026-07-06T00:00:00.000Z';
     repository.recordScheduledTaskRun({
       backgroundTaskId: task.id,

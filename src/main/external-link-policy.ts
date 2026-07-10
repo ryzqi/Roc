@@ -4,35 +4,32 @@ type ShellLike = {
   openExternal: (url: string) => unknown;
 };
 
-type ExternalLinkPolicyInput = {
+export type ExternalNavigationPolicyInput = {
   shell: ShellLike;
   logService: Pick<LogService, 'warn'>;
 };
 
 const allowedExternalSchemes = new Set(['http:', 'https:']);
 
-export function handleExternalWindowOpen(
+export function handleExternalNavigation(
   url: string,
-  input: ExternalLinkPolicyInput
+  input: ExternalNavigationPolicyInput
 ): { action: 'deny' } {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
   } catch {
-    input.logService.warn('Blocked invalid external link.', {
+    input.logService.warn('Blocked invalid top-level navigation.', {
       service: 'external-link-policy',
-      component: 'handleExternalWindowOpen',
-      metadata: {
-        url
-      }
+      component: 'handleExternalNavigation'
     });
     return { action: 'deny' };
   }
 
   if (!allowedExternalSchemes.has(parsedUrl.protocol)) {
-    input.logService.warn('Blocked external link with unsupported scheme.', {
+    input.logService.warn('Blocked top-level navigation with unsupported scheme.', {
       service: 'external-link-policy',
-      component: 'handleExternalWindowOpen',
+      component: 'handleExternalNavigation',
       metadata: {
         scheme: parsedUrl.protocol
       }

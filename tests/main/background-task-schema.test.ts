@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fc from 'fast-check';
+import { z } from 'zod';
+
+import { CapabilityRegistry } from '../../src/main/kernel/capability-registry';
+import { createTaskPlugin } from '../../src/main/plugins/task';
 import { MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE } from '../../src/shared/background-task-tool-contract';
+import type { BackgroundTaskPreviewRequest } from '../../src/shared/types';
 import { invalidProposeInput, minimalProposeToolInput, validProposeInput } from '../_factories/background-task';
 
 describe('background task propose schema', () => {
@@ -121,3 +126,64 @@ describe('background task propose schema', () => {
     );
   });
 });
+
+describe('background task capability schemas', () => {
+  it('rejects renderer-derived fields on create before handler execution', async () => {
+    await expectTaskCapabilityInputRejected('task.background.create', {
+      ...backgroundTaskPreviewRequest(),
+      riskLevel: 'low',
+      requiresConfirmation: false
+    });
+  });
+
+  it('rejects an incomplete cron trigger on preview before handler execution', async () => {
+    await expectTaskCapabilityInputRejected('task.background.preview', {
+      ...backgroundTaskPreviewRequest(),
+      trigger: {
+        type: 'cron',
+        description: 'nightly',
+        cronExpression: '0 0 * * *'
+      }
+    });
+  });
+
+  it('rejects derived fields inside an update patch before handler execution', async () => {
+    await expectTaskCapabilityInputRejected('task.background.update', {
+      taskId: 'task-1',
+      patch: {
+        riskLevel: 'low'
+      },
+      reason: 'forged renderer update'
+    });
+  });
+});
+
+async function expectTaskCapabilityInputRejected(name: string, input: unknown): Promise<void> {
+  const plugin = createTaskPlugin();
+  const descriptor = plugin.manifest.capabilities.find((capability) => capability.name === name);
+  if (descriptor === undefined) {
+    throw new Error(`Missing task capability descriptor: ${name}`);
+  }
+  const capabilities = new CapabilityRegistry();
+  const handler = vi.fn(async () => ({}));
+  capabilities.declare(plugin.manifest.id, descriptor);
+  capabilities.register(plugin.manifest.id, descriptor, handler);
+
+  await expect(capabilities.invoke(name, input)).rejects.toThrow(z.ZodError);
+  expect(handler).not.toHaveBeenCalled();
+}
+
+function backgroundTaskPreviewRequest(): BackgroundTaskPreviewRequest {
+  return {
+    goal: 'Review plugin state',
+    trigger: {
+      type: 'manual',
+      description: 'Manual'
+    },
+    workspacePath: 'F:\\Code\\Roc',
+    allowedActions: [],
+    forbiddenActions: [],
+    failurePolicy: 'pause_and_report',
+    notificationPolicy: 'failures_and_confirmations'
+  };
+}

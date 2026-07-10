@@ -56,8 +56,7 @@ describe('task plugin', () => {
       capabilities.declare(plugin.manifest.id, descriptor);
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
-    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', previewRequest);
 
     const runNow = await capabilities.invoke<{ id: string }, { taskId: string; runId: string }>('task.background.runNow', {
       id: task.id
@@ -114,8 +113,7 @@ describe('task plugin', () => {
       capabilities.declare(plugin.manifest.id, descriptor);
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
-    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', previewRequest);
-    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', previewRequest);
 
     const runNow = await capabilities.invoke<{ id: string }, { taskId: string; runId: string }>('task.background.runNow', {
       id: task.id
@@ -171,14 +169,14 @@ describe('task plugin', () => {
       capabilities.declare(plugin.manifest.id, descriptor);
     }
     await plugin.initialize(createContext({ capabilities, eventBus }));
-    const preview = await capabilities.invoke<BackgroundTaskPreviewRequest, unknown>('task.background.preview', {
+    const request: BackgroundTaskPreviewRequest = {
       ...previewRequest,
       enabledCapabilities: {
         mcpServers: ['filesystem'],
         skills: ['typescript']
       }
-    });
-    const task = await capabilities.invoke<unknown, BackgroundTask>('task.background.create', preview);
+    };
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', request);
 
     const runNow = await capabilities.invoke<{ id: string }, { taskId: string; runId: string }>('task.background.runNow', {
       id: task.id

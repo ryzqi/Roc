@@ -1,18 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import type { BackgroundTaskPreview } from '../../../shared/types';
+import type { BackgroundTaskPreview, BackgroundTaskPreviewRequest } from '../../../shared/types';
+
+export type StoredBackgroundTaskPreview = {
+  request: BackgroundTaskPreviewRequest;
+  preview: BackgroundTaskPreview;
+};
 
 export class PreviewStore {
-  private readonly entries = new Map<string, BackgroundTaskPreview>();
+  private readonly entries = new Map<string, StoredBackgroundTaskPreview>();
 
   generatePreviewId(): string {
     return `preview_${randomUUID()}`;
   }
 
-  put(previewId: string, preview: BackgroundTaskPreview): void {
-    this.entries.set(previewId, preview);
+  put(previewId: string, entry: StoredBackgroundTaskPreview): void {
+    this.entries.set(previewId, entry);
   }
 
-  take(previewId: string): BackgroundTaskPreview | null {
+  take(previewId: string): StoredBackgroundTaskPreview | null {
     const value = this.entries.get(previewId);
     if (value === undefined) {
       return null;

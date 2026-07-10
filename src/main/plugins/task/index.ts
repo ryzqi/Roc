@@ -3,8 +3,6 @@ import { z } from 'zod';
 import type {
   ActiveTaskItem,
   BackgroundTask,
-  BackgroundTaskPreview,
-  BackgroundTaskPreviewRequest,
   BackgroundTaskSummary,
   ChatStartRunRequest,
   ChatStartRunResult,
@@ -15,7 +13,6 @@ import type {
   TaskEvent,
   TaskSnapshot,
   TaskUpdateEvent,
-  UpdateBackgroundTaskRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import {
@@ -26,6 +23,12 @@ import {
   resolveAgentRunThreadKind
 } from './agent-run-payloads';
 import { AgentTaskHistoryReader } from './agent-task-history';
+import {
+  backgroundTaskPreviewRequestSchema,
+  backgroundTaskPreviewSchema,
+  backgroundTaskSchema,
+  updateBackgroundTaskRequestSchema
+} from './contracts';
 import { TaskScheduler } from './scheduler';
 import { applyTaskPluginSchema } from './schema';
 import { TaskRepository } from './task-repository';
@@ -44,9 +47,9 @@ const taskRunNowResultSchema = z.object({
 
 const taskCapabilityDescriptors = [
   descriptor('task.snapshot.get', z.object({}), z.custom<TaskSnapshot>()),
-  descriptor('task.background.preview', z.custom<BackgroundTaskPreviewRequest>(), z.custom<BackgroundTaskPreview>()),
-  descriptor('task.background.create', z.custom<BackgroundTaskPreview>(), z.custom<BackgroundTask>()),
-  descriptor('task.background.update', z.custom<UpdateBackgroundTaskRequest>(), z.custom<BackgroundTask>()),
+  descriptor('task.background.preview', backgroundTaskPreviewRequestSchema, backgroundTaskPreviewSchema),
+  descriptor('task.background.create', backgroundTaskPreviewRequestSchema, backgroundTaskSchema),
+  descriptor('task.background.update', updateBackgroundTaskRequestSchema, backgroundTaskSchema),
   descriptor('task.background.runNow', idInputSchema, taskRunNowResultSchema),
   descriptor('task.background.pause', idInputSchema, z.custom<BackgroundTask>()),
   descriptor('task.background.resume', idInputSchema, z.custom<BackgroundTask>()),
@@ -156,16 +159,16 @@ export function createTaskPlugin(): RocPlugin {
 function registerTaskCapabilities(context: RocPluginContext, repository: TaskRepository, scheduler: TaskScheduler): void {
   context.capabilities.register(pluginId, taskCapabilityDescriptors[0], async () => repository.getSnapshot());
   context.capabilities.register(pluginId, taskCapabilityDescriptors[1], async (input) =>
-    repository.createBackgroundTaskPreview(input as BackgroundTaskPreviewRequest)
+    repository.createBackgroundTaskPreview(backgroundTaskPreviewRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, taskCapabilityDescriptors[2], async (input) => {
-    const task = repository.createBackgroundTask(input as BackgroundTaskPreview);
+    const task = repository.createBackgroundTask(backgroundTaskPreviewRequestSchema.parse(input));
     scheduler.registerTask(task);
     await publishTaskUpdated(context, { kind: 'task_created', taskId: task.id });
     return task;
   });
   context.capabilities.register(pluginId, taskCapabilityDescriptors[3], async (input) => {
-    const task = repository.updateBackgroundTask(input as UpdateBackgroundTaskRequest);
+    const task = repository.updateBackgroundTask(updateBackgroundTaskRequestSchema.parse(input));
     scheduler.registerTask(task);
     await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
     return task;
