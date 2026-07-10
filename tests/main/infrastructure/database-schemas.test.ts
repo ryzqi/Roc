@@ -66,10 +66,20 @@ describe('target database schemas', () => {
     expect(tableNames()).toEqual(expect.arrayContaining(['langgraph_store_items', 'memory_events', 'memory_auto_audit']));
   });
 
-  it('creates only background task projection tables in task db', () => {
+  it('creates task-owned projection and deletion journal tables in task db', () => {
     applyTaskDatabaseSchema(db, () => '2026-07-06T00:00:00.000Z');
 
-    expect(tableNames()).toEqual(expect.arrayContaining(['background_tasks', 'scheduled_task_runs']));
+    expect(tableNames()).toEqual(expect.arrayContaining(['background_tasks', 'scheduled_task_runs', 'thread_deletion_journal']));
+    expect(columnNames('thread_deletion_journal')).toEqual([
+      'thread_id',
+      'state',
+      'attempt_count',
+      'last_error',
+      'created_at',
+      'updated_at',
+      'completed_at'
+    ]);
+    expect(indexNames('thread_deletion_journal')).toContain('idx_task_thread_deletion_journal_state_updated');
     expect(tableNames()).not.toContain('task_threads');
     expect(tableNames()).not.toContain('task_runs');
     expect(tableNames()).not.toContain('task_events');
@@ -94,4 +104,12 @@ function tableNames(): string[] {
   }>)
     .map((row) => row.name)
     .filter((name) => !name.startsWith('sqlite_'));
+}
+
+function columnNames(tableName: string): string[] {
+  return (db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>).map((row) => row.name);
+}
+
+function indexNames(tableName: string): string[] {
+  return (db.prepare(`PRAGMA index_list(${tableName})`).all() as Array<{ name: string }>).map((row) => row.name);
 }

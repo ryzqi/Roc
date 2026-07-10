@@ -6,6 +6,7 @@ import {
   readSchemaMetadata,
   type RocDatabaseMigration
 } from '../../../src/main/infrastructure/database-migrations';
+import { taskMigrations } from '../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 
@@ -79,5 +80,24 @@ describe('database migrations', () => {
         now: () => '2026-07-06T00:00:00.000Z'
       })
     ).toThrow('database_migration_version_gap');
+  });
+
+  it('applies task migrations through version 2 without changing version order', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'task',
+      migrations: taskMigrations,
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+
+    expect(
+      db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'task' ORDER BY version").all()
+    ).toEqual([
+      { version: 1, name: 'background_task_projection_tables' },
+      { version: 2, name: 'thread_deletion_journal' }
+    ]);
+    expect(readSchemaMetadata(db, 'task')).toMatchObject({
+      dbName: 'task',
+      currentVersion: 2
+    });
   });
 });

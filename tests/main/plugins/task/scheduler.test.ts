@@ -6,6 +6,7 @@ import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/da
 import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
+import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 
 let db: Database.Database;
 let agentDb: Database.Database;
@@ -211,6 +212,33 @@ describe('TaskScheduler', () => {
       status: 'paused',
       lastRunStatus: 'failed'
     });
+  });
+
+  it('never registers or fires a journaled scheduled task', async () => {
+    vi.useFakeTimers({ now: new Date('2026-07-10T00:00:00.000Z') });
+    const repository = createRepository();
+    const task = repository.createBackgroundTask({
+      goal: 'Do not fire while deletion is pending',
+      trigger: {
+        type: 'once',
+        description: 'One second from now',
+        nextRunAt: '2026-07-10T00:00:01.000Z'
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations'
+    });
+    new ThreadDeletionJournal(db).ensurePending(task.threadId);
+    const startRun = vi.fn();
+    const scheduler = new TaskScheduler(repository, { startRun });
+
+    scheduler.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(scheduler.getStatus().registeredTaskCount).toBe(0);
+    expect(startRun).not.toHaveBeenCalled();
   });
 });
 

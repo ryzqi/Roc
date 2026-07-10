@@ -358,6 +358,24 @@ export const taskMigrations: RocDatabaseMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_task_plugin_scheduled_task_runs_task_status
         ON scheduled_task_runs(background_task_id, status, scheduled_at DESC);
     `
+  },
+  {
+    version: 2,
+    name: 'thread_deletion_journal',
+    sql: `
+      CREATE TABLE thread_deletion_journal (
+        thread_id TEXT PRIMARY KEY,
+        state TEXT NOT NULL CHECK(state IN ('pending','agent_deleted','complete')),
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+
+      CREATE INDEX idx_task_thread_deletion_journal_state_updated
+        ON thread_deletion_journal(state, updated_at);
+    `
   }
 ];
 

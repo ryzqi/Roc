@@ -1,10 +1,11 @@
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
+import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 import type { BackgroundTaskPreviewRequest, EnabledCapabilities } from '../../../../src/shared/types';
 
 let db: Database.Database;
@@ -174,6 +175,99 @@ describe('TaskRepository', () => {
     expect(countRows(agentDb, 'langgraph_checkpoint_writes')).toBe(0);
     expect(countRows(agentDb, 'agent_tool_effects')).toBe(0);
     expect(countRows(agentDb, 'context_artifacts')).toBe(0);
+    expect(new ThreadDeletionJournal(db).require(task.threadId).state).toBe('complete');
+  });
+
+  it('keeps an agent-delete failure pending, hidden, and retryable', () => {
+    applyTaskPluginSchema(db);
+    const journal = new ThreadDeletionJournal(db, () => '2026-07-10T02:00:00.000Z');
+    const agentHistory = new AgentTaskHistoryReader(agentDb);
+    const repository = new TaskRepository(db, agentHistory, journal);
+    const task = repository.createBackgroundTask(manualPreviewRequest);
+    const deleteSpy = vi.spyOn(agentHistory, 'deleteThread').mockImplementationOnce(() => {
+      throw new Error('agent_delete_injected');
+    });
+
+    expect(() => repository.deleteThread(task.threadId)).toThrow('agent_delete_injected');
+    expect(journal.require(task.threadId)).toMatchObject({
+      state: 'pending',
+      attemptCount: 1,
+      lastError: 'agent_delete_injected'
+    });
+    expect(repository.findBackgroundTask(task.id)).toBeNull();
+    expect(repository.listBackgroundTasks()).toEqual([]);
+    expect(repository.getSnapshot().threads.some((thread) => thread.id === task.threadId)).toBe(false);
+
+    deleteSpy.mockRestore();
+    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    expect(journal.require(task.threadId).state).toBe('complete');
+    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    expect(journal.require(task.threadId).attemptCount).toBe(1);
+  });
+
+  it('resumes projection deletion after agent history has already been deleted', () => {
+    applyTaskPluginSchema(db);
+    const journal = new ThreadDeletionJournal(db, () => '2026-07-10T02:00:00.000Z');
+    const repository = new TaskRepository(db, new AgentTaskHistoryReader(agentDb), journal);
+    const task = repository.createBackgroundTask(manualPreviewRequest);
+    db.exec(`
+      CREATE TRIGGER fail_background_task_delete
+      BEFORE DELETE ON background_tasks
+      BEGIN
+        SELECT RAISE(ABORT, 'projection_delete_injected');
+      END;
+    `);
+
+    expect(() => repository.deleteThread(task.threadId)).toThrow('projection_delete_injected');
+    expect(journal.require(task.threadId)).toMatchObject({
+      state: 'agent_deleted',
+      attemptCount: 1
+    });
+    expect(journal.require(task.threadId).lastError).toContain('projection_delete_injected');
+    expect(countRows(agentDb, 'agent_threads')).toBe(0);
+    expect(countRows(db, 'background_tasks')).toBe(1);
+
+    db.exec('DROP TRIGGER fail_background_task_delete;');
+    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    expect(journal.require(task.threadId).state).toBe('complete');
+    expect(countRows(db, 'background_tasks')).toBe(0);
+  });
+
+  it('hides every public task surface as soon as deletion is journaled', () => {
+    applyTaskPluginSchema(db);
+    const journal = new ThreadDeletionJournal(db);
+    const repository = new TaskRepository(db, new AgentTaskHistoryReader(agentDb), journal);
+    const request: BackgroundTaskPreviewRequest = {
+      ...manualPreviewRequest,
+      trigger: {
+        type: 'once',
+        description: 'Run later',
+        nextRunAt: '2026-07-11T00:00:00.000Z'
+      }
+    };
+    const task = repository.createBackgroundTask(request);
+    repository.recordScheduledTaskRun({
+      backgroundTaskId: task.id,
+      scheduledAt: '2026-07-11T00:00:00.000Z',
+      status: 'skipped',
+      skipReason: 'visibility_test'
+    });
+    journal.ensurePending(task.threadId);
+
+    expect(repository.findBackgroundTask(task.id)).toBeNull();
+    expect(repository.findBackgroundTaskByRunId(task.runId)).toBeNull();
+    expect(repository.listBackgroundTasks()).toEqual([]);
+    expect(repository.listSchedulableBackgroundTasks()).toEqual([]);
+    expect(repository.getActiveTasks()).toEqual([]);
+    expect(repository.getBackgroundTaskSummary().total).toBe(0);
+    expect(repository.countRecentSkippedScheduledRuns()).toBe(0);
+    expect(repository.getSnapshot().threads.map((thread) => thread.id)).not.toContain(task.threadId);
+    expect(repository.getSnapshot().recentEvents.map((event) => event.threadId)).not.toContain(task.threadId);
+    expect(() => repository.getTaskDetail({ taskId: task.id, schedulerRegistered: true })).toThrow(
+      'background_task_not_found'
+    );
+    expect(() => repository.listScheduledRuns({ taskId: task.id })).toThrow('background_task_not_found');
+    expect(() => repository.listThreadMessages(task.threadId)).toThrow(expect.objectContaining({ code: 'task_thread_not_found' }));
   });
 });
 

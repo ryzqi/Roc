@@ -240,12 +240,19 @@ Expected: PASS; task schema metadata reports version `2`, checksum tests pass, a
 **Files:**
 - Modify: `src/main/plugins/task/task-repository.ts:1-362`
 - Modify: `src/main/plugins/task/task-repository-queries.ts`
-- Modify: `src/main/plugins/task/agent-task-history.ts`
 - Modify: `src/main/plugins/task/index.ts:86-95`
+- Modify: `src/main/infrastructure/database-health.ts` to require the v2 journal table
+- Modify: `src/shared/types/task.ts` for the deletion-started refresh event
+- Modify: `src/renderer/app/data-loading.ts` to skip a selected task after it becomes hidden
+- Modify: `src/renderer/app/AppShell.tsx` to clear hidden task detail navigation
+- Verify: `src/main/plugins/task/agent-task-history.ts` remains unchanged
 - Modify: `tests/main/plugins/task/task-repository.test.ts`
 - Modify: `tests/main/plugins/task/plugin.test.ts`
-- Modify: `tests/main/plugins/task/plugin-thread-history.test.ts`
 - Modify: `tests/main/plugins/task/scheduler.test.ts`
+- Modify: `tests/main/infrastructure/database-health.test.ts`
+- Modify: `tests/renderer/app-shell.test.tsx`
+- Verify: `tests/renderer/task-surface-data.test.ts` remains passing
+- Verify: `tests/main/plugins/task/plugin-thread-history.test.ts` remains passing without modification
 
 **Interfaces:**
 - Consumes: `ThreadDeletionJournal`, `deleteAgentThreadHistory()`, `deleteTaskProjectionForThread()`.
@@ -441,6 +448,14 @@ scheduler = new TaskScheduler(repository, {
 scheduler.start();
 ```
 
+If a live delete has already created a journal but later fails, unregister linked scheduler entries and publish a dedicated task update:
+
+```ts
+{ kind: 'thread_deletion_started', threadId }
+```
+
+Do not publish a false `archived` status. The renderer already refreshes task state for every task update, including chat-only threads that have no linked background task id.
+
 - [ ] **Step 7: Add restart-recovery plugin tests**
 
 Seed a `pending` journal plus both DB projections, initialize the plugin, and assert both DBs are cleaned before scheduler status is read. Seed an `agent_deleted` journal plus only task projection and assert initialize finishes the task transaction. Inject one recovery failure and assert plugin initialize resolves, scheduler excludes the hidden task, journal attempt increments, and logger receives the thread id/state.
@@ -466,7 +481,7 @@ Expected: PASS; both failure points resume correctly, repeated complete delete s
 - [ ] **Step 1: Run the complete consistency focused suite**
 
 ```powershell
-pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/plugins/task/thread-deletion-journal.test.ts tests/main/plugins/task/task-repository.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/plugin-thread-history.test.ts tests/main/plugins/task/scheduler.test.ts
+pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/infrastructure/database-health.test.ts tests/main/plugins/task/thread-deletion-journal.test.ts tests/main/plugins/task/task-repository.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/plugin-thread-history.test.ts tests/main/plugins/task/scheduler.test.ts tests/renderer/app-shell.test.tsx tests/renderer/task-surface-data.test.ts
 ```
 
 Expected: PASS.
@@ -483,7 +498,7 @@ Review in this order:
 2. High: any journal state can expose the thread, schedule it, or return success before `complete`.
 3. High: failure after agent deletion cannot resume, `complete` is deleted, or repeated deletion depends on a remaining agent thread.
 4. High: plugin starts scheduler before recovery or recovery failure aborts the whole plugin.
-5. Medium: migration v1 changed, state transition lacks conditional update, or attempt/error audit is lost.
+5. Medium: migration v1 changed, health checks omit the v2 journal, state transition lacks conditional update, or attempt/error audit is lost.
 
 Record findings with file and line. Fix each finding and rerun its direct test. If none exist, record `未发现问题` and note that two SQLite databases still cannot share an atomic transaction; the journal is the recovery mechanism.
 
@@ -491,7 +506,8 @@ Record findings with file and line. Fix each finding and rerun its direct test. 
 
 ```powershell
 pnpm typecheck
-pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/plugins/task/thread-deletion-journal.test.ts tests/main/plugins/task/task-repository.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/plugin-thread-history.test.ts tests/main/plugins/task/scheduler.test.ts
+pnpm check:ipc
+pnpm test -- tests/main/services/deep-agent/sqlite-checkpointer.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/infrastructure/database-health.test.ts tests/main/plugins/task/thread-deletion-journal.test.ts tests/main/plugins/task/task-repository.test.ts tests/main/plugins/task/plugin.test.ts tests/main/plugins/task/plugin-thread-history.test.ts tests/main/plugins/task/scheduler.test.ts tests/renderer/app-shell.test.tsx tests/renderer/task-surface-data.test.ts
 git diff --check
 ```
 
@@ -502,20 +518,25 @@ Expected: every command exit code `0`.
 ```powershell
 $batchFiles = @(
   'src/main/infrastructure/database-schemas.ts'
+  'src/main/infrastructure/database-health.ts'
   'src/main/plugins/task/thread-deletion-journal.ts'
   'src/main/plugins/task/task-repository.ts'
   'src/main/plugins/task/task-repository-queries.ts'
-  'src/main/plugins/task/agent-task-history.ts'
   'src/main/plugins/task/index.ts'
   'src/main/services/deep-agent/sqlite-checkpointer.ts'
+  'src/shared/types/task.ts'
+  'src/renderer/app/data-loading.ts'
+  'src/renderer/app/AppShell.tsx'
   'tests/main/infrastructure/database-schemas.test.ts'
   'tests/main/infrastructure/database-migrations.test.ts'
+  'tests/main/infrastructure/database-health.test.ts'
   'tests/main/plugins/task/thread-deletion-journal.test.ts'
   'tests/main/plugins/task/task-repository.test.ts'
   'tests/main/plugins/task/plugin.test.ts'
-  'tests/main/plugins/task/plugin-thread-history.test.ts'
   'tests/main/plugins/task/scheduler.test.ts'
   'tests/main/services/deep-agent/sqlite-checkpointer.test.ts'
+  'tests/renderer/app-shell.test.tsx'
+  'docs/superpowers/plans/2026-07-10-roc-production-hardening-02-consistency.md'
 )
 git add -- $batchFiles
 git diff --cached --check

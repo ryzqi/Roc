@@ -9,6 +9,7 @@ import type {
   SchedulerStatus,
   ScheduledTaskRun,
   TaskDeleteThreadRequest,
+  TaskDeleteThreadResult,
   TaskDetail,
   TaskEvent,
   TaskSnapshot,
@@ -32,6 +33,7 @@ import {
 import { TaskScheduler } from './scheduler';
 import { applyTaskPluginSchema } from './schema';
 import { TaskRepository } from './task-repository';
+import { ThreadDeletionJournal } from './thread-deletion-journal';
 
 const pluginId = '@roc/plugin-task';
 const capabilityVersion = '1.0.0';
@@ -89,7 +91,25 @@ export function createTaskPlugin(): RocPlugin {
     initialize: async (context) => {
       const db = context.database.getTaskConnection();
       applyTaskPluginSchema(db);
-      const repository = new TaskRepository(db, new AgentTaskHistoryReader(context.database.getAgentConnection()));
+      const deletionJournal = new ThreadDeletionJournal(db);
+      const repository = new TaskRepository(
+        db,
+        new AgentTaskHistoryReader(context.database.getAgentConnection()),
+        deletionJournal
+      );
+      for (const record of repository.listIncompleteThreadDeletions()) {
+        try {
+          repository.deleteThread(record.threadId);
+        } catch (error) {
+          const failedRecord = deletionJournal.require(record.threadId);
+          context.logger.warn('Task thread deletion recovery failed.', {
+            component: 'task.initialize',
+            threadId: record.threadId,
+            state: failedRecord.state,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
       scheduler = new TaskScheduler(repository, {
         startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
       });
@@ -238,7 +258,18 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
     const linkedTaskIds = repository.listBackgroundTasks()
       .filter((task) => task.threadId === threadId)
       .map((task) => task.id);
-    const result = repository.deleteThread(threadId);
+    let result: TaskDeleteThreadResult;
+    try {
+      result = repository.deleteThread(threadId);
+    } catch (error) {
+      if (repository.listIncompleteThreadDeletions().some((record) => record.threadId === threadId)) {
+        for (const taskId of linkedTaskIds) {
+          scheduler.unregisterTask(taskId);
+        }
+        await publishTaskUpdated(context, { kind: 'thread_deletion_started', threadId });
+      }
+      throw error;
+    }
     for (const taskId of linkedTaskIds) {
       scheduler.unregisterTask(taskId);
       await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });

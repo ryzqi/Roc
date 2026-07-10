@@ -1,10 +1,14 @@
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
+import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
+import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
+import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 import type {
   BackgroundTaskPreviewRequest,
   TaskSnapshot
@@ -307,9 +311,202 @@ describe('task plugin', () => {
     );
   });
 
+  it('recovers pending thread deletions before the scheduler starts', async () => {
+    const { journal, repository } = createSeededRepository();
+    const task = repository.createBackgroundTask(previewRequest);
+    journal.ensurePending(task.threadId);
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+
+    await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
+
+    expect(countRows(db, 'background_tasks')).toBe(0);
+    expect(countRows(agentDb, 'agent_threads')).toBe(0);
+    expect(journal.require(task.threadId).state).toBe('complete');
+    await expect(capabilities.invoke('task.scheduler.status', {})).resolves.toMatchObject({ registeredTaskCount: 0 });
+  });
+
+  it('recovers task projection deletion from an agent-deleted journal state', async () => {
+    const { agentHistory, journal, repository } = createSeededRepository();
+    const task = repository.createBackgroundTask(previewRequest);
+    journal.ensurePending(task.threadId);
+    agentHistory.deleteThread(task.threadId);
+    journal.markAgentDeleted(task.threadId);
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+
+    await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
+
+    expect(countRows(db, 'background_tasks')).toBe(0);
+    expect(journal.require(task.threadId).state).toBe('complete');
+  });
+
+  it('continues startup after one recovery failure while keeping the target hidden', async () => {
+    const { journal, repository } = createSeededRepository();
+    const task = repository.createBackgroundTask({
+      ...previewRequest,
+      trigger: {
+        type: 'once',
+        description: 'Run later',
+        nextRunAt: '2026-07-11T00:00:00.000Z'
+      }
+    });
+    journal.ensurePending(task.threadId);
+    agentDb.exec(`
+      CREATE TRIGGER fail_recovery_agent_delete
+      BEFORE DELETE ON agent_threads
+      BEGIN
+        SELECT RAISE(ABORT, 'recovery_agent_delete_injected');
+      END;
+    `);
+    const warn = vi.fn<(message: string, metadata?: Record<string, unknown>) => void>();
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+
+    await expect(
+      plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus(), warn }))
+    ).resolves.toBeUndefined();
+
+    expect(journal.require(task.threadId)).toMatchObject({
+      state: 'pending',
+      attemptCount: 1
+    });
+    expect(journal.require(task.threadId).lastError).toContain('recovery_agent_delete_injected');
+    expect(warn).toHaveBeenCalledWith('Task thread deletion recovery failed.', {
+      component: 'task.initialize',
+      threadId: task.threadId,
+      state: 'pending',
+      error: expect.stringContaining('recovery_agent_delete_injected')
+    });
+    await expect(capabilities.invoke('task.background.list', {})).resolves.toEqual([]);
+    await expect(capabilities.invoke('task.scheduler.status', {})).resolves.toMatchObject({ registeredTaskCount: 0 });
+  });
+
+  it('logs the advanced journal state when projection recovery fails after agent deletion', async () => {
+    const { journal, repository } = createSeededRepository();
+    const task = repository.createBackgroundTask(previewRequest);
+    journal.ensurePending(task.threadId);
+    db.exec(`
+      CREATE TRIGGER fail_recovery_projection_delete
+      BEFORE DELETE ON background_tasks
+      BEGIN
+        SELECT RAISE(ABORT, 'recovery_projection_delete_injected');
+      END;
+    `);
+    const warn = vi.fn<(message: string, metadata?: Record<string, unknown>) => void>();
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+
+    await expect(
+      plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus(), warn }))
+    ).resolves.toBeUndefined();
+
+    expect(journal.require(task.threadId)).toMatchObject({
+      state: 'agent_deleted',
+      attemptCount: 1
+    });
+    expect(warn).toHaveBeenCalledWith('Task thread deletion recovery failed.', {
+      component: 'task.initialize',
+      threadId: task.threadId,
+      state: 'agent_deleted',
+      error: expect.stringContaining('recovery_projection_delete_injected')
+    });
+    await expect(capabilities.invoke('task.scheduler.status', {})).resolves.toMatchObject({ registeredTaskCount: 0 });
+  });
+
+  it('unregisters a live task immediately when deletion becomes journaled but fails', async () => {
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+    const eventBus = createTestEventBus();
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, { id: string; threadId: string }>(
+      'task.background.create',
+      {
+        ...previewRequest,
+        trigger: {
+          type: 'once',
+          description: 'Run later',
+          nextRunAt: '2026-07-11T00:00:00.000Z'
+        }
+      }
+    );
+    agentDb.exec(`
+      CREATE TRIGGER fail_live_agent_delete
+      BEFORE DELETE ON agent_threads
+      BEGIN
+        SELECT RAISE(ABORT, 'live_agent_delete_injected');
+      END;
+    `);
+
+    await expect(capabilities.invoke('task.thread.delete', { threadId: task.threadId })).rejects.toThrow(
+      'live_agent_delete_injected'
+    );
+
+    await expect(capabilities.invoke('task.scheduler.status', {})).resolves.toMatchObject({ registeredTaskCount: 0 });
+    await expect(capabilities.invoke('task.background.list', {})).resolves.toEqual([]);
+    expect(eventBus.published.at(-1)).toMatchObject({
+      type: 'task.updated',
+      payload: {
+        kind: 'thread_deletion_started',
+        threadId: task.threadId
+      }
+    });
+    expect(new ThreadDeletionJournal(db).require(task.threadId)).toMatchObject({
+      state: 'pending',
+      attemptCount: 1
+    });
+  });
+
+  it('publishes a refresh event when a chat-only thread deletion becomes journaled but fails', async () => {
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+    const eventBus = createTestEventBus();
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+    agentDb
+      .prepare(
+        `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        'thread-chat-delete',
+        'chat',
+        'Chat delete',
+        'Chat delete',
+        'completed',
+        '2026-07-10T00:00:00.000Z',
+        '2026-07-10T00:00:00.000Z'
+      );
+    agentDb.exec(`
+      CREATE TRIGGER fail_chat_agent_delete
+      BEFORE DELETE ON agent_threads
+      BEGIN
+        SELECT RAISE(ABORT, 'chat_agent_delete_injected');
+      END;
+    `);
+
+    await expect(capabilities.invoke('task.thread.delete', { threadId: 'thread-chat-delete' })).rejects.toThrow(
+      'chat_agent_delete_injected'
+    );
+
+    expect(eventBus.published.at(-1)).toMatchObject({
+      type: 'task.updated',
+      payload: {
+        kind: 'thread_deletion_started',
+        threadId: 'thread-chat-delete'
+      }
+    });
+    await expect(capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {})).resolves.toMatchObject({
+      threads: []
+    });
+  });
+
 });
 
-function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocEventBus }): RocPluginContext {
+function createContext(input: {
+  capabilities: CapabilityRegistry;
+  eventBus: RocEventBus;
+  warn?: (message: string, metadata?: Record<string, unknown>) => void;
+}): RocPluginContext {
   return {
     pluginId: '@roc/plugin-task',
     eventBus: input.eventBus,
@@ -317,10 +514,37 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     database: createTaskPluginTestDatabaseFacade(db, agentDb),
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },
-    logger: { info: () => {}, warn: () => {}, error: () => {} }
+    logger: { info: () => {}, warn: input.warn === undefined ? () => {} : input.warn, error: () => {} }
   };
 }
 
 function createTestEventBus(): RocEventBus & { published: RocEventEnvelope[] } {
   return createTaskPluginTestEventBus(agentDb);
+}
+
+function createSeededRepository(): {
+  agentHistory: AgentTaskHistoryReader;
+  journal: ThreadDeletionJournal;
+  repository: TaskRepository;
+} {
+  applyTaskPluginSchema(db);
+  const agentHistory = new AgentTaskHistoryReader(agentDb);
+  const journal = new ThreadDeletionJournal(db);
+  return {
+    agentHistory,
+    journal,
+    repository: new TaskRepository(db, agentHistory, journal)
+  };
+}
+
+function declarePluginCapabilities(plugin: ReturnType<typeof createTaskPlugin>): CapabilityRegistry {
+  const capabilities = new CapabilityRegistry();
+  for (const descriptor of plugin.manifest.capabilities) {
+    capabilities.declare(plugin.manifest.id, descriptor);
+  }
+  return capabilities;
+}
+
+function countRows(connection: Database.Database, tableName: string): number {
+  return connection.prepare(`SELECT COUNT(*) FROM ${tableName}`).pluck().get() as number;
 }

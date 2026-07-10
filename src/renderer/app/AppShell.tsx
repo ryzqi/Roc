@@ -97,6 +97,15 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       client.api.tasks.getSnapshot(),
       loadTaskSurfaceData(selectedTaskId, client)
     ]);
+    const selectedTaskWasRemoved =
+      typeof selectedTaskId === 'string' &&
+      taskSurfaceData.activeTasks.every((task) => task.taskId !== selectedTaskId);
+    if (selectedTaskWasRemoved && selectedTaskSurfaceTaskIdRef.current === selectedTaskId) {
+      selectedTaskSurfaceTaskIdRef.current = null;
+      setSelectedTaskSurfaceTaskId(null);
+      setActiveTaskDetailId(null);
+      setActiveView((current) => (current === 'task-detail' ? 'tasks-board' : current));
+    }
     setState((current) =>
       current === null
         ? current

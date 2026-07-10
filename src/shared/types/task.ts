@@ -221,6 +221,7 @@ export type TaskUpdateEvent =
   | { kind: 'task_created'; taskId: string }
   | { kind: 'task_status_changed'; taskId: string; status: TaskStatus }
   | { kind: 'task_run_fired'; taskId: string; runId: string }
+  | { kind: 'thread_deletion_started'; threadId: string }
   | { kind: 'scheduler_health_changed'; healthy: boolean };
 
 export type SchedulerStatus = {

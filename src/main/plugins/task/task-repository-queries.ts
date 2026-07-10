@@ -23,6 +23,11 @@ function listActiveBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
               enabled_capabilities_json
        FROM background_tasks
        WHERE status != 'archived'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )
        ORDER BY updated_at DESC`
     )
     .all() as BackgroundTaskRecord[];
@@ -38,7 +43,12 @@ export function findBackgroundTask(db: DatabaseConnection, id: string): Backgrou
               requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
               enabled_capabilities_json
        FROM background_tasks
-       WHERE id = ?`
+       WHERE id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )`
     )
     .get(id) as BackgroundTaskRecord | undefined;
   if (row === undefined) {
@@ -56,7 +66,12 @@ export function findBackgroundTaskByRunId(db: DatabaseConnection, runId: string)
               requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
               enabled_capabilities_json
        FROM background_tasks
-       WHERE run_id = ?`
+       WHERE run_id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )`
     )
     .get(runId) as BackgroundTaskRecord | undefined;
   if (row === undefined) {
@@ -74,6 +89,11 @@ export function listBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
               requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
               enabled_capabilities_json
        FROM background_tasks
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM thread_deletion_journal deletion
+         WHERE deletion.thread_id = background_tasks.thread_id
+       )
        ORDER BY updated_at DESC`
     )
     .all() as BackgroundTaskRecord[];
@@ -91,6 +111,11 @@ export function listSchedulableBackgroundTasks(db: DatabaseConnection): Backgrou
        FROM background_tasks
        WHERE scheduled = 1
          AND status IN ('running', 'pending_confirmation', 'paused')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )
        ORDER BY next_run_at ASC, updated_at DESC`
     )
     .all() as BackgroundTaskRecord[];

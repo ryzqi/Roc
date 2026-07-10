@@ -20,6 +20,7 @@ describe('AppShell', () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -518,6 +519,69 @@ describe('AppShell', () => {
     expect(client.api.tasks.getTaskDetail).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Roc 启动失败');
+  });
+
+  it('returns to the task board when a deletion-started update hides the selected task', async () => {
+    const client = createShellClient();
+    let taskUpdateListener: ((event: TaskUpdateEvent | null) => void) | null = null;
+    const task = createActiveTask({
+      taskId: 'task-delete-started',
+      threadId: 'thread-delete-started',
+      goal: '删除开始后移除任务详情',
+      status: 'running'
+    });
+    vi.mocked(client.api.tasks.onUpdated).mockImplementation((listener) => {
+      taskUpdateListener = listener;
+      return () => {
+        taskUpdateListener = null;
+      };
+    });
+    let deletionStarted = false;
+    vi.mocked(client.api.tasks.getActiveTasks).mockImplementation(async () => ({
+      ok: true,
+      data: deletionStarted ? [] : [task]
+    }));
+    vi.mocked(client.api.tasks.getTaskDetail).mockImplementation(async () =>
+      deletionStarted
+        ? {
+            ok: false,
+            error: {
+              code: 'task_not_found',
+              message: '任务会话不存在或已被删除。',
+              category: 'not_found',
+              retryable: false
+            }
+          }
+        : { ok: true, data: createBackgroundTaskDetail(task) }
+    );
+    window.roc = client.api;
+    window.history.replaceState(null, '', `/?${new URLSearchParams({ page: 'tasks-board' }).toString()}`);
+
+    await act(async () => {
+      root.render(
+        <AppShell
+          bootstrap={createBootstrap({
+            activeTasks: [task],
+            taskDetail: createBackgroundTaskDetail(task)
+          })}
+          client={client}
+        />
+      );
+    });
+
+    await act(async () => {
+      queryButton('task-board-card-task-delete-started').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    vi.mocked(client.api.tasks.getTaskDetail).mockClear();
+    deletionStarted = true;
+    await act(async () => {
+      taskUpdateListener?.({ kind: 'thread_deletion_started', threadId: task.threadId });
+      await flushPromises();
+    });
+
+    expect(client.api.tasks.getTaskDetail).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="tasks-board-view"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('task detail failed');
   });
 
   it('starts workbench background task creation with the current MCP and skill selections', async () => {

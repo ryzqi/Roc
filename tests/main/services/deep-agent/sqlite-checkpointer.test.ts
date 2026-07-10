@@ -65,7 +65,7 @@ describe('RocSqliteCheckpointer', () => {
     expect(loaded?.parentConfig?.configurable?.checkpoint_id).toBe('parent_checkpoint_1');
   });
 
-  it('physically deletes Roc agent history rows for the thread', async () => {
+  it('deletes only LangGraph checkpoints and keeps Roc application history', async () => {
     const checkpointer = new RocSqliteCheckpointer(db);
     const now = '2026-07-06T00:00:00.000Z';
     insertAgentHistoryResidue({
@@ -88,17 +88,17 @@ describe('RocSqliteCheckpointer', () => {
 
     await checkpointer.deleteThread('thread_delete_thread');
 
-    expect(countRows('agent_threads')).toBe(0);
-    expect(countRows('agent_runs')).toBe(0);
-    expect(countRows('agent_events')).toBe(0);
-    expect(countRows('session_messages')).toBe(0);
-    expect(countRows('session_messages_fts')).toBe(0);
-    expect(countRows('agent_pending_interrupts')).toBe(0);
-    expect(countRows('agent_run_events')).toBe(0);
+    expect(countRows('agent_threads')).toBe(1);
+    expect(countRows('agent_runs')).toBe(1);
+    expect(countRows('agent_events')).toBe(1);
+    expect(countRows('session_messages')).toBe(1);
+    expect(countRows('session_messages_fts')).toBe(1);
+    expect(countRows('agent_pending_interrupts')).toBe(1);
+    expect(countRows('agent_run_events')).toBe(1);
     expect(countRows('langgraph_checkpoints')).toBe(0);
     expect(countRows('langgraph_checkpoint_writes')).toBe(0);
-    expect(countRows('agent_tool_effects')).toBe(0);
-    expect(countRows('context_artifacts')).toBe(0);
+    expect(countRows('agent_tool_effects')).toBe(1);
+    expect(countRows('context_artifacts')).toBe(1);
   });
 
   it('overwrites repeated special pending writes while preserving regular writes', async () => {

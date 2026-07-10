@@ -16,9 +16,11 @@ import type {
   TaskKind,
   TaskRun,
   TaskSnapshot,
+  TaskThread,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
 import { deleteTaskProjectionForThread } from '../../infrastructure/agent-history-deletion';
+import { RocDomainError } from '../../services/errors';
 import { AgentTaskHistoryReader } from './agent-task-history';
 import {
   inferBackgroundRisk,
@@ -43,6 +45,7 @@ import {
   listSchedulableBackgroundTasks as readSchedulableBackgroundTasks,
   listScheduledRuns as readScheduledRuns,
 } from './task-repository-queries';
+import { ThreadDeletionJournal, type ThreadDeletionRecord } from './thread-deletion-journal';
 
 const taskDetailRunHistoryLimit = 20;
 const taskDetailRecentEventLimit = 20;
@@ -50,7 +53,8 @@ const taskDetailRecentEventLimit = 20;
 export class TaskRepository {
   constructor(
     private readonly db: DatabaseConnection,
-    private readonly agentHistory: AgentTaskHistoryReader
+    private readonly agentHistory: AgentTaskHistoryReader,
+    private readonly deletionJournal: ThreadDeletionJournal = new ThreadDeletionJournal(db)
   ) {}
 
   createBackgroundTaskProposalRequest(input: {
@@ -128,13 +132,53 @@ export class TaskRepository {
   }
 
   deleteThread(threadId: string): TaskDeleteThreadResult {
-    const thread = this.agentHistory.requireActiveThread(threadId);
-    deleteTaskProjectionForThread(this.db, thread.id);
-    this.agentHistory.deleteThread(thread.id);
+    const existing = this.deletionJournal.find(threadId);
+    if (existing !== null && existing.state === 'complete') {
+      return {
+        deleted: true,
+        threadId
+      };
+    }
+    if (existing === null) {
+      this.agentHistory.requireActiveThread(threadId);
+      this.deletionJournal.ensurePending(threadId);
+    }
+
+    let record = this.deletionJournal.require(threadId);
+    if (record.state === 'pending') {
+      try {
+        this.agentHistory.deleteThread(threadId);
+        this.deletionJournal.markAgentDeleted(threadId);
+      } catch (error) {
+        this.deletionJournal.recordFailure(threadId, error);
+        throw error;
+      }
+      record = this.deletionJournal.require(threadId);
+    }
+
+    if (record.state === 'agent_deleted') {
+      try {
+        this.db.transaction(() => {
+          deleteTaskProjectionForThread(this.db, threadId);
+          this.deletionJournal.markCompleteInCurrentTransaction(threadId);
+        })();
+      } catch (error) {
+        this.deletionJournal.recordFailure(threadId, error);
+        throw error;
+      }
+    }
+
+    if (this.deletionJournal.require(threadId).state !== 'complete') {
+      throw new Error('thread_deletion_state_incomplete');
+    }
     return {
       deleted: true,
-      threadId: thread.id
+      threadId
     };
+  }
+
+  listIncompleteThreadDeletions(): ThreadDeletionRecord[] {
+    return this.deletionJournal.listIncomplete();
   }
 
   listSchedulableBackgroundTasks(): BackgroundTask[] {
@@ -239,7 +283,19 @@ export class TaskRepository {
   }
 
   countRecentSkippedScheduledRuns(): number {
-    const row = this.db.prepare("SELECT COUNT(*) AS total FROM scheduled_task_runs WHERE status = 'skipped'").get() as
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS total
+         FROM scheduled_task_runs runs
+         INNER JOIN background_tasks task ON task.id = runs.background_task_id
+         WHERE runs.status = 'skipped'
+           AND NOT EXISTS (
+             SELECT 1
+             FROM thread_deletion_journal deletion
+             WHERE deletion.thread_id = task.thread_id
+           )`
+      )
+      .get() as
       | { total: number }
       | undefined;
     if (row === undefined) {
@@ -307,8 +363,9 @@ export class TaskRepository {
 
   getSnapshot(): TaskSnapshot {
     const tasks = this.listVisibleBackgroundTasks();
-    const threads = this.agentHistory.readThreads();
-    const recentEvents = this.agentHistory.readRecentEvents();
+    const hiddenThreadIds = this.deletionJournal.listHiddenThreadIds();
+    const threads = this.agentHistory.readThreads().filter((thread) => !hiddenThreadIds.has(thread.id));
+    const recentEvents = this.agentHistory.readRecentEvents().filter((event) => !hiddenThreadIds.has(event.threadId));
     return {
       generatedAt: new Date().toISOString(),
       counts: {
@@ -328,7 +385,7 @@ export class TaskRepository {
 
   getTaskDetail(input: { taskId: string; schedulerRegistered: boolean }): TaskDetail {
     const task = this.requireBackgroundTask(input.taskId);
-    const thread = this.agentHistory.requireActiveThread(task.threadId);
+    const thread = this.requireVisibleThread(task.threadId);
     const runHistory = this.agentHistory.listRunsForThread(task.threadId, taskDetailRunHistoryLimit);
     const firstRun = runHistory[0];
     const lastRunId = firstRun === undefined ? null : firstRun.id;
@@ -358,7 +415,7 @@ export class TaskRepository {
   }
 
   listThreadMessages(threadId: string): TaskEvent[] {
-    this.agentHistory.requireActiveThread(threadId);
+    this.requireVisibleThread(threadId);
     return this.agentHistory.listEventsForThread(threadId);
   }
 
@@ -431,5 +488,18 @@ export class TaskRepository {
 
   private hasActiveThread(threadId: string): boolean {
     return this.agentHistory.findActiveThread(threadId) !== null;
+  }
+
+  private requireVisibleThread(threadId: string): TaskThread {
+    if (this.deletionJournal.find(threadId) !== null) {
+      throw new RocDomainError({
+        code: 'task_thread_not_found',
+        message: '任务会话不存在或已被删除。',
+        category: 'not_found',
+        retryable: false,
+        userAction: '该会话可能已被删除，请刷新任务列表后重试。'
+      });
+    }
+    return this.agentHistory.requireActiveThread(threadId);
   }
 }

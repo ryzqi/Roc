@@ -48,7 +48,14 @@ describe('checkRocDatabases', () => {
       'task'
     ]);
     expect(report.databases.every((item) => item.quickCheck === 'ok')).toBe(true);
-    expect(report.databases.every((item) => item.schemaVersion === 1)).toBe(true);
+    expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
+      core: 1,
+      agent: 1,
+      memory: 1,
+      task: 2,
+      'plugin:@roc/plugin-workspace': 1,
+      'plugin:@roc/plugin-diagnostics': 1
+    });
     expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(6);
   });
 
@@ -67,6 +74,25 @@ describe('checkRocDatabases', () => {
         dbName: 'task',
         status: 'unhealthy',
         detail: 'schema_table_missing:background_tasks'
+      })
+    );
+  });
+
+  it('marks task schema drift unhealthy when the deletion journal is missing', () => {
+    applyAllSchemas(pool);
+    pool.getConnection('@roc/plugin-task').prepare('DROP TABLE thread_deletion_journal').run();
+
+    const report = checkRocDatabases({
+      rootDir: root,
+      now: () => '2026-07-06T00:00:00.000Z'
+    });
+
+    expect(report.status).toBe('unhealthy');
+    expect(report.databases).toContainEqual(
+      expect.objectContaining({
+        dbName: 'task',
+        status: 'unhealthy',
+        detail: 'schema_table_missing:thread_deletion_journal'
       })
     );
   });

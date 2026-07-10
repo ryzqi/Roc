@@ -8,8 +8,6 @@ import {
 } from '@langchain/langgraph';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
-import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
-
 type CheckpointRow = {
   thread_id: string;
   checkpoint_ns: string;
@@ -187,7 +185,10 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
 
   override async deleteThread(threadId: string): Promise<void> {
     requireStorageKey(threadId, 'agent_checkpoint_thread_id_missing');
-    deleteAgentThreadHistory(this.db, threadId);
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?').run(threadId);
+      this.db.prepare('DELETE FROM langgraph_checkpoints WHERE thread_id = ?').run(threadId);
+    })();
   }
 
   private readLatestCheckpointId(threadId: string, checkpointNs: string): string | null {

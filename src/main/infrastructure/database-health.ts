@@ -78,7 +78,13 @@ const managedDatabases: ManagedDatabase[] = [
   },
   {
     dbName: 'task',
-    requiredTables: ['background_tasks', 'scheduled_task_runs', 'schema_migrations', 'schema_metadata'],
+    requiredTables: [
+      'background_tasks',
+      'scheduled_task_runs',
+      'thread_deletion_journal',
+      'schema_migrations',
+      'schema_metadata'
+    ],
     open: (pool) => pool.getConnection('@roc/plugin-task'),
     applySchema: applyTaskDatabaseSchema
   },
