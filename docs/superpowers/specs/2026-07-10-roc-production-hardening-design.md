@@ -1,7 +1,7 @@
 # Roc 生产加固设计
 
 日期：2026-07-10
-状态：总体架构已确认，等待书面规格复核
+状态：书面规格已复核批准
 
 ## 1. 背景
 
@@ -318,7 +318,7 @@ AppShell 保留 task surface 所需的 live state，但不再把普通 chat even
 - 集合由 task snapshot/background task 的 run id 初始化。
 - 收到 `run_started` 且 `mode === 'task'` 时加入集合。
 - 其他 event 只有 `runId` 已在集合中才进入 `applyChatRunEvent()`。
-- terminal event 应用完成后从集合移除，再刷新 task state。
+- `run_completed` / `run_failed` 应用完成后从集合移除，再刷新 task state；`run_interrupted` 保留 run id 以继续接收同一 run 的 `run_resumed`，同时刷新 task state。
 - 普通 chat 继续只由 `useChatRun()` 的 RAF batching 路径消费。
 
 不为过滤事件增加跨进程 IPC 或第二条 event bus。
@@ -361,7 +361,7 @@ type TaskMessageHistoryPage = {
 - `before` 使用严格 `< sequence`，返回更旧页。
 - `after` 使用严格 `> sequence`，返回新持久化事件。
 - 所有响应 items 按 sequence 升序。
-- `(thread_id, sequence)` 现有索引或等价索引必须支持查询计划。
+- agent DB migration v2 新增 `(thread_id, sequence)` 索引并支持查询计划；现有 `(thread_id, run_id, sequence)` 索引不能替代跨 run 的 sequence cursor 索引。
 - renderer 用 sequence 和 id 去重；缺失、重复冲突或非单调 sequence 显式失败。
 
 ### 8.3 历史加载和虚拟化
@@ -540,6 +540,7 @@ Settings 和现有使用 dialog helper 的创建/确认弹窗复用同一逻辑�
 
 - task DB：`thread_deletion_journal` 及状态查询索引。
 - core DB：`database_maintenance_runs` 及 kind/finished-at 查询索引。
+- agent DB：`agent_events(thread_id, sequence)` cursor 查询索引；不新增或回填第二个 cursor 字段。
 
 现有 `agent_events.sequence` 直接作为 cursor，不回填第二个 cursor 字段。
 
