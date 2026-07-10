@@ -69,6 +69,24 @@ export const coreMigrations: RocDatabaseMigration[] = [
         created_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 2,
+    name: 'database_maintenance_runs',
+    sql: `
+      CREATE TABLE database_maintenance_runs (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('retention','full_health_check')),
+        status TEXT NOT NULL CHECK(status IN ('running','complete','failed')),
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        detail_json TEXT NOT NULL,
+        error_message TEXT
+      );
+
+      CREATE INDEX idx_core_database_maintenance_runs_kind_finished
+        ON database_maintenance_runs(kind, finished_at DESC);
+    `
   }
 ];
 

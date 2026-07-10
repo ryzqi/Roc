@@ -1,8 +1,15 @@
 import { join } from 'node:path';
 
 import { checkRocDatabases } from '../infrastructure/database-health';
+import {
+  acquireDatabaseMaintenanceLease,
+  type DatabaseMaintenanceLease
+} from '../infrastructure/database-maintenance-lease';
+import { DatabaseMaintenanceService } from '../infrastructure/database-maintenance';
 import { ConfigStore } from '../infrastructure/config-store';
+import { runDatabaseFastProbe } from '../infrastructure/database-fast-probe';
 import { DatabasePool } from '../infrastructure/database-pool';
+import { runDatabaseRetention, type RocDatabaseRetentionPolicy } from '../infrastructure/database-retention';
 import { InfrastructureLogger } from '../infrastructure/logger';
 import { SecretManager, type SafeStorageBackend } from '../infrastructure/secret-manager';
 import { CapabilityRegistry } from './capability-registry';
@@ -28,6 +35,14 @@ type KernelInfrastructure = {
   eventBus: EventBus;
   loader: PluginLoader;
   logger: InfrastructureLogger;
+  maintenanceLease: DatabaseMaintenanceLease;
+  maintenanceService: DatabaseMaintenanceService;
+};
+
+const productionRetentionPolicy: RocDatabaseRetentionPolicy = {
+  terminalRunRetentionDays: 90,
+  maxCheckpointsPerThread: 100,
+  autoMemoryAuditRetentionDays: 180
 };
 
 export class KernelRuntime {
@@ -40,48 +55,86 @@ export class KernelRuntime {
     if (this.started) {
       throw new Error('kernel_runtime_already_started');
     }
-
-    if (this.options.activateMigration !== undefined) {
-      await this.options.activateMigration();
-    }
-
-    const databasePool = new DatabasePool(this.options.rootDir);
-    const databaseHealth = checkRocDatabases({
+    const maintenanceLease = acquireDatabaseMaintenanceLease({
       rootDir: this.options.rootDir,
-      now: () => new Date().toISOString()
+      owner: { kind: 'app', pid: process.pid }
     });
-    if (databaseHealth.status === 'unhealthy') {
-      databasePool.closeAll();
-      throw new Error('database_health_unhealthy');
-    }
-
-    const configStore = new ConfigStore(databasePool, join(this.options.rootDir, 'config'));
-    const secretManager = new SecretManager(databasePool, this.options.safeStorage);
-    const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
-    const eventBus = new EventBus(logger.createPluginLogger('@roc/plugin-kernel'));
-    const capabilities = new CapabilityRegistry();
-    const loader = new PluginLoader({
-      eventBus,
-      capabilities,
-      createContext: (plugin, scopedCapabilities) => ({
-        pluginId: plugin.manifest.id,
-        eventBus,
-        capabilities: scopedCapabilities,
-        database: databasePool.createPluginDatabaseFacade(plugin.manifest.id),
-        config: configStore.createPluginConfigFacade(plugin.manifest.id),
-        secrets: secretManager.createPluginSecretFacade(plugin.manifest.id),
-        logger: logger.createPluginLogger(plugin.manifest.id)
-      })
-    });
-
-    this.infrastructure = { capabilities, databasePool, eventBus, loader, logger };
+    let databasePoolToClose: DatabasePool | null = null;
+    let loggerToClose: InfrastructureLogger | null = null;
     try {
+      if (this.options.activateMigration !== undefined) {
+        await this.options.activateMigration();
+      }
+
+      const databasePool = new DatabasePool(this.options.rootDir);
+      databasePoolToClose = databasePool;
+      const fastProbe = runDatabaseFastProbe({
+        pool: databasePool,
+        now: () => new Date().toISOString()
+      });
+      if (fastProbe.status === 'unhealthy') {
+        throw new Error('database_fast_probe_unhealthy');
+      }
+
+      const configStore = new ConfigStore(databasePool, join(this.options.rootDir, 'config'));
+      const secretManager = new SecretManager(databasePool, this.options.safeStorage);
+      const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
+      loggerToClose = logger;
+      const maintenanceService = new DatabaseMaintenanceService({
+        coreDb: databasePool.getCoreConnection(),
+        jobs: {
+          runFullHealthCheck: () =>
+            checkRocDatabases({
+              pool: databasePool,
+              now: () => new Date().toISOString()
+            }),
+          runRetention: () =>
+            runDatabaseRetention({
+              agentDb: databasePool.getConnection('@roc/plugin-agent'),
+              memoryDb: databasePool.getConnection('@roc/plugin-memory'),
+              policy: productionRetentionPolicy,
+              now: new Date()
+            })
+        },
+        logger: logger.createPluginLogger('@roc/plugin-kernel'),
+        now: () => new Date().toISOString()
+      });
+      const eventBus = new EventBus(logger.createPluginLogger('@roc/plugin-kernel'));
+      const capabilities = new CapabilityRegistry();
+      const loader = new PluginLoader({
+        eventBus,
+        capabilities,
+        createContext: (plugin, scopedCapabilities) => ({
+          pluginId: plugin.manifest.id,
+          eventBus,
+          capabilities: scopedCapabilities,
+          database: databasePool.createPluginDatabaseFacade(plugin.manifest.id),
+          config: configStore.createPluginConfigFacade(plugin.manifest.id),
+          secrets: secretManager.createPluginSecretFacade(plugin.manifest.id),
+          logger: logger.createPluginLogger(plugin.manifest.id)
+        })
+      });
+
+      this.infrastructure = {
+        capabilities,
+        databasePool,
+        eventBus,
+        loader,
+        logger,
+        maintenanceLease,
+        maintenanceService
+      };
       await loader.load(this.options.plugins);
       this.started = true;
     } catch (error) {
-      await logger.close();
-      databasePool.closeAll();
+      if (loggerToClose !== null) {
+        await loggerToClose.close();
+      }
+      if (databasePoolToClose !== null) {
+        databasePoolToClose.closeAll();
+      }
       this.infrastructure = null;
+      maintenanceLease.release();
       throw error;
     }
   }
@@ -91,11 +144,36 @@ export class KernelRuntime {
       this.started = false;
       return;
     }
-    await this.infrastructure.loader.shutdown();
-    await this.infrastructure.logger.close();
-    this.infrastructure.databasePool.closeAll();
-    this.infrastructure = null;
-    this.started = false;
+    const infrastructure = this.infrastructure;
+    try {
+      await infrastructure.maintenanceService.stopAndWait();
+    } finally {
+      try {
+        await infrastructure.loader.shutdown();
+      } finally {
+        try {
+          await infrastructure.logger.close();
+        } finally {
+          try {
+            infrastructure.databasePool.closeAll();
+          } finally {
+            try {
+              infrastructure.maintenanceLease.release();
+            } finally {
+              this.infrastructure = null;
+              this.started = false;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  startDatabaseMaintenance(): void {
+    if (this.infrastructure === null || !this.started) {
+      throw new Error('kernel_runtime_not_started');
+    }
+    this.infrastructure.maintenanceService.start();
   }
 
   getStatus(): KernelRuntimeStatus {

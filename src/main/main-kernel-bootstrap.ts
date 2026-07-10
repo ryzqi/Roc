@@ -49,6 +49,7 @@ export type MainKernelBootstrap = {
   readonly providerRuntimeService: ProviderRuntimeService;
   readonly performanceObserverService: PerformanceObserverService;
   start(): Promise<void>;
+  startDatabaseMaintenance(): void;
   shutdown(): Promise<void>;
   syncSettingsSnapshot(request: SettingsSaveRequest): void;
   invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
@@ -115,6 +116,9 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     async start() {
       paths.ensureTree();
       await runtime.start();
+    },
+    startDatabaseMaintenance() {
+      runtime.startDatabaseMaintenance();
     },
     async shutdown() {
       try {

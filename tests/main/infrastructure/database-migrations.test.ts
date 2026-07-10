@@ -6,7 +6,7 @@ import {
   readSchemaMetadata,
   type RocDatabaseMigration
 } from '../../../src/main/infrastructure/database-migrations';
-import { taskMigrations } from '../../../src/main/infrastructure/database-schemas';
+import { coreMigrations, taskMigrations } from '../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 
@@ -97,6 +97,25 @@ describe('database migrations', () => {
     ]);
     expect(readSchemaMetadata(db, 'task')).toMatchObject({
       dbName: 'task',
+      currentVersion: 2
+    });
+  });
+
+  it('applies core migrations through version 2 without changing version order', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'core',
+      migrations: coreMigrations,
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+
+    expect(
+      db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'core' ORDER BY version").all()
+    ).toEqual([
+      { version: 1, name: 'core_platform_tables' },
+      { version: 2, name: 'database_maintenance_runs' }
+    ]);
+    expect(readSchemaMetadata(db, 'core')).toMatchObject({
+      dbName: 'core',
       currentVersion: 2
     });
   });

@@ -3,10 +3,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createMainKernelBootstrap } from '../../src/main/main-kernel-bootstrap';
+import { acquireDatabaseMaintenanceLease } from '../../src/main/infrastructure/database-maintenance-lease';
+import { DatabasePool } from '../../src/main/infrastructure/database-pool';
+import { applyTaskDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { KernelRuntime } from '../../src/main/kernel/kernel-runtime';
 import type { RocPlugin } from '../../src/main/kernel/types';
 import type { SafeStorageBackend } from '../../src/main/infrastructure/secret-manager';
@@ -23,6 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -55,6 +60,120 @@ describe('main kernel bootstrap integration', () => {
 
     expect(calls).toEqual(['plugin-load', 'plugin-shutdown']);
     expect(bootstrap.runtime.getStatus().started).toBe(false);
+  });
+
+  it('starts with fast database probes without preparing full quick checks', async () => {
+    const prepare = vi.spyOn(Database.prototype, 'prepare');
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [],
+      safeStorage: safeStorage()
+    });
+
+    await bootstrap.start();
+    try {
+      expect(prepare.mock.calls.map(([sql]) => sql)).not.toContain('PRAGMA quick_check');
+    } finally {
+      await bootstrap.shutdown();
+    }
+  });
+
+  it('rejects missing required tables through the fast probe without replacing the database file', async () => {
+    const pluginDataRoot = join(root, 'plugin-data');
+    const pool = new DatabasePool(pluginDataRoot);
+    const taskDb = pool.getConnection('@roc/plugin-task');
+    applyTaskDatabaseSchema(taskDb, () => '2026-07-10T00:00:00.000Z');
+    taskDb.prepare('DROP TABLE thread_deletion_journal').run();
+    const taskPath = pool.getDatabasePath('task');
+    pool.closeAll();
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [],
+      safeStorage: safeStorage()
+    });
+
+    await expect(bootstrap.start()).rejects.toThrow('database_fast_probe_unhealthy');
+
+    expect(existsSync(taskPath)).toBe(true);
+    const lease = acquireDatabaseMaintenanceLease({
+      rootDir: pluginDataRoot,
+      owner: { kind: 'cli', pid: 200 },
+      isProcessAlive: () => false
+    });
+    lease.release();
+  });
+
+  it('holds the app maintenance lease until shutdown and releases it afterward', async () => {
+    const pluginDataRoot = join(root, 'plugin-data');
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [],
+      safeStorage: safeStorage()
+    });
+
+    await bootstrap.start();
+    try {
+      expect(() =>
+        acquireDatabaseMaintenanceLease({
+          rootDir: pluginDataRoot,
+          owner: { kind: 'cli', pid: 200 },
+          isProcessAlive: () => true
+        })
+      ).toThrow('database_maintenance_locked');
+    } finally {
+      await bootstrap.shutdown();
+    }
+
+    const lease = acquireDatabaseMaintenanceLease({
+      rootDir: pluginDataRoot,
+      owner: { kind: 'cli', pid: 200 },
+      isProcessAlive: () => false
+    });
+    lease.release();
+  });
+
+  it('releases shutdown dependencies and the maintenance lease when plugin shutdown fails', async () => {
+    const pluginDataRoot = join(root, 'plugin-data');
+    const plugin = createProbePlugin([]);
+    plugin.shutdown = async () => {
+      throw new Error('plugin_shutdown_injected');
+    };
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [plugin],
+      safeStorage: safeStorage()
+    });
+
+    await bootstrap.start();
+    await expect(bootstrap.shutdown()).rejects.toThrow('plugin_shutdown_injected');
+
+    expect(bootstrap.runtime.getStatus().started).toBe(false);
+    const lease = acquireDatabaseMaintenanceLease({
+      rootDir: pluginDataRoot,
+      owner: { kind: 'cli', pid: 200 },
+      isProcessAlive: () => false
+    });
+    lease.release();
+  });
+
+  it('releases the maintenance lease when activation fails before databases open', async () => {
+    const runtime = new KernelRuntime({
+      rootDir: join(root, 'plugin-data'),
+      plugins: [],
+      safeStorage: safeStorage(),
+      activateMigration: () => {
+        throw new Error('activation_injected');
+      }
+    });
+
+    await expect(runtime.start()).rejects.toThrow('activation_injected');
+
+    const lease = acquireDatabaseMaintenanceLease({
+      rootDir: join(root, 'plugin-data'),
+      owner: { kind: 'cli', pid: 200 },
+      isProcessAlive: () => false
+    });
+    lease.release();
   });
 
   it('creates only approved first-launch user data files before kernel start', () => {
@@ -109,7 +228,32 @@ describe('main kernel bootstrap integration', () => {
     expect(source).toContain('handleExternalNavigation(url');
     expect(source).toContain('const performanceObserverService = new PerformanceObserverService();');
     expect(source).toContain('performanceObserverService,');
+    expect(source).toContain('kernel.startDatabaseMaintenance();');
     expect(source).not.toContain('services.terminalSessionService.onOutput');
+  });
+
+  it('exposes idempotent database maintenance start and waits for maintenance before shutdown dependencies', async () => {
+    const bootstrap = createMainKernelBootstrap({
+      dataRoot: root,
+      plugins: [],
+      safeStorage: safeStorage()
+    });
+
+    await bootstrap.start();
+    try {
+      bootstrap.startDatabaseMaintenance();
+      bootstrap.startDatabaseMaintenance();
+    } finally {
+      await bootstrap.shutdown();
+    }
+
+    const runtimeSource = readFileSync(join(process.cwd(), 'src', 'main', 'kernel', 'kernel-runtime.ts'), 'utf8');
+    expect(runtimeSource.indexOf('maintenanceService.stopAndWait()')).toBeLessThan(
+      runtimeSource.indexOf('loader.shutdown()')
+    );
+    expect(runtimeSource.indexOf('loader.shutdown()')).toBeLessThan(runtimeSource.lastIndexOf('logger.close()'));
+    expect(runtimeSource.lastIndexOf('logger.close()')).toBeLessThan(runtimeSource.lastIndexOf('databasePool.closeAll()'));
+    expect(runtimeSource.lastIndexOf('databasePool.closeAll()')).toBeLessThan(runtimeSource.lastIndexOf('maintenanceLease.release()'));
   });
 
   it('loads the preload bundle filename emitted by electron-vite', () => {

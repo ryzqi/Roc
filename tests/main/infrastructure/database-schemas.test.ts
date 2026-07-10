@@ -31,10 +31,21 @@ describe('target database schemas', () => {
         'plugin_secrets',
         'database_health_checks',
         'database_backup_manifests',
+        'database_maintenance_runs',
         'schema_migrations',
         'schema_metadata'
       ])
     );
+    expect(columnNames('database_maintenance_runs')).toEqual([
+      'id',
+      'kind',
+      'status',
+      'started_at',
+      'finished_at',
+      'detail_json',
+      'error_message'
+    ]);
+    expect(indexNames('database_maintenance_runs')).toContain('idx_core_database_maintenance_runs_kind_finished');
   });
 
   it('creates canonical agent runtime tables without task-owned table names', () => {

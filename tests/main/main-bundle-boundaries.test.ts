@@ -8,6 +8,20 @@ describe('main bundle boundaries', () => {
     expect(external).toEqual(expect.arrayContaining(['electron']));
   });
 
+  it('builds the offline database maintenance CLI as a separate main entry', () => {
+    const input = config.main?.build?.rollupOptions?.input;
+    const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(input).toMatchObject({
+      index: expect.stringMatching(/src[\\/]main[\\/]index\.ts$/u),
+      'database-maintenance-cli': expect.stringMatching(/src[\\/]main[\\/]infrastructure[\\/]database-maintenance-cli\.ts$/u)
+    });
+    expect(packageJson.scripts['database:backup']).toBe('node dist/main/database-maintenance-cli.js backup');
+    expect(packageJson.scripts['database:restore']).toBe('node dist/main/database-maintenance-cli.js restore');
+  });
+
   it('keeps Electron as a runtime external in the preload bundle', () => {
     const external = config.preload?.build?.rollupOptions?.external;
 

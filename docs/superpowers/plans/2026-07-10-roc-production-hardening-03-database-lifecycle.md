@@ -63,7 +63,7 @@ expect(report.databases.every((item) => item.writeLockProbe === 'ok')).toBe(true
 expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(0);
 ```
 
-Update the full-health test's version expectations for this batch to `{ core: 2, agent: 1, memory: 1, task: 2, workspace: 1, diagnostics: 1 }`; batch four raises agent to version 2 when it adds the sequence cursor index. Do not keep the old assertion that every database is version 1.
+Keep the Task 1 full-health version expectations at `{ core: 1, agent: 1, memory: 1, task: 2, workspace: 1, diagnostics: 1 }`. Task 2 raises core to version `2` when it creates `database_maintenance_runs`; batch four raises agent to version `2` when it adds the sequence cursor index. The task `2` expectation already landed with the consistency batch and must remain exact.
 
 Spy on database preparation in the kernel test and assert startup does not issue `PRAGMA quick_check`. Corrupt/remove a required table and assert `kernel.start()` rejects `database_fast_probe_unhealthy` while preserving the existing DB file.
 
@@ -97,7 +97,6 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'plugin_secrets',
       'database_health_checks',
       'database_backup_manifests',
-      'database_maintenance_runs',
       'schema_migrations',
       'schema_metadata'
     ],
@@ -228,11 +227,13 @@ Expected: PASS; kernel startup applies migrations and probes basic read/write wi
 
 **Files:**
 - Modify: `src/main/infrastructure/database-schemas.ts` in `coreMigrations`
+- Modify: `src/main/infrastructure/database-fast-probe.ts` to require the new core v2 table
 - Create: `src/main/infrastructure/database-maintenance.ts`
 - Modify: `src/main/kernel/kernel-runtime.ts`
 - Modify: `src/main/main-kernel-bootstrap.ts:41-125`
 - Modify: `src/main/index.ts:229-430`
 - Modify: `tests/main/infrastructure/database-schemas.test.ts`
+- Modify: `tests/main/infrastructure/database-health.test.ts` for core schema version 2
 - Create: `tests/main/infrastructure/database-maintenance.test.ts`
 - Modify: `tests/main/kernel-main-integration.test.ts`
 
@@ -305,6 +306,8 @@ Append without editing v1:
   `
 }
 ```
+
+After adding the migration, add `database_maintenance_runs` to the core entry in `managedDatabaseDefinitions` and update the full-health version expectation from core `1` to core `2`.
 
 - [ ] **Step 4: Implement fixed-policy maintenance scheduling**
 
@@ -644,10 +647,11 @@ await expect(restoreRocDatabaseBackup({
 })).rejects.toThrow('database_restore_final_probe_failed');
 
 expect(readCurrentMarker(rootDir)).toBe(before);
-expect(listRollbackGenerations(rootDir)).toHaveLength(1);
+expect(listRollbackGenerations(rootDir)).toHaveLength(0);
+expect(existsSync(join(rootDir, '.restore-restore-fail.staging', 'data.failed'))).toBe(true);
 ```
 
-Successful restore must leave current `data`, one rollback generation and `restore-receipt.json`; it must not auto-delete rollback.
+Successful restore must leave current `data`, one rollback generation and `restore-receipt.json`; it must not auto-delete rollback. Failed post-switch restore renames the failed new generation into staging diagnostics and renames rollback back to current, so no `data.rollback-*` path remains after rollback succeeds.
 
 Use a partial Vitest module mock of `node:fs` to make a selected `renameSync` call throw for directory-switch failure, and a module mock of `runDatabaseFastProbe` for final-probe failure. Do not add `hooks`, callbacks or failure-injection fields to the production restore API.
 
@@ -755,7 +759,7 @@ pnpm database:backup -- --data-root C:\Users\任彦舟\AppData\Roaming\Roc --bac
 pnpm database:restore -- --data-root C:\Users\任彦舟\AppData\Roaming\Roc --backup-dir D:\RocBackups\manual-20260710
 ```
 
-- [ ] **Step 6: Run Task 5 tests and verify GREEN**
+- [x] **Step 6: Run Task 5 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/main/infrastructure/database-backup.test.ts tests/main/infrastructure/database-maintenance-cli.test.ts tests/main/main-bundle-boundaries.test.ts
@@ -773,7 +777,7 @@ Expected: PASS; staging failure leaves current unchanged, post-switch failure ro
 - Consumes: final shared pool, maintenance service, lease, backup and restore lifecycle.
 - Produces: one reviewed database lifecycle commit.
 
-- [ ] **Step 1: Run the complete database focused suite**
+- [x] **Step 1: Run the complete database focused suite**
 
 ```powershell
 pnpm test -- tests/main/infrastructure/database-fast-probe.test.ts tests/main/infrastructure/database-health.test.ts tests/main/infrastructure/database-retention.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/infrastructure/database-maintenance.test.ts tests/main/infrastructure/database-maintenance-lease.test.ts tests/main/infrastructure/database-backup.test.ts tests/main/infrastructure/database-maintenance-cli.test.ts tests/main/kernel-main-integration.test.ts tests/main/main-bundle-boundaries.test.ts
@@ -781,7 +785,7 @@ pnpm test -- tests/main/infrastructure/database-fast-probe.test.ts tests/main/in
 
 Expected: PASS.
 
-- [ ] **Step 2: Review the current diff before committing**
+- [x] **Step 2: Review the current diff before committing**
 
 ```powershell
 git diff -- src/main/infrastructure src/main/kernel src/main/main-kernel-bootstrap.ts src/main/index.ts electron.vite.config.ts package.json tests/main
@@ -798,7 +802,7 @@ Review in this order:
 
 Record findings with file and line. Fix every finding and rerun its direct test. If none exist, record `未发现问题` and note that rollback generations are intentionally retained for explicit manual cleanup.
 
-- [ ] **Step 3: Run build, native and package verification**
+- [x] **Step 3: Run build, native and package verification**
 
 ```powershell
 pnpm typecheck
@@ -810,7 +814,7 @@ git diff --check
 
 Expected: every command exit code `0`; `dist\main\database-maintenance-cli.js` exists after build and package verification preserves `better-sqlite3` loading.
 
-- [ ] **Step 4: Run a temporary-root CLI smoke**
+- [x] **Step 4: Run a temporary-root CLI smoke**
 
 ```powershell
 $suffix = [guid]::NewGuid().ToString('N')
@@ -822,13 +826,12 @@ pnpm database:restore -- --data-root $root --backup-dir (Join-Path $backups 'smo
 
 Expected: both commands exit code `0`, restore receipt and rollback generation exist, and no path outside the two temporary roots is modified.
 
-- [ ] **Step 5: Commit only the reviewed database lifecycle batch**
+- [x] **Step 5: Commit only the reviewed database lifecycle batch**
 
 ```powershell
 $batchFiles = @(
   'src/main/infrastructure/database-fast-probe.ts'
   'src/main/infrastructure/database-health.ts'
-  'src/main/infrastructure/database-pool.ts'
   'src/main/infrastructure/database-maintenance.ts'
   'src/main/infrastructure/database-maintenance-lease.ts'
   'src/main/infrastructure/database-maintenance-cli.ts'
@@ -845,9 +848,11 @@ $batchFiles = @(
   'tests/main/infrastructure/database-maintenance-cli.test.ts'
   'tests/main/infrastructure/database-maintenance-lease.test.ts'
   'tests/main/infrastructure/database-maintenance.test.ts'
+  'tests/main/infrastructure/database-migrations.test.ts'
   'tests/main/infrastructure/database-schemas.test.ts'
   'tests/main/kernel-main-integration.test.ts'
   'tests/main/main-bundle-boundaries.test.ts'
+  'docs/superpowers/plans/2026-07-10-roc-production-hardening-03-database-lifecycle.md'
 )
 git add -- $batchFiles
 git diff --cached --check

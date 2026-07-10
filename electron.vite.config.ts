@@ -48,7 +48,8 @@ export default defineConfig({
       outDir: 'dist/main',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'src/main/index.ts'),
+          'database-maintenance-cli': resolve(__dirname, 'src/main/infrastructure/database-maintenance-cli.ts')
         },
         external: ['better-sqlite3', 'electron', 'node-pty']
       }

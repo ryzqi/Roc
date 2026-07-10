@@ -380,6 +380,7 @@ async function createWindow(): Promise<void> {
       return;
     }
     mainWindowShown = true;
+    kernel.startDatabaseMaintenance();
     kernel.performanceObserverService.record({
       phase: 'ready_to_show',
       label,

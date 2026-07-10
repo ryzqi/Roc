@@ -2,16 +2,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
-import { DatabasePool } from './database-pool';
-import type { RocLogicalDatabaseName } from './database-pragmas';
+import type { DatabasePool } from './database-pool';
 import {
-  applyAgentDatabaseSchema,
-  applyCoreDatabaseSchema,
-  applyDiagnosticsDatabaseSchema,
-  applyMemoryDatabaseSchema,
-  applyTaskDatabaseSchema,
-  applyWorkspaceDatabaseSchema
-} from './database-schemas';
+  findMissingDatabaseTable,
+  managedDatabaseDefinitions,
+  type ManagedDatabaseDefinition
+} from './database-fast-probe';
+import type { RocLogicalDatabaseName } from './database-pragmas';
 
 export type RocDatabaseHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 
@@ -29,100 +26,22 @@ export type RocDatabaseHealthReport = {
   checkedAt: string;
 };
 
-type ManagedDatabase = {
-  dbName: RocLogicalDatabaseName;
-  requiredTables: string[];
-  open(pool: DatabasePool): DatabaseConnection;
-  applySchema(db: DatabaseConnection, now: () => string): void;
-};
-
-const managedDatabases: ManagedDatabase[] = [
-  {
-    dbName: 'core',
-    requiredTables: [
-      'plugin_config',
-      'plugin_secrets',
-      'database_health_checks',
-      'database_backup_manifests',
-      'schema_migrations',
-      'schema_metadata'
-    ],
-    open: (pool) => pool.getCoreConnection(),
-    applySchema: applyCoreDatabaseSchema
-  },
-  {
-    dbName: 'agent',
-    requiredTables: [
-      'agent_threads',
-      'agent_runs',
-      'agent_events',
-      'session_messages',
-      'session_messages_fts',
-      'agent_pending_interrupts',
-      'agent_run_events',
-      'langgraph_checkpoints',
-      'langgraph_checkpoint_writes',
-      'agent_tool_effects',
-      'context_artifacts',
-      'schema_migrations',
-      'schema_metadata'
-    ],
-    open: (pool) => pool.getConnection('@roc/plugin-agent'),
-    applySchema: applyAgentDatabaseSchema
-  },
-  {
-    dbName: 'memory',
-    requiredTables: ['langgraph_store_items', 'memory_events', 'memory_auto_audit', 'schema_migrations', 'schema_metadata'],
-    open: (pool) => pool.getConnection('@roc/plugin-memory'),
-    applySchema: applyMemoryDatabaseSchema
-  },
-  {
-    dbName: 'task',
-    requiredTables: [
-      'background_tasks',
-      'scheduled_task_runs',
-      'thread_deletion_journal',
-      'schema_migrations',
-      'schema_metadata'
-    ],
-    open: (pool) => pool.getConnection('@roc/plugin-task'),
-    applySchema: applyTaskDatabaseSchema
-  },
-  {
-    dbName: 'plugin:@roc/plugin-workspace',
-    requiredTables: ['recovery_points', 'schema_migrations', 'schema_metadata'],
-    open: (pool) => pool.getConnection('@roc/plugin-workspace'),
-    applySchema: applyWorkspaceDatabaseSchema
-  },
-  {
-    dbName: 'plugin:@roc/plugin-diagnostics',
-    requiredTables: ['performance_samples', 'diagnostic_packages', 'schema_migrations', 'schema_metadata'],
-    open: (pool) => pool.getConnection('@roc/plugin-diagnostics'),
-    applySchema: applyDiagnosticsDatabaseSchema
-  }
-];
-
-export function checkRocDatabases(input: { rootDir: string; now: () => string }): RocDatabaseHealthReport {
+export function checkRocDatabases(input: { pool: DatabasePool; now: () => string }): RocDatabaseHealthReport {
   const checkedAt = input.now();
-  const pool = new DatabasePool(input.rootDir);
-  try {
-    const now = () => checkedAt;
-    const databases = managedDatabases.map((database) => checkManagedDatabase(pool, database, now));
-    const report = {
-      status: aggregateStatus(databases),
-      databases,
-      checkedAt
-    };
-    persistHealthReport(pool.getCoreConnection(), report);
-    return report;
-  } finally {
-    pool.closeAll();
-  }
+  const now = () => checkedAt;
+  const databases = managedDatabaseDefinitions.map((database) => checkManagedDatabase(input.pool, database, now));
+  const report = {
+    status: aggregateStatus(databases),
+    databases,
+    checkedAt
+  };
+  persistHealthReport(input.pool.getCoreConnection(), report);
+  return report;
 }
 
 function checkManagedDatabase(
   pool: DatabasePool,
-  database: ManagedDatabase,
+  database: ManagedDatabaseDefinition,
   now: () => string
 ): RocDatabaseHealthItem {
   try {
@@ -148,7 +67,7 @@ function checkManagedDatabase(
         detail: 'schema_version_missing'
       };
     }
-    const missingTable = findMissingTable(db, database.requiredTables);
+    const missingTable = findMissingDatabaseTable(db, database.requiredTables);
     if (missingTable !== null) {
       return {
         dbName: database.dbName,
@@ -192,20 +111,6 @@ function readSchemaVersion(db: DatabaseConnection, dbName: RocLogicalDatabaseNam
     return null;
   }
   return row.current_version;
-}
-
-function findMissingTable(db: DatabaseConnection, requiredTables: readonly string[]): string | null {
-  const existingTables = new Set(
-    (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all() as Array<{ name: string }>).map(
-      (row) => row.name
-    )
-  );
-  for (const tableName of requiredTables) {
-    if (!existingTables.has(tableName)) {
-      return tableName;
-    }
-  }
-  return null;
 }
 
 function aggregateStatus(items: readonly RocDatabaseHealthItem[]): RocDatabaseHealthStatus {

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
 import {
@@ -25,15 +25,17 @@ beforeEach(() => {
 
 afterEach(() => {
   pool.closeAll();
+  vi.restoreAllMocks();
   rmSync(root, { recursive: true, force: true });
 });
 
 describe('checkRocDatabases', () => {
   it('reports every managed database healthy and persists health rows in core.db', () => {
     applyAllSchemas(pool);
+    const getCoreConnection = vi.spyOn(pool, 'getCoreConnection');
 
     const report = checkRocDatabases({
-      rootDir: root,
+      pool,
       now: () => '2026-07-06T00:00:00.000Z'
     });
 
@@ -49,13 +51,14 @@ describe('checkRocDatabases', () => {
     ]);
     expect(report.databases.every((item) => item.quickCheck === 'ok')).toBe(true);
     expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
-      core: 1,
+      core: 2,
       agent: 1,
       memory: 1,
       task: 2,
       'plugin:@roc/plugin-workspace': 1,
       'plugin:@roc/plugin-diagnostics': 1
     });
+    expect(getCoreConnection).toHaveBeenCalled();
     expect(pool.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(6);
   });
 
@@ -64,7 +67,7 @@ describe('checkRocDatabases', () => {
     pool.getConnection('@roc/plugin-task').prepare('DROP TABLE background_tasks').run();
 
     const report = checkRocDatabases({
-      rootDir: root,
+      pool,
       now: () => '2026-07-06T00:00:00.000Z'
     });
 
@@ -83,7 +86,7 @@ describe('checkRocDatabases', () => {
     pool.getConnection('@roc/plugin-task').prepare('DROP TABLE thread_deletion_journal').run();
 
     const report = checkRocDatabases({
-      rootDir: root,
+      pool,
       now: () => '2026-07-06T00:00:00.000Z'
     });
 
