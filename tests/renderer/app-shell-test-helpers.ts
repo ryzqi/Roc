@@ -32,6 +32,16 @@ export function createShellClient(): RocClient {
     },
     tasks: {
       getSnapshot: vi.fn().mockResolvedValue({ ok: true, data: state.taskSnapshot }),
+      getThreadMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          items: [],
+          oldestSequence: null,
+          newestSequence: null,
+          hasMoreBefore: false,
+          hasMoreAfter: false
+        }
+      }),
       getActiveTasks: vi.fn().mockResolvedValue({ ok: true, data: [] }),
       getSchedulerStatus: vi.fn().mockResolvedValue({ ok: true, data: state.schedulerStatus }),
       getTaskDetail: vi.fn().mockResolvedValue({ ok: true, data: null }),

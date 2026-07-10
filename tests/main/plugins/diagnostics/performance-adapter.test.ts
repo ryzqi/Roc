@@ -119,4 +119,61 @@ describe('diagnostics performance adapter', () => {
       ]
     });
   });
+
+  it('aggregates all process private and working set memory for the budget', () => {
+    const adapter = createDiagnosticsPerformanceAdapter({
+      db,
+      runtimeMetricsProvider: {
+        getBrowserWindowCount: () => 1,
+        getProcessMetrics: () => [
+          processMetric(1, 200, 240),
+          processMetric(2, 220, 270)
+        ]
+      }
+    });
+
+    const sample = adapter.samplePerformance({ mode: 'test', memoryBudgetMb: 400 });
+
+    expect(sample).toMatchObject({
+      totalPrivateBytesMb: 420,
+      totalWorkingSetMb: 510,
+      memoryMeasurement: 'complete',
+      exceedsBudget: true
+    });
+  });
+
+  it('fails the budget when any process private bytes are unavailable', () => {
+    const metric = processMetric(1, 200, 240);
+    Reflect.deleteProperty(metric.memory, 'privateBytesKb');
+    const adapter = createDiagnosticsPerformanceAdapter({
+      db,
+      runtimeMetricsProvider: {
+        getBrowserWindowCount: () => 1,
+        getProcessMetrics: () => [metric]
+      }
+    });
+
+    const sample = adapter.samplePerformance({ mode: 'test', memoryBudgetMb: 450 });
+
+    expect(sample).toMatchObject({
+      totalPrivateBytesMb: null,
+      totalWorkingSetMb: 240,
+      memoryMeasurement: 'private_bytes_unavailable',
+      exceedsBudget: true
+    });
+  });
 });
+
+function processMetric(pid: number, privateMb: number, workingSetMb: number) {
+  return {
+    pid,
+    type: 'renderer',
+    cpuPercent: 1,
+    memory: {
+      workingSetSizeKb: workingSetMb * 1024,
+      peakWorkingSetSizeKb: workingSetMb * 1024,
+      privateBytesKb: privateMb * 1024,
+      sharedBytesKb: 0
+    }
+  };
+}

@@ -55,8 +55,9 @@ function createIdleRunState(): ChatRunState {
 
 function stripAttachments(messages: ReturnType<typeof buildChatTranscript>) {
   return messages.map((message) => {
-    const { attachments, ...withoutAttachments } = message;
+    const { attachments, source, ...withoutAttachments } = message;
     void attachments;
+    void source;
     return withoutAttachments;
   });
 }

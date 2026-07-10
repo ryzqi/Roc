@@ -64,6 +64,8 @@ export type TaskEvent = {
   sequence?: number;
 };
 
+export type PersistedTaskEvent = Omit<TaskEvent, 'sequence'> & { sequence: number };
+
 export type GuardrailNudgePayload = {
   nudgeKind: 'retry' | 'unknown_tool' | 'tool_resolution' | 'context_warning';
   tier?: number;
@@ -86,6 +88,19 @@ export type TaskSnapshot = {
 
 export type TaskMessageHistoryRequest = {
   threadId: string;
+  limit: number;
+  cursor:
+    | null
+    | { direction: 'before'; sequence: number }
+    | { direction: 'after'; sequence: number };
+};
+
+export type TaskMessageHistoryPage = {
+  items: PersistedTaskEvent[];
+  oldestSequence: number | null;
+  newestSequence: number | null;
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
 };
 
 export type TaskRun = {

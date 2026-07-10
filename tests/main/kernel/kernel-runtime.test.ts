@@ -83,7 +83,7 @@ describe('KernelRuntime', () => {
     expect(runtime.getStatus().started).toBe(false);
   });
 
-  it('runs database health before loading plugins', async () => {
+  it('initializes database schemas before loading plugins', async () => {
     const plugin: RocPlugin = {
       manifest: {
         id: '@roc/plugin-agent',
@@ -97,7 +97,12 @@ describe('KernelRuntime', () => {
         capabilities: []
       },
       initialize: async (context) => {
-        expect(context.database.getCoreConnection().prepare('SELECT COUNT(*) FROM database_health_checks').pluck().get()).toBe(6);
+        expect(
+          context.database.getCoreConnection().prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'").pluck().get()
+        ).toBe(2);
+        expect(
+          context.database.getConnection().prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'agent'").pluck().get()
+        ).toBe(2);
       },
       shutdown: async () => {},
       healthCheck: async () => ({ status: 'healthy' })

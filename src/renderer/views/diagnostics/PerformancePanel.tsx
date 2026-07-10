@@ -8,7 +8,12 @@ export function PerformancePanel({ performanceSample }: { performanceSample: Per
   const completedSample = [...performanceSample.timing.samples]
     .reverse()
     .find((sample) => sample.phase === 'provider_completed');
-  const rssNote = performanceSample.exceedsBudget ? '超过 Roc 预算' : 'Electron/Chromium/Node 基线内';
+  const privateNote =
+    performanceSample.memoryMeasurement === 'complete'
+      ? performanceSample.exceedsBudget
+        ? '超过 Roc 预算'
+        : '全部 Roc 进程'
+      : 'private bytes 不可用';
 
   return (
     <section className="section" data-testid="performance-sample">
@@ -16,7 +21,14 @@ export function PerformancePanel({ performanceSample }: { performanceSample: Per
         <h2 className="section-title">性能采样</h2>
       </div>
       <div className="stat-row">
-        <Metric label="RSS" note={rssNote} tone={performanceSample.exceedsBudget ? 'warn' : 'neutral'} value={performanceSample.rssMb} />
+        <Metric
+          label="Private"
+          note={privateNote}
+          tone={performanceSample.exceedsBudget ? 'warn' : 'neutral'}
+          value={performanceSample.totalPrivateBytesMb === null ? 0 : performanceSample.totalPrivateBytesMb}
+        />
+        <Metric label="Working Set" note="全部 Roc 进程" value={performanceSample.totalWorkingSetMb} />
+        <Metric label="RSS" note="主进程诊断值" value={performanceSample.rssMb} />
         <Metric label="Heap" note={`${performanceSample.heapUsedMb} / ${performanceSample.heapTotalMb} MB`} value={performanceSample.heapUsedMb} />
         <Metric label="预算" note={performanceSample.mode} value={performanceSample.memoryBudgetMb} />
         <Metric label="Provider 首 token" note={firstTokenSample?.label ?? '暂无'} value={firstTokenSample === undefined ? 0 : Math.round(firstTokenSample.durationMs)} />

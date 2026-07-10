@@ -47,8 +47,11 @@ export function emptyOperationsData(mode: AppStatus['mode']): OperationsData {
       rssMb: 0,
       heapUsedMb: 0,
       heapTotalMb: 0,
-      memoryBudgetMb: 300,
-      exceedsBudget: false,
+      memoryBudgetMb: 450,
+      totalPrivateBytesMb: null,
+      totalWorkingSetMb: 0,
+      memoryMeasurement: 'private_bytes_unavailable',
+      exceedsBudget: true,
       timing: {
         generatedAt: '',
         samples: []

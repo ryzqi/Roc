@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../../src/renderer/app/AppShell';
 import type { ChatRunEvent, TaskUpdateEvent } from '../../src/shared/types';
 import {
@@ -18,6 +18,10 @@ import {
 describe('AppShell', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+
+  beforeAll(async () => {
+    await import('../../src/renderer/features/tasks');
+  });
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -37,6 +41,7 @@ describe('AppShell', () => {
     });
     globalThis.ResizeObserver = class {
       observe(): void {}
+      unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
     Element.prototype.scrollTo = vi.fn();
@@ -315,6 +320,77 @@ describe('AppShell', () => {
       taskSource: null,
       workspacePath: 'F:\\Code\\Roc'
     }));
+  });
+
+  it('does not refresh task state for ordinary chat terminal events but refreshes task runs', async () => {
+    const client = createShellClient();
+    const runEventListeners: Array<(event: ChatRunEvent) => void> = [];
+    vi.mocked(client.api.chat.onRunEvent).mockImplementation((listener) => {
+      runEventListeners.push(listener);
+      return () => {
+        const index = runEventListeners.indexOf(listener);
+        if (index !== -1) {
+          runEventListeners.splice(index, 1);
+        }
+      };
+    });
+    window.roc = client.api;
+
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+    if (runEventListeners.length === 0) {
+      throw new Error('missing_run_event_listener');
+    }
+    const emitRunEvent = (event: ChatRunEvent): void => {
+      for (const listener of runEventListeners) {
+        listener(event);
+      }
+    };
+    const baselineSnapshotRequests = vi.mocked(client.api.tasks.getSnapshot).mock.calls.length;
+
+    await act(async () => {
+      emitRunEvent({
+        type: 'run_completed',
+        runId: 'run-chat',
+        threadId: 'thread-chat',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-07-10T00:00:00.000Z',
+        durationMs: 10,
+        summary: 'chat done',
+        assistantMessage: 'chat done'
+      });
+      await flushPromises();
+    });
+
+    expect(client.api.tasks.getSnapshot).toHaveBeenCalledTimes(baselineSnapshotRequests);
+
+    await act(async () => {
+      emitRunEvent({
+        type: 'run_started',
+        runId: 'run-task',
+        mode: 'task',
+        threadId: 'thread-task',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-07-10T00:00:00.000Z'
+      });
+      emitRunEvent({
+        type: 'run_completed',
+        runId: 'run-task',
+        threadId: 'thread-task',
+        providerId: 'provider-openai',
+        modelId: 'gpt-test',
+        createdAt: '2026-07-10T00:00:01.000Z',
+        durationMs: 10,
+        summary: 'task done',
+        assistantMessage: 'task done'
+      });
+      await flushPromises();
+    });
+
+    expect(client.api.tasks.getSnapshot).toHaveBeenCalledTimes(baselineSnapshotRequests + 1);
   });
 
   it('executes a completed proposed plan as a clean chat run', async () => {

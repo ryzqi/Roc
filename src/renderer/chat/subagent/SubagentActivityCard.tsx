@@ -1,10 +1,12 @@
 import { Bot, CheckCircle2, ChevronDown, CirclePlay, LoaderCircle, XCircle } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 import type { ChatTranscriptActivityBlock, ChatTranscriptSubagentBlock } from '../../chat-transcript';
 import { ActivityBlockShell } from '../activity-block/ActivityBlockShell';
 import { useActivityBlockState } from '../activity-block/use-activity-block-state';
 import { ReasoningBlock } from '../reasoning/ReasoningBlock';
-import { StreamingMarkdownView } from '../streaming-markdown-view';
 import { ToolCallView } from '../tool-call-view';
+
+const StreamingMarkdownView = lazy(() => import('../streaming-markdown-view').then((module) => ({ default: module.StreamingMarkdownView })));
 
 type SubagentBlockModel = Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }>;
 
@@ -60,7 +62,11 @@ function buildMetaChips(block: SubagentBlockModel): string[] {
 
 function renderSubagentBlock(block: ChatTranscriptSubagentBlock, isStreaming: boolean): React.JSX.Element {
   if (block.kind === 'text') {
-    return <StreamingMarkdownView key={block.id} text={block.content} isStreaming={isStreaming} />;
+    return (
+      <Suspense key={block.id} fallback={null}>
+        <StreamingMarkdownView text={block.content} isStreaming={isStreaming} />
+      </Suspense>
+    );
   }
   if (block.kind === 'reasoning') {
     return <ReasoningBlock key={block.id} id={block.id} content={block.content} isStreaming={block.isStreaming} />;

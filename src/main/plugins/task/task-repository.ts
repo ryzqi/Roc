@@ -14,6 +14,8 @@ import type {
   TaskDetail,
   TaskEvent,
   TaskKind,
+  TaskMessageHistoryPage,
+  TaskMessageHistoryRequest,
   TaskRun,
   TaskSnapshot,
   TaskThread,
@@ -414,9 +416,9 @@ export class TaskRepository {
     return readScheduledRuns(this.db, task, limit);
   }
 
-  listThreadMessages(threadId: string): TaskEvent[] {
-    this.requireVisibleThread(threadId);
-    return this.agentHistory.listEventsForThread(threadId);
+  listThreadMessages(request: TaskMessageHistoryRequest): TaskMessageHistoryPage {
+    this.requireVisibleThread(request.threadId);
+    return this.agentHistory.listEventPage(request);
   }
 
   recordAgentRunCompleted(input: {

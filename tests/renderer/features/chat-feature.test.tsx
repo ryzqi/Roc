@@ -136,7 +136,12 @@ describe('ChatFeature', () => {
     });
     await flushPromises();
 
-    expect(client.api.tasks.getThreadMessages).toHaveBeenCalledWith({ threadId: 'thread-current' });
+    expect(client.api.tasks.getThreadMessages).toHaveBeenCalledWith({
+      threadId: 'thread-current',
+      limit: 100,
+      cursor: null
+    });
+    await waitForText(container, '完整回复');
     expect(container.textContent).toContain('完整回复');
   });
 
@@ -284,16 +289,21 @@ function createChatClient(input: { agentStatus?: AgentRuntimeStatus; settingsSna
     tasks: {
       getThreadMessages: vi.fn().mockResolvedValue({
         ok: true,
-        data: [
-          {
+        data: {
+          items: [{
             id: 'message-full',
             threadId: 'thread-current',
             runId: 'run-current',
             type: 'message',
             payload: { role: 'assistant', content: '完整回复' },
-            createdAt: '2026-05-09T08:30:00.000Z'
-          }
-        ]
+            createdAt: '2026-05-09T08:30:00.000Z',
+            sequence: 1
+          }],
+          oldestSequence: 1,
+          newestSequence: 1,
+          hasMoreBefore: false,
+          hasMoreAfter: false
+        }
       })
     },
     files: {
@@ -371,6 +381,16 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function waitForText(element: HTMLElement, text: string): Promise<void> {
+  const startedAt = Date.now();
+  while (!element.textContent?.includes(text)) {
+    if (Date.now() - startedAt > 2000) {
+      throw new Error(`Timed out waiting for text: ${text}`);
+    }
+    await flushPromises();
+  }
 }
 
 function setTextareaValue(input: HTMLTextAreaElement, value: string): void {

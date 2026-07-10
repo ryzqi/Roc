@@ -5,19 +5,26 @@ import type { LazyLoadState, ViewId } from '../app/types';
 import type { LoadedState } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { ChatFeature } from '../features/chat';
-import { DiagnosticsFeature } from '../features/diagnostics';
-import { MemoryFeature } from '../features/memory';
-import { McpFeature } from '../features/mcp';
-import { SkillsFeature } from '../features/skills';
 import type { TaskBoardUiState } from '../features/tasks';
-import { TaskDetailFeature, TasksBoardFeature } from '../features/tasks';
-import { WorkspaceFeature } from '../features/workspace';
 import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from './tasks/TaskDetailView';
 import type { TaskPromptSubmission } from './tasks/TasksView';
 
 const GitView = lazy(() => import('./git/GitView').then((module) => ({ default: module.GitView })));
 const TerminalView = lazy(() => import('./terminal/TerminalView').then((module) => ({ default: module.TerminalView })));
 const PreviewView = lazy(() => import('./preview/PreviewView').then((module) => ({ default: module.PreviewView })));
+const DiagnosticsFeature = lazy(() => import('../features/diagnostics').then((module) => ({ default: module.DiagnosticsFeature })));
+const MemoryFeature = lazy(() => import('../features/memory').then((module) => ({ default: module.MemoryFeature })));
+const McpFeature = lazy(() => import('../features/mcp').then((module) => ({ default: module.McpFeature })));
+const SkillsFeature = lazy(() => import('../features/skills').then((module) => ({ default: module.SkillsFeature })));
+const TaskDetailFeature = lazy(() =>
+  import('../features/tasks').then((module) => ({ default: module.TaskDetailFeature }))
+);
+const TasksBoardFeature = lazy(() =>
+  import('../features/tasks').then((module) => ({ default: module.TasksBoardFeature }))
+);
+const WorkspaceFeature = lazy(() =>
+  import('../features/workspace').then((module) => ({ default: module.WorkspaceFeature }))
+);
 
 export function ViewContent({
   activeView,
@@ -71,7 +78,7 @@ export function ViewContent({
   }
 
   if (activeView === 'tasks-board') {
-    return (
+    return renderLazyView(
       <TasksBoardFeature
         client={client}
         liveTaskRun={liveTaskRun}
@@ -99,7 +106,7 @@ export function ViewContent({
         </section>
       );
     }
-    return (
+    return renderLazyView(
       <TaskDetailFeature
         client={client}
         liveTaskRun={liveTaskRun}
@@ -114,7 +121,7 @@ export function ViewContent({
     );
   }
   if (activeView === 'workspace') {
-    return <WorkspaceFeature client={client} loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />;
+    return renderLazyView(<WorkspaceFeature client={client} loadState={workspaceLoadState} onSelectWorkspace={onSelectWorkspace} state={state} />);
   }
   if (activeView === 'git') {
     return renderLazyView(<GitView loadState={workspaceLoadState} state={state} />);
@@ -126,16 +133,16 @@ export function ViewContent({
     return renderLazyView(<PreviewView loadState={workspaceLoadState} state={state} />);
   }
   if (activeView === 'mcp') {
-    return <McpFeature client={client} state={state} updateLoadedState={updateLoadedState} />;
+    return renderLazyView(<McpFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'skills') {
-    return <SkillsFeature client={client} state={state} updateLoadedState={updateLoadedState} />;
+    return renderLazyView(<SkillsFeature client={client} state={state} updateLoadedState={updateLoadedState} />);
   }
   if (activeView === 'memory') {
-    return <MemoryFeature client={client} loadState={memoryLoadState} state={state} />;
+    return renderLazyView(<MemoryFeature client={client} loadState={memoryLoadState} state={state} />);
   }
   if (activeView === 'diagnostics') {
-    return <DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />;
+    return renderLazyView(<DiagnosticsFeature client={client} loadState={operationsLoadState} state={state} />);
   }
   return (
     <ChatFeature

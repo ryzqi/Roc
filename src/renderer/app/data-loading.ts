@@ -40,18 +40,28 @@ export async function loadWorkspaceData(
   }
 
   const api = client.api;
-  const fileTree = unwrap<FileTreeResult>('file tree', await api.files.listTree({ relativePath: '' }));
-  const filePreview = await loadWorkspaceFilePreview(client, fileTree, options);
-  const fileWorkbenchPdfPreview = await loadWorkspacePdfWorkbenchPreview(client, filePreview, options);
+  const fileTreePromise = api.files.listTree({ relativePath: '' });
+  const gitStatusPromise = api.git.status();
+  const fileTree = unwrap<FileTreeResult>('file tree', await fileTreePromise);
+  const filePreviewPromise = loadWorkspaceFilePreview(client, fileTree, options);
   const fileSearch = null;
-  const gitResult = await api.git.status();
-  const gitBranchesResult = gitResult.ok ? await api.git.listBranches() : null;
+  const gitResult = await gitStatusPromise;
+  const gitBranchesPromise = gitResult.ok ? api.git.listBranches() : Promise.resolve(null);
+  const filePreview = await filePreviewPromise;
+  const fileWorkbenchPdfPreviewPromise = loadWorkspacePdfWorkbenchPreview(client, filePreview, options);
   const gitSelectedPath =
     options.gitSelectedPath === undefined || !gitResult.ok
       ? null
       : findNextGitSelection(gitResult.data.changes, options.gitSelectedPath);
-  const gitSelectedPreview =
-    gitSelectedPath === null ? null : await loadGitSelectedPreview(client, { relativePath: gitSelectedPath });
+  const gitSelectedPreviewPromise =
+    gitSelectedPath === null
+      ? Promise.resolve(null)
+      : loadGitSelectedPreview(client, { relativePath: gitSelectedPath });
+  const [fileWorkbenchPdfPreview, gitBranchesResult, gitSelectedPreview] = await Promise.all([
+    fileWorkbenchPdfPreviewPromise,
+    gitBranchesPromise,
+    gitSelectedPreviewPromise
+  ]);
 
   return {
     fileTree,
@@ -161,26 +171,26 @@ export async function loadTaskSurfaceData(selectedTaskId?: string | null, client
 
 export async function loadOperationsData(mode: AppStatus['mode'], client: RocClient = createRocClient()): Promise<OperationsData> {
   const api = client.api;
-  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await api.tasks.listBackgroundTasks());
+  const backgroundTasksPromise = api.tasks.listBackgroundTasks();
+  const performancePromise = api.diagnostics.samplePerformance({ mode, memoryBudgetMb: 450 });
+  const checksPromise = api.diagnostics.runChecks();
+  const backgroundTasks = unwrap<BackgroundTask[]>('background tasks', await backgroundTasksPromise);
   const backgroundTask = backgroundTasks[0] ?? null;
-  const performanceSample = unwrap<PerformanceSample>(
-    'performance sample',
-    await api.diagnostics.samplePerformance({
-      mode,
-      memoryBudgetMb: 300
-    })
-  );
-  const diagnosticChecks = unwrap('diagnostic checks', await api.diagnostics.runChecks());
-  const diagnosticPackage =
+  const diagnosticPackagePromise =
     backgroundTask === null
-      ? null
-      : unwrap<DiagnosticPackage>(
-          'diagnostic package',
-          await api.diagnostics.createDiagnosticPackage({
-            taskId: backgroundTask.id,
-            errorSummary: '后台任务诊断请求'
-          })
-        );
+      ? Promise.resolve(null)
+      : api.diagnostics.createDiagnosticPackage({
+          taskId: backgroundTask.id,
+          errorSummary: '后台任务诊断请求'
+        });
+  const [performanceResult, checksResult, packageResult] = await Promise.all([
+    performancePromise,
+    checksPromise,
+    diagnosticPackagePromise
+  ]);
+  const performanceSample = unwrap<PerformanceSample>('performance sample', performanceResult);
+  const diagnosticChecks = unwrap('diagnostic checks', checksResult);
+  const diagnosticPackage = packageResult === null ? null : unwrap<DiagnosticPackage>('diagnostic package', packageResult);
 
   return {
     diagnosticChecks,

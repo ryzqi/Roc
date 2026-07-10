@@ -128,6 +128,7 @@ describe('chat transcript helpers', () => {
   it('keeps persisted message object references stable while appending live output', () => {
     const persistedMessage = {
       key: 'user-current',
+      source: 'persisted' as const,
       role: 'user' as const,
       content: '请总结当前变更',
       attachments: [],
@@ -237,6 +238,7 @@ describe('chat transcript helpers', () => {
     expect(messages).toEqual([
       {
         key: 'user-current',
+        source: 'persisted',
         role: 'user',
         content: '请整理一下当前变更',
         attachments: [],
@@ -247,6 +249,7 @@ describe('chat transcript helpers', () => {
       },
       {
         key: 'live-run-current',
+        source: 'live',
         role: 'assistant',
         content: '我先检查当前变更。',
         attachments: [],
@@ -648,6 +651,7 @@ describe('chat transcript helpers', () => {
     expect(messages).toEqual([
       {
         key: 'user-current',
+        source: 'persisted',
         role: 'user',
         content: '整理一下结果',
         attachments: [],
@@ -658,6 +662,7 @@ describe('chat transcript helpers', () => {
       },
       {
         key: 'assistant-current',
+        source: 'persisted',
         role: 'assistant',
         content: '已经整理完成。',
         attachments: [],
@@ -793,6 +798,7 @@ describe('chat transcript helpers', () => {
     expect(messages).toEqual([
       {
         key: 'user-current',
+        source: 'persisted',
         role: 'user',
         content: '请读取文件并总结',
         attachments: [],
@@ -803,6 +809,7 @@ describe('chat transcript helpers', () => {
       },
       {
         key: 'assistant-run-current',
+        source: 'persisted',
         role: 'assistant',
         content: '总结完成。',
         attachments: [],

@@ -1,9 +1,10 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { lazy, Suspense, type Dispatch, type SetStateAction } from 'react';
 
-import { SettingsFeature } from '../features/settings';
 import { SettingsModal } from '../settings/settings-modal';
 import type { RocClient } from '../shared/roc-client';
 import type { AppBootstrap } from './use-app-bootstrap';
+
+const SettingsFeature = lazy(() => import('../features/settings').then((module) => ({ default: module.SettingsFeature })));
 
 interface AppSettingsLayerProps {
   client: RocClient;
@@ -26,13 +27,15 @@ export function AppSettingsLayer({
 
   return (
     <SettingsModal onClose={() => setOpen(false)}>
-      <SettingsFeature
-        client={client}
-        state={state}
-        updateLoadedState={(partial) =>
-          setState((current) => (current === null ? current : { ...current, ...partial }))
-        }
-      />
+      <Suspense fallback={null}>
+        <SettingsFeature
+          client={client}
+          state={state}
+          updateLoadedState={(partial) =>
+            setState((current) => (current === null ? current : { ...current, ...partial }))
+          }
+        />
+      </Suspense>
     </SettingsModal>
   );
 }

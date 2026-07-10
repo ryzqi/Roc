@@ -42,6 +42,7 @@ beforeEach(() => {
       root.render(
         <ChatMessageRow
           message={{
+            source: 'persisted',
             key: 'assistant-live-activity',
             role: 'assistant',
             content: '',
@@ -79,6 +80,7 @@ beforeEach(() => {
       root.render(
         <ChatMessageRow
           message={{
+            source: 'persisted',
             key: 'assistant-live-activity',
             role: 'assistant',
             content: '',
@@ -125,6 +127,7 @@ beforeEach(() => {
       root.render(
         <ChatMessageRow
           message={{
+            source: 'persisted',
             key: 'assistant-force-open',
             role: 'assistant',
             content: '',
@@ -166,6 +169,7 @@ beforeEach(() => {
       root.render(
         <ChatMessageRow
           message={{
+            source: 'persisted',
             key: 'assistant-copy',
             role: 'assistant',
             content: '正式回答',

@@ -36,7 +36,7 @@
 - Consumes: `ChatRunEvent`, task snapshot background thread ids, recent events and selected `TaskDetail.backgroundTask.runId`.
 - Produces: `syncKnownTaskRunIds()` and `shouldApplyTaskRunEvent()` used by AppShell.
 
-- [ ] **Step 1: Write failing pure filter tests**
+- [x] **Step 1: Write failing pure filter tests**
 
 ```ts
 const known = new Set<string>();
@@ -71,11 +71,11 @@ expect(shouldApplyTaskRunEvent(known, {
 
 For a known `run_interrupted`, assert the function returns true and retains the id so a later `run_resumed` is also accepted. For `run_completed` and `run_failed`, assert the id is removed only after the caller applies the event via `completeTaskRunEvent(known, event)`.
 
-- [ ] **Step 2: Write a failing AppShell render-count regression**
+- [x] **Step 2: Write a failing AppShell render-count regression**
 
 Subscribe the mocked client, emit 50 ordinary chat `assistant_block` events, and assert the task transcript/render probe remains unchanged. Emit a task `run_started` plus block and assert it updates once. This test must fail on the current handler, which applies every non-start ordinary event.
 
-- [ ] **Step 3: Run Task 1 tests and verify RED**
+- [x] **Step 3: Run Task 1 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/task-run-event-filter.test.ts tests/renderer/app-shell.test.tsx
@@ -83,7 +83,7 @@ pnpm test -- tests/renderer/task-run-event-filter.test.ts tests/renderer/app-she
 
 Expected: FAIL because AppShell only filters non-task `run_started` and cannot classify later ordinary events.
 
-- [ ] **Step 4: Implement and wire the run-id set**
+- [x] **Step 4: Implement and wire the run-id set**
 
 Create:
 
@@ -128,7 +128,7 @@ export function completeTaskRunEvent(known: Set<string>, event: ChatRunEvent): v
 
 In AppShell keep `const taskRunIdsRef = useRef(new Set<string>());`, synchronize it when task snapshot/detail changes, guard before `setTaskLiveRunState`, apply the event, then remove only completed/failed ids. Refresh task state for completed、failed and interrupted; interrupted remains classified for resumed/recovering/recovered events.
 
-- [ ] **Step 5: Run Task 1 tests and verify GREEN**
+- [x] **Step 5: Run Task 1 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/task-run-event-filter.test.ts tests/renderer/app-shell.test.tsx
@@ -156,7 +156,7 @@ Expected: PASS; ordinary chat events do not call the task state setter or task r
 - Consumes: monotonic per-thread `agent_events.sequence`.
 - Produces: `PersistedTaskEvent`, `TaskMessageHistoryRequest`, `TaskMessageHistoryPage`, strict schemas and indexed latest/before/after queries.
 
-- [ ] **Step 1: Write failing contract and pagination tests**
+- [x] **Step 1: Write failing contract and pagination tests**
 
 Use the exact shared types:
 
@@ -203,7 +203,7 @@ expect(after.items.map((item) => item.sequence)).toEqual(
 
 Reject `limit` 0/201, missing cursor, non-positive/non-integer sequence and extra fields. Run `EXPLAIN QUERY PLAN` for all directions and assert detail contains `idx_agent_events_thread_sequence` and does not contain `USE TEMP B-TREE FOR ORDER BY`.
 
-- [ ] **Step 2: Run Task 2 tests and verify RED**
+- [x] **Step 2: Run Task 2 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/main/plugins/task/plugin-thread-history.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/ipc-plugin-adapter.test.ts
@@ -211,7 +211,7 @@ pnpm test -- tests/main/plugins/task/plugin-thread-history.test.ts tests/main/in
 
 Expected: FAIL because the current capability accepts only `{ threadId }`, returns all `TaskEvent[]`, and lacks a `(thread_id, sequence)` index.
 
-- [ ] **Step 3: Add the required agent cursor index migration**
+- [x] **Step 3: Add the required agent cursor index migration**
 
 Append an agent migration without editing v1:
 
@@ -230,7 +230,7 @@ This migration is required because the existing `(thread_id, run_id, sequence)` 
 
 Update schema/health expectations so agent is version `2` after this batch; core remains `2`, task remains `2`, and the other logical databases remain version `1`.
 
-- [ ] **Step 4: Implement strict page schemas**
+- [x] **Step 4: Implement strict page schemas**
 
 In `task/contracts.ts`:
 
@@ -280,7 +280,7 @@ export const taskMessageHistoryPageSchema = z.object({
 }).strict() satisfies z.ZodType<TaskMessageHistoryPage>;
 ```
 
-- [ ] **Step 5: Implement the three indexed queries**
+- [x] **Step 5: Implement the three indexed queries**
 
 Add to `AgentTaskHistoryReader`:
 
@@ -378,7 +378,7 @@ function eventExists(
 
 Pass the full request into `buildTaskMessageHistoryPage()`. The operator is chosen only from the closed union above, never from IPC text.
 
-- [ ] **Step 6: Wire repository, capability and IPC**
+- [x] **Step 6: Wire repository, capability and IPC**
 
 ```ts
 listThreadMessages(request: TaskMessageHistoryRequest): TaskMessageHistoryPage {
@@ -389,7 +389,7 @@ listThreadMessages(request: TaskMessageHistoryRequest): TaskMessageHistoryPage {
 
 Register `task.thread.messages.list` with the new request/page schemas, change `RocPreloadApi.tasks.getThreadMessages` to return `TaskMessageHistoryPage`, and update the capability adapter/mocks without retaining the array signature.
 
-- [ ] **Step 7: Run Task 2 tests and verify GREEN**
+- [x] **Step 7: Run Task 2 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/main/plugins/task/plugin-thread-history.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/ipc-schema-generation.test.ts
@@ -417,7 +417,7 @@ Expected: PASS; all pages are ascending, strict bounds are correct, and query pl
 - Consumes: page IPC and `latestPersistedThreadEventId` signal.
 - Produces: `usePersistedThreadHistory()` state/actions and a Virtuoso transcript with stable prepend anchoring.
 
-- [ ] **Step 1: Add `react-virtuoso` as a direct dependency**
+- [x] **Step 1: Add `react-virtuoso` as a direct dependency**
 
 ```powershell
 pnpm add react-virtuoso
@@ -425,7 +425,7 @@ pnpm add react-virtuoso
 
 Expected: `package.json` and `pnpm-lock.yaml` change; no other dependency upgrades.
 
-- [ ] **Step 2: Write failing hook tests for initial/before/after and stale responses**
+- [x] **Step 2: Write failing hook tests for initial/before/after and stale responses**
 
 Use a deferred mock client:
 
@@ -453,7 +453,7 @@ Trigger a new persisted signal and assert an `after newestSequence` request. Add
 
 Seed 250 events after the current newest sequence and assert the hook follows `hasMoreAfter` through three `after` requests until false; one snapshot signal must not leave the last 150 events unloaded.
 
-- [ ] **Step 3: Write failing Virtuoso and 10k DOM tests**
+- [x] **Step 3: Write failing Virtuoso and 10k DOM tests**
 
 Render `ChatTranscriptPanel` with 10,000 synthetic transcript messages in a fixed `800x600` jsdom viewport and real Virtuoso. Assert:
 
@@ -463,7 +463,7 @@ expect(container.querySelectorAll('[data-testid^="chat-message-"]').length).toBe
 
 Simulate `startReached`, prepend 100 messages, and assert the first previously visible message key remains visible. Assert the old whole-transcript `ResizeObserver` is not constructed.
 
-- [ ] **Step 4: Run Task 3 tests and verify RED**
+- [x] **Step 4: Run Task 3 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/use-persisted-thread-history.test.tsx tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-history-performance.test.tsx tests/renderer/features/chat-feature.test.tsx
@@ -471,7 +471,7 @@ pnpm test -- tests/renderer/use-persisted-thread-history.test.tsx tests/renderer
 
 Expected: FAIL because ChatView reloads the full array, clears errors to empty, and panel maps every message into DOM.
 
-- [ ] **Step 5: Implement page validation and merging in the hook**
+- [x] **Step 5: Implement page validation and merging in the hook**
 
 Use this public result:
 
@@ -515,7 +515,7 @@ function mergePersistedEvents(
 
 Initial load uses null cursor; `loadOlder` uses oldest. A persisted signal starts an `after` loop: validate/merge the page, advance the cursor to that page's `newestSequence`, and continue while `hasMoreAfter` is true. Thread change increments generation and resets state before requesting the new tail; every iteration checks the generation before applying or issuing the next request.
 
-- [ ] **Step 6: Use the hook in chat and task detail**
+- [x] **Step 6: Use the hook in chat and task detail**
 
 Replace ChatView's `persistedMessages` effect with the hook. Build persisted transcript only when `history.events` changes; streaming token updates only append/merge live transcript. Pass hook error to the existing inline error surface rather than replacing events with `[]`.
 
@@ -539,7 +539,7 @@ All messages built from `PersistedTaskEvent[]` use `source: 'persisted'`; pendin
 
 TaskDetailView uses the same hook for transcript history; its metadata can continue using `detail.recentEvents`, but rendered transcript uses paged events plus live state.
 
-- [ ] **Step 7: Replace full map/ResizeObserver with Virtuoso**
+- [x] **Step 7: Replace full map/ResizeObserver with Virtuoso**
 
 Extend the panel contract explicitly:
 
@@ -617,7 +617,7 @@ function useTranscriptFirstItemIndex(input: {
 }
 ```
 
-- [ ] **Step 8: Add the seeded 1k/10k performance assertions**
+- [x] **Step 8: Add the seeded 1k/10k performance assertions**
 
 In `chat-history-performance.test.tsx`, back the mock client with an in-memory agent DB using the real page query. Measure from hook mount to tail rows rendered:
 
@@ -632,7 +632,7 @@ expect(percentile95(profile10000.prependDurationsMs)).toBeLessThanOrEqual(250);
 
 Use `performance.now()` and at least 20 prepend samples. Fail with the measured values in the assertion message; do not increase thresholds in the test.
 
-- [ ] **Step 9: Run Task 3 tests and verify GREEN**
+- [x] **Step 9: Run Task 3 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/use-persisted-thread-history.test.tsx tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-history-performance.test.tsx tests/renderer/features/chat-feature.test.tsx tests/renderer/chat-view.queued-task.test.ts tests/renderer/task-detail-view.test.tsx
@@ -663,7 +663,7 @@ Expected: PASS; initial page is 100, stale responses are ignored, conflicts fail
 - Consumes: Vite dynamic imports and build manifest.
 - Produces: lazy feature boundaries, language-specific highlighter loaders and `pnpm check:renderer-chunks`.
 
-- [ ] **Step 1: Write failing source-boundary and build-budget tests**
+- [x] **Step 1: Write failing source-boundary and build-budget tests**
 
 Assert no initial static imports:
 
@@ -676,7 +676,7 @@ expect(viewContentSource).not.toContain("import { DiagnosticsFeature } from '../
 
 The chunk script test builds a fixture manifest/output and asserts failure when the static import graph is `1_500_001` bytes or any statically visited manifest key/file identifies Markdown, Streamdown, highlight or Settings; it passes at exactly `1_500_000` when those modules exist only in `dynamicImports`.
 
-- [ ] **Step 2: Run Task 4 unit tests and verify RED**
+- [x] **Step 2: Run Task 4 unit tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/bundle-boundaries.test.ts tests/renderer/bundle-splitting.test.ts tests/main/renderer-chunk-budget.test.ts
@@ -684,7 +684,7 @@ pnpm test -- tests/renderer/bundle-boundaries.test.ts tests/renderer/bundle-spli
 
 Expected: FAIL because Markdown/Settings/features are statically imported and no automatic budget script exists.
 
-- [ ] **Step 3: Lazy-load Markdown only when assistant content exists**
+- [x] **Step 3: Lazy-load Markdown only when assistant content exists**
 
 In `chat-message-row.tsx`:
 
@@ -696,7 +696,7 @@ const StreamingMarkdownView = lazy(() =>
 
 Wrap only the non-empty assistant content and rich activity Markdown in the existing loading-neutral `Suspense` fallback. An empty chat renders no Markdown import request.
 
-- [ ] **Step 4: Replace global/highlight-all behavior with dynamic core languages**
+- [x] **Step 4: Replace global/highlight-all behavior with dynamic core languages**
 
 Remove the global highlight CSS import and `rehype-highlight`. In `syntax-highlight.ts` import `highlight.js/lib/core` and map only these aliases/loaders: JavaScript, TypeScript, JSON, Bash, PowerShell, Python, Markdown, SQL, XML/HTML and CSS.
 
@@ -721,11 +721,11 @@ const languageLoaders: Record<string, () => Promise<{ default: LanguageFn }>> = 
 
 `highlightCode(language, code)` returns escaped plaintext for unknown languages and never imports the full language registry. `CodeBlock` loads/highlights in an effect keyed by language/code and renders the returned HTML inside its existing `<pre>` shell. Import `syntax-highlight.css` from the dynamic highlighter module so the CSS is not initial.
 
-- [ ] **Step 5: Lazy-load Settings and all non-chat feature modules**
+- [x] **Step 5: Lazy-load Settings and all non-chat feature modules**
 
 Keep the Settings presence owner in `AppSettingsLayer` but lazy import `SettingsFeature`; batch five will move `AnimatePresence` into this same owner. In `ViewContent.tsx`, replace static value imports for tasks, workspace, MCP, skills, memory and diagnostics with `lazy()` imports; keep type-only imports static. Chat remains the only eager feature.
 
-- [ ] **Step 6: Add the build manifest and chunk gate**
+- [x] **Step 6: Add the build manifest and chunk gate**
 
 Set renderer `build.manifest = true`. `scripts/check-renderer-chunks.mjs` reads `dist/renderer/.vite/manifest.json`, finds the `isEntry` record for `src/renderer/main.tsx`, recursively traverses only `imports` (never `dynamicImports`), sums each visited JS file's `statSync().size`, and fails above `1_500_000`. It rejects any statically visited manifest key or output basename matching `/markdown|streamdown|highlight|settings/iu`, and separately verifies `dist/renderer/index.html` modulepreload entries are a subset of the same static graph.
 
@@ -735,7 +735,7 @@ Add:
 "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs"
 ```
 
-- [ ] **Step 7: Run build and verify the real output gate**
+- [x] **Step 7: Run build and verify the real output gate**
 
 ```powershell
 pnpm build
@@ -763,7 +763,7 @@ Expected: both exit code `0`; initial total is printed and is `<= 1500000`, with
 - Consumes: existing independent IPC promises and Electron process metrics.
 - Produces: concurrent loaders plus `totalPrivateBytesMb`, `totalWorkingSetMb`, `memoryMeasurement` and private-byte budget semantics.
 
-- [ ] **Step 1: Write failing loader start-order tests**
+- [x] **Step 1: Write failing loader start-order tests**
 
 Use deferred promises and assert independent calls begin before either resolves:
 
@@ -784,7 +784,7 @@ await loading;
 
 For operations, assert listBackgroundTasks, samplePerformance and runChecks all start synchronously; createDiagnosticPackage waits only for background task result.
 
-- [ ] **Step 2: Write failing memory aggregation tests**
+- [x] **Step 2: Write failing memory aggregation tests**
 
 ```ts
 expect(sample).toMatchObject({
@@ -797,7 +797,7 @@ expect(sample).toMatchObject({
 
 Use a `400 MB` request and assert `exceedsBudget: true`. Set one process `privateBytesKb` undefined/null and assert `totalPrivateBytesMb: null`, `memoryMeasurement: 'private_bytes_unavailable'`, and `exceedsBudget: true` so unmeasurable samples cannot pass.
 
-- [ ] **Step 3: Run Task 5 tests and verify RED**
+- [x] **Step 3: Run Task 5 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/data-loading-concurrency.test.ts tests/main/plugins/diagnostics/performance-adapter.test.ts
@@ -805,7 +805,7 @@ pnpm test -- tests/renderer/data-loading-concurrency.test.ts tests/main/plugins/
 
 Expected: FAIL because loaders are serial and budget compares only main process RSS.
 
-- [ ] **Step 4: Start independent loader branches together**
+- [x] **Step 4: Start independent loader branches together**
 
 For workspace:
 
@@ -842,7 +842,7 @@ const [performanceResult, checksResult, packageResult] = await Promise.all([
 ]);
 ```
 
-- [ ] **Step 5: Compute process totals once and use private bytes for the gate**
+- [x] **Step 5: Compute process totals once and use private bytes for the gate**
 
 Extend `PerformanceSample`:
 
@@ -878,7 +878,7 @@ Keep main `rssMb` as diagnostics only. Recompute the aggregate in `getLatestPerf
 
 Set the pre-load placeholder in `emptyOperationsData()` to `totalPrivateBytesMb: null`, `totalWorkingSetMb: 0`, `memoryMeasurement: 'private_bytes_unavailable'`, and `exceedsBudget: true`; the diagnostics loading state, not a fabricated zero-private measurement, represents “not sampled yet”.
 
-- [ ] **Step 6: Enforce fixed budgets in performance smoke**
+- [x] **Step 6: Enforce fixed budgets in performance smoke**
 
 Change the empty sample request to `memoryBudgetMb: 450`. Assert:
 
@@ -923,7 +923,7 @@ if (profile10000.domMessageRows >= 300) {
 
 The 10k Playwright flow also scrolls to the top for at least 20 page prepends and records p95 `<= 250 ms`, complementing the jsdom/Virtuoso test with a real Electron renderer measurement. All roots are removed in the smoke `finally` block after the Electron app exits; the wrapper restores Node ABI afterward.
 
-- [ ] **Step 7: Run Task 5 tests and verify GREEN**
+- [x] **Step 7: Run Task 5 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/data-loading-concurrency.test.ts tests/renderer/workspace-surfaces.test.ts tests/main/plugins/diagnostics/performance-adapter.test.ts tests/smoke/performance-profile-seed.test.ts
@@ -942,7 +942,7 @@ Expected: PASS; independent promises start together and private-byte absence can
 - Consumes: final history page and PerformanceSample contracts.
 - Produces: synchronized IPC, built chunk gate, performance smoke and one reviewed commit.
 
-- [ ] **Step 1: Generate and check IPC**
+- [x] **Step 1: Generate and check IPC**
 
 ```powershell
 pnpm generate:ipc
@@ -951,7 +951,7 @@ pnpm check:ipc
 
 Expected: both exit code `0`; task history returns a page and performance sample includes aggregate fields.
 
-- [ ] **Step 2: Run the complete renderer performance focused suite**
+- [x] **Step 2: Run the complete renderer performance focused suite**
 
 ```powershell
 pnpm test -- tests/renderer/task-run-event-filter.test.ts tests/renderer/app-shell.test.tsx tests/main/plugins/task/plugin-thread-history.test.ts tests/main/infrastructure/database-schemas.test.ts tests/main/infrastructure/database-migrations.test.ts tests/main/ipc-plugin-adapter.test.ts tests/main/ipc-schema-generation.test.ts tests/renderer/use-persisted-thread-history.test.tsx tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-history-performance.test.tsx tests/renderer/features/chat-feature.test.tsx tests/renderer/chat-view.queued-task.test.ts tests/renderer/task-detail-view.test.tsx tests/renderer/bundle-boundaries.test.ts tests/renderer/bundle-splitting.test.ts tests/main/renderer-chunk-budget.test.ts tests/renderer/data-loading-concurrency.test.ts tests/renderer/workspace-surfaces.test.ts tests/main/plugins/diagnostics/performance-adapter.test.ts tests/smoke/performance-profile-seed.test.ts
@@ -959,7 +959,7 @@ pnpm test -- tests/renderer/task-run-event-filter.test.ts tests/renderer/app-she
 
 Expected: PASS.
 
-- [ ] **Step 3: Review the current diff before committing**
+- [x] **Step 3: Review the current diff before committing**
 
 ```powershell
 git diff -- src/main src/preload src/renderer src/shared scripts tests package.json pnpm-lock.yaml electron.vite.config.ts
@@ -977,7 +977,7 @@ Review in this order:
 
 Record findings with file and line. Fix every finding and rerun its direct test. If none exist, record `未发现问题` and note that performance thresholds remain hardware-sensitive but are fixed by the approved spec.
 
-- [ ] **Step 4: Run final batch verification**
+- [x] **Step 4: Run final batch verification**
 
 ```powershell
 pnpm typecheck
@@ -990,7 +990,7 @@ git diff --check
 
 Expected: every command exit code `0`; performance smoke reports complete private-byte measurement and passes empty、1k、10k fixed budgets, DOM cap and prepend p95.
 
-- [ ] **Step 5: Commit only the reviewed renderer performance batch**
+- [x] **Step 5: Commit only the reviewed renderer performance batch**
 
 ```powershell
 $batchFiles = @(

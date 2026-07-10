@@ -6,8 +6,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatTranscriptPanel } from '../../src/renderer/chat/chat-transcript-panel';
 import type { ChatTranscriptMessage } from '../../src/renderer/chat-transcript';
 
+vi.mock('react-virtuoso', async () => {
+  const ReactModule = await import('react');
+  const Virtuoso = ReactModule.forwardRef(function TestVirtuoso(props: Record<string, unknown>, ref) {
+    const elementRef = ReactModule.useRef<HTMLDivElement | null>(null);
+    ReactModule.useImperativeHandle(ref, () => ({ scrollToIndex: vi.fn() }));
+    ReactModule.useEffect(() => {
+      if (typeof ResizeObserver !== 'function' || elementRef.current === null) {
+        return;
+      }
+      const observer = new ResizeObserver(() => {});
+      observer.observe(elementRef.current);
+      return () => observer.disconnect();
+    }, []);
+    const data = props.data as ChatTranscriptMessage[];
+    const itemContent = props.itemContent as (index: number, message: ChatTranscriptMessage) => React.ReactNode;
+    return ReactModule.createElement(
+      'div',
+      {
+        ref: elementRef,
+        className: props.className,
+        'data-testid': props['data-testid'],
+        'data-message-count': props['data-message-count']
+      },
+      data.map((message, index) => ReactModule.createElement(ReactModule.Fragment, { key: message.key }, itemContent(index, message)))
+    );
+  });
+  return { Virtuoso };
+});
+
 describe('chat transcript panel', () => {
   let container: HTMLDivElement;
+  let scrollContainer: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
@@ -40,8 +70,12 @@ describe('chat transcript panel', () => {
       removeListener: () => {},
       dispatchEvent: () => false
     }));
+    scrollContainer = document.createElement('div');
+    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
+    scrollContainer.scrollTo = vi.fn();
     container = document.createElement('div');
-    document.body.appendChild(container);
+    scrollContainer.appendChild(container);
+    document.body.appendChild(scrollContainer);
     root = createRoot(container);
   });
 
@@ -49,35 +83,33 @@ describe('chat transcript panel', () => {
     act(() => {
       root.unmount();
     });
-    container.remove();
+    scrollContainer.remove();
     vi.unstubAllGlobals();
   });
 
   it('renders assistant text in the existing transcript scroll surface', async () => {
-    const scrollContainer = document.createElement('div');
-    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
-    scrollContainer.scrollTo = vi.fn();
-
     await act(async () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages: createMessages(),
           liveSignal: 'run_1|18|0',
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
           scrollContainerRef: { current: scrollContainer }
         })
       );
     });
-    await flushAnimationFrame();
+    await waitForText(container, '流式输出可见');
 
     expect(container.querySelector('[data-testid="chat-transcript"]')?.textContent).toContain('流式输出可见');
     expect(container.querySelector('[data-testid="chat-message-assistant"]')).not.toBeNull();
-    expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 800 });
+    expect(scrollContainer.scrollTo).not.toHaveBeenCalled();
   });
 
-  it('keeps following the bottom when new messages increase transcript height', async () => {
-    const scrollContainer = document.createElement('div');
-    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
-    scrollContainer.scrollTo = vi.fn();
+  it('updates the visible virtualized message during streaming', async () => {
     const messages = createMessages();
 
     await act(async () => {
@@ -85,30 +117,39 @@ describe('chat transcript panel', () => {
         React.createElement(ChatTranscriptPanel, {
           messages,
           liveSignal: 'run_1|18|0',
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
           scrollContainerRef: { current: scrollContainer }
         })
       );
     });
-    await flushAnimationFrame();
+    await waitForText(container, '流式输出可见');
     vi.mocked(scrollContainer.scrollTo).mockClear();
     setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 1000, scrollTop: 400 });
 
     await act(async () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
-          messages: [...messages, createMessage('assistant-next', '新增回复')],
+          messages: [createMessage('assistant-visible', '流式输出可见，新增回复')],
           liveSignal: 'run_1|22|0',
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
           scrollContainerRef: { current: scrollContainer }
         })
       );
     });
-    await flushAnimationFrame();
+    await waitForText(container, '新增回复');
 
-    expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 1000 });
+    expect(container.textContent).toContain('新增回复');
   });
 
-  it('keeps following the bottom when rendered transcript content resizes', async () => {
-    const scrollContainer = document.createElement('div');
+  it('does not attach a whole-transcript ResizeObserver', async () => {
     let resizeCallback: ResizeObserverCallback | null = null;
     class TestResizeObserver {
       constructor(callback: ResizeObserverCallback) {
@@ -122,14 +163,16 @@ describe('chat transcript panel', () => {
       disconnect(): void {}
     }
     vi.stubGlobal('ResizeObserver', TestResizeObserver);
-    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
-    scrollContainer.scrollTo = vi.fn();
-
     await act(async () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
           messages: createMessages(),
           liveSignal: 'run_1|18|0',
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
           scrollContainerRef: { current: scrollContainer }
         })
       );
@@ -139,19 +182,11 @@ describe('chat transcript panel', () => {
     setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 1000, scrollTop: 400 });
 
     expect(resizeCallback).not.toBeNull();
-    await act(async () => {
-      resizeCallback?.([], new TestResizeObserver(resizeCallback));
-    });
-    await flushAnimationFrame();
-
-    expect(scrollContainer.scrollTo).toHaveBeenCalledWith({ top: 1000 });
+    expect(container.querySelector('[data-testid="chat-transcript"]')).not.toBeNull();
+    expect(scrollContainer.scrollTo).not.toHaveBeenCalled();
   });
 
   it('renders user image attachment metadata', async () => {
-    const scrollContainer = document.createElement('div');
-    setScrollGeometry(scrollContainer, { clientHeight: 400, scrollHeight: 800, scrollTop: 400 });
-    scrollContainer.scrollTo = vi.fn();
-
     await act(async () => {
       root.render(
         React.createElement(ChatTranscriptPanel, {
@@ -171,6 +206,11 @@ describe('chat transcript panel', () => {
             }
           ],
           liveSignal: 'run_1|0|0',
+          threadId: 'thread-test',
+          prependRevision: 0,
+          hasMoreBefore: false,
+          loadingOlder: false,
+          loadOlder: async () => {},
           scrollContainerRef: { current: scrollContainer }
         })
       );
@@ -190,6 +230,7 @@ function createMessages(): ChatTranscriptMessage[] {
 function createMessage(key: string, content: string): ChatTranscriptMessage {
   return {
     key,
+    source: 'persisted',
     role: 'assistant',
     content,
     attachments: [],
@@ -215,4 +256,14 @@ async function flushAnimationFrame(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function waitForText(element: HTMLElement, text: string): Promise<void> {
+  const startedAt = Date.now();
+  while (!element.textContent?.includes(text)) {
+    if (Date.now() - startedAt > 2000) {
+      throw new Error(`Timed out waiting for text: ${text}`);
+    }
+    await flushAnimationFrame();
+  }
 }

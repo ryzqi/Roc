@@ -267,7 +267,9 @@ describe('TaskRepository', () => {
       'background_task_not_found'
     );
     expect(() => repository.listScheduledRuns({ taskId: task.id })).toThrow('background_task_not_found');
-    expect(() => repository.listThreadMessages(task.threadId)).toThrow(expect.objectContaining({ code: 'task_thread_not_found' }));
+    expect(() =>
+      repository.listThreadMessages({ threadId: task.threadId, limit: 100, cursor: null })
+    ).toThrow(expect.objectContaining({ code: 'task_thread_not_found' }));
   });
 });
 

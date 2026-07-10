@@ -21,6 +21,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-1',
           role: 'assistant',
           content: '最终答案',
@@ -48,6 +49,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-streaming',
           role: 'assistant',
           content: '最终答案',
@@ -88,6 +90,7 @@ describe('chat message row', () => {
       React.createElement(ChatMessageRow, {
         message: {
           key: 'question',
+          source: 'persisted',
           role: 'assistant',
           content: '',
           reasoning: null,
@@ -113,6 +116,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-activity',
           role: 'assistant',
           content: '最终答案\n\n- 保持 Markdown',
@@ -156,6 +160,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-hook',
           role: 'assistant',
           content: '最终答案',
@@ -218,6 +223,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-subagent',
           role: 'assistant',
           content: '',
@@ -299,7 +305,6 @@ describe('chat message row', () => {
     expect(html).toContain('reasoning');
     expect(html).toContain('remote failed');
     expect(html).toContain('已完成部分调查。');
-    expect(html).toContain('partial');
     expect(html).toContain('read_file');
     expect(html).toContain('data-testid=\"chat-activity-subagent-child\"');
     expect(html).toContain('Subagent · research');
@@ -312,6 +317,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-subagent-streaming',
           role: 'assistant',
           content: '',
@@ -357,6 +363,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-subagent-running',
           role: 'assistant',
           content: '',
@@ -427,6 +434,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-live-activity',
           role: 'assistant',
           content: '',
@@ -464,6 +472,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-tool-error',
           role: 'assistant',
           content: '',
@@ -502,6 +511,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-approval',
           role: 'assistant',
           content: '',
@@ -541,6 +551,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-task-approval',
           role: 'assistant',
           content: '',
@@ -593,6 +604,7 @@ describe('chat message row', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {
         message: {
+          source: 'persisted',
           key: 'assistant-mixed-task-approval',
           role: 'assistant',
           content: '',

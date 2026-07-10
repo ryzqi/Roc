@@ -14,6 +14,11 @@ import { AppSettingsLayer } from './AppSettingsLayer';
 import { AppSidebar } from './AppSidebar';
 import { AppWorkspaceShell } from './AppWorkspaceShell';
 import {
+  completeTaskRunEvent,
+  shouldApplyTaskRunEvent,
+  syncKnownTaskRunIds
+} from './task-run-event-filter';
+import {
   loadTaskSurfaceData,
   loadWorkspaceData
 } from './data-loading';
@@ -73,6 +78,7 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     scrollTop: 0
   });
   const [taskLiveRunState, setTaskLiveRunState] = useState<ChatRunState>(() => createEmptyChatRunState());
+  const taskRunIdsRef = useRef(new Set<string>());
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [pendingWorkflowHint, setPendingWorkflowHint] = useState<ChatStartRunRequest['workflowHint']>(null);
   const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
@@ -142,11 +148,23 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [refreshTaskState]);
 
   useEffect(() => {
+    if (state === null) {
+      return;
+    }
+    syncKnownTaskRunIds({
+      target: taskRunIdsRef.current,
+      snapshot: state.taskSnapshot,
+      taskDetail: state.taskDetail
+    });
+  }, [state]);
+
+  useEffect(() => {
     return client.api.chat.onRunEvent((event) => {
-      if (event.type === 'run_started' && event.mode !== 'task') {
+      if (!shouldApplyTaskRunEvent(taskRunIdsRef.current, event)) {
         return;
       }
       setTaskLiveRunState((current) => applyChatRunEvent(current, event));
+      completeTaskRunEvent(taskRunIdsRef.current, event);
       if (
         event.type === 'run_completed' ||
         event.type === 'run_failed' ||

@@ -48,6 +48,9 @@ export type PerformanceSample = {
   heapUsedMb: number;
   heapTotalMb: number;
   memoryBudgetMb: number;
+  totalPrivateBytesMb: number | null;
+  totalWorkingSetMb: number;
+  memoryMeasurement: 'complete' | 'private_bytes_unavailable';
   exceedsBudget: boolean;
   timing: PerformanceSnapshot;
   ipc: PerformanceIpcSummary;

@@ -81,6 +81,8 @@ export function createDiagnosticsPerformanceAdapter(
       }
 
       const memoryUsage = process.memoryUsage();
+      const electron = readElectronMetrics(runtimeMetricsProvider);
+      const aggregate = aggregateProcessMemory(electron, request.memoryBudgetMb);
       const sample: PerformanceSample = {
         id: `perf_${randomUUID()}`,
         sampledAt: new Date().toISOString(),
@@ -90,10 +92,10 @@ export function createDiagnosticsPerformanceAdapter(
         heapUsedMb: bytesToMb(memoryUsage.heapUsed),
         heapTotalMb: bytesToMb(memoryUsage.heapTotal),
         memoryBudgetMb: request.memoryBudgetMb,
-        exceedsBudget: bytesToMb(memoryUsage.rss) > request.memoryBudgetMb,
+        ...aggregate,
         timing: performanceObserver.getSnapshot(),
         ipc: performanceObserver.getIpcSummary(5),
-        electron: readElectronMetrics(runtimeMetricsProvider)
+        electron
       };
 
       options.db
@@ -142,6 +144,7 @@ export function createDiagnosticsPerformanceAdapter(
         return null;
       }
 
+      const electron = readElectronMetrics(runtimeMetricsProvider);
       return {
         id: row.id,
         sampledAt: row.sampled_at,
@@ -151,10 +154,10 @@ export function createDiagnosticsPerformanceAdapter(
         heapUsedMb: row.heap_used_mb,
         heapTotalMb: row.heap_total_mb,
         memoryBudgetMb: row.memory_budget_mb,
-        exceedsBudget: row.exceeds_budget === 1,
+        ...aggregateProcessMemory(electron, row.memory_budget_mb),
         timing: performanceObserver.getSnapshot(),
         ipc: performanceObserver.getIpcSummary(5),
-        electron: readElectronMetrics(runtimeMetricsProvider)
+        electron
       };
     },
     getMetricsSnapshot(filter = {}) {
@@ -191,6 +194,37 @@ function toPerformanceProcessMetric(metric: RuntimeProcessMetric): PerformancePr
       privateBytesMb: metric.memory.privateBytesKb === undefined ? null : kbToMb(metric.memory.privateBytesKb),
       sharedBytesMb: metric.memory.sharedBytesKb === undefined ? null : kbToMb(metric.memory.sharedBytesKb)
     }
+  };
+}
+
+function aggregateProcessMemory(
+  electron: PerformanceElectronMetrics,
+  memoryBudgetMb: number
+): Pick<PerformanceSample, 'totalPrivateBytesMb' | 'totalWorkingSetMb' | 'memoryMeasurement' | 'exceedsBudget'> {
+  const totalWorkingSetMb = electron.processMetrics.reduce(
+    (total, metric) => total + metric.memory.workingSetSizeMb,
+    0
+  );
+  const privateValues = electron.processMetrics.map((metric) => metric.memory.privateBytesMb);
+  const memoryMeasurement = privateValues.some((value) => value === null)
+    ? 'private_bytes_unavailable'
+    : 'complete';
+  let totalPrivateBytesMb: number | null = null;
+  if (memoryMeasurement === 'complete') {
+    const completePrivateValues: number[] = [];
+    for (const value of privateValues) {
+      if (value === null) {
+        throw new Error('performance_private_bytes_contract_broken');
+      }
+      completePrivateValues.push(value);
+    }
+    totalPrivateBytesMb = completePrivateValues.reduce((total, value) => total + value, 0);
+  }
+  return {
+    totalPrivateBytesMb,
+    totalWorkingSetMb,
+    memoryMeasurement,
+    exceedsBudget: memoryMeasurement !== 'complete' || totalPrivateBytesMb === null || totalPrivateBytesMb > memoryBudgetMb
   };
 }
 

@@ -10,10 +10,6 @@ export const rendererChunkRules = [
   {
     chunk: 'renderer-diff',
     packages: ['react-diff-view']
-  },
-  {
-    chunk: 'renderer-markdown',
-    packages: ['react-markdown', 'rehype-highlight', 'remark-gfm', 'highlight.js']
   }
 ] as const;
 
@@ -75,6 +71,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
       outDir: 'dist/renderer',
+      manifest: true,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'index.html')

@@ -69,6 +69,7 @@ describe('target database schemas', () => {
     expect(tableNames()).not.toContain('task_threads');
     expect(tableNames()).not.toContain('task_runs');
     expect(tableNames()).not.toContain('task_events');
+    expect(indexNames('agent_events')).toContain('idx_agent_events_thread_sequence');
   });
 
   it('creates memory store and audit tables', () => {

@@ -6,7 +6,7 @@ import {
   readSchemaMetadata,
   type RocDatabaseMigration
 } from '../../../src/main/infrastructure/database-migrations';
-import { coreMigrations, taskMigrations } from '../../../src/main/infrastructure/database-schemas';
+import { agentMigrations, coreMigrations, taskMigrations } from '../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 
@@ -116,6 +116,25 @@ describe('database migrations', () => {
     ]);
     expect(readSchemaMetadata(db, 'core')).toMatchObject({
       dbName: 'core',
+      currentVersion: 2
+    });
+  });
+
+  it('applies agent migrations through version 2 without changing version 1', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+
+    expect(
+      db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'agent' ORDER BY version").all()
+    ).toEqual([
+      { version: 1, name: 'agent_canonical_runtime_tables' },
+      { version: 2, name: 'agent_event_sequence_cursor' }
+    ]);
+    expect(readSchemaMetadata(db, 'agent')).toMatchObject({
+      dbName: 'agent',
       currentVersion: 2
     });
   });

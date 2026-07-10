@@ -69,7 +69,7 @@ describe('ConfigStore', () => {
         .prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'")
         .pluck()
         .get()
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it('rejects invalid plugin ids instead of writing unscoped config', () => {

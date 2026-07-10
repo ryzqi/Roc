@@ -4,6 +4,7 @@ import type { ActiveTaskItem, BackgroundTask, ChatResumeDecision } from '../../.
 import type { ChatRunState } from '../../chat-run-state';
 import { appendLiveTranscriptMessages, buildPersistedTranscriptMessages } from '../../chat-transcript';
 import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
+import { usePersistedThreadHistory } from '../../chat/use-persisted-thread-history';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import type { TaskActions } from './use-task-actions';
@@ -26,6 +27,7 @@ export type TaskDetailInputRequest = {
 type LoadedTaskDetail = NonNullable<LoadedState['taskDetail']>;
 
 export function TaskDetailView({
+  client,
   liveTaskRun,
   onApprovalDecision,
   onBackToBoard,
@@ -48,11 +50,20 @@ export function TaskDetailView({
   const [inlineError, setInlineError] = useState<string | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const detail = state.taskDetail;
+  const latestPersistedThreadEventId =
+    detail === null
+      ? null
+      : state.taskSnapshot.recentEvents.find((event) => event.threadId === detail.threadId)?.id ?? null;
+  const history = usePersistedThreadHistory({
+    client,
+    threadId: detail === null ? null : detail.threadId,
+    latestPersistedThreadEventId
+  });
   const transcript = useMemo(() => {
     if (detail === null) {
       return [];
     }
-    const persistedMessages = buildPersistedTranscriptMessages(detail.recentEvents, detail.threadId);
+    const persistedMessages = buildPersistedTranscriptMessages(history.events, detail.threadId);
     if (liveTaskRun === null) {
       return persistedMessages;
     }
@@ -62,7 +73,7 @@ export function TaskDetailView({
       persistedMessages,
       selectedThreadId: detail.threadId
     });
-  }, [detail, liveTaskRun]);
+  }, [detail, history.events, liveTaskRun]);
 
   if (detail === null || detail.taskId !== taskId) {
     return (
@@ -132,8 +143,13 @@ export function TaskDetailView({
                 <span className="task-detail-count">{transcript.length} 条消息</span>
               </div>
               <ChatTranscriptPanel
+                threadId={loadedDetail.threadId}
                 messages={transcript}
                 liveSignal={liveSignal}
+                prependRevision={history.prependRevision}
+                hasMoreBefore={history.hasMoreBefore}
+                loadingOlder={history.loadingOlder}
+                loadOlder={history.loadOlder}
                 scrollContainerRef={transcriptScrollRef}
                 onApprovalDecision={(interruptId, decisions) => {
                   if (loadedDetail.lastRunId === null) {
@@ -155,6 +171,7 @@ export function TaskDetailView({
                   });
                 }}
               />
+              {history.error === null ? null : <span className="inline-warning">{history.error}</span>}
             </section>
             {waitingUser ? (
               <form

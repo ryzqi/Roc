@@ -41,7 +41,7 @@ describe('runDatabaseFastProbe', () => {
     expect(report.databases.every((item) => item.writeLockProbe === 'ok')).toBe(true);
     expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
       core: 2,
-      agent: 1,
+      agent: 2,
       memory: 1,
       task: 2,
       'plugin:@roc/plugin-workspace': 1,

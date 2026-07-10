@@ -5,9 +5,7 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
-import type {
-  TaskEvent
-} from '../../../../src/shared/types';
+import type { TaskMessageHistoryPage, TaskMessageHistoryRequest } from '../../../../src/shared/types';
 import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
 
 let db: Database.Database;
@@ -124,9 +122,11 @@ describe('task plugin', () => {
       }
     });
 
-    const messages = await capabilities.invoke<{ threadId: string }, TaskEvent[]>('task.thread.messages.list', {
-      threadId: 'thread_weather_1'
-    });
+    const page = await capabilities.invoke<TaskMessageHistoryRequest, TaskMessageHistoryPage>(
+      'task.thread.messages.list',
+      { threadId: 'thread_weather_1', limit: 200, cursor: null }
+    );
+    const messages = page.items;
     const historyMilestones = messages.flatMap((event) => {
       if (event.payload === null || typeof event.payload !== 'object') {
         return [];
@@ -219,7 +219,135 @@ describe('task plugin', () => {
     );
   });
 
+  it('returns bounded latest, before, and after pages in ascending sequence order', async () => {
+    const capabilities = new CapabilityRegistry();
+    const plugin = createTaskPlugin();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
+    seedHistoryEvents(250);
+
+    const latest = await capabilities.invoke<TaskMessageHistoryRequest, TaskMessageHistoryPage>(
+      'task.thread.messages.list',
+      { threadId: 'thread-page', limit: 100, cursor: null }
+    );
+    expect(latest.items.map((item) => item.sequence)).toEqual(
+      Array.from({ length: 100 }, (_value, index) => index + 151)
+    );
+    expect(latest).toMatchObject({
+      oldestSequence: 151,
+      newestSequence: 250,
+      hasMoreBefore: true,
+      hasMoreAfter: false
+    });
+
+    const before = await capabilities.invoke<TaskMessageHistoryRequest, TaskMessageHistoryPage>(
+      'task.thread.messages.list',
+      { threadId: 'thread-page', limit: 100, cursor: { direction: 'before', sequence: 151 } }
+    );
+    expect(before.items.map((item) => item.sequence)).toEqual(
+      Array.from({ length: 100 }, (_value, index) => index + 51)
+    );
+
+    const after = await capabilities.invoke<TaskMessageHistoryRequest, TaskMessageHistoryPage>(
+      'task.thread.messages.list',
+      { threadId: 'thread-page', limit: 100, cursor: { direction: 'after', sequence: 200 } }
+    );
+    expect(after.items.map((item) => item.sequence)).toEqual(
+      Array.from({ length: 50 }, (_value, index) => index + 201)
+    );
+  });
+
+  it.each([
+    { threadId: 'thread-page', limit: 0, cursor: null },
+    { threadId: 'thread-page', limit: 201, cursor: null },
+    { threadId: 'thread-page', limit: 100 },
+    { threadId: 'thread-page', limit: 100, cursor: { direction: 'before', sequence: 0 } },
+    { threadId: 'thread-page', limit: 100, cursor: null, extra: true }
+  ])('rejects an invalid history page request %#', async (request) => {
+    const capabilities = new CapabilityRegistry();
+    const plugin = createTaskPlugin();
+    for (const descriptor of plugin.manifest.capabilities) {
+      capabilities.declare(plugin.manifest.id, descriptor);
+    }
+    await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
+    seedHistoryEvents(1);
+
+    await expect(capabilities.invoke('task.thread.messages.list', request)).rejects.toThrow();
+  });
+
+  it('uses the thread sequence index without a temporary order-by sort', () => {
+    const plans = [
+      `EXPLAIN QUERY PLAN
+       SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+       FROM agent_events
+       WHERE thread_id = ?
+       ORDER BY sequence DESC
+       LIMIT ?`,
+      `EXPLAIN QUERY PLAN
+       SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+       FROM agent_events
+       WHERE thread_id = ? AND sequence < ?
+       ORDER BY sequence DESC
+       LIMIT ?`,
+      `EXPLAIN QUERY PLAN
+       SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+       FROM agent_events
+       WHERE thread_id = ? AND sequence > ?
+       ORDER BY sequence ASC
+       LIMIT ?`
+    ];
+
+    for (const [index, sql] of plans.entries()) {
+      const parameters = index === 0 ? ['thread-page', 100] : ['thread-page', 151, 100];
+      const detail = (agentDb.prepare(sql).all(...parameters) as Array<{ detail: string }>)
+        .map((row) => row.detail)
+        .join('\n');
+      expect(detail).toContain('idx_agent_events_thread_sequence');
+      expect(detail).not.toContain('USE TEMP B-TREE FOR ORDER BY');
+    }
+  });
+
 });
+
+function seedHistoryEvents(count: number): void {
+  agentDb
+    .prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES (?, 'background', ?, ?, 'running', ?, ?)`
+    )
+    .run('thread-page', 'Paged history', 'Paged history', '2026-07-10T00:00:00.000Z', '2026-07-10T00:00:00.000Z');
+  agentDb
+    .prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+       VALUES (?, ?, 1, ?, 'running', ?, NULL, NULL, NULL, ?, ?, 'workbench', 'background_task')`
+    )
+    .run(
+      'run-page',
+      'thread-page',
+      'Paged history',
+      '2026-07-10T00:00:00.000Z',
+      JSON.stringify({ mcpServers: [], skills: [] }),
+      'F:\\Code\\Roc'
+    );
+  const insert = agentDb.prepare(
+    `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+     VALUES (?, 'thread-page', 'run-page', ?, 'message', ?, ?)`
+  );
+  agentDb.transaction(() => {
+    for (let sequence = 1; sequence <= count; sequence += 1) {
+      insert.run(
+        `event-page-${sequence}`,
+        sequence,
+        JSON.stringify({ role: 'assistant', content: `message-${sequence}` }),
+        `2026-07-10T00:00:${String(sequence % 60).padStart(2, '0')}.000Z`
+      );
+    }
+  })();
+}
 
 function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocEventBus }): RocPluginContext {
   return {

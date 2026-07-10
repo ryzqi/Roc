@@ -43,7 +43,20 @@ describe('renderer bundle boundaries', () => {
     const viewContent = readFileSync('src/renderer/views/ViewContent.tsx', 'utf8');
 
     expect(viewContent).not.toContain("import { SkillsHostView } from './skills/SkillsHostView';");
-    expect(viewContent).toContain("import { SkillsFeature } from '../features/skills';");
+    expect(viewContent).toContain("lazy(() => import('../features/skills')");
+  });
+
+  it('keeps markdown, settings, and non-chat features out of the eager renderer graph', () => {
+    const mainSource = readFileSync('src/renderer/main.tsx', 'utf8');
+    const messageRowSource = readFileSync('src/renderer/chat/chat-message-row.tsx', 'utf8');
+    const settingsLayerSource = readFileSync('src/renderer/app/AppSettingsLayer.tsx', 'utf8');
+    const viewContentSource = readFileSync('src/renderer/views/ViewContent.tsx', 'utf8');
+
+    expect(mainSource).not.toContain("import 'highlight.js/styles/github.css'");
+    expect(messageRowSource).toContain("lazy(() => import('./streaming-markdown-view')");
+    expect(settingsLayerSource).toContain("lazy(() => import('../features/settings')");
+    expect(viewContentSource).not.toContain("import { DiagnosticsFeature } from '../features/diagnostics';");
+    expect(viewContentSource).toContain("lazy(() => import('../features/diagnostics')");
   });
 
   it('lazy-loads the workbench panel outside the chat first-screen bundle', () => {

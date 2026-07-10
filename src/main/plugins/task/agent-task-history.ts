@@ -2,7 +2,17 @@ import { randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
-import type { BackgroundTask, EnabledCapabilities, TaskEvent, TaskRun, TaskSnapshot, TaskThread } from '../../../shared/types';
+import type {
+  BackgroundTask,
+  EnabledCapabilities,
+  PersistedTaskEvent,
+  TaskEvent,
+  TaskMessageHistoryPage,
+  TaskMessageHistoryRequest,
+  TaskRun,
+  TaskSnapshot,
+  TaskThread
+} from '../../../shared/types';
 import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
 import {
@@ -171,6 +181,39 @@ export class AgentTaskHistoryReader {
     return rows.map(mapTaskEvent);
   }
 
+  listEventPage(request: TaskMessageHistoryRequest): TaskMessageHistoryPage {
+    const rows = request.cursor === null
+      ? (this.agentDb
+          .prepare(
+            `SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+             FROM agent_events
+             WHERE thread_id = ?
+             ORDER BY sequence DESC
+             LIMIT ?`
+          )
+          .all(request.threadId, request.limit) as PersistedTaskEventRow[]).reverse()
+      : request.cursor.direction === 'before'
+        ? (this.agentDb
+            .prepare(
+              `SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+               FROM agent_events
+               WHERE thread_id = ? AND sequence < ?
+               ORDER BY sequence DESC
+               LIMIT ?`
+            )
+            .all(request.threadId, request.cursor.sequence, request.limit) as PersistedTaskEventRow[]).reverse()
+        : (this.agentDb
+            .prepare(
+              `SELECT sequence, id, thread_id, run_id, type, payload_json, created_at
+               FROM agent_events
+               WHERE thread_id = ? AND sequence > ?
+               ORDER BY sequence ASC
+               LIMIT ?`
+            )
+            .all(request.threadId, request.cursor.sequence, request.limit) as PersistedTaskEventRow[]);
+    return buildTaskMessageHistoryPage(this.agentDb, request, rows.map(mapPersistedTaskEvent));
+  }
+
   listRecentEventsForThread(threadId: string, limit: number): TaskEvent[] {
     const rows = this.agentDb
       .prepare(
@@ -231,6 +274,64 @@ export class AgentTaskHistoryReader {
     }
     return row.max_sequence + 1;
   }
+}
+
+type PersistedTaskEventRow = TaskEventRow & { sequence: number };
+
+function mapPersistedTaskEvent(row: PersistedTaskEventRow): PersistedTaskEvent {
+  const event = mapTaskEvent({ ...row, rowid: row.sequence });
+  if (event.sequence === undefined) {
+    throw new Error('task_history_sequence_missing');
+  }
+  return { ...event, sequence: event.sequence };
+}
+
+function buildTaskMessageHistoryPage(
+  db: DatabaseConnection,
+  request: TaskMessageHistoryRequest,
+  items: PersistedTaskEvent[]
+): TaskMessageHistoryPage {
+  const oldestSequence = items[0] === undefined ? null : items[0].sequence;
+  const newestItem = items.at(-1);
+  const newestSequence = newestItem === undefined ? null : newestItem.sequence;
+  if (oldestSequence !== null && newestSequence !== null) {
+    return {
+      items,
+      oldestSequence,
+      newestSequence,
+      hasMoreBefore: eventExists(db, request.threadId, '<', oldestSequence),
+      hasMoreAfter: eventExists(db, request.threadId, '>', newestSequence)
+    };
+  }
+  if (request.cursor === null) {
+    return { items: [], oldestSequence: null, newestSequence: null, hasMoreBefore: false, hasMoreAfter: false };
+  }
+  return {
+    items: [],
+    oldestSequence: null,
+    newestSequence: null,
+    hasMoreBefore:
+      request.cursor.direction === 'after'
+        ? eventExists(db, request.threadId, '<', request.cursor.sequence)
+        : false,
+    hasMoreAfter:
+      request.cursor.direction === 'before'
+        ? eventExists(db, request.threadId, '>', request.cursor.sequence)
+        : false
+  };
+}
+
+function eventExists(
+  db: DatabaseConnection,
+  threadId: string,
+  operator: '<' | '>',
+  sequence: number
+): boolean {
+  const value = db
+    .prepare(`SELECT EXISTS(SELECT 1 FROM agent_events WHERE thread_id = ? AND sequence ${operator} ?)`)
+    .pluck()
+    .get(threadId, sequence);
+  return value === 1;
 }
 
 function emptyCapabilities(): EnabledCapabilities {

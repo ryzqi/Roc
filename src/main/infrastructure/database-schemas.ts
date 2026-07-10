@@ -272,6 +272,14 @@ export const agentMigrations: RocDatabaseMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_context_artifacts_thread_created
         ON context_artifacts(thread_id, created_at);
     `
+  },
+  {
+    version: 2,
+    name: 'agent_event_sequence_cursor',
+    sql: `
+      CREATE INDEX idx_agent_events_thread_sequence
+        ON agent_events(thread_id, sequence);
+    `
   }
 ];
 

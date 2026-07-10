@@ -253,6 +253,9 @@ describe('workspace and diagnostics surfaces', () => {
         heapUsedMb: 48,
         heapTotalMb: 96,
         memoryBudgetMb: 256,
+        totalPrivateBytesMb: 0,
+        totalWorkingSetMb: 0,
+        memoryMeasurement: 'complete',
         exceedsBudget: false,
         timing: {
           generatedAt: '2026-05-16T08:00:00.000Z',
@@ -351,6 +354,9 @@ describe('workspace and diagnostics surfaces', () => {
         heapUsedMb: 48,
         heapTotalMb: 96,
         memoryBudgetMb: 256,
+        totalPrivateBytesMb: 0,
+        totalWorkingSetMb: 0,
+        memoryMeasurement: 'complete',
         exceedsBudget: false,
         timing: {
           generatedAt: '2026-05-16T08:00:00.000Z',
@@ -394,7 +400,8 @@ describe('workspace and diagnostics surfaces', () => {
     expect(performanceHtml).toContain('metric-value');
     expect(performanceHtml).toContain('metric-label');
     expect(performanceHtml).toContain('metric-note');
-    expect(performanceHtml).toContain('Electron/Chromium/Node 基线内');
+    expect(performanceHtml).toContain('全部 Roc 进程');
+    expect(performanceHtml).toContain('Private');
     expect(performanceHtml).toContain('Provider 首 token');
     expect(performanceHtml).toContain('42');
     expect(performanceHtml).not.toContain('正常');

@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
+
+import type { ChatResumeDecision } from '../../shared/types';
+import { resolveMotionTransition, scrollBottomFade, scrollBottomTransition } from '../animations';
 import type { ChatTranscriptMessage } from '../chat-transcript';
 import { ChatMessageRow } from './chat-message-row';
-import { resolveMotionTransition, scrollBottomFade, scrollBottomTransition } from '../animations';
-import type { ChatResumeDecision } from '../../shared/types';
 
 type ChatTranscriptPanelProps = {
+  threadId: string | null;
   messages: ChatTranscriptMessage[];
   liveSignal: string;
+  prependRevision: number;
+  hasMoreBefore: boolean;
+  loadingOlder: boolean;
+  loadOlder(): Promise<void>;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
-
-const BOTTOM_THRESHOLD_PX = 96;
 
 export function buildStreamingAutoFollowScrollOptions(scrollHeight: number): ScrollToOptions {
   return { top: scrollHeight };
@@ -33,120 +38,70 @@ function prefersReducedMotion(): boolean {
 }
 
 export function ChatTranscriptPanel({
+  threadId,
   messages,
   liveSignal,
+  prependRevision,
+  hasMoreBefore,
+  loadingOlder,
+  loadOlder,
   scrollContainerRef,
   onApprovalDecision
 }: ChatTranscriptPanelProps): React.JSX.Element {
-  const rafHandleRef = useRef<number | null>(null);
-  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
+  const virtualIndex = useTranscriptFirstItemIndex({
+    threadId,
+    messageCount: messages.length,
+    prependRevision
+  });
 
-  const measureAtBottom = useCallback((): boolean => {
-    const container = scrollContainerRef.current;
-    if (container === null) {
-      return true;
-    }
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    return distanceFromBottom <= BOTTOM_THRESHOLD_PX;
-  }, [scrollContainerRef]);
-
-  const scheduleAutoFollowScroll = useCallback((): void => {
-    const container = scrollContainerRef.current;
-    if (container === null) {
-      return;
-    }
-    if (rafHandleRef.current !== null) {
-      return;
-    }
-    rafHandleRef.current = requestAnimationFrame(() => {
-      rafHandleRef.current = null;
-      const node = scrollContainerRef.current;
-      if (node !== null) {
-        node.scrollTo(buildStreamingAutoFollowScrollOptions(node.scrollHeight));
-      }
-    });
+  useEffect(() => {
+    setScrollParent(scrollContainerRef.current);
   }, [scrollContainerRef]);
 
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (container === null) {
+    if (!isAtBottom || messages.length === 0) {
       return;
     }
-    let frameHandle: number | null = null;
-    function onScroll(): void {
-      if (frameHandle !== null) {
-        return;
-      }
-      frameHandle = requestAnimationFrame(() => {
-        frameHandle = null;
-        setIsAtBottom(measureAtBottom());
-      });
-    }
-    container.addEventListener('scroll', onScroll, { passive: true });
-    setIsAtBottom(measureAtBottom());
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      if (frameHandle !== null) {
-        cancelAnimationFrame(frameHandle);
-      }
-    };
-  }, [measureAtBottom, scrollContainerRef]);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (container === null) {
-      return;
-    }
-    if (!isAtBottom) {
-      return;
-    }
-    scheduleAutoFollowScroll();
-  }, [isAtBottom, liveSignal, messages, scheduleAutoFollowScroll]);
-
-  useEffect(() => {
-    const transcript = transcriptRef.current;
-    if (transcript === null) {
-      return;
-    }
-    if (typeof ResizeObserver !== 'function') {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      if (isAtBottom) {
-        scheduleAutoFollowScroll();
-      }
-    });
-    observer.observe(transcript);
-    return () => {
-      observer.disconnect();
-    };
-  }, [isAtBottom, scheduleAutoFollowScroll]);
-
-  useEffect(() => {
-    return () => {
-      if (rafHandleRef.current !== null) {
-        cancelAnimationFrame(rafHandleRef.current);
-        rafHandleRef.current = null;
-      }
-    };
-  }, []);
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'auto' });
+  }, [isAtBottom, liveSignal, messages.length]);
 
   function handleScrollBottomClick(): void {
-    const node = scrollContainerRef.current;
-    if (node === null) {
-      return;
-    }
-    node.scrollTo(buildManualScrollBottomOptions(node.scrollHeight, prefersReducedMotion()));
+    virtuosoRef.current?.scrollToIndex({
+      index: 'LAST',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth'
+    });
   }
 
   return (
     <>
-      <div className="chat-transcript" data-testid="chat-transcript" ref={transcriptRef}>
-        {messages.map((message) => (
-          <ChatMessageRow key={message.key} message={message} onApprovalDecision={onApprovalDecision} />
-        ))}
-      </div>
+      <Virtuoso
+        key={`${threadId === null ? 'none' : threadId}:${messages.length === 0 ? 'empty' : 'loaded'}`}
+        ref={virtuosoRef}
+        className="chat-transcript"
+        data-testid="chat-transcript"
+        data-message-count={messages.length}
+        style={{ height: '100%' }}
+        customScrollParent={scrollParent === null ? undefined : scrollParent}
+        data={messages}
+        {...(messages.length > 20
+          ? { initialTopMostItemIndex: virtualIndex + messages.length - 1 }
+          : { initialItemCount: messages.length })}
+        firstItemIndex={virtualIndex}
+        computeItemKey={(_index, message) => message.key}
+        followOutput={isAtBottom ? 'auto' : false}
+        atBottomStateChange={setIsAtBottom}
+        itemContent={(_index, message) => (
+          <ChatMessageRow message={message} onApprovalDecision={onApprovalDecision} />
+        )}
+        startReached={() => {
+          if (hasMoreBefore && !loadingOlder) {
+            void loadOlder();
+          }
+        }}
+      />
       <AnimatePresence>
         {isAtBottom ? null : (
           <motion.button
@@ -170,4 +125,33 @@ export function ChatTranscriptPanel({
       </AnimatePresence>
     </>
   );
+}
+
+export function useTranscriptFirstItemIndex(input: {
+  threadId: string | null;
+  messageCount: number;
+  prependRevision: number;
+}): number {
+  const state = useRef({
+    threadId: input.threadId,
+    index: 1_000_000,
+    messageCount: input.messageCount,
+    prependRevision: input.prependRevision
+  });
+  if (state.current.threadId !== input.threadId) {
+    state.current = {
+      threadId: input.threadId,
+      index: 1_000_000,
+      messageCount: input.messageCount,
+      prependRevision: input.prependRevision
+    };
+  } else {
+    if (state.current.prependRevision !== input.prependRevision) {
+      const prependedRows = Math.max(0, input.messageCount - state.current.messageCount);
+      state.current.index -= prependedRows;
+      state.current.prependRevision = input.prependRevision;
+    }
+    state.current.messageCount = input.messageCount;
+  }
+  return state.current.index;
 }

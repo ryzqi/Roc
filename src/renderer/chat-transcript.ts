@@ -84,6 +84,7 @@ export type ChatTranscriptActivityBlock =
 
 export type ChatTranscriptMessage = {
   key: string;
+  source: 'persisted' | 'live';
   role: 'user' | 'assistant';
   content: string;
   attachments?: ChatPersistedAttachment[];
@@ -379,6 +380,7 @@ function compareTaskEventsAscending(left: TaskEvent, right: TaskEvent): number {
 function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
   return {
     key: event.id,
+    source: 'persisted',
     role: 'user',
     content: event.payload.content,
     attachments: event.payload.attachments === undefined ? [] : event.payload.attachments,
@@ -393,6 +395,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
   return {
     message: {
       key: `assistant-${runId}`,
+      source: 'persisted',
       role: 'assistant',
       content: '',
       attachments: [],
@@ -926,6 +929,7 @@ function readReasoningFromBlocks(blocks: readonly ChatTranscriptActivityBlock[])
 function createPendingUserMessage(content: string): ChatTranscriptMessage {
   return {
     key: 'pending-user-message',
+    source: 'live',
     role: 'user',
     content,
     attachments: [],
@@ -947,6 +951,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
 
   return {
     key: `live-${chatRunState.runId ?? 'assistant'}`,
+    source: 'live',
     role: 'assistant',
     content: liveContent,
     attachments: [],

@@ -1,12 +1,28 @@
 import { spawnSync } from 'node:child_process';
-import { prepareAndVerifyWorkspaceBetterSqlite3, restoreBetterSqlite3ForNode } from './lib/native-packaging.mjs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  buildWindowsShellCommand,
+  prepareAndVerifyWorkspaceBetterSqlite3,
+  restoreBetterSqlite3ForNode
+} from './lib/native-packaging.mjs';
 
 let exitCode = 0;
+const profileRoot = mkdtempSync(join(tmpdir(), 'roc-performance-profiles-'));
+const profileRoots = {
+  empty: join(profileRoot, 'empty'),
+  profile1000: join(profileRoot, 'profile-1000'),
+  profile10000: join(profileRoot, 'profile-10000')
+};
+const profileRootsJson = JSON.stringify(profileRoots);
 
 function run(command, args, options = { exitOnFailure: true }) {
-  const result = spawnSync(command, args, {
+  const useWindowsShell = process.platform === 'win32';
+  const result = spawnSync(useWindowsShell ? buildWindowsShellCommand(command, args) : command, useWindowsShell ? [] : args, {
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: useWindowsShell,
+    env: options.env === undefined ? process.env : options.env
   });
 
   if (result.status !== 0) {
@@ -21,10 +37,26 @@ function run(command, args, options = { exitOnFailure: true }) {
 }
 
 try {
-  prepareAndVerifyWorkspaceBetterSqlite3({
-    run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
-  });
-  exitCode = run('node', ['tests/smoke/performance-smoke.mjs'], { exitOnFailure: false });
+  exitCode = run(
+    'pnpm',
+    ['test', 'tests/smoke/performance-profile-seed.test.ts'],
+    {
+      exitOnFailure: false,
+      env: { ...process.env, ROC_PERFORMANCE_PROFILE_ROOTS: profileRootsJson }
+    }
+  );
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
+  } else {
+    process.env.ROC_PERFORMANCE_PROFILE_ROOTS = profileRootsJson;
+    if (process.env.ROC_SMOKE_TARGET === undefined) {
+      process.env.ROC_SMOKE_TARGET = 'dist';
+    }
+    prepareAndVerifyWorkspaceBetterSqlite3({
+      run: (command, args, options) => run(command, args, { ...options, exitOnFailure: false })
+    });
+    exitCode = run('node', ['tests/smoke/performance-smoke.mjs'], { exitOnFailure: false });
+  }
 } finally {
   let restoreExitCode = 0;
   try {
@@ -38,6 +70,7 @@ try {
   if (exitCode === 0 && restoreExitCode !== 0) {
     exitCode = restoreExitCode;
   }
+  rmSync(profileRoot, { recursive: true, force: true });
 }
 
 process.exit(exitCode);

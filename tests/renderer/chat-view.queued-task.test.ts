@@ -180,7 +180,13 @@ describe('ChatView task boundary', () => {
     ];
     const getThreadMessages = vi.fn().mockResolvedValue({
       ok: true as const,
-      data: persistedMessages
+      data: {
+        items: persistedMessages.map((event, index) => ({ ...event, sequence: index + 1 })),
+        oldestSequence: 1,
+        newestSequence: persistedMessages.length,
+        hasMoreBefore: false,
+        hasMoreAfter: false
+      }
     });
 
     window.roc = createMockPreloadApi(
@@ -233,10 +239,15 @@ describe('ChatView task boundary', () => {
     });
     await flushPromises();
 
-    expect(getThreadMessages).toHaveBeenCalledWith({ threadId: 'thread-historical-nvidia' });
+    expect(getThreadMessages).toHaveBeenCalledWith({
+      threadId: 'thread-historical-nvidia',
+      limit: 100,
+      cursor: null
+    });
     expect(container.querySelector('[data-testid="chat-activity-reasoning"]')?.textContent).toContain(
       '先检查 NVIDIA thinking 输出。'
     );
+    await waitForText(container, '最终答案');
     expect(container.textContent).toContain('最终答案');
   });
 
@@ -262,7 +273,16 @@ function createMockPreloadApi(
       cancelRun: vi.fn()
     },
     tasks: {
-      getThreadMessages: overrides.getThreadMessages ?? vi.fn().mockResolvedValue({ ok: true as const, data: [] })
+      getThreadMessages: overrides.getThreadMessages ?? vi.fn().mockResolvedValue({
+        ok: true as const,
+        data: {
+          items: [],
+          oldestSequence: null,
+          newestSequence: null,
+          hasMoreBefore: false,
+          hasMoreAfter: false
+        }
+      })
     },
     files: {
       selectFromDialog: vi.fn()
@@ -274,6 +294,16 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function waitForText(element: HTMLElement, text: string): Promise<void> {
+  const startedAt = Date.now();
+  while (!element.textContent?.includes(text)) {
+    if (Date.now() - startedAt > 2000) {
+      throw new Error(`Timed out waiting for text: ${text}`);
+    }
+    await flushPromises();
+  }
 }
 
 function createChatClient(): RocClient {

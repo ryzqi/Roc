@@ -6,8 +6,85 @@ import type {
   BackgroundTaskPreviewRequest,
   BackgroundTaskTrigger,
   EnabledCapabilities,
+  PersistedTaskEvent,
+  TaskEvent,
+  TaskMessageHistoryPage,
+  TaskMessageHistoryRequest,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
+
+const taskEventTypeSchema = z.enum([
+  'message',
+  'assistant_block',
+  'agent_update',
+  'plan',
+  'tool_call',
+  'mcp_call',
+  'skill_loaded',
+  'subagent_event',
+  'hook_started',
+  'hook_completed',
+  'agent_execute',
+  'file_change',
+  'git_operation',
+  'memory_operation',
+  'approval_requested',
+  'approval_decision',
+  'human_question_requested',
+  'human_question_answered',
+  'recovery_point',
+  'context_manifest',
+  'background_task_created',
+  'background_task_paused',
+  'background_task_resumed',
+  'background_task_cancelled',
+  'long_running_promoted',
+  'guardrail_nudge',
+  'diagnostic',
+  'verification',
+  'error',
+  'summary'
+]);
+
+export const taskEventSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    threadId: z.string().trim().min(1),
+    runId: z.string().trim().min(1),
+    type: taskEventTypeSchema,
+    payload: z.unknown(),
+    createdAt: z.string().datetime({ offset: true }),
+    sequence: z.number().int().positive().optional()
+  })
+  .strict() satisfies z.ZodType<TaskEvent>;
+
+export const persistedTaskEventSchema = taskEventSchema
+  .omit({ sequence: true })
+  .extend({ sequence: z.number().int().positive() })
+  .strict() satisfies z.ZodType<PersistedTaskEvent>;
+
+const taskMessageCursorSchema = z.discriminatedUnion('direction', [
+  z.object({ direction: z.literal('before'), sequence: z.number().int().positive() }).strict(),
+  z.object({ direction: z.literal('after'), sequence: z.number().int().positive() }).strict()
+]);
+
+export const taskMessageHistoryRequestSchema = z
+  .object({
+    threadId: z.string().trim().min(1),
+    limit: z.number().int().min(1).max(200),
+    cursor: taskMessageCursorSchema.nullable()
+  })
+  .strict() satisfies z.ZodType<TaskMessageHistoryRequest>;
+
+export const taskMessageHistoryPageSchema = z
+  .object({
+    items: z.array(persistedTaskEventSchema),
+    oldestSequence: z.number().int().positive().nullable(),
+    newestSequence: z.number().int().positive().nullable(),
+    hasMoreBefore: z.boolean(),
+    hasMoreAfter: z.boolean()
+  })
+  .strict() satisfies z.ZodType<TaskMessageHistoryPage>;
 
 export const enabledCapabilitiesSchema = z
   .object({

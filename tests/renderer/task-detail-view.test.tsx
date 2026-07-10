@@ -26,6 +26,39 @@ describe('TaskDetailView', () => {
       dispatchEvent: vi.fn()
     });
     Element.prototype.scrollTo = vi.fn();
+    window.roc = {
+      tasks: {
+        getThreadMessages: vi.fn().mockResolvedValue({
+          ok: true,
+          data: {
+            items: [
+              {
+                id: 'message-user',
+                threadId: 'thread-1',
+                runId: 'run-1',
+                type: 'message',
+                payload: { role: 'user', content: '请整理工作区变更' },
+                createdAt: '2026-05-16T07:00:00.000Z',
+                sequence: 1
+              },
+              {
+                id: 'message-assistant',
+                threadId: 'thread-1',
+                runId: 'run-1',
+                type: 'message',
+                payload: { role: 'assistant', content: '已经整理完成' },
+                createdAt: '2026-05-16T07:05:00.000Z',
+                sequence: 2
+              }
+            ],
+            oldestSequence: 1,
+            newestSequence: 2,
+            hasMoreBefore: false,
+            hasMoreAfter: false
+          }
+        })
+      }
+    } as never;
   });
 
   afterEach(async () => {
@@ -76,6 +109,7 @@ describe('TaskDetailView', () => {
 
     expect(container.querySelector('[data-testid="task-detail-view"]')).not.toBeNull();
     expect(container.textContent).toContain('返回任务工作台');
+    await waitForText(container, '已经整理完成');
     expect(container.textContent).toContain('已经整理完成');
     expect(container.querySelector('.task-detail-page-head')).not.toBeNull();
     expect(container.querySelector('.task-detail-content-shell')).not.toBeNull();
@@ -83,6 +117,16 @@ describe('TaskDetailView', () => {
   });
 
   it('merges the current task live subagent run into the detail transcript', async () => {
+    vi.mocked(window.roc.tasks.getThreadMessages).mockResolvedValue({
+      ok: true,
+      data: {
+        items: [],
+        oldestSequence: null,
+        newestSequence: null,
+        hasMoreBefore: false,
+        hasMoreAfter: false
+      }
+    });
     await act(async () => {
       root.render(
         <TaskDetailView
@@ -116,6 +160,7 @@ describe('TaskDetailView', () => {
     expect(subagent).not.toBeNull();
     expect(subagent?.open).toBe(true);
     expect(container.textContent).toContain('Subagent · general-purpose');
+    await waitForText(container, '正在调查仓库状态');
     expect(container.textContent).toContain('正在调查仓库状态');
     expect(container.textContent).toContain('读取关键文件');
     expect(container.textContent).toContain('read_file');
@@ -542,4 +587,14 @@ async function flushPromises(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+async function waitForText(element: HTMLElement, text: string): Promise<void> {
+  const startedAt = Date.now();
+  while (!element.textContent?.includes(text)) {
+    if (Date.now() - startedAt > 2000) {
+      throw new Error(`Timed out waiting for text: ${text}`);
+    }
+    await flushPromises();
+  }
 }

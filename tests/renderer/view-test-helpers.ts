@@ -163,6 +163,9 @@ export function createLoadedState(partial: Partial<LoadedState>): LoadedState {
       heapUsedMb: 0,
       heapTotalMb: 0,
       memoryBudgetMb: 0,
+      totalPrivateBytesMb: 0,
+      totalWorkingSetMb: 0,
+      memoryMeasurement: 'complete',
       exceedsBudget: false,
       timing: {
         generatedAt: '2026-05-13T00:00:00.000Z',

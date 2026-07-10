@@ -8,8 +8,7 @@ import type {
   ChatPendingInterrupt,
   ChatPendingQuestion,
   ChatResumeDecision,
-  ChatResumeRunRequest,
-  TaskEvent
+  ChatResumeRunRequest
 } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
 import type { ChatTaskSubmitPayload } from './task-run-payload';
@@ -17,6 +16,7 @@ import type { RendererImageAttachment } from './image-attachments';
 import { isImageInputSupported, toChatImageAttachments } from './image-attachments';
 import { parseSlashSkillCommand } from './slash-skill-command';
 import { extractLastProposedPlan } from './proposed-plan';
+import { usePersistedThreadHistory } from './use-persisted-thread-history';
 
 type ComposerPopover = 'tools' | 'skills' | 'models' | null;
 type ComposerMode = 'chat' | 'plan';
@@ -92,7 +92,6 @@ export function ChatView({
   const [submitting, setSubmitting] = useState(false);
   const [activeComposerPopover, setActiveComposerPopover] = useState<ComposerPopover>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode>('chat');
-  const [persistedMessages, setPersistedMessages] = useState<TaskEvent[]>([]);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const selectedAttachmentsRef = useRef<RendererImageAttachment[]>([]);
 
@@ -103,15 +102,20 @@ export function ChatView({
     activeThreadId === null
       ? null
       : state.taskSnapshot.recentEvents.find((event) => event.threadId === activeThreadId)?.id ?? null;
+  const history = usePersistedThreadHistory({
+    client,
+    threadId: activeThreadId,
+    latestPersistedThreadEventId
+  });
 
   const persistedTranscript = useMemo(
     () =>
       activeThreadId === null
         ? []
-        : buildPersistedTranscriptMessages(persistedMessages, activeThreadId),
+        : buildPersistedTranscriptMessages(history.events, activeThreadId),
     [
       activeThreadId,
-      persistedMessages,
+      history.events,
     ]
   );
 
@@ -177,43 +181,12 @@ export function ChatView({
   }, [pendingUserInput, selectedThreadId, state.taskSnapshot.recentEvents]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadPersistedMessages(threadId: string): Promise<void> {
-      const result = await client.api.tasks.getThreadMessages({ threadId });
-      if (!result.ok) {
-        throw new Error(result.error.message);
-      }
-      if (cancelled) {
-        return;
-      }
-      setPersistedMessages(result.data);
-    }
-
-    if (activeThreadId === null) {
-      setPersistedMessages([]);
-      return;
-    }
-
-    void loadPersistedMessages(activeThreadId).catch(() => {
-      if (!cancelled) {
-        setPersistedMessages([]);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeThreadId, latestPersistedThreadEventId]);
-
-  useEffect(() => {
     selectedAttachmentsRef.current = selectedAttachments;
   }, [selectedAttachments]);
 
   useEffect(() => {
     setChatInput('');
     setPendingUserInput(null);
-    setPersistedMessages([]);
     revokeAttachmentPreviewUrls(selectedAttachmentsRef.current);
     setSelectedAttachments([]);
     setSubmitting(false);
@@ -355,9 +328,15 @@ export function ChatView({
               ) : null}
               {state.agent.execution !== 'ready' ? <span className="inline-warning" data-testid="chat-blocked">需要先配置默认模型</span> : null}
               {chatRun.errorMessage === null ? null : <span className="inline-warning" data-testid="chat-error">{chatRun.errorMessage}</span>}
+              {history.error === null ? null : <span className="inline-warning" data-testid="chat-history-error">{history.error}</span>}
               <ChatTranscriptPanel
+                threadId={activeThreadId}
                 messages={chatTranscript}
                 liveSignal={liveSignal}
+                prependRevision={history.prependRevision}
+                hasMoreBefore={history.hasMoreBefore}
+                loadingOlder={history.loadingOlder}
+                loadOlder={history.loadOlder}
                 scrollContainerRef={transcriptScrollRef}
                 onApprovalDecision={(approvalId, decisions) => {
                   void handleApprovalDecision(approvalId, decisions);

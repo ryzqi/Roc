@@ -1,4 +1,6 @@
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+
+import { highlightCode } from './syntax-highlight';
 
 type CodeBlockProps = {
   children?: ReactNode;
@@ -54,6 +56,20 @@ export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.El
   const codeClassName = codeChild?.props.className;
   const language = extractLanguage(codeClassName);
   const codeText = extractText(codeChild?.props.children ?? children);
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHighlightedHtml(null);
+    void highlightCode(language, codeText).then((html) => {
+      if (!cancelled) {
+        setHighlightedHtml(html);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [codeText, language]);
 
   async function handleCopy(): Promise<void> {
     if (codeText.length === 0) {
@@ -81,7 +97,9 @@ export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.El
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className={className}>{children}</pre>
+      <pre className={className}>
+        {highlightedHtml === null ? <code>{codeText}</code> : <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />}
+      </pre>
     </div>
   );
 }

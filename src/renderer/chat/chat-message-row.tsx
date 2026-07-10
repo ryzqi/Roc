@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import { motion } from 'motion/react';
 import {
   approvalCardEnter,
@@ -16,8 +16,9 @@ import { HookCallBlock } from './hook-call/HookCallBlock';
 import { QuestionInterruptCard } from './QuestionInterruptCard';
 import { ReasoningBlock } from './reasoning/ReasoningBlock';
 import { ToolCallView } from './tool-call-view';
-import { StreamingMarkdownView } from './streaming-markdown-view';
 import { SubagentActivityCard } from './subagent/SubagentActivityCard';
+
+const StreamingMarkdownView = lazy(() => import('./streaming-markdown-view').then((module) => ({ default: module.StreamingMarkdownView })));
 
 type ChatMessageRowProps = {
   message: ChatTranscriptMessage;
@@ -66,7 +67,9 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
               <ChatActivityBlockView key={block.id} block={block} />
             ))}
             {message.content.length === 0 ? null : (
-              <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
+              <Suspense fallback={null}>
+                <StreamingMarkdownView text={message.content} isStreaming={message.isStreaming} />
+              </Suspense>
             )}
             {interrupt !== null && interrupt.kind === 'approval' && isTaskApproval(interrupt) ? (
               <TaskApprovalCard approval={interrupt} onApprovalDecision={onApprovalDecision} />
@@ -205,7 +208,9 @@ function ChatActivityBlockView({ block }: { block: ChatTranscriptActivityBlock }
     <details className="chat-bubble-activity chat-bubble-guardrail" data-testid="chat-activity-guardrail">
       <summary>{`Guardrail · ${block.nudgeKind}`}</summary>
       <div className="activity-body">
-        <StreamingMarkdownView text={block.content} isStreaming={false} />
+        <Suspense fallback={null}>
+          <StreamingMarkdownView text={block.content} isStreaming={false} />
+        </Suspense>
       </div>
     </details>
   );

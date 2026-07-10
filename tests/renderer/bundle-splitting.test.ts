@@ -10,8 +10,8 @@ describe('renderer bundle splitting', () => {
       resolveRendererManualChunk('F:/Code/Roc/node_modules/.pnpm/@xterm+xterm@6.0.0/node_modules/@xterm/xterm/lib/xterm.js')
     ).toBe('renderer-terminal');
     expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-diff-view/esm/index.js')).toBe('renderer-diff');
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-markdown/index.js')).toBe('renderer-markdown');
-    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/rehype-highlight/index.js')).toBe('renderer-markdown');
+    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/react-markdown/index.js')).toBeUndefined();
+    expect(resolveRendererManualChunk('F:/Code/Roc/node_modules/rehype-highlight/index.js')).toBeUndefined();
     expect(resolveRendererManualChunk('F:/Code/Roc/src/renderer/App.tsx')).toBeUndefined();
   });
 
@@ -41,5 +41,13 @@ describe('renderer bundle splitting', () => {
     expect(workbenchPanelSource).toContain("lazy(() => import('./TerminalWorkbench')");
     expect(terminalSource).toContain("@xterm/xterm/css/xterm.css");
     expect(gitDiffSource).toContain("react-diff-view/style/index.css");
+  });
+
+  it('emits a renderer manifest and exposes the automatic chunk gate', () => {
+    const viteConfig = readFileSync('electron.vite.config.ts', 'utf8');
+    const packageJson = readFileSync('package.json', 'utf8');
+
+    expect(viteConfig).toContain('manifest: true');
+    expect(packageJson).toContain('"check:renderer-chunks"');
   });
 });

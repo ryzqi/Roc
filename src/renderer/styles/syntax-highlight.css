@@ -1,0 +1,27 @@
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: #8b3dff;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-name,
+.hljs-type,
+.hljs-attribute {
+  color: #087f5b;
+}
+
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: #6b7280;
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: #b45309;
+}

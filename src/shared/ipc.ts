@@ -90,7 +90,7 @@ import type {
   SchedulerStatus,
   ScheduledTaskRun,
   TaskDetail,
-  TaskEvent,
+  TaskMessageHistoryPage,
   TaskSnapshot,
   TaskMessageHistoryRequest,
   TaskDeleteThreadRequest,
@@ -134,7 +134,7 @@ export type RocPreloadApi = {
   };
   tasks: {
     getSnapshot: () => Promise<IpcResult<TaskSnapshot>>;
-    getThreadMessages: (request: TaskMessageHistoryRequest) => Promise<IpcResult<TaskEvent[]>>;
+    getThreadMessages: (request: TaskMessageHistoryRequest) => Promise<IpcResult<TaskMessageHistoryPage>>;
     listBackgroundTasks: () => Promise<IpcResult<BackgroundTask[]>>;
     deleteThread: (request: TaskDeleteThreadRequest) => Promise<IpcResult<TaskDeleteThreadResult>>;
     createBackgroundTaskPreview: (request: BackgroundTaskPreviewRequest) => Promise<IpcResult<BackgroundTaskPreview>>;

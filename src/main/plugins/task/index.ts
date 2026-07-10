@@ -11,7 +11,7 @@ import type {
   TaskDeleteThreadRequest,
   TaskDeleteThreadResult,
   TaskDetail,
-  TaskEvent,
+  TaskMessageHistoryRequest,
   TaskSnapshot,
   TaskUpdateEvent,
 } from '../../../shared/types';
@@ -28,6 +28,8 @@ import {
   backgroundTaskPreviewRequestSchema,
   backgroundTaskPreviewSchema,
   backgroundTaskSchema,
+  taskMessageHistoryPageSchema,
+  taskMessageHistoryRequestSchema,
   updateBackgroundTaskRequestSchema
 } from './contracts';
 import { TaskScheduler } from './scheduler';
@@ -62,7 +64,7 @@ const taskCapabilityDescriptors = [
   descriptor('task.scheduler.resume', z.object({}), z.object({ resumed: z.literal(true) })),
   descriptor('task.scheduler.handlePowerResume', z.object({}), z.object({ handled: z.literal(true) })),
   descriptor('task.background.summary', z.object({}), z.custom<BackgroundTaskSummary>()),
-  descriptor('task.thread.messages.list', z.object({ threadId: z.string() }), z.array(z.custom<TaskEvent>())),
+  descriptor('task.thread.messages.list', taskMessageHistoryRequestSchema, taskMessageHistoryPageSchema),
   descriptor('task.background.list', z.object({}), z.array(z.custom<BackgroundTask>())),
   descriptor('task.thread.delete', z.object({ threadId: z.string() }), z.object({ deleted: z.literal(true), threadId: z.string() })),
   descriptor('task.active.list', z.object({}), z.array(z.custom<ActiveTaskItem>())),
@@ -250,7 +252,7 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
   });
   context.capabilities.register(pluginId, taskCapabilityDescriptors[13], async () => repository.getBackgroundTaskSummary());
   context.capabilities.register(pluginId, taskCapabilityDescriptors[14], async (input) =>
-    repository.listThreadMessages((input as { threadId: string }).threadId)
+    repository.listThreadMessages(input as TaskMessageHistoryRequest)
   );
   context.capabilities.register(pluginId, taskCapabilityDescriptors[15], async () => repository.listBackgroundTasks());
   context.capabilities.register(pluginId, taskCapabilityDescriptors[16], async (input) => {

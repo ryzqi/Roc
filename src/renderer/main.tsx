@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { MotionConfig } from 'motion/react';
 import { App } from './App';
 import './styles/index.css';
-import 'highlight.js/styles/github.css';
 
 const root = document.getElementById('root');
 if (root === null) {
