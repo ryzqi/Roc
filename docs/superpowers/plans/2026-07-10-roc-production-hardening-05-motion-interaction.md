@@ -36,7 +36,7 @@
 - Consumes: `ChatTranscriptMessage.source` introduced with the paged history state in batch four.
 - Produces: stable `user-${runId}` / `assistant-${runId}` keys and `messageInitial(source)` for row/subcard motion.
 
-- [ ] **Step 1: Write failing source and stable-key transcript tests**
+- [x] **Step 1: Write failing source and stable-key transcript tests**
 
 ```ts
 const persisted = buildPersistedTranscriptMessages(events, 'thread-1');
@@ -59,7 +59,7 @@ expect(live).toEqual([
 
 After the same run's persisted events arrive, assert keys remain identical while source changes to persisted and the array contains no duplicate user/assistant row.
 
-- [ ] **Step 2: Write failing motion-initial tests**
+- [x] **Step 2: Write failing motion-initial tests**
 
 Export a pure helper from `chat-message-row.tsx`:
 
@@ -70,7 +70,7 @@ expect(messageInitial('live')).toBe('initial');
 
 Mock `motion.div` in the component test and assert both the outer row and generic approval subcard receive `false` for a persisted message, and `'initial'` for a live message.
 
-- [ ] **Step 3: Run Task 1 tests and verify RED**
+- [x] **Step 3: Run Task 1 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/chat-transcript.test.ts tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-transcript-approval.test.ts
@@ -78,7 +78,7 @@ pnpm test -- tests/renderer/chat-transcript.test.ts tests/renderer/chat-transcri
 
 Expected: FAIL because current persisted rows use event ids, live rows use `live-*`, and all motion nodes use `initial="initial"`.
 
-- [ ] **Step 4: Assign source and run-based keys at construction**
+- [x] **Step 4: Assign source and run-based keys at construction**
 
 ```ts
 function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
@@ -118,7 +118,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
 
 Do not overwrite the assistant key with the final message event id. Pending/live constructors use the same run ids and `source: 'live'`. When `runId` is genuinely absent before start, keep the existing pending key only until the run starts; the first `run_started` state update must replace it before any persisted event can match.
 
-- [ ] **Step 5: Make row and approval initial source-aware**
+- [x] **Step 5: Make row and approval initial source-aware**
 
 ```ts
 export function messageInitial(source: ChatTranscriptMessage['source']): false | 'initial' {
@@ -130,7 +130,7 @@ Use `initial={messageInitial(message.source)}` on the row and generic approval `
 
 Update the memo comparator to include `prev.message.source === next.message.source`.
 
-- [ ] **Step 6: Run Task 1 tests and verify GREEN**
+- [x] **Step 6: Run Task 1 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/chat-transcript.test.ts tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-transcript-approval.test.ts
@@ -157,7 +157,7 @@ Expected: PASS; 100 persisted rows report false initial state and a new live row
 - Consumes: existing initial-focus/tab-trap helpers and Motion `AnimatePresence.onExitComplete`.
 - Produces: `captureDialogOpener()` / `restoreDialogFocus()` and focus-safe Settings/TaskCreate lifecycles.
 
-- [ ] **Step 1: Write failing helper tests**
+- [x] **Step 1: Write failing helper tests**
 
 ```ts
 const opener = document.createElement('button');
@@ -177,15 +177,15 @@ expect(document.activeElement).toBe(focusBeforeRestore);
 
 Also assert capture returns null when active element is not an HTMLElement or is `document.body`.
 
-- [ ] **Step 2: Write failing Settings exit/focus tests**
+- [x] **Step 2: Write failing Settings exit/focus tests**
 
 Open Settings by clicking `settings-gear`, close with Escape and assert the modal remains mounted until the mocked `onExitComplete` fires; after completion, gear regains focus. Repeat for backdrop and close button. Change `open` externally and assert the same exit/focus path.
 
-- [ ] **Step 3: Write failing TaskCreate opener tests**
+- [x] **Step 3: Write failing TaskCreate opener tests**
 
 Run the same focus flow for both the PageHeading “新建任务” button and empty-state “新建任务” button. Close via Escape, backdrop, close button and successful submit; focus returns to the exact opener only after exit completion.
 
-- [ ] **Step 4: Run Task 2 tests and verify RED**
+- [x] **Step 4: Run Task 2 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/dialog-focus.test.ts tests/renderer/settings-modal.test.ts tests/renderer/app-shell.test.tsx tests/renderer/tasks-view.interaction.test.ts
@@ -193,7 +193,7 @@ pnpm test -- tests/renderer/dialog-focus.test.ts tests/renderer/settings-modal.t
 
 Expected: FAIL because AppSettingsLayer unmounts the presence owner immediately and no dialog captures/restores opener focus.
 
-- [ ] **Step 5: Extend the focus helper without adding fallback guesses**
+- [x] **Step 5: Extend the focus helper without adding fallback guesses**
 
 ```ts
 export function captureDialogOpener(): HTMLElement | null {
@@ -215,7 +215,7 @@ export function restoreDialogFocus(opener: HTMLElement | null): boolean {
 
 Keep `focusDialogInitialElement()` and `trapDialogTabFocus()` unchanged except for shared internal focusable-element reuse.
 
-- [ ] **Step 6: Make AppSettingsLayer the persistent presence owner**
+- [x] **Step 6: Make AppSettingsLayer the persistent presence owner**
 
 AppShell stores `settingsOpenerRef` and passes an explicit open callback to AppSidebar:
 
@@ -249,7 +249,7 @@ AppSidebar uses `onOpenSettings(event.currentTarget)` instead of setting state d
 
 `SettingsModal` removes its internal `AnimatePresence`; backdrop/panel keep `motion` exit props. AppShell's exit callback calls `restoreDialogFocus(settingsOpenerRef.current)` then clears the ref.
 
-- [ ] **Step 7: Capture TaskCreate opener in TasksView**
+- [x] **Step 7: Capture TaskCreate opener in TasksView**
 
 Use one `createDialogOpenerRef`. Both open buttons call:
 
@@ -262,7 +262,7 @@ function openCreateDialog(opener: HTMLElement): void {
 
 Pass `onExitComplete` to TaskCreateDialog. Its `AnimatePresence` invokes the callback, which restores and clears the opener. Every internal close trigger calls the same `onClose` prop; successful submit also calls it.
 
-- [ ] **Step 8: Run Task 2 tests and verify GREEN**
+- [x] **Step 8: Run Task 2 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/dialog-focus.test.ts tests/renderer/settings-modal.test.ts tests/renderer/app-shell.test.tsx tests/renderer/tasks-view.interaction.test.ts
@@ -286,7 +286,7 @@ Expected: PASS; exit completes before unmount/focus return, and disconnected ope
 - Consumes: existing `deleteHistoryThread(threadId)` and selected-thread navigation.
 - Produces: `HistoryThreadRow` with main select button + Lucide `MoreHorizontal` opener + `role="menu"` delete item.
 
-- [ ] **Step 1: Write failing menu position and keyboard tests**
+- [x] **Step 1: Write failing menu position and keyboard tests**
 
 Test a pure clamp helper:
 
@@ -312,7 +312,7 @@ Component flow:
 6. Delete calls the existing callback once with thread id and closes.
 7. `role="menu"`, `role="menuitem"`, `aria-label="更多历史会话操作"`, `aria-haspopup="menu"`, `aria-expanded` are exact.
 
-- [ ] **Step 2: Run Task 3 tests and verify RED**
+- [x] **Step 2: Run Task 3 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/history-thread-menu.test.tsx tests/renderer/app-shell.test.tsx
@@ -320,7 +320,7 @@ pnpm test -- tests/renderer/history-thread-menu.test.tsx tests/renderer/app-shel
 
 Expected: FAIL because history is one button, deletion is right-click-only, menu has no roles/focus/Escape/clamp.
 
-- [ ] **Step 3: Implement the focused menu component**
+- [x] **Step 3: Implement the focused menu component**
 
 Export the row and position helper from the focused module:
 
@@ -345,7 +345,7 @@ export function clampHistoryMenuPosition(input: {
 
 `HistoryThreadRow` owns `mainButtonRef`, `moreButtonRef` and nullable menu state `{ requestedX, requestedY, opener }`. Use `useLayoutEffect` to measure the menu, clamp to `window.innerWidth/innerHeight` with an 8px margin, set final coordinates, then focus the first `[role="menuitem"]`. A document keydown handler closes on Escape; a pointerdown handler ignores targets inside the menu. Both call `restoreDialogFocus(opener)` after closing.
 
-- [ ] **Step 4: Split each history row into select and More buttons**
+- [x] **Step 4: Split each history row into select and More buttons**
 
 ```tsx
 <div className={selected ? 'history-row active' : 'history-row'} onContextMenu={openContextMenu}>
@@ -385,15 +385,15 @@ export function clampHistoryMenuPosition(input: {
 
 `openContextMenu()` uses `event.clientX/clientY` and `mainButtonRef.current` as the opener. `openFromElement()` uses the element's `getBoundingClientRect()` and requests the point `{ x: rect.right, y: rect.bottom }`. AppSidebar maps `visibleHistoryItems` to `HistoryThreadRow`. Remove AppShell's old `historyContextMenu` state/effect and all `setHistoryContextMenu(null)` calls made unused by this change. Do not nest buttons. Keep the existing primary selection behavior and delete API.
 
-- [ ] **Step 5: Style stable dimensions and viewport-safe menu**
+- [x] **Step 5: Style stable dimensions and viewport-safe menu**
 
 Use a two-column row with a fixed 32px icon-button track; keep card radius at `8px` or less. Menu fixed dimensions must not change on hover. Add `:focus-visible` states for both buttons and destructive menuitem. Remove the old `.nav-button` coupling only for history rows; leave other navigation unchanged.
 
-- [ ] **Step 6: Extend responsive smoke for 320px and desktop**
+- [x] **Step 6: Extend responsive smoke for 320px and desktop**
 
 In `history-thread-menu.test.tsx`, set 320px and desktop `window.innerWidth/innerHeight`, mock the last row/button rectangle near the bottom-right corner, open the real component menu, and assert `left >= 8`, `top >= 8`, `right <= viewportWidth - 8`, `bottom <= viewportHeight - 8`. In `responsive-layout-smoke.mjs`, add static history-row/menu markup using the clamped coordinates and assert the same bounding constraints so the real CSS is covered at both viewports.
 
-- [ ] **Step 7: Run Task 3 tests and verify GREEN**
+- [x] **Step 7: Run Task 3 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/history-thread-menu.test.tsx tests/renderer/app-shell.test.tsx
@@ -414,7 +414,7 @@ Expected: PASS; all keyboard/focus paths work and menu remains inside both viewp
 - Consumes: existing static reasoning text and fixed-size `.chat-typing-cursor`/waiting indicator.
 - Produces: no moving gradient or large-area background-position animation.
 
-- [ ] **Step 1: Write a failing CSS residue test**
+- [x] **Step 1: Write a failing CSS residue test**
 
 ```ts
 const css = readFileSync('src/renderer/styles/chat.css', 'utf8');
@@ -425,7 +425,7 @@ expect(css).not.toMatch(/background-position[^;]*;[\s\S]*animation/iu);
 
 Render a streaming reasoning block and assert its text remains visible and the existing fixed-size typing indicator is present. Under `prefers-reduced-motion: reduce`, assert no pulse animation class is applied.
 
-- [ ] **Step 2: Run Task 4 tests and verify RED**
+- [x] **Step 2: Run Task 4 tests and verify RED**
 
 ```powershell
 pnpm test -- tests/renderer/reasoning-motion.test.ts tests/renderer/chat-transcript-live-state.test.ts
@@ -433,11 +433,11 @@ pnpm test -- tests/renderer/reasoning-motion.test.ts tests/renderer/chat-transcr
 
 Expected: FAIL because `.reasoning-shimmer` and its infinite background-position keyframes remain.
 
-- [ ] **Step 3: Remove the moving gradient and keep static feedback**
+- [x] **Step 3: Remove the moving gradient and keep static feedback**
 
 Delete the selector/keyframes. Render reasoning content with the existing muted text class. If `ReasoningBlock` currently applies `reasoning-shimmer`, remove that class. Keep only the existing fixed-size typing cursor/indicator for streaming state; do not add a new animation. The global reduced-motion rule continues disabling the indicator's pulse.
 
-- [ ] **Step 4: Run Task 4 tests and verify GREEN**
+- [x] **Step 4: Run Task 4 tests and verify GREEN**
 
 ```powershell
 pnpm test -- tests/renderer/reasoning-motion.test.ts tests/renderer/chat-transcript-live-state.test.ts
@@ -455,7 +455,7 @@ Expected: PASS; streaming reasoning remains readable and CSS contains no shimmer
 - Consumes: final source-aware transcript, presence owner, focus helper and history menu.
 - Produces: one reviewed interaction commit.
 
-- [ ] **Step 1: Run the complete motion/interaction focused suite**
+- [x] **Step 1: Run the complete motion/interaction focused suite**
 
 ```powershell
 pnpm test -- tests/renderer/chat-transcript.test.ts tests/renderer/chat-transcript-panel.test.tsx tests/renderer/chat-transcript-approval.test.ts tests/renderer/dialog-focus.test.ts tests/renderer/settings-modal.test.ts tests/renderer/app-shell.test.tsx tests/renderer/tasks-view.interaction.test.ts tests/renderer/history-thread-menu.test.tsx tests/renderer/reasoning-motion.test.ts tests/renderer/chat-transcript-live-state.test.ts
@@ -464,7 +464,7 @@ node tests\smoke\responsive-layout-smoke.mjs
 
 Expected: PASS.
 
-- [ ] **Step 2: Review the current diff before committing**
+- [x] **Step 2: Review the current diff before committing**
 
 ```powershell
 git diff -- src/renderer tests/renderer tests/smoke/responsive-layout-smoke.mjs
@@ -481,7 +481,7 @@ Review in this order:
 
 Record findings with file and line. Fix every finding and rerun its direct test. If none exist, record `未发现问题` and note that OS/browser focus behavior after a physically removed opener intentionally has no fallback target.
 
-- [ ] **Step 3: Run final batch verification**
+- [x] **Step 3: Run final batch verification**
 
 ```powershell
 pnpm typecheck
@@ -492,7 +492,7 @@ git diff --check
 
 Expected: every command exit code `0`.
 
-- [ ] **Step 4: Commit only the reviewed motion/interaction batch**
+- [x] **Step 4: Commit only the reviewed motion/interaction batch**
 
 ```powershell
 $batchFiles = @(

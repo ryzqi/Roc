@@ -10,6 +10,7 @@ import { filterHistoryItems } from '../history-sidebar';
 import { unwrap } from '../loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { applySystemAppearance } from '../system-appearance';
+import { restoreDialogFocus } from '../dialog-focus';
 import { AppSettingsLayer } from './AppSettingsLayer';
 import { AppSidebar } from './AppSidebar';
 import { AppWorkspaceShell } from './AppWorkspaceShell';
@@ -54,18 +55,13 @@ const WorkbenchPanel = lazy(() =>
   import('../workbench/WorkbenchPanel').then((module) => ({ default: module.WorkbenchPanel }))
 );
 
-type HistoryContextMenuState = {
-  threadId: string;
-  x: number;
-  y: number;
-};
-
 export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; client: RocClient }): React.JSX.Element {
   const { error, setError, setState, setWindowState, state, windowState } = bootstrap;
   const initialParams = new URLSearchParams(window.location.search);
   const initialView = parseViewId(initialParams.get('page'));
   const [activeView, setActiveView] = useState<ViewId>(initialView === 'settings' ? 'chat' : initialView);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(initialView === 'settings');
+  const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedTaskSurfaceTaskId, setSelectedTaskSurfaceTaskId] = useState<string | null | undefined>(undefined);
   const selectedTaskSurfaceTaskIdRef = useRef<string | null | undefined>(selectedTaskSurfaceTaskId);
@@ -82,7 +78,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const [chatSelectionVersion, setChatSelectionVersion] = useState(0);
   const [pendingWorkflowHint, setPendingWorkflowHint] = useState<ChatStartRunRequest['workflowHint']>(null);
   const [pendingTaskSource, setPendingTaskSource] = useState<ChatStartRunRequest['taskSource'] | null>(null);
-  const [historyContextMenu, setHistoryContextMenu] = useState<HistoryContextMenuState | null>(null);
   const [workspaceSelectError, setWorkspaceSelectError] = useState<string | null>(null);
   const [activeWorkbenchTool, setActiveWorkbenchTool] = useState<WorkbenchTool>(
     parseWorkbenchTool(initialParams.get('tool'), initialView)
@@ -131,12 +126,27 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     return client.api.app.onNavigate((page) => {
       const view = parseViewId(page);
       if (view === 'settings') {
+        settingsOpenerRef.current = null;
         setSettingsOpen(true);
         return;
       }
       setActiveView(view);
       setWorkbenchVisible(view !== 'chat' && WORKBENCH_VIEWS.has(view));
     });
+  }, []);
+
+  const openSettings = useCallback((opener: HTMLElement): void => {
+    settingsOpenerRef.current = opener;
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback((): void => {
+    setSettingsOpen(false);
+  }, []);
+
+  const completeSettingsExit = useCallback((): void => {
+    restoreDialogFocus(settingsOpenerRef.current);
+    settingsOpenerRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -178,24 +188,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, [refreshTaskState]);
 
   useEffect(() => {
-    if (historyContextMenu === null) {
-      return;
-    }
-
-    function closeHistoryContextMenu(event: PointerEvent): void {
-      if (event.target instanceof Element && event.target.closest('.history-context-menu') !== null) {
-        return;
-      }
-      setHistoryContextMenu(null);
-    }
-
-    window.addEventListener('pointerdown', closeHistoryContextMenu);
-    return () => {
-      window.removeEventListener('pointerdown', closeHistoryContextMenu);
-    };
-  }, [historyContextMenu]);
-
-  useEffect(() => {
     if (activeView === 'chat') {
       return;
     }
@@ -206,7 +198,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     if (activeView !== 'chat') {
       setHistorySearchVisible(false);
       setHistorySearchQuery('');
-      setHistoryContextMenu(null);
       return;
     }
     if (historySearchVisible) {
@@ -255,7 +246,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setSelectedThreadId(null);
     setPendingWorkflowHint(null);
     setPendingTaskSource(null);
-    setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
@@ -264,7 +254,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setSelectedThreadId(threadId);
     setPendingWorkflowHint(null);
     setPendingTaskSource(null);
-    setHistoryContextMenu(null);
     setChatSelectionVersion((current) => current + 1);
   }, []);
 
@@ -276,7 +265,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     setSelectedTaskSurfaceTaskId(taskId);
     setActiveTaskDetailId(taskId);
     setActiveView('task-detail');
-    setHistoryContextMenu(null);
   }, []);
 
   const clearDeletingTaskSelection = useCallback((): void => {
@@ -287,11 +275,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   const returnToTaskBoard = useCallback((): void => {
     setActiveTaskDetailId(null);
     setActiveView('tasks-board');
-    setHistoryContextMenu(null);
   }, []);
 
   const toggleChatSidebar = useCallback((): void => {
-    setHistoryContextMenu(null);
     setChatSidebarCollapsed((current) => {
       const next = !current;
       if (next) {
@@ -303,7 +289,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
   }, []);
 
   const toggleHistorySearch = useCallback((): void => {
-    setHistoryContextMenu(null);
     if (chatSidebarCollapsed) {
       setChatSidebarCollapsed(false);
       setHistorySearchVisible(true);
@@ -334,7 +319,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
     pendingWorkflowHint,
     refreshTaskState,
     selectedThreadId,
-    setHistoryContextMenu,
     setPendingTaskSource,
     setPendingWorkflowHint,
     setSelectedTaskSurfaceTaskId,
@@ -345,7 +329,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
 
   const deleteHistoryThread = useCallback(
     async (threadId: string): Promise<void> => {
-      setHistoryContextMenu(null);
       const result = await client.api.tasks.deleteThread({ threadId });
       if (!result.ok) {
         setError(result.error.message);
@@ -509,7 +492,6 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             activeView={activeView}
             controlNavItems={controlNavItems}
             deleteHistoryThread={deleteHistoryThread}
-            historyContextMenu={historyContextMenu}
             historyItems={historyItems}
             historyNavItems={historyNavItems}
             historySearchInputRef={historySearchInputRef}
@@ -518,9 +500,8 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
             selectWorkspaceFromDialog={selectWorkspaceFromDialog}
             selectedThreadId={selectedThreadId}
             setActiveView={setActiveView}
-            setHistoryContextMenu={setHistoryContextMenu}
             setHistorySearchQuery={setHistorySearchQuery}
-            setSettingsOpen={setSettingsOpen}
+            onOpenSettings={openSettings}
             showHistorySearch={showHistorySearch}
             showHistorySearchEmpty={showHistorySearchEmpty}
             startNewConversation={startNewConversation}
@@ -545,8 +526,9 @@ export function AppShell({ bootstrap, client }: { bootstrap: AppBootstrap; clien
       </div>
       <AppSettingsLayer
         client={client}
+        onClose={closeSettings}
+        onExitComplete={completeSettingsExit}
         open={settingsOpen}
-        setOpen={setSettingsOpen}
         setState={setState}
         state={state}
       />

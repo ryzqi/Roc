@@ -6,6 +6,7 @@ const styles = [
   'tokens.css',
   'base.css',
   'app-shell.css',
+  'app-sidebar.css',
   'chat.css',
   'shared.css',
   'composer.css',
@@ -161,6 +162,18 @@ const workbenchMarkup = `
 
 const chatWorkspaceBaseWidth = 1032;
 
+function buildHistoryMenuMarkup({ left, top }) {
+  return `
+    <div class="history-row">
+      <button class="history-row-main" type="button">History</button>
+      <button class="history-row-more" type="button" aria-label="更多历史会话操作"></button>
+      <div class="history-context-menu" role="menu" style="left:${left}px;top:${top}px">
+        <button role="menuitem" type="button">删除</button>
+      </div>
+    </div>
+  `;
+}
+
 function resolveChatScale(viewportWidth) {
   const expandedSidebarShellWidth = viewportWidth - 248 - 40;
   return Math.min(1, expandedSidebarShellWidth / chatWorkspaceBaseWidth);
@@ -287,6 +300,19 @@ async function readBoxes(page, selectors) {
 const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL ?? 'msedge' });
 try {
   const page = await browser.newPage({ viewport: { width: 640, height: 640 } });
+  for (const viewport of [{ width: 320, height: 480 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(viewport);
+    const left = viewport.width - 112 - 8;
+    const top = viewport.height - 48 - 8;
+    await page.setContent(buildDocument(buildHistoryMenuMarkup({ left, top })));
+    const menuEvidence = await readBoxes(page, [{ key: 'menu', selector: '.history-context-menu' }]);
+    assertCondition(menuEvidence.menu.left >= 8, 'History menu must keep the left viewport margin', menuEvidence);
+    assertCondition(menuEvidence.menu.top >= 8, 'History menu must keep the top viewport margin', menuEvidence);
+    assertCondition(menuEvidence.menu.right <= viewport.width - 8, 'History menu must keep the right viewport margin', menuEvidence);
+    assertCondition(menuEvidence.menu.bottom <= viewport.height - 8, 'History menu must keep the bottom viewport margin', menuEvidence);
+  }
+
+  await page.setViewportSize({ width: 640, height: 640 });
   await page.setContent(buildDocument(taskWorkbenchMarkup));
 
   const evidence = await readBoxes(page, [

@@ -55,6 +55,53 @@ function createIdleRunState(): ChatRunState {
 
 
 describe('chat transcript helpers', () => {
+  it('keeps run-based keys stable when live messages become persisted', () => {
+    const persisted = buildPersistedTranscriptMessages(
+      [
+        {
+          id: 'message-user-event',
+          threadId: 'thread-stable',
+          runId: 'run-stable',
+          type: 'message',
+          payload: { role: 'user', content: 'hello' },
+          createdAt: '2026-07-11T00:00:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'message-assistant-event',
+          threadId: 'thread-stable',
+          runId: 'run-stable',
+          type: 'message',
+          payload: { role: 'assistant', content: 'world' },
+          createdAt: '2026-07-11T00:00:01.000Z',
+          sequence: 2
+        }
+      ],
+      'thread-stable'
+    );
+    const live = appendLiveTranscriptMessages({
+      chatRunState: {
+        ...createIdleRunState(),
+        runId: 'run-stable',
+        threadId: 'thread-stable',
+        status: 'running',
+        assistantMessage: 'world'
+      },
+      pendingUserInput: 'hello',
+      persistedMessages: [],
+      selectedThreadId: 'thread-stable'
+    });
+
+    expect(persisted).toEqual([
+      expect.objectContaining({ key: 'user-run-stable', source: 'persisted' }),
+      expect.objectContaining({ key: 'assistant-run-stable', source: 'persisted' })
+    ]);
+    expect(live).toEqual([
+      expect.objectContaining({ key: 'user-run-stable', source: 'live' }),
+      expect.objectContaining({ key: 'assistant-run-stable', source: 'live' })
+    ]);
+  });
+
   it('projects persisted user image attachment metadata into transcript messages', () => {
     const messages = buildPersistedTranscriptMessages(
       [
@@ -153,7 +200,7 @@ describe('chat transcript helpers', () => {
 
     expect(messages[0]).toBe(persistedMessage);
     expect(messages.at(-1)).toMatchObject({
-      key: 'live-run-current',
+      key: 'assistant-run-current',
       role: 'assistant',
       content: '正在总结',
       isStreaming: true
@@ -237,7 +284,7 @@ describe('chat transcript helpers', () => {
 
     expect(messages).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         source: 'persisted',
         role: 'user',
         content: '请整理一下当前变更',
@@ -248,7 +295,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'live-run-current',
+        key: 'assistant-run-current',
         source: 'live',
         role: 'assistant',
         content: '我先检查当前变更。',
@@ -650,7 +697,7 @@ describe('chat transcript helpers', () => {
 
     expect(messages).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         source: 'persisted',
         role: 'user',
         content: '整理一下结果',
@@ -661,7 +708,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'assistant-current',
+        key: 'assistant-run-current',
         source: 'persisted',
         role: 'assistant',
         content: '已经整理完成。',
@@ -797,7 +844,7 @@ describe('chat transcript helpers', () => {
 
     expect(messages).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         source: 'persisted',
         role: 'user',
         content: '请读取文件并总结',

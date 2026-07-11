@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from 'react';
 import { useCallback } from 'react';
 
 import type { ChatStartRunRequest } from '../../shared/types';
@@ -9,7 +8,6 @@ import type { TaskDetailApprovalRequest, TaskDetailInputRequest } from '../views
 import type { TaskPromptSubmission } from '../views/tasks/TasksView';
 import { loadTaskSurfaceData } from './data-loading';
 import { loadTaskSurfaceForCreatedRun } from './task-creation-surface';
-import type { HistoryContextMenuState } from './types';
 import type { AppBootstrap } from './use-app-bootstrap';
 
 interface UseAppTaskRunsOptions {
@@ -23,7 +21,6 @@ interface UseAppTaskRunsOptions {
   pendingWorkflowHint: ChatStartRunRequest['workflowHint'];
   refreshTaskState: () => Promise<void>;
   selectedThreadId: string | null;
-  setHistoryContextMenu: Dispatch<SetStateAction<HistoryContextMenuState | null>>;
   setPendingTaskSource: (value: ChatStartRunRequest['taskSource'] | null) => void;
   setPendingWorkflowHint: (value: ChatStartRunRequest['workflowHint']) => void;
   setSelectedTaskSurfaceTaskId: (value: string | null | undefined) => void;
@@ -47,7 +44,6 @@ export function useAppTaskRuns({
   pendingWorkflowHint,
   refreshTaskState,
   selectedThreadId,
-  setHistoryContextMenu,
   setPendingTaskSource,
   setPendingWorkflowHint,
   setSelectedTaskSurfaceTaskId,
@@ -89,7 +85,6 @@ export function useAppTaskRuns({
         return { ok: false, error: '聊天运行没有返回可打开的会话。' };
       }
       setSelectedThreadId(result.data.threadId);
-      setHistoryContextMenu(null);
       return { ok: true };
     },
     [
@@ -98,7 +93,6 @@ export function useAppTaskRuns({
       currentSelectedSkills,
       currentWorkspacePath,
       selectedThreadId,
-      setHistoryContextMenu,
       setPendingTaskSource,
       setPendingWorkflowHint,
       setSelectedThreadId
@@ -137,7 +131,6 @@ export function useAppTaskRuns({
       if (result.data.threadId === null) {
         return { ok: false, error: '任务运行没有返回可打开的会话。' };
       }
-      setHistoryContextMenu(null);
       return { ok: true, runId: result.data.runId, threadId: result.data.threadId };
     },
     [
@@ -147,7 +140,6 @@ export function useAppTaskRuns({
       pendingTaskSource,
       pendingWorkflowHint,
       selectedThreadId,
-      setHistoryContextMenu,
       setPendingTaskSource,
       setPendingWorkflowHint
     ]

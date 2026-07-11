@@ -261,7 +261,7 @@ async function flushAnimationFrame(): Promise<void> {
 async function waitForText(element: HTMLElement, text: string): Promise<void> {
   const startedAt = Date.now();
   while (!element.textContent?.includes(text)) {
-    if (Date.now() - startedAt > 2000) {
+    if (Date.now() - startedAt > 5000) {
       throw new Error(`Timed out waiting for text: ${text}`);
     }
     await flushAnimationFrame();

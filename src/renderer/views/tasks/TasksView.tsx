@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { WorkflowHint } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
 import { buildTopMeta } from '../../app/view-routing';
@@ -8,6 +8,7 @@ import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { TaskBoardColumn } from './TaskBoardColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
+import { restoreDialogFocus } from '../../dialog-focus';
 import { buildTaskBoardLanes } from './task-board-model';
 
 type TaskBoardUiState = {
@@ -41,6 +42,7 @@ export function TasksView({
   onBoardUiStateChange: (state: TaskBoardUiState) => void;
 }): React.JSX.Element {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const createDialogOpenerRef = useRef<HTMLElement | null>(null);
   const lanes = useMemo(() => buildTaskBoardLanes(state.activeTasks), [state.activeTasks]);
 
   async function submitTaskDescription(description: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -57,13 +59,23 @@ export function TasksView({
     });
   }
 
+  function openCreateDialog(opener: HTMLElement): void {
+    createDialogOpenerRef.current = opener;
+    setCreateDialogOpen(true);
+  }
+
+  function completeCreateDialogExit(): void {
+    restoreDialogFocus(createDialogOpenerRef.current);
+    createDialogOpenerRef.current = null;
+  }
+
   return (
     <>
       <PageHeading
         title="任务工作台"
         meta={buildTopMeta('tasks-board', state)}
         flags={
-          <button className="action-button" type="button" onClick={() => setCreateDialogOpen(true)}>
+          <button className="action-button" type="button" onClick={(event) => openCreateDialog(event.currentTarget)}>
             新建任务
           </button>
         }
@@ -75,7 +87,7 @@ export function TasksView({
               testId="tasks-empty-state"
               title="暂无任务"
               action={
-                <button className="action-button" type="button" onClick={() => setCreateDialogOpen(true)}>
+                <button className="action-button" type="button" onClick={(event) => openCreateDialog(event.currentTarget)}>
                   新建任务
                 </button>
               }
@@ -102,6 +114,7 @@ export function TasksView({
       <TaskCreateDialog
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
+        onExitComplete={completeCreateDialogExit}
         onSubmitDescription={submitTaskDescription}
       />
     </>

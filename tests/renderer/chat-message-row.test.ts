@@ -2,10 +2,15 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ChatMessageRow } from '../../src/renderer/chat/chat-message-row';
+import { ChatMessageRow, messageInitial } from '../../src/renderer/chat/chat-message-row';
 import { StreamingMarkdownView } from '../../src/renderer/chat/streaming-markdown-view';
 
 describe('chat message row', () => {
+  it('disables mount motion for persisted messages only', () => {
+    expect(messageInitial('persisted')).toBe(false);
+    expect(messageInitial('live')).toBe('initial');
+  });
+
   it('uses a streaming Markdown boundary while assistant content is flowing', () => {
     const html = renderToStaticMarkup(
       React.createElement(StreamingMarkdownView, {

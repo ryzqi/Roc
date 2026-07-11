@@ -60,12 +60,6 @@ export type NavItem = {
   active?: boolean;
 };
 
-export type HistoryContextMenuState = {
-  threadId: string;
-  x: number;
-  y: number;
-};
-
 export type WorkbenchTool = 'files' | 'git' | 'terminal';
 export type MainViewId = ViewId;
 

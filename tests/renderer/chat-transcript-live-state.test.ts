@@ -129,7 +129,7 @@ describe('chat transcript helpers', () => {
     });
 
     expect(messages.at(-1)).toMatchObject({
-      key: 'live-run-current',
+      key: 'assistant-run-current',
       role: 'assistant',
       content: '最终回答正文。',
       reasoning: '先搜索资料。',
@@ -424,7 +424,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'pending-user-message',
+        key: 'user-run-current',
         role: 'user',
         content: '新的用户输入',
         reasoning: null,
@@ -480,7 +480,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-older',
+        key: 'user-run-older',
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
@@ -489,7 +489,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'assistant-older',
+        key: 'assistant-run-older',
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,

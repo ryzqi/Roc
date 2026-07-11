@@ -39,6 +39,7 @@ describe('TaskCreateDialog', () => {
       React.createElement(TaskCreateDialog, {
         open: true,
         onClose: () => {},
+        onExitComplete: () => {},
         onSubmitDescription: async () => ({ ok: true as const })
       })
     );
@@ -65,6 +66,7 @@ describe('TaskCreateDialog', () => {
       React.createElement(TaskCreateDialog, {
         open: true,
         onClose: () => {},
+        onExitComplete: () => {},
         onSubmitDescription: async () => ({ ok: true as const })
       })
     );
@@ -171,6 +173,7 @@ describe('TaskCreateDialog', () => {
         React.createElement(TaskCreateDialog, {
           open: true,
           onClose: input?.onClose ?? (() => {}),
+          onExitComplete: () => {},
           onSubmitDescription: input?.onSubmitDescription ?? (async () => ({ ok: true as const }))
         })
       );

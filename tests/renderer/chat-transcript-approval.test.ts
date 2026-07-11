@@ -113,7 +113,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-older',
+        key: 'user-run-older',
         role: 'user',
         content: '请继续历史会话',
         reasoning: null,
@@ -122,7 +122,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'assistant-older',
+        key: 'assistant-run-older',
         role: 'assistant',
         content: '历史线程回复',
         reasoning: null,
@@ -185,7 +185,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-current-1',
+        key: 'user-run-current-1',
         role: 'user',
         content: '第一轮输入',
         reasoning: null,
@@ -194,7 +194,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'assistant-current-1',
+        key: 'assistant-run-current-1',
         role: 'assistant',
         content: '第一轮回复',
         reasoning: null,
@@ -203,7 +203,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'user-current-2',
+        key: 'user-run-current-2',
         role: 'user',
         content: '第二轮输入',
         reasoning: null,
@@ -274,7 +274,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         role: 'user',
         content: '请执行 git status',
         reasoning: null,
@@ -283,7 +283,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'live-run-current',
+        key: 'assistant-run-current',
         role: 'assistant',
         content: '',
         reasoning: '先分析命令风险。',
@@ -369,7 +369,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         role: 'user',
         content: '请执行 git status',
         reasoning: null,

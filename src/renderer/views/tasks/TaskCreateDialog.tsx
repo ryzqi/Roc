@@ -6,12 +6,14 @@ import { focusDialogInitialElement, trapDialogTabFocus } from '../../dialog-focu
 export function TaskCreateDialog({
   open,
   onClose,
+  onExitComplete,
   onSubmitDescription
 }: {
   open: boolean;
   onClose: () => void;
+  onExitComplete: () => void;
   onSubmitDescription: (description: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -73,7 +75,7 @@ export function TaskCreateDialog({
   }
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {open ? (
         <motion.div
           animate="animate"

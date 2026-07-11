@@ -1,4 +1,5 @@
-import { lazy, Suspense, type Dispatch, type SetStateAction } from 'react';
+import { lazy, Suspense } from 'react';
+import { AnimatePresence } from 'motion/react';
 
 import { SettingsModal } from '../settings/settings-modal';
 import type { RocClient } from '../shared/roc-client';
@@ -8,34 +9,36 @@ const SettingsFeature = lazy(() => import('../features/settings').then((module) 
 
 interface AppSettingsLayerProps {
   client: RocClient;
+  onClose(): void;
+  onExitComplete(): void;
   open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
   setState: AppBootstrap['setState'];
   state: NonNullable<AppBootstrap['state']>;
 }
 
 export function AppSettingsLayer({
   client,
+  onClose,
+  onExitComplete,
   open,
-  setOpen,
   setState,
   state
-}: AppSettingsLayerProps): React.JSX.Element | null {
-  if (!open) {
-    return null;
-  }
-
+}: AppSettingsLayerProps): React.JSX.Element {
   return (
-    <SettingsModal onClose={() => setOpen(false)}>
-      <Suspense fallback={null}>
-        <SettingsFeature
-          client={client}
-          state={state}
-          updateLoadedState={(partial) =>
-            setState((current) => (current === null ? current : { ...current, ...partial }))
-          }
-        />
-      </Suspense>
-    </SettingsModal>
+    <AnimatePresence onExitComplete={onExitComplete}>
+      {open ? (
+        <SettingsModal key="settings-modal" onClose={onClose}>
+          <Suspense fallback={<div className="boot">Roc 正在加载设置</div>}>
+            <SettingsFeature
+              client={client}
+              state={state}
+              updateLoadedState={(partial) =>
+                setState((current) => (current === null ? current : { ...current, ...partial }))
+              }
+            />
+          </Suspense>
+        </SettingsModal>
+      ) : null}
+    </AnimatePresence>
   );
 }

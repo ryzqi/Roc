@@ -379,7 +379,7 @@ function compareTaskEventsAscending(left: TaskEvent, right: TaskEvent): number {
 
 function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
   return {
-    key: event.id,
+    key: `user-${event.runId}`,
     source: 'persisted',
     role: 'user',
     content: event.payload.content,
@@ -790,7 +790,6 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
       }
 
       const draft = getAssistantDraft(drafts, messages, event.runId);
-      draft.message.key = event.id;
       draft.message.content = event.payload.content;
       continue;
     }
@@ -926,9 +925,9 @@ function readReasoningFromBlocks(blocks: readonly ChatTranscriptActivityBlock[])
   return blocks.flatMap((block) => (block.kind === 'reasoning' ? [block.content] : [])).join('');
 }
 
-function createPendingUserMessage(content: string): ChatTranscriptMessage {
+function createPendingUserMessage(content: string, runId: string | null): ChatTranscriptMessage {
   return {
-    key: 'pending-user-message',
+    key: runId === null ? 'pending-user-message' : `user-${runId}`,
     source: 'live',
     role: 'user',
     content,
@@ -950,7 +949,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
   }
 
   return {
-    key: `live-${chatRunState.runId ?? 'assistant'}`,
+    key: chatRunState.runId === null ? 'live-assistant' : `assistant-${chatRunState.runId}`,
     source: 'live',
     role: 'assistant',
     content: liveContent,
@@ -970,12 +969,12 @@ export function appendLiveTranscriptMessages(input: {
 }): ChatTranscriptMessage[] {
   const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
   if (activeThreadId === null) {
-    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput)];
+    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
   }
 
   const messages = input.persistedMessages.slice();
   if (input.pendingUserInput !== null && !messages.some((message) => message.role === 'user' && message.content === input.pendingUserInput)) {
-    messages.push(createPendingUserMessage(input.pendingUserInput));
+    messages.push(createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId));
   }
 
   if (input.chatRunState.threadId !== activeThreadId) {
@@ -1021,7 +1020,7 @@ export function buildChatTranscript(input: {
 }): ChatTranscriptMessage[] {
   const activeThreadId = resolveActiveThreadId(input.selectedThreadId, input.chatRunState);
   if (activeThreadId === null) {
-    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput)];
+    return input.pendingUserInput === null ? [] : [createPendingUserMessage(input.pendingUserInput, input.chatRunState.runId)];
   }
 
   const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;

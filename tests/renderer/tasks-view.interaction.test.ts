@@ -66,6 +66,40 @@ describe('TasksView interactions', () => {
     expect(container.querySelector('[data-testid="task-create-dialog-panel"]')).not.toBeNull();
   });
 
+  it('restores focus to the exact create opener after closing the dialog', async () => {
+    await act(async () => {
+      root.render(
+        React.createElement(TasksView, {
+          state: createLoadedState({ activeTasks: [] }),
+          updateLoadedState: () => {},
+          liveTaskRun: null,
+          onOpenTaskDetail: () => {},
+          onSelectedTaskIdChange: () => {},
+          onSubmitTaskPrompt: async () => ({ ok: true as const }),
+          boardUiState: { railId: 'all', scrollTop: 0 },
+          onBoardUiStateChange: () => {}
+        })
+      );
+    });
+    const triggers = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).filter(
+      (button) => button.textContent?.trim() === '新建任务'
+    );
+    const opener = triggers[1];
+    expect(opener).not.toBeUndefined();
+    opener?.focus();
+    await act(async () => {
+      opener?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(document.activeElement).not.toBe(opener);
+
+    await act(async () => {
+      queryButton('task-create-dialog-close').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('submits the new task description through the existing task prompt contract and stays in the task domain', async () => {
     const preload = createMockPreloadApi();
     window.roc = preload;

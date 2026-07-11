@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import type React from 'react';
 import { modalBackdropFade, modalPop, modalPopTransition, resolveMotionTransition } from '../animations';
 import { focusDialogInitialElement, trapDialogTabFocus } from '../dialog-focus';
@@ -35,8 +35,7 @@ export function SettingsModal({
   }, [onClose]);
 
   return (
-    <AnimatePresence>
-      <motion.div
+    <motion.div
         animate="animate"
         className="settings-modal-backdrop"
         data-testid="settings-modal-backdrop"
@@ -77,6 +76,5 @@ export function SettingsModal({
           <div className="settings-modal-body">{children}</div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
   );
 }

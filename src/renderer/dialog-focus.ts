@@ -16,6 +16,22 @@ function findDialogFocusableElements(root: HTMLElement): HTMLElement[] {
   });
 }
 
+export function captureDialogOpener(): HTMLElement | null {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement) || activeElement === document.body) {
+    return null;
+  }
+  return activeElement;
+}
+
+export function restoreDialogFocus(opener: HTMLElement | null): boolean {
+  if (opener === null || !opener.isConnected) {
+    return false;
+  }
+  opener.focus();
+  return document.activeElement === opener;
+}
+
 export function focusDialogInitialElement(root: HTMLElement, preferred: HTMLElement | null): void {
   if (preferred !== null && !preferred.hasAttribute('disabled')) {
     preferred.focus();

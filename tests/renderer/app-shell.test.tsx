@@ -73,6 +73,31 @@ describe('AppShell', () => {
     expect(container.textContent).toContain('任务工作台');
   });
 
+  it('restores focus to the settings opener after Escape closes the modal', async () => {
+    const client = createShellClient();
+    window.roc = client.api;
+    await act(async () => {
+      root.render(<AppShell bootstrap={createBootstrap()} client={client} />);
+    });
+    const opener = queryButton('settings-gear');
+    opener.focus();
+    await act(async () => {
+      opener.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushPromises();
+    expect(container.querySelector('[data-testid="settings-modal"]')).not.toBeNull();
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+    await flushPromises();
+
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('subscribes to task and workspace updates through the RocClient api', async () => {
     const client = createShellClient();
     window.roc = client.api;

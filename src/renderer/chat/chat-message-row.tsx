@@ -25,6 +25,10 @@ type ChatMessageRowProps = {
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
 };
 
+export function messageInitial(source: ChatTranscriptMessage['source']): false | 'initial' {
+  return source === 'persisted' ? false : 'initial';
+}
+
 function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps): React.JSX.Element {
   const interrupt = message.interrupt;
   const isAssistant = message.role === 'assistant';
@@ -56,7 +60,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
       className={isAssistant ? 'chat-message-row chat-message-row--assistant' : 'chat-message-row chat-message-row--user'}
       data-role={message.role}
       data-testid={isAssistant ? 'chat-message-assistant' : 'chat-message-user'}
-      initial="initial"
+      initial={messageInitial(message.source)}
       transition={resolveMotionTransition(bubbleEnterTransition)}
       variants={variants}
     >
@@ -77,7 +81,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision }: ChatMessageRowProps
               <motion.div
                 className="chat-approval-card"
                 data-testid="chat-approval-card"
-                initial="initial"
+                initial={messageInitial(message.source)}
                 animate="animate"
                 variants={approvalCardEnter}
                 transition={resolveMotionTransition(approvalCardTransition)}
@@ -178,6 +182,7 @@ export const ChatMessageRow = memo(
   ChatMessageRowImpl,
   (prev, next) =>
     prev.message.key === next.message.key &&
+    prev.message.source === next.message.source &&
     prev.message.role === next.message.role &&
     prev.message.content === next.message.content &&
     prev.message.attachments === next.message.attachments &&

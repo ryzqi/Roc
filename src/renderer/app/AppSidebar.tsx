@@ -3,9 +3,9 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { HistorySidebarItem } from '../history-sidebar';
 import { PreviewIcon } from '../components/PreviewIcon';
-import { sanitizeTestId } from '../utils/sanitize-test-id';
+import { HistoryThreadRow } from './sidebar/HistoryThreadMenu';
 import { SidebarNavGroup } from './sidebar/SidebarNavGroup';
-import type { HistoryContextMenuState, NavItem, ViewId } from './types';
+import type { NavItem, ViewId } from './types';
 import { visibleWorkspaceLabel } from './view-routing';
 import type { AppBootstrap } from './use-app-bootstrap';
 
@@ -13,18 +13,16 @@ interface AppSidebarProps {
   activeView: ViewId;
   controlNavItems: NavItem[];
   deleteHistoryThread: (threadId: string) => Promise<void>;
-  historyContextMenu: HistoryContextMenuState | null;
   historyItems: HistorySidebarItem[];
   historyNavItems: NavItem[];
   historySearchInputRef: RefObject<HTMLInputElement | null>;
   historySearchQuery: string;
+  onOpenSettings: (opener: HTMLElement) => void;
   selectHistoryThread: (threadId: string) => void;
   selectWorkspaceFromDialog: () => Promise<void>;
   selectedThreadId: string | null;
   setActiveView: Dispatch<SetStateAction<ViewId>>;
-  setHistoryContextMenu: Dispatch<SetStateAction<HistoryContextMenuState | null>>;
   setHistorySearchQuery: Dispatch<SetStateAction<string>>;
-  setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   showHistorySearch: boolean;
   showHistorySearchEmpty: boolean;
   startNewConversation: () => void;
@@ -38,18 +36,16 @@ export function AppSidebar({
   activeView,
   controlNavItems,
   deleteHistoryThread,
-  historyContextMenu,
   historyItems,
   historyNavItems,
   historySearchInputRef,
   historySearchQuery,
+  onOpenSettings,
   selectHistoryThread,
   selectWorkspaceFromDialog,
   selectedThreadId,
   setActiveView,
-  setHistoryContextMenu,
   setHistorySearchQuery,
-  setSettingsOpen,
   showHistorySearch,
   showHistorySearchEmpty,
   startNewConversation,
@@ -101,7 +97,6 @@ export function AppSidebar({
               type="search"
               value={historySearchQuery}
               onChange={(event) => {
-                setHistoryContextMenu(null);
                 setHistorySearchQuery(event.target.value);
               }}
             />
@@ -114,44 +109,16 @@ export function AppSidebar({
             <div className="history-empty" data-testid="chat-history-search-empty">未找到匹配的历史会话</div>
           ) : (
             visibleHistoryItems.map((item) => (
-              <button
-                className={item.id === selectedThreadId ? 'nav-button active' : 'nav-button'}
-                data-testid={`history-thread-${sanitizeTestId(item.id)}`}
+              <HistoryThreadRow
+                item={item}
                 key={item.id}
-                type="button"
-                onClick={() => selectHistoryThread(item.id)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  setHistoryContextMenu({
-                    threadId: item.id,
-                    x: event.clientX,
-                    y: event.clientY
-                  });
-                }}
-              >
-                <PreviewIcon name={item.icon} />
-                <span className="nav-copy">
-                  <span className="nav-label">{item.label}</span>
-                  <span className="nav-meta">{item.meta}</span>
-                </span>
-              </button>
+                selected={item.id === selectedThreadId}
+                onDelete={deleteHistoryThread}
+                onSelect={selectHistoryThread}
+              />
             ))
           )}
         </div>
-        {historyContextMenu === null ? null : (
-          <div
-            className="history-context-menu"
-            style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
-          >
-            <button
-              data-testid="history-thread-delete"
-              type="button"
-              onClick={() => void deleteHistoryThread(historyContextMenu.threadId)}
-            >
-              删除
-            </button>
-          </div>
-        )}
       </div>
       <SidebarNavGroup
         className="sidebar-block sidebar-block--tasks"
@@ -172,7 +139,7 @@ export function AppSidebar({
           className="settings-gear"
           data-testid="settings-gear"
           type="button"
-          onClick={() => setSettingsOpen(true)}
+          onClick={(event) => onOpenSettings(event.currentTarget)}
           title="打开设置"
           aria-label="打开设置"
         >

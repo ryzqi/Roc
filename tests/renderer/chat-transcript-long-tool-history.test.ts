@@ -153,7 +153,7 @@ describe('chat transcript helpers', () => {
 
     expect(stripAttachments(messages)).toEqual([
       {
-        key: 'user-current',
+        key: 'user-run-current',
         role: 'user',
         content: '搜索今日成都天气？',
         reasoning: null,
@@ -162,7 +162,7 @@ describe('chat transcript helpers', () => {
         isStreaming: false
       },
       {
-        key: 'assistant-current',
+        key: 'assistant-run-current',
         role: 'assistant',
         content: '成都今日多云，气温 22-28°C。',
         reasoning: null,
