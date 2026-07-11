@@ -8,6 +8,10 @@ import type { RocPreloadApi } from '../../src/shared/ipc';
 import type { ChatRunEvent, TaskEvent } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
+vi.mock('../../src/renderer/chat/streaming-markdown-view', () => ({
+  StreamingMarkdownView: ({ text }: { text: string }) => text
+}));
+
 describe('ChatView task boundary', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;

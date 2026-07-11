@@ -11,6 +11,10 @@ import { emptyRocHookConfigSnapshot } from '../../../src/shared/types';
 import type { AgentRuntimeStatus, ProviderConfig, SettingsSnapshot } from '../../../src/shared/types';
 import { createLoadedState } from '../view-test-helpers';
 
+vi.mock('../../../src/renderer/chat/streaming-markdown-view', () => ({
+  StreamingMarkdownView: ({ text }: { text: string }) => text
+}));
+
 describe('chat feature actions', () => {
   it('starts, resumes, cancels, and subscribes through the RocClient api', async () => {
     const client = createChatClient();

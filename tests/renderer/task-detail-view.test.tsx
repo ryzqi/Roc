@@ -6,6 +6,10 @@ import type { ChatRunState } from '../../src/renderer/chat-run-state';
 import { TaskDetailView } from '../../src/renderer/views/tasks/TaskDetailView';
 import { createLoadedState } from './view-test-helpers';
 
+vi.mock('../../src/renderer/chat/streaming-markdown-view', () => ({
+  StreamingMarkdownView: ({ text }: { text: string }) => text
+}));
+
 describe('TaskDetailView', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
