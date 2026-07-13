@@ -12,7 +12,6 @@ docs/*
 !docs/release/
 !docs/release/release-candidate-checklist.md
 .claude/
-.superpowers/
 .codegraph/
 AGENTS.md
 CLAUDE.md
