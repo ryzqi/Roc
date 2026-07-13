@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
-import * as ts from 'typescript';
+import type { Expression, Node, SourceFile } from 'typescript/unstable/ast';
+import * as ts from 'typescript/unstable/ast';
+import { API } from 'typescript/unstable/sync';
 import { describe, expect, it } from 'vitest';
 
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
@@ -19,33 +21,40 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
   return files;
 }
 
-function scriptKindFor(file: string): ts.ScriptKind {
-  switch (extname(file)) {
-    case '.tsx':
-      return ts.ScriptKind.TSX;
-    case '.jsx':
-      return ts.ScriptKind.JSX;
-    case '.js':
-    case '.mjs':
-    case '.cjs':
-      return ts.ScriptKind.JS;
-    default:
-      return ts.ScriptKind.TS;
-  }
-}
-
-function formatLocation(sourceFile: ts.SourceFile, file: string, position: number): string {
+function formatLocation(sourceFile: SourceFile, file: string, position: number): string {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(position);
   return `${relative(process.cwd(), file).replace(/\\/g, '/')}:${line + 1}:${character + 1}`;
 }
 
+function withParsedSourceFiles(files: string[], visitFile: (file: string, sourceFile: SourceFile) => void): void {
+  const api = new API({ cwd: process.cwd() });
+  try {
+    const snapshot = api.updateSnapshot({ openFiles: files });
+    try {
+      for (const file of files) {
+        const project = snapshot.getDefaultProjectForFile(file);
+        if (project === undefined) {
+          throw new Error(`TypeScript 7 API did not resolve a project for ${file}`);
+        }
+        const sourceFile = project.program.getSourceFile(file);
+        if (sourceFile === undefined) {
+          throw new Error(`TypeScript 7 API did not return SourceFile for ${file}`);
+        }
+        visitFile(file, sourceFile);
+      }
+    } finally {
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
+}
+
 function findEmptyCatchHandlers(): string[] {
   const findings: string[] = [];
-  for (const file of collectSourceFiles(join(process.cwd(), 'src'))) {
-    const source = readFileSync(file, 'utf8');
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
-
-    function visit(node: ts.Node): void {
+  const files = collectSourceFiles(join(process.cwd(), 'src'));
+  withParsedSourceFiles(files, (file, sourceFile) => {
+    function visit(node: Node): void {
       if (ts.isCatchClause(node) && node.block.statements.length === 0) {
         findings.push(`${formatLocation(sourceFile, file, node.getStart(sourceFile))} empty catch clause`);
       }
@@ -63,54 +72,50 @@ function findEmptyCatchHandlers(): string[] {
           findings.push(`${formatLocation(sourceFile, file, handler.getStart(sourceFile))} empty Promise.catch handler`);
         }
       }
-      ts.forEachChild(node, visit);
+      node.forEachChild(visit);
     }
 
     visit(sourceFile);
-  }
+  });
   return findings;
 }
 
 function findExplicitAnyTypes(): string[] {
   const findings: string[] = [];
-  for (const file of collectSourceFiles(join(process.cwd(), 'src', 'main'))) {
-    const source = readFileSync(file, 'utf8');
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
-
-    function visit(node: ts.Node): void {
+  const files = collectSourceFiles(join(process.cwd(), 'src', 'main'));
+  withParsedSourceFiles(files, (file, sourceFile) => {
+    function visit(node: Node): void {
       if (node.kind === ts.SyntaxKind.AnyKeyword) {
         findings.push(`${formatLocation(sourceFile, file, node.getStart(sourceFile))} explicit any type`);
       }
-      ts.forEachChild(node, visit);
+      node.forEachChild(visit);
     }
 
     visit(sourceFile);
-  }
+  });
   return findings;
 }
 
 function findWeakToBeDefinedAssertions(): string[] {
   const findings: string[] = [];
-  for (const file of collectSourceFiles(join(process.cwd(), 'tests'))) {
-    const source = readFileSync(file, 'utf8');
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
-
-    function visit(node: ts.Node): void {
+  const files = collectSourceFiles(join(process.cwd(), 'tests'));
+  withParsedSourceFiles(files, (file, sourceFile) => {
+    function visit(node: Node): void {
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const assertion = node.expression;
         if (assertion.name.text === 'toBeDefined' && isExpectChain(assertion.expression)) {
           findings.push(`${formatLocation(sourceFile, file, node.getStart(sourceFile))} weak toBeDefined assertion`);
         }
       }
-      ts.forEachChild(node, visit);
+      node.forEachChild(visit);
     }
 
     visit(sourceFile);
-  }
+  });
   return findings;
 }
 
-function isExpectChain(expression: ts.Expression): boolean {
+function isExpectChain(expression: Expression): boolean {
   if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === 'expect') {
     return true;
   }
@@ -121,22 +126,21 @@ function isExpectChain(expression: ts.Expression): boolean {
 }
 
 function readClassMethodSource(file: string, className: string, methodName: string): string {
-  const source = readFileSync(file, 'utf8');
-  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKindFor(file));
   let methodSource: string | null = null;
-
-  function visit(node: ts.Node): void {
-    if (ts.isClassDeclaration(node) && node.name !== undefined && node.name.text === className) {
-      for (const member of node.members) {
-        if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name) && member.name.text === methodName) {
-          methodSource = member.getText(sourceFile);
+  withParsedSourceFiles([file], (_file, sourceFile) => {
+    function visit(node: Node): void {
+      if (ts.isClassDeclaration(node) && node.name !== undefined && node.name.text === className) {
+        for (const member of node.members) {
+          if (ts.isMethodDeclaration(member) && ts.isIdentifier(member.name) && member.name.text === methodName) {
+            methodSource = member.getText(sourceFile);
+          }
         }
       }
+      node.forEachChild(visit);
     }
-    ts.forEachChild(node, visit);
-  }
 
-  visit(sourceFile);
+    visit(sourceFile);
+  });
   if (methodSource === null) {
     throw new Error(`Could not find ${className}.${methodName}`);
   }

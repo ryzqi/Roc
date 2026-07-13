@@ -345,4 +345,25 @@ describe('native packaging contract', () => {
       'node "scripts/package dir.mjs" "quoted\\"value"'
     );
   });
+
+  it('rewrites langgraph-sdk bundled pnpm relative imports to package specifiers', async () => {
+    const { rewriteBundledPnpmRelativeImports, hasBundledPnpmRelativeImports } = await loadNativePackagingModule();
+    const source = [
+      'import pRetry$1 from "../node_modules/.pnpm/p-retry@7.1.1/node_modules/p-retry/index.js";',
+      'import PQueue from "../node_modules/.pnpm/p-queue@9.1.0/node_modules/p-queue/dist/index.js";',
+      'const require_index = require("../node_modules/.pnpm/p-retry@7.1.1/node_modules/p-retry/index.cjs");'
+    ].join('\n');
+
+    const rewritten = rewriteBundledPnpmRelativeImports(source);
+    expect(hasBundledPnpmRelativeImports(source)).toBe(true);
+    expect(hasBundledPnpmRelativeImports(rewritten)).toBe(false);
+    expect(rewritten).toContain('from "p-retry"');
+    expect(rewritten).toContain('from "p-queue"');
+    expect(rewritten).toContain('require("p-retry")');
+  });
+
+  it('sanitizes installed langgraph-sdk package sources before packaging', () => {
+    expect(beforePackHook).toContain('sanitizeLanggraphSdkForPackaging');
+  });
+
 });

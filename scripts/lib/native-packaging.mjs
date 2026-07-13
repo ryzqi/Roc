@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { getElectronVersion, packageJsonPath, projectRoot } from './electron-version.mjs';
 
@@ -59,6 +59,118 @@ try {
   }
 }
 `;
+
+
+export const langgraphSdkPackageName = '@langchain/langgraph-sdk';
+
+
+export function hasBundledPnpmRelativeImports(source) {
+  return typeof source === 'string' && source.includes('node_modules/.pnpm/');
+}
+
+export function rewriteBundledPnpmRelativeImports(source) {
+  if (typeof source !== 'string' || source.length === 0) {
+    throw new Error('rewriteBundledPnpmRelativeImports requires a non-empty source string.');
+  }
+
+  let next = source;
+  next = next.replace(
+    /from\s+["'](?:\.\.\/)+node_modules\/\.pnpm\/[^"']+\/node_modules\/((?:@[^/"']+\/)?[^/"']+)\/[^"']+["']/g,
+    'from "$1"'
+  );
+  next = next.replace(
+    /import\s+["'](?:\.\.\/)+node_modules\/\.pnpm\/[^"']+\/node_modules\/((?:@[^/"']+\/)?[^/"']+)\/[^"']+["']/g,
+    'import "$1"'
+  );
+  next = next.replace(
+    /require\(\s*["'](?:\.\.\/)+node_modules\/\.pnpm\/[^"']+\/node_modules\/((?:@[^/"']+\/)?[^/"']+)\/[^"']+["']\s*\)/g,
+    'require("$1")'
+  );
+  return next;
+}
+
+export function findLanggraphSdkPackageRoots(targetProjectRoot = projectRoot) {
+  const roots = [];
+  const pnpmDir = resolve(targetProjectRoot, 'node_modules', '.pnpm');
+  if (!existsSync(pnpmDir)) {
+    return roots;
+  }
+
+  for (const entry of readdirSync(pnpmDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('@langchain+langgraph-sdk@')) {
+      continue;
+    }
+    const packageRoot = resolve(pnpmDir, entry.name, 'node_modules', '@langchain', 'langgraph-sdk');
+    if (existsSync(resolve(packageRoot, 'package.json'))) {
+      roots.push(packageRoot);
+    }
+  }
+
+  return roots;
+}
+
+function listPackagingCandidateFiles(packageRoot) {
+  const files = [];
+  const distRoot = resolve(packageRoot, 'dist');
+  if (!existsSync(distRoot)) {
+    return files;
+  }
+
+  const queue = [distRoot];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        // electron-builder already drops nested node_modules; skip vendored trees here.
+        if (entry.name === 'node_modules') {
+          continue;
+        }
+        queue.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (entry.name.endsWith('.js') || entry.name.endsWith('.cjs') || entry.name.endsWith('.mjs')) {
+        files.push(fullPath);
+      }
+    }
+  }
+  return files;
+}
+
+export function sanitizeLanggraphSdkForPackaging({
+  projectRoot: targetProjectRoot = projectRoot
+} = {}) {
+  const packageRoots = findLanggraphSdkPackageRoots(targetProjectRoot);
+  const rewrittenFiles = [];
+
+  for (const packageRoot of packageRoots) {
+    for (const filePath of listPackagingCandidateFiles(packageRoot)) {
+      const original = readFileSync(filePath, 'utf8');
+      if (!hasBundledPnpmRelativeImports(original)) {
+        continue;
+      }
+
+      const rewritten = rewriteBundledPnpmRelativeImports(original);
+      if (rewritten === original) {
+        throw new Error(`Failed to sanitize bundled pnpm imports in ${filePath}.`);
+      }
+      if (hasBundledPnpmRelativeImports(rewritten)) {
+        throw new Error(`Residual bundled pnpm imports remain in ${filePath}.`);
+      }
+
+      writeFileSync(filePath, rewritten, 'utf8');
+      rewrittenFiles.push(filePath);
+    }
+  }
+
+  return {
+    packageRootCount: packageRoots.length,
+    rewrittenFiles
+  };
+}
 
 export function createPackagingEnvironment(baseEnvironment = process.env) {
   mkdirSync(electronBuilderCache, { recursive: true });
@@ -319,7 +431,9 @@ export function prepareBetterSqlite3ForElectron({
   );
   if (fallbackStatus !== 0) {
     throw new Error(
-      `Failed to prepare ${betterSqlite3ModuleName} for Electron ${electronVersion}: electron-rebuild exited ${rebuildStatus}, prebuild-install exited ${fallbackStatus}.`
+      `Failed to prepare ${betterSqlite3ModuleName} for Electron ${electronVersion}: electron-rebuild exited ${rebuildStatus}, prebuild-install exited ${fallbackStatus}. ` +
+        `No local compiler toolchain and no published prebuild for this Electron ABI. ` +
+        `Install Visual Studio Build Tools with Desktop development with C++, or pin electron to a version that publishes better-sqlite3 prebuilds for this platform.`
     );
   }
 

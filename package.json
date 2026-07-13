@@ -24,48 +24,48 @@
   },
   "dependencies": {
     "@langchain/anthropic": "1.5.1",
-    "@langchain/core": "1.2.1",
+    "@langchain/core": "1.2.2",
     "@langchain/langgraph": "1.4.7",
     "@langchain/mcp-adapters": "1.1.3",
-    "@langchain/openai": "^1.5.3",
+    "@langchain/openai": "1.5.5",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "better-sqlite3": "12.11.1",
-    "deepagents": "1.10.5",
+    "deepagents": "1.10.7",
     "highlight.js": "11.11.1",
-    "langchain": "1.5.2",
-    "langsmith": "0.7.15",
-    "lucide-react": "1.23.0",
+    "langchain": "1.5.3",
+    "langsmith": "0.8.1",
+    "lucide-react": "1.24.0",
     "motion": "12.42.2",
     "node-pty": "1.1.0",
     "react": "19.2.7",
     "react-diff-view": "3.3.3",
     "react-dom": "19.2.7",
     "react-markdown": "10.1.0",
-    "react-virtuoso": "^4.18.10",
+    "react-virtuoso": "4.18.10",
     "rehype-highlight": "7.0.2",
     "remark-gfm": "4.0.1",
     "streamdown": "2.5.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "4.1.0",
+    "@electron/rebuild": "4.2.0",
     "@playwright/test": "1.61.1",
     "@types/better-sqlite3": "7.6.13",
-    "@types/node": "26.1.0",
+    "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.2.0",
-    "@vitest/coverage-v8": "4.1.9",
-    "electron": "42.4.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "electron": "42.6.1",
     "electron-builder": "26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "electron-vite": "5.0.0",
-    "fast-check": "^4.8.0",
-    "jsdom": "^29.1.1",
-    "typescript": "6.0.3",
+    "fast-check": "4.9.0",
+    "jsdom": "29.1.1",
+    "typescript": "7.0.2",
     "vite": "7.3.6",
-    "vitest": "4.1.9"
+    "vitest": "4.1.10"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -77,3 +77,5 @@
     ]
   }
 }
+
+
