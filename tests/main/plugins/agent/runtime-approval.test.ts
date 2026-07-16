@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
+import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
+import { createTestCapabilityPreviewProvider } from './runtime-capability-preview-test-helpers';
 
 let db: Database.Database;
 let events: RocEventEnvelope[];
@@ -16,9 +18,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -70,8 +72,8 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           resumePayload = input.resumePayload;
-          resumedTaskSource = input.request.taskSource;
-          resumedWorkflowHint = input.request.workflowHint;
+          resumedTaskSource = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).taskSource;
+          resumedWorkflowHint = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).workflowHint;
           yield createTextBlock(input.run.id, 'Approved command finished.');
         }
       },
@@ -161,6 +163,7 @@ describe('AgentPluginRuntime', () => {
           } satisfies ChatRunEvent;
         }
       },
+      capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
       modelFactory,
       repository
@@ -187,7 +190,7 @@ describe('AgentPluginRuntime', () => {
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          resumedRequests.push(input.request);
+          resumedRequests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           yield createTextBlock(input.run.id, 'Rebuilt runtime approved.');
         }
@@ -292,7 +295,7 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          executedModes.push(input.request.mode);
+          executedModes.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run).mode);
           if (input.resumePayload === undefined) {
             yield {
               type: 'run_interrupted',
@@ -354,9 +357,9 @@ describe('AgentPluginRuntime', () => {
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
-        createModelHandleByModelId: async (modelId) => ({
+        createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
           modelId,
-          providerId: 'openai'
+          providerId
         })
       },
       repository

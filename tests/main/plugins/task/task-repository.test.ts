@@ -75,6 +75,17 @@ describe('TaskRepository', () => {
       status: 'running',
       triggerType: 'manual'
     });
+    expect(new AgentTaskHistoryReader(agentDb).listEventsForThread(task.threadId)).toContainEqual(
+      expect.objectContaining({
+        runId: task.runId,
+        type: 'background_task_created',
+        payload: expect.objectContaining({
+          taskId: task.id,
+          goal: task.goal,
+          status: task.status
+        })
+      })
+    );
     expect(repository.findBackgroundTask(task.id)).toEqual(task);
     expect(rawRow('background_tasks', task.id)).toMatchObject({
       enabled_capabilities_json: JSON.stringify(enabledCapabilities),

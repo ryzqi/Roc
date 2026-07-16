@@ -1,8 +1,13 @@
+import type { WorkflowHint } from './chat';
 import type { DefaultModelState } from './settings';
 
 export type EnabledCapabilities = {
   mcpServers: string[];
   skills: string[];
+};
+
+export type AgentCapabilityPreviewRequest = EnabledCapabilities & {
+  mode: 'chat' | 'plan' | 'task';
 };
 
 export type InterruptDecisionType = 'approve' | 'edit' | 'reject';
@@ -76,6 +81,7 @@ export type AgentCapabilityPreview = {
   skillCards: AgentCapabilityCard[];
   subagents: AgentSubagentPreview[];
   interruptOn: AgentInterruptPolicy;
+  manifest: RunCapabilityManifestV1;
   untrustedContextPolicy: 'external_content_reference_only';
   reason: string;
 };
@@ -86,6 +92,79 @@ export type AgentCapabilityManifest = {
   skippedCapabilities: SkippedCapability[];
   toolCards: Array<Pick<AgentCapabilityCard, 'id' | 'name' | 'capabilityType' | 'riskLevel' | 'scope' | 'requiresApproval'>>;
   untrustedContextPolicy: 'external_content_reference_only';
+};
+
+export type RunCapabilityExecutionScopeV1 = 'main' | 'subagent';
+
+export type RunCapabilityProvenanceV1 =
+  | { kind: 'builtin'; source: 'roc' }
+  | { kind: 'mcp'; serverId: string };
+
+export type RunCapabilityEffectClassV1 =
+  | 'external_call'
+  | 'host_execution'
+  | 'network_read'
+  | 'none'
+  | 'workspace_mutation';
+
+export type RunCapabilityApprovalPolicyV1 =
+  | { kind: 'none' }
+  | { kind: 'required'; allowedDecisions: InterruptDecisionType[] };
+
+export type RunCapabilityManifestToolV1 = {
+  canonicalIdentity: string;
+  modelVisibleName: string;
+  provenance: RunCapabilityProvenanceV1;
+  executionScopes: RunCapabilityExecutionScopeV1[];
+  riskLevel: AgentCapabilityRisk;
+  effectClass: RunCapabilityEffectClassV1;
+  approvalPolicy: RunCapabilityApprovalPolicyV1;
+  idempotencyStrategy: 'none' | 'tool_call';
+  resourceScope: AgentCapabilityScope;
+};
+
+export type RunCapabilityManifestSkillV1 = {
+  canonicalIdentity: string;
+  name: string;
+  sourcePath: string;
+  description: string;
+};
+
+export type RunCapabilityManifestV1 = {
+  schemaVersion: 1;
+  manifestHash: string;
+  requestedCapabilities: EnabledCapabilities;
+  resolvedCapabilities: EnabledCapabilities;
+  skippedCapabilities: SkippedCapability[];
+  tools: RunCapabilityManifestToolV1[];
+  skills: RunCapabilityManifestSkillV1[];
+  untrustedContextPolicy: 'external_content_reference_only';
+};
+
+export type RunBudgetV1 = {
+  contextBudgetTokens: number | null;
+};
+
+export type RunExecutionSnapshotV1 = {
+  schemaVersion: 1;
+  runId: string;
+  threadId: string;
+  runOrigin: 'background_schedule' | 'chat' | 'manual_task_run' | 'workbench_creation';
+  model: {
+    providerId: string;
+    modelId: string;
+  };
+  mode: 'plan' | 'run' | 'task';
+  workspace: {
+    path: string;
+    hash: string;
+  } | null;
+  capabilityManifest: RunCapabilityManifestV1;
+  budget: RunBudgetV1;
+  workflowHint: WorkflowHint;
+  explicitSkillIds: string[];
+  inputMessageId: string;
+  dispatchKey: string | null;
 };
 
 export type AgentRuntimeStatus = {

@@ -3,9 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
+  AgentCapabilityPreview,
   ChatInterruptPayload,
   ChatPersistedAttachment,
+  ChatRunEvent,
   EnabledCapabilities,
+  RunExecutionSnapshotV1,
   SessionMessageEntry,
   SessionMessagePhase,
   SessionMessageSearchRequest,
@@ -16,6 +19,11 @@ import type {
   TaskStatus
 } from '../../../shared/types';
 import type { PendingInterrupt } from './runtime-types';
+import {
+  createRunExecutionSnapshot,
+  parseRunExecutionSnapshot,
+  type RunExecutionSnapshotSeed
+} from './run-execution-snapshot';
 
 type TaskRunRow = {
   id: string;
@@ -59,14 +67,6 @@ type PendingInterruptRow = {
   thread_id: string;
   interrupt_id: string;
   payload_json: string;
-  mode: PendingInterrupt['mode'];
-  task_source: PendingInterrupt['taskSource'];
-  workflow_hint: PendingInterrupt['workflowHint'];
-  workspace_path_state: 'undefined' | 'null' | 'value';
-  workspace_path: string | null;
-  explicit_skill_ids_json: string | null;
-  created_at: string;
-  updated_at: string;
 };
 
 export class AgentSessionRepository {
@@ -74,8 +74,8 @@ export class AgentSessionRepository {
 
   createTaskRun(input: {
     userInput: string;
-    modelId: string;
-    enabledCapabilities: EnabledCapabilities;
+    capabilityPreview: AgentCapabilityPreview;
+    snapshot: RunExecutionSnapshotSeed;
     threadKind: TaskKind;
     threadId?: string;
     attachments?: ChatPersistedAttachment[];
@@ -87,7 +87,17 @@ export class AgentSessionRepository {
     const threadId = existingThreadId === null ? `thread_${randomUUID()}` : existingThreadId;
     const hasActiveThread = existingThreadId !== null && this.hasActiveThread(threadId);
     const runNumber = existingThreadId === null || !hasActiveThread ? 1 : this.nextRunNumber(threadId);
-    const enabledCapabilitiesJson = JSON.stringify(input.enabledCapabilities);
+    const snapshot = createRunExecutionSnapshot({
+      runId,
+      threadId,
+      inputMessageId: eventId,
+      snapshot: input.snapshot
+    });
+    if (snapshot.capabilityManifest.manifestHash !== input.capabilityPreview.manifest.manifestHash) {
+      throw new Error('run_execution_snapshot_manifest_mismatch');
+    }
+    const enabledCapabilities = snapshot.capabilityManifest.resolvedCapabilities;
+    const enabledCapabilitiesJson = JSON.stringify(enabledCapabilities);
     const userMessagePayload: {
       role: 'user';
       content: string;
@@ -96,7 +106,7 @@ export class AgentSessionRepository {
     } = {
       role: 'user',
       content: input.userInput,
-      enabledCapabilities: input.enabledCapabilities
+      enabledCapabilities
     };
     if (input.attachments !== undefined && input.attachments.length > 0) {
       userMessagePayload.attachments = input.attachments;
@@ -121,8 +131,9 @@ export class AgentSessionRepository {
           .prepare(
             `INSERT INTO agent_runs
              (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
-              enabled_capabilities_json, workspace_path, task_source, workflow_hint)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              enabled_capabilities_json, workspace_path, task_source, workflow_hint, snapshot_json, snapshot_version,
+              snapshot_error_code, state_version, run_origin, dispatch_key)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             runId,
@@ -132,28 +143,71 @@ export class AgentSessionRepository {
             'waiting_next_turn',
             now,
             null,
-            null,
-            input.modelId,
+            snapshot.model.providerId,
+            snapshot.model.modelId,
             enabledCapabilitiesJson,
+            snapshot.workspace === null ? null : snapshot.workspace.path,
+            snapshot.runOrigin === 'workbench_creation' ? 'workbench' : null,
+            snapshot.workflowHint,
+            JSON.stringify(snapshot),
+            snapshot.schemaVersion,
             null,
-            null,
-            null
+            1,
+            snapshot.runOrigin,
+            snapshot.dispatchKey
           );
 
+        this.insertEvent({
+          id: eventId,
+          threadId,
+          runId,
+          type: 'message',
+          payload: userMessagePayload,
+          createdAt: now
+        });
+        this.insertEvent({
+          id: `event_${randomUUID()}`,
+          threadId,
+          runId,
+          type: 'context_manifest',
+          payload: {
+            manifest: snapshot.capabilityManifest,
+            requestedCapabilities: snapshot.capabilityManifest.requestedCapabilities,
+            resolvedCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
+            skippedCapabilities: snapshot.capabilityManifest.skippedCapabilities,
+            toolCards: input.capabilityPreview.toolCards,
+            skillCards: input.capabilityPreview.skillCards,
+            untrustedContextPolicy: snapshot.capabilityManifest.untrustedContextPolicy
+          },
+          createdAt: now
+        });
+        this.insertEvent({
+          id: `event_${randomUUID()}`,
+          threadId,
+          runId,
+          type: 'agent_update',
+          payload: {
+            status: 'running',
+            providerId: snapshot.model.providerId,
+            modelId: snapshot.model.modelId
+          },
+          createdAt: now
+        });
+        const runStartedEvent: ChatRunEvent = {
+          type: 'run_started',
+          runId,
+          mode: snapshot.mode === 'run' ? 'chat' : snapshot.mode,
+          threadId,
+          providerId: snapshot.model.providerId,
+          modelId: snapshot.model.modelId,
+          createdAt: now
+        };
         this.db
           .prepare(
-            `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
+             VALUES (?, ?, ?, ?)`
           )
-          .run(
-            eventId,
-            threadId,
-            runId,
-            this.nextEventSequence(threadId),
-            'message',
-            JSON.stringify(userMessagePayload),
-            now
-          );
+          .run(runId, 1, JSON.stringify(runStartedEvent), now);
       })();
 
     return {
@@ -164,8 +218,8 @@ export class AgentSessionRepository {
       status: 'waiting_next_turn',
       startedAt: now,
       endedAt: null,
-      modelId: input.modelId,
-      enabledCapabilities: input.enabledCapabilities
+      modelId: snapshot.model.modelId,
+      enabledCapabilities
     };
   }
 
@@ -175,6 +229,48 @@ export class AgentSessionRepository {
       throw new Error('task_run_not_found');
     }
     return mapTaskRun(row);
+  }
+
+  getRunExecutionSnapshot(runId: string): RunExecutionSnapshotV1 {
+    const row = this.db
+      .prepare('SELECT id, thread_id, status, snapshot_json, snapshot_version, snapshot_error_code FROM agent_runs WHERE id = ?')
+      .get(runId) as
+      | {
+          id: string;
+          thread_id: string;
+          status: TaskStatus;
+          snapshot_json: string | null;
+          snapshot_version: number | null;
+          snapshot_error_code: string | null;
+        }
+      | undefined;
+    if (row === undefined) {
+      throw new Error('task_run_not_found');
+    }
+    if (row.snapshot_json === null || row.snapshot_version !== 1) {
+      this.quarantineRunSnapshot(row, 'run_execution_snapshot_missing');
+      throw new Error('run_execution_snapshot_missing');
+    }
+    let storedSnapshot: unknown;
+    try {
+      storedSnapshot = JSON.parse(row.snapshot_json) as unknown;
+    } catch {
+      this.quarantineRunSnapshot(row, 'run_execution_snapshot_json_invalid');
+      throw new Error('run_execution_snapshot_json_invalid');
+    }
+    try {
+      const snapshot = parseRunExecutionSnapshot(storedSnapshot);
+      if (snapshot.runId !== row.id || snapshot.threadId !== row.thread_id) {
+        throw new Error('run_execution_snapshot_identity_mismatch');
+      }
+      return snapshot;
+    } catch (error) {
+      const code = error instanceof Error && error.message === 'run_execution_snapshot_identity_mismatch'
+        ? 'run_execution_snapshot_identity_mismatch'
+        : 'run_execution_snapshot_corrupt';
+      this.quarantineRunSnapshot(row, code);
+      throw new Error(code);
+    }
   }
 
   updateRunStatus(input: { runId: string; status: TaskStatus; endedAt?: string | null }): TaskRun {
@@ -195,9 +291,6 @@ export class AgentSessionRepository {
       throw new Error('agent_pending_interrupt_thread_mismatch');
     }
     const now = new Date().toISOString();
-    const workspacePath = encodeWorkspacePath(input.interrupt.workspacePath);
-    const explicitSkillIdsJson =
-      input.interrupt.explicitSkillIds === undefined ? null : JSON.stringify(input.interrupt.explicitSkillIds);
     this.db.transaction(() => {
       this.db.prepare('UPDATE agent_runs SET status = ?, ended_at = ? WHERE id = ?').run('waiting_user', null, input.runId);
       this.db.prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?').run('waiting_user', now, run.threadId);
@@ -224,12 +317,12 @@ export class AgentSessionRepository {
           input.threadId,
           input.interrupt.interruptId,
           JSON.stringify(input.interrupt.payload),
-          input.interrupt.mode,
-          input.interrupt.taskSource,
-          input.interrupt.workflowHint,
-          workspacePath.state,
-          workspacePath.value,
-          explicitSkillIdsJson,
+          'snapshot',
+          null,
+          null,
+          'null',
+          null,
+          null,
           now,
           now
         );
@@ -238,7 +331,9 @@ export class AgentSessionRepository {
   }
 
   getPendingInterrupt(runId: string): { runId: string; threadId: string; interrupt: PendingInterrupt } | null {
-    const row = this.db.prepare('SELECT * FROM agent_pending_interrupts WHERE run_id = ?').get(runId) as
+    const row = this.db
+      .prepare('SELECT run_id, thread_id, interrupt_id, payload_json FROM agent_pending_interrupts WHERE run_id = ?')
+      .get(runId) as
       | PendingInterruptRow
       | undefined;
     if (row === undefined) {
@@ -249,13 +344,7 @@ export class AgentSessionRepository {
       threadId: row.thread_id,
       interrupt: {
         interruptId: row.interrupt_id,
-        payload: JSON.parse(row.payload_json) as ChatInterruptPayload,
-        mode: row.mode,
-        taskSource: row.task_source,
-        workflowHint: row.workflow_hint,
-        workspacePath: decodeWorkspacePath(row),
-        explicitSkillIds:
-          row.explicit_skill_ids_json === null ? undefined : JSON.parse(row.explicit_skill_ids_json) as string[]
+        payload: JSON.parse(row.payload_json) as ChatInterruptPayload
       }
     };
   }
@@ -274,13 +363,7 @@ export class AgentSessionRepository {
       payload: input.payload,
       createdAt
     };
-    const sequence = this.nextEventSequence(input.threadId);
-    this.db
-      .prepare(
-        `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(event.id, event.threadId, event.runId, sequence, event.type, JSON.stringify(event.payload), event.createdAt);
+    this.insertEvent(event);
     return event;
   }
 
@@ -426,6 +509,56 @@ export class AgentSessionRepository {
     return row.max_sequence + 1;
   }
 
+  private insertEvent(event: TaskEvent): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        event.id,
+        event.threadId,
+        event.runId,
+        this.nextEventSequence(event.threadId),
+        event.type,
+        JSON.stringify(event.payload),
+        event.createdAt
+      );
+  }
+
+  private quarantineRunSnapshot(
+    row: {
+      id: string;
+      thread_id: string;
+      status: TaskStatus;
+      snapshot_error_code: string | null;
+    },
+    code: string
+  ): void {
+    if (row.snapshot_error_code !== null) {
+      return;
+    }
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      if (isTerminalRunStatus(row.status)) {
+        this.db.prepare('UPDATE agent_runs SET snapshot_error_code = ? WHERE id = ?').run(code, row.id);
+      } else {
+        this.db
+          .prepare('UPDATE agent_runs SET status = ?, ended_at = ?, snapshot_error_code = ? WHERE id = ?')
+          .run('interrupted', now, code, row.id);
+        this.db.prepare('UPDATE agent_threads SET status = ?, updated_at = ? WHERE id = ?').run('interrupted', now, row.thread_id);
+      }
+      this.insertEvent({
+        id: `event_${randomUUID()}`,
+        threadId: row.thread_id,
+        runId: row.id,
+        type: 'error',
+        payload: { code },
+        createdAt: now
+      });
+    })();
+  }
+
   private hasActiveThread(threadId: string): boolean {
     const row = this.db.prepare('SELECT id FROM agent_threads WHERE id = ? AND archived_at IS NULL').get(threadId) as
       | { id: string }
@@ -440,6 +573,10 @@ export class AgentSessionRepository {
     }
     return row.title;
   }
+}
+
+function isTerminalRunStatus(status: TaskStatus): boolean {
+  return status === 'failed' || status === 'cancelled' || status === 'completed' || status === 'interrupted' || status === 'archived';
 }
 
 function mapTaskRun(row: TaskRunRow): TaskRun {
@@ -487,32 +624,6 @@ function requireNonEmpty(value: string, code: string): string {
     throw new Error(code);
   }
   return normalized;
-}
-
-function encodeWorkspacePath(workspacePath: PendingInterrupt['workspacePath']): { state: 'undefined' | 'null' | 'value'; value: string | null } {
-  if (workspacePath === undefined) {
-    return { state: 'undefined', value: null };
-  }
-  if (workspacePath === null) {
-    return { state: 'null', value: null };
-  }
-  return { state: 'value', value: workspacePath };
-}
-
-function decodeWorkspacePath(row: Pick<PendingInterruptRow, 'workspace_path_state' | 'workspace_path'>): PendingInterrupt['workspacePath'] {
-  if (row.workspace_path_state === 'undefined') {
-    return undefined;
-  }
-  if (row.workspace_path_state === 'null') {
-    return null;
-  }
-  if (row.workspace_path_state === 'value') {
-    if (row.workspace_path === null) {
-      throw new Error('agent_pending_interrupt_workspace_path_missing');
-    }
-    return row.workspace_path;
-  }
-  throw new Error('agent_pending_interrupt_workspace_path_state_invalid');
 }
 
 function buildPlainPrefixFtsQuery(query: string): string | null {

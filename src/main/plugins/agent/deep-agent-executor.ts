@@ -11,9 +11,11 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
-  ChatStartRunRequest,
+  ChatRunMode,
   ChatValidatedImageAttachment,
   FileDeleteResult,
+  RunCapabilityManifestV1,
+  RunExecutionSnapshotV1,
   TaskDetail,
   TaskRun,
   UpdateBackgroundTaskRequest,
@@ -77,49 +79,54 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       if (handle === undefined) {
         throw new Error('agent_deep_agent_model_handle_missing');
       }
+      const mode = readExecutorMode(input.snapshot);
+      const workflowHint = input.snapshot.workflowHint;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
       const usageAccumulator = createUsageAccumulator();
       const eventQueue = createChatRunEventQueue();
 
-      const workspace = await options.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {});
-      const runtimeWorkspace = resolveRuntimeWorkspace(input.request, workspace);
-      requireWorkbenchSourceForBackgroundTaskWorkflow(input.request);
+      const runtimeWorkspace = createWorkspaceFromSnapshot(input.snapshot);
+      requireWorkbenchSourceForBackgroundTaskWorkflow(input.snapshot);
       const hookRunContext = {
         runId: input.run.id,
         threadId: input.run.threadId,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         cwd: runtimeWorkspace === null ? options.paths.root : runtimeWorkspace.path,
-        source: isBackgroundTaskWorkflow(input.request) ? ('background_task' as const) : ('chat' as const),
+        source: isBackgroundTaskWorkflow(input.snapshot) ? ('background_task' as const) : ('chat' as const),
         modelId: input.modelHandle.modelId,
-        workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
+        workflowHint
       };
       const shellExecutionService = createShellExecutionAdapter(options.capabilities, runtimeWorkspace === null ? null : runtimeWorkspace.path);
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
-        enabledCapabilities: input.request.enabledCapabilities,
-        backgroundTaskToolMode: input.request.mode === 'plan' ? null : readBackgroundTaskToolMode(input.request),
+        capabilityManifest: input.snapshot.capabilityManifest,
+        enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
+        backgroundTaskToolMode: mode === 'plan' ? null : readBackgroundTaskToolMode(input.snapshot),
         runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         shellExecutionService,
-        mode: input.request.mode
+        mode
+      });
+      const explicitSkillContexts = loadExplicitSkillContexts({
+        explicitSkillIds: input.snapshot.explicitSkillIds,
+        manifestSkills: input.snapshot.capabilityManifest.skills
       });
       const runtimeBackend = createRuntimeBackend({
         capabilities: options.capabilities,
         getMemorySettings: options.getMemorySettings,
         handle,
         paths: options.paths,
-        selectedSkillIds: input.request.enabledCapabilities.skills,
+        selectedSkillIds: [
+          ...input.snapshot.capabilityManifest.resolvedCapabilities.skills,
+          ...explicitSkillContexts.map((skill) => skill.id)
+        ],
         store: options.store,
         workspace: runtimeWorkspace
       });
-      const explicitSkillContexts = await loadExplicitSkillContexts({
-        capabilities: options.capabilities,
-        explicitSkillIds: input.request.explicitSkillIds
-      });
       const contextHarness = assembleContextHarness({
-        mode: input.request.mode,
-        enabledCapabilities: input.request.enabledCapabilities,
-        workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
+        mode,
+        enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
+        workflowHint,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         memorySources: runtimeBackend.memorySources,
         baseTools: tools.runTools,
@@ -132,7 +139,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           runId: input.run.id,
           threadId: input.run.threadId,
           event: event.type,
-          mode: input.request.mode,
+          mode,
           stage: event.stage,
           ...(event.persistedChars === undefined ? {} : { persistedChars: event.persistedChars }),
           ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars })
@@ -167,7 +174,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         initialHookContexts.push(...sessionStart.additionalContexts);
       }
       const agent = buildDeepAgent({
-        mode: input.request.mode,
+        mode,
         model: handle.model,
         systemPrompt: contextHarness.systemPrompt,
         backend: runtimeBackend.backend,
@@ -179,18 +186,19 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         }),
         tools: contextHarness.tools,
         filesystemPermissions:
-          input.request.mode === 'plan'
+          mode === 'plan'
             ? createRocReadOnlyFilesystemPermissions()
             : createRocFilesystemPermissions(),
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
-        interruptOn: await readInterruptPolicy(options.capabilities, input.request.enabledCapabilities, input.request),
+        interruptOn: readInterruptPolicy(input.snapshot.capabilityManifest, input.snapshot),
         checkpointer: options.checkpointer,
-        workflowHint: input.request.workflowHint ?? null,
-        contextBudgetTokens: handle.runtime.contextBudgetTokens,
+        workflowHint,
+        contextBudgetTokens:
+          input.snapshot.budget.contextBudgetTokens === null ? undefined : input.snapshot.budget.contextBudgetTokens,
         contextCompaction: {
           artifactStore: options.contextArtifactStore,
           emitEvent: emitContextMaintenanceEvent,
-          mode: input.request.mode,
+          mode,
           runId: input.run.id,
           threadId: input.run.threadId,
           workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
@@ -212,7 +220,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       });
       const runInput =
         input.resumePayload === undefined
-          ? createInitialState(input.request.input, input.validatedAttachments)
+          ? createInitialState(input.run.userInput, input.validatedAttachments)
           : new Command({
               resume: input.resumePayload
             });
@@ -262,7 +270,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           recordPromptCacheMetrics({
             metricsService: options.metricsService,
             modelId: input.modelHandle.modelId,
-            mode: input.request.mode,
+            mode,
             providerId: input.modelHandle.providerId,
             source: hookRunContext.source,
             usageAccumulator
@@ -303,7 +311,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
 function recordPromptCacheMetrics(input: {
   metricsService: Pick<MetricsService, 'recordPromptCacheMetrics'> | undefined;
   usageAccumulator: ReturnType<typeof createUsageAccumulator>;
-  mode: ChatStartRunRequest['mode'];
+  mode: ChatRunMode;
   source: 'chat' | 'background_task';
   providerId: string;
   modelId: string;
@@ -328,32 +336,32 @@ function recordPromptCacheMetrics(input: {
   });
 }
 
-async function readInterruptPolicy(
-  capabilities: RocCapabilityRegistry,
-  enabledCapabilities: TaskRun['enabledCapabilities'],
-  request: ChatStartRunRequest
-): Promise<NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined> {
-  const backgroundTaskInterrupts = createBackgroundTaskInterruptPolicy(request);
-  if (!capabilities.list().some((capability) => capability.name === 'agent.capability.preview')) {
-    return backgroundTaskInterrupts;
+function readInterruptPolicy(
+  manifest: RunCapabilityManifestV1,
+  snapshot: RunExecutionSnapshotV1
+): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
+  const backgroundTaskInterrupts = createBackgroundTaskInterruptPolicy(snapshot);
+  const interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> = {};
+  for (const tool of manifest.tools) {
+    if (tool.approvalPolicy.kind === 'required') {
+      interruptOn[tool.modelVisibleName] = {
+        allowedDecisions: tool.approvalPolicy.allowedDecisions
+      };
+    }
   }
-  const preview = await capabilities.invoke<
-    TaskRun['enabledCapabilities'],
-    { interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> }
-  >('agent.capability.preview', enabledCapabilities);
   if (backgroundTaskInterrupts === undefined) {
-    return preview.interruptOn;
+    return Object.keys(interruptOn).length === 0 ? undefined : interruptOn;
   }
   return {
-    ...preview.interruptOn,
+    ...interruptOn,
     ...backgroundTaskInterrupts
   };
 }
 
 function createBackgroundTaskInterruptPolicy(
-  request: ChatStartRunRequest
+  snapshot: RunExecutionSnapshotV1
 ): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
-  if (!isBackgroundTaskWorkflow(request) || request.taskSource !== 'workbench') {
+  if (!isBackgroundTaskWorkflow(snapshot) || snapshot.runOrigin !== 'workbench_creation') {
     return undefined;
   }
   return {
@@ -390,21 +398,14 @@ function createInitialState(input: string, attachments: readonly ChatValidatedIm
   };
 }
 
-function resolveRuntimeWorkspace(request: ChatStartRunRequest, currentWorkspace: Workspace | null): Workspace | null {
-  if (request.workspacePath === undefined || request.workspacePath === null) {
-    return currentWorkspace;
-  }
-  const workspacePath = request.workspacePath.trim();
-  if (workspacePath.length === 0) {
-    throw new Error('agent_workspace_path_empty');
-  }
-  if (currentWorkspace !== null && currentWorkspace.path === workspacePath) {
-    return currentWorkspace;
+function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV1): Workspace | null {
+  if (snapshot.workspace === null) {
+    return null;
   }
   return {
-    id: 'request-workspace',
-    path: workspacePath,
-    displayName: workspacePath,
+    id: 'snapshot-workspace',
+    path: snapshot.workspace.path,
+    displayName: snapshot.workspace.path,
     lastOpenedAt: new Date().toISOString(),
     trustState: 'trusted'
   };
@@ -422,18 +423,19 @@ function createExecutorCallbacks(input: { emitRuntimeEvent: (event: ChatRunEvent
 
 async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
+  capabilityManifest: RunCapabilityManifestV1;
   enabledCapabilities: TaskRun['enabledCapabilities'];
   backgroundTaskToolMode: 'all' | 'change' | null;
   runtimeWorkspacePath: string | null;
   shellExecutionService: AgentExecuteAdapter;
-  mode: ChatStartRunRequest['mode'];
+  mode: ChatRunMode;
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: StringDynamicStructuredTool;
 }> {
   const webReadTool = createWebReadTool(input.capabilities);
   const askUserTool = createAskUserTool();
-  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.enabledCapabilities);
+  const mcpTools = await loadSelectedMcpTools(input.capabilities, input.capabilityManifest);
   if (input.mode === 'plan') {
     return {
       runTools: [webReadTool, askUserTool, ...mcpTools],
@@ -485,9 +487,10 @@ async function createExecutorTools(input: {
 
 async function loadSelectedMcpTools(
   capabilities: RocCapabilityRegistry,
-  enabledCapabilities: TaskRun['enabledCapabilities']
+  capabilityManifest: RunCapabilityManifestV1
 ): Promise<ClientTool[]> {
-  if (enabledCapabilities.mcpServers.length === 0) {
+  const selectedTools = capabilityManifest.tools.filter((tool) => tool.provenance.kind === 'mcp');
+  if (selectedTools.length === 0) {
     return [];
   }
   const tools = await capabilities.invoke<{}, unknown[]>('mcp.tools.get', {});
@@ -495,34 +498,34 @@ async function loadSelectedMcpTools(
     if (!isClientTool(tool)) {
       return [];
     }
-    const normalizedName = normalizeMcpToolName(tool.name, enabledCapabilities.mcpServers);
-    if (normalizedName === null) {
+    const modelVisibleName = resolveManifestMcpToolName(tool.name, selectedTools);
+    if (modelVisibleName === null) {
       return [];
     }
-    tool.name = normalizedName;
+    tool.name = modelVisibleName;
     return [tool];
   });
 }
 
-function isBackgroundTaskWorkflow(request: ChatStartRunRequest): boolean {
-  return request.workflowHint === 'propose_background_task' || request.workflowHint === 'background_task_change';
+function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): boolean {
+  return snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change';
 }
 
-function readBackgroundTaskToolMode(request: ChatStartRunRequest): 'all' | 'change' | null {
-  if (request.workflowHint === 'propose_background_task') {
+function readBackgroundTaskToolMode(snapshot: RunExecutionSnapshotV1): 'all' | 'change' | null {
+  if (snapshot.workflowHint === 'propose_background_task') {
     return 'all';
   }
-  if (request.workflowHint === 'background_task_change') {
+  if (snapshot.workflowHint === 'background_task_change') {
     return 'change';
   }
   return null;
 }
 
-function requireWorkbenchSourceForBackgroundTaskWorkflow(request: ChatStartRunRequest): void {
-  if (!isBackgroundTaskWorkflow(request)) {
+function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): void {
+  if (!isBackgroundTaskWorkflow(snapshot)) {
     return;
   }
-  if (request.taskSource !== 'workbench') {
+  if (snapshot.runOrigin !== 'workbench_creation') {
     throw new Error('background_task_workbench_source_required');
   }
 }
@@ -531,18 +534,36 @@ function isClientTool(value: unknown): value is ClientTool {
   return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'name') === 'string';
 }
 
-function normalizeMcpToolName(name: string, enabledServerIds: readonly string[]): string | null {
-  if (
-    enabledServerIds.includes('exa-hosted') &&
-    (name === 'web_search' ||
-      name === 'web_search_exa' ||
-      name === 'web_search_advanced_exa' ||
-      name === 'exa-hosted__web_search_exa' ||
-      name === 'exa-hosted__web_search_advanced_exa')
-  ) {
-    return 'web_search';
+function resolveManifestMcpToolName(
+  runtimeName: string,
+  selectedTools: RunCapabilityManifestV1['tools']
+): string | null {
+  for (const tool of selectedTools) {
+    if (tool.provenance.kind !== 'mcp') {
+      continue;
+    }
+    if (tool.provenance.serverId === 'exa-hosted' && isExaHostedWebSearchName(runtimeName)) {
+      return tool.modelVisibleName === 'web_search' ? tool.modelVisibleName : null;
+    }
+    if (runtimeName === `${tool.provenance.serverId}__${tool.modelVisibleName}`) {
+      return tool.modelVisibleName;
+    }
   }
-  return enabledServerIds.some((serverId) => name.startsWith(`${serverId}__`)) ? name : null;
+  return null;
+}
+
+function readExecutorMode(snapshot: RunExecutionSnapshotV1): ChatRunMode {
+  return snapshot.mode === 'run' ? 'chat' : snapshot.mode;
+}
+
+function isExaHostedWebSearchName(name: string): boolean {
+  return (
+    name === 'web_search' ||
+    name === 'web_search_exa' ||
+    name === 'web_search_advanced_exa' ||
+    name === 'exa-hosted__web_search_exa' ||
+    name === 'exa-hosted__web_search_advanced_exa'
+  );
 }
 
 function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicStructuredTool {

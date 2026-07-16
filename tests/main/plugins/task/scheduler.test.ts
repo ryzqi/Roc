@@ -103,7 +103,7 @@ describe('TaskScheduler', () => {
       expect.objectContaining({
         input: task.goal,
         mode: 'task',
-        taskSource: 'workbench',
+        taskSource: 'background_schedule',
         threadId: task.threadId,
         workspacePath: task.workspacePath
       })
@@ -165,7 +165,7 @@ describe('TaskScheduler', () => {
       expect.objectContaining({
         input: task.goal,
         mode: 'task',
-        taskSource: 'workbench',
+        taskSource: 'background_schedule',
         workspacePath: task.workspacePath
       })
     ]);

@@ -8,12 +8,12 @@ export type AgentModelHandle = {
 
 export type AgentModelFactoryAdapter = {
   createDefaultModelHandle(): Promise<AgentModelHandle>;
-  createModelHandleByModelId(modelId: string): Promise<AgentModelHandle>;
+  createModelHandleByProviderAndModel(input: { providerId: string; modelId: string }): Promise<AgentModelHandle>;
 };
 
 export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapter {
   constructor(
-    private readonly factory: Pick<LangChainModelFactory, 'createChatModelByModelId' | 'createDefaultChatModel'>,
+    private readonly factory: Pick<LangChainModelFactory, 'createChatModelByProviderAndModel' | 'createDefaultChatModel'>,
     private readonly options: { beforeCreate?: () => void } = {}
   ) {}
 
@@ -29,11 +29,11 @@ export class LangChainAgentModelFactoryAdapter implements AgentModelFactoryAdapt
     };
   }
 
-  async createModelHandleByModelId(modelId: string): Promise<AgentModelHandle> {
+  async createModelHandleByProviderAndModel(input: { providerId: string; modelId: string }): Promise<AgentModelHandle> {
     if (this.options.beforeCreate !== undefined) {
       this.options.beforeCreate();
     }
-    const handle = await this.factory.createChatModelByModelId(modelId, { streaming: true });
+    const handle = await this.factory.createChatModelByProviderAndModel(input.providerId, input.modelId, { streaming: true });
     return {
       providerId: handle.provider.id,
       modelId: handle.modelId,
@@ -53,10 +53,12 @@ export class StaticAgentModelFactoryAdapter implements AgentModelFactoryAdapter 
     });
   }
 
-  createModelHandleByModelId(modelId: string): Promise<AgentModelHandle> {
+  createModelHandleByProviderAndModel(input: { providerId: string; modelId: string }): Promise<AgentModelHandle> {
+    if (input.providerId !== this.handle.providerId || input.modelId !== this.handle.modelId) {
+      throw new Error('static_model_handle_mismatch');
+    }
     return Promise.resolve({
-      providerId: this.handle.providerId,
-      modelId
+      ...this.handle
     });
   }
 }

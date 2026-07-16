@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
+import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
+import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { buildWorkspaceHash } from '../../../../src/main/services/paths';
-import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
+import type { AgentCapabilityPreview, ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 
 let db: Database.Database;
 let events: RocEventEnvelope[];
@@ -17,9 +19,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -86,6 +88,161 @@ describe('AgentPluginRuntime', () => {
     );
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_completed')
+    );
+  });
+
+  it('publishes the mode-aware capability preview with the run-start projection', async () => {
+    const repository = new AgentSessionRepository(db);
+    const previewRequests: Array<{ mode: ChatStartRunRequest['mode']; requestedCapabilities: ChatStartRunRequest['enabledCapabilities'] }> = [];
+    const runtime = new AgentPluginRuntime({
+      capabilityPreviewProvider: async (input) => {
+        previewRequests.push({
+          mode: input.mode,
+          requestedCapabilities: input.requestedCapabilities
+        });
+        return capabilityPreview(input.requestedCapabilities);
+      },
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      enabledCapabilities: {
+        mcpServers: ['docs'],
+        skills: ['research']
+      },
+      input: 'Plan the migration',
+      mode: 'plan'
+    });
+
+    expect(previewRequests).toEqual([
+      {
+        mode: 'plan',
+        requestedCapabilities: {
+          mcpServers: ['docs'],
+          skills: ['research']
+        }
+      }
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          runId: result.runId,
+          capabilityPreview: expect.objectContaining({
+            requestedCapabilities: {
+              mcpServers: ['docs'],
+              skills: ['research']
+            }
+          })
+        }),
+        type: 'agent.run.started'
+      })
+    );
+    await waitForEvent(() =>
+      events.some(
+        (event) =>
+          event.type === 'agent.chat.run-event' &&
+          readChatRunEvent(event.payload)?.runId === result.runId &&
+          readChatRunEvent(event.payload)?.type === 'run_completed'
+      )
+    );
+  });
+
+  it('freezes explicit skills without changing resolved capabilities', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      capabilityPreviewProvider: async (input) => capabilityPreview(input.requestedCapabilities, input.explicitSkillIds),
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      enabledCapabilities: {
+        mcpServers: [],
+        skills: ['typescript']
+      },
+      explicitSkillIds: ['python-expert'],
+      input: 'Review this Python migration.',
+      mode: 'chat'
+    });
+    const snapshot = repository.getRunExecutionSnapshot(result.runId);
+
+    expect(snapshot.explicitSkillIds).toEqual(['python-expert']);
+    expect(snapshot.capabilityManifest.resolvedCapabilities.skills).toEqual(['typescript']);
+    expect(snapshot.capabilityManifest.skills.map((skill) => skill.canonicalIdentity)).toEqual([
+      'skill:typescript',
+      'skill:python-expert'
+    ]);
+    expect(repository.listThreadEvents(snapshot.threadId)).toContainEqual(
+      expect.objectContaining({
+        type: 'context_manifest',
+        payload: expect.objectContaining({
+          skillCards: [
+            expect.objectContaining({ id: 'skill:typescript' }),
+            expect.objectContaining({ id: 'skill:python-expert' })
+          ]
+        })
+      })
+    );
+    await waitForEvent(() =>
+      events.some(
+        (event) =>
+          event.type === 'agent.chat.run-event' &&
+          readChatRunEvent(event.payload)?.runId === result.runId &&
+          readChatRunEvent(event.payload)?.type === 'run_completed'
+      )
+    );
+  });
+
+  it('rejects a background-task workflow hint without workbench provenance', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    await expect(
+      runtime.startRun({
+        ...startRequest,
+        taskSource: null,
+        workflowHint: 'propose_background_task'
+      })
+    ).rejects.toThrow('agent_workflow_hint_source_invalid');
+  });
+
+  it('freezes scheduled task runs with their scheduler provenance', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      taskSource: 'background_schedule',
+      workspacePath: 'F:\\Code\\Roc'
+    });
+    const run = repository.getRun(result.runId);
+    const snapshot = repository.getRunExecutionSnapshot(result.runId);
+
+    expect(snapshot.runOrigin).toBe('background_schedule');
+    expect(createChatStartRunRequestFromSnapshot(snapshot, run).taskSource).toBe('background_schedule');
+    expect(db.prepare('SELECT kind FROM agent_threads WHERE id = ?').get(result.threadId)).toEqual({ kind: 'background' });
+    await waitForEvent(() =>
+      events.some(
+        (event) =>
+          event.type === 'agent.chat.run-event' &&
+          readChatRunEvent(event.payload)?.runId === result.runId &&
+          readChatRunEvent(event.payload)?.type === 'run_completed'
+      )
     );
   });
 
@@ -177,9 +334,10 @@ describe('AgentPluginRuntime', () => {
       modelFactory,
       repository
     });
+    const preview = capabilityPreview(startRequest.enabledCapabilities);
     const run = repository.createTaskRun({
-      enabledCapabilities: startRequest.enabledCapabilities,
-      modelId: 'openai:gpt-4.1',
+      capabilityPreview: preview,
+      snapshot: runSnapshot(preview, 'openai:gpt-4.1'),
       threadKind: 'chat',
       userInput: 'Summarize'
     });
@@ -195,6 +353,19 @@ describe('AgentPluginRuntime', () => {
     });
 
     expect(result.message.workspaceHash).toBe(buildWorkspaceHash('F:\\Code\\Roc'));
+    expect(repository.listThreadEvents(run.threadId)).toContainEqual(
+      expect.objectContaining({
+        runId: run.id,
+        type: 'agent_update',
+        payload: {
+          providerId: 'openai',
+          modelId: 'gpt-4.1',
+          finishReason: 'stop',
+          durationMs: 10,
+          summary: 'Done'
+        }
+      })
+    );
   });
 
   it('publishes deterministic completion summary instead of slicing assistant text at 120 characters', async () => {
@@ -238,7 +409,7 @@ describe('AgentPluginRuntime', () => {
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
-        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+        createModelHandleByProviderAndModel: modelFactory.createModelHandleByProviderAndModel
       },
       repository
     });
@@ -282,7 +453,7 @@ describe('AgentPluginRuntime', () => {
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
-        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+        createModelHandleByProviderAndModel: modelFactory.createModelHandleByProviderAndModel
       },
       repository
     });
@@ -377,6 +548,77 @@ async function waitForEvent(predicate: () => boolean, timeoutMs = 250): Promise<
     }
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+}
+
+function capabilityPreview(
+  selectedCapabilities: ChatStartRunRequest['enabledCapabilities'],
+  explicitSkillIds: ChatStartRunRequest['explicitSkillIds'] = []
+): AgentCapabilityPreview {
+  const manifestSkillIds = [...selectedCapabilities.skills];
+  for (const skillId of explicitSkillIds) {
+    if (!manifestSkillIds.includes(skillId)) {
+      manifestSkillIds.push(skillId);
+    }
+  }
+  const compiled = compileRunCapabilityManifest({
+    deleteFileApprovalMode: 'fully_automatic',
+    explicitSkillIds,
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: selectedCapabilities.mcpServers.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      transport: 'http' as const,
+      status: 'ready' as const,
+      tools: 0,
+      allowedTools: []
+    })),
+    mode: 'chat',
+    requestedCapabilities: selectedCapabilities,
+    skills: manifestSkillIds.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      path: `F:\\skills\\${id}`,
+      description: `${id} skill`,
+      status: 'ready' as const
+    }))
+  });
+  return {
+    runnable: false,
+    modelId: 'openai:gpt-4.1',
+    builtInTools: [],
+    selectedCapabilities: compiled.manifest.resolvedCapabilities,
+    requestedCapabilities: compiled.manifest.requestedCapabilities,
+    skippedCapabilities: compiled.manifest.skippedCapabilities,
+    toolCards: compiled.toolCards,
+    skillCards: compiled.skillCards,
+    subagents: compiled.subagents,
+    interruptOn: compiled.interruptOn,
+    manifest: compiled.manifest,
+    untrustedContextPolicy: 'external_content_reference_only',
+    reason: 'test'
+  };
+}
+
+function runSnapshot(preview: AgentCapabilityPreview, modelId: string) {
+  return {
+    schemaVersion: 1 as const,
+    runOrigin: 'chat' as const,
+    model: {
+      providerId: 'openai',
+      modelId
+    },
+    mode: 'run' as const,
+    workspace: null,
+    capabilityManifest: preview.manifest,
+    budget: {
+      contextBudgetTokens: null
+    },
+    workflowHint: null,
+    explicitSkillIds: [],
+    dispatchKey: null
+  };
 }
 
 function readChatRunEvent(payload: unknown): ChatRunEvent | null {

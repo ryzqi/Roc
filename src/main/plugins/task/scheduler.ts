@@ -154,7 +154,7 @@ export class TaskScheduler {
       const result = await this.options.startRun({
         input: task.goal,
         mode: 'task',
-        taskSource: 'workbench',
+        taskSource: 'background_schedule',
         threadId: task.threadId,
         enabledCapabilities: task.enabledCapabilities ?? emptyCapabilities,
         workspacePath: task.workspacePath

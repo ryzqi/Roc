@@ -138,10 +138,8 @@ export async function runSmokeTaskFlow(ctx) {
   });
   await page.getByRole('button', { name: '新建任务' }).first().click();
   await page.waitForSelector('[data-testid="task-create-dialog-panel"]', { timeout: 5000 });
-  await page.fill(
-    '[data-testid="task-create-description"]',
-    `${naturalLanguageTaskGoal}，使用当前工作区。`
-  );
+  const naturalLanguageTaskPrompt = `${naturalLanguageTaskGoal}，使用当前工作区。`;
+  await page.fill('[data-testid="task-create-description"]', naturalLanguageTaskPrompt);
   await page.click('[data-testid="task-create-submit"]');
   const taskCreateOutcomeHandle = await page.waitForFunction(
     () => {
@@ -227,7 +225,7 @@ export async function runSmokeTaskFlow(ctx) {
     { timeout: 15000 }
   );
   const taskProposalEvidence = await page.evaluate(
-    async ({ expectedGoal, expectedCronExpression, expectedNextRunAt }) => {
+    async ({ expectedGoal, expectedPrompt, expectedCronExpression, expectedNextRunAt }) => {
       const snapshot = await window.roc.tasks.getSnapshot();
       const activeTasks = await window.roc.tasks.getActiveTasks();
       if (!snapshot.ok) {
@@ -237,6 +235,18 @@ export async function runSmokeTaskFlow(ctx) {
         throw new Error(activeTasks.error.message);
       }
       const task = activeTasks.data.find((item) => item.kind === 'background' && item.goal === expectedGoal);
+      const proposalThread = snapshot.data.threads.find((item) => item.goal === expectedPrompt);
+      const proposalHistory =
+        proposalThread === undefined
+          ? null
+          : await window.roc.tasks.getThreadMessages({
+              threadId: proposalThread.id,
+              limit: 100,
+              cursor: null
+            });
+      if (proposalHistory !== null && !proposalHistory.ok) {
+        throw new Error(proposalHistory.error.message);
+      }
       const createdEvent = snapshot.data.recentEvents.find((item) => {
         if (item.type !== 'background_task_created' || typeof item.payload !== 'object' || item.payload === null) {
           return false;
@@ -249,7 +259,7 @@ export async function runSmokeTaskFlow(ctx) {
         }
         return Reflect.get(item.payload, 'code') === 'tool_input_schema_invalid';
       });
-      const toolCalls = snapshot.data.recentEvents.filter((item) => {
+      const toolCalls = (proposalHistory?.data.items ?? []).filter((item) => {
         if (item.type !== 'tool_call' || typeof item.payload !== 'object' || item.payload === null) {
           return false;
         }
@@ -281,6 +291,7 @@ export async function runSmokeTaskFlow(ctx) {
         hasScheduleToolCallStart: hasToolCall('schedule_background_task', 'start'),
         hasScheduleToolCallEnd: hasToolCall('schedule_background_task', 'end'),
         nextRunAt: task?.nextRunAt ?? null,
+        proposalThreadId: proposalThread?.id ?? null,
         schemaFailureCount: schemaFailures.length,
         toolCallErrors,
         triggerType: task?.trigger.type ?? null,
@@ -290,6 +301,7 @@ export async function runSmokeTaskFlow(ctx) {
     },
     {
       expectedGoal: naturalLanguageTaskGoal,
+      expectedPrompt: naturalLanguageTaskPrompt,
       expectedCronExpression: naturalLanguageTaskCronExpression,
       expectedNextRunAt: nextDailyRunAtUtc(naturalLanguageTaskClock.hour, naturalLanguageTaskClock.minute)
     }

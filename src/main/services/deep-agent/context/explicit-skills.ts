@@ -1,5 +1,4 @@
-import type { SkillSnapshot } from '../../../../shared/types';
-import type { RocCapabilityRegistry } from '../../../kernel/types';
+import type { RunCapabilityManifestSkillV1 } from '../../../../shared/types';
 
 export type ExplicitSkillContext = {
   id: string;
@@ -7,31 +6,24 @@ export type ExplicitSkillContext = {
   path: string;
 };
 
-export async function loadExplicitSkillContexts(input: {
-  capabilities: RocCapabilityRegistry;
-  explicitSkillIds: readonly string[] | undefined;
-}): Promise<ExplicitSkillContext[]> {
-  if (input.explicitSkillIds === undefined || input.explicitSkillIds.length === 0) {
+export function loadExplicitSkillContexts(input: {
+  explicitSkillIds: readonly string[];
+  manifestSkills: readonly RunCapabilityManifestSkillV1[];
+}): ExplicitSkillContext[] {
+  if (input.explicitSkillIds.length === 0) {
     return [];
   }
 
-  const skills = await input.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {});
   const contexts: ExplicitSkillContext[] = [];
   for (const skillId of input.explicitSkillIds) {
-    const skill = skills.find((item) => item.id === skillId);
+    const skill = input.manifestSkills.find((item) => item.canonicalIdentity === `skill:${skillId}`);
     if (skill === undefined) {
-      throw new Error(`skill_not_found:${skillId}`);
-    }
-    if (!skill.enabled) {
-      throw new Error(`skill_disabled:${skillId}`);
-    }
-    if (skill.status !== 'ready') {
-      throw new Error(`skill_invalid:${skillId}`);
+      throw new Error(`run_explicit_skill_not_authorized:${skillId}`);
     }
     contexts.push({
-      id: skill.id,
+      id: skillId,
       name: skill.name,
-      path: `/skills/${skill.id}/SKILL.md`
+      path: `/skills/${skillId}/SKILL.md`
     });
   }
   return contexts;

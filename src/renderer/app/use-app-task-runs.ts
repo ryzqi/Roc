@@ -15,7 +15,6 @@ interface UseAppTaskRunsOptions {
   client: RocClient;
   currentSelectedMcpServers: string[];
   currentSelectedSkills: string[];
-  currentWorkspacePath: string | null;
   openTaskDetail: (taskId: string, boardUiState?: { railId: 'all' | 'todo' | 'running' | 'paused' | 'done'; scrollTop: number }) => void;
   pendingTaskSource: ChatStartRunRequest['taskSource'] | null;
   pendingWorkflowHint: ChatStartRunRequest['workflowHint'];
@@ -38,7 +37,6 @@ export function useAppTaskRuns({
   client,
   currentSelectedMcpServers,
   currentSelectedSkills,
-  currentWorkspacePath,
   openTaskDetail,
   pendingTaskSource,
   pendingWorkflowHint,
@@ -69,8 +67,7 @@ export function useAppTaskRuns({
           skills: currentSelectedSkills
         },
         workflowHint: null,
-        taskSource: null,
-        workspacePath: currentWorkspacePath
+        taskSource: null
       };
       if (payload.explicitSkillIds !== undefined) {
         request.explicitSkillIds = payload.explicitSkillIds;
@@ -91,7 +88,6 @@ export function useAppTaskRuns({
       chatFeature,
       currentSelectedMcpServers,
       currentSelectedSkills,
-      currentWorkspacePath,
       selectedThreadId,
       setPendingTaskSource,
       setPendingWorkflowHint,

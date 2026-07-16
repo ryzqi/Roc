@@ -1,5 +1,6 @@
 import type {
   AgentCapabilityPreview,
+  AgentCapabilityPreviewRequest,
   AgentRuntimeStatus,
   ActiveTaskItem,
   AppStatus,
@@ -204,7 +205,7 @@ export type RocPreloadApi = {
   agent: {
     getStatus: () => Promise<IpcResult<AgentRuntimeStatus>>;
     getConfigPreview: () => Promise<IpcResult<DeepAgentConfigPreview>>;
-    getCapabilityPreview: (request: ChatStartRunRequest['enabledCapabilities']) => Promise<IpcResult<AgentCapabilityPreview>>;
+    getCapabilityPreview: (request: AgentCapabilityPreviewRequest) => Promise<IpcResult<AgentCapabilityPreview>>;
   };
   chat: {
     startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;

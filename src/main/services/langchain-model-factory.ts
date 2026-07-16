@@ -128,6 +128,14 @@ export class LangChainModelFactory {
     return await this.createModelForProvider(matches[0]!, modelId, options);
   }
 
+  async createChatModelByProviderAndModel(
+    providerId: string,
+    modelId: string,
+    options: CreateModelOptions = {}
+  ): Promise<LangChainChatModelHandle> {
+    return await this.createModelForProvider(this.resolveProviderById(providerId), modelId, options);
+  }
+
   resolveCheapModelHandle(activeHandle: LangChainChatModelHandle): LangChainChatModelHandle {
     return activeHandle;
   }

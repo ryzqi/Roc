@@ -38,6 +38,7 @@ describe('agent plugin manifest', () => {
     expect(plugin.manifest.id).toBe('@roc/plugin-agent');
     expect(plugin.manifest.loadPhase).toBe('critical');
     expect(plugin.manifest.required).toBe(true);
+    expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-workspace']);
     expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(agentCapabilities);
   });
 
@@ -49,7 +50,7 @@ describe('agent plugin manifest', () => {
       }
     });
 
-    expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-mcp', '@roc/plugin-skills']);
+    expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-workspace', '@roc/plugin-mcp', '@roc/plugin-skills']);
     expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(agentCapabilitiesWithPreview);
   });
 
@@ -61,9 +62,9 @@ describe('agent plugin manifest', () => {
     });
 
     expect(plugin.manifest.dependencies).toEqual([
+      '@roc/plugin-workspace',
       '@roc/plugin-mcp',
       '@roc/plugin-skills',
-      '@roc/plugin-workspace',
       '@roc/plugin-runtime-tools'
     ]);
     expect(Reflect.get(plugin.manifest, 'capabilityDependencies')).toEqual(['@roc/plugin-task']);

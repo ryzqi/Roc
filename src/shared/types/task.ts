@@ -10,6 +10,7 @@ export type TaskStatus =
   | 'failed'
   | 'cancelled'
   | 'completed'
+  | 'interrupted'
   | 'archived';
 
 export type TaskKind = 'chat' | 'background';

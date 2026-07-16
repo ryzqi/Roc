@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
+import { loadExplicitSkillContexts } from '../../../../src/main/services/deep-agent/context/explicit-skills';
 import type { BackgroundTaskPreview } from '../../../../src/shared/types';
 import {
   buildExecutorOnce,
@@ -39,7 +40,7 @@ describe('createAgentDeepAgentExecutor', () => {
     );
     expect(toolNames).not.toContain('update_background_task');
     expect(toolNames).not.toContain('cancel_background_task');
-    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent']);
+    expect(capabilityCalls.map((call) => call.name)).toEqual([]);
   });
 
 
@@ -61,7 +62,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.skillSources).toEqual(['/skills/']);
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=exa-hosted;skills=deep-review;');
     expect(buildInput.systemPrompt).toContain('本轮后台任务继承当前主聊天已启用的 MCP 和 skills');
-    expect(capabilityCalls.map((call) => call.name)).toEqual(['workspace.getCurrent', 'mcp.tools.get']);
+    expect(capabilityCalls.map((call) => call.name)).toEqual(['mcp.tools.get']);
   });
 
   it('loads explicit slash skill index into request context without changing selected skills', async () => {
@@ -110,33 +111,16 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).not.toContain('# Python Expert');
     expect(buildInput.systemPrompt).toContain('Capabilities: mcp=none;skills=typescript;');
     expect(buildInput.systemPrompt).not.toContain('<name>typescript</name>');
-    expect(capabilityCalls.map((call) => call.name)).toEqual([
-      'workspace.getCurrent',
-      'skills.list'
-    ]);
+    expect(capabilityCalls.map((call) => call.name)).toEqual([]);
   });
 
-  it('rejects disabled explicit slash skill before building the agent', async () => {
-    await expect(
-      buildExecutorOnce(
-        createCapabilities([], {
-          skills: [
-            {
-              id: 'python-expert',
-              name: 'python-expert',
-              enabled: false,
-              path: 'F:\\Code\\Roc\\.roc\\skills\\python-expert',
-              description: 'Python expertise',
-              status: 'ready',
-              lastError: null
-            }
-          ]
-        }),
-        {
-          explicitSkillIds: ['python-expert']
-        }
-      )
-    ).rejects.toThrow('skill_disabled:python-expert');
+  it('rejects explicit slash skills absent from the frozen manifest', () => {
+    expect(() =>
+      loadExplicitSkillContexts({
+        explicitSkillIds: ['python-expert'],
+        manifestSkills: []
+      })
+    ).toThrow('run_explicit_skill_not_authorized:python-expert');
   });
 
   it('passes image attachments to DeepAgents as LangChain multimodal content blocks', async () => {
@@ -253,11 +237,7 @@ describe('createAgentDeepAgentExecutor', () => {
       taskId: 'background-1',
       threadId: 'thread-background-1'
     });
-    expect(capabilityCalls.map((call) => call.name)).toEqual([
-      'workspace.getCurrent',
-      'task.background.preview',
-      'task.background.create'
-    ]);
+    expect(capabilityCalls.map((call) => call.name)).toEqual(['task.background.preview', 'task.background.create']);
     const previewCall = capabilityCalls.find((call) => call.name === 'task.background.preview');
     expect(previewCall?.input).toMatchObject({
       goal: '每天中午一点创建 docx 文件，里面写你好世界',
@@ -314,7 +294,9 @@ describe('createAgentDeepAgentExecutor', () => {
       {
         taskSource: 'workbench',
         workspacePath: taskWorkspacePath
-      }
+      },
+      undefined,
+      taskWorkspacePath
     );
 
     const buildInput = readBuildInput();
@@ -347,7 +329,7 @@ describe('createAgentDeepAgentExecutor', () => {
     await buildExecutorOnce(createCapabilities([], { workspace: null }), {
       workflowHint: 'propose_background_task',
       taskSource: 'workbench'
-    });
+    }, undefined, null);
     expect(readBuildInput().memorySources).toEqual([
       '/memory/global/USER.md',
       '/memory/global/AGENTS.md',
@@ -492,7 +474,6 @@ describe('createAgentDeepAgentExecutor', () => {
     });
 
     expect(capabilityCalls.map((call) => call.name)).toEqual([
-      'workspace.getCurrent',
       'task.detail.get',
       'task.background.update',
       'task.background.cancel'

@@ -342,9 +342,9 @@ describe('AppShell', () => {
       mode: 'chat',
       threadId: null,
       workflowHint: null,
-      taskSource: null,
-      workspacePath: 'F:\\Code\\Roc'
+      taskSource: null
     }));
+    expect(vi.mocked(client.api.chat.startRun).mock.calls[0]?.[0]).not.toHaveProperty('workspacePath');
   });
 
   it('does not refresh task state for ordinary chat terminal events but refreshes task runs', async () => {
@@ -496,9 +496,9 @@ describe('AppShell', () => {
       mode: 'chat',
       threadId: null,
       workflowHint: null,
-      taskSource: null,
-      workspacePath: 'F:\\Code\\Roc'
+      taskSource: null
     });
+    expect(secondRequest).not.toHaveProperty('workspacePath');
     expect(secondRequest?.input).not.toContain('Plan this');
   });
 

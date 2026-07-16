@@ -13,11 +13,6 @@ export type DeepAgentExecutionResult =
 export type PendingInterrupt = {
   interruptId: string;
   payload: ChatInterruptPayload;
-  mode: ChatStartRunRequest['mode'];
-  taskSource: ChatStartRunRequest['taskSource'] | null;
-  workflowHint: ChatStartRunRequest['workflowHint'] | null;
-  workspacePath: ChatStartRunRequest['workspacePath'];
-  explicitSkillIds: ChatStartRunRequest['explicitSkillIds'];
 };
 
 export type AgentLifecycleHookEmitter = {

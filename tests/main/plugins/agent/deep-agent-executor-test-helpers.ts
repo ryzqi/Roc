@@ -23,6 +23,7 @@ import type {
 } from '../../../../src/shared/types';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../src/main/services/deep-agent/context/context-artifact-store';
@@ -63,6 +64,7 @@ interface ExecutorEventsInput {
   messages?: AsyncIterable<unknown>;
   output?: unknown;
   requestOverride?: Partial<ChatStartRunRequest>;
+  snapshotWorkspacePath?: string | null;
   subagents?: AsyncIterable<unknown>;
   toolCalls?: AsyncIterable<unknown>;
   validatedAttachments?: ChatValidatedImageAttachment[];
@@ -71,11 +73,13 @@ interface ExecutorEventsInput {
 export async function buildExecutorOnce(
   capabilities: RocCapabilityRegistry,
   requestOverride: Partial<ChatStartRunRequest> = {},
-  validatedAttachments?: ChatValidatedImageAttachment[]
+  validatedAttachments?: ChatValidatedImageAttachment[],
+  snapshotWorkspacePath: string | null = workspacePath
 ): Promise<void> {
   await collectExecutorEvents({
     capabilities,
     requestOverride,
+    snapshotWorkspacePath,
     validatedAttachments,
     output: {
       messages: [
@@ -124,6 +128,16 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     contextArtifactStore: new ContextArtifactStore(toolEffectDb),
     toolEffectStore: new AgentToolEffectStore(toolEffectDb)
   });
+  const request: ChatStartRunRequest = {
+    input: '每天检查测试',
+    mode: 'task',
+    enabledCapabilities: {
+      mcpServers: [],
+      skills: []
+    },
+    ...input.requestOverride
+  };
+  const run = createRun(request);
   const execution = await executor.execute({
     abortSignal: new AbortController().signal,
     modelHandle: {
@@ -150,16 +164,8 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
         }
       }
     },
-    request: {
-      input: '每天检查测试',
-      mode: 'task',
-      enabledCapabilities: {
-        mcpServers: [],
-        skills: []
-      },
-      ...input.requestOverride
-    },
-    run: createRun(),
+    snapshot: createSnapshot(request, run, input.snapshotWorkspacePath === undefined ? workspacePath : input.snapshotWorkspacePath),
+    run,
     validatedAttachments: input.validatedAttachments
   });
   return execution;
@@ -276,20 +282,86 @@ export function createMcpTool(name: string): ClientTool {
   } as ClientTool;
 }
 
-function createRun(): TaskRun {
+function createRun(request: ChatStartRunRequest): TaskRun {
   return {
     id: 'run-1',
     threadId: 'thread-1',
     runNumber: 1,
-    userInput: '每天检查测试',
+    userInput: request.input,
     status: 'running',
     startedAt: '2026-06-04T00:00:00.000Z',
     endedAt: null,
     modelId: 'test-model',
-    enabledCapabilities: {
-      mcpServers: [],
-      skills: []
+    enabledCapabilities: request.enabledCapabilities
+  };
+}
+
+function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWorkspacePath: string | null) {
+  const explicitSkillIds = request.explicitSkillIds === undefined ? [] : request.explicitSkillIds;
+  const manifestSkillIds = [...request.enabledCapabilities.skills];
+  for (const skillId of explicitSkillIds) {
+    if (!manifestSkillIds.includes(skillId)) {
+      manifestSkillIds.push(skillId);
     }
+  }
+  const capabilityManifest = compileRunCapabilityManifest({
+    deleteFileApprovalMode: 'fully_automatic',
+    explicitSkillIds,
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: request.enabledCapabilities.mcpServers.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      transport: 'http' as const,
+      status: 'ready' as const,
+      tools: 1,
+      allowedTools: ['search']
+    })),
+    mode: request.mode,
+    requestedCapabilities: request.enabledCapabilities,
+    skills: manifestSkillIds.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      path: `F:\\skills\\${id}`,
+      description: `${id} skill`,
+      status: 'ready' as const
+    }))
+  }).manifest;
+  return {
+    schemaVersion: 1 as const,
+    runId: run.id,
+    threadId: run.threadId,
+    runOrigin:
+      request.taskSource === 'background_schedule'
+        ? 'background_schedule' as const
+        : request.workflowHint === undefined
+          ? request.mode === 'task'
+            ? 'manual_task_run' as const
+            : 'chat' as const
+          : request.taskSource === 'workbench'
+            ? 'workbench_creation' as const
+            : 'chat' as const,
+    model: {
+      providerId: 'test-provider',
+      modelId: 'test-model'
+    },
+    mode: request.mode === 'chat' ? 'run' as const : request.mode,
+    workspace:
+      snapshotWorkspacePath === null
+        ? null
+        : {
+            path: snapshotWorkspacePath,
+            hash: 'snapshot_workspace_hash'
+          },
+    capabilityManifest,
+    budget: {
+      contextBudgetTokens: null
+    },
+    workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
+    explicitSkillIds,
+    inputMessageId: 'event-1',
+    dispatchKey: null
   };
 }
 

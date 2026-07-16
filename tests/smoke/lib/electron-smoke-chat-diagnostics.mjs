@@ -44,10 +44,17 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
   const agentPreviewApiEvidence = await page.evaluate(async () => {
     const preview = await window.roc.agent.getCapabilityPreview({
       mcpServers: ['smoke-mcp', 'missing-mcp'],
-      skills: ['smoke-skill']
+      skills: ['smoke-skill'],
+      mode: 'chat'
     });
     if (!preview.ok) {
       throw new Error(preview.error.message);
+    }
+    if (
+      !preview.data.toolCards.some((card) => card.id === 'builtin:delete_file') ||
+      !preview.data.toolCards.some((card) => card.id === 'builtin:run_shell_command')
+    ) {
+      throw new Error('agent_capability_preview_chat_mode_surface_missing');
     }
     return {
       selected: preview.data.selectedCapabilities,
@@ -348,7 +355,13 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
     if (manifest === undefined) {
       throw new Error('No context_manifest event found after chat submit.');
     }
-    const providerUpdate = snapshot.data.recentEvents.find((item) => item.type === 'agent_update');
+    const providerUpdate = snapshot.data.recentEvents.find(
+      (item) =>
+        item.type === 'agent_update' &&
+        typeof item.payload === 'object' &&
+        item.payload !== null &&
+        Reflect.get(item.payload, 'finishReason') === 'stop'
+    );
     if (providerUpdate === undefined) {
       throw new Error('No provider agent_update event found after chat submit.');
     }

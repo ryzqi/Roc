@@ -13,7 +13,8 @@ describe('agent capability preview', () => {
         skills: []
       },
       runtimeStatus: readyRuntimeStatus(),
-      skills: []
+      skills: [],
+      mode: 'chat'
     });
 
     expect(preview.toolCards.map((card) => card.name)).not.toEqual(
@@ -37,7 +38,7 @@ describe('agent capability preview', () => {
       dependencies: ['ShellExecutionService', 'RtkService'],
       auditCategory: 'agent_execute'
     });
-    expect(preview.subagents.map((subagent) => subagent.id)).toEqual(['research']);
+    expect(preview.subagents.map((subagent) => subagent.id)).toEqual(['general-purpose', 'research']);
   });
 
   it('uses delete_file and MCP approval modes independently', () => {
@@ -64,7 +65,8 @@ describe('agent capability preview', () => {
         skills: []
       },
       runtimeStatus: readyRuntimeStatus(),
-      skills: []
+      skills: [],
+      mode: 'chat'
     });
 
     expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'delete_file')).toMatchObject({
@@ -100,7 +102,8 @@ describe('agent capability preview', () => {
         skills: []
       },
       runtimeStatus: readyRuntimeStatus(),
-      skills: []
+      skills: [],
+      mode: 'chat'
     });
 
     expect(deleteFileDefaultPreview.toolCards.find((card) => card.name === 'delete_file')?.requiresApproval).toBe(true);

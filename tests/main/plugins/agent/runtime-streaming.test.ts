@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
@@ -16,9 +17,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -57,7 +58,7 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          seenInputs.push(input.request);
+          seenInputs.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           yield {
             type: 'assistant_block',
             runId: input.run.id,
@@ -211,9 +212,9 @@ describe('AgentPluginRuntime', () => {
           modelId: 'nvidia:test-model',
           providerId: 'nvidia'
         }),
-        createModelHandleByModelId: async (modelId) => ({
+        createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
           modelId,
-          providerId: 'nvidia'
+          providerId
         })
       },
       repository

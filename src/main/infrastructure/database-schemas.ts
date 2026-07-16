@@ -280,6 +280,41 @@ export const agentMigrations: RocDatabaseMigration[] = [
       CREATE INDEX idx_agent_events_thread_sequence
         ON agent_events(thread_id, sequence);
     `
+  },
+  {
+    version: 3,
+    name: 'agent_run_execution_snapshot',
+    sql: `
+      ALTER TABLE agent_runs ADD COLUMN snapshot_json TEXT;
+      ALTER TABLE agent_runs ADD COLUMN snapshot_version INTEGER;
+      ALTER TABLE agent_runs ADD COLUMN snapshot_error_code TEXT;
+      ALTER TABLE agent_runs ADD COLUMN state_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE agent_runs ADD COLUMN run_origin TEXT;
+      ALTER TABLE agent_runs ADD COLUMN dispatch_key TEXT;
+
+      CREATE UNIQUE INDEX idx_agent_runs_dispatch_key
+        ON agent_runs(dispatch_key)
+        WHERE dispatch_key IS NOT NULL;
+
+      UPDATE agent_runs
+      SET status = 'interrupted',
+          ended_at = COALESCE(ended_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          snapshot_error_code = 'legacy_snapshot_missing'
+      WHERE snapshot_json IS NULL
+        AND status IN ('running', 'waiting_next_turn', 'waiting_user');
+
+      UPDATE agent_threads
+      SET status = 'interrupted',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE status IN ('running', 'waiting_next_turn', 'waiting_user')
+        AND EXISTS (
+          SELECT 1
+          FROM agent_runs
+          WHERE agent_runs.thread_id = agent_threads.id
+            AND agent_runs.status = 'interrupted'
+            AND agent_runs.snapshot_error_code = 'legacy_snapshot_missing'
+        );
+    `
   }
 ];
 

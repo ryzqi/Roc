@@ -90,7 +90,7 @@ export function rebuildRocDatabases(input: RocDatabaseRebuildInput): RocDatabase
     sources = openBackupSources(input.rootDir, backup.backupDir);
     removeWorkDatabaseFiles(input.rootDir);
     targets = createFreshTargetDatabases(input.rootDir, input.now);
-    importAgentRows({ sources, targets });
+    importAgentRows({ sources, targets }, input.now);
     importMemoryRows({ sources, targets });
     importTaskRows({ sources, targets });
     importWorkspaceRows({ sources, targets });
@@ -185,9 +185,9 @@ function createFreshTargetDatabases(rootDir: string, now: () => string): OpenedT
   };
 }
 
-function importAgentRows(input: ImportInput): void {
+function importAgentRows(input: ImportInput, now: () => string): void {
   importAgentThreads(input.sources.agent, input.targets.agent);
-  importAgentRuns(input.sources.agent, input.targets.agent);
+  importAgentRuns(input.sources.agent, input.targets.agent, now);
   importAgentEvents(input.sources.agent, input.targets.agent);
   importSessionMessages(input.sources.agent, input.targets.agent);
   importPendingInterrupts(input.sources.agent, input.targets.agent);
@@ -358,7 +358,7 @@ function importAgentThreads(source: DatabaseConnection | null, target: DatabaseC
   ]);
 }
 
-function importAgentRuns(source: DatabaseConnection | null, target: DatabaseConnection): void {
+function importAgentRuns(source: DatabaseConnection | null, target: DatabaseConnection, now: () => string): void {
   type Row = {
     id: string;
     thread_id: string;
@@ -378,25 +378,40 @@ function importAgentRuns(source: DatabaseConnection | null, target: DatabaseConn
   const statement = target.prepare(
     `INSERT INTO agent_runs (
       id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
-      enabled_capabilities_json, workspace_path, task_source, workflow_hint
+      enabled_capabilities_json, workspace_path, task_source, workflow_hint, snapshot_error_code
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
-  importRows(rows, statement, (row) => [
-    row.id,
-    row.thread_id,
-    row.run_number,
-    row.user_input,
-    row.status,
-    row.started_at,
-    row.ended_at,
-    null,
-    row.model_id,
-    row.enabled_capabilities_json,
-    null,
-    null,
-    null
-  ]);
+  importRows(rows, statement, (row) => {
+    const isNonTerminal = row.status === 'running' || row.status === 'waiting_next_turn' || row.status === 'waiting_user';
+    return [
+      row.id,
+      row.thread_id,
+      row.run_number,
+      row.user_input,
+      isNonTerminal ? 'interrupted' : row.status,
+      row.started_at,
+      isNonTerminal ? now() : row.ended_at,
+      null,
+      row.model_id,
+      row.enabled_capabilities_json,
+      null,
+      null,
+      null,
+      isNonTerminal ? 'legacy_snapshot_missing' : null
+    ];
+  });
+  target
+    .prepare(
+      `UPDATE agent_threads
+       SET status = 'interrupted', updated_at = ?
+       WHERE id IN (
+         SELECT thread_id
+         FROM agent_runs
+         WHERE snapshot_error_code = 'legacy_snapshot_missing'
+       )`
+    )
+    .run(now());
 }
 
 function importAgentEvents(source: DatabaseConnection | null, target: DatabaseConnection): void {

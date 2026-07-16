@@ -16,9 +16,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -213,6 +213,7 @@ describe('AgentPluginRuntime', () => {
       ...startRequest,
       input: '每天 09:00 检查测试',
       mode: 'task',
+      taskSource: 'workbench',
       workflowHint: 'propose_background_task'
     });
 

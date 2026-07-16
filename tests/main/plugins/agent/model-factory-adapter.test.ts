@@ -22,14 +22,17 @@ describe('LangChainAgentModelFactoryAdapter', () => {
     });
   });
 
-  it('creates selected LangChain handles with streaming enabled for DeepAgent resumes', async () => {
+  it('creates resume handles from the persisted provider and model identity', async () => {
     const handle = createLangChainHandle('nvidia:selected-model');
     const factory = createFactory(handle);
     const adapter = new LangChainAgentModelFactoryAdapter(factory);
 
-    const modelHandle = await adapter.createModelHandleByModelId('nvidia:selected-model');
+    const modelHandle = await adapter.createModelHandleByProviderAndModel({
+      providerId: 'nvidia',
+      modelId: 'nvidia:selected-model'
+    });
 
-    expect(factory.createChatModelByModelId).toHaveBeenCalledWith('nvidia:selected-model', { streaming: true });
+    expect(factory.createChatModelByProviderAndModel).toHaveBeenCalledWith('nvidia', 'nvidia:selected-model', { streaming: true });
     expect(modelHandle).toEqual({
       providerId: 'nvidia',
       modelId: 'nvidia:selected-model',
@@ -38,9 +41,11 @@ describe('LangChainAgentModelFactoryAdapter', () => {
   });
 });
 
-function createFactory(handle: LangChainChatModelHandle): Pick<LangChainModelFactory, 'createChatModelByModelId' | 'createDefaultChatModel'> {
+function createFactory(
+  handle: LangChainChatModelHandle
+): Pick<LangChainModelFactory, 'createChatModelByProviderAndModel' | 'createDefaultChatModel'> {
   return {
-    createChatModelByModelId: vi.fn(async () => handle),
+    createChatModelByProviderAndModel: vi.fn(async () => handle),
     createDefaultChatModel: vi.fn(async () => handle)
   };
 }

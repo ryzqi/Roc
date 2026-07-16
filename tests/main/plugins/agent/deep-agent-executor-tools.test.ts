@@ -93,7 +93,6 @@ describe('createAgentDeepAgentExecutor', () => {
       createCapabilities([], {
         mcpTools: [
           createMcpTool('filesystem__search'),
-          createMcpTool('filesystem__write_file'),
           createMcpTool('exa-hosted__web_search_exa')
         ]
       }),
@@ -114,8 +113,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('ask_user');
     expect(toolNames).toContain('session_search');
-    expect(toolNames).toContain('filesystem__search');
-    expect(toolNames).toContain('filesystem__write_file');
+    expect(toolNames).toContain('search');
     expect(toolNames).toContain('web_search');
     expect(toolNames).not.toContain('run_shell_command');
     expect(toolNames).not.toContain('delete_file');
@@ -231,13 +229,14 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('rejects background task workflow hints without workbench source', async () => {
+  it('uses the frozen workbench origin to enable background task tools', async () => {
     await expect(
       buildExecutorOnce(createCapabilities([]), {
         workflowHint: 'propose_background_task',
-        taskSource: null
+        taskSource: 'workbench'
       })
-    ).rejects.toThrow('background_task_workbench_source_required');
+    ).resolves.toBeUndefined();
+    expect(readBuiltTools().map((tool) => tool.name)).toContain('propose_background_task');
   });
 
 });

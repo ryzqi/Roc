@@ -20,7 +20,9 @@ import type {
   SessionMessageSearchResult,
   TaskEvent,
   TaskRun,
-  WorkflowHint
+  WorkflowHint,
+  Workspace,
+  RunExecutionSnapshotV1
 } from '../../../shared/types';
 import type { ActiveChatRun } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
@@ -31,6 +33,9 @@ import type { RunFailure } from '../../services/deep-agent/types';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentRunEventLog } from './run-event-log';
+import { compileRunCapabilityManifest } from './run-capability-manifest';
+import { createChatStartRunRequestFromSnapshot, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
+import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
 import type { AgentSessionRepository } from './session-repository';
 import { toRecoveryDecision } from './recovery-policy';
 import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
@@ -44,6 +49,8 @@ import {
 export const agentChatRunEventType = 'agent.chat.run-event';
 
 export type AgentCapabilityPreviewProvider = (input: {
+  explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
+  mode: ChatStartRunRequest['mode'];
   requestedCapabilities: EnabledCapabilities;
   runtimeStatus: AgentRuntimeStatus;
 }) => Promise<AgentCapabilityPreview>;
@@ -52,7 +59,7 @@ type AgentResumePayload = HITLResponse | { answer: string };
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
-    request: ChatStartRunRequest;
+    snapshot: RunExecutionSnapshotV1;
     resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
@@ -76,6 +83,7 @@ type ExecuteRunInput = {
   validatedAttachments?: ChatValidatedImageAttachment[];
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
   enabledCapabilities: EnabledCapabilities;
+  snapshot: RunExecutionSnapshotV1;
 };
 
 export type AgentPluginRuntimeOptions = {
@@ -89,6 +97,7 @@ export type AgentPluginRuntimeOptions = {
   runEventLog?: AgentRunEventLog;
   status?: AgentRuntimeStatus;
   statusProvider?: () => AgentRuntimeStatus;
+  workspaceProvider?: () => Promise<Workspace | null>;
 };
 
 export class AgentPluginRuntime {
@@ -120,12 +129,18 @@ export class AgentPluginRuntime {
     return createBlockedAgentRuntimeStatus();
   }
 
-  async getCapabilityPreview(requestedCapabilities: EnabledCapabilities): Promise<AgentCapabilityPreview> {
+  async getCapabilityPreview(input: {
+    explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
+    mode: ChatStartRunRequest['mode'];
+    requestedCapabilities: EnabledCapabilities;
+  }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider === undefined) {
       throw new Error('agent_capability_preview_unavailable');
     }
     return await this.options.capabilityPreviewProvider({
-      requestedCapabilities,
+      explicitSkillIds: input.explicitSkillIds,
+      mode: input.mode,
+      requestedCapabilities: input.requestedCapabilities,
       runtimeStatus: this.getStatus()
     });
   }
@@ -136,22 +151,32 @@ export class AgentPluginRuntime {
       throw new Error('chat_input_empty');
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
-    const capabilityPreview =
-      this.options.capabilityPreviewProvider === undefined ? undefined : await this.getCapabilityPreview(request.enabledCapabilities);
+    const capabilityPreview = await this.getRunCapabilityPreview({
+      explicitSkillIds: request.explicitSkillIds,
+      mode: request.mode,
+      requestedCapabilities: request.enabledCapabilities,
+      modelHandle
+    });
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
+    const workspace = await this.resolveRunWorkspace(request);
+    const explicitSkillIds = normalizeExplicitSkillIds(request.explicitSkillIds, capabilityPreview.manifest);
     const run = this.options.repository.createTaskRun({
       attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
-      enabledCapabilities: request.enabledCapabilities,
-      modelId: modelHandle.modelId,
+      capabilityPreview,
+      snapshot: createRunExecutionSnapshotSeed({
+        capabilityManifest: capabilityPreview.manifest,
+        explicitSkillIds,
+        modelHandle,
+        request,
+        workspace
+      }),
       threadKind: resolveNewRunThreadKind(request),
       threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
       userInput: input
     });
+    const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.activeRuns.add(run.id);
-    const normalizedRequest = {
-      ...request,
-      input
-    };
+    const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, run);
     this.activeRunMetadata.set(run.id, {
       request: normalizedRequest,
       threadId: run.threadId
@@ -168,19 +193,19 @@ export class AgentPluginRuntime {
     };
     await this.publish('agent.run.started', {
       ...result,
-      enabledCapabilities: request.enabledCapabilities,
+      enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
       userInput: input,
-      workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
+      workflowHint: snapshot.workflowHint,
       capabilityPreview
     });
-    await this.publishChatRunEvent({
+    await this.publish(agentChatRunEventType, {
       type: 'run_started',
       ...result
     });
     const timer = setTimeout(() => {
       this.scheduledRuns.delete(timer);
       const pendingRun = this.executeRun({
-        enabledCapabilities: request.enabledCapabilities,
+        enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
         input,
         modelId: modelHandle.modelId,
         mode: request.mode,
@@ -190,9 +215,10 @@ export class AgentPluginRuntime {
         abortSignal: abortController.signal,
         modelHandle,
         run,
+        snapshot,
         threadId: run.threadId,
         validatedAttachments: preparedAttachments.images,
-        workflowHint: request.workflowHint === undefined ? null : request.workflowHint
+        workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
       });
       this.pendingRuns.add(pendingRun);
       void pendingRun.finally(() => {
@@ -261,20 +287,16 @@ export class AgentPluginRuntime {
     if (run.modelId === null) {
       throw new Error('chat_resume_run_missing');
     }
-    const modelHandle = await this.options.modelFactory.createModelHandleByModelId(run.modelId);
-    this.activeRuns.add(run.id);
-    const resumedRequest: ChatStartRunRequest = {
-      input: run.userInput,
-      mode: pendingInterrupt.mode,
-      threadId: run.threadId,
-      enabledCapabilities: run.enabledCapabilities,
-      taskSource: pendingInterrupt.taskSource,
-      workspacePath: pendingInterrupt.workspacePath,
-      workflowHint: pendingInterrupt.workflowHint
-    };
-    if (pendingInterrupt.explicitSkillIds !== undefined) {
-      resumedRequest.explicitSkillIds = pendingInterrupt.explicitSkillIds;
+    const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
+    const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
+      providerId: snapshot.model.providerId,
+      modelId: snapshot.model.modelId
+    });
+    if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
+      throw new Error('run_execution_snapshot_model_mismatch');
     }
+    this.activeRuns.add(run.id);
+    const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, run);
     this.activeRunMetadata.set(run.id, {
       request: resumedRequest,
       threadId: run.threadId
@@ -301,7 +323,7 @@ export class AgentPluginRuntime {
       interruptId: pendingInterrupt.interruptId
     });
     if (request.kind === 'approval') {
-      await this.publish('agent.run.task-event', {
+      await this.recordRunTaskEvent({
         runId: run.id,
         threadId: run.threadId,
         type: 'approval_decision',
@@ -326,7 +348,7 @@ export class AgentPluginRuntime {
         role: 'user',
         content: request.answer
       });
-      await this.publish('agent.run.task-event', {
+      await this.recordRunTaskEvent({
         runId: run.id,
         threadId: run.threadId,
         type: 'human_question_answered',
@@ -342,9 +364,9 @@ export class AgentPluginRuntime {
         : { answer: request.answer };
     const pendingRun = this.executeRun({
       abortSignal: abortController.signal,
-      enabledCapabilities: run.enabledCapabilities,
+      enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
       input: run.userInput,
-      mode: pendingInterrupt.mode,
+      mode: resumedRequest.mode,
       modelHandle,
       modelId: modelHandle.modelId,
       providerId: modelHandle.providerId,
@@ -352,8 +374,9 @@ export class AgentPluginRuntime {
       resumePayload,
       run,
       runId: run.id,
+      snapshot,
       threadId: run.threadId,
-      workflowHint: pendingInterrupt.workflowHint
+      workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
     });
     this.pendingRuns.add(pendingRun);
     pendingRun.finally(() => {
@@ -445,6 +468,18 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       type: 'message'
     });
+    this.options.repository.recordEvent({
+      payload: {
+        providerId: input.providerId,
+        modelId: input.modelId,
+        finishReason: 'stop',
+        durationMs: input.durationMs,
+        summary: input.summary
+      },
+      runId: run.id,
+      threadId: run.threadId,
+      type: 'agent_update'
+    });
     const completedPayload: {
       runId: string;
       threadId: string;
@@ -511,6 +546,16 @@ export class AgentPluginRuntime {
     await this.publish(agentChatRunEventType, payload);
   }
 
+  private async recordRunTaskEvent(input: {
+    runId: string;
+    threadId: string;
+    type: TaskEvent['type'];
+    payload: unknown;
+  }): Promise<void> {
+    this.options.repository.recordEvent(input);
+    await this.publish('agent.run.task-event', input);
+  }
+
   private async executeRun(input: ExecuteRunInput): Promise<void> {
     if (!this.activeRuns.has(input.runId)) {
       return;
@@ -526,9 +571,9 @@ export class AgentPluginRuntime {
         const execution = await this.executeDeepAgentRun({
           abortSignal: input.abortSignal,
           modelHandle: input.modelHandle,
-          request: input.request,
           resumePayload: input.resumePayload,
           run: input.run,
+          snapshot: input.snapshot,
           validatedAttachments: input.validatedAttachments
         });
         if (execution.status === 'interrupted') {
@@ -671,7 +716,7 @@ export class AgentPluginRuntime {
   }
 
   private async executeDeepAgentRun(input: {
-    request: ChatStartRunRequest;
+    snapshot: RunExecutionSnapshotV1;
     resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
@@ -694,7 +739,7 @@ export class AgentPluginRuntime {
       if (event.type === 'hook_started' || event.type === 'hook_completed') {
         collectHookDisplayText(hookDisplayTexts, event.hook.additionalContext);
         collectHookDisplayText(hookDisplayTexts, event.hook.requestContinue);
-        await this.publish('agent.run.task-event', {
+        await this.recordRunTaskEvent({
           runId: input.run.id,
           threadId: input.run.threadId,
           type: event.type,
@@ -706,13 +751,8 @@ export class AgentPluginRuntime {
         await this.handleRunInterrupted({
           interruptId: event.interruptId,
           payload: event.payload,
-          mode: input.request.mode,
           runId: input.run.id,
-          threadId: input.run.threadId,
-          taskSource: input.request.taskSource === undefined ? null : input.request.taskSource,
-          workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
-          workspacePath: input.request.workspacePath,
-          explicitSkillIds: input.request.explicitSkillIds
+          threadId: input.run.threadId
         });
         return {
           status: 'interrupted'
@@ -725,7 +765,7 @@ export class AgentPluginRuntime {
         updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
         updateSuccessfulToolNames(successfulToolNamesByBlockId, event.block);
         const taskEvent = createTaskEventFromAssistantBlock(event.block);
-        await this.publish('agent.run.task-event', {
+        await this.recordRunTaskEvent({
           runId: input.run.id,
           threadId: input.run.threadId,
           type: taskEvent.type,
@@ -734,7 +774,7 @@ export class AgentPluginRuntime {
         continue;
       }
       if (event.type === 'subagent_event') {
-        await this.publish('agent.run.task-event', {
+        await this.recordRunTaskEvent({
           runId: input.run.id,
           threadId: input.run.threadId,
           type: 'subagent_event',
@@ -757,6 +797,74 @@ export class AgentPluginRuntime {
     };
   }
 
+  private async resolveRunWorkspace(request: ChatStartRunRequest): Promise<Workspace | null> {
+    const currentWorkspace = this.options.workspaceProvider === undefined ? null : await this.options.workspaceProvider();
+    if (request.workspacePath === undefined || request.workspacePath === null) {
+      return currentWorkspace;
+    }
+    if (request.taskSource !== 'workbench' && request.taskSource !== 'background_schedule') {
+      throw new Error('agent_workspace_path_source_invalid');
+    }
+    const workspacePath = request.workspacePath.trim();
+    if (workspacePath.length === 0) {
+      throw new Error('agent_workspace_path_empty');
+    }
+    if (currentWorkspace !== null && currentWorkspace.path === workspacePath) {
+      return currentWorkspace;
+    }
+    return {
+      id: 'request-workspace',
+      path: workspacePath,
+      displayName: workspacePath,
+      lastOpenedAt: new Date().toISOString(),
+      trustState: 'trusted'
+    };
+  }
+
+  private async getRunCapabilityPreview(input: {
+    explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
+    mode: ChatStartRunRequest['mode'];
+    requestedCapabilities: EnabledCapabilities;
+    modelHandle: AgentModelHandle;
+  }): Promise<AgentCapabilityPreview> {
+    if (this.options.capabilityPreviewProvider !== undefined) {
+      return await this.getCapabilityPreview({
+        explicitSkillIds: input.explicitSkillIds,
+        mode: input.mode,
+        requestedCapabilities: input.requestedCapabilities
+      });
+    }
+    if (input.requestedCapabilities.mcpServers.length > 0 || input.requestedCapabilities.skills.length > 0) {
+      throw new Error('agent_capability_preview_unavailable');
+    }
+    if (input.explicitSkillIds !== undefined && input.explicitSkillIds.length > 0) {
+      throw new Error('agent_capability_preview_unavailable');
+    }
+    const compiled = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      mode: input.mode,
+      requestedCapabilities: input.requestedCapabilities,
+      skills: []
+    });
+    return {
+      runnable: false,
+      modelId: input.modelHandle.modelId,
+      builtInTools: [],
+      selectedCapabilities: compiled.manifest.resolvedCapabilities,
+      requestedCapabilities: compiled.manifest.requestedCapabilities,
+      skippedCapabilities: compiled.manifest.skippedCapabilities,
+      toolCards: compiled.toolCards,
+      skillCards: compiled.skillCards,
+      subagents: compiled.subagents,
+      interruptOn: compiled.interruptOn,
+      manifest: compiled.manifest,
+      untrustedContextPolicy: compiled.manifest.untrustedContextPolicy,
+      reason: '当前运行未配置能力预览提供者；仅装配内置工具。'
+    };
+  }
+
   private resolvePendingInterrupt(runId: string): PendingInterrupt | undefined {
     const pendingInterrupt = this.pendingInterrupts.get(runId);
     if (pendingInterrupt !== undefined) {
@@ -775,20 +883,10 @@ export class AgentPluginRuntime {
     threadId: string;
     interruptId: string;
     payload: ChatInterruptPayload;
-    mode: ChatStartRunRequest['mode'];
-    taskSource: ChatStartRunRequest['taskSource'] | null;
-    workflowHint: ChatStartRunRequest['workflowHint'] | null;
-    workspacePath: ChatStartRunRequest['workspacePath'];
-    explicitSkillIds: ChatStartRunRequest['explicitSkillIds'];
   }): Promise<void> {
     const pendingInterrupt: PendingInterrupt = {
       interruptId: input.interruptId,
-      payload: input.payload,
-      mode: input.mode,
-      taskSource: input.taskSource,
-      workflowHint: input.workflowHint,
-      workspacePath: input.workspacePath,
-      explicitSkillIds: input.explicitSkillIds
+      payload: input.payload
     };
     this.options.repository.markRunInterrupted({
       runId: input.runId,
@@ -797,7 +895,7 @@ export class AgentPluginRuntime {
     });
     this.pendingInterrupts.set(input.runId, pendingInterrupt);
     if (input.payload.kind === 'approval') {
-      await this.publish('agent.run.task-event', {
+      await this.recordRunTaskEvent({
         runId: input.runId,
         threadId: input.threadId,
         type: 'approval_requested',
@@ -809,7 +907,7 @@ export class AgentPluginRuntime {
       return;
     }
 
-    await this.publish('agent.run.task-event', {
+    await this.recordRunTaskEvent({
       runId: input.runId,
       threadId: input.threadId,
       type: 'human_question_requested',
@@ -821,6 +919,78 @@ export class AgentPluginRuntime {
       }
     });
   }
+}
+
+function createRunExecutionSnapshotSeed(input: {
+  capabilityManifest: RunExecutionSnapshotV1['capabilityManifest'];
+  explicitSkillIds: string[];
+  modelHandle: AgentModelHandle;
+  request: ChatStartRunRequest;
+  workspace: Workspace | null;
+}): RunExecutionSnapshotSeed {
+  return {
+    schemaVersion: 1,
+    runOrigin: resolveRunOrigin(input.request),
+    model: {
+      providerId: input.modelHandle.providerId,
+      modelId: input.modelHandle.modelId
+    },
+    mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
+    workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
+    capabilityManifest: input.capabilityManifest,
+    budget: {
+      contextBudgetTokens:
+        input.modelHandle.langChainHandle === undefined
+          ? null
+          : input.modelHandle.langChainHandle.runtime.contextBudgetTokens
+    },
+    workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
+    explicitSkillIds: input.explicitSkillIds,
+    dispatchKey: null
+  };
+}
+
+function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV1['runOrigin'] {
+  if (request.taskSource === 'background_schedule') {
+    return 'background_schedule';
+  }
+  if (request.workflowHint === 'propose_background_task' || request.workflowHint === 'background_task_change') {
+    if (request.taskSource !== 'workbench') {
+      throw new Error('agent_workflow_hint_source_invalid');
+    }
+    return 'workbench_creation';
+  }
+  if (request.mode === 'task') {
+    return 'manual_task_run';
+  }
+  return 'chat';
+}
+
+function normalizeExplicitSkillIds(
+  explicitSkillIds: ChatStartRunRequest['explicitSkillIds'],
+  capabilityManifest: RunExecutionSnapshotV1['capabilityManifest']
+): string[] {
+  if (explicitSkillIds === undefined) {
+    return [];
+  }
+  const manifestSkills = new Set(capabilityManifest.skills.map((skill) => skill.canonicalIdentity));
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const skillId of explicitSkillIds) {
+    const value = skillId.trim();
+    if (value.length === 0) {
+      throw new Error('run_explicit_skill_id_empty');
+    }
+    if (!manifestSkills.has(`skill:${value}`)) {
+      throw new Error(`run_explicit_skill_not_authorized:${value}`);
+    }
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    normalized.push(value);
+  }
+  return normalized;
 }
 
 function buildCompletionSummary(input: {

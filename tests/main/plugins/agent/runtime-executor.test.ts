@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
+import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
+import { createTestCapabilityPreviewProvider } from './runtime-capability-preview-test-helpers';
 
 let db: Database.Database;
 let events: RocEventEnvelope[];
@@ -16,9 +18,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -57,7 +59,7 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          executorCalledWith = input.request;
+          executorCalledWith = createChatStartRunRequestFromSnapshot(input.snapshot, input.run);
           yield createToolBlock(input.run.id, {
             kind: 'tool_call',
             blockId: 'tool-call-web-read',
@@ -77,7 +79,7 @@ describe('AgentPluginRuntime', () => {
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
-        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+        createModelHandleByProviderAndModel: modelFactory.createModelHandleByProviderAndModel
       },
       repository
     });
@@ -122,6 +124,22 @@ describe('AgentPluginRuntime', () => {
         content: 'DeepAgent executor response.'
       }
     ]);
+    expect(repository.listThreadEvents(result.threadId!)).toContainEqual(
+      expect.objectContaining({
+        runId: result.runId,
+        type: 'assistant_block',
+        payload: {
+          kind: 'tool_call',
+          blockId: 'tool-call-web-read',
+          callId: 'call-web-read',
+          name: 'web_read',
+          phase: 'start',
+          input: {
+            url: 'https://example.test'
+          }
+        }
+      })
+    );
   });
 
 
@@ -134,7 +152,7 @@ describe('AgentPluginRuntime', () => {
           modelId: 'openai:gpt-4.1',
           providerId: 'openai'
         }),
-        createModelHandleByModelId: modelFactory.createModelHandleByModelId
+        createModelHandleByProviderAndModel: modelFactory.createModelHandleByProviderAndModel
       },
       repository
     });
@@ -169,13 +187,22 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: createTextDeepAgentExecutor('Workspace-bound response.'),
+      capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
       modelFactory,
-      repository
+      repository,
+      workspaceProvider: async () => ({
+        id: 'workspace-roc',
+        path: 'F:\\Code\\Roc',
+        displayName: 'Roc',
+        lastOpenedAt: '2026-07-15T00:00:00.000Z',
+        trustState: 'trusted'
+      })
     });
 
     const result = await runtime.startRun({
       ...startRequest,
+      taskSource: 'workbench',
       workspacePath: 'F:\\Code\\ScheduledTask'
     });
 
@@ -204,6 +231,7 @@ describe('AgentPluginRuntime', () => {
           yield createTextBlock(input.run.id, '图片里有图表。');
         }
       },
+      capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
       modelFactory,
       repository
@@ -322,7 +350,7 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          requests.push(input.request);
+          requests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           if (input.resumePayload === undefined) {
             yield {
@@ -341,9 +369,17 @@ describe('AgentPluginRuntime', () => {
           yield createTextBlock(input.run.id, 'continued');
         }
       },
+      capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
       modelFactory,
-      repository
+      repository,
+      workspaceProvider: async () => ({
+        id: 'workspace-roc',
+        path: 'F:\\Code\\Roc',
+        displayName: 'Roc',
+        lastOpenedAt: '2026-07-15T00:00:00.000Z',
+        trustState: 'trusted'
+      })
     });
 
     const start = await runtime.startRun({
@@ -353,7 +389,6 @@ describe('AgentPluginRuntime', () => {
       threadId: null,
       workflowHint: null,
       taskSource: null,
-      workspacePath: 'F:\\Code\\Roc',
       explicitSkillIds: ['typescript']
     });
     await waitForEvent(() =>
@@ -373,8 +408,6 @@ describe('AgentPluginRuntime', () => {
 
     expect(requests.map((request) => request.mode)).toEqual(['plan', 'plan']);
     expect(requests[1]).toMatchObject({
-      workflowHint: null,
-      taskSource: null,
       workspacePath: 'F:\\Code\\Roc',
       explicitSkillIds: ['typescript']
     });

@@ -265,7 +265,7 @@ export type ChatStartRunRequest = {
   enabledCapabilities: EnabledCapabilities;
   threadId?: string | null;
   workflowHint?: WorkflowHint;
-  taskSource?: 'workbench' | null;
+  taskSource?: 'background_schedule' | 'workbench' | null;
   workspacePath?: string | null;
   attachments?: ChatImageAttachment[];
   explicitSkillIds?: string[];

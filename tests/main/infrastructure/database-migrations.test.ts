@@ -120,7 +120,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 2 without changing version 1', () => {
+  it('applies agent migrations through version 3 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -131,11 +131,64 @@ describe('database migrations', () => {
       db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'agent' ORDER BY version").all()
     ).toEqual([
       { version: 1, name: 'agent_canonical_runtime_tables' },
-      { version: 2, name: 'agent_event_sequence_cursor' }
+      { version: 2, name: 'agent_event_sequence_cursor' },
+      { version: 3, name: 'agent_run_execution_snapshot' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 2
+      currentVersion: 3
     });
+  });
+
+  it('quarantines legacy non-terminal agent runs that have no execution snapshot', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 2),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'thread_legacy_run',
+      'chat',
+      'Legacy run',
+      'Legacy run',
+      'running',
+      '2026-07-10T01:00:00.000Z',
+      '2026-07-10T01:00:00.000Z'
+    );
+    db.prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'run_legacy_snapshot_missing',
+      'thread_legacy_run',
+      1,
+      'Legacy run',
+      'running',
+      '2026-07-10T01:00:00.000Z',
+      null,
+      'legacy-provider',
+      'legacy-model',
+      '{"mcpServers":[],"skills":[]}',
+      null,
+      null,
+      null
+    );
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(db.prepare('SELECT status, snapshot_error_code FROM agent_runs WHERE id = ?').get('run_legacy_snapshot_missing')).toEqual({
+      status: 'interrupted',
+      snapshot_error_code: 'legacy_snapshot_missing'
+    });
+    expect(db.prepare('SELECT status FROM agent_threads WHERE id = ?').pluck().get('thread_legacy_run')).toBe('interrupted');
   });
 });

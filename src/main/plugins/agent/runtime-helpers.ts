@@ -44,7 +44,10 @@ export function createTaskEventFromAssistantBlock(block: ChatAssistantBlock): Pi
 }
 
 export function resolveNewRunThreadKind(request: ChatStartRunRequest): TaskKind {
-  if (request.mode === 'task' && request.taskSource === 'workbench') {
+  if (
+    request.mode === 'task' &&
+    (request.taskSource === 'workbench' || request.taskSource === 'background_schedule')
+  ) {
     return 'background';
   }
   return 'chat';

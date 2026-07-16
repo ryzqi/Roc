@@ -15,13 +15,13 @@ import type {
   ChatStartRunRequest,
   ChatStartRunResult,
   DeepAgentConfigPreview,
-  EnabledCapabilities,
   McpServerSnapshot,
   SessionMessageEntry,
   SessionMessageSearchRequest,
   SessionMessageSearchResult,
   SequencedChatRunEvent,
-  SkillSnapshot
+  SkillSnapshot,
+  Workspace
 } from '../../../shared/types';
 import { applyMemoryDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
@@ -48,6 +48,10 @@ const capabilityVersion = '1.0.0';
 const enabledCapabilitiesSchema = z.object({
   mcpServers: z.array(z.string()),
   skills: z.array(z.string())
+});
+
+const agentCapabilityPreviewInputSchema = enabledCapabilitiesSchema.extend({
+  mode: z.enum(['chat', 'task', 'plan'])
 });
 
 const chatImageAttachmentSchema = z.object({
@@ -233,7 +237,7 @@ const baseAgentCapabilityDescriptors = [
 
 const agentCapabilityPreviewDescriptor = descriptor(
   'agent.capability.preview',
-  enabledCapabilitiesSchema,
+  agentCapabilityPreviewInputSchema,
   agentCapabilityPreviewSchema
 );
 
@@ -290,7 +294,8 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       repository: new AgentSessionRepository(db),
       runEventLog: new AgentRunEventLog(db),
       status: options.status,
-      statusProvider: options.statusProvider
+      statusProvider: options.statusProvider,
+      workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {})
     });
       registerAgentCapabilities(context, runtime, options);
     },
@@ -312,11 +317,13 @@ function createCapabilityPreviewProvider(
     return undefined;
   }
   const capabilityPreviewOptions = options.capabilityPreview;
-  return async ({ requestedCapabilities, runtimeStatus }) =>
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
+      explicitSkillIds,
       mcpApprovalMode: capabilityPreviewOptions.mcpApprovalModeProvider(),
       mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
+      mode,
       requestedCapabilities,
       runtimeStatus,
       skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {})
@@ -387,6 +394,7 @@ function resolveLifecycleHooks(
 
 function resolveDependencies(options: AgentPluginOptions): string[] {
   const dependencies = new Set<string>();
+  dependencies.add('@roc/plugin-workspace');
   if (options.capabilityPreview !== undefined) {
     dependencies.add('@roc/plugin-mcp');
     dependencies.add('@roc/plugin-skills');
@@ -394,7 +402,6 @@ function resolveDependencies(options: AgentPluginOptions): string[] {
   if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
     dependencies.add('@roc/plugin-mcp');
     dependencies.add('@roc/plugin-skills');
-    dependencies.add('@roc/plugin-workspace');
     dependencies.add('@roc/plugin-runtime-tools');
   }
   return [...dependencies];
@@ -412,7 +419,8 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async () =>
     buildDeepAgentConfigPreview({
       deleteFileApprovalMode: options.capabilityPreview?.deleteFileApprovalModeProvider() ?? 'default',
-      runtimeStatus: runtime.getStatus()
+      runtimeStatus: runtime.getStatus(),
+      mode: 'chat'
     })
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) => runtime.startRun(input as ChatStartRunRequest));
@@ -433,9 +441,16 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
     runtime.searchSessionMessages(input as SessionMessageSearchRequest)
   );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
-    context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) =>
-      runtime.getCapabilityPreview(input as EnabledCapabilities)
-    );
+    context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) => {
+      const request = agentCapabilityPreviewInputSchema.parse(input);
+      return await runtime.getCapabilityPreview({
+        mode: request.mode,
+        requestedCapabilities: {
+          mcpServers: request.mcpServers,
+          skills: request.skills
+        }
+      });
+    });
   }
 }
 

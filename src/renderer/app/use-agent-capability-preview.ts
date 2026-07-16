@@ -42,7 +42,8 @@ export function useAgentCapabilityPreview({
     void client.api.agent
       .getCapabilityPreview({
         mcpServers: currentSelectedMcpServers,
-        skills: currentSelectedSkills
+        skills: currentSelectedSkills,
+        mode: 'chat'
       })
       .then((result) => {
         if (cancelled) {

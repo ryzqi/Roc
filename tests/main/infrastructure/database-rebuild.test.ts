@@ -51,6 +51,11 @@ describe('rebuildRocDatabases', () => {
       );
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_threads').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_runs').pluck().get()).toBe(1);
+      expect(agentDb.prepare('SELECT status, snapshot_error_code FROM agent_runs WHERE id = ?').get('run-1')).toEqual({
+        status: 'interrupted',
+        snapshot_error_code: 'legacy_snapshot_missing'
+      });
+      expect(agentDb.prepare('SELECT status FROM agent_threads WHERE id = ?').pluck().get('thread-1')).toBe('interrupted');
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_events').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM session_messages').pluck().get()).toBe(1);
       expect(taskDb.prepare("SELECT name FROM sqlite_master WHERE name = 'task_events'").pluck().get()).toBeUndefined();
@@ -122,7 +127,7 @@ function writeOldAgentDatabase(path: string): void {
     ).run();
     db.prepare(
       `INSERT INTO task_runs (id, thread_id, run_number, user_input, status, started_at, ended_at, model_id, enabled_capabilities_json)
-       VALUES ('run-1', 'thread-1', 1, 'hello', 'completed', '2026-07-06T00:00:00.000Z', NULL, 'model-a', '{}')`
+       VALUES ('run-1', 'thread-1', 1, 'hello', 'running', '2026-07-06T00:00:00.000Z', NULL, 'model-a', '{}')`
     ).run();
     db.prepare(
       `INSERT INTO task_events (id, thread_id, run_id, type, payload_json, created_at)

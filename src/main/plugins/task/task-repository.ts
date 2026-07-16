@@ -102,6 +102,7 @@ export class TaskRepository {
     this.agentHistory.ensureBackgroundTaskThread(task);
     this.agentHistory.recordBackgroundTaskEvent(task, 'background_task_created', {
       taskId: task.id,
+      goal: task.goal,
       status: task.status
     });
     return task;

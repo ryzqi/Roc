@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { EnabledCapabilities } from '../../../../src/shared/types';
+import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, EnabledCapabilities, TaskKind } from '../../../../src/shared/types';
+import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 
@@ -35,7 +36,7 @@ describe('AgentSessionRepository', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
 
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -62,7 +63,7 @@ describe('AgentSessionRepository', () => {
 
     expect(repository.getRun(run.id)).toEqual(run);
     const events = repository.listThreadEvents(run.threadId);
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(4);
     expect(events[0]).toMatchObject({
       payload: {
         content: 'Summarize this workspace',
@@ -73,11 +74,54 @@ describe('AgentSessionRepository', () => {
       threadId: run.threadId,
       type: 'message'
     });
-    expect(events[1]).toEqual(event);
+    expect(events[1]).toMatchObject({
+      runId: run.id,
+      threadId: run.threadId,
+      type: 'context_manifest',
+      payload: expect.objectContaining({
+        manifest: expect.objectContaining({
+          manifestHash: expect.any(String),
+          schemaVersion: 1
+        }),
+        requestedCapabilities: enabledCapabilities,
+        resolvedCapabilities: enabledCapabilities
+      })
+    });
+    expect(events[2]).toMatchObject({
+      runId: run.id,
+      threadId: run.threadId,
+      type: 'agent_update',
+      payload: {
+        status: 'running',
+        providerId: 'test-provider',
+        modelId: 'openai:gpt-4.1'
+      }
+    });
+    expect(events[3]).toEqual(event);
+    expect(
+      db
+        .prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ?')
+        .all(run.id)
+    ).toEqual([
+      {
+        sequence: 1,
+        event_json: JSON.stringify({
+          type: 'run_started',
+          runId: run.id,
+          mode: 'chat',
+          threadId: run.threadId,
+          providerId: 'test-provider',
+          modelId: 'openai:gpt-4.1',
+          createdAt: run.startedAt
+        })
+      }
+    ]);
     expect(repository.listSessionMessages({ threadId: run.threadId })).toEqual([message]);
     expect(rawRow('agent_runs', run.id)).toMatchObject({
       enabled_capabilities_json: JSON.stringify(enabledCapabilities),
       model_id: 'openai:gpt-4.1',
+      provider_id: 'test-provider',
+      snapshot_version: 1,
       thread_id: run.threadId
     });
     expect(rawRow('agent_events', event.id)).toMatchObject({
@@ -97,10 +141,10 @@ describe('AgentSessionRepository', () => {
     });
   });
 
-  it('marks interrupted runs waiting for the user while persisting resume metadata', () => {
+  it('marks interrupted runs waiting for the user while persisting only interrupt UI data', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -130,12 +174,7 @@ describe('AgentSessionRepository', () => {
               }
             ]
           }
-        },
-        mode: 'plan',
-        taskSource: 'workbench',
-        workflowHint: 'propose_background_task',
-        workspacePath: undefined,
-        explicitSkillIds: ['typescript']
+        }
       }
     });
 
@@ -163,20 +202,41 @@ describe('AgentSessionRepository', () => {
               }
             ]
           }
-        },
-        mode: 'plan',
-        taskSource: 'workbench',
-        workflowHint: 'propose_background_task',
-        workspacePath: undefined,
-        explicitSkillIds: ['typescript']
+        }
       }
     });
+  });
+
+  it('quarantines a corrupt execution snapshot without reusing it for a run', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Recover this run'
+    });
+    db.prepare('UPDATE agent_runs SET snapshot_json = ? WHERE id = ?').run('{not-json', run.id);
+
+    expect(() => repository.getRunExecutionSnapshot(run.id)).toThrow('run_execution_snapshot_json_invalid');
+    expect(repository.getRun(run.id).status).toBe('interrupted');
+    expect(rawRow('agent_runs', run.id)).toMatchObject({
+      snapshot_error_code: 'run_execution_snapshot_json_invalid'
+    });
+    expect(repository.listThreadEvents(run.threadId)).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        payload: expect.objectContaining({
+          code: 'run_execution_snapshot_json_invalid'
+        })
+      })
+    );
   });
 
   it('persists workspace hash on session messages', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -226,7 +286,7 @@ describe('AgentSessionRepository', () => {
   it('stores user image attachment metadata without base64 data', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -262,13 +322,13 @@ describe('AgentSessionRepository', () => {
   it('filters current workspace search by workspace hash and keeps unscoped rows only in all scope', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const runA = repository.createTaskRun({
+    const runA = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
       userInput: 'Workspace A'
     });
-    const runB = repository.createTaskRun({
+    const runB = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -315,7 +375,7 @@ describe('AgentSessionRepository', () => {
   it('includes pre-compaction flush rows in workspace-scoped session search', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -353,7 +413,7 @@ describe('AgentSessionRepository', () => {
   it('treats punctuation-heavy session_search queries as plain text instead of FTS syntax', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
-    const run = repository.createTaskRun({
+    const run = createRun(repository, {
       enabledCapabilities,
       modelId: 'openai:gpt-4.1',
       threadKind: 'chat',
@@ -385,4 +445,87 @@ function columnNames(tableName: string): string[] {
 
 function rawRow(tableName: string, id: string): Record<string, unknown> {
   return db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id) as Record<string, unknown>;
+}
+
+function createRun(
+  repository: AgentSessionRepository,
+  input: {
+    attachments?: ChatPersistedAttachment[];
+    enabledCapabilities: EnabledCapabilities;
+    modelId: string;
+    threadId?: string;
+    threadKind: TaskKind;
+    userInput: string;
+  }
+) {
+  const capabilityPreview = createCapabilityPreview(input.enabledCapabilities);
+  return repository.createTaskRun({
+    attachments: input.attachments,
+    capabilityPreview,
+    snapshot: {
+      schemaVersion: 1,
+      runOrigin: 'chat',
+      model: {
+        providerId: 'test-provider',
+        modelId: input.modelId
+      },
+      mode: 'run',
+      workspace: null,
+      capabilityManifest: capabilityPreview.manifest,
+      budget: {
+        contextBudgetTokens: null
+      },
+      workflowHint: null,
+      explicitSkillIds: [],
+      dispatchKey: null
+    },
+    threadId: input.threadId,
+    threadKind: input.threadKind,
+    userInput: input.userInput
+  });
+}
+
+function createCapabilityPreview(requestedCapabilities: EnabledCapabilities): AgentCapabilityPreview {
+  return buildAgentCapabilityPreview({
+    deleteFileApprovalMode: 'fully_automatic',
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: requestedCapabilities.mcpServers.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      transport: 'http' as const,
+      status: 'ready' as const,
+      tools: 0,
+      allowedTools: []
+    })),
+    requestedCapabilities,
+    runtimeStatus: readyRuntimeStatus(),
+    skills: requestedCapabilities.skills.map((id) => ({
+      id,
+      name: id,
+      enabled: true,
+      path: `F:\\skills\\${id}`,
+      description: `${id} skill`,
+      status: 'ready' as const
+    })),
+    mode: 'chat'
+  });
+}
+
+function readyRuntimeStatus(): AgentRuntimeStatus {
+  return {
+    deepAgentsPackage: 'available',
+    deepAgentsApi: {
+      createDeepAgent: true
+    },
+    defaultModelConfigured: true,
+    defaultModelState: {
+      status: 'ready',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      reason: 'ready'
+    },
+    memoryAccess: 'store_backend',
+    execution: 'ready'
+  };
 }

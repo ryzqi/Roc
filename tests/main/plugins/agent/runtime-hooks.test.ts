@@ -17,9 +17,9 @@ const modelFactory: AgentModelFactoryAdapter = {
     modelId: 'openai:gpt-4.1',
     providerId: 'openai'
   }),
-  createModelHandleByModelId: async (modelId) => ({
+  createModelHandleByProviderAndModel: async ({ providerId, modelId }) => ({
     modelId,
-    providerId: 'openai'
+    providerId
   })
 };
 
@@ -37,6 +37,7 @@ const startRequest: ChatStartRunRequest = {
   },
   input: 'Summarize this workspace',
   mode: 'chat',
+  taskSource: 'workbench',
   workspacePath
 };
 
