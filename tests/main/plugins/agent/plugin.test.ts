@@ -5,6 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAgentPlugin } from '../../../../src/main/plugins/agent';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocPluginContext } from '../../../../src/main/kernel/types';
+import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
+import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { RocPaths } from '../../../../src/main/services/paths';
 
 const mocked = vi.hoisted(() => ({
@@ -100,6 +105,73 @@ describe('agent plugin manifest', () => {
         'langgraph_store_items'
       );
       expect(coreDb.prepare("SELECT name FROM sqlite_master WHERE name = 'langgraph_store_items'").pluck().get()).toBeUndefined();
+    } finally {
+      agentDb.close();
+      memoryDb.close();
+      taskDb.close();
+      coreDb.close();
+    }
+  });
+
+  it('reconciles persisted agent runs during plugin initialization', async () => {
+    const agentDb = new Database(':memory:');
+    const memoryDb = new Database(':memory:');
+    const taskDb = new Database(':memory:');
+    const coreDb = new Database(':memory:');
+    const reconcileStartupRuns = vi.spyOn(AgentSessionRepository.prototype, 'reconcileStartupRuns');
+    try {
+      const plugin = createAgentPlugin();
+      const context = createContext(agentDb, memoryDb, taskDb, coreDb);
+      for (const capability of plugin.manifest.capabilities) {
+        context.capabilities.declare(plugin.manifest.id, capability);
+      }
+
+      await plugin.initialize(context);
+
+      expect(reconcileStartupRuns).toHaveBeenCalledTimes(1);
+    } finally {
+      reconcileStartupRuns.mockRestore();
+      agentDb.close();
+      memoryDb.close();
+      taskDb.close();
+      coreDb.close();
+    }
+  });
+
+  it('initializes after a normal background-task placeholder run is persisted', async () => {
+    const agentDb = new Database(':memory:');
+    const memoryDb = new Database(':memory:');
+    const taskDb = new Database(':memory:');
+    const coreDb = new Database(':memory:');
+    try {
+      applyAgentDatabaseSchema(agentDb);
+      applyTaskPluginSchema(taskDb);
+      const task = new TaskRepository(taskDb, new AgentTaskHistoryReader(agentDb)).createBackgroundTask({
+        goal: 'Review the workspace every morning',
+        trigger: {
+          type: 'manual',
+          description: 'Run when requested'
+        },
+        workspacePath: 'F:\\Code\\Roc',
+        allowedActions: [],
+        forbiddenActions: [],
+        failurePolicy: 'pause_and_report',
+        notificationPolicy: 'failures_and_confirmations',
+        enabledCapabilities: {
+          mcpServers: [],
+          skills: []
+        }
+      });
+      const plugin = createAgentPlugin();
+      const context = createContext(agentDb, memoryDb, taskDb, coreDb);
+      for (const capability of plugin.manifest.capabilities) {
+        context.capabilities.declare(plugin.manifest.id, capability);
+      }
+
+      await expect(plugin.initialize(context)).resolves.toBeUndefined();
+      expect(
+        agentDb.prepare('SELECT snapshot_json, provider_id, model_id, status FROM agent_runs WHERE id = ?').get(task.runId)
+      ).toEqual({ snapshot_json: null, provider_id: null, model_id: null, status: 'running' });
     } finally {
       agentDb.close();
       memoryDb.close();

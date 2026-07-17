@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
+  AgentOutboxEvent,
   BackgroundTask,
   EnabledCapabilities,
   PersistedTaskEvent,
@@ -102,13 +103,15 @@ export class AgentTaskHistoryReader {
       payload,
       createdAt
     };
-    const sequence = this.nextEventSequence(task.threadId);
-    this.agentDb
-      .prepare(
-        `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(event.id, event.threadId, event.runId, sequence, event.type, JSON.stringify(event.payload), event.createdAt);
+    this.agentDb.transaction(() => {
+      const sequence = this.nextEventSequence(task.threadId);
+      this.agentDb
+        .prepare(
+          `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(event.id, event.threadId, event.runId, sequence, event.type, JSON.stringify(event.payload), event.createdAt);
+    })();
     return event;
   }
 
@@ -239,6 +242,25 @@ export class AgentTaskHistoryReader {
     return rows.map(mapTaskEvent);
   }
 
+  listOutboxEventsAfter(input: { afterSequence: number; limit: number }): AgentOutboxEvent[] {
+    if (!Number.isInteger(input.afterSequence) || input.afterSequence < 0) {
+      throw new Error('agent_outbox_after_sequence_invalid');
+    }
+    if (!Number.isInteger(input.limit) || input.limit <= 0) {
+      throw new Error('agent_outbox_limit_invalid');
+    }
+    const rows = this.agentDb
+      .prepare(
+        `SELECT sequence, id, event_type, run_id, thread_id, payload_json, created_at
+         FROM agent_outbox
+         WHERE sequence > ?
+         ORDER BY sequence ASC
+         LIMIT ?`
+      )
+      .all(input.afterSequence, input.limit) as AgentOutboxRow[];
+    return rows.map(mapAgentOutboxEvent);
+  }
+
   readThreads(): TaskSnapshot['threads'] {
     const rows = this.agentDb
       .prepare(
@@ -266,17 +288,187 @@ export class AgentTaskHistoryReader {
   }
 
   private nextEventSequence(threadId: string): number {
-    const row = this.agentDb.prepare('SELECT MAX(sequence) AS max_sequence FROM agent_events WHERE thread_id = ?').get(threadId) as
-      | { max_sequence: number | null }
+    const row = this.agentDb
+      .prepare('SELECT next_sequence FROM agent_thread_event_cursors WHERE thread_id = ?')
+      .get(threadId) as
+      | { next_sequence: number }
       | undefined;
-    if (row === undefined || row.max_sequence === null) {
+    if (row === undefined) {
+      this.agentDb
+        .prepare(
+          `INSERT INTO agent_thread_event_cursors (thread_id, next_sequence)
+           VALUES (?, ?)`
+        )
+        .run(threadId, 2);
       return 1;
     }
-    return row.max_sequence + 1;
+    this.agentDb
+      .prepare('UPDATE agent_thread_event_cursors SET next_sequence = ? WHERE thread_id = ?')
+      .run(row.next_sequence + 1, threadId);
+    return row.next_sequence;
   }
 }
 
 type PersistedTaskEventRow = TaskEventRow & { sequence: number };
+
+type AgentOutboxRow = {
+  sequence: number;
+  id: string;
+  event_type: string;
+  run_id: string;
+  thread_id: string;
+  payload_json: string;
+  created_at: string;
+};
+
+function mapAgentOutboxEvent(row: AgentOutboxRow): AgentOutboxEvent {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.payload_json) as unknown;
+  } catch {
+    throw new Error('agent_outbox_payload_json_invalid');
+  }
+  const record = requireOutboxPayloadRecord(payload);
+  if (row.event_type === 'run_completed') {
+    const finishReason = requireOutboxString(record, 'finishReason');
+    if (finishReason !== 'stop') {
+      throw new Error('agent_outbox_payload_invalid');
+    }
+    return {
+      id: row.id,
+      sequence: row.sequence,
+      eventType: 'run_completed',
+      runId: row.run_id,
+      threadId: row.thread_id,
+      payload: {
+        assistantMessage: requireOutboxString(record, 'assistantMessage'),
+        durationMs: requireOutboxNumber(record, 'durationMs'),
+        finishReason,
+        modelId: requireOutboxString(record, 'modelId'),
+        providerId: requireOutboxString(record, 'providerId'),
+        summary: requireOutboxString(record, 'summary')
+      },
+      createdAt: row.created_at
+    };
+  }
+  if (row.event_type === 'run_failed') {
+    const diagnostic = readOptionalOutboxDiagnostic(record);
+    const suggestion = readOptionalOutboxString(record, 'suggestion');
+    return {
+      id: row.id,
+      sequence: row.sequence,
+      eventType: 'run_failed',
+      runId: row.run_id,
+      threadId: row.thread_id,
+      payload: {
+        code: requireOutboxString(record, 'code'),
+        error: requireOutboxString(record, 'error'),
+        modelId: requireOutboxString(record, 'modelId'),
+        providerId: requireOutboxString(record, 'providerId'),
+        retryable: requireOutboxBoolean(record, 'retryable'),
+        ...(diagnostic === undefined ? {} : { diagnostic }),
+        ...(suggestion === undefined ? {} : { suggestion })
+      },
+      createdAt: row.created_at
+    };
+  }
+  if (row.event_type === 'run_cancelled') {
+    const reason = requireOutboxString(record, 'reason');
+    if (reason !== 'user_cancelled') {
+      throw new Error('agent_outbox_payload_invalid');
+    }
+    return {
+      id: row.id,
+      sequence: row.sequence,
+      eventType: 'run_cancelled',
+      runId: row.run_id,
+      threadId: row.thread_id,
+      payload: { reason },
+      createdAt: row.created_at
+    };
+  }
+  if (row.event_type === 'run_deleted') {
+    if (Object.keys(record).length !== 0) {
+      throw new Error('agent_outbox_payload_invalid');
+    }
+    return {
+      id: row.id,
+      sequence: row.sequence,
+      eventType: 'run_deleted',
+      runId: row.run_id,
+      threadId: row.thread_id,
+      payload: {},
+      createdAt: row.created_at
+    };
+  }
+  throw new Error('agent_outbox_event_type_invalid');
+}
+
+function requireOutboxPayloadRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('agent_outbox_payload_invalid');
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireOutboxString(value: Record<string, unknown>, key: string): string {
+  const field = value[key];
+  if (typeof field !== 'string') {
+    throw new Error('agent_outbox_payload_invalid');
+  }
+  return field;
+}
+
+function readOptionalOutboxString(value: Record<string, unknown>, key: string): string | undefined {
+  if (!(key in value)) {
+    return undefined;
+  }
+  return requireOutboxString(value, key);
+}
+
+function readOptionalOutboxDiagnostic(
+  value: Record<string, unknown>
+): { badKeys?: string[]; schemaPath?: string; toolName?: string } | undefined {
+  if (!('diagnostic' in value)) {
+    return undefined;
+  }
+  const diagnostic = requireOutboxPayloadRecord(value.diagnostic);
+  const badKeys = readOptionalOutboxStringArray(diagnostic, 'badKeys');
+  const schemaPath = readOptionalOutboxString(diagnostic, 'schemaPath');
+  const toolName = readOptionalOutboxString(diagnostic, 'toolName');
+  return {
+    ...(badKeys === undefined ? {} : { badKeys }),
+    ...(schemaPath === undefined ? {} : { schemaPath }),
+    ...(toolName === undefined ? {} : { toolName })
+  };
+}
+
+function readOptionalOutboxStringArray(value: Record<string, unknown>, key: string): string[] | undefined {
+  if (!(key in value)) {
+    return undefined;
+  }
+  const field = value[key];
+  if (!Array.isArray(field) || field.some((entry) => typeof entry !== 'string')) {
+    throw new Error('agent_outbox_payload_invalid');
+  }
+  return field;
+}
+
+function requireOutboxNumber(value: Record<string, unknown>, key: string): number {
+  const field = value[key];
+  if (typeof field !== 'number' || !Number.isFinite(field)) {
+    throw new Error('agent_outbox_payload_invalid');
+  }
+  return field;
+}
+
+function requireOutboxBoolean(value: Record<string, unknown>, key: string): boolean {
+  const field = value[key];
+  if (typeof field !== 'boolean') {
+    throw new Error('agent_outbox_payload_invalid');
+  }
+  return field;
+}
 
 function mapPersistedTaskEvent(row: PersistedTaskEventRow): PersistedTaskEvent {
   const event = mapTaskEvent({ ...row, rowid: row.sequence });

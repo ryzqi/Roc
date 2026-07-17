@@ -315,6 +315,124 @@ export const agentMigrations: RocDatabaseMigration[] = [
             AND agent_runs.snapshot_error_code = 'legacy_snapshot_missing'
         );
     `
+  },
+  {
+    version: 4,
+    name: 'agent_run_state_transition',
+    sql: `
+      CREATE TABLE agent_run_leases (
+        thread_id   TEXT PRIMARY KEY,
+        run_id      TEXT NOT NULL UNIQUE,
+        acquired_at TEXT NOT NULL,
+        FOREIGN KEY(thread_id) REFERENCES agent_threads(id),
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+      );
+    `
+  },
+  {
+    version: 5,
+    name: 'agent_terminal_outbox',
+    sql: `
+      CREATE TABLE agent_outbox (
+        sequence    INTEGER PRIMARY KEY,
+        id          TEXT NOT NULL UNIQUE,
+        event_type  TEXT NOT NULL CHECK(event_type IN ('run_completed','run_failed')),
+        run_id      TEXT NOT NULL,
+        thread_id   TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id),
+        FOREIGN KEY(thread_id) REFERENCES agent_threads(id)
+      );
+
+      CREATE INDEX idx_agent_outbox_sequence
+        ON agent_outbox(sequence);
+      CREATE INDEX idx_agent_outbox_run
+        ON agent_outbox(run_id, sequence);
+
+      INSERT INTO agent_run_leases (thread_id, run_id, acquired_at)
+      SELECT runs.thread_id, runs.id, runs.started_at
+      FROM agent_runs AS runs
+      WHERE runs.snapshot_json IS NOT NULL
+        AND runs.status IN ('dispatch_pending','waiting_next_turn','running','recovering','waiting_user')
+        AND runs.run_number = (
+          SELECT MAX(candidate.run_number)
+          FROM agent_runs AS candidate
+          WHERE candidate.thread_id = runs.thread_id
+            AND candidate.snapshot_json IS NOT NULL
+            AND candidate.status IN ('dispatch_pending','waiting_next_turn','running','recovering','waiting_user')
+        )
+      ON CONFLICT(thread_id) DO NOTHING;
+    `
+  },
+  {
+    version: 6,
+    name: 'agent_event_sequence_cursors',
+    sql: `
+      CREATE UNIQUE INDEX idx_agent_events_thread_sequence_unique
+        ON agent_events(thread_id, sequence);
+
+      CREATE TABLE agent_thread_event_cursors (
+        thread_id     TEXT PRIMARY KEY,
+        next_sequence INTEGER NOT NULL,
+        FOREIGN KEY(thread_id) REFERENCES agent_threads(id)
+      );
+
+      INSERT INTO agent_thread_event_cursors (thread_id, next_sequence)
+      SELECT thread_id, MAX(sequence) + 1
+      FROM agent_events
+      GROUP BY thread_id;
+
+      CREATE TABLE agent_run_event_cursors (
+        run_id        TEXT PRIMARY KEY,
+        next_sequence INTEGER NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+      );
+
+      INSERT INTO agent_run_event_cursors (run_id, next_sequence)
+      SELECT run_id, MAX(sequence) + 1
+      FROM agent_run_events
+      GROUP BY run_id;
+    `
+  },
+  {
+    version: 7,
+    name: 'agent_outbox_monotonic_sequence',
+    sql: `
+      ALTER TABLE agent_outbox RENAME TO agent_outbox_legacy;
+
+      CREATE TABLE agent_outbox (
+        sequence    INTEGER PRIMARY KEY AUTOINCREMENT,
+        id          TEXT NOT NULL UNIQUE,
+        event_type  TEXT NOT NULL CHECK(event_type IN ('run_completed','run_failed','run_cancelled','run_deleted')),
+        run_id      TEXT NOT NULL,
+        thread_id   TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+      );
+
+      INSERT INTO agent_outbox (sequence, id, event_type, run_id, thread_id, payload_json, created_at)
+      SELECT sequence, id, event_type, run_id, thread_id, payload_json, created_at
+      FROM agent_outbox_legacy;
+
+      DROP TABLE agent_outbox_legacy;
+
+      CREATE INDEX idx_agent_outbox_sequence
+        ON agent_outbox(sequence);
+      CREATE INDEX idx_agent_outbox_run
+        ON agent_outbox(run_id, sequence);
+    `
+  },
+  {
+    version: 8,
+    name: 'agent_notification_metrics',
+    sql: `
+      CREATE TABLE agent_notification_metrics (
+        code          TEXT PRIMARY KEY,
+        failure_count INTEGER NOT NULL,
+        updated_at    TEXT NOT NULL
+      );
+    `
   }
 ];
 
@@ -436,6 +554,17 @@ export const taskMigrations: RocDatabaseMigration[] = [
 
       CREATE INDEX idx_task_thread_deletion_journal_state_updated
         ON thread_deletion_journal(state, updated_at);
+    `
+  },
+  {
+    version: 3,
+    name: 'task_agent_outbox_cursor',
+    sql: `
+      CREATE TABLE task_agent_outbox_cursors (
+        projector_name TEXT PRIMARY KEY,
+        last_sequence  INTEGER NOT NULL,
+        updated_at     TEXT NOT NULL
+      );
     `
   }
 ];

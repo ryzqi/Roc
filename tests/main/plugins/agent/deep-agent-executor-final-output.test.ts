@@ -28,7 +28,7 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('uses final ToolMessage content for tool block output when present', async () => {
+  it('does not backfill a tool block from final ToolMessage content', async () => {
     const events = await collectExecutorEvents({
       capabilities: createCapabilities([]),
       output: {
@@ -42,20 +42,7 @@ describe('createAgentDeepAgentExecutor', () => {
       }
     });
 
-    expect(events).toEqual([
-      {
-        type: 'assistant_block',
-        runId: 'run-1',
-        block: {
-          kind: 'tool_call',
-          blockId: 'tool-call-write',
-          callId: 'call-write',
-          name: 'write_file',
-          phase: 'end',
-          output: 'Successfully wrote to /workspace/hello.docx'
-        }
-      }
-    ]);
+    expect(events).toEqual([]);
   });
 
 

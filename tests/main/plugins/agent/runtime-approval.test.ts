@@ -258,9 +258,13 @@ describe('AgentPluginRuntime', () => {
     await waitForEvent(() =>
       events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')
     );
-    repository.updateRunStatus({
+    const staleState = repository.getRunTransitionState(started.runId);
+    repository.transitionRun({
+      endedAt: '2026-07-17T00:00:00.000Z',
+      expectedStateVersion: staleState.stateVersion,
+      expectedStatus: staleState.status,
       runId: started.runId,
-      status: 'completed'
+      status: 'cancelled'
     });
 
     const rebuiltRepository = new AgentSessionRepository(db);

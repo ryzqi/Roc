@@ -9,6 +9,30 @@ let db: Database.Database;
 beforeEach(() => {
   db = new Database(':memory:');
   applyAgentPluginSchema(db);
+  db.prepare(
+    `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run('thread_1', 'chat', 'Run event test', 'Run event test', 'waiting_next_turn', '2026-07-03T00:00:00.000Z', '2026-07-03T00:00:00.000Z');
+  db.prepare(
+    `INSERT INTO agent_runs
+     (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+      enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    'run_1',
+    'thread_1',
+    1,
+    'Run event test',
+    'waiting_next_turn',
+    '2026-07-03T00:00:00.000Z',
+    null,
+    'openai',
+    'openai:gpt-4.1',
+    '{"mcpServers":[],"skills":[]}',
+    null,
+    null,
+    null
+  );
 });
 
 afterEach(() => {
@@ -51,6 +75,9 @@ describe('AgentRunEventLog', () => {
 
     expect(first.sequence).toBe(1);
     expect(second.sequence).toBe(2);
+    expect(
+      db.prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?').get('run_1')
+    ).toEqual({ next_sequence: 3 });
     expect(log.listRunEvents({ runId: 'run_1', afterSequence: 1 })).toEqual([second]);
   });
 });

@@ -3,6 +3,78 @@ import { projectSubagentStream } from '../../../../src/main/services/deep-agent/
 import type { ChatRunEvent } from '../../../../src/shared/types';
 
 describe('projectSubagentStream', () => {
+  it('propagates subagent output-projection failure instead of emitting a tool error', async () => {
+    const events: ChatRunEvent[] = [];
+    const callbackSet = callbacks(events);
+    callbackSet.projectToolOutput
+      .mockImplementationOnce(() => {
+        throw new Error('subagent_tool_output_projection_failed');
+      })
+      .mockImplementation(({ output }: { output: unknown }) => output);
+
+    await expect(
+      projectSubagentStream({
+        runId: 'run_subagent_projection_failure',
+        subagents: single({
+          name: 'research',
+          toolCalls: single({
+            callId: 'call-subagent-projection-failure',
+            name: 'web_read',
+            input: { url: 'https://example.com' },
+            output: 'web read completed'
+          }),
+          output: 'done'
+        }),
+        callbacks: callbackSet
+      })
+    ).rejects.toThrow('subagent_tool_output_projection_failed');
+
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          kind: 'tool_call',
+          block: expect.objectContaining({ phase: 'error' })
+        })
+      })
+    );
+  });
+
+  it('uses the shared tool-output projector for subagent tool results', async () => {
+    const events: ChatRunEvent[] = [];
+    const callbackSet = callbacks(events);
+    const projectedOutput = { kind: 'tool_result_artifact', preview: '[REDACTED]', truncated: true };
+    callbackSet.projectToolOutput.mockReturnValue(projectedOutput);
+
+    await projectSubagentStream({
+      runId: 'run_subagent_projection',
+      subagents: single({
+        name: 'research',
+        toolCalls: single({
+          callId: 'call-subagent-output',
+          name: 'web_read',
+          input: { url: 'https://example.com' },
+          output: 'Bearer should-not-reach-the-timeline'
+        }),
+        output: 'done'
+      }),
+      callbacks: callbackSet
+    });
+
+    expect(callbackSet.projectToolOutput).toHaveBeenCalledWith({
+      callId: 'call-subagent-output',
+      name: 'web_read',
+      output: 'Bearer should-not-reach-the-timeline'
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          kind: 'tool_call',
+          block: expect.objectContaining({ output: projectedOutput })
+        })
+      })
+    );
+  });
+
   it('streams nested subagent messages and tool calls with stable identity', async () => {
     const events: ChatRunEvent[] = [];
     await projectSubagentStream({
@@ -163,6 +235,7 @@ function callbacks(events: ChatRunEvent[]) {
     emitRuntimeEvent: vi.fn((event: ChatRunEvent) => events.push(event)),
     emitTodoEvent: vi.fn(),
     markVisibleOutput: vi.fn(),
+    projectToolOutput: vi.fn(({ output }: { output: unknown }) => output),
     recordSessionToolCall: vi.fn()
   };
 }

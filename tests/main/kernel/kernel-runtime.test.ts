@@ -102,7 +102,7 @@ describe('KernelRuntime', () => {
         ).toBe(2);
         expect(
           context.database.getConnection().prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'agent'").pluck().get()
-        ).toBe(3);
+        ).toBe(8);
       },
       shutdown: async () => {},
       healthCheck: async () => ({ status: 'healthy' })

@@ -49,18 +49,16 @@ afterEach(() => {
 });
 
 describe('AgentPluginRuntime thread concurrency characterization', () => {
-  it('allows two started runs for the same thread to execute concurrently', async () => {
+  it('rejects a second active run for the same thread', async () => {
     const repository = new AgentSessionRepository(db);
     const releaseExecutors = deferred<void>();
-    const bothExecutorsStarted = deferred<void>();
+    const executorStarted = deferred<void>();
     const executorRunIds: string[] = [];
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
           executorRunIds.push(input.run.id);
-          if (executorRunIds.length === 2) {
-            bothExecutorsStarted.resolve();
-          }
+          executorStarted.resolve();
           await releaseExecutors.promise;
           yield textBlock(input.run.id);
         }
@@ -71,21 +69,20 @@ describe('AgentPluginRuntime thread concurrency characterization', () => {
     });
 
     const first = await runtime.startRun(startRequest);
-    const second = await runtime.startRun({
-      ...startRequest,
-      input: 'Inspect the second workspace state'
-    });
-
     expect(first.threadId).toBe('thread_shared');
-    expect(second.threadId).toBe('thread_shared');
-    expect(first.runId).not.toBe(second.runId);
+
+    await expect(
+      runtime.startRun({
+        ...startRequest,
+        input: 'Inspect the second workspace state'
+      })
+    ).rejects.toMatchObject({ code: 'thread_run_conflict' });
 
     await vi.runAllTimersAsync();
-    await bothExecutorsStarted.promise;
+    await executorStarted.promise;
 
-    expect(executorRunIds).toEqual([first.runId, second.runId]);
-    expect(repository.getRun(first.runId).status).toBe('waiting_next_turn');
-    expect(repository.getRun(second.runId).status).toBe('waiting_next_turn');
+    expect(executorRunIds).toEqual([first.runId]);
+    expect(repository.getRun(first.runId).status).toBe('running');
 
     releaseExecutors.resolve();
     await runtime.shutdown();

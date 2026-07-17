@@ -6,6 +6,7 @@ import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agen
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
+import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { buildWorkspaceHash } from '../../../../src/main/services/paths';
@@ -393,6 +394,51 @@ describe('AgentPluginRuntime', () => {
     expect(completedPayload?.summary).toBe(assistantMessage);
   });
 
+  it('keeps execution successful when streamed replay reaches its reserved capacity', async () => {
+    const repository = new AgentSessionRepository(db);
+    const releaseExecution = createDeferred<void>();
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          await releaseExecution.promise;
+          yield createTextBlock(input.run.id, 'Live event after replay capacity.');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository,
+      runEventLog: new AgentRunEventLog(db)
+    });
+
+    const result = await runtime.startRun(startRequest);
+    const log = new AgentRunEventLog(db);
+    for (let index = 0; index < agentRunEventLogMaxEvents - 2; index += 1) {
+      log.recordRunEvent({
+        type: 'assistant_block',
+        runId: result.runId,
+        block: {
+          kind: 'text',
+          blockId: `text-replay-${index}`,
+          phase: 'delta',
+          text: String(index)
+        }
+      });
+    }
+
+    releaseExecution.resolve(undefined);
+    await waitForEvent(() => repository.getRun(result.runId).status === 'completed');
+
+    expect(
+      db.prepare('SELECT failure_count FROM agent_notification_metrics WHERE code = ?').get('agent_run_event_replay_persist_failed')
+    ).toEqual({ failure_count: 1 });
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(result.runId)
+    ).toEqual({
+      sequence: agentRunEventLogMaxEvents,
+      event_json: expect.stringContaining('run_completed')
+    });
+  });
+
 
   it('cancels only active plugin runs', async () => {
     const repository = new AgentSessionRepository(db);
@@ -427,6 +473,18 @@ describe('AgentPluginRuntime', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(repository.getRun(result.runId).status).toBe('cancelled');
+    expect(
+      db.prepare('SELECT event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(result.runId)
+    ).toContainEqual({ event_json: expect.stringContaining('run_cancelled') });
+    expect(
+      db.prepare("SELECT event_type, payload_json FROM agent_outbox WHERE run_id = ?").get(result.runId)
+    ).toEqual({ event_type: 'run_cancelled', payload_json: expect.stringContaining('user_cancelled') });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'agent.chat.run-event',
+        payload: expect.objectContaining({ runId: result.runId, type: 'run_cancelled' })
+      })
+    );
     expect(events).not.toContainEqual(
       expect.objectContaining({
         type: 'agent.chat.run-event',
@@ -480,6 +538,41 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('persists diagnostic and suggestion fields identically to the live terminal failure event', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* () {
+          throw new Error(
+            "Error invoking tool 'propose_background_task': Received tool input did not match expected schema kwargs {'goal':'daily review','forbiddenActions':[]} with error: Invalid input"
+          );
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+
+    const live = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload))
+      .find((event): event is Extract<ChatRunEvent, { type: 'run_failed' }> => event?.type === 'run_failed');
+    const replay = new AgentRunEventLog(db).listRunEvents({ afterSequence: 0, runId: result.runId }).at(-1)?.event;
+
+    expect(live).toMatchObject({
+      code: 'tool_input_schema_invalid',
+      diagnostic: expect.objectContaining({ toolName: 'propose_background_task' }),
+      suggestion: expect.stringContaining('propose_background_task')
+    });
+    expect(replay).toEqual(live);
+  });
+
   it('recovers transient provider connection errors before publishing final failure', async () => {
     const repository = new AgentSessionRepository(db);
     let calls = 0;
@@ -514,6 +607,7 @@ describe('AgentPluginRuntime', () => {
     expect(chatEvents.map((event) => event?.type)).toContain('run_recovering');
     expect(chatEvents.map((event) => event?.type)).toContain('run_recovered');
     expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(repository.getRunTransitionState(result.runId).stateVersion).toBe(6);
     expect(calls).toBe(2);
   });
 

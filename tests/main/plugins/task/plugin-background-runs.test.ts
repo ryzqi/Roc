@@ -150,10 +150,11 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: runNow.runId,
         threadId: task.threadId,
-        type: 'background_task_paused',
+        type: 'error',
         payload: {
-          taskId: task.id,
-          status: 'paused'
+          code: 'agent_run_failed',
+          error: 'provider_unavailable',
+          retryable: true
         }
       })
     );

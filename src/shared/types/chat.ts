@@ -222,6 +222,12 @@ export type ChatRunEvent =
       assistantMessage: string;
     }
   | {
+      type: 'run_cancelled';
+      runId: string;
+      threadId: string | null;
+      reason: 'user_cancelled';
+    }
+  | {
       type: 'run_failed';
       runId: string;
       threadId: string | null;

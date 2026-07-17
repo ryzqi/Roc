@@ -174,19 +174,27 @@ export class AgentPluginRuntime {
       threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
       userInput: input
     });
+    const dispatchState = this.options.repository.getRunTransitionState(run.id);
+    const dispatchedRun = this.options.repository.transitionRun({
+      endedAt: null,
+      expectedStateVersion: dispatchState.stateVersion,
+      expectedStatus: dispatchState.status,
+      runId: run.id,
+      status: 'dispatch_pending'
+    }).run;
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.activeRuns.add(run.id);
-    const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, run);
+    const normalizedRequest = createChatStartRunRequestFromSnapshot(snapshot, dispatchedRun);
     this.activeRunMetadata.set(run.id, {
       request: normalizedRequest,
-      threadId: run.threadId
+      threadId: dispatchedRun.threadId
     });
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const result: ChatStartRunResult = {
       runId: run.id,
       mode: request.mode,
-      threadId: run.threadId,
+      threadId: dispatchedRun.threadId,
       providerId: modelHandle.providerId,
       modelId: modelHandle.modelId,
       createdAt: run.startedAt
@@ -204,6 +212,20 @@ export class AgentPluginRuntime {
     });
     const timer = setTimeout(() => {
       this.scheduledRuns.delete(timer);
+      if (!this.activeRuns.has(run.id)) {
+        return;
+      }
+      const executionState = this.options.repository.getRunTransitionState(run.id);
+      if (executionState.status !== 'dispatch_pending') {
+        return;
+      }
+      const executingRun = this.options.repository.transitionRun({
+        endedAt: null,
+        expectedStateVersion: executionState.stateVersion,
+        expectedStatus: executionState.status,
+        runId: run.id,
+        status: 'running'
+      }).run;
       const pendingRun = this.executeRun({
         enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
         input,
@@ -214,9 +236,9 @@ export class AgentPluginRuntime {
         request: normalizedRequest,
         abortSignal: abortController.signal,
         modelHandle,
-        run,
+        run: executingRun,
         snapshot,
-        threadId: run.threadId,
+        threadId: executingRun.threadId,
         validatedAttachments: preparedAttachments.images,
         workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
       });
@@ -236,6 +258,13 @@ export class AgentPluginRuntime {
         cancelled: false
       };
     }
+    const terminalState = this.options.repository.getRunTransitionState(input.runId);
+    const terminal = this.options.repository.cancelRunAtomically({
+      endedAt: new Date().toISOString(),
+      expectedStateVersion: terminalState.stateVersion,
+      expectedStatus: terminalState.status,
+      runId: input.runId
+    });
     this.activeRuns.delete(input.runId);
     const metadata = this.activeRunMetadata.get(input.runId);
     this.activeRunMetadata.delete(input.runId);
@@ -243,12 +272,17 @@ export class AgentPluginRuntime {
     abortController?.abort();
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
-    this.options.repository.clearPendingInterrupt(input.runId);
-    this.options.repository.updateRunStatus({
-      endedAt: new Date().toISOString(),
-      runId: input.runId,
-      status: 'cancelled'
+    void this.publish('agent.run.cancelled', {
+      runId: terminal.run.id,
+      threadId: terminal.run.threadId,
+      reason: 'user_cancelled'
     });
+    void this.publishChatRunEventBestEffort({
+      type: 'run_cancelled',
+      runId: terminal.run.id,
+      threadId: terminal.run.threadId,
+      reason: 'user_cancelled'
+    }, false);
     if (metadata !== undefined) {
       void this.emitSessionEndBestEffort({
         runId: input.runId,
@@ -287,6 +321,7 @@ export class AgentPluginRuntime {
     if (run.modelId === null) {
       throw new Error('chat_resume_run_missing');
     }
+    const resumeState = this.options.repository.getRunTransitionState(run.id);
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
@@ -295,11 +330,16 @@ export class AgentPluginRuntime {
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
     }
+    const resumedRun = this.options.repository.resumeRunAtomically({
+      expectedStateVersion: resumeState.stateVersion,
+      expectedStatus: resumeState.status,
+      runId: run.id
+    });
     this.activeRuns.add(run.id);
-    const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, run);
+    const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, resumedRun);
     this.activeRunMetadata.set(run.id, {
       request: resumedRequest,
-      threadId: run.threadId
+      threadId: resumedRun.threadId
     });
     const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
@@ -309,12 +349,7 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       resumedAt
     };
-    this.options.repository.updateRunStatus({
-      runId: run.id,
-      status: 'running'
-    });
     this.pendingInterrupts.delete(run.id);
-    this.options.repository.clearPendingInterrupt(run.id);
     await this.publish('agent.run.resumed', result);
     await this.publishChatRunEvent({
       type: 'run_resumed',
@@ -365,17 +400,17 @@ export class AgentPluginRuntime {
     const pendingRun = this.executeRun({
       abortSignal: abortController.signal,
       enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
-      input: run.userInput,
+      input: resumedRun.userInput,
       mode: resumedRequest.mode,
       modelHandle,
       modelId: modelHandle.modelId,
       providerId: modelHandle.providerId,
       request: resumedRequest,
       resumePayload,
-      run,
+      run: resumedRun,
       runId: run.id,
       snapshot,
-      threadId: run.threadId,
+      threadId: resumedRun.threadId,
       workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
     });
     this.pendingRuns.add(pendingRun);
@@ -440,46 +475,28 @@ export class AgentPluginRuntime {
     modelId: string;
     workspacePath: ChatStartRunRequest['workspacePath'];
   }): Promise<{ run: TaskRun; message: SessionMessageEntry; event: TaskEvent }> {
-    const run = this.options.repository.updateRunStatus({
-      endedAt: new Date().toISOString(),
+    const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
+    const currentRun = this.options.repository.getRun(input.runId);
+    const terminalState = this.options.repository.getRunTransitionState(input.runId);
+    const endedAt = new Date().toISOString();
+    const terminal = this.options.repository.completeRunAtomically({
+      assistantMessage: input.assistantMessage,
+      durationMs: input.durationMs,
+      endedAt,
+      expectedStateVersion: terminalState.stateVersion,
+      expectedStatus: terminalState.status,
+      modelId: input.modelId,
+      providerId: input.providerId,
       runId: input.runId,
-      status: 'completed'
+      runStartedAt: currentRun.startedAt,
+      summary: input.summary,
+      workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
+    const run = terminal.run;
     this.activeRuns.delete(input.runId);
     this.activeRunMetadata.delete(input.runId);
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
-    this.options.repository.clearPendingInterrupt(input.runId);
-    const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
-    const message = this.options.repository.recordSessionMessage({
-      content: input.assistantMessage,
-      role: 'assistant',
-      threadId: run.threadId,
-      workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
-    });
-    const event = this.options.repository.recordEvent({
-      payload: {
-        role: 'assistant',
-        content: input.assistantMessage,
-        providerId: input.providerId,
-        modelId: input.modelId
-      },
-      runId: run.id,
-      threadId: run.threadId,
-      type: 'message'
-    });
-    this.options.repository.recordEvent({
-      payload: {
-        providerId: input.providerId,
-        modelId: input.modelId,
-        finishReason: 'stop',
-        durationMs: input.durationMs,
-        summary: input.summary
-      },
-      runId: run.id,
-      threadId: run.threadId,
-      type: 'agent_update'
-    });
     const completedPayload: {
       runId: string;
       threadId: string;
@@ -504,18 +521,18 @@ export class AgentPluginRuntime {
       completedPayload.workspacePath = input.workspacePath;
     }
     await this.publish('agent.run.completed', completedPayload);
-    await this.publishChatRunEvent({
+    await this.publishChatRunEventBestEffort({
       type: 'run_completed',
       runId: run.id,
       threadId: run.threadId,
       providerId: input.providerId,
       modelId: input.modelId,
-      createdAt: run.startedAt,
+      createdAt: currentRun.startedAt,
       durationMs: input.durationMs,
       summary: input.summary,
       assistantMessage: input.assistantMessage
-    });
-    return { run, message, event };
+    }, false);
+    return terminal;
   }
 
   private async emitSessionEndBestEffort(input: Parameters<AgentLifecycleHookEmitter['emitSessionEnd']>[0]): Promise<void> {
@@ -524,26 +541,50 @@ export class AgentPluginRuntime {
     }
     try {
       await this.options.lifecycleHooks.emitSessionEnd(input);
-    } catch (error) {
-      console.warn(
-        '[AgentPluginRuntime] SessionEnd hook failed:',
-        error instanceof Error ? error.message : String(error)
-      );
+    } catch {
+      this.recordNotificationFailure('agent_session_end_notification_failed');
     }
   }
 
   private async publish<TPayload>(type: string, payload: TPayload): Promise<void> {
-    await this.options.eventBus.publish({
-      type,
-      source: this.pluginId,
-      payload,
-      createdAt: new Date().toISOString()
-    });
+    try {
+      await this.options.eventBus.publish({
+        type,
+        source: this.pluginId,
+        payload,
+        createdAt: new Date().toISOString()
+      });
+    } catch {
+      this.recordNotificationFailure('agent_event_bus_notification_failed');
+    }
   }
 
   private async publishChatRunEvent(payload: ChatRunEvent): Promise<void> {
-    this.options.runEventLog?.recordRunEvent(payload);
+    this.persistChatRunEvent(payload);
     await this.publish(agentChatRunEventType, payload);
+  }
+
+  private async publishChatRunEventBestEffort(payload: ChatRunEvent, persist: boolean): Promise<void> {
+    if (persist) {
+      this.persistChatRunEvent(payload);
+    }
+    await this.publish(agentChatRunEventType, payload);
+  }
+
+  private persistChatRunEvent(payload: ChatRunEvent): void {
+    try {
+      this.options.runEventLog?.recordRunEvent(payload);
+    } catch {
+      this.recordNotificationFailure('agent_run_event_replay_persist_failed');
+    }
+  }
+
+  private recordNotificationFailure(code: string): void {
+    try {
+      this.options.repository.recordNotificationFailure(code);
+    } catch {
+      console.warn('[AgentPluginRuntime] Notification metric persistence failed.');
+    }
   }
 
   private async recordRunTaskEvent(input: {
@@ -639,9 +680,13 @@ export class AgentPluginRuntime {
         });
         if (decision.action === 'recover') {
           const nextRetryAt = new Date(nowMs + decision.delayMs).toISOString();
-          this.options.repository.updateRunStatus({
+          const recoveryState = this.options.repository.getRunTransitionState(input.runId);
+          this.options.repository.transitionRun({
+            endedAt: null,
+            expectedStateVersion: recoveryState.stateVersion,
+            expectedStatus: recoveryState.status,
             runId: input.runId,
-            status: 'running'
+            status: 'recovering'
           });
           await this.publish('agent.run.recovery.started', {
             runId: input.runId,
@@ -668,6 +713,14 @@ export class AgentPluginRuntime {
             }
             throw delayError;
           }
+          const resumedRecoveryState = this.options.repository.getRunTransitionState(input.runId);
+          this.options.repository.transitionRun({
+            endedAt: null,
+            expectedStateVersion: resumedRecoveryState.stateVersion,
+            expectedStatus: resumedRecoveryState.status,
+            runId: input.runId,
+            status: 'running'
+          });
           continue;
         }
         await this.failRun({ input, failure });
@@ -677,16 +730,25 @@ export class AgentPluginRuntime {
   }
 
   private async failRun(input: { input: ExecuteRunInput; failure: RunFailure }): Promise<void> {
+    const terminalState = this.options.repository.getRunTransitionState(input.input.runId);
+    const endedAt = new Date().toISOString();
+    this.options.repository.failRunAtomically({
+      code: input.failure.code,
+      diagnostic: input.failure.diagnostic,
+      endedAt,
+      error: input.failure.message,
+      expectedStateVersion: terminalState.stateVersion,
+      expectedStatus: terminalState.status,
+      modelId: input.input.modelId,
+      providerId: input.input.providerId,
+      retryable: input.failure.retryable,
+      runId: input.input.runId,
+      suggestion: input.failure.suggestion
+    });
     this.activeRuns.delete(input.input.runId);
     this.activeRunMetadata.delete(input.input.runId);
     this.abortControllers.delete(input.input.runId);
     this.pendingInterrupts.delete(input.input.runId);
-    this.options.repository.clearPendingInterrupt(input.input.runId);
-    this.options.repository.updateRunStatus({
-      endedAt: new Date().toISOString(),
-      runId: input.input.runId,
-      status: 'failed'
-    });
     await this.emitSessionEndBestEffort({
       runId: input.input.runId,
       threadId: input.input.threadId,
@@ -703,7 +765,7 @@ export class AgentPluginRuntime {
       code: input.failure.code,
       retryable: input.failure.retryable
     });
-    await this.publishChatRunEvent({
+    await this.publishChatRunEventBestEffort({
       type: 'run_failed',
       runId: input.input.runId,
       threadId: input.input.threadId,
@@ -712,7 +774,7 @@ export class AgentPluginRuntime {
       message: input.failure.message,
       retryable: input.failure.retryable,
       suggestion: input.failure.suggestion
-    });
+    }, false);
   }
 
   private async executeDeepAgentRun(input: {
@@ -888,7 +950,10 @@ export class AgentPluginRuntime {
       interruptId: input.interruptId,
       payload: input.payload
     };
+    const interruptState = this.options.repository.getRunTransitionState(input.runId);
     this.options.repository.markRunInterrupted({
+      expectedStateVersion: interruptState.stateVersion,
+      expectedStatus: interruptState.status,
       runId: input.runId,
       threadId: input.threadId,
       interrupt: pendingInterrupt

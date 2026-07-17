@@ -3,6 +3,7 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type {
   ActiveTaskItem,
   AgentCapabilityPreview,
+  AgentOutboxEvent,
   BackgroundTask,
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
@@ -459,6 +460,83 @@ export class TaskRepository {
     }
     return null;
   }
+  projectAgentOutboxEvents(input: {
+    events: readonly AgentOutboxEvent[];
+    projectorName: string;
+  }): { appliedCount: number; lastSequence: number } {
+    const projectorName = input.projectorName.trim();
+    if (projectorName.length === 0) {
+      throw new Error('task_agent_outbox_projector_name_empty');
+    }
+    return this.db.transaction(() => {
+      const cursorRow = this.db
+        .prepare('SELECT last_sequence FROM task_agent_outbox_cursors WHERE projector_name = ?')
+        .get(projectorName) as { last_sequence: number } | undefined;
+      let lastSequence = cursorRow === undefined ? 0 : cursorRow.last_sequence;
+      let appliedCount = 0;
+      let updatedAt: string | null = null;
+      for (const event of input.events) {
+        if (event.sequence <= lastSequence) {
+          continue;
+        }
+        if (event.sequence !== lastSequence + 1) {
+          throw new Error('task_agent_outbox_sequence_gap');
+        }
+        const task = this.findBackgroundTaskByRunId(event.runId);
+        if (task !== null) {
+          if (event.eventType === 'run_completed') {
+            this.db
+              .prepare('UPDATE background_tasks SET last_run_status = ?, updated_at = ? WHERE id = ?')
+              .run('success', event.createdAt, task.id);
+          } else if (event.eventType === 'run_failed') {
+            this.db
+              .prepare('UPDATE background_tasks SET status = ?, last_run_status = ?, updated_at = ? WHERE id = ?')
+              .run('paused', 'failed', event.createdAt, task.id);
+            const updatedTask = this.requireBackgroundTask(task.id);
+            this.agentHistory.updateBackgroundTaskThread(updatedTask);
+            if (!this.hasBackgroundTaskPausedEvent(updatedTask)) {
+              this.agentHistory.recordBackgroundTaskEvent(updatedTask, 'background_task_paused', {
+                taskId: updatedTask.id,
+                status: updatedTask.status
+              });
+            }
+          } else if (event.eventType === 'run_cancelled') {
+            this.db
+              .prepare('UPDATE background_tasks SET last_run_status = ?, updated_at = ? WHERE id = ?')
+              .run('cancelled', event.createdAt, task.id);
+          }
+        }
+        lastSequence = event.sequence;
+        updatedAt = event.createdAt;
+        appliedCount += 1;
+      }
+      if (updatedAt !== null) {
+        this.db
+          .prepare(
+            `INSERT INTO task_agent_outbox_cursors (projector_name, last_sequence, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(projector_name) DO UPDATE SET
+               last_sequence = excluded.last_sequence,
+               updated_at = excluded.updated_at`
+          )
+          .run(projectorName, lastSequence, updatedAt);
+      }
+      return { appliedCount, lastSequence };
+    })();
+  }
+  getAgentOutboxCursor(projectorName: string): number {
+    const normalizedProjectorName = projectorName.trim();
+    if (normalizedProjectorName.length === 0) {
+      throw new Error('task_agent_outbox_projector_name_empty');
+    }
+    const row = this.db
+      .prepare('SELECT last_sequence FROM task_agent_outbox_cursors WHERE projector_name = ?')
+      .get(normalizedProjectorName) as { last_sequence: number } | undefined;
+    if (row === undefined) {
+      return 0;
+    }
+    return row.last_sequence;
+  }
   recordAgentTaskEvent(input: {
     runId: string;
     threadId: string;
@@ -483,6 +561,15 @@ export class TaskRepository {
 
   private pauseBackgroundTaskAfterRunFailure(taskId: string, now: string): void {
     pauseBackgroundTaskAfterRunFailure(this.db, taskId, now);
+  }
+
+  private hasBackgroundTaskPausedEvent(task: BackgroundTask): boolean {
+    return this.agentHistory.listEventsForRun(task.threadId, task.runId).some((event) => {
+      if (event.type !== 'background_task_paused' || typeof event.payload !== 'object' || event.payload === null) {
+        return false;
+      }
+      return Reflect.get(event.payload, 'taskId') === task.id && Reflect.get(event.payload, 'status') === 'paused';
+    });
   }
 
   private listVisibleBackgroundTasks(): BackgroundTask[] {

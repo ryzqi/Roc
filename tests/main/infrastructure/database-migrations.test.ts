@@ -82,7 +82,7 @@ describe('database migrations', () => {
     ).toThrow('database_migration_version_gap');
   });
 
-  it('applies task migrations through version 2 without changing version order', () => {
+  it('applies task migrations through version 3 without changing version order', () => {
     applyDatabaseMigrations(db, {
       dbName: 'task',
       migrations: taskMigrations,
@@ -93,11 +93,12 @@ describe('database migrations', () => {
       db.prepare("SELECT version, name FROM schema_migrations WHERE db_name = 'task' ORDER BY version").all()
     ).toEqual([
       { version: 1, name: 'background_task_projection_tables' },
-      { version: 2, name: 'thread_deletion_journal' }
+      { version: 2, name: 'thread_deletion_journal' },
+      { version: 3, name: 'task_agent_outbox_cursor' }
     ]);
     expect(readSchemaMetadata(db, 'task')).toMatchObject({
       dbName: 'task',
-      currentVersion: 2
+      currentVersion: 3
     });
   });
 
@@ -120,7 +121,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 3 without changing earlier versions', () => {
+  it('applies agent migrations through version 8 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -132,11 +133,16 @@ describe('database migrations', () => {
     ).toEqual([
       { version: 1, name: 'agent_canonical_runtime_tables' },
       { version: 2, name: 'agent_event_sequence_cursor' },
-      { version: 3, name: 'agent_run_execution_snapshot' }
+      { version: 3, name: 'agent_run_execution_snapshot' },
+      { version: 4, name: 'agent_run_state_transition' },
+      { version: 5, name: 'agent_terminal_outbox' },
+      { version: 6, name: 'agent_event_sequence_cursors' },
+      { version: 7, name: 'agent_outbox_monotonic_sequence' },
+      { version: 8, name: 'agent_notification_metrics' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 3
+      currentVersion: 8
     });
   });
 

@@ -3,7 +3,9 @@ import type { EnabledCapabilities } from './agent';
 export type TaskStatus =
   | 'draft'
   | 'pending_confirmation'
+  | 'dispatch_pending'
   | 'running'
+  | 'recovering'
   | 'paused'
   | 'waiting_user'
   | 'waiting_next_turn'
@@ -115,6 +117,65 @@ export type TaskRun = {
   modelId: string | null;
   enabledCapabilities: EnabledCapabilities;
 };
+
+export type AgentOutboxEvent =
+  | {
+      id: string;
+      sequence: number;
+      eventType: 'run_completed';
+      runId: string;
+      threadId: string;
+      payload: {
+        assistantMessage: string;
+        durationMs: number;
+        finishReason: 'stop';
+        modelId: string;
+        providerId: string;
+        summary: string;
+      };
+      createdAt: string;
+    }
+  | {
+      id: string;
+      sequence: number;
+      eventType: 'run_failed';
+      runId: string;
+      threadId: string;
+      payload: {
+        code: string;
+        diagnostic?: {
+          badKeys?: string[];
+          schemaPath?: string;
+          toolName?: string;
+        };
+        error: string;
+        modelId: string;
+        providerId: string;
+        retryable: boolean;
+        suggestion?: string;
+      };
+      createdAt: string;
+    }
+  | {
+      id: string;
+      sequence: number;
+      eventType: 'run_cancelled';
+      runId: string;
+      threadId: string;
+      payload: {
+        reason: 'user_cancelled';
+      };
+      createdAt: string;
+    }
+  | {
+      id: string;
+      sequence: number;
+      eventType: 'run_deleted';
+      runId: string;
+      threadId: string;
+      payload: Record<string, never>;
+      createdAt: string;
+    };
 
 export type TaskDeleteThreadRequest = {
   threadId: string;

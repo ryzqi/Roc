@@ -293,11 +293,8 @@ describe('task plugin', () => {
       expect.objectContaining({
         runId: 'run_failed_1',
         threadId: 'thread_failed_1',
-        type: 'agent_update',
+        type: 'error',
         payload: {
-          status: 'failed',
-          providerId: 'smoke-provider',
-          modelId: 'smoke-model',
           code: 'agent_run_failed',
           error: 'provider_unavailable',
           retryable: true

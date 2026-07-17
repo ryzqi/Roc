@@ -66,7 +66,7 @@ export type ChatRunState = {
   providerId: string | null;
   modelId: string | null;
   createdAt: string | null;
-  status: 'idle' | 'running' | 'recovering' | 'waiting_user' | 'completed' | 'failed';
+  status: 'idle' | 'running' | 'recovering' | 'waiting_user' | 'completed' | 'cancelled' | 'failed';
   assistantMessage: string;
   activityBlocks: ChatRunActivityBlock[];
   durationMs: number | null;
@@ -227,6 +227,20 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       threadId: event.threadId,
       status: 'running',
       recoveryAttempt: null
+    };
+  }
+
+  if (event.type === 'run_cancelled') {
+    return {
+      ...state,
+      threadId: event.threadId,
+      status: 'cancelled',
+      errorCode: null,
+      errorMessage: null,
+      pendingInterrupts: [],
+      recoveryAttempt: null,
+      resumeBusy: false,
+      retryable: false
     };
   }
 

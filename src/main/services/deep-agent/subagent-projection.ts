@@ -2,11 +2,13 @@ import type { ChatAssistantBlock, ChatRunEvent, SubagentEventPayload, SubagentId
 import * as recordUtils from './record-utils';
 import { redact } from './redact';
 import { readToolCallId, redactUnknown } from './stream-tool-utils';
+import type { ToolOutputProjector } from './tool-output-projection';
 
 export type SubagentProjectionCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
+  projectToolOutput: ToolOutputProjector;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
 };
 
@@ -189,19 +191,15 @@ async function consumeToolCalls(
     emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: startBlock });
     callbacks.emitTodoEvent(input);
 
+    let rawOutput: unknown;
     try {
-      const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
-      emit(callbacks, runId, nextSequence(), identity, {
-        kind: 'tool_call',
-        block: {
-          ...startBlock,
-          phase: 'end',
-          output
-        }
-      });
-      callbacks.recordSessionToolCall?.(name, input, output);
+      rawOutput = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
     } catch (error) {
-      const message = redact(error instanceof Error ? error.message : String(error));
+      const message = callbacks.projectToolOutput({
+        callId,
+        name,
+        output: redact(error instanceof Error ? error.message : String(error))
+      });
       emit(callbacks, runId, nextSequence(), identity, {
         kind: 'tool_call',
         block: {
@@ -211,7 +209,22 @@ async function consumeToolCalls(
         }
       });
       callbacks.recordSessionToolCall?.(name, input, { error: message });
+      continue;
     }
+    const output = callbacks.projectToolOutput({
+      callId,
+      name,
+      output: rawOutput
+    });
+    emit(callbacks, runId, nextSequence(), identity, {
+      kind: 'tool_call',
+      block: {
+        ...startBlock,
+        phase: 'end',
+        output
+      }
+    });
+    callbacks.recordSessionToolCall?.(name, input, output);
   }
 }
 

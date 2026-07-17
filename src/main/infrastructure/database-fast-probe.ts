@@ -61,6 +61,7 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'session_messages_fts',
       'agent_pending_interrupts',
       'agent_run_events',
+      'agent_notification_metrics',
       'langgraph_checkpoints',
       'langgraph_checkpoint_writes',
       'agent_tool_effects',

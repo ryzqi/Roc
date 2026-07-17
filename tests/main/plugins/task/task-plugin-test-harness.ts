@@ -165,6 +165,17 @@ function persistRunCompleted(db: Database.Database, event: RocEventEnvelope): vo
       { status: 'completed', providerId, modelId, finishReason, durationMs, summary },
       createdAt
     );
+    db.prepare(
+      `INSERT INTO agent_outbox (id, event_type, run_id, thread_id, payload_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      `outbox_test_completed_${runId}`,
+      'run_completed',
+      runId,
+      threadId,
+      JSON.stringify({ assistantMessage, durationMs, finishReason, modelId, providerId, summary }),
+      createdAt
+    );
   })();
 }
 
@@ -185,8 +196,19 @@ function persistRunFailed(db: Database.Database, event: RocEventEnvelope): void 
       db,
       threadId,
       runId,
-      'agent_update',
-      { status: 'failed', providerId, modelId, code, error, retryable },
+      'error',
+      { code, error, retryable },
+      createdAt
+    );
+    db.prepare(
+      `INSERT INTO agent_outbox (id, event_type, run_id, thread_id, payload_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      `outbox_test_failed_${runId}`,
+      'run_failed',
+      runId,
+      threadId,
+      JSON.stringify({ code, error, modelId, providerId, retryable }),
       createdAt
     );
   })();
@@ -259,13 +281,20 @@ function nextRunNumber(db: Database.Database, threadId: string): number {
 }
 
 function nextEventSequence(db: Database.Database, threadId: string): number {
-  const row = db.prepare('SELECT MAX(sequence) AS max_sequence FROM agent_events WHERE thread_id = ?').get(threadId) as
-    | { max_sequence: number | null }
+  const row = db
+    .prepare('SELECT next_sequence FROM agent_thread_event_cursors WHERE thread_id = ?')
+    .get(threadId) as
+    | { next_sequence: number }
     | undefined;
-  if (row === undefined || row.max_sequence === null) {
+  if (row === undefined) {
+    db.prepare(
+      `INSERT INTO agent_thread_event_cursors (thread_id, next_sequence)
+       VALUES (?, ?)`
+    ).run(threadId, 2);
     return 1;
   }
-  return row.max_sequence + 1;
+  db.prepare('UPDATE agent_thread_event_cursors SET next_sequence = ? WHERE thread_id = ?').run(row.next_sequence + 1, threadId);
+  return row.next_sequence;
 }
 
 function readThreadKind(mode: string): TaskKind {

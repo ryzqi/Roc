@@ -6,7 +6,7 @@
 
 ## Current Phase
 
-Stage 1 completed — Immutable Run Contract（不进入 Stage 2；Stage 0 的 Step 4b/5/6 仍依赖后续生产合同）
+Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选择）
 
 ## Phases
 
@@ -34,13 +34,20 @@ Stage 1 completed — Immutable Run Contract（不进入 Stage 2；Stage 0 的 S
 
 ### Stage 2: Durable Run State, Outbox, Bounded Timeline
 
-- [ ] 实施、review、修复、验证、提交。
-- **Status:** pending
+- [x] 定义 repository CAS transition、state version 与 per-thread active-run invariant。
+- [x] 实现 terminal transaction、agent outbox 与 idempotent task projector。
+- [x] 替换 `MAX+1` event sequence，建立 transactional append constraint。
+- [x] 加 startup reconciliation：旧执行不自动重放；有效 `waiting_user` 保留，其他中断状态原子落为 `interrupted` 并写 durable terminal outbox。
+- [x] 补 bounded/coalesced queue、event-row 上界与 backpressure 证据：100k text coalesce、10k structural overflow、10k timeline/replay P95 均有稳定 fixture。
+- [x] 收敛 startup、HITL、retry、cancel 的 CAS transition；已删除 `updateRunStatus()`，所有生产状态切换要求 expected status/version。
+- [x] 运行 Stage 2 focused/broad verification，独立 review，修复后提交。
+- [x] 实施、review、修复、验证、提交。
+- **Status:** complete
 
 ### Stage 3: Durable Background Occurrences
 
 - [ ] 实施、review、修复、验证、提交。
-- **Status:** pending
+- **Status:** blocked, awaiting Scheduler misfire product gate
 
 ### Stage 4: Execution Safety, Budgets, Cancellation
 
@@ -120,12 +127,31 @@ Stage 1 completed — Immutable Run Contract（不进入 Stage 2；Stage 0 的 S
 | Stage 1 review found explicit skills absent from persisted audit cards | 1 | Derive persisted skill cards from the frozen manifest and cover explicit-skill audit visibility. |
 | Review red test created an accepted workflow-hint run, then DB teardown observed `clearPendingInterrupt` on a closed connection | 1 | The fixed source rejects the request before persistence; focused green run has no unhandled rejection. |
 | Post-review focused suite retained two fixtures that intentionally sent old source provenance | 1 | Update only the fixture source values (`workbench` for workflow tests); the rerun passed 23 files / 144 tests. |
+| Stage 2 test discovery used nonexistent `plugin-run-state.test.ts` | 1 | Current file is `tests/main/plugins/task/plugin-run-states.test.ts`; use `rg --files` before test reads. |
+| Stage 2 first implementation left `agent_run_leases` absent after `applyAgentPluginSchema()` | 1 | v4 was placed in diagnostics by an over-broad patch context; moved it to `agentMigrations`. Migration/repository suite now passes. |
+| Stage 2 impacted suite threw `ReferenceError: hasActiveThread is not defined` on the first `startRun()` | 1 | `createTaskRun()` variable was renamed to `hasExistingThread` but one branch retained the old identifier; corrected that one reference and rerun the same suite. |
+| Stage 2 v6 cursor migration caused `FOREIGN KEY constraint failed` in standalone run-event and history deletion tests | 1 | Seed the run fixture before allocating its cursor; delete lease/outbox/cursor rows before deleting agent runs and threads. |
+| Stage 2 focused suite found database health/probe fixtures still expected agent v4/task v2 | 1 | Update only version assertions to the current v6/v3 migration ledger. |
+| Stage 2 focused suite found streaming fixture asserted text delta chunk boundaries after deliberate queue coalescing | 1 | Assert exact concatenated transcript and structural order; do not require old transport chunk boundaries. |
+| Stage 2 typecheck found nullable provider/model passed to `requireNonEmpty`, and new reconcile test used obsolete approval payload shape | 1 | Broaden explicit required-string guard to accept nullable DB fields and fix test payload under `request`. |
+| Stage 2 review-repair patch did not match the current `stream-consumers.ts` import context | 1 | No production file changed; re-read current source fragments and resend a smaller exact-context patch. |
 
 ## Review Notes
 
 - Step 2 spec review P1 已处理：`plan.md` 要求复现 `completed -> failed`，但当前源码在 publish 前移除 active run，故不能也不应人为复活旧故障；回归测试锁住已修正的终态不变量。
 - Step 3 review 已处理：fixture 改为关闭并重连同一临时 SQLite 文件，approval 改走真实 Deep Agents `interruptOn`/HITL；最后移除 unused import。
 - Step 4 review：当前测试只锁 `startRun -> recordScheduledTaskRun -> markBackgroundTaskFired` 的 gap；不能宣称已满足计划所列四个 crash point。 
+- Stage 2 independent standards/spec review (2026-07-17) findings pending repair:
+  - P0: queue overflow can leave producer streams running; `AgentRunEventLog` capacity exception can enter recovery/failure; agent outbox `INTEGER PRIMARY KEY` sequence can be reused after history deletion.
+  - P1: cancel lacks durable replay/outbox terminal projection; text/reasoning coalescing has no char bound and producers ignore `push()` false; repository terminal writers can allocate beyond row cap.
+  - P2: EventBus notification failures are only logged, not counted; assess against available Stage 2/6 observability boundary before final review.
+- Stage 2 resume (2026-07-17): first-round findings have implementation and focused verification recorded; no live review worker remains after session recovery. Before any commit, launch a fresh independent re-review against the repaired diff, then repair any new findings and rerun the Stage 2 verification set.
+- Stage 2 independent spec re-review (2026-07-17): P0 raw tool output is persisted without centralized redact/size/artifact projection; P1 duplicate final tool terminal backfill remains; P1 startup reconciliation does not use checkpoint/effect evidence; P1 live and replayed terminal failure payloads differ. All require repair before commit.
+- Stage 2 independent standards re-review (2026-07-17): P0 startup reconciliation treats background-task placeholder rows with null snapshot/provider/model as executable, throws before plugin initialization, and lacks restart coverage. Repair before commit.
+- Stage 2 final review repair (2026-07-17): fixed renderer `run_cancelled` terminal state/type, persisted live `run_failed` diagnostic/suggestion into the canonical transaction and replay, and made main/subagent tool-output projector failures propagate rather than masquerade as tool execution errors. The spec reviewer requested startup auto-resume; disposition: no automatic restart replay is the existing Stage 2 safety decision. Reconciliation uses snapshot/checkpoint/effect evidence to preserve only a safe `waiting_user` state, then the existing explicit `resumeRunAtomically()` path performs resume. No model/tool/effect executes merely because Roc restarted.
+- Stage 2 release-spec repair (2026-07-17): queue now delays delivery of text/reasoning deltas to an already waiting consumer, so fast UI consumption cannot bypass the time/character coalescing contract. Task outbox projection is caught at the EventBus boundary; a new controlled `task.outbox.replay` capability replays pending durable rows after the projection store is healthy, with a regression covering failure followed by manual recovery and no new agent event.
+- Stage 2 final review and verification (2026-07-17): `run_failed` outbox now strictly retains optional `diagnostic` and `suggestion`; focused regression, strict unused scan, IPC check, diff check, build and full Vitest all passed. Two new independent reviewers reported no findings. Stage 2 has an independent commit; Stage 3 remains blocked only on the explicit Scheduler misfire product gate.
 - Step 6 discovery：graph abort 仅到 Deep Agent stream；`run_shell_command`、`ShellExecutionService`、`HookCommandRunner` 都没有 graph `AbortSignal` 入口。`WebReadService` 只有自身 timeout abort。完整 fixture 必须跟随 Stage 4 的生产合同，而不能以架构脆弱性测试伪造完成。
 - Stage 1 discovery：Electron smoke 的 user/assistant/task-update 均来自 `AgentSessionRepository`；`capabilityPreview` 只被 EventBus 投影携带，未写 `agent_events`，所以没有 `context_manifest`。正确修复点是 run 创建事务。
 - Stage 1 final review：standards/spec review 提出的 run-origin provenance 与 explicit-skill audit-card 缺口均已 red-green 修复；final CodeGraph call-path review 与 whitespace check 未发现新的具体问题。Stage 2 outbox 与 subagent safety parity 仍按 `plan.md` 留在后续阶段，未在本 stage 提前实施。
+- Stage 2 re-review repair: `run_cancelled` renderer terminal state, overflow producer settlement, and legacy 10k non-terminal replay reconciliation are active P1 fixes. No Stage 2 completion/commit until their tests, aggregate verification, and a clean independent re-review pass.

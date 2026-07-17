@@ -86,6 +86,41 @@ describe('AgentPluginRuntime terminal projection characterization', () => {
 
     await runtime.shutdown();
   });
+
+  it('continues execution when a started subscriber rejects', async () => {
+    const repository = new AgentSessionRepository(db);
+    const eventBus: RocEventBus = {
+      publish: async (event) => {
+        if (event.type === 'agent.run.started') {
+          throw new RocDomainError({
+            code: 'task_projection_failed',
+            message: 'task_projection_failed',
+            category: 'internal',
+            retryable: false
+          });
+        }
+      },
+      subscribe: () => () => {}
+    };
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          yield textBlock(input.run.id);
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const started = await runtime.startRun(startRequest);
+
+    await vi.runAllTimersAsync();
+
+    expect(repository.getRun(started.runId).status).toBe('completed');
+
+    await runtime.shutdown();
+  });
 });
 
 function textBlock(runId: string): ChatRunEvent {

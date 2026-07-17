@@ -118,6 +118,81 @@ describe('consumeMessageStream', () => {
 });
 
 describe('consumeToolCallStream', () => {
+  it('propagates output-projection failure instead of reporting a completed tool as failed', async () => {
+    const callbacks = createCallbacks([]);
+    callbacks.projectToolOutput
+      .mockImplementationOnce(() => {
+        throw new Error('tool_output_projection_failed');
+      })
+      .mockImplementation(({ output }: { output: unknown }) => output);
+
+    await expect(
+      consumeToolCallStream({
+        calls: createSingleMessageStream({
+          id: 'call-projection-failure',
+          name: 'write_file',
+          input: { path: '/workspace/result.txt' },
+          output: 'write completed'
+        }),
+        context: {
+          runId: 'run-projection-failure',
+          taskRun: null
+        },
+        callbacks
+      })
+    ).rejects.toThrow('tool_output_projection_failed');
+
+    expect(callbacks.emitRuntimeEvent).not.toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        block: expect.objectContaining({ phase: 'error' })
+      })
+    );
+  });
+
+  it('uses the output projector before exposing tool output to runtime callbacks', async () => {
+    const callbacks = createCallbacks([]);
+    const projectedOutput = {
+      kind: 'tool_result_artifact',
+      preview: '[REDACTED]',
+      truncated: true
+    };
+    callbacks.projectToolOutput.mockReturnValue(projectedOutput);
+
+    await consumeToolCallStream({
+      calls: createSingleMessageStream({
+        id: 'call-project-output',
+        name: 'read_file',
+        input: { path: '/workspace/secret.txt' },
+        output: 'Bearer should-not-reach-the-timeline'
+      }),
+      context: {
+        runId: 'run-project-output',
+        taskRun: null
+      },
+      callbacks
+    });
+
+    expect(callbacks.projectToolOutput).toHaveBeenCalledWith({
+      callId: 'call-project-output',
+      name: 'read_file',
+      output: 'Bearer should-not-reach-the-timeline'
+    });
+    expect(callbacks.emitRuntimeEvent).toHaveBeenLastCalledWith({
+      type: 'assistant_block',
+      runId: 'run-project-output',
+      block: {
+        kind: 'tool_call',
+        blockId: 'tool-call-project-output',
+        callId: 'call-project-output',
+        name: 'read_file',
+        phase: 'end',
+        input: { path: '/workspace/secret.txt' },
+        output: projectedOutput
+      }
+    });
+    expect(callbacks.recordSessionToolCall).toHaveBeenCalledWith('read_file', { path: '/workspace/secret.txt' }, projectedOutput);
+  });
+
   it('does not emit a synthetic tool block when DeepAgents omits callId', async () => {
     const callbacks = createCallbacks([]);
 
@@ -155,6 +230,8 @@ function createCallbacks(outputOrder: string[]) {
       }
     }),
     emitTodoEvent: vi.fn(),
+    projectToolOutput: vi.fn(({ output }: { output: unknown }) => output),
+    recordSessionToolCall: vi.fn(),
     recordTaskEvent: vi.fn()
   };
 }

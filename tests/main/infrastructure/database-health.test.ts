@@ -52,9 +52,9 @@ describe('checkRocDatabases', () => {
     expect(report.databases.every((item) => item.quickCheck === 'ok')).toBe(true);
     expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
       core: 2,
-      agent: 3,
+      agent: 8,
       memory: 1,
-      task: 2,
+      task: 3,
       'plugin:@roc/plugin-workspace': 1,
       'plugin:@roc/plugin-diagnostics': 1
     });

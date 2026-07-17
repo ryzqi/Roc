@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, EnabledCapabilities, TaskKind } from '../../../../src/shared/types';
+import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
+import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 
@@ -99,6 +100,9 @@ describe('AgentSessionRepository', () => {
     });
     expect(events[3]).toEqual(event);
     expect(
+      db.prepare('SELECT next_sequence FROM agent_thread_event_cursors WHERE thread_id = ?').get(run.threadId)
+    ).toEqual({ next_sequence: 5 });
+    expect(
       db
         .prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ?')
         .all(run.id)
@@ -152,6 +156,8 @@ describe('AgentSessionRepository', () => {
     });
 
     const interruptedRun = repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
       runId: run.id,
       threadId: run.threadId,
       interrupt: {
@@ -179,6 +185,7 @@ describe('AgentSessionRepository', () => {
     });
 
     expect(interruptedRun.status).toBe('waiting_user');
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 2, status: 'waiting_user' });
     expect(repository.getPendingInterrupt(run.id)).toEqual({
       runId: run.id,
       threadId: run.threadId,
@@ -205,6 +212,443 @@ describe('AgentSessionRepository', () => {
         }
       }
     });
+
+    const resumedRun = repository.resumeRunAtomically({
+      expectedStateVersion: 2,
+      expectedStatus: 'waiting_user',
+      runId: run.id
+    });
+
+    expect(resumedRun).toMatchObject({ status: 'running' });
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 3, status: 'running' });
+    expect(repository.getPendingInterrupt(run.id)).toBeNull();
+  });
+
+  it('applies run status transitions with status and state-version CAS', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Transition this run'
+    });
+
+    const transitioned = repository.transitionRun({
+      endedAt: null,
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      status: 'running'
+    });
+
+    expect(transitioned.run.status).toBe('running');
+    expect(transitioned.stateVersion).toBe(2);
+    expect(() =>
+      repository.transitionRun({
+        endedAt: '2026-07-17T00:00:00.000Z',
+        expectedStateVersion: 1,
+        expectedStatus: 'waiting_next_turn',
+        runId: run.id,
+        status: 'completed'
+      })
+    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_conflict' }));
+    expect(() =>
+      repository.transitionRun({
+        endedAt: null,
+        expectedStateVersion: 2,
+        expectedStatus: 'running',
+        runId: run.id,
+        status: 'waiting_next_turn'
+      })
+    ).toThrowError(expect.objectContaining({ code: 'agent_run_transition_invalid' }));
+  });
+
+  it('atomically records a completed run, its terminal timeline, and its task outbox event', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Complete this run atomically'
+    });
+
+    const terminal = repository.completeRunAtomically({
+      assistantMessage: 'Completed answer',
+      durationMs: 42,
+      endedAt: '2026-07-17T01:00:00.000Z',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      runId: run.id,
+      runStartedAt: run.startedAt,
+      summary: 'Completed summary',
+      workspaceHash: 'workspace_hash_terminal'
+    });
+
+    expect(terminal.run.status).toBe('completed');
+    expect(terminal.stateVersion).toBe(2);
+    expect(terminal.message).toMatchObject({
+      content: 'Completed answer',
+      role: 'assistant',
+      threadId: run.threadId,
+      workspaceHash: 'workspace_hash_terminal'
+    });
+    expect(terminal.event).toMatchObject({
+      runId: run.id,
+      threadId: run.threadId,
+      type: 'message',
+      payload: {
+        role: 'assistant',
+        content: 'Completed answer',
+        providerId: 'test-provider',
+        modelId: 'openai:gpt-4.1'
+      }
+    });
+    expect(
+      db.prepare('SELECT run_id, thread_id, event_type, payload_json FROM agent_outbox WHERE run_id = ?').all(run.id)
+    ).toEqual([
+      {
+        run_id: run.id,
+        thread_id: run.threadId,
+        event_type: 'run_completed',
+        payload_json: JSON.stringify({
+          assistantMessage: 'Completed answer',
+          durationMs: 42,
+          finishReason: 'stop',
+          modelId: 'openai:gpt-4.1',
+          providerId: 'test-provider',
+          summary: 'Completed summary'
+        })
+      }
+    ]);
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence').all(run.id)
+    ).toHaveLength(2);
+    expect(db.prepare('SELECT * FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
+    expect(db.prepare('SELECT * FROM agent_pending_interrupts WHERE run_id = ?').get(run.id)).toBeUndefined();
+  });
+
+  it('reserves the final timeline slot before accepting more streamed events', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Reserve the terminal timeline slot'
+    });
+    const log = new AgentRunEventLog(db);
+    for (let index = 0; index < agentRunEventLogMaxEvents - 2; index += 1) {
+      log.recordRunEvent({
+        type: 'assistant_block',
+        runId: run.id,
+        block: {
+          kind: 'text',
+          blockId: `text-${index}`,
+          phase: 'delta',
+          text: String(index)
+        }
+      });
+    }
+
+    expect(() =>
+      log.recordRunEvent({
+        type: 'assistant_block',
+        runId: run.id,
+        block: {
+          kind: 'text',
+          blockId: 'text-overflow',
+          phase: 'delta',
+          text: 'overflow'
+        }
+      })
+    ).toThrow('agent_run_event_log_capacity_exceeded');
+
+    repository.completeRunAtomically({
+      assistantMessage: 'Terminal answer',
+      durationMs: 42,
+      endedAt: '2026-07-17T01:00:00.000Z',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      runId: run.id,
+      runStartedAt: run.startedAt,
+      summary: 'Terminal answer',
+      workspaceHash: null
+    });
+
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(run.id)
+    ).toHaveLength(agentRunEventLogMaxEvents);
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(run.id)
+    ).toEqual({
+      sequence: agentRunEventLogMaxEvents,
+      event_json: expect.stringContaining('run_completed')
+    });
+  });
+
+  it('atomically records a failed run, its terminal timeline, and its task outbox event', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Fail this run atomically'
+    });
+
+    const terminal = repository.failRunAtomically({
+      code: 'provider_unavailable',
+      diagnostic: {
+        toolName: 'web_read'
+      },
+      endedAt: '2026-07-17T01:00:00.000Z',
+      error: 'Provider is unavailable',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      retryable: true,
+      runId: run.id,
+      suggestion: 'Check the provider connection.'
+    });
+
+    expect(terminal.run.status).toBe('failed');
+    expect(terminal.stateVersion).toBe(2);
+    expect(terminal.event).toMatchObject({
+      runId: run.id,
+      threadId: run.threadId,
+      type: 'error',
+      payload: {
+        code: 'provider_unavailable',
+        diagnostic: {
+          toolName: 'web_read'
+        },
+        error: 'Provider is unavailable',
+        retryable: true,
+        suggestion: 'Check the provider connection.'
+      }
+    });
+    expect(
+      db.prepare('SELECT run_id, thread_id, event_type, payload_json FROM agent_outbox WHERE run_id = ?').all(run.id)
+    ).toEqual([
+      {
+        run_id: run.id,
+        thread_id: run.threadId,
+        event_type: 'run_failed',
+        payload_json: JSON.stringify({
+          code: 'provider_unavailable',
+          error: 'Provider is unavailable',
+          modelId: 'openai:gpt-4.1',
+          providerId: 'test-provider',
+          retryable: true,
+          diagnostic: {
+            toolName: 'web_read'
+          },
+          suggestion: 'Check the provider connection.'
+        })
+      }
+    ]);
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence').all(run.id)
+    ).toHaveLength(2);
+    expect(db.prepare('SELECT * FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
+  });
+
+  it('reconciles a legacy full non-terminal timeline by reserving the terminal replay slot', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Reconcile a legacy full timeline'
+    });
+    transitionRun(repository, run.id, 'running');
+    const log = new AgentRunEventLog(db);
+    for (let index = 0; index < agentRunEventLogMaxEvents - 2; index += 1) {
+      log.recordRunEvent({
+        type: 'assistant_block',
+        runId: run.id,
+        block: {
+          kind: 'text',
+          blockId: `legacy-${index}`,
+          phase: 'delta',
+          text: String(index)
+        }
+      });
+    }
+    db.prepare(
+      `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
+       VALUES (?, ?, ?, ?)`
+    ).run(
+      run.id,
+      agentRunEventLogMaxEvents,
+      JSON.stringify({
+        type: 'assistant_block',
+        runId: run.id,
+        block: {
+          kind: 'text',
+          blockId: 'legacy-overflow',
+          phase: 'delta',
+          text: 'must be replaced by the terminal replay event'
+        }
+      }),
+      '2026-07-17T01:00:00.000Z'
+    );
+    db.prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?').run(
+      agentRunEventLogMaxEvents + 1,
+      run.id
+    );
+
+    expect(() => repository.reconcileStartupRuns()).not.toThrow();
+    expect(repository.getRun(run.id).status).toBe('interrupted');
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(run.id)
+    ).toHaveLength(agentRunEventLogMaxEvents);
+    expect(
+      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(run.id)
+    ).toEqual({
+      sequence: agentRunEventLogMaxEvents,
+      event_json: expect.stringContaining('agent_run_interrupted_on_restart')
+    });
+  });
+
+  it('rejects a second active run for one thread', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const first = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'First active run'
+    });
+
+    expect(() =>
+      createRun(repository, {
+        enabledCapabilities,
+        modelId: 'openai:gpt-4.1',
+        threadId: first.threadId,
+        threadKind: 'chat',
+        userInput: 'Second active run'
+      })
+    ).toThrowError(expect.objectContaining({ code: 'thread_run_conflict' }));
+  });
+
+  it('reconciles interrupted startup runs into durable terminal records without replaying them', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const waitingNextTurn = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Restart before dispatch'
+    });
+    const dispatchPending = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Restart while pending dispatch'
+    });
+    const running = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Restart while running'
+    });
+    const recovering = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Restart while recovering'
+    });
+    const waitingUser = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Wait for explicit approval'
+    });
+
+    transitionRun(repository, dispatchPending.id, 'dispatch_pending');
+    transitionRun(repository, running.id, 'running');
+    transitionRun(repository, recovering.id, 'recovering');
+    const waitingUserState = repository.getRunTransitionState(waitingUser.id);
+    repository.markRunInterrupted({
+      expectedStateVersion: waitingUserState.stateVersion,
+      expectedStatus: waitingUserState.status,
+      runId: waitingUser.id,
+      threadId: waitingUser.threadId,
+      interrupt: {
+        interruptId: 'interrupt_restart_reconcile',
+        payload: {
+          kind: 'approval',
+          request: {
+            actionRequests: [],
+            reviewConfigs: []
+          }
+        }
+      }
+    });
+    for (const run of [waitingNextTurn, dispatchPending, running, recovering, waitingUser]) {
+      seedCheckpoint(run.threadId);
+    }
+
+    db.prepare(
+      `INSERT INTO agent_tool_effects
+       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      running.id,
+      running.threadId,
+      'call_inflight_restart',
+      'run_shell_command',
+      'input_hash_restart',
+      'in_progress',
+      null,
+      null,
+      '2026-07-17T01:00:00.000Z',
+      '2026-07-17T01:00:00.000Z'
+    );
+
+    repository.reconcileStartupRuns();
+
+    for (const run of [waitingNextTurn, dispatchPending, running, recovering]) {
+      expect(repository.getRun(run.id)).toMatchObject({
+        status: 'interrupted',
+        endedAt: expect.any(String)
+      });
+      expect(db.prepare('SELECT run_id FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
+      expect(
+        db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(run.id)
+      ).toEqual([
+        expect.objectContaining({ sequence: 1 }),
+        expect.objectContaining({
+          sequence: 2,
+          event_json: expect.stringContaining('agent_run_interrupted_on_restart')
+        })
+      ]);
+    }
+    expect(
+      db.prepare('SELECT event_json FROM agent_run_events WHERE run_id = ? AND sequence = 2').get(running.id)
+    ).toEqual({ event_json: expect.stringContaining('agent_run_interrupted_on_restart_effect_unknown') });
+    expect(repository.getRunTransitionState(waitingNextTurn.id).stateVersion).toBe(2);
+    expect(repository.getRunTransitionState(dispatchPending.id).stateVersion).toBe(3);
+    expect(repository.getRunTransitionState(running.id).stateVersion).toBe(3);
+    expect(repository.getRunTransitionState(recovering.id).stateVersion).toBe(3);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM agent_outbox WHERE event_type = 'run_failed'").get()).toEqual({ count: 4 });
+    expect(repository.getRun(waitingUser.id).status).toBe('waiting_user');
+    expect(repository.getPendingInterrupt(waitingUser.id)).toMatchObject({
+      interrupt: { interruptId: 'interrupt_restart_reconcile' }
+    });
+
+    repository.reconcileStartupRuns();
+
+    expect(db.prepare("SELECT COUNT(*) AS count FROM agent_outbox WHERE event_type = 'run_failed'").get()).toEqual({ count: 4 });
   });
 
   it('quarantines a corrupt execution snapshot without reusing it for a run', () => {
@@ -445,6 +889,35 @@ function columnNames(tableName: string): string[] {
 
 function rawRow(tableName: string, id: string): Record<string, unknown> {
   return db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id) as Record<string, unknown>;
+}
+
+function transitionRun(repository: AgentSessionRepository, runId: string, status: TaskStatus): void {
+  const state = repository.getRunTransitionState(runId);
+  repository.transitionRun({
+    endedAt: null,
+    expectedStateVersion: state.stateVersion,
+    expectedStatus: state.status,
+    runId,
+    status
+  });
+}
+
+function seedCheckpoint(threadId: string): void {
+  db.prepare(
+    `INSERT INTO langgraph_checkpoints
+     (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    threadId,
+    '',
+    'checkpoint_restart_reconcile',
+    null,
+    'json',
+    Buffer.from('{}'),
+    'json',
+    Buffer.from('{}'),
+    '2026-07-17T01:00:00.000Z'
+  );
 }
 
 function createRun(

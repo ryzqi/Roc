@@ -35,7 +35,8 @@ const taskCapabilities = [
   'task.thread.delete',
   'task.active.list',
   'task.detail.get',
-  'task.scheduledRuns.list'
+  'task.scheduledRuns.list',
+  'task.outbox.replay'
 ];
 
 let db: Database.Database;
@@ -309,6 +310,52 @@ describe('task plugin', () => {
         })
       })
     );
+  });
+
+  it('isolates outbox projection failure and lets a manual replay recover without a new agent event', async () => {
+    const eventBus = createTestEventBus();
+    const plugin = createTaskPlugin();
+    const capabilities = declarePluginCapabilities(plugin);
+    await plugin.initialize(createContext({ capabilities, eventBus }));
+    const task = await capabilities.invoke<BackgroundTaskPreviewRequest, { id: string; runId: string; threadId: string }>(
+      'task.background.create',
+      previewRequest
+    );
+    db.exec(`
+      CREATE TRIGGER fail_outbox_projection
+      BEFORE UPDATE ON background_tasks
+      BEGIN
+        SELECT RAISE(ABORT, 'outbox_projection_injected');
+      END;
+    `);
+
+    await expect(
+      eventBus.publish({
+        type: 'agent.run.completed',
+        source: '@roc/plugin-agent',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        payload: {
+          runId: task.runId,
+          threadId: task.threadId,
+          assistantMessage: 'Completed after projection retry.',
+          durationMs: 12,
+          finishReason: 'stop',
+          modelId: 'test-model',
+          providerId: 'test-provider',
+          summary: 'Outbox recovery test'
+        }
+      })
+    ).resolves.toBeUndefined();
+    expect(db.prepare("SELECT last_sequence FROM task_agent_outbox_cursors WHERE projector_name = 'task_background_status'").get()).toBeUndefined();
+
+    db.exec('DROP TRIGGER fail_outbox_projection');
+
+    await expect(capabilities.invoke('task.outbox.replay', {})).resolves.toEqual({ appliedCount: 1, lastSequence: 1 });
+    await expect(capabilities.invoke('task.detail.get', { taskId: task.id })).resolves.toMatchObject({
+      backgroundTask: {
+        lastRunStatus: 'success'
+      }
+    });
   });
 
   it('recovers pending thread deletions before the scheduler starts', async () => {

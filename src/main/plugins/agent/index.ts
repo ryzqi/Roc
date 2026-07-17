@@ -284,6 +284,8 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       const db = context.database.getAgentConnection();
       applyAgentPluginSchema(db);
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
+      const repository = new AgentSessionRepository(db);
+      repository.reconcileStartupRuns();
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
@@ -291,7 +293,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
       modelFactory,
       pluginId,
-      repository: new AgentSessionRepository(db),
+      repository,
       runEventLog: new AgentRunEventLog(db),
       status: options.status,
       statusProvider: options.statusProvider,

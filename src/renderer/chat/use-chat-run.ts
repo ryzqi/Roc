@@ -28,7 +28,7 @@ export function coalesceChatRunEvents(events: readonly ChatRunEvent[]): ChatRunE
 }
 
 export function isTerminalChatRunEvent(event: ChatRunEvent): boolean {
-  return event.type === 'run_started' || event.type === 'run_completed' || event.type === 'run_failed';
+  return event.type === 'run_started' || event.type === 'run_completed' || event.type === 'run_cancelled' || event.type === 'run_failed';
 }
 
 export function normalizeSequencedChatRunEvent(event: ChatRunEvent | SequencedChatRunEvent): ChatRunEvent {

@@ -16,6 +16,7 @@ import {
   readToolChunkId,
   redactUnknown
 } from './stream-tool-utils';
+import type { ToolOutputProjector } from './tool-output-projection';
 import {
   createUsageAccumulator,
   updateUsageAccumulator,
@@ -53,6 +54,7 @@ type StreamConsumerCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
+  projectToolOutput: ToolOutputProjector;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
   recordTaskEvent: (type: 'guardrail_nudge', payload: Record<string, unknown>) => void;
 };
@@ -169,26 +171,15 @@ export async function consumeToolCallStream(input: {
     });
     input.callbacks.emitTodoEvent(callInput);
 
+    let rawOutput: unknown;
     try {
-      const output = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
-      input.callbacks.markVisibleOutput?.();
-      input.callbacks.emitRuntimeEvent({
-        type: 'assistant_block',
-        runId: input.context.runId,
-        block: {
-          kind: 'tool_call',
-          blockId: `tool-${callId}`,
-          callId,
-          name,
-          phase: 'end',
-          input: callInput,
-          output
-        }
-      });
-      input.callbacks.recordSessionToolCall?.(name, callInput, output);
-      input.callbacks.emitTodoEvent(output);
+      rawOutput = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
     } catch (error) {
-      const message = redact(error instanceof Error ? error.message : 'Tool 执行失败。');
+      const message = input.callbacks.projectToolOutput({
+        callId,
+        name,
+        output: redact(error instanceof Error ? error.message : 'Tool 执行失败。')
+      });
       input.callbacks.markVisibleOutput?.();
       input.callbacks.emitRuntimeEvent({
         type: 'assistant_block',
@@ -204,7 +195,29 @@ export async function consumeToolCallStream(input: {
         }
       });
       input.callbacks.recordSessionToolCall?.(name, callInput, { error: message });
+      continue;
     }
+    const output = input.callbacks.projectToolOutput({
+      callId,
+      name,
+      output: rawOutput
+    });
+    input.callbacks.markVisibleOutput?.();
+    input.callbacks.emitRuntimeEvent({
+      type: 'assistant_block',
+      runId: input.context.runId,
+      block: {
+        kind: 'tool_call',
+        blockId: `tool-${callId}`,
+        callId,
+        name,
+        phase: 'end',
+        input: callInput,
+        output
+      }
+    });
+    input.callbacks.recordSessionToolCall?.(name, callInput, output);
+    input.callbacks.emitTodoEvent(output);
   }
 }
 

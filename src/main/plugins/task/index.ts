@@ -17,8 +17,6 @@ import type {
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import {
-  readAgentRunCompletedPayload,
-  readAgentRunFailedPayload,
   readAgentRunStartedPayload,
   readAgentTaskEventPayload,
   resolveAgentRunThreadKind
@@ -39,6 +37,8 @@ import { ThreadDeletionJournal } from './thread-deletion-journal';
 
 const pluginId = '@roc/plugin-task';
 const capabilityVersion = '1.0.0';
+const agentOutboxProjectorName = 'task_background_status';
+const agentOutboxProjectionBatchSize = 100;
 
 const idInputSchema = z.object({
   id: z.string()
@@ -69,13 +69,15 @@ const taskCapabilityDescriptors = [
   descriptor('task.thread.delete', z.object({ threadId: z.string() }), z.object({ deleted: z.literal(true), threadId: z.string() })),
   descriptor('task.active.list', z.object({}), z.array(z.custom<ActiveTaskItem>())),
   descriptor('task.detail.get', z.object({ taskId: z.string() }), z.custom<TaskDetail>()),
-  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().positive().optional() }), z.array(z.custom<ScheduledTaskRun>()))
+  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().positive().optional() }), z.array(z.custom<ScheduledTaskRun>())),
+  descriptor('task.outbox.replay', z.object({}), z.object({ appliedCount: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative() }))
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export function createTaskPlugin(): RocPlugin {
   let scheduler: TaskScheduler | null = null;
   let unsubscribeAgentRunStarted: EventSubscription | null = null;
   let unsubscribeAgentRunCompleted: EventSubscription | null = null;
+  let unsubscribeAgentRunCancelled: EventSubscription | null = null;
   let unsubscribeAgentRunFailed: EventSubscription | null = null;
   let unsubscribeAgentRunTaskEvent: EventSubscription | null = null;
   return {
@@ -94,11 +96,18 @@ export function createTaskPlugin(): RocPlugin {
       const db = context.database.getTaskConnection();
       applyTaskPluginSchema(db);
       const deletionJournal = new ThreadDeletionJournal(db);
-      const repository = new TaskRepository(
-        db,
-        new AgentTaskHistoryReader(context.database.getAgentConnection()),
-        deletionJournal
-      );
+      const agentHistory = new AgentTaskHistoryReader(context.database.getAgentConnection());
+      const repository = new TaskRepository(db, agentHistory, deletionJournal);
+      const projectAgentOutboxBestEffort = (): void => {
+        try {
+          projectAgentOutbox({ agentHistory, repository });
+        } catch (error) {
+          context.logger.warn('Agent outbox projection failed.', {
+            component: 'task.outbox.projector',
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      };
       for (const record of repository.listIncompleteThreadDeletions()) {
         try {
           repository.deleteThread(record.threadId);
@@ -112,11 +121,12 @@ export function createTaskPlugin(): RocPlugin {
           });
         }
       }
+      projectAgentOutboxBestEffort();
       scheduler = new TaskScheduler(repository, {
         startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
       });
       scheduler.start();
-      registerTaskCapabilities(context, repository, scheduler);
+      registerTaskCapabilities(context, repository, scheduler, () => projectAgentOutbox({ agentHistory, repository }));
       unsubscribeAgentRunStarted = context.eventBus.subscribe('agent.run.started', async (event) => {
         const payload = readAgentRunStartedPayload(event.payload);
         if (payload === null) {
@@ -127,19 +137,14 @@ export function createTaskPlugin(): RocPlugin {
           threadKind: resolveAgentRunThreadKind(payload)
         });
       });
-      unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', (event) => {
-        const payload = readAgentRunCompletedPayload(event.payload);
-        if (payload === null) {
-          return;
-        }
-        repository.recordAgentRunCompleted(payload);
+      unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', () => {
+        projectAgentOutboxBestEffort();
       });
-      unsubscribeAgentRunFailed = context.eventBus.subscribe('agent.run.failed', (event) => {
-        const payload = readAgentRunFailedPayload(event.payload);
-        if (payload === null) {
-          return;
-        }
-        repository.recordAgentRunFailed(payload);
+      unsubscribeAgentRunCancelled = context.eventBus.subscribe('agent.run.cancelled', () => {
+        projectAgentOutboxBestEffort();
+      });
+      unsubscribeAgentRunFailed = context.eventBus.subscribe('agent.run.failed', () => {
+        projectAgentOutboxBestEffort();
       });
       unsubscribeAgentRunTaskEvent = context.eventBus.subscribe('agent.run.task-event', (event) => {
         const payload = readAgentTaskEventPayload(event.payload);
@@ -161,6 +166,10 @@ export function createTaskPlugin(): RocPlugin {
         unsubscribeAgentRunCompleted();
       }
       unsubscribeAgentRunCompleted = null;
+      if (unsubscribeAgentRunCancelled !== null) {
+        unsubscribeAgentRunCancelled();
+      }
+      unsubscribeAgentRunCancelled = null;
       if (unsubscribeAgentRunFailed !== null) {
         unsubscribeAgentRunFailed();
       }
@@ -178,7 +187,35 @@ export function createTaskPlugin(): RocPlugin {
   };
 }
 
-function registerTaskCapabilities(context: RocPluginContext, repository: TaskRepository, scheduler: TaskScheduler): void {
+function projectAgentOutbox(input: { agentHistory: AgentTaskHistoryReader; repository: TaskRepository }): { appliedCount: number; lastSequence: number } {
+  let lastSequence = input.repository.getAgentOutboxCursor(agentOutboxProjectorName);
+  let appliedCount = 0;
+  while (true) {
+    const events = input.agentHistory.listOutboxEventsAfter({
+      afterSequence: lastSequence,
+      limit: agentOutboxProjectionBatchSize
+    });
+    if (events.length === 0) {
+      return { appliedCount, lastSequence };
+    }
+    const result = input.repository.projectAgentOutboxEvents({
+      events,
+      projectorName: agentOutboxProjectorName
+    });
+    lastSequence = result.lastSequence;
+    appliedCount += result.appliedCount;
+    if (events.length < agentOutboxProjectionBatchSize) {
+      return { appliedCount, lastSequence };
+    }
+  }
+}
+
+function registerTaskCapabilities(
+  context: RocPluginContext,
+  repository: TaskRepository,
+  scheduler: TaskScheduler,
+  replayAgentOutbox: () => { appliedCount: number; lastSequence: number }
+): void {
   context.capabilities.register(pluginId, taskCapabilityDescriptors[0], async () => repository.getSnapshot());
   context.capabilities.register(pluginId, taskCapabilityDescriptors[1], async (input) =>
     repository.createBackgroundTaskPreview(backgroundTaskPreviewRequestSchema.parse(input))
@@ -288,6 +325,7 @@ function registerTaskCapabilities(context: RocPluginContext, repository: TaskRep
   context.capabilities.register(pluginId, taskCapabilityDescriptors[19], async (input) =>
     repository.listScheduledRuns(input as { taskId: string; limit?: number })
   );
+  context.capabilities.register(pluginId, taskCapabilityDescriptors[20], async () => replayAgentOutbox());
 }
 
 async function publishTaskUpdated(context: RocPluginContext, payload: TaskUpdateEvent): Promise<void> {

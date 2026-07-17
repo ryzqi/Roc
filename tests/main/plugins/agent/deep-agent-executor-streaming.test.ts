@@ -82,7 +82,7 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
 
-  it('drains buffered assistant events without array shift reindexing', async () => {
+  it('drains buffered assistant events without array shift reindexing while preserving the transcript', async () => {
     const chunks = Array.from({ length: 128 }, (_, index) => `实时片段${index}`);
     const originalShift = Array.prototype.shift;
     Object.defineProperty(Array.prototype, 'shift', {
@@ -108,15 +108,61 @@ describe('createAgentDeepAgentExecutor', () => {
         }
       });
 
-      expect(
-        events.map((event) => (event.type === 'assistant_block' && event.block.kind === 'text' ? event.block.text : null))
-      ).toEqual(chunks);
+      const transcript = events
+        .map((event) => (event.type === 'assistant_block' && event.block.kind === 'text' ? event.block.text : null))
+        .join('');
+
+      expect(transcript).toBe(chunks.join(''));
     } finally {
       Object.defineProperty(Array.prototype, 'shift', {
         configurable: true,
         value: originalShift
       });
     }
+  });
+
+  it('stops the tool-event producer when bounded queue overflow aborts the stream', async () => {
+    let yieldedCalls = 0;
+    let finalized = false;
+    let messageProducerFinalized = false;
+    const toolCalls = (async function* () {
+      try {
+        for (let index = 0; index < 2_000; index += 1) {
+          yieldedCalls += 1;
+          yield {
+            id: `call-${index}`,
+            name: 'read_file',
+            input: { path: `/workspace/${index}.txt` },
+            output: { content: String(index) }
+          };
+        }
+      } finally {
+        finalized = true;
+      }
+    })();
+    const messages = (async function* () {
+      try {
+        for (let index = 0; index < 2_000; index += 1) {
+          yield {
+            text: createAsyncIterable([`message-${index}`])
+          };
+        }
+      } finally {
+        messageProducerFinalized = true;
+      }
+    })();
+
+    await expect(
+      collectExecutorEvents({
+        capabilities: createCapabilities([]),
+        messages,
+        toolCalls
+      })
+    ).rejects.toThrow('chat_run_event_queue_overflow');
+
+    expect(finalized).toBe(true);
+    expect(messageProducerFinalized).toBe(true);
+    expect(yieldedCalls).toBeLessThan(1_000);
   });
 
 
@@ -145,6 +191,25 @@ describe('createAgentDeepAgentExecutor', () => {
         }
       }
     ]);
+  });
+
+  it('does not backfill terminal tool blocks from final output after the tool stream closes', async () => {
+    const events = await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      output: {
+        messages: [
+          {
+            type: 'tool',
+            tool_call_id: 'call-final-tool',
+            name: 'read_file',
+            status: 'success',
+            content: 'raw tool output'
+          }
+        ]
+      }
+    });
+
+    expect(events).toEqual([]);
   });
 
 });

@@ -45,6 +45,7 @@ import type { ContextArtifactStore } from '../../services/deep-agent/context/con
 import type { ContextMaintenanceEvent } from '../../services/deep-agent/context/context-compaction-pipeline';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import { createToolOutputProjector, type ToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
@@ -55,7 +56,6 @@ import type { AgentDeepAgentExecutor } from './runtime';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import {
   readFinalAssistantText,
-  readFinalToolBlockEvents,
   readInterrupted,
   readRunInterruptedEvent
 } from './deep-agent-final-output';
@@ -85,6 +85,21 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const reasoningChunks: string[] = [];
       const usageAccumulator = createUsageAccumulator();
       const eventQueue = createChatRunEventQueue();
+      const executionAbortController = new AbortController();
+      const abortFromParent = () => executionAbortController.abort(input.abortSignal.reason);
+      if (input.abortSignal.aborted) {
+        abortFromParent();
+      } else {
+        input.abortSignal.addEventListener('abort', abortFromParent, { once: true });
+      }
+      const emitRuntimeEvent = (event: ChatRunEvent): void => {
+        if (eventQueue.push(event)) {
+          return;
+        }
+        const overflow = new Error('chat_run_event_queue_overflow');
+        executionAbortController.abort(overflow);
+        throw overflow;
+      };
 
       const runtimeWorkspace = createWorkspaceFromSnapshot(input.snapshot);
       requireWorkbenchSourceForBackgroundTaskWorkflow(input.snapshot);
@@ -134,7 +149,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         explicitSkillContexts
       });
       const emitContextMaintenanceEvent = (event: ContextMaintenanceEvent) => {
-        eventQueue.push({
+        emitRuntimeEvent({
           type: 'context_maintenance',
           runId: input.run.id,
           threadId: input.run.threadId,
@@ -162,12 +177,16 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           }
         });
         for (const event of sessionStart.events) {
-          eventQueue.push(event);
+          emitRuntimeEvent(event);
         }
         if (sessionStart.blocked) {
           eventQueue.fail(new Error(sessionStart.blockReason === null ? 'Blocked by SessionStart hook.' : sessionStart.blockReason));
-          for await (const event of eventQueue) {
-            yield event;
+          try {
+            for await (const event of eventQueue) {
+              yield event;
+            }
+          } finally {
+            input.abortSignal.removeEventListener('abort', abortFromParent);
           }
           return;
         }
@@ -214,7 +233,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             : {
                 hookRuntime: options.hookRuntime,
                 runContext: hookRunContext,
-                emitHookEvent: eventQueue.push,
+                emitHookEvent: emitRuntimeEvent,
                 initialContexts: initialHookContexts
               }
       });
@@ -230,11 +249,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           run_id: input.run.id,
           thread_id: input.run.threadId
         },
-        signal: input.abortSignal
+        signal: executionAbortController.signal
       });
       const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
-        emitRuntimeEvent: eventQueue.push
+        emitRuntimeEvent,
+        projectToolOutput: createToolOutputProjector({
+          artifactStore: options.contextArtifactStore,
+          runId: input.run.id,
+          threadId: input.run.threadId,
+          workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
+        })
       });
       const consumeRun = (async () => {
         try {
@@ -276,13 +301,13 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             usageAccumulator
           });
           if (readInterrupted(run)) {
-            eventQueue.push(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
+            emitRuntimeEvent(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
           } else {
             const output = await Promise.resolve(run.output);
             const finalAssistantText = readFinalAssistantText(output);
             if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
               assistantChunks.push(finalAssistantText);
-              eventQueue.push({
+              emitRuntimeEvent({
                 type: 'assistant_block',
                 runId: input.run.id,
                 block: {
@@ -293,17 +318,23 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
                 }
               });
             }
-            readFinalToolBlockEvents(output, input.run.id).forEach((event) => eventQueue.push(event));
           }
           eventQueue.close();
         } catch (error) {
           eventQueue.fail(error);
+          throw error;
         }
       })();
-      for await (const event of eventQueue) {
-        yield event;
+      try {
+        for await (const event of eventQueue) {
+          yield event;
+        }
+        await consumeRun;
+      } finally {
+        executionAbortController.abort(new Error('chat_run_event_consumer_stopped'));
+        await consumeRun.catch(() => undefined);
+        input.abortSignal.removeEventListener('abort', abortFromParent);
       }
-      await consumeRun;
     }
   };
 }
@@ -411,12 +442,16 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV1): Workspac
   };
 }
 
-function createExecutorCallbacks(input: { emitRuntimeEvent: (event: ChatRunEvent) => void }): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
+function createExecutorCallbacks(input: {
+  emitRuntimeEvent: (event: ChatRunEvent) => void;
+  projectToolOutput: ToolOutputProjector;
+}): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
   return {
     emitRuntimeEvent: (event) => {
       input.emitRuntimeEvent(event);
     },
     emitTodoEvent: () => {},
+    projectToolOutput: input.projectToolOutput,
     recordTaskEvent: () => {}
   };
 }

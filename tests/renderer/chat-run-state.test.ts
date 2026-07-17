@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyChatRunEvent, createEmptyChatRunState } from '../../src/renderer/chat-run-state';
+import { isTerminalChatRunEvent } from '../../src/renderer/chat/use-chat-run';
 import type { ChatRunEvent } from '../../src/shared/types';
 
 describe('chat run state', () => {
@@ -45,6 +46,37 @@ describe('chat run state', () => {
     expect(state.assistantMessage).toBe('partial');
     expect(state.errorMessage).toBe('Provider 网络请求失败。');
     expect(state.errorCode).toBe('provider_network_error');
+  });
+
+  it('treats cancellation as a terminal state for live delivery and replay', () => {
+    let state = createEmptyChatRunState();
+    state = applyChatRunEvent(state, runStarted('chat_cancelled', 'chat'));
+    state = applyChatRunEvent(state, textBlock('chat_cancelled', 'partial'));
+    state = applyChatRunEvent(state, {
+      type: 'run_recovering',
+      runId: 'chat_cancelled',
+      threadId: 'thread_chat_cancelled',
+      code: 'provider_network_error',
+      message: 'Connection error.',
+      attempt: 1,
+      nextRetryAt: '2026-07-17T00:00:01.000Z'
+    });
+    const cancelled: ChatRunEvent = {
+      type: 'run_cancelled',
+      runId: 'chat_cancelled',
+      threadId: 'thread_chat_cancelled',
+      reason: 'user_cancelled'
+    };
+
+    state = applyChatRunEvent(state, cancelled);
+
+    expect(isTerminalChatRunEvent(cancelled)).toBe(true);
+    expect(state.status).toBe('cancelled');
+    expect(state.assistantMessage).toBe('partial');
+    expect(state.errorCode).toBeNull();
+    expect(state.errorMessage).toBeNull();
+    expect(state.pendingInterrupts).toEqual([]);
+    expect(state.resumeBusy).toBe(false);
   });
 
   it('keeps partial assistant content while recovering and resumes running after recovery', () => {
