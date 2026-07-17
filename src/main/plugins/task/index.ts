@@ -139,12 +139,15 @@ export function createTaskPlugin(): RocPlugin {
       });
       unsubscribeAgentRunCompleted = context.eventBus.subscribe('agent.run.completed', () => {
         projectAgentOutboxBestEffort();
+        scheduler?.reconcile();
       });
       unsubscribeAgentRunCancelled = context.eventBus.subscribe('agent.run.cancelled', () => {
         projectAgentOutboxBestEffort();
+        scheduler?.reconcile();
       });
       unsubscribeAgentRunFailed = context.eventBus.subscribe('agent.run.failed', () => {
         projectAgentOutboxBestEffort();
+        scheduler?.reconcile();
       });
       unsubscribeAgentRunTaskEvent = context.eventBus.subscribe('agent.run.task-event', (event) => {
         const payload = readAgentTaskEventPayload(event.payload);

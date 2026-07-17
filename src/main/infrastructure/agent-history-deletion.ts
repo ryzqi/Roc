@@ -38,6 +38,10 @@ export function deleteTaskProjectionForThread(db: DatabaseConnection, threadId: 
       `DELETE FROM scheduled_task_runs
        WHERE background_task_id IN (SELECT id FROM background_tasks WHERE thread_id = ?)`
     ).run(targetThreadId);
+    db.prepare(
+      `DELETE FROM scheduled_occurrences
+       WHERE background_task_id IN (SELECT id FROM background_tasks WHERE thread_id = ?)`
+    ).run(targetThreadId);
     db.prepare('DELETE FROM background_tasks WHERE thread_id = ?').run(targetThreadId);
   })();
 }

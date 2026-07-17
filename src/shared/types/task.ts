@@ -273,7 +273,16 @@ export type ScheduledTaskRun = {
   taskRunId: string | null;
   scheduledAt: string;
   triggeredAt: string | null;
-  status: 'pending' | 'fired' | 'skipped' | 'failed';
+  status:
+    | 'pending'
+    | 'claimed'
+    | 'dispatched'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
+    | 'unknown'
+    | 'fired';
   skipReason: string | null;
 };
 

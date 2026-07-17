@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { BackgroundTask, ChatStartRunRequest, ChatStartRunResult, SchedulerStatus } from '../../../shared/types';
 import { computeNextRunAt } from './next-run-calculator';
 import type { TaskRepository } from './task-repository';
@@ -7,16 +9,14 @@ type TaskSchedulerOptions = {
   maxTimeoutDelayMs?: number;
 };
 
-const emptyCapabilities = {
-  mcpServers: [],
-  skills: []
-};
 const defaultMaxTimeoutDelayMs = 24 * 24 * 60 * 60 * 1000;
 
 export class TaskScheduler {
   private readonly registeredTasks = new Map<string, BackgroundTask>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly maxTimeoutDelayMs: number;
+  private readonly claimOwner = `task-scheduler-${randomUUID()}`;
+  private occurrenceReconcileTimer: NodeJS.Timeout | null = null;
   private running = false;
   private suspended = false;
   private lastError: string | null = null;
@@ -31,7 +31,7 @@ export class TaskScheduler {
   start(): void {
     this.running = true;
     this.suspended = false;
-    this.registerAllFromDatabase();
+    this.reconcile();
   }
 
   stop(): void {
@@ -51,14 +51,28 @@ export class TaskScheduler {
       return;
     }
     this.suspended = false;
-    this.registerAllFromDatabase();
+    this.reconcile();
   }
 
   handlePowerResume(): void {
     if (!this.running || this.suspended) {
       return;
     }
+    this.reconcile();
+  }
+
+  reconcile(): void {
+    if (!this.running || this.suspended) {
+      return;
+    }
+    this.repository.reconcileScheduledOccurrences({ now: new Date().toISOString() });
     this.registerAllFromDatabase();
+    this.scheduleOccurrenceReconcile();
+    for (const task of this.repository.listSchedulableBackgroundTasks()) {
+      if (this.repository.hasDuePendingScheduledOccurrence({ now: new Date().toISOString(), taskId: task.id })) {
+        void this.fire(task.id);
+      }
+    }
   }
 
   registerTask(task: BackgroundTask): void {
@@ -138,39 +152,72 @@ export class TaskScheduler {
       this.unregisterTask(taskId);
       return;
     }
-    if (task.nextRunAt === null) {
-      this.unregisterTask(taskId);
-      return;
-    }
-    if (new Date(task.nextRunAt).getTime() > Date.now()) {
-      this.scheduleTask(task);
-      return;
-    }
+    const now = new Date().toISOString();
+    const taskDue = task.nextRunAt !== null && Date.parse(task.nextRunAt) <= Date.parse(now);
+    const pendingOccurrenceDue = this.repository.hasDuePendingScheduledOccurrence({ now, taskId: task.id });
     if (this.options.startRun === undefined) {
-      this.lastError = 'task_scheduler_starter_missing';
+      if (taskDue || pendingOccurrenceDue) {
+        this.lastError = 'task_scheduler_starter_missing';
+      }
       return;
     }
+    let claim: ReturnType<TaskRepository['claimDueScheduledOccurrence']> = null;
+    let agentStartSucceeded = false;
     try {
+      claim = this.repository.claimDueScheduledOccurrence({
+        claimOwner: this.claimOwner,
+        now,
+        taskId: task.id
+      });
+      if (claim === null) {
+        const refreshedTask = this.repository.findBackgroundTask(task.id);
+        if (refreshedTask !== null) {
+          this.registerTask(refreshedTask);
+        }
+        return;
+      }
+      this.scheduleOccurrenceReconcile();
       const result = await this.options.startRun({
-        input: task.goal,
-        mode: 'task',
-        taskSource: 'background_schedule',
-        threadId: task.threadId,
-        enabledCapabilities: task.enabledCapabilities ?? emptyCapabilities,
-        workspacePath: task.workspacePath
+        ...claim.request,
+        dispatchKey: claim.dispatchKey
       });
-      this.runNow(task.id, result.runId);
+      agentStartSucceeded = true;
+      const updated = this.repository.markScheduledOccurrenceDispatched({
+        attempt: claim.attempt,
+        claimOwner: claim.claimOwner,
+        dispatchedAt: new Date().toISOString(),
+        occurrenceKey: claim.occurrenceKey,
+        runId: result.runId
+      });
+      if (updated === null) {
+        this.lastError = 'scheduled_occurrence_dispatch_claim_lost';
+        this.scheduleOccurrenceReconcile();
+        return;
+      }
+      this.repository.reconcileScheduledOccurrences({ now: new Date().toISOString() });
+      this.scheduleOccurrenceReconcile();
+      const reconciledTask = this.repository.findBackgroundTask(updated.id);
+      if (reconciledTask !== null) {
+        this.registerTask(reconciledTask);
+      }
     } catch (error) {
-      const failedAt = new Date().toISOString();
       this.lastError = error instanceof Error ? error.message : String(error);
-      const scheduledAt = task.nextRunAt === null ? failedAt : task.nextRunAt;
-      const updated = this.repository.recordBackgroundTaskStartFailure({
-        taskId: task.id,
-        scheduledAt,
-        failedAt,
-        reason: 'agent_start_failed'
-      });
-      this.registerTask(updated);
+      if (claim !== null && !agentStartSucceeded) {
+        const updated = this.repository.recordScheduledOccurrenceStartFailure({
+          attempt: claim.attempt,
+          claimOwner: claim.claimOwner,
+          failedAt: new Date().toISOString(),
+          occurrenceKey: claim.occurrenceKey,
+          reason: 'agent_start_failed'
+        });
+        if (updated === null) {
+          this.lastError = 'scheduled_occurrence_start_failure_claim_lost';
+          this.scheduleOccurrenceReconcile();
+          return;
+        }
+        this.registerTask(updated);
+        this.scheduleOccurrenceReconcile();
+      }
     }
   }
 
@@ -206,5 +253,30 @@ export class TaskScheduler {
       clearTimeout(timer);
     }
     this.timers.clear();
+    if (this.occurrenceReconcileTimer !== null) {
+      clearTimeout(this.occurrenceReconcileTimer);
+      this.occurrenceReconcileTimer = null;
+    }
+  }
+
+  private scheduleOccurrenceReconcile(): void {
+    if (this.occurrenceReconcileTimer !== null) {
+      clearTimeout(this.occurrenceReconcileTimer);
+      this.occurrenceReconcileTimer = null;
+    }
+    if (!this.running || this.suspended) {
+      return;
+    }
+    const claimExpiresAt = this.repository.nextScheduledOccurrenceClaimExpiry();
+    if (claimExpiresAt === null) {
+      return;
+    }
+    const delay = Math.max(0, Date.parse(claimExpiresAt) - Date.now());
+    const timer = setTimeout(() => {
+      this.occurrenceReconcileTimer = null;
+      this.reconcile();
+    }, Math.min(delay, this.maxTimeoutDelayMs));
+    timer.unref();
+    this.occurrenceReconcileTimer = timer;
   }
 }

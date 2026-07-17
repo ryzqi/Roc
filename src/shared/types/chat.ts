@@ -274,6 +274,7 @@ export type ChatStartRunRequest = {
   taskSource?: 'background_schedule' | 'workbench' | null;
   workspacePath?: string | null;
   attachments?: ChatImageAttachment[];
+  dispatchKey?: string;
   explicitSkillIds?: string[];
 };
 

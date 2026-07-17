@@ -44,11 +44,25 @@ export function updateBackgroundTaskRecord(input: {
 }): BackgroundTask {
   const now = new Date().toISOString();
   input.db.transaction(() => {
+    const revisionRow = input.db
+      .prepare('SELECT task_revision FROM background_tasks WHERE id = ?')
+      .get(input.task.id) as { task_revision: number } | undefined;
+    if (revisionRow === undefined || !Number.isInteger(revisionRow.task_revision) || revisionRow.task_revision <= 0) {
+      throw new Error('background_task_revision_invalid');
+    }
+    input.db
+      .prepare(
+        `UPDATE scheduled_occurrences
+         SET status = ?, terminal_at = ?, reason = ?
+         WHERE background_task_id = ? AND task_revision = ? AND status = 'pending'`
+      )
+      .run('skipped', now, 'superseded_by_task_revision', input.task.id, revisionRow.task_revision);
     input.db.prepare(
       `UPDATE background_tasks
        SET goal = ?, scheduled = ?, trigger_type = ?, trigger_description = ?, next_run_at = ?, cron_expression = ?,
            workspace_path = ?, allowed_actions_json = ?, forbidden_actions_json = ?, failure_policy = ?,
-           notification_policy = ?, risk_level = ?, requires_confirmation = ?, updated_at = ?, enabled_capabilities_json = ?
+           notification_policy = ?, risk_level = ?, requires_confirmation = ?, updated_at = ?, enabled_capabilities_json = ?,
+           task_revision = task_revision + 1
        WHERE id = ?`
     ).run(
       input.preview.goal,

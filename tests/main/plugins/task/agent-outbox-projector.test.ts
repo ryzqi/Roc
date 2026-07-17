@@ -162,6 +162,72 @@ describe('agent outbox projector', () => {
     ).toHaveLength(pausedEventCount);
   });
 
+  it('marks the linked occurrence failed without letting an older run pause a newer task projection', () => {
+    const agentRepository = new AgentSessionRepository(agentDb);
+    const run = createRun(agentRepository, 'Fail an older scheduled occurrence');
+    const history = new AgentTaskHistoryReader(agentDb);
+    const repository = new TaskRepository(taskDb, history);
+    const scheduledAt = '2026-07-17T01:00:00.000Z';
+    const task = repository.createBackgroundTask({
+      goal: run.userInput,
+      trigger: {
+        description: 'At the scheduled time',
+        nextRunAt: scheduledAt,
+        type: 'once'
+      },
+      workspacePath: 'F:\\Code\\Roc',
+      allowedActions: [],
+      forbiddenActions: [],
+      failurePolicy: 'pause_and_report',
+      notificationPolicy: 'failures_and_confirmations',
+      enabledCapabilities
+    });
+    taskDb.prepare('UPDATE background_tasks SET thread_id = ? WHERE id = ?').run(run.threadId, task.id);
+    const claim = repository.claimDueScheduledOccurrence({
+      claimOwner: 'scheduler-a',
+      now: '2026-07-17T01:00:01.000Z',
+      taskId: task.id
+    });
+    if (claim === null) {
+      throw new Error('scheduled_occurrence_claim_missing');
+    }
+    repository.markScheduledOccurrenceDispatched({
+      attempt: claim.attempt,
+      claimOwner: claim.claimOwner,
+      dispatchedAt: '2026-07-17T01:00:02.000Z',
+      occurrenceKey: claim.occurrenceKey,
+      runId: run.id
+    });
+    taskDb
+      .prepare('UPDATE background_tasks SET run_id = ?, status = ?, last_run_status = ? WHERE id = ?')
+      .run('run_newer_occurrence', 'running', null, task.id);
+    agentRepository.failRunAtomically({
+      code: 'provider_unavailable',
+      endedAt: '2026-07-17T01:01:00.000Z',
+      error: 'Provider is unavailable',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      retryable: true,
+      runId: run.id
+    });
+
+    const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
+    expect(repository.projectAgentOutboxEvents({ events, projectorName: 'task_background_status' })).toEqual({
+      appliedCount: 1,
+      lastSequence: events[0]!.sequence
+    });
+    expect(
+      taskDb.prepare('SELECT status, terminal_at FROM scheduled_occurrences WHERE occurrence_key = ?').get(claim.occurrenceKey)
+    ).toEqual({ status: 'failed', terminal_at: '2026-07-17T01:01:00.000Z' });
+    expect(repository.findBackgroundTask(task.id)).toMatchObject({
+      runId: 'run_newer_occurrence',
+      status: 'running',
+      lastRunStatus: null
+    });
+  });
+
   it('projects a cancelled run without pausing the background task', () => {
     const agentRepository = new AgentSessionRepository(agentDb);
     const run = createRun(agentRepository, 'Cancel the scheduled task');
@@ -241,6 +307,69 @@ describe('agent outbox projector', () => {
     expect(repository.projectAgentOutboxEvents({ events: nextEvents, projectorName: 'task_background_status' })).toEqual({
       appliedCount: 1,
       lastSequence: 2
+    });
+  });
+
+  it('rejects an out-of-order event without advancing the cursor or mutating task projection', () => {
+    const agentRepository = new AgentSessionRepository(agentDb);
+    const firstRun = createRun(agentRepository, 'Complete the first ordered task');
+    const secondRun = createRun(agentRepository, 'Complete the second ordered task');
+    agentRepository.completeRunAtomically({
+      assistantMessage: 'First task completed',
+      durationMs: 10,
+      endedAt: '2026-07-17T01:00:00.000Z',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      runId: firstRun.id,
+      runStartedAt: firstRun.startedAt,
+      summary: 'First task completed',
+      workspaceHash: null
+    });
+    agentRepository.completeRunAtomically({
+      assistantMessage: 'Second task completed',
+      durationMs: 10,
+      endedAt: '2026-07-17T01:00:01.000Z',
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      modelId: 'openai:gpt-4.1',
+      providerId: 'test-provider',
+      runId: secondRun.id,
+      runStartedAt: secondRun.startedAt,
+      summary: 'Second task completed',
+      workspaceHash: null
+    });
+    const history = new AgentTaskHistoryReader(agentDb);
+    const repository = new TaskRepository(taskDb, history);
+    const secondTaskId = seedBackgroundTask(repository, taskDb, secondRun);
+    const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
+    const firstEvent = events[0];
+    const secondEvent = events[1];
+    if (firstEvent === undefined || secondEvent === undefined) {
+      throw new Error('ordered_agent_outbox_events_missing');
+    }
+
+    expect(() =>
+      repository.projectAgentOutboxEvents({
+        events: [secondEvent],
+        projectorName: 'task_background_status'
+      })
+    ).toThrow('task_agent_outbox_sequence_gap');
+    expect(repository.getAgentOutboxCursor('task_background_status')).toBe(0);
+    expect(repository.findBackgroundTask(secondTaskId)).toMatchObject({
+      status: 'running',
+      lastRunStatus: null
+    });
+
+    expect(repository.projectAgentOutboxEvents({ events: [firstEvent, secondEvent], projectorName: 'task_background_status' })).toEqual({
+      appliedCount: 2,
+      lastSequence: secondEvent.sequence
+    });
+    expect(repository.getAgentOutboxCursor('task_background_status')).toBe(secondEvent.sequence);
+    expect(repository.findBackgroundTask(secondTaskId)).toMatchObject({
+      status: 'running',
+      lastRunStatus: 'success'
     });
   });
 });

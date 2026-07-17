@@ -566,6 +566,44 @@ export const taskMigrations: RocDatabaseMigration[] = [
         updated_at     TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 4,
+    name: 'durable_scheduled_occurrences',
+    sql: `
+      ALTER TABLE background_tasks ADD COLUMN task_revision INTEGER NOT NULL DEFAULT 1;
+
+      CREATE TABLE scheduled_occurrences (
+        occurrence_key     TEXT PRIMARY KEY,
+        background_task_id TEXT NOT NULL,
+        task_revision      INTEGER NOT NULL,
+        scheduled_at       TEXT NOT NULL,
+        status             TEXT NOT NULL CHECK(status IN ('pending','claimed','dispatched','completed','failed','cancelled','skipped','unknown')),
+        claim_owner        TEXT,
+        claim_expires_at   TEXT,
+        attempt            INTEGER NOT NULL DEFAULT 0,
+        dispatch_key       TEXT NOT NULL UNIQUE,
+        run_id             TEXT,
+        request_json       TEXT NOT NULL,
+        created_at         TEXT NOT NULL,
+        claimed_at         TEXT,
+        dispatched_at      TEXT,
+        terminal_at        TEXT,
+        reason             TEXT,
+        FOREIGN KEY(background_task_id) REFERENCES background_tasks(id),
+        UNIQUE(background_task_id, scheduled_at, task_revision)
+      );
+
+      CREATE INDEX idx_scheduled_occurrences_task_status_scheduled
+        ON scheduled_occurrences(background_task_id, status, scheduled_at DESC);
+      CREATE INDEX idx_scheduled_occurrences_run
+        ON scheduled_occurrences(run_id);
+      CREATE UNIQUE INDEX idx_scheduled_occurrences_run_unique
+        ON scheduled_occurrences(run_id)
+        WHERE run_id IS NOT NULL;
+      CREATE INDEX idx_scheduled_occurrences_claim_expiry
+        ON scheduled_occurrences(status, claim_expires_at);
+    `
   }
 ];
 

@@ -6,7 +6,7 @@
 
 ## Current Phase
 
-Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选择）
+Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope gate pending)
 
 ## Phases
 
@@ -17,7 +17,7 @@ Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选�
 - [x] Step 2：subscriber rejection terminal characterization；当前实现保持 `completed`，与 `plan.md` 旧故障前提冲突，已记录为回归测试。
 - [x] Step 3：真实 `RocSqliteCheckpointer` restart + `Command(resume)`；approval 与 `ask_user` 均通过、review 已修复，待提交。
 - [x] Step 4a：scheduler 非原子顺序基线；review 无代码问题，待提交。
-- [ ] Step 4b：四 crash-point/restart fixture；当前缺 occurrence/claim/crash hook/terminal projection，待 Stage 3 状态机具备真实执行边界后补齐。
+- [x] Step 4b：四 crash-point/restart fixture；Stage 3 已以持久 task/agent DB、真实 runtime、task plugin startup projector 补齐。
 - [ ] Step 5：stream 10k/100k high-water fixture；当前 queue/event log 不暴露 high-water 或 row cap，待 Stage 2/6 instrumentation 后补齐。
 - [ ] Step 6：shell/web/hook graph-abort 与 Windows child-tree fixture；web 仅支持内部 timeout，hook 仅支持 timeout tree kill，shell/tool contract 无 `AbortSignal`，待 Stage 4 建立统一执行边界后补齐。
 - [ ] Review 测试的真实故障路径和稳定性。
@@ -46,13 +46,18 @@ Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选�
 
 ### Stage 3: Durable Background Occurrences
 
-- [ ] 实施、review、修复、验证、提交。
-- **Status:** blocked, awaiting Scheduler misfire product gate
+- [x] Step 1：task v4 occurrence/revision schema、不可变 occurrence request snapshot、唯一 key 与 CAS claim/lease；repository red-green tests 已通过。
+- [x] Step 2：把 `dispatchKey=occurrenceKey` 接入 agent start；重复 dispatch 只返回同一 run。
+- [x] Step 3：scheduler 先 claim 后 dispatch；重启 reconcile；同 task 不重叠与 misfire latest-only coalesce。
+- [x] Step 4：outbox projector 按 occurrence/run 终态回写，旧 run 不覆盖最新摘要。
+- [x] Step 5：四 crash point、duplicate fire、revision、power resume、乱序/重复投影与 Electron smoke。
+- [x] 实施、review、修复、验证、提交。
+- **Status:** complete
 
 ### Stage 4: Execution Safety, Budgets, Cancellation
 
 - [ ] 实施、review、修复、验证、提交。
-- **Status:** pending
+- **Status:** in_progress (blocked on Shell scope product gate)
 
 ### Stage 5: Context, Checkpoint, HITL Conformance
 
@@ -77,13 +82,14 @@ Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选�
 | 先执行 Stage 0 | `plan.md` 明确要求先锁定当前故障，不改变产品行为。 |
 | 每个 stage 独立提交 | `plan.md` 明确禁止跨 stage 大提交。 |
 | 清理只做 evidence-first deletion | 项目规则与用户目标均禁止凭名称删除。 |
+| Scheduler misfire | 用户以“继续”接受推荐策略：同 task 不重叠，睡眠/关机错过多次时只 coalesce 最新一次。 |
 
 ## Product Gates
 
 | Gate | Current state |
 |---|---|
 | Shell scope | 未确认；Stage 4 前必须取得产品选择。 |
-| Scheduler misfire | 未确认；Stage 3 的行为切换前必须取得产品选择。 |
+| Scheduler misfire | 已确认：同 task 不重叠；misfire 只 coalesce 最新一次。 |
 
 ## Errors Encountered
 
@@ -135,6 +141,7 @@ Stage 3 — Durable Background Occurrences（等待 Scheduler misfire 产品选�
 | Stage 2 focused suite found streaming fixture asserted text delta chunk boundaries after deliberate queue coalescing | 1 | Assert exact concatenated transcript and structural order; do not require old transport chunk boundaries. |
 | Stage 2 typecheck found nullable provider/model passed to `requireNonEmpty`, and new reconcile test used obsolete approval payload shape | 1 | Broaden explicit required-string guard to accept nullable DB fields and fix test payload under `request`. |
 | Stage 2 review-repair patch did not match the current `stream-consumers.ts` import context | 1 | No production file changed; re-read current source fragments and resend a smaller exact-context patch. |
+| Stage 3 power-resume cron test used `vi.runAllTimersAsync` and recursively executed every future cron timer | 1 | Advance only the due 0ms timer; preserve the future cron timer for the scheduler rather than test execution. |
 
 ## Review Notes
 

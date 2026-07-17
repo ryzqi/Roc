@@ -305,6 +305,17 @@ export class AgentSessionRepository {
     return mapTaskRun(row);
   }
 
+  findRunByDispatchKey(dispatchKey: string): TaskRun | null {
+    const normalizedDispatchKey = requireNonEmpty(dispatchKey, 'agent_run_dispatch_key_empty');
+    const row = this.db
+      .prepare('SELECT * FROM agent_runs WHERE dispatch_key = ?')
+      .get(normalizedDispatchKey) as TaskRunRow | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return mapTaskRun(row);
+  }
+
   getRunTransitionState(runId: string): { stateVersion: number; status: TaskStatus } {
     const row = this.db
       .prepare('SELECT status, state_version FROM agent_runs WHERE id = ?')

@@ -186,4 +186,93 @@
 - Commit-gate spec review returned no findings; standards review found that consumed queue prefix entries still counted toward capacity. Added prefix compaction and a partial-consumption capacity regression; queue/backpressure verification passed 2 files / 7 tests. Next: final aggregate/full verification and a fresh no-findings independent review before Stage 2 commit.
 - Final standards review found `run_failed` outbox projection left agent history at failed without the old paused audit. Projection now updates that history and records the pause only when absent; `rtk pnpm exec vitest run tests/main/plugins/task/agent-outbox-projector.test.ts tests/main/plugins/task/plugin.test.ts` passed 2 files / 15 tests. Next: final aggregate, independent re-review, full suite, and Stage 2 commit.
 - **Stage 2 complete:** final outbox mapping repair adds strict `diagnostic`/`suggestion` round-trip coverage. Focused regression 4/4, strict unused scan, IPC check, diff check, build, and full `pnpm test` all passed; full Vitest is 296 files / 1556 tests, exit 0. Two fresh independent reviews reported no findings. Isolated commit `feat(agent): harden durable run state and outbox`; `plan.md` remains user-provided and untracked.
-- Re-review repair in progress: standards found producer cleanup and legacy timeline-cap startup defects; spec found missing renderer `run_cancelled` terminal handling. Scope remains Stage 2 only. Next: red tests, surgical fixes, focused verification, then independent final re-review before commit.
+- **Stage 3 started:** 用户以“继续”接受 Scheduler 推荐策略：同 task 不重叠；misfire 只 coalesce 最新一次。Stage 2 已独立提交；当前先定位 occurrence schema、scheduler 调用链与现有 crash/scheduler tests，再写第一个稳定 red fixture。
+- **Located:** `TaskScheduler.fire()` 当前先 `startRun()`，再写随机 `scheduled_task_runs` 并覆盖 `background_tasks.run_id`；无 deterministic occurrence key、revision、claim/lease。下一步读取 task schema、scheduler tests 与 plugin start contract，先定义 occurrence repository red test。
+- **Stage 3 plan:** 先完成 occurrence/revision schema 与 repository claim；再接 agent dispatch-key 幂等、scheduler reconcile/coalesce、按 occurrence 的 terminal projector；最后用 crash/duplicate/revision/power-resume/乱序投影与 smoke 验证。每个提交仍只覆盖 Stage 3。
+- **Verified passing:** Step 1 red test 先证明 `claimDueScheduledOccurrence()` 缺失；实现 task v4 occurrence/revision schema、唯一 claim 和 immutable request snapshot 后，`scheduled-occurrence-repository` 与 database migrations 共 2 files / 9 tests 通过。下一步接入 agent `dispatchKey` 幂等，不改变 scheduler 行为直到该合同有回归覆盖。
+- **Verified passing:** Step 2 red test 先得到两个 run；`dispatchKey` 现仅允许 `background_schedule`，runtime/快照/rehydration 复用该键，竞争回退也返回已有 run。runtime + occurrence repository 共 2 files / 17 tests通过；`pnpm typecheck` 通过。下一步将 scheduler 替换为先 claim 后 dispatch。
+- **Verified passing:** Step 3a scheduler red tests 已锁 claim 在 agent start 前，成功后才关联 run，启动失败写 occurrence `failed`。scheduler/crash 测试 2 files / 6 tests与 `pnpm typecheck` 通过。下一步实现 claim/dispatched restart reconcile、latest-only misfire 与 overlap coalesce，再接 terminal outbox occurrence projection。
+- **Verified passing:** Step 3b/4 红测先锁 misfire latest-only、overlap pending、lease restart、dispatched restart reconcile 与 old-run outbox protection；task repository/scheduler/projector 4 files / 19 tests均通过，`pnpm typecheck` 通过。下一步将 occurrence 作为 task detail history、revision 更新和 skip 统计事实源，并补跨 DB crash/重复/乱序回归。
+- **Verified passing:** task detail scheduled history 已读取 occurrence 与旧历史的并集；revision update 跳过旧 pending occurrence；task deletion 会清理 occurrence FK。fast-probe/health 当前 task schema v4，相关 4 files / 21 tests通过。另有 power-resume cron regression 通过，只 dispatch latest missed occurrence。下一步运行完整 task/agent affected suite、IPC/build/smoke，再独立 review。
+# 2026-07-17 — Stage 3 恢复与验收启动
+
+- 已重读 Stage 3 计划、当前账本、CodeGraph 调用关系和未提交 diff stat。
+- 当前阶段：验收已有 Stage 3 WIP；顺序为 focused tests → 独立 review → 修复 → 再验收/review → 单独提交。
+- 未修改生产逻辑；Stage 3 状态保持 `in_progress`。
+
+## 2026-07-17 — Stage 3 聚焦验证
+
+- `rtk pnpm exec vitest run`：9 files / 60 tests passed（occurrence、scheduler crash/reconcile、scheduler、outbox、repository、runtime、migration/health/probe）。
+- 当前 diff 涉及 Stage 3 既定边界；下一步独立只读 review，禁止 reviewer 直接修改。
+- `rtk pnpm typecheck` 通过。
+- `rtk pnpm exec vitest run` 扩展集：3 files / 29 tests passed（schema/history/session/runtime executor）。
+- `rtk git diff --check` 通过。`AGENTS.md` 已忽略且未跟踪；无新增可复用规则，不改该文件。
+- `rtk pnpm test`：297 files / 1571 tests passed。期间 `node-pty` 子进程打印 `AttachConsole failed`，但测试进程退出码为 0。
+- `rtk pnpm build` 通过。
+
+## 2026-07-17 — Stage 3 独立 review #1
+
+- Reviewer 发现 P0：lease 未到期的 restart 没有 lease-expiry wakeup，once occurrence 可永久卡在 `claimed`。
+- Reviewer 发现 P1：持续 active run 下第二周期 pending occurrence 不能最新化，`next_run_at` 过期后进入 0ms loop，并违背 latest-only。
+- Reviewer 发现 stale-owner CAS 缺口：terminal dispatch/failure 写入未以 owner/attempt 约束。
+- 状态：修复中；禁止提交。
+
+## 2026-07-17 — Stage 3 review red tests
+
+- 新增 lease-expiry restart 与第二轮 overlap latest-only 回归；聚焦执行 2 files / 20 tests，新增两条均失败，确认 reviewer 时序结论。
+- 失败原因：无 claim-expiry reconcile timer；active occurrence 存在时旧 pending 直接阻止最新 occurrence materialize。
+- 修复首次运行发现 `pending` 常量赋值错误；已定点改为 `let`，将重跑同一聚焦集。
+
+## 2026-07-17 — Stage 3 review repair green
+
+- 修复 lease-expiry wakeup、latest-only overlap replacement、owner/attempt CAS；补 stale-owner regression。
+- `rtk pnpm exec vitest run`：5 files / 36 tests passed。
+- `rtk pnpm typecheck`、`rtk git diff --check` 通过。
+- 下一步：新独立 reviewer 复审 repaired diff；未提交。
+- 扩展验证：9 files / 63 tests passed；`pnpm check:ipc`、strict unused scan 通过。
+- 全量验证：`pnpm test` 297 files / 1574 tests passed（`node-pty AttachConsole failed` 子进程输出，exit 0）；`pnpm build` 通过。
+
+## 2026-07-17 — Stage 3 independent review #2
+
+- 修复本身未发现新行为回归。
+- P1 验收缺口：agent DB run 创建与 task DB occurrence 链接之间的 crash/restart 未用持久双 DB fixture 证明。下一步补该 fixture；禁止提交。
+
+## 2026-07-17 — Stage 3 crash-gap fixture
+
+- 新增双 DB reopen fixture：agent start 成功、task occurrence link 前 crash、lease expiry re-claim、dispatch key run re-use、terminal reconcile。
+- `rtk pnpm exec vitest run tests/main/plugins/task/scheduler-crash-consistency.test.ts`：2 tests passed。
+- 下一步：独立 review 新 fixture 和 Stage 3 exit coverage；未提交。
+- 扩展验证：9 files / 64 tests passed；typecheck、IPC、strict unused、diff check 通过。
+- 真实 runtime fixture 首跑读到 `dispatch_pending`：需 drain 同刻新增 0ms executor timer，再验证 terminal/outbox；已定点补 timer drain。
+- 0ms drain 仍早于 detached scheduler fire 的 runtime timer 创建；改为 startRun-return deferred 后再 drain，避免重复同一时序假设。
+- deferred 后 0ms drain 仍不运行 nested timer；按 fake-timer next-tick 语义改为 1ms advance。
+- 真实 runtime terminal 已在 restart scheduler link 后被立即 reconcile；fixture 断言 completed terminal 与幂等重放，不再错误期望 dispatched 中间态。
+- 真实 runtime crash-gap fixture 通过：2 tests passed。下一步独立复审 repaired fixture；未提交。
+- 最终聚焦集 9 files / 64 tests、typecheck、IPC、strict unused、diff check 通过；`ROC_SMOKE_TARGET=dist pnpm smoke:electron` exit 0（仅 Node deprecation warnings）。
+
+## 2026-07-17 — Stage 3 independent review #4
+
+- P1：四 crash-point restart gate 未全覆盖。缺持久 scheduler 的 claim-before-start restart、terminal/outbox projector-before-projection restart。
+- 下一步：补四类明确命名的 fixture 与 projector cursor replay；未提交。
+
+## 2026-07-17 — Stage 3 four-crash repair
+
+- 补持久 claim-before-start 与 terminal outbox-before-projector fixtures；crash suite 共 4 tests passed。
+- 下一步：独立 review 四 crash gate；未提交。
+- Review 补充 P1：补 outbox projector 乱序/sequence-gap regression；未提交。
+- 新增 projector 乱序回归：sequence 2 拒绝且无副作用，随后 1→2 成功；`agent-outbox-projector.test.ts` 6 tests passed。等待最终 review。
+- Final review P1：terminal outbox fixture 绕过 task plugin startup wiring。下一步改为真实 `createTaskPlugin().initialize()` 持久重启 replay；未提交。
+- 已改为持久真实 task plugin startup replay + second startup idempotence；crash suite 4 tests passed。下一步独立复审。
+- Stage 3 聚焦集 9 files / 67 tests passed；typecheck、IPC、strict unused、diff check 通过。等待最终 review。
+
+## 2026-07-17 — Stage 3 complete
+
+- Independent review #6：无 blocker。
+- Final verification：`pnpm test` 297 files / 1578 tests；`pnpm build`、Electron smoke、IPC、strict unused、diff check 全通过。
+- `node-pty AttachConsole failed` 和 Node deprecation 为 exit 0 的既有环境输出。
+- Stage 3 complete；准备提交。用户未跟踪 `plan.md` 保留在工作树，不纳入提交。
+
+## 2026-07-17 — Stage 3 committed / Stage 4 gate
+
+- 已提交 `bc87156 feat(task): make scheduled occurrences durable`；仅保留用户未跟踪 `plan.md`。
+- Stage 4 需要 Shell scope 产品选择后才能开始：interactive shell 逐次审批、background shell durable pre-authorization；若要求 workspace isolation，需授权 OS sandbox 路线。

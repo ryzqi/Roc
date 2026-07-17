@@ -247,6 +247,37 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('returns the same run for a duplicate scheduled occurrence dispatch key', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor(),
+      eventBus,
+      modelFactory,
+      repository
+    });
+    const request = {
+      ...startRequest,
+      dispatchKey: 'background_1:2026-07-17T00:00:00.000Z:1',
+      taskSource: 'background_schedule' as const,
+      workspacePath: 'F:\\Code\\Roc'
+    };
+
+    const first = await runtime.startRun(request);
+    const second = await runtime.startRun(request);
+
+    expect(second).toEqual(first);
+    expect(repository.getRunExecutionSnapshot(first.runId).dispatchKey).toBe(request.dispatchKey);
+    expect(db.prepare('SELECT COUNT(*) AS total FROM agent_runs').get()).toEqual({ total: 1 });
+    await waitForEvent(() =>
+      events.some(
+        (event) =>
+          event.type === 'agent.chat.run-event' &&
+          readChatRunEvent(event.payload)?.runId === first.runId &&
+          readChatRunEvent(event.payload)?.type === 'run_completed'
+      )
+    );
+  });
+
 
   it('stores workbench background task proposal runs outside chat history', async () => {
     const repository = new AgentSessionRepository(db);

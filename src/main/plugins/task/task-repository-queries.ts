@@ -148,11 +148,20 @@ export function listScheduledRuns(
   const rows = db
     .prepare(
       `SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason
-       FROM scheduled_task_runs
-       WHERE background_task_id = ?
-       ORDER BY scheduled_at DESC, rowid DESC
+       FROM (
+         SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason, rowid AS sort_rowid
+         FROM scheduled_task_runs
+         WHERE background_task_id = ?
+         UNION ALL
+         SELECT occurrence_key AS id, background_task_id, run_id AS task_run_id, scheduled_at,
+                COALESCE(dispatched_at, claimed_at, created_at) AS triggered_at,
+                status, reason AS skip_reason, rowid AS sort_rowid
+         FROM scheduled_occurrences
+         WHERE background_task_id = ?
+       )
+       ORDER BY scheduled_at DESC, sort_rowid DESC
        LIMIT ?`
     )
-    .all(task.id, limit) as ScheduledTaskRunRow[];
+    .all(task.id, task.id, limit) as ScheduledTaskRunRow[];
   return rows.map(mapScheduledTaskRun);
 }

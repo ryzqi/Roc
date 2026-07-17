@@ -82,7 +82,7 @@ describe('database migrations', () => {
     ).toThrow('database_migration_version_gap');
   });
 
-  it('applies task migrations through version 3 without changing version order', () => {
+  it('applies task migrations through version 4 without changing version order', () => {
     applyDatabaseMigrations(db, {
       dbName: 'task',
       migrations: taskMigrations,
@@ -94,11 +94,12 @@ describe('database migrations', () => {
     ).toEqual([
       { version: 1, name: 'background_task_projection_tables' },
       { version: 2, name: 'thread_deletion_journal' },
-      { version: 3, name: 'task_agent_outbox_cursor' }
+      { version: 3, name: 'task_agent_outbox_cursor' },
+      { version: 4, name: 'durable_scheduled_occurrences' }
     ]);
     expect(readSchemaMetadata(db, 'task')).toMatchObject({
       dbName: 'task',
-      currentVersion: 3
+      currentVersion: 4
     });
   });
 

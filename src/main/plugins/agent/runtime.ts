@@ -150,6 +150,13 @@ export class AgentPluginRuntime {
     if (input.length === 0) {
       throw new Error('chat_input_empty');
     }
+    const dispatchKey = resolveDispatchKey(request);
+    if (dispatchKey !== null) {
+      const existingRun = this.options.repository.findRunByDispatchKey(dispatchKey);
+      if (existingRun !== null) {
+        return toExistingRunStartResult(this.options.repository, existingRun);
+      }
+    }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
     const capabilityPreview = await this.getRunCapabilityPreview({
       explicitSkillIds: request.explicitSkillIds,
@@ -160,20 +167,33 @@ export class AgentPluginRuntime {
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
     const workspace = await this.resolveRunWorkspace(request);
     const explicitSkillIds = normalizeExplicitSkillIds(request.explicitSkillIds, capabilityPreview.manifest);
-    const run = this.options.repository.createTaskRun({
-      attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
-      capabilityPreview,
-      snapshot: createRunExecutionSnapshotSeed({
-        capabilityManifest: capabilityPreview.manifest,
-        explicitSkillIds,
-        modelHandle,
-        request,
-        workspace
-      }),
-      threadKind: resolveNewRunThreadKind(request),
-      threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
-      userInput: input
-    });
+    let run: TaskRun;
+    try {
+      run = this.options.repository.createTaskRun({
+        attachments: preparedAttachments.metadata.length === 0 ? undefined : preparedAttachments.metadata,
+        capabilityPreview,
+        snapshot: createRunExecutionSnapshotSeed({
+          capabilityManifest: capabilityPreview.manifest,
+          dispatchKey,
+          explicitSkillIds,
+          modelHandle,
+          request,
+          workspace
+        }),
+        threadKind: resolveNewRunThreadKind(request),
+        threadId: typeof request.threadId === 'string' ? request.threadId : undefined,
+        userInput: input
+      });
+    } catch (error) {
+      if (dispatchKey === null) {
+        throw error;
+      }
+      const existingRun = this.options.repository.findRunByDispatchKey(dispatchKey);
+      if (existingRun === null) {
+        throw error;
+      }
+      return toExistingRunStartResult(this.options.repository, existingRun);
+    }
     const dispatchState = this.options.repository.getRunTransitionState(run.id);
     const dispatchedRun = this.options.repository.transitionRun({
       endedAt: null,
@@ -988,6 +1008,7 @@ export class AgentPluginRuntime {
 
 function createRunExecutionSnapshotSeed(input: {
   capabilityManifest: RunExecutionSnapshotV1['capabilityManifest'];
+  dispatchKey: string | null;
   explicitSkillIds: string[];
   modelHandle: AgentModelHandle;
   request: ChatStartRunRequest;
@@ -1011,7 +1032,33 @@ function createRunExecutionSnapshotSeed(input: {
     },
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,
-    dispatchKey: null
+    dispatchKey: input.dispatchKey
+  };
+}
+
+function resolveDispatchKey(request: ChatStartRunRequest): string | null {
+  if (request.dispatchKey === undefined) {
+    return null;
+  }
+  if (request.taskSource !== 'background_schedule') {
+    throw new Error('agent_dispatch_key_source_invalid');
+  }
+  const dispatchKey = request.dispatchKey.trim();
+  if (dispatchKey.length === 0) {
+    throw new Error('agent_dispatch_key_empty');
+  }
+  return dispatchKey;
+}
+
+function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskRun): ChatStartRunResult {
+  const snapshot = repository.getRunExecutionSnapshot(run.id);
+  return {
+    runId: run.id,
+    mode: snapshot.mode === 'run' ? 'chat' : snapshot.mode,
+    threadId: run.threadId,
+    providerId: snapshot.model.providerId,
+    modelId: snapshot.model.modelId,
+    createdAt: run.startedAt
   };
 }
 

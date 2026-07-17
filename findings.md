@@ -8,6 +8,35 @@
 
 ## Current Findings
 
+- 2026-07-17 Stage 3 恢复：当前未提交实现已横跨 task v4 schema、occurrence claim/lease、occurrence dispatch key、scheduler/reconcile、outbox projection 与对应回归测试；尚未运行本轮聚焦验证或独立 review，不能标记完成或提交。
+- 2026-07-17 Stage 3 聚焦验证：occurrence、scheduler crash/reconcile、scheduler、outbox projector、task repository、agent runtime、migration/health/probe 共 9 个文件、60 个测试通过。独立 review 尚未开始。
+- 2026-07-17 Stage 3 扩展验证：`pnpm typecheck` 通过；schema/history/session/runtime executor 聚焦集 3 个文件、29 个测试通过；`git diff --check` 通过。根 `AGENTS.md` 已确认被 `.gitignore` 忽略且未跟踪，不更新、不纳入本阶段提交。
+- 2026-07-17 Stage 3 广泛验证：`pnpm test` 297 files / 1571 tests passed，进程退出码 0；过程中 `node-pty` 辅助进程打印既有 `AttachConsole failed`，未使测试失败。`pnpm build` 通过。
+- 2026-07-17 Stage 3 独立 review 阻塞项：P0 为 scheduler restart 发生于 claim lease 未过期时，once occurrence 已使 `next_run_at=null`，但无 lease-expiry wakeup，最终永久停在 `claimed`；P1 为 active dispatched 存在时不推进/替换过期 pending occurrence，导致 0ms timer loop 且执行旧 occurrence，违背已确认 latest-only。附加 CAS 缺口：dispatch/failure 写入未绑定 claim owner/attempt，stale owner 可覆盖新 claim。必须加时序回归、修复、复审。
+- 2026-07-17 Stage 3 review red tests：lease-expiry restart 和第二轮 overlap latest-only 均按预期失败；现有实现分别未调用 agent start、保留 00:05 pending occurrence，未产生 00:10 latest occurrence。
+- 2026-07-17 Stage 3 review repair error：首次修复将 `pending` 保持为 `const` 后又赋值为 `undefined`，聚焦测试明确报 `Assignment to constant variable`；已改为 `let`，未重复原执行。
+- 2026-07-17 Stage 3 review repair：scheduler 新增最低 claimed lease expiry 的一次性 reconcile wakeup；旧 pending overlap 在当前 due cron 出现时原子标 `skipped/overlap_coalesced_superseded` 并创建最新 pending；claim result 携带 owner/attempt，dispatch/start-failure 更新使用二者 CAS，stale owner 得到 `null` 不影响任务。5 个聚焦文件、36 个测试，`pnpm typecheck` 与 `git diff --check` 通过；待新独立复审。
+- 2026-07-17 Stage 3 repair 扩展验证：完整 Stage 3 聚焦集 9 files / 63 tests passed；`pnpm check:ipc` 和 strict unused scan 通过。复审仍在进行。
+- 2026-07-17 Stage 3 repair 全量验证：`pnpm test` 297 files / 1574 tests passed，exit 0；`pnpm build` 通过。测试期间仍有既有 `node-pty` `AttachConsole failed` 子进程输出，未改变成功退出码。等待复审。
+- 2026-07-17 Stage 3 独立复审 #2：lease wakeup、latest-only、owner/attempt CAS 无新回归；仍缺 Stage 3 crash-point 验收：`startRun` 已在 agent DB 创建 run、task DB 尚未 mark dispatched 时的进程退出/双 DB reopen/lease expiry/dispatch-key re-use/terminal reconcile fixture。补齐前不能提交。
+- 2026-07-17 Stage 3 crash-gap repair：新增持久 task/agent 双 DB fixture，模拟 `startRun` 已将 dispatch key 与 run 写入 agent DB、`markScheduledOccurrenceDispatched()` 前进程退出；reopen 后 lease 到期重领、同 dispatch key 查回同一 run、occurrence 关联并由 terminal reconcile 落为 completed。`scheduler-crash-consistency.test.ts` 2 tests passed。源码检索曾误指向不存在的 `tests/main/infrastructure/database-schemas.ts`，已改用实际 schema 路径，未重复错误命令。
+- 2026-07-17 Stage 3 crash-gap 扩展验证：9 files / 64 tests passed；`pnpm typecheck`、`pnpm check:ipc`、strict unused scan、`git diff --check` 全部通过。最终独立 review 仍在进行。
+- 2026-07-17 Stage 3 crash-gap fixture repair：改接真实 `AgentPluginRuntime` 后，首次断言在 scheduler timer 后立即读取到 `dispatch_pending`；runtime 执行由同一时刻新排的 0ms timer 驱动。fixture 增加一次 0ms fake-timer drain 后再断言 terminal/outbox，未改生产逻辑。
+- 2026-07-17 Stage 3 crash-gap fixture repair attempt 2：单独 0ms drain 仍早于 detached scheduler `fire()` 内的 runtime timer 创建，状态仍为 `dispatch_pending`。改用 startRun-return deferred 确认 runtime 已排 timer，再 drain；不重复同一时序假设。
+- 2026-07-17 Stage 3 crash-gap fixture repair attempt 3：deferred 后的同刻 0ms drain 仍不执行 newly-scheduled runtime timer。按 Vitest fake-timer 嵌套 timer 行为重新判定，改为推进下一个逻辑 tick（1ms），不再重复 0ms drain。
+- 2026-07-17 Stage 3 crash-gap fixture runtime result：真实 runtime 已在 crash 前完成并写 durable outbox；restart scheduler link 后立即调用 reconcile，因此 occurrence 已是 `completed`，不是中间 `dispatched`。fixture 改为断言这一更强的 terminal projection，再验证重复 reconcile 幂等。
+- 2026-07-17 Stage 3 crash-gap real-runtime verification：`scheduler-crash-consistency.test.ts` 2 tests passed。fixture 不再手写 agent SQL 或 dispatch-key lookup；使用持久 `AgentSessionRepository` 与真实 `AgentPluginRuntime.startRun()`，并检查 terminal outbox、双 DB reopen、agent unique dispatch key、scheduler terminal projection。
+- 2026-07-17 Stage 3 final pre-review verification：9 files / 64 tests、typecheck、IPC、strict unused、diff check 均通过；`ROC_SMOKE_TARGET=dist pnpm smoke:electron` exit 0。smoke 的 Node deprecation warnings 未影响退出码。
+- 2026-07-17 Stage 3 独立复审 #4 blocker：plan 要求四个 crash point 的 scheduler restart fixture；当前仅覆盖 start/link gap，缺 claim 后未 start 的持久 scheduler restart，以及 terminal/outbox projector 前 crash 的持久 restart/projector cursor replay。repository-only lease fixture、memory-only outbox fixture 不能替代。补齐前不可提交。
+- 2026-07-17 Stage 3 four-crash repair：`scheduler-crash-consistency` 现有四个明确流程：claim/start/link 顺序、持久 claim 后未 start restart、真实 Agent runtime start 后未 link restart、terminal outbox 持久化后未 task projector restart/cursor replay。后两条使用双 DB reopen；terminal case 检查 actual outbox、occurrence terminal 与 replay idempotence。crash suite 4 tests passed，待独立复审。
+- 2026-07-17 Stage 3 review 补充 blocker：projector 已有重复/restart 与旧 run 投影测试，但没有乱序/sequence gap 回归。需锁定 sequence 2 先到时拒绝、cursor/task DB 不变，随后 1→2 正常投影；不可只依赖生产 `task_agent_outbox_sequence_gap` 检查。
+- 2026-07-17 Stage 3 projector order repair：新增 sequence 2 先到必须抛 `task_agent_outbox_sequence_gap`、cursor 仍为 0、task projection 未变，随后 1→2 以 `appliedCount=2` 正常提交的回归。`agent-outbox-projector.test.ts` 6 tests passed；待独立复审。
+- 2026-07-17 Stage 3 final review blocker：terminal outbox crash fixture 虽为双 DB 重启，但直接调用 repository projector，未覆盖 `createTaskPlugin().initialize()` 的 production startup replay/batch loop/boundary。改为以 fresh persistent plugin context 初始化 task plugin，断言 occurrence/cursor；第二次 plugin restart 断言无重复投影。
+- 2026-07-17 Stage 3 startup projector repair：terminal outbox fixture 已用 fresh `createTaskPlugin().initialize()` 的持久 DB context 完成首次 startup replay 和 cursor 写入；第二次 fresh plugin 初始化仍保持同一 cursor/terminal occurrence。crash suite 4 tests passed，待独立复审。
+- 2026-07-17 Stage 3 post-startup-repair verification：完整 Stage 3 聚焦集 9 files / 67 tests passed；typecheck、IPC check、strict unused、diff check 均通过；最终 review 仍在进行。
+- 2026-07-17 Stage 3 final review/validation：独立 review #6 无 blocker。全仓 `pnpm test` 297 files / 1578 tests passed，`pnpm build` 通过，Electron smoke、IPC、strict unused、diff check 全通过。`node-pty AttachConsole failed` 和 Node deprecation 均为 exit 0 的既有环境输出。`plan.md` 是用户未跟踪验收源，保留但不纳入提交。
+- 2026-07-17 Stage 3 commit：`bc87156 feat(task): make scheduled occurrences durable`。Stage 4 的实现前 Gate 仍未确认：interactive 是否逐次 shell approval、background 是否仅在 task 创建时 durable pre-authorization；workspace isolation 若要求必须走 OS sandbox，不能用 cwd guard 替代。
+
 - 工作树当前仅有用户提供、未跟踪的 `plan.md`；代码分支为 `main`。
 - `.codegraph/` 存在；代码定位必须优先使用 CodeGraph。
 - Stage 0 目标是表征测试，不改变运行行为。
@@ -115,6 +144,13 @@
 - Commit-gate standards repair (2026-07-17): queue capacity now compacts consumed prefix entries before it tests capacity. The cap and high-water metrics therefore represent only unconsumed work; a slow consumer cannot cause false overflow/abort solely because earlier entries remain in the backing array.
 - Final standards repair (2026-07-17): `run_failed` outbox projection now mirrors the old task failure path by synchronizing agent-history thread status to `paused` and recording `background_task_paused`. Cursor idempotency prevents normal replay; an existing matching event check protects an interrupted cross-database projection retry from adding duplicate audit events.
 - Stage 2 final gate (2026-07-17): optional `run_failed.diagnostic` and `suggestion` are now declared in `AgentOutboxEvent`, persisted by the terminal writer, and strictly reconstructed from the durable outbox. Focused regression passed. Independent standards and Stage 2 spec reviews both found no further issues. Fresh strict unused/typecheck, IPC, diff, build, and full Vitest (296 files / 1556 tests) passed; Vitest exit code was 0 despite the known post-run node-pty `AttachConsole failed` teardown output. Independently committed.
+- Stage 3 product decision (2026-07-17): 用户以“继续”接受上轮推荐。Scheduler 采用同 task 不重叠；睡眠/关机造成的多次错过只合并执行最新 occurrence，必须保留可审计的 coalesce/skip reason，不补跑无限历史。
+- Stage 3 baseline (2026-07-17): `TaskScheduler.fire()` 仍是 `startRun()` 后才插入随机 id 的 `scheduled_task_runs` 并更新 `background_tasks.run_id`；没有 occurrence key、task revision、claim 或 lease。`scheduled_task_runs` 只能按 task/time 查询，不能防 duplicate fire/restart；`background_tasks.run_id` 只保留最新 run，不能作为旧 occurrence 的权威关联。
+- Stage 3 Step 1 green (2026-07-17): task schema v4 新增 `background_tasks.task_revision` 与 `scheduled_occurrences`（唯一 `(task, scheduledAt, revision)`、claim lease、attempt、dispatch key、run link、冻结 request、终态时间/原因）。`claimDueScheduledOccurrence()` 在同一 task DB transaction 内创建/claim occurrence 并推进下一次触发；已 claim snapshot 不受 task update 影响，task update 递增 revision。聚焦迁移/repository 测试通过。
+- Stage 3 Step 2 green (2026-07-17): `ChatStartRunRequest`/capability schema 接受仅 `background_schedule` 可用的 `dispatchKey`；runtime 把它冻结进 snapshot，并在创建前及 thread-lease/unique-key竞争后查询既有 run。重复同 key 返回同一 `ChatStartRunResult`，不重新排队执行；snapshot rehydration 保留该 key。
+- Stage 3 Step 3a green (2026-07-17): scheduler 已由 `startRun -> random scheduled_task_run` 改为 `claimDueScheduledOccurrence -> startRun(dispatchKey) -> markScheduledOccurrenceDispatched`。claim 在 agent 启动前持久化；agent 启动失败只将已 claim occurrence 落为 `failed` 并暂停 task。若 agent 已启动而 task DB link 失败，occurrence 保持可 reconcile 的 claim，不伪造启动失败。
+- Stage 3 Step 3b/4 green (2026-07-17): cron misfire 只 materialize 最晚一次并写 `misfire_coalesced_latest`；前 run 未终态时新 occurrence 仅写 `pending/overlap_coalesced_latest`。过期 claim 在 restart reconcile 释放；dispatched occurrence 从 agent DB 终态收敛，`interrupted`/missing 只标 `unknown`。outbox projector 用 occurrence `run_id` 而非 `background_tasks.run_id` 找回终态，旧 run 不会覆盖或暂停较新的 task 摘要。
+- Stage 3 power-resume green (2026-07-17): `handlePowerResume()` 重注册 timer 后，cron 从多个错过时间只 dispatch 最新 occurrence；审计保留 `misfire_coalesced_latest`，`next_run_at` 前进到下一未来时间。测试只推进当前 due timer，不能用 `runAllTimersAsync` 穿透无限 cron。
 
 ## Verification Rules
 

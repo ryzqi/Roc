@@ -85,6 +85,7 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
     requiredTables: [
       'background_tasks',
       'scheduled_task_runs',
+      'scheduled_occurrences',
       'thread_deletion_journal',
       'schema_migrations',
       'schema_metadata'

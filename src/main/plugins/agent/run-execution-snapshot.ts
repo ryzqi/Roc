@@ -142,6 +142,9 @@ export function createChatStartRunRequestFromSnapshot(
   if (snapshot.explicitSkillIds.length > 0) {
     request.explicitSkillIds = snapshot.explicitSkillIds;
   }
+  if (snapshot.dispatchKey !== null) {
+    request.dispatchKey = snapshot.dispatchKey;
+  }
   return request;
 }
 

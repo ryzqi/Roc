@@ -147,6 +147,29 @@ describe('TaskRepository', () => {
       status: 'skipped',
       skipReason: 'manual_delete_regression'
     });
+    db.prepare(
+      `INSERT INTO scheduled_occurrences
+       (occurrence_key, background_task_id, task_revision, scheduled_at, status, claim_owner, claim_expires_at,
+        attempt, dispatch_key, run_id, request_json, created_at, claimed_at, dispatched_at, terminal_at, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'occurrence_delete_regression',
+      task.id,
+      1,
+      now,
+      'skipped',
+      null,
+      null,
+      0,
+      'occurrence_delete_regression',
+      null,
+      '{}',
+      now,
+      null,
+      null,
+      now,
+      'manual_delete_regression'
+    );
     insertAgentThreadResidue({
       runId: task.runId,
       threadId: task.threadId,
@@ -155,6 +178,7 @@ describe('TaskRepository', () => {
 
     expect(countRows(db, 'background_tasks')).toBe(1);
     expect(countRows(db, 'scheduled_task_runs')).toBe(1);
+    expect(countRows(db, 'scheduled_occurrences')).toBe(1);
     expect(countRows(agentDb, 'agent_threads')).toBe(1);
     expect(countRows(agentDb, 'agent_runs')).toBe(1);
     expect(countRows(agentDb, 'agent_events')).toBe(1);
@@ -174,6 +198,7 @@ describe('TaskRepository', () => {
 
     expect(repository.findBackgroundTask(task.id)).toBeNull();
     expect(countRows(db, 'scheduled_task_runs')).toBe(0);
+    expect(countRows(db, 'scheduled_occurrences')).toBe(0);
     expect(countRows(db, 'background_tasks')).toBe(0);
     expect(countRows(agentDb, 'agent_threads')).toBe(0);
     expect(countRows(agentDb, 'agent_runs')).toBe(0);

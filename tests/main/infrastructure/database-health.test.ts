@@ -54,7 +54,7 @@ describe('checkRocDatabases', () => {
       core: 2,
       agent: 8,
       memory: 1,
-      task: 3,
+      task: 4,
       'plugin:@roc/plugin-workspace': 1,
       'plugin:@roc/plugin-diagnostics': 1
     });
