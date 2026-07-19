@@ -29,51 +29,94 @@ describe('AgentToolEffectStore', () => {
 
   it('returns a stored successful result for the same tool call and input hash', () => {
     const store = new AgentToolEffectStore(db);
+    const identity = effectIdentity('main', 'checkpoint_1');
     store.start({
-      runId: 'run_1',
-      threadId: 'thread_1',
-      toolCallId: 'call_1',
+      ...identity,
       toolName: 'run_shell_command',
-      inputHash: 'hash_1'
+      effectClass: 'host_execution',
+      reconcileStrategy: 'manual_confirmation'
     });
-    store.finishSuccess({ runId: 'run_1', toolCallId: 'call_1', result: { ok: true } });
+    store.finishSuccess({ ...identity, result: { ok: true } });
 
-    expect(store.readReusable({ runId: 'run_1', toolCallId: 'call_1', inputHash: 'hash_1' })).toEqual({
-      status: 'success',
+    expect(store.readReusable(identity)).toEqual({
+      status: 'succeeded',
       result: { ok: true }
     });
   });
 
   it('fails when the same tool call id has a different input hash', () => {
     const store = new AgentToolEffectStore(db);
+    const identity = effectIdentity('main', 'checkpoint_1');
     store.start({
-      runId: 'run_1',
-      threadId: 'thread_1',
-      toolCallId: 'call_1',
+      ...identity,
       toolName: 'delete_file',
-      inputHash: 'hash_1'
+      effectClass: 'workspace_mutation',
+      reconcileStrategy: 'manual_confirmation'
     });
 
-    expect(() => store.readReusable({ runId: 'run_1', toolCallId: 'call_1', inputHash: 'hash_2' })).toThrow(
+    expect(() => store.readReusable({ ...identity, inputHash: 'hash_2' })).toThrow(
       'agent_tool_effect_input_drift'
     );
   });
 
   it('fails when a duplicate side effect is still in progress', () => {
     const store = new AgentToolEffectStore(db);
+    const identity = effectIdentity('main', 'checkpoint_1');
     store.start({
-      runId: 'run_1',
-      threadId: 'thread_1',
-      toolCallId: 'call_1',
+      ...identity,
       toolName: 'delete_file',
-      inputHash: 'hash_1'
+      effectClass: 'workspace_mutation',
+      reconcileStrategy: 'manual_confirmation'
     });
 
-    expect(() => store.readReusable({ runId: 'run_1', toolCallId: 'call_1', inputHash: 'hash_1' })).toThrow(
+    expect(() => store.readReusable(identity)).toThrow(
       'agent_tool_effect_in_progress'
     );
   });
+
+  it('uses execution path and checkpoint identity for the effect key and exposes the full state machine', () => {
+    const store = new AgentToolEffectStore(db);
+    const first = effectIdentity('main', 'checkpoint_main');
+    const nested = effectIdentity('subagent/research#0', 'checkpoint_nested');
+    expect(store.readState(first)).toEqual({ status: 'not_started' });
+
+    store.start({ ...first, toolName: 'run_shell_command', inputHash: 'hash_1', effectClass: 'host_execution', reconcileStrategy: 'manual_confirmation' });
+    store.start({ ...nested, toolName: 'run_shell_command', inputHash: 'hash_1', effectClass: 'host_execution', reconcileStrategy: 'manual_confirmation' });
+    expect(store.readState(first)).toEqual({ status: 'in_progress' });
+    expect(store.readState(nested)).toEqual({ status: 'in_progress' });
+
+    store.finishSuccess({ ...first, result: { ok: true } });
+    store.finishError({ ...nested, error: new Error('transient'), retryable: true });
+    expect(store.readReusable(first)).toEqual({ status: 'succeeded', result: { ok: true } });
+    expect(store.readState(nested)).toEqual({ status: 'failed_retryable' });
+    store.start({ ...nested, toolName: 'run_shell_command', inputHash: 'hash_1', effectClass: 'host_execution', reconcileStrategy: 'manual_confirmation' });
+    expect(store.readState(nested)).toEqual({ status: 'in_progress' });
+  });
+
+  it('stores unknown effects and refuses blind reuse', () => {
+    const store = new AgentToolEffectStore(db);
+    const identity = effectIdentity('main', 'checkpoint_restart');
+    store.start({ ...identity, toolName: 'delete_file', inputHash: 'hash_restart', effectClass: 'workspace_mutation', reconcileStrategy: 'manual_confirmation' });
+
+    store.finishUnknown({ ...identity, error: new Error('result state cannot be confirmed') });
+
+    expect(store.readState(identity)).toEqual({ status: 'unknown' });
+    expect(() => store.readReusable({ ...identity, inputHash: 'hash_restart' })).toThrow(
+      'agent_tool_effect_unknown_manual_confirmation'
+    );
+  });
 });
+
+function effectIdentity(executionPath: string, checkpointId: string) {
+  return {
+    runId: 'run_1',
+    threadId: 'thread_1',
+    toolCallId: `call_${executionPath}`,
+    executionPath,
+    checkpointId,
+    inputHash: 'hash_1'
+  };
+}
 
 function tableExists(connection: Database.Database, tableName: string): boolean {
   const row = connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as

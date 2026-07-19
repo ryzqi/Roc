@@ -632,14 +632,19 @@ describe('AgentSessionRepository', () => {
 
     db.prepare(
       `INSERT INTO agent_tool_effects
-       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       running.id,
       running.threadId,
+      'main',
+      'checkpoint_restart',
       'call_inflight_restart',
       'run_shell_command',
       'input_hash_restart',
+      'host_execution',
+      'manual_confirmation',
       'in_progress',
       null,
       null,
@@ -668,6 +673,9 @@ describe('AgentSessionRepository', () => {
     expect(
       db.prepare('SELECT event_json FROM agent_run_events WHERE run_id = ? AND sequence = 2').get(running.id)
     ).toEqual({ event_json: expect.stringContaining('agent_run_interrupted_on_restart_effect_unknown') });
+    expect(db.prepare('SELECT status FROM agent_tool_effects WHERE run_id = ?').get(running.id)).toEqual({
+      status: 'unknown'
+    });
     expect(repository.getRunTransitionState(waitingNextTurn.id).stateVersion).toBe(2);
     expect(repository.getRunTransitionState(dispatchPending.id).stateVersion).toBe(3);
     expect(repository.getRunTransitionState(running.id).stateVersion).toBe(3);

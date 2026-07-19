@@ -351,7 +351,8 @@ function createToolEffectMiddleware(input: DeepAgentBuildInput) {
     createToolEffectIdempotencyMiddleware({
       runId: input.toolEffectIdempotency.runId,
       threadId: input.toolEffectIdempotency.threadId,
-      store: input.toolEffectIdempotency.store
+      store: input.toolEffectIdempotency.store,
+      capabilityManifest: input.capabilityManifest
     })
   ];
 }

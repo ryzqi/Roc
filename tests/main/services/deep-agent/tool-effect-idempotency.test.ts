@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import { createToolEffectIdempotencyMiddleware } from '../../../../src/main/services/deep-agent/tool-effect-idempotency';
+import type { RunCapabilityManifestV1 } from '../../../../src/shared/types';
 
 let db: Database.Database;
 let store: AgentToolEffectStore;
@@ -24,7 +25,8 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     const middleware = createToolEffectIdempotencyMiddleware({
       runId: 'run_1',
       threadId: 'thread_1',
-      store
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
     });
     const handler = vi.fn(async () => new ToolMessage({ tool_call_id: 'call_1', name: 'run_shell_command', content: 'ran' }));
     const request = {
@@ -32,7 +34,8 @@ describe('createToolEffectIdempotencyMiddleware', () => {
         id: 'call_1',
         name: 'run_shell_command',
         args: { command: 'pnpm typecheck', cwd: 'F:\\Code\\Roc' }
-      }
+      },
+      runtime: runtime('')
     };
 
     const first = await middleware.wrapToolCall?.(request as never, handler as never);
@@ -48,7 +51,8 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     const middleware = createToolEffectIdempotencyMiddleware({
       runId: 'run_1',
       threadId: 'thread_1',
-      store
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
     });
     const handler = vi.fn(async () => new ToolMessage({ tool_call_id: 'missing', name: 'run_shell_command', content: 'ran' }));
 
@@ -57,7 +61,8 @@ describe('createToolEffectIdempotencyMiddleware', () => {
         toolCall: {
           name: 'run_shell_command',
           args: { command: 'pnpm typecheck' }
-        }
+        },
+        runtime: runtime('')
       } as never,
       handler as never
     );
@@ -68,11 +73,37 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('blocks a side-effecting tool call when execution info is missing', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
+    });
+    const handler = vi.fn(async () => new ToolMessage({ tool_call_id: 'call_1', name: 'run_shell_command', content: 'ran' }));
+
+    const result = await middleware.wrapToolCall?.(
+      {
+        toolCall: {
+          id: 'call_1',
+          name: 'run_shell_command',
+          args: { command: 'pnpm typecheck' }
+        }
+      } as never,
+      handler as never
+    );
+
+    expect((result as ToolMessage).content).toBe('agent_tool_effect_execution_info_missing');
+    expect((result as ToolMessage).status).toBe('error');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('does not require a tool call id for read-only built-in tools', async () => {
     const middleware = createToolEffectIdempotencyMiddleware({
       runId: 'run_1',
       threadId: 'thread_1',
-      store
+      store,
+      capabilityManifest: manifestFor([manifestTool('read_file', 'none', 'none')])
     });
     const handler = vi.fn(async () => new ToolMessage({ tool_call_id: 'read', name: 'read_file', content: 'contents' }));
 
@@ -81,7 +112,8 @@ describe('createToolEffectIdempotencyMiddleware', () => {
         toolCall: {
           name: 'read_file',
           args: { file_path: '/workspace/package.json' }
-        }
+        },
+        runtime: runtime('')
       } as never,
       handler as never
     );
@@ -90,11 +122,15 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it('treats MCP tools as side-effecting unless metadata marks them read-only', async () => {
+  it('uses the local manifest policy instead of MCP readOnlyHint', async () => {
     const middleware = createToolEffectIdempotencyMiddleware({
       runId: 'run_1',
       threadId: 'thread_1',
-      store
+      store,
+      capabilityManifest: manifestFor([
+        manifestTool('server__mutate', 'external_call', 'tool_call'),
+        manifestTool('server__read', 'external_call', 'tool_call')
+      ])
     });
     const handler = vi.fn(async () => new ToolMessage({ tool_call_id: 'mcp-read', name: 'server__read', content: 'ok' }));
 
@@ -122,7 +158,118 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     );
 
     expect((blocked as ToolMessage).content).toBe('agent_tool_effect_call_id_missing');
-    expect((allowed as ToolMessage).content).toBe('ok');
+    expect((allowed as ToolMessage).content).toBe('agent_tool_effect_call_id_missing');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('uses checkpoint namespace as the subagent effect path instead of MCP readOnlyHint', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('server__mutate', 'external_call', 'tool_call')])
+    });
+    const handler = vi.fn(async (request: { toolCall: { id: string } }) =>
+      new ToolMessage({ tool_call_id: request.toolCall.id, name: 'server__mutate', content: 'ran' })
+    );
+    const baseRequest = {
+      tool: { name: 'server__mutate', metadata: { readOnlyHint: true } },
+      toolCall: { id: 'call_same', name: 'server__mutate', args: { value: 1 } }
+    };
+
+    await middleware.wrapToolCall?.({
+      ...baseRequest,
+      runtime: { executionInfo: { checkpointNs: 'research#0', checkpointId: 'cp_1' } }
+    } as never, handler as never);
+    await middleware.wrapToolCall?.({
+      ...baseRequest,
+      runtime: { executionInfo: { checkpointNs: 'research#1', checkpointId: 'cp_2' } }
+    } as never, handler as never);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows a retry-safe effect to retry after a retryable failure', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('web_read', 'network_read', 'tool_call')])
+    });
+    const request = {
+      toolCall: { id: 'call_web', name: 'web_read', args: { url: 'https://example.com' } },
+      runtime: runtime('')
+    };
+    const handler = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('web_read 请求失败：network reset'))
+      .mockResolvedValueOnce(new ToolMessage({ tool_call_id: 'call_web', name: 'web_read', content: 'ok' }));
+
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow(
+      'web_read 请求失败：network reset'
+    );
+    const result = await middleware.wrapToolCall?.(request as never, handler as never);
+
+    expect((result as ToolMessage).content).toBe('ok');
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks a manual-confirmation effect unknown and never retries it blindly', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
+    });
+    const request = {
+      toolCall: { id: 'call_shell', name: 'run_shell_command', args: { command: 'git status' } },
+      runtime: runtime('')
+    };
+    const handler = vi.fn().mockRejectedValue(new Error('shell result unavailable'));
+
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow(
+      'shell result unavailable'
+    );
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow(
+      'agent_tool_effect_unknown_manual_confirmation'
+    );
     expect(handler).toHaveBeenCalledTimes(1);
   });
 });
+
+function manifestFor(tools: RunCapabilityManifestV1['tools']): RunCapabilityManifestV1 {
+  return {
+    schemaVersion: 1,
+    manifestHash: 'a'.repeat(64),
+    requestedCapabilities: { mcpServers: [], skills: [] },
+    resolvedCapabilities: { mcpServers: [], skills: [] },
+    skippedCapabilities: [],
+    tools,
+    skills: [],
+    untrustedContextPolicy: 'external_content_reference_only'
+  };
+}
+
+function manifestTool(modelVisibleName: string, effectClass: RunCapabilityManifestV1['tools'][number]['effectClass'], idempotencyStrategy: 'none' | 'tool_call'): RunCapabilityManifestV1['tools'][number] {
+  return {
+    canonicalIdentity: `test:${modelVisibleName}`,
+    modelVisibleName,
+    provenance: { kind: 'mcp', serverId: 'server' },
+    executionScopes: ['main', 'subagent'],
+    riskLevel: effectClass === 'none' ? 'low' : 'medium',
+    effectClass,
+    approvalPolicy: { kind: 'none' },
+    idempotencyStrategy,
+    reconcileStrategy: effectClass === 'none' ? 'none' : effectClass === 'network_read' ? 'retry_safe' : 'manual_confirmation',
+    resourceScope: 'external'
+  };
+}
+
+function runtime(checkpointNs: string) {
+  return {
+    executionInfo: {
+      checkpointNs,
+      checkpointId: `checkpoint_${checkpointNs.length === 0 ? 'main' : checkpointNs}`
+    }
+  };
+}

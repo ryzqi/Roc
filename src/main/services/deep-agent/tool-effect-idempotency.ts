@@ -2,12 +2,19 @@ import { ToolMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
 import { createMiddleware } from 'langchain';
 
-import { AgentToolEffectStore, hashToolInput } from './tool-effect-store';
+import type {
+  RunCapabilityManifestToolV1,
+  RunCapabilityManifestV1,
+  RunCapabilityReconcileStrategyV1
+} from '../../../shared/types';
+import { toRunFailure } from './error-mapping';
+import { AgentToolEffectStore, hashToolInput, type ToolEffectKey } from './tool-effect-store';
 
 type ToolEffectIdempotencyOptions = {
   runId: string;
   threadId: string;
   store: AgentToolEffectStore;
+  capabilityManifest: RunCapabilityManifestV1;
 };
 
 type ToolCallRequest = {
@@ -16,6 +23,12 @@ type ToolCallRequest = {
     args: unknown;
     id?: string;
     name: string;
+  };
+  runtime?: {
+    executionInfo?: {
+      checkpointId: string;
+      checkpointNs: string;
+    };
   };
 };
 
@@ -28,99 +41,123 @@ type StoredToolMessage = {
   toolCallId: string;
 };
 
-const sideEffectingToolNames = new Set<string>([
-  'delete_file',
-  'run_shell_command',
-  'propose_background_task',
-  'schedule_background_task',
-  'update_background_task',
-  'cancel_background_task',
-  'write_file',
-  'edit_file'
-]);
-
-const readOnlyToolNames = new Set<string>([
-  'ask_user',
-  'glob',
-  'grep',
-  'ls',
-  'read_background_task',
-  'read_file',
-  'web_read',
-  'web_search',
-  'write_todos'
-]);
-
 export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempotencyOptions) {
+  const manifestTools = new Map(options.capabilityManifest.tools.map((tool) => [tool.modelVisibleName, tool]));
   return createMiddleware({
     name: 'RocToolEffectIdempotencyMiddleware',
     wrapToolCall: async (request, handler) => {
       const typedRequest = request as ToolCallRequest;
-      if (!isSideEffectingToolCall(typedRequest)) {
+      const policy = manifestTools.get(typedRequest.toolCall.name);
+      if (policy === undefined) {
+        throw new Error(`agent_tool_effect_manifest_tool_missing:${typedRequest.toolCall.name}`);
+      }
+      if (policy.idempotencyStrategy === 'none') {
         return await handler(request);
       }
 
       const toolCallId = readToolCallId(typedRequest);
       if (toolCallId === null) {
-        return new ToolMessage({
-          tool_call_id: 'unknown-tool-call',
-          name: typedRequest.toolCall.name,
-          content: 'agent_tool_effect_call_id_missing',
-          status: 'error'
-        });
+        return createEffectErrorMessage(typedRequest.toolCall.name, 'unknown-tool-call', 'agent_tool_effect_call_id_missing');
       }
-
+      const executionIdentity = readExecutionIdentity(typedRequest);
+      if (executionIdentity === null) {
+        return createEffectErrorMessage(typedRequest.toolCall.name, toolCallId, 'agent_tool_effect_execution_info_missing');
+      }
+      const effectPolicy = requireEffectPolicy(policy);
+      const key: ToolEffectKey = {
+        runId: options.runId,
+        toolCallId,
+        executionPath: executionIdentity.executionPath,
+        checkpointId: executionIdentity.checkpointId
+      };
       const inputHash = hashToolInput({
         args: typedRequest.toolCall.args,
         name: typedRequest.toolCall.name
       });
-      const reusable = options.store.readReusable({
-        runId: options.runId,
-        toolCallId,
-        inputHash
-      });
+      const reusable = options.store.readReusable({ ...key, inputHash });
       if (reusable !== null) {
         return deserializeToolResult(reusable.result);
       }
 
       options.store.start({
-        runId: options.runId,
+        ...key,
         threadId: options.threadId,
-        toolCallId,
         toolName: typedRequest.toolCall.name,
-        inputHash
+        inputHash,
+        effectClass: effectPolicy.effectClass,
+        reconcileStrategy: effectPolicy.reconcileStrategy
       });
       try {
         const result = await handler(request);
         options.store.finishSuccess({
-          runId: options.runId,
-          toolCallId,
+          ...key,
           result: serializeToolResult(result)
         });
         return result;
       } catch (error) {
-        options.store.finishError({
-          runId: options.runId,
-          toolCallId,
-          error
-        });
+        if (effectPolicy.reconcileStrategy === 'manual_confirmation') {
+          options.store.finishUnknown({ ...key, error });
+        } else {
+          options.store.finishError({
+            ...key,
+            error,
+            retryable: toRunFailure(error).retryable
+          });
+        }
         throw error;
       }
     }
   });
 }
 
-export function isSideEffectingToolCall(request: ToolCallRequest): boolean {
-  if (isToolMarkedReadOnly(request.tool)) {
-    return false;
+function requireEffectPolicy(tool: RunCapabilityManifestToolV1): {
+  effectClass: Exclude<RunCapabilityManifestToolV1['effectClass'], 'none'>;
+  reconcileStrategy: Exclude<RunCapabilityReconcileStrategyV1, 'none'>;
+} {
+  if (tool.effectClass === 'none') {
+    throw new Error(`agent_tool_effect_manifest_class_invalid:${tool.modelVisibleName}`);
   }
-  if (readOnlyToolNames.has(request.toolCall.name)) {
-    return false;
+  const reconcileStrategy = tool.reconcileStrategy === undefined
+    ? resolveLegacyReconcileStrategy(tool.effectClass)
+    : tool.reconcileStrategy;
+  if (reconcileStrategy === 'none') {
+    throw new Error(`agent_tool_effect_manifest_reconcile_invalid:${tool.modelVisibleName}`);
   }
-  if (sideEffectingToolNames.has(request.toolCall.name)) {
-    return true;
+  return {
+    effectClass: tool.effectClass,
+    reconcileStrategy
+  };
+}
+
+function resolveLegacyReconcileStrategy(
+  effectClass: RunCapabilityManifestToolV1['effectClass']
+): Exclude<RunCapabilityReconcileStrategyV1, 'none'> {
+  return effectClass === 'network_read' ? 'retry_safe' : 'manual_confirmation';
+}
+
+function readExecutionIdentity(request: ToolCallRequest): { executionPath: string; checkpointId: string } | null {
+  const executionInfo = request.runtime?.executionInfo;
+  if (
+    executionInfo === undefined ||
+    typeof executionInfo.checkpointId !== 'string' ||
+    typeof executionInfo.checkpointNs !== 'string' ||
+    executionInfo.checkpointId.length === 0
+  ) {
+    return null;
   }
-  return isMcpToolName(request.toolCall.name);
+  return {
+    executionPath: executionInfo.checkpointNs.length === 0 ? 'main' : `subagent/${executionInfo.checkpointNs}`,
+    checkpointId: executionInfo.checkpointId
+  };
+}
+
+function createEffectErrorMessage(toolName: string, toolCallId: string, content: string): ToolMessage {
+  return new ToolMessage({
+    tool_call_id: toolCallId,
+    name: toolName,
+    content,
+    status: 'error'
+  });
 }
 
 function serializeToolResult(result: unknown): StoredToolMessage {
@@ -164,10 +201,7 @@ function isStoredToolMessage(value: unknown): value is StoredToolMessage {
 }
 
 function readToolCallId(request: ToolCallRequest): string | null {
-  if (typeof request.toolCall.id !== 'string') {
-    return null;
-  }
-  if (request.toolCall.id.length === 0) {
+  if (typeof request.toolCall.id !== 'string' || request.toolCall.id.length === 0) {
     return null;
   }
   return request.toolCall.id;
@@ -175,36 +209,10 @@ function readToolCallId(request: ToolCallRequest): string | null {
 
 function readToolMessageName(message: ToolMessage): string {
   const name = Reflect.get(message, 'name');
-  if (typeof name !== 'string') {
-    throw new Error('agent_tool_effect_result_name_missing');
-  }
-  if (name.length === 0) {
+  if (typeof name !== 'string' || name.length === 0) {
     throw new Error('agent_tool_effect_result_name_missing');
   }
   return name;
-}
-
-function isMcpToolName(name: string): boolean {
-  return name.includes('__');
-}
-
-function isToolMarkedReadOnly(tool: ClientTool | undefined): boolean {
-  if (tool === undefined) {
-    return false;
-  }
-  const metadata = Reflect.get(tool, 'metadata');
-  if (hasReadOnlyHint(metadata)) {
-    return true;
-  }
-  const annotations = Reflect.get(tool, 'annotations');
-  return hasReadOnlyHint(annotations);
-}
-
-function hasReadOnlyHint(value: unknown): boolean {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return value.readOnlyHint === true || value.readonly === true || value.readOnly === true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

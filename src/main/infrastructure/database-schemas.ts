@@ -433,6 +433,52 @@ export const agentMigrations: RocDatabaseMigration[] = [
         updated_at    TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 9,
+    name: 'agent_effect_execution_identity',
+    sql: `
+      ALTER TABLE agent_tool_effects RENAME TO agent_tool_effects_legacy;
+
+      CREATE TABLE agent_tool_effects (
+        run_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        execution_path TEXT NOT NULL,
+        checkpoint_id TEXT NOT NULL,
+        tool_call_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        effect_class TEXT NOT NULL CHECK(effect_class IN ('external_call','host_execution','network_read','workspace_mutation')),
+        reconcile_strategy TEXT NOT NULL CHECK(reconcile_strategy IN ('retry_safe','manual_confirmation')),
+        status TEXT NOT NULL CHECK(status IN ('in_progress','succeeded','failed_retryable','failed_final','unknown')),
+        result_json TEXT,
+        error_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (run_id, execution_path, checkpoint_id, tool_call_id)
+      );
+
+      INSERT INTO agent_tool_effects
+        (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+         effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
+      SELECT run_id, thread_id, 'legacy-main', 'legacy-checkpoint', tool_call_id, tool_name, input_hash,
+             'external_call', 'manual_confirmation',
+             CASE status
+               WHEN 'success' THEN 'succeeded'
+               WHEN 'error' THEN 'failed_final'
+               WHEN 'in_progress' THEN 'unknown'
+               ELSE status
+             END,
+             result_json, error_json, created_at, updated_at
+      FROM agent_tool_effects_legacy;
+
+      DROP TABLE agent_tool_effects_legacy;
+
+      CREATE INDEX idx_agent_tool_effects_thread_updated
+        ON agent_tool_effects(thread_id, updated_at DESC);
+      CREATE INDEX idx_agent_tool_effects_run_status
+        ON agent_tool_effects(run_id, status);
+    `
   }
 ];
 

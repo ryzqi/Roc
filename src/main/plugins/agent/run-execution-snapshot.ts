@@ -34,6 +34,7 @@ const runCapabilityManifestToolSchema = z
       z.object({ kind: z.literal('required'), allowedDecisions: z.array(z.enum(['approve', 'edit', 'reject'])) }).strict()
     ]),
     idempotencyStrategy: z.enum(['none', 'tool_call']),
+    reconcileStrategy: z.enum(['none', 'retry_safe', 'manual_confirmation']).optional(),
     resourceScope: z.enum(['app', 'workspace', 'memory', 'network', 'external'])
   })
   .strict();

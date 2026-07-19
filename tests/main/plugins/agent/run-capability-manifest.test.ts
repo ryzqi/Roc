@@ -64,6 +64,7 @@ describe('run capability manifest', () => {
           effectClass: 'host_execution',
           approvalPolicy: { kind: 'none' },
           idempotencyStrategy: 'tool_call',
+          reconcileStrategy: 'manual_confirmation',
           resourceScope: 'external'
         }),
         expect.objectContaining({
@@ -73,6 +74,7 @@ describe('run capability manifest', () => {
           effectClass: 'external_call',
           approvalPolicy: { kind: 'required', allowedDecisions: ['approve', 'reject'] },
           idempotencyStrategy: 'tool_call',
+          reconcileStrategy: 'manual_confirmation',
           resourceScope: 'external',
           executionScopes: ['main', 'subagent']
         }),
@@ -116,6 +118,31 @@ describe('run capability manifest', () => {
         mode: 'chat',
         workflowHint: null
       }).manifest.manifestHash
+    );
+  });
+
+  it('classifies hosted web search from local policy instead of generic MCP defaults', () => {
+    const compiled = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'default',
+      mcpApprovalMode: 'default',
+      mcpServers: [mcpServer({ id: 'exa-hosted', allowedTools: [] })],
+      requestedCapabilities: { mcpServers: ['exa-hosted'], skills: [] },
+      skills: [],
+      mode: 'chat',
+      shellAllowedCommands: undefined,
+      workflowHint: null
+    });
+
+    expect(compiled.manifest.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          canonicalIdentity: 'mcp:exa-hosted:web_search',
+          modelVisibleName: 'web_search',
+          effectClass: 'network_read',
+          idempotencyStrategy: 'tool_call',
+          reconcileStrategy: 'retry_safe'
+        })
+      ])
     );
   });
 

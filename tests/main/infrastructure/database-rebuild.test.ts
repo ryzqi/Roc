@@ -58,6 +58,11 @@ describe('rebuildRocDatabases', () => {
       expect(agentDb.prepare('SELECT status FROM agent_threads WHERE id = ?').pluck().get('thread-1')).toBe('interrupted');
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_events').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM session_messages').pluck().get()).toBe(1);
+      expect(agentDb.prepare('SELECT execution_path, checkpoint_id, status FROM agent_tool_effects').get()).toEqual({
+        execution_path: 'main',
+        checkpoint_id: 'checkpoint-1',
+        status: 'succeeded'
+      });
       expect(taskDb.prepare("SELECT name FROM sqlite_master WHERE name = 'task_events'").pluck().get()).toBeUndefined();
       expect(taskDb.prepare('SELECT COUNT(*) FROM background_tasks').pluck().get()).toBe(1);
       expect(memoryDb.prepare('SELECT COUNT(*) FROM langgraph_store_items').pluck().get()).toBe(1);
@@ -76,9 +81,37 @@ describe('rebuildRocDatabases', () => {
       diagnosticsDb.close();
     }
   });
+
+  it('imports v8 agent tool effects as unknown legacy executions', () => {
+    writeOldAgentDatabase(pool.getDatabasePath('agent'), 'v8');
+
+    rebuildRocDatabases({
+      rootDir: root,
+      now: () => '2026-07-06T00:00:00.000Z',
+      backupId: 'migration-v8-effects'
+    });
+
+    const agentDb = new Database(pool.getDatabasePath('agent'), { readonly: true });
+    try {
+      expect(
+        agentDb.prepare(
+          `SELECT execution_path, checkpoint_id, effect_class, reconcile_strategy, status
+           FROM agent_tool_effects`
+        ).get()
+      ).toEqual({
+        execution_path: 'legacy-main',
+        checkpoint_id: 'legacy-checkpoint',
+        effect_class: 'external_call',
+        reconcile_strategy: 'manual_confirmation',
+        status: 'unknown'
+      });
+    } finally {
+      agentDb.close();
+    }
+  });
 });
 
-function writeOldAgentDatabase(path: string): void {
+function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): void {
   withDatabase(path, (db) => {
     db.exec(`
       CREATE TABLE task_threads (
@@ -121,6 +154,43 @@ function writeOldAgentDatabase(path: string): void {
         created_at TEXT NOT NULL
       );
     `);
+    if (effectSchema === 'v8') {
+      db.exec(`
+        CREATE TABLE agent_tool_effects (
+          run_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          tool_call_id TEXT NOT NULL,
+          tool_name TEXT NOT NULL,
+          input_hash TEXT NOT NULL,
+          status TEXT NOT NULL,
+          result_json TEXT,
+          error_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, tool_call_id)
+        );
+      `);
+    } else {
+      db.exec(`
+        CREATE TABLE agent_tool_effects (
+          run_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          execution_path TEXT NOT NULL,
+          checkpoint_id TEXT NOT NULL,
+          tool_call_id TEXT NOT NULL,
+          tool_name TEXT NOT NULL,
+          input_hash TEXT NOT NULL,
+          effect_class TEXT NOT NULL,
+          reconcile_strategy TEXT NOT NULL,
+          status TEXT NOT NULL,
+          result_json TEXT,
+          error_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, execution_path, checkpoint_id, tool_call_id)
+        );
+      `);
+    }
     db.prepare(
       `INSERT INTO task_threads (id, kind, title, goal, status, created_at, updated_at)
        VALUES ('thread-1', 'chat', 'Thread', 'Goal', 'running', '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
@@ -141,6 +211,23 @@ function writeOldAgentDatabase(path: string): void {
       `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
        VALUES ('message-1', 'thread-1', 'user', 'hello', 1, 'visible', 'workspace-a', '2026-07-06T00:00:00.000Z')`
     ).run();
+    if (effectSchema === 'v8') {
+      db.prepare(
+        `INSERT INTO agent_tool_effects
+         (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
+         VALUES ('run-1', 'thread-1', 'call-1', 'run_shell_command', 'hash-1', 'in_progress', NULL, NULL,
+          '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      ).run();
+    } else {
+      db.prepare(
+        `INSERT INTO agent_tool_effects
+         (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+          effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
+         VALUES ('run-1', 'thread-1', 'main', 'checkpoint-1', 'call-1', 'run_shell_command', 'hash-1',
+          'host_execution', 'manual_confirmation', 'succeeded', '{"exitCode":0}', NULL,
+          '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      ).run();
+    }
   });
 }
 

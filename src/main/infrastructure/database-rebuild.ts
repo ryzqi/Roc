@@ -195,6 +195,7 @@ function importAgentRows(input: ImportInput, now: () => string): void {
   importAgentRunEvents(input.sources.agent, input.targets.agent);
   importLangGraphCheckpoints(input.sources.core, input.targets.agent);
   importLangGraphCheckpointWrites(input.sources.core, input.targets.agent);
+  importAgentToolEffects(input.sources.agent, input.targets.agent);
   importAgentToolEffects(input.sources.core, input.targets.agent);
   importContextArtifacts(input.sources.agent, input.targets.agent);
 }
@@ -616,6 +617,59 @@ function importLangGraphCheckpointWrites(source: DatabaseConnection | null, targ
 }
 
 function importAgentToolEffects(source: DatabaseConnection | null, target: DatabaseConnection): void {
+  const columns = readRows<{ name: string }>(source, 'PRAGMA table_info(agent_tool_effects)');
+  if (!columns.some((column) => column.name === 'execution_path')) {
+    importLegacyAgentToolEffects(source, target);
+    return;
+  }
+  type Row = {
+    run_id: string;
+    thread_id: string;
+    execution_path: string;
+    checkpoint_id: string;
+    tool_call_id: string;
+    tool_name: string;
+    input_hash: string;
+    effect_class: string;
+    reconcile_strategy: string;
+    status: string;
+    result_json: string | null;
+    error_json: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  const rows = readRows<Row>(
+    source,
+    `SELECT run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+       effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
+     FROM agent_tool_effects`
+  );
+  const statement = target.prepare(
+    `INSERT OR IGNORE INTO agent_tool_effects (
+      run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+      effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
+    )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  importRows(rows, statement, (row) => [
+    row.run_id,
+    row.thread_id,
+    row.execution_path,
+    row.checkpoint_id,
+    row.tool_call_id,
+    row.tool_name,
+    row.input_hash,
+    row.effect_class,
+    row.reconcile_strategy,
+    row.status,
+    row.result_json,
+    row.error_json,
+    row.created_at,
+    row.updated_at
+  ]);
+}
+
+function importLegacyAgentToolEffects(source: DatabaseConnection | null, target: DatabaseConnection): void {
   type Row = {
     run_id: string;
     thread_id: string;
@@ -634,10 +688,11 @@ function importAgentToolEffects(source: DatabaseConnection | null, target: Datab
      FROM agent_tool_effects`
   );
   const statement = target.prepare(
-    `INSERT INTO agent_tool_effects (
-      run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at
+    `INSERT OR IGNORE INTO agent_tool_effects (
+      run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+      effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, 'legacy-main', 'legacy-checkpoint', ?, ?, ?, 'external_call', 'manual_confirmation', ?, ?, ?, ?, ?)`
   );
   importRows(rows, statement, (row) => [
     row.run_id,
@@ -645,12 +700,25 @@ function importAgentToolEffects(source: DatabaseConnection | null, target: Datab
     row.tool_call_id,
     row.tool_name,
     row.input_hash,
-    row.status,
+    mapLegacyToolEffectStatus(row.status),
     row.result_json,
     row.error_json,
     row.created_at,
     row.updated_at
   ]);
+}
+
+function mapLegacyToolEffectStatus(status: string): string {
+  if (status === 'success') {
+    return 'succeeded';
+  }
+  if (status === 'error') {
+    return 'failed_final';
+  }
+  if (status === 'in_progress') {
+    return 'unknown';
+  }
+  return status;
 }
 
 function importContextArtifacts(source: DatabaseConnection | null, target: DatabaseConnection): void {

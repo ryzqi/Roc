@@ -111,6 +111,8 @@ export type RunCapabilityApprovalPolicyV1 =
   | { kind: 'none' }
   | { kind: 'required'; allowedDecisions: InterruptDecisionType[] };
 
+export type RunCapabilityReconcileStrategyV1 = 'none' | 'retry_safe' | 'manual_confirmation';
+
 export type RunCapabilityManifestToolV1 = {
   canonicalIdentity: string;
   modelVisibleName: string;
@@ -120,6 +122,7 @@ export type RunCapabilityManifestToolV1 = {
   effectClass: RunCapabilityEffectClassV1;
   approvalPolicy: RunCapabilityApprovalPolicyV1;
   idempotencyStrategy: 'none' | 'tool_call';
+  reconcileStrategy?: RunCapabilityReconcileStrategyV1;
   resourceScope: AgentCapabilityScope;
 };
 

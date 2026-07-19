@@ -379,10 +379,26 @@ function insertAgentThreadResidue(input: { runId: string; threadId: string; crea
   agentDb
     .prepare(
       `INSERT INTO agent_tool_effects
-       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(input.runId, input.threadId, 'tool_delete_thread', 'shell', 'hash_delete_thread', 'success', '{}', null, input.createdAt, input.createdAt);
+    .run(
+      input.runId,
+      input.threadId,
+      'main',
+      'checkpoint_delete_thread',
+      'tool_delete_thread',
+      'shell',
+      'hash_delete_thread',
+      'host_execution',
+      'manual_confirmation',
+      'succeeded',
+      '{}',
+      null,
+      input.createdAt,
+      input.createdAt
+    );
   agentDb
     .prepare(
       `INSERT INTO context_artifacts

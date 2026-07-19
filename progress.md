@@ -407,3 +407,17 @@
 - Hook implementation：`HookRuntime.runEvent()` 按配置顺序串行执行，block 后不启动后续 handler；`RocHookMiddleware`、runtime executor 与 lifecycle `SessionEnd` 传递同一 run signal；runner 已支持预取消、运行中 abort、timeout 和 Windows tree termination。
 - Verified passing：focused 8 files / 74 tests、真实 Windows Hook child-tree fixture 通过；`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm verify:paths`、`pnpm build`、`pnpm test`（299 files / 1604 tests）和 `git diff --check` 均通过。Full test 仅有已知 `node-pty AttachConsole failed` teardown 噪音，Vitest exit 0。
 - 当前状态：Verified passing；准备独立 Part 4 commit，继续保留未跟踪用户文件 `plan.md`。
+
+## 2026-07-19 — Stage 4 Part 4 committed / Part 5 discovery
+
+- Part 4 已提交 `e75a754 feat(agent): harden web and hook execution`；`plan.md` 继续排除。
+- Part 5 目标：冻结 effect state、补 subagent execution path identity，并让 reconcile 基于 checkpoint/effect evidence，禁止 crash unknown 盲重试。
+- 下一步：先用 CodeGraph 定位 `AgentToolEffectStore`、`tool-effect-idempotency` middleware、subagent tool/effect 调用和 startup reconcile 的真实边界，再建立红测。
+
+## 2026-07-19 — Stage 4 Part 5 verified / commit gate
+
+- Red/green：effect key 加入 checkpoint/subagent execution path；manifest 成为 effect class/reconcile 的最终事实源，MCP `readOnlyHint` 不再绕过本地分类；retry-safe failure 可显式重试，manual-confirmation failure 固化为 `unknown` 并拒绝盲重试。
+- Persistence/restart：agent schema v9 持久化完整状态机和策略；v8 migration/rebuild 将旧 `in_progress` 映射为 `unknown`；startup reconcile 在读取 restart evidence 前固化悬空 effect。
+- Risk review repairs：补 hosted `web_search -> network_read/retry_safe` 本地分类、缺失 execution info fail-closed、v8/v9 rebuild source detection，并删除重复的 test-only reconcile API。最终无未处置 finding。
+- Verification：affected suite 15 files / 95 tests；`pnpm typecheck`、strict unused、`pnpm check:ipc`、`pnpm verify:paths`、`git diff --check`、`pnpm build` 均通过。
+- Broad：`pnpm test` 299 files / 1613 tests passed，exit 0；已知 Windows `node-pty AttachConsole failed` teardown 噪音不改变结果。`plan.md` 继续排除提交。

@@ -122,7 +122,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 8 without changing earlier versions', () => {
+  it('applies agent migrations through version 9 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -139,12 +139,78 @@ describe('database migrations', () => {
       { version: 5, name: 'agent_terminal_outbox' },
       { version: 6, name: 'agent_event_sequence_cursors' },
       { version: 7, name: 'agent_outbox_monotonic_sequence' },
-      { version: 8, name: 'agent_notification_metrics' }
+      { version: 8, name: 'agent_notification_metrics' },
+      { version: 9, name: 'agent_effect_execution_identity' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 8
+      currentVersion: 9
     });
+  });
+
+  it('migrates v8 tool effects without treating a restarted effect as still in progress', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 8),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    const insert = db.prepare(
+      `INSERT INTO agent_tool_effects
+       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, 'thread_legacy_effect', ?, 'run_shell_command', 'hash_legacy', ?, NULL, NULL,
+         '2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z')`
+    );
+    insert.run('run_success', 'call_success', 'success');
+    insert.run('run_error', 'call_error', 'error');
+    insert.run('run_in_progress', 'call_in_progress', 'in_progress');
+    insert.run('run_unknown', 'call_unknown', 'unknown');
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(
+      db.prepare(
+        `SELECT run_id, execution_path, checkpoint_id, effect_class, reconcile_strategy, status
+         FROM agent_tool_effects
+         ORDER BY run_id`
+      ).all()
+    ).toEqual([
+      {
+        run_id: 'run_error',
+        execution_path: 'legacy-main',
+        checkpoint_id: 'legacy-checkpoint',
+        effect_class: 'external_call',
+        reconcile_strategy: 'manual_confirmation',
+        status: 'failed_final'
+      },
+      {
+        run_id: 'run_in_progress',
+        execution_path: 'legacy-main',
+        checkpoint_id: 'legacy-checkpoint',
+        effect_class: 'external_call',
+        reconcile_strategy: 'manual_confirmation',
+        status: 'unknown'
+      },
+      {
+        run_id: 'run_success',
+        execution_path: 'legacy-main',
+        checkpoint_id: 'legacy-checkpoint',
+        effect_class: 'external_call',
+        reconcile_strategy: 'manual_confirmation',
+        status: 'succeeded'
+      },
+      {
+        run_id: 'run_unknown',
+        execution_path: 'legacy-main',
+        checkpoint_id: 'legacy-checkpoint',
+        effect_class: 'external_call',
+        reconcile_strategy: 'manual_confirmation',
+        status: 'unknown'
+      }
+    ]);
   });
 
   it('quarantines legacy non-terminal agent runs that have no execution snapshot', () => {

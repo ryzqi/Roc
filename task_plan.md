@@ -6,7 +6,7 @@
 
 ## Current Phase
 
-Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
+Stage 5 — Context, Checkpoint, HITL Conformance
 
 ## Phases
 
@@ -59,10 +59,10 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 - [x] Part 1：main/subagent 共享安全装配与 immutable manifest 合同；scope exposure 与 background inventory drift 已修复，独立复核无新 finding，focused/static/build/full-test gate 通过，已提交。
 - [x] Part 2：native model/tool budget 与结构化终止；review repair、IPC、build、full-test gate 通过，已提交。
 - [x] Part 3：shell host execution、background pre-authorization、path/env/output/abort；interactive 无审批，background 白名单冻结进 occurrence/run，旧 background snapshot fail-closed，Windows tree abort 与 output artifact 已覆盖。
-- [x] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交（credentials/private URL、Jina provenance、2 MiB byte cap、caller abort、串行 hook/block short-circuit、SessionEnd/lifecycle signal、Windows Hook child-tree、full verification 已完成；待 commit）。
-- [ ] Part 5：effect state、subagent execution path 与 reconcile 合同；独立 review、修复、验证、提交。
-- [ ] Stage exit：全量验证、最终独立 review、提交。
-- **Status:** in_progress
+- [x] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交（credentials/private URL、Jina provenance、2 MiB byte cap、caller abort、串行 hook/block short-circuit、SessionEnd/lifecycle signal、Windows Hook child-tree、full verification 已完成；已提交 `e75a754`）。
+- [x] Part 5：effect state、subagent execution path 与 reconcile 合同；risk review 修复 v8 unknown 迁移、hosted web search 本地分类和 retry/unknown 回归，focused/static/build/full-test gate 通过。
+- [x] Stage exit：全量验证、最终 risk review、Part 1–5 独立提交。
+- **Status:** complete
 
 ### Stage 5: Context, Checkpoint, HITL Conformance
 

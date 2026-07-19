@@ -159,10 +159,26 @@ function insertRunPayloadRows(runId: string, threadId: string, createdAt: string
   agentDb
     .prepare(
       `INSERT INTO agent_tool_effects
-       (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(runId, threadId, `tool_${runId}`, 'read_file', `hash_${runId}`, 'success', '{}', null, createdAt, createdAt);
+    .run(
+      runId,
+      threadId,
+      'main',
+      `checkpoint_${runId}`,
+      `tool_${runId}`,
+      'read_file',
+      `hash_${runId}`,
+      'network_read',
+      'retry_safe',
+      'succeeded',
+      '{}',
+      null,
+      createdAt,
+      createdAt
+    );
   agentDb
     .prepare(
       `INSERT INTO context_artifacts

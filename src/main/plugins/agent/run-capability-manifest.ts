@@ -249,6 +249,7 @@ function compileManifestTools(
       effectClass,
       approvalPolicy: resolveApprovalPolicy(card.name, interruptOn),
       idempotencyStrategy: effectClass === 'none' ? 'none' : 'tool_call',
+      reconcileStrategy: resolveReconcileStrategy(effectClass),
       resourceScope: card.scope
     };
   });
@@ -309,8 +310,21 @@ function createRuntimeManifestTool(
     effectClass,
     approvalPolicy: { kind: 'none' },
     idempotencyStrategy,
+    reconcileStrategy: resolveReconcileStrategy(effectClass),
     resourceScope
   };
+}
+
+function resolveReconcileStrategy(
+  effectClass: RunCapabilityManifestToolV1['effectClass']
+): RunCapabilityManifestToolV1['reconcileStrategy'] {
+  if (effectClass === 'none') {
+    return 'none';
+  }
+  if (effectClass === 'network_read') {
+    return 'retry_safe';
+  }
+  return 'manual_confirmation';
 }
 
 function compileManifestSkills(skills: SkillSnapshot[]): RunCapabilityManifestSkillV1[] {
@@ -340,7 +354,7 @@ function resolveEffectClass(card: AgentCapabilityCard): RunCapabilityEffectClass
   if (card.id === 'builtin:delete_file') {
     return 'workspace_mutation';
   }
-  if (card.id === 'web:web_read') {
+  if (card.id === 'web:web_read' || card.id === 'mcp:exa-hosted:web_search') {
     return 'network_read';
   }
   if (card.capabilityType === 'mcp_tool') {

@@ -543,6 +543,7 @@ export class AgentSessionRepository {
     const reconciled: TaskRun[] = [];
 
     for (const candidate of candidates) {
+      this.markRestartedToolEffectsUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
       if (
         candidate.status === 'waiting_user' &&
@@ -1138,12 +1139,22 @@ export class AgentSessionRepository {
       .prepare('SELECT 1 FROM langgraph_checkpoints WHERE thread_id = ? LIMIT 1')
       .get(candidate.thread_id) as { 1: number } | undefined;
     const effect = this.db
-      .prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status IN ('in_progress', 'unknown') LIMIT 1")
+      .prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status = 'unknown' LIMIT 1")
       .get(candidate.id) as { 1: number } | undefined;
     return {
       hasCheckpoint: checkpoint !== undefined,
       hasInFlightEffect: effect !== undefined
     };
+  }
+
+  private markRestartedToolEffectsUnknown(runId: string): void {
+    this.db
+      .prepare(
+        `UPDATE agent_tool_effects
+         SET status = 'unknown', updated_at = ?
+         WHERE run_id = ? AND status = 'in_progress'`
+      )
+      .run(new Date().toISOString(), runId);
   }
 
   private verifyWaitingUserSnapshot(runId: string): void {
