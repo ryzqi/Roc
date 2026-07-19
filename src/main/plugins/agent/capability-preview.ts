@@ -6,7 +6,8 @@ import type {
   EnabledCapabilities,
   McpServerSnapshot,
   SkillSnapshot,
-  ChatRunMode
+  ChatRunMode,
+  WorkflowHint
 } from '../../../shared/types';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
 import { compileRunCapabilityManifest } from './run-capability-manifest';
@@ -20,6 +21,7 @@ export function buildAgentCapabilityPreview(input: {
   runtimeStatus: AgentRuntimeStatus;
   skills: SkillSnapshot[];
   mode: ChatRunMode;
+  workflowHint: WorkflowHint;
 }): AgentCapabilityPreview {
   const defaultModelState = input.runtimeStatus.defaultModelState;
   if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null) {
@@ -58,6 +60,7 @@ export function buildDeepAgentConfigPreview(input: {
     mcpApprovalMode: 'fully_automatic',
     mcpServers: [],
     mode: input.mode,
+    workflowHint: null,
     requestedCapabilities: {
       mcpServers: [],
       skills: []

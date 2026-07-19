@@ -699,6 +699,7 @@ function capabilityPreview(
       allowedTools: []
     })),
     mode: 'chat',
+    workflowHint: null,
     requestedCapabilities: selectedCapabilities,
     skills: manifestSkillIds.map((id) => ({
       id,

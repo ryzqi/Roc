@@ -489,6 +489,7 @@ function createCapabilityPreview(
     mcpApprovalMode: 'fully_automatic',
     mcpServers: [],
     mode: 'chat',
+    workflowHint: null,
     requestedCapabilities,
     skills: []
   });

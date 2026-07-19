@@ -320,7 +320,7 @@ function createCapabilityPreviewProvider(
     return undefined;
   }
   const capabilityPreviewOptions = options.capabilityPreview;
-  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus }) =>
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, workflowHint }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
       explicitSkillIds,
@@ -329,7 +329,8 @@ function createCapabilityPreviewProvider(
       mode,
       requestedCapabilities,
       runtimeStatus,
-      skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {})
+      skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
+      workflowHint
     });
 }
 

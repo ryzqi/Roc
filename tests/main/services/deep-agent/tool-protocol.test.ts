@@ -1,7 +1,13 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { BackgroundTaskPreview, BackgroundTaskPreviewRequest } from '../../../../src/shared/types';
+import type {
+  BackgroundTaskPreview,
+  BackgroundTaskPreviewRequest,
+  RunCapabilityExecutionScopeV1,
+  RunCapabilityManifestToolV1,
+  RunCapabilityManifestV1
+} from '../../../../src/shared/types';
 import { createToolProtocolMiddleware, normalizeToolCallArgs } from '../../../../src/main/services/deep-agent/tool-protocol';
 import { createBackgroundTaskTools, proposeToolInputSchema } from '../../../../src/main/services/deep-agent/background-task-tools';
 import { PreviewStore } from '../../../../src/main/services/forge-guardrails';
@@ -146,7 +152,12 @@ describe('deep agent tool protocol', () => {
       schema,
       func: async (input) => input.trigger.description
     });
-    const middleware = createToolProtocolMiddleware();
+    const middleware = createToolProtocolMiddleware({
+      capabilityManifest: createCapabilityManifest([
+        createManifestTool('propose_background_task', ['main'])
+      ]),
+      executionScope: 'main'
+    });
     if (typeof middleware.wrapToolCall !== 'function') {
       throw new Error('Expected tool protocol middleware to expose wrapToolCall.');
     }
@@ -183,4 +194,90 @@ describe('deep agent tool protocol', () => {
       })
     );
   });
+
+  it('rejects unregistered, out-of-scope, and identity-drift tool calls before invoking their handlers', async () => {
+    const webReadTool = createNamedTool('web_read');
+    const shellTool = createNamedTool('run_shell_command');
+    const scheduleTool = createNamedTool('schedule_background_task');
+    const handler = vi.fn(async () => 'unexpected_handler_call');
+    const mainManifest = createCapabilityManifest([
+      createManifestTool('web_read', ['main'])
+    ]);
+    const mainMiddleware = createToolProtocolMiddleware({
+      capabilityManifest: mainManifest,
+      executionScope: 'main'
+    });
+    const subagentMiddleware = createToolProtocolMiddleware({
+      capabilityManifest: mainManifest,
+      executionScope: 'subagent'
+    });
+    const backgroundSubagentMiddleware = createToolProtocolMiddleware({
+      capabilityManifest: createCapabilityManifest([
+        createManifestTool('schedule_background_task', ['main'])
+      ]),
+      executionScope: 'subagent'
+    });
+
+    await expect(mainMiddleware.wrapToolCall?.({
+      tool: shellTool,
+      toolCall: { name: 'run_shell_command', args: {}, id: 'call-unregistered' }
+    } as never, handler as never)).rejects.toThrow('agent_capability_manifest_tool_not_authorized:run_shell_command');
+    await expect(mainMiddleware.wrapToolCall?.({
+      tool: scheduleTool,
+      toolCall: { name: 'schedule_background_task', args: {}, id: 'call-runtime-unregistered' }
+    } as never, handler as never)).rejects.toThrow('agent_capability_manifest_tool_not_authorized:schedule_background_task');
+    await expect(subagentMiddleware.wrapToolCall?.({
+      tool: webReadTool,
+      toolCall: { name: 'web_read', args: {}, id: 'call-out-of-scope' }
+    } as never, handler as never)).rejects.toThrow('agent_capability_manifest_scope_denied:web_read:subagent');
+    await expect(mainMiddleware.wrapToolCall?.({
+      tool: shellTool,
+      toolCall: { name: 'web_read', args: {}, id: 'call-identity-drift' }
+    } as never, handler as never)).rejects.toThrow('agent_capability_manifest_tool_identity_mismatch:web_read');
+    await expect(backgroundSubagentMiddleware.wrapToolCall?.({
+      tool: scheduleTool,
+      toolCall: { name: 'schedule_background_task', args: {}, id: 'call-background-scope' }
+    } as never, handler as never)).rejects.toThrow('agent_capability_manifest_scope_denied:schedule_background_task:subagent');
+
+    expect(handler).not.toHaveBeenCalled();
+  });
 });
+
+function createCapabilityManifest(tools: RunCapabilityManifestToolV1[] = []): RunCapabilityManifestV1 {
+  return {
+    schemaVersion: 1,
+    manifestHash: 'manifest-hash',
+    requestedCapabilities: { mcpServers: [], skills: [] },
+    resolvedCapabilities: { mcpServers: [], skills: [] },
+    skippedCapabilities: [],
+    tools,
+    skills: [],
+    untrustedContextPolicy: 'external_content_reference_only'
+  };
+}
+
+function createManifestTool(
+  modelVisibleName: string,
+  executionScopes: RunCapabilityExecutionScopeV1[]
+): RunCapabilityManifestToolV1 {
+  return {
+    canonicalIdentity: `builtin:${modelVisibleName}`,
+    modelVisibleName,
+    provenance: { kind: 'builtin', source: 'roc' },
+    executionScopes,
+    riskLevel: 'medium',
+    effectClass: 'network_read',
+    approvalPolicy: { kind: 'none' },
+    idempotencyStrategy: 'none',
+    resourceScope: 'network'
+  };
+}
+
+function createNamedTool(name: string) {
+  return new DynamicStructuredTool({
+    name,
+    description: `${name} tool`,
+    schema: z.object({}),
+    func: async () => ''
+  });
+}

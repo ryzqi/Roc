@@ -2,6 +2,7 @@ import type { ClientTool } from '@langchain/core/tools';
 import { describe, expect, it, vi } from 'vitest';
 import type { RocCompositeBackend } from '../../src/main/services/deep-agent/backend';
 import type { DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
+import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
 
 const mocked = vi.hoisted(() => ({
   createDeepAgent: vi.fn(() => ({ __agent: true })),
@@ -50,10 +51,17 @@ function createBuildInput(): DeepAgentBuildInput {
     subagents: [],
     tools: [
       fakeTool('web_read'),
-      fakeTool('schedule_background_task'),
-      fakeTool('update_background_task'),
-      fakeTool('cancel_background_task')
+      fakeTool('schedule_background_task')
     ],
+    capabilityManifest: compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      mode: 'chat',
+      workflowHint: 'propose_background_task',
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: []
+    }).manifest,
     filesystemPermissions: [],
     workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,

@@ -276,3 +276,86 @@
 
 - 已提交 `bc87156 feat(task): make scheduled occurrences durable`；仅保留用户未跟踪 `plan.md`。
 - Stage 4 需要 Shell scope 产品选择后才能开始：interactive shell 逐次审批、background shell durable pre-authorization；若要求 workspace isolation，需授权 OS sandbox 路线。
+
+## 2026-07-18 — Stage 4 Gate confirmed / Part 1 discovery
+
+- 用户确认：interactive shell 无审批，目标最小化人工参与。background shell 保持任务创建时 durable pre-authorization；所有 shell 继续标为 host code execution，不虚构 workspace isolation。
+- 当前 Part 1：先核实 `buildDeepAgent()` 与 custom subagent 的 middleware、manifest、effect 装配；再写稳定红测。未修改生产代码。
+- 官方网页检索工具两次返回 `Invalid URL`。按错误协议不再重试；使用本机官方-skill 镜像、已安装 TypeScript 声明和真实回归测试核验。
+
+## 2026-07-18 — Stage 4 Part 1 implementation / review pending
+
+- Red：新增 `execution-safety-scopes.test.ts`，在无 hook runtime 的 chat run 中断言 main、general-purpose、research 共享 safety middleware 与 frozen `interruptOn`；初始稳定失败于 general-purpose 未显式创建。
+- Green：`agent-builder.ts` 改为显式创建 run-mode general-purpose；所有 declarative run/plan subagent 注入现有 shell/path/protocol/effect/error-budget/error-envelope middleware，并继承 parent `interruptOn`。main 保持 context compaction 在 rescue parsing 前；该顺序首次回归失败后已定点恢复。
+- 验证：`rtk pnpm exec vitest run tests/main/services/deep-agent/execution-safety-scopes.test.ts` 1/1 通过；`rtk pnpm exec vitest run tests/main/deep-agent-build-wiring.test.ts` 14/14 通过；`rtk pnpm typecheck` 通过。
+- 下一步：启动独立只读 Part 1 review；有问题先修复、复验、复审，清洁后独立提交。
+
+## 2026-07-18 — Stage 4 Part 1 review finding / repair discovery
+
+- Standards review：无 findings。
+- Spec review P1：共享 safety middleware 尚未消费 frozen capability manifest；main/subagent 可以在 build input drift 时接收未登记或错误 execution scope 的 tool。下一步定位 executor snapshot rehydration、manifest 与 tool protocol call path，写 runtime red test 后定点 enforcement；未提交。
+
+## 2026-07-18 — Stage 4 Part 1 P1 repair / re-review pending
+
+- Red：protocol scope test 证明未登记 `run_shell_command`、错误 scope `web_read`、runtime tool-name drift 都会到达 handler。
+- Green：executor 把 immutable snapshot manifest 传入 `buildDeepAgent()`；`RocToolProtocolMiddleware` 在 normalizing args 前校验 identity、manifest membership 与 `main|subagent` scope。只允许显式 DeepAgents built-in、Roc runtime internal 或 manifest 工具；fixture 的 delete-file 测试补其真实 manifest capability，不放宽 guard。
+- 验证：扩展 Vitest 11 files / 71 tests、`rtk pnpm typecheck`、strict unused scan、`rtk git diff --check` 均通过。
+- 下一步：新 Standards/Spec reviewers 只读复审 P1 repair；无 findings 后提交 Part 1。
+
+## 2026-07-18 — Stage 4 Part 1 re-review P1 / manifest inventory
+
+- Standards 与 Spec re-review 均发现 `ROC_RUNTIME_TOOL_NAMES` bypass：manifest 未登记的 model-visible Roc runtime tools 不受 authorization 或 execution scope 限制。未提交。
+- 下一步：扩展 immutable manifest，使 runtime tool identity/scope 从 snapshot 读取；删除 protocol 的名称 bypass，新增 subagent 拒绝 mutation/background task 的回归后复验、复审。
+
+## 2026-07-18 — Stage 4 Part 1 P1 repairs / final re-review pending
+
+- Red：manifest 缺 `write_file`、`schedule_background_task`、`session_search`；opaque compiled subagent 没有失败；runtime-name bypass 允许未登记 schedule tool 到 handler。
+- Green：manifest 加入全部模型可见 Roc runtime tool identity/effect/scope；protocol 删除名称 bypass。background/user/session scope 为 main；write/edit 维持既有 main/subagent surface。builder 在所有模式先拒绝无法注入 safety middleware 的 compiled/async subagent。
+- 验证：扩展 Vitest 11 files / 73 tests、`rtk pnpm typecheck`、strict unused scan、`rtk git diff --check` 均通过。
+- 下一步：新 Standards/Spec reviewers 复审上述 P1 repair；无 findings 后执行 broader verification 和 Part 1 commit。
+
+## 2026-07-18 — Stage 4 Part 1 final review findings
+
+- Standards final review P1：general-purpose 子代理目前得到所有 main tools，包括 manifest 限 main 的 ask_user；protocol 虽拒绝调用，但模型不应看见不可执行 tool。P2：普通/plan run manifest 无条件列 background task tools，但 executor 不注册它们。
+- 下一步：scope filter 在 builder 生成 tool surface 前执行；capability manifest 编译接收 workflow hint，background inventory 按实际 executor surface 冻结；将 direct builder fixtures 改为真实 manifest 后复验、复审。
+
+## 2026-07-19 — Stage 4 Part 1 resumed
+
+- 已恢复 `task_plan.md`、`findings.md`、`progress.md`；session catchup 无未同步上下文。
+- CodeGraph 已确认 final review 两项缺口的当前调用链。验收顺序：红测 → scope/inventory 定点修复 → focused verification → 独立复审 → broader verification → Part 1 commit。
+- 当前工作树为既有 Stage 4 Part 1 WIP；用户未跟踪 `plan.md` 保留，不纳入提交。
+- 已核对当前 diff：workflow-dependent manifest 红色期望已存在但生产尚未实现；builder fixture 尚未覆盖 main-only tool 预过滤。下一步先跑现有红测，再补第二条红测。
+- Red verified：`rtk pnpm exec vitest run tests/main/plugins/agent/run-capability-manifest.test.ts` 为 1 failed / 5 passed；普通 chat manifest 错误包含 `schedule_background_task`。
+- Builder fixture audit：现有 scope test 已写 main-only exposure 断言，但 manifest fixture 不真实。先改为 compiler 产物，再确认 exposure 红测，不直接接受当前假 hash。
+- Fixture inventory：builder wiring 14 个输入、scope 3 个输入需显式真实 manifest；保持其余测试 stub 不动。
+- 类型声明宽范围检索 exit 1 且无输出；改为先定位 `node_modules\deepagents` 实际目录与本地 `types.ts`。
+- DeepAgents 声明确认 declarative subagent tools 为 `StructuredTool[]`；实现将按 manifest `executionScopes` 过滤 general-purpose 和 custom subagent tool surface。
+- Scope red run：main-only exposure 按预期失败（收到 `ask_user, inspect_workspace`）；opaque fixture 未抛错，原因是测试对象仍含 declarative `systemPrompt`，需按真实 `CompiledSubAgent` 形状修夹具。
+- Opaque fixture 已按真实 `CompiledSubAgent` 形状修正；scope suite 现仅 main-only exposure 失败。Exposure 断言已扩到 general-purpose 与 declarative custom subagent。
+- Green：manifest focused 6/6、execution safety scope 3/3 通过。下一步跑 typecheck，补齐所有 compiler 调用的必填 workflow contract 与 direct builder fixtures。
+- Typecheck：18 errors / 6 files，全部为新必填 `workflowHint` 未传或 preview 输入仍 optional；无其他错误。进入机械合同补齐。
+- Runtime helper 组合检索因无匹配 `rg` exit 1 丢失输出；改为分离搜索与定点读取。
+- Typecheck attempt 2：剩余 5 errors / 3 files，仍仅 downstream `buildAgentCapabilityPreview()` fixture 缺 `workflowHint`；继续显式补 `null`。
+- Typecheck attempt 3 passed。Builder wiring baseline 14/14 failed at `manifest.tools` because all direct fixtures masked the new required field；进入 compiler-backed fixture repair。
+- Builder fixture repair green：14/14 passed；所有 wiring 调用经真实 compiler manifest，两个遗留非法 `workflowHint: 'default'` 已改为 `null`。
+- Part 1 final-finding repair verification：focused aggregate 10 files / 73 tests passed；`pnpm typecheck`、strict unused scan、`git diff --check` passed。下一步独立 Standards/Spec 复审。
+- Standards review finding：`full-stack.test.ts` 与 `deep-agent-tool-retry.test.ts` 仍使用手写/伪 manifest；executor background tool array 与 manifest inventory 分离维护，存在 drift。两项均在 commit 前修复。
+- Spec review 首次 worker 因 provider HTTP 429 失败；待修复后用窄 prompt 重跑只读 Spec review。
+- Executor repair direction fixed：manifest name set 直接决定实际 background tool surface；不新增 workflow mode fallback，不改变 tool handlers。
+- Standards repair focused verification：deep-agent-executor、executor-tools、full-stack、tool-retry 4 files / 34 tests passed。下一步 typecheck + aggregate + 独立复审。
+- Post-Standards aggregate：12 files / 102 tests passed；`pnpm typecheck`、strict unused、`pnpm check:ipc`、`git diff --check` passed。Standards finding repair is changed, verified locally; waiting Spec review before commit.
+
+## 2026-07-19 — Stage 4 Part 1 continuation review
+
+- 恢复后重新读取 `task_plan.md`、`findings.md`、`progress.md`、`plan.md`；session catchup 无未同步上下文。
+- CodeGraph 与源码复核确认：executor background tool surface 由 frozen manifest 名称集筛选；MCP 按 manifest provenance/name 选择；`session_search` 由 context assembler 追加且 compiler 已登记；builder 在 model exposure 前按 execution scope 过滤 general-purpose 与 declarative custom subagent tools，protocol 再做 identity/membership/scope enforcement。
+- Fresh focused gate：8 files / 50 tests passed，覆盖 builder wiring、scope exposure、manifest inventory、preview/runtime、tool protocol、retry 与 full-stack guardrail。
+- Fresh static gate：`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`git diff --check` 全部通过。
+- 当前未发现新的 Part 1 spec/standards 缺口。下一步：fresh build、全量 Vitest；通过后更新 Part 1 状态并提交独立 commit。
+
+## 2026-07-19 — Stage 4 Part 1 verified / commit gate
+
+- Final CodeGraph review：`buildDeepAgent -> createExecutionSafetyMiddleware -> createToolProtocolMiddleware` 调用链完整；manifest inventory、subagent scope filter、MCP provenance selection 无新增问题。
+- Final preview contract review：外部 `agent.capability.preview` 只服务普通能力预览；实际 workflow-aware preview 在 `startRun -> getRunCapabilityPreview -> compileRunCapabilityManifest` 内部冻结，未发生 preview/executor 分叉。
+- Broad verification：`pnpm build` 成功；`pnpm test` 298 files / 1583 tests passed，Vitest exit 0；Windows node-pty teardown `AttachConsole failed` 为既有噪音。
+- Part 1 状态：Verified passing；已提交独立 commit；未跟踪用户文件 `plan.md` 保持排除。

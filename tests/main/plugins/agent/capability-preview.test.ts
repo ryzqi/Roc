@@ -14,7 +14,8 @@ describe('agent capability preview', () => {
       },
       runtimeStatus: readyRuntimeStatus(),
       skills: [],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
 
     expect(preview.toolCards.map((card) => card.name)).not.toEqual(
@@ -66,7 +67,8 @@ describe('agent capability preview', () => {
       },
       runtimeStatus: readyRuntimeStatus(),
       skills: [],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
 
     expect(mcpDefaultPreview.toolCards.find((card) => card.name === 'delete_file')).toMatchObject({
@@ -103,7 +105,8 @@ describe('agent capability preview', () => {
       },
       runtimeStatus: readyRuntimeStatus(),
       skills: [],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
 
     expect(deleteFileDefaultPreview.toolCards.find((card) => card.name === 'delete_file')?.requiresApproval).toBe(true);

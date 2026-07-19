@@ -1,14 +1,21 @@
 import { createMiddleware } from 'langchain';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1 } from '../../../shared/types';
 
 const JSON_HANDOFF_FIELDS_BY_TOOL = {
   propose_background_task: new Set(['trigger']),
   update_background_task: new Set(['patch.trigger'])
 } as const;
 
-export function createToolProtocolMiddleware() {
+export type ToolProtocolOptions = {
+  capabilityManifest: RunCapabilityManifestV1;
+  executionScope: RunCapabilityExecutionScopeV1;
+};
+
+export function createToolProtocolMiddleware(_options: ToolProtocolOptions) {
   return createMiddleware({
     name: 'RocToolProtocolMiddleware',
     wrapToolCall: async (request, handler) => {
+      assertCapabilityManifestToolContract(_options, request);
       const normalizedArgs = normalizeToolCallArgs(request.toolCall.name, request.toolCall.args);
       if (normalizedArgs === request.toolCall.args) {
         return await handler(request);
@@ -22,6 +29,26 @@ export function createToolProtocolMiddleware() {
       });
     }
   });
+}
+
+function assertCapabilityManifestToolContract(
+  options: ToolProtocolOptions,
+  request: { tool?: unknown; toolCall: { name: string } }
+): void {
+  let runtimeToolName: unknown;
+  if (request.tool !== null && typeof request.tool === 'object') {
+    runtimeToolName = Reflect.get(request.tool, 'name');
+  }
+  if (typeof runtimeToolName === 'string' && runtimeToolName !== request.toolCall.name) {
+    throw new Error(`agent_capability_manifest_tool_identity_mismatch:${request.toolCall.name}`);
+  }
+  const manifestTool = options.capabilityManifest.tools.find((tool) => tool.modelVisibleName === request.toolCall.name);
+  if (manifestTool === undefined) {
+    throw new Error(`agent_capability_manifest_tool_not_authorized:${request.toolCall.name}`);
+  }
+  if (!manifestTool.executionScopes.includes(options.executionScope)) {
+    throw new Error(`agent_capability_manifest_scope_denied:${request.toolCall.name}:${options.executionScope}`);
+  }
 }
 
 export function normalizeToolCallArgs(toolName: string, args: unknown): unknown {

@@ -17,13 +17,33 @@ import type {
   SkillSnapshot,
   SkippedCapability
 } from '../../../shared/types';
+import type { WorkflowHint } from '../../../shared/types';
 import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-tool-exposure';
 import { DEEP_AGENT_BUILT_IN_TOOLS } from '../../services/deep-agent/types';
 
 const deleteFileAllowedDecisions: InterruptDecisionType[] = ['approve', 'edit', 'reject'];
 const mcpAllowedDecisions: InterruptDecisionType[] = ['approve', 'reject'];
+const runtimeManifestToolNames = [
+  'ask_user',
+  'cancel_background_task',
+  'edit_file',
+  'glob',
+  'grep',
+  'ls',
+  'propose_background_task',
+  'read_background_task',
+  'read_file',
+  'resolve_background_task_time',
+  'schedule_background_task',
+  'session_search',
+  'task',
+  'update_background_task',
+  'write_file',
+  'write_todos'
+] as const;
 const reservedMcpModelVisibleToolNames = new Set<string>([
   ...DEEP_AGENT_BUILT_IN_TOOLS,
+  ...runtimeManifestToolNames,
   'ask_user',
   'delete_file',
   'execute',
@@ -45,6 +65,7 @@ export function compileRunCapabilityManifest(input: {
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   mode: ChatRunMode;
+  workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
   skills: SkillSnapshot[];
 }): CompiledRunCapabilityManifest {
@@ -128,7 +149,13 @@ export function compileRunCapabilityManifest(input: {
       skills: resolvedSkills
     },
     skippedCapabilities,
-    tools: compileManifestTools(toolCards, interruptOn),
+    tools: [
+      ...compileManifestTools(toolCards, interruptOn),
+      ...createRuntimeManifestTools({
+        mode: input.mode,
+        workflowHint: input.workflowHint
+      })
+    ],
     skills: compileManifestSkills(manifestSkills),
     untrustedContextPolicy: 'external_content_reference_only' as const
   };
@@ -222,6 +249,65 @@ function compileManifestTools(
       resourceScope: card.scope
     };
   });
+}
+
+function createRuntimeManifestTools(input: {
+  mode: ChatRunMode;
+  workflowHint: WorkflowHint;
+}): RunCapabilityManifestToolV1[] {
+  const tools = [
+    createRuntimeManifestTool('write_todos', ['main', 'subagent'], 'app', 'none', 'none'),
+    createRuntimeManifestTool('task', ['main'], 'app', 'none', 'none'),
+    createRuntimeManifestTool('ls', ['main', 'subagent'], 'workspace', 'none', 'none'),
+    createRuntimeManifestTool('read_file', ['main', 'subagent'], 'workspace', 'none', 'none'),
+    createRuntimeManifestTool('write_file', ['main', 'subagent'], 'workspace', 'workspace_mutation', 'tool_call'),
+    createRuntimeManifestTool('edit_file', ['main', 'subagent'], 'workspace', 'workspace_mutation', 'tool_call'),
+    createRuntimeManifestTool('glob', ['main', 'subagent'], 'workspace', 'none', 'none'),
+    createRuntimeManifestTool('grep', ['main', 'subagent'], 'workspace', 'none', 'none'),
+    createRuntimeManifestTool('ask_user', ['main'], 'app', 'none', 'none'),
+    createRuntimeManifestTool('session_search', ['main'], 'memory', 'none', 'none')
+  ];
+  if (input.mode === 'plan') {
+    return tools;
+  }
+  if (input.workflowHint === 'propose_background_task') {
+    return [
+      ...tools,
+      createRuntimeManifestTool('resolve_background_task_time', ['main'], 'app', 'none', 'none'),
+      createRuntimeManifestTool('propose_background_task', ['main'], 'app', 'external_call', 'tool_call'),
+      createRuntimeManifestTool('schedule_background_task', ['main'], 'app', 'external_call', 'tool_call'),
+      createRuntimeManifestTool('read_background_task', ['main'], 'app', 'none', 'none')
+    ];
+  }
+  if (input.workflowHint === 'background_task_change') {
+    return [
+      ...tools,
+      createRuntimeManifestTool('read_background_task', ['main'], 'app', 'none', 'none'),
+      createRuntimeManifestTool('update_background_task', ['main'], 'app', 'external_call', 'tool_call'),
+      createRuntimeManifestTool('cancel_background_task', ['main'], 'app', 'external_call', 'tool_call')
+    ];
+  }
+  return tools;
+}
+
+function createRuntimeManifestTool(
+  modelVisibleName: string,
+  executionScopes: RunCapabilityManifestToolV1['executionScopes'],
+  resourceScope: RunCapabilityManifestToolV1['resourceScope'],
+  effectClass: RunCapabilityManifestToolV1['effectClass'],
+  idempotencyStrategy: RunCapabilityManifestToolV1['idempotencyStrategy']
+): RunCapabilityManifestToolV1 {
+  return {
+    canonicalIdentity: `builtin:${modelVisibleName}`,
+    modelVisibleName,
+    provenance: { kind: 'builtin', source: 'roc' },
+    executionScopes,
+    riskLevel: effectClass === 'none' ? 'low' : 'medium',
+    effectClass,
+    approvalPolicy: { kind: 'none' },
+    idempotencyStrategy,
+    resourceScope
+  };
 }
 
 function compileManifestSkills(skills: SkillSnapshot[]): RunCapabilityManifestSkillV1[] {

@@ -3,12 +3,14 @@ import type { AgentCapabilityPreviewProvider } from '../../../../src/main/plugin
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 
 export function createTestCapabilityPreviewProvider(): AgentCapabilityPreviewProvider {
-  return async ({ mode, requestedCapabilities }) => createTestCapabilityPreview(mode, requestedCapabilities);
+  return async ({ mode, requestedCapabilities, workflowHint }) =>
+    createTestCapabilityPreview(mode, requestedCapabilities, workflowHint);
 }
 
 export function createTestCapabilityPreview(
   mode: ChatStartRunRequest['mode'],
-  requestedCapabilities: ChatStartRunRequest['enabledCapabilities']
+  requestedCapabilities: ChatStartRunRequest['enabledCapabilities'],
+  workflowHint: ChatStartRunRequest['workflowHint'] = null
 ): AgentCapabilityPreview {
   const compiled = compileRunCapabilityManifest({
     deleteFileApprovalMode: 'fully_automatic',
@@ -24,6 +26,7 @@ export function createTestCapabilityPreview(
     })),
     mode,
     requestedCapabilities,
+    workflowHint,
     skills: requestedCapabilities.skills.map((id) => ({
       id,
       name: id,

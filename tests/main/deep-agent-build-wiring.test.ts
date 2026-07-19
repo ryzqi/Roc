@@ -5,8 +5,11 @@ import { createDeepAgent } from 'deepagents';
 import type { SubAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { z } from 'zod';
+import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
+
+type BuildFixtureInput = Omit<DeepAgentBuildInput, 'capabilityManifest'>;
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -47,11 +50,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: 'default',
+      workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     expect(ensureRocHarnessProfilesRegistered).toHaveBeenCalledTimes(1);
     expect(createDeepAgent).toHaveBeenCalledTimes(1);
@@ -87,9 +90,9 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
@@ -127,9 +130,9 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     if (createDeepAgentInput === undefined) {
@@ -163,9 +166,9 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
@@ -196,9 +199,9 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, ['mcp_docs_lookup']);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0] as
       | { middleware?: unknown[] }
@@ -283,11 +286,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: 'default',
+      workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
@@ -312,9 +315,9 @@ describe('buildDeepAgent harness profile wiring', () => {
       checkpointer: undefined,
       workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
@@ -368,9 +371,9 @@ describe('buildDeepAgent harness profile wiring', () => {
         },
         emitHookEvent: vi.fn()
       }
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
@@ -427,9 +430,9 @@ describe('buildDeepAgent harness profile wiring', () => {
         },
         emitHookEvent: vi.fn()
       }
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, ['inspect_workspace']);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const generalPurposeSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'general-purpose');
@@ -491,9 +494,9 @@ describe('buildDeepAgent harness profile wiring', () => {
         threadId: 'thread_1',
         store: {} as never
       }
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
@@ -534,9 +537,9 @@ describe('buildDeepAgent harness profile wiring', () => {
         threadId: 'thread_context_1',
         workspaceHash: 'workspace_hash_context'
       }
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
@@ -580,11 +583,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\Code\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: 'default',
+      workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, ['internet_search']);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0] as
       | { middleware?: unknown[] }
@@ -619,7 +622,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     ]);
   });
 
-  it('lets DeepAgents create the native general-purpose subagent with main tools, skills, and memory state', () => {
+  it('builds the general-purpose subagent explicitly with main tools, skills, and middleware', () => {
     const inspectSchema = z.object({
       target: z.string()
     });
@@ -645,11 +648,11 @@ describe('buildDeepAgent harness profile wiring', () => {
       workspacePath: 'F:\\\\Code\\\\Roc',
       interruptOn: undefined,
       checkpointer: undefined,
-      workflowHint: 'default',
+      workflowHint: null,
       contextBudgetTokens: undefined
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, ['mcp_docs_lookup']);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
 
@@ -658,7 +661,22 @@ describe('buildDeepAgent harness profile wiring', () => {
       skills: ['/skills/'],
       tools: [inspectTool]
     });
-    expect(createDeepAgentInput?.subagents?.some((subagent) => subagent.name === 'general-purpose')).toBe(false);
+    const generalPurposeSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'general-purpose');
+    if (!isSubAgent(generalPurposeSubagent)) {
+      throw new Error('Expected explicit general-purpose subagent.');
+    }
+    const middlewareNames = generalPurposeSubagent.middleware?.map((middlewareItem) =>
+      Reflect.get(middlewareItem as object, 'name')
+    ) ?? [];
+
+    expect(generalPurposeSubagent.tools).toEqual([inspectTool]);
+    expect(generalPurposeSubagent.skills).toEqual(['/skills/']);
+    expect(middlewareNames).toEqual(expect.arrayContaining([
+      'RocShellPathPolicyMiddleware',
+      'RocToolProtocolMiddleware',
+      'ForgeErrorBudgetMiddleware',
+      'RocFilesystemPathPolicyMiddleware'
+    ]));
   });
 
   it('builds plan mode without file mutation tools while preserving non-file tools', () => {
@@ -709,9 +727,16 @@ describe('buildDeepAgent harness profile wiring', () => {
         threadId: 'thread_plan_context',
         workspaceHash: 'workspace_hash_plan'
       }
-    } as unknown as DeepAgentBuildInput;
+    } as unknown as BuildFixtureInput;
 
-    buildDeepAgent(input);
+    buildFixtureAgent(input, [
+      'web_search',
+      'mcp_docs_lookup',
+      'filesystem__search',
+      'filesystem__write_file',
+      'filesystem__edit_file',
+      'filesystem__delete_file'
+    ]);
 
     expect(createDeepAgent).toHaveBeenCalledTimes(1);
     expect(createAgent).not.toHaveBeenCalled();
@@ -768,7 +793,15 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(middlewareNames.indexOf('RocFilesystemPathPolicyMiddleware')).toBeLessThan(
       middlewareNames.indexOf('ForgeFilesystemToolErrorMiddleware')
     );
-    expect(generalPurposeToolNames).toEqual(toolNames);
+    expect(generalPurposeToolNames).toEqual([
+      'web_read',
+      'web_search',
+      'mcp_docs_lookup',
+      'filesystem__search',
+      'filesystem__write_file',
+      'filesystem__edit_file',
+      'filesystem__delete_file'
+    ]);
     expect(generalPurposeMiddlewareNames).toEqual(expect.arrayContaining([
       'RocPlanReadOnlyMemoryMiddleware',
       'RocPlanToolExposureMiddleware',
@@ -791,6 +824,39 @@ describe('buildDeepAgent harness profile wiring', () => {
     });
   });
 });
+
+function buildFixtureAgent(input: BuildFixtureInput, customToolNames: string[]): void {
+  const mcpServers = customToolNames.length === 0
+    ? []
+    : [
+        {
+          id: 'fixture-mcp',
+          name: 'Fixture MCP',
+          enabled: true,
+          transport: 'stdio' as const,
+          status: 'ready' as const,
+          tools: customToolNames.length,
+          allowedTools: customToolNames
+        }
+      ];
+  const capabilityManifest = compileRunCapabilityManifest({
+    deleteFileApprovalMode: 'fully_automatic',
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers,
+    mode: input.mode,
+    workflowHint: input.workflowHint,
+    requestedCapabilities: {
+      mcpServers: customToolNames.length === 0 ? [] : ['fixture-mcp'],
+      skills: []
+    },
+    skills: []
+  }).manifest;
+
+  buildDeepAgent({
+    ...input,
+    capabilityManifest
+  });
+}
 
 function createNamedTool(name: string) {
   return tool(async () => '', {

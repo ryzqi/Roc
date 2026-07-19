@@ -6,7 +6,7 @@
 
 ## Current Phase
 
-Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope gate pending)
+Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 
 ## Phases
 
@@ -56,8 +56,13 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope gate pending)
 
 ### Stage 4: Execution Safety, Budgets, Cancellation
 
-- [ ] 实施、review、修复、验证、提交。
-- **Status:** in_progress (blocked on Shell scope product gate)
+- [x] Part 1：main/subagent 共享安全装配与 immutable manifest 合同；scope exposure 与 background inventory drift 已修复，独立复核无新 finding，focused/static/build/full-test gate 通过，已提交。
+- [ ] Part 2：native model/tool budget 与结构化终止；独立 review、修复、验证、提交。
+- [ ] Part 3：shell host execution、background pre-authorization、path/env/output/abort；独立 review、修复、验证、提交。
+- [ ] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交。
+- [ ] Part 5：effect state、subagent execution path 与 reconcile 合同；独立 review、修复、验证、提交。
+- [ ] Stage exit：全量验证、最终独立 review、提交。
+- **Status:** in_progress
 
 ### Stage 5: Context, Checkpoint, HITL Conformance
 
@@ -83,12 +88,13 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope gate pending)
 | 每个 stage 独立提交 | `plan.md` 明确禁止跨 stage 大提交。 |
 | 清理只做 evidence-first deletion | 项目规则与用户目标均禁止凭名称删除。 |
 | Scheduler misfire | 用户以“继续”接受推荐策略：同 task 不重叠，睡眠/关机错过多次时只 coalesce 最新一次。 |
+| Shell scope | 用户确认 interactive shell 不需要审批；维持 host code execution 真实命名。background shell 仍要求任务创建时持久化 pre-authorization。 |
 
 ## Product Gates
 
 | Gate | Current state |
 |---|---|
-| Shell scope | 未确认；Stage 4 前必须取得产品选择。 |
+| Shell scope | 已确认：interactive 无审批；background 保持创建任务时持久化 pre-authorization；不宣称 workspace isolation。 |
 | Scheduler misfire | 已确认：同 task 不重叠；misfire 只 coalesce 最新一次。 |
 
 ## Errors Encountered
@@ -137,11 +143,20 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope gate pending)
 | Stage 2 first implementation left `agent_run_leases` absent after `applyAgentPluginSchema()` | 1 | v4 was placed in diagnostics by an over-broad patch context; moved it to `agentMigrations`. Migration/repository suite now passes. |
 | Stage 2 impacted suite threw `ReferenceError: hasActiveThread is not defined` on the first `startRun()` | 1 | `createTaskRun()` variable was renamed to `hasExistingThread` but one branch retained the old identifier; corrected that one reference and rerun the same suite. |
 | Stage 2 v6 cursor migration caused `FOREIGN KEY constraint failed` in standalone run-event and history deletion tests | 1 | Seed the run fixture before allocating its cursor; delete lease/outbox/cursor rows before deleting agent runs and threads. |
+| Official LangChain documentation lookup returned `Invalid URL` | 2 | Do not retry the web tool; use the installed framework declarations and the local official-skill mirror, then cover behavior with repository tests. |
 | Stage 2 focused suite found database health/probe fixtures still expected agent v4/task v2 | 1 | Update only version assertions to the current v6/v3 migration ledger. |
 | Stage 2 focused suite found streaming fixture asserted text delta chunk boundaries after deliberate queue coalescing | 1 | Assert exact concatenated transcript and structural order; do not require old transport chunk boundaries. |
 | Stage 2 typecheck found nullable provider/model passed to `requireNonEmpty`, and new reconcile test used obsolete approval payload shape | 1 | Broaden explicit required-string guard to accept nullable DB fields and fix test payload under `request`. |
 | Stage 2 review-repair patch did not match the current `stream-consumers.ts` import context | 1 | No production file changed; re-read current source fragments and resend a smaller exact-context patch. |
 | Stage 3 power-resume cron test used `vi.runAllTimersAsync` and recursively executed every future cron timer | 1 | Advance only the due 0ms timer; preserve the future cron timer for the scheduler rather than test execution. |
+| Stage 4 Part 1 manifest red test found ordinary chat still includes `schedule_background_task` | 1 | Use `workflowHint` to compile only executor-registered background tool inventory, then rerun the same focused test. |
+| Stage 4 Part 1 broad `rg` for DeepAgents `SubAgent` declarations returned exit 1 without output | 1 | Locate the installed package directory and Roc local type file separately; do not repeat the broad declaration scan. |
+| Stage 4 Part 1 scope run found opaque-subagent fixture classified as declarative | 1 | Rebuild the fixture from DeepAgents 1.10.7 `CompiledSubAgent` declaration; retain the separate expected tool-exposure red failure. |
+| Stage 4 Part 1 typecheck found missing/optional `workflowHint` calls | 2 | First pass fixed 18 compiler errors; second pass exposed five downstream preview fixtures in three files, now add explicit `null`. |
+| Stage 4 Part 1 combined runtime-helper search/read lost output when `rg` returned 1 | 1 | Separate `Select-String` discovery from fixed-range reads; do not batch a possibly empty search with required reads. |
+| Stage 4 Part 1 builder wiring suite failed 14/14 with missing manifest | 1 | Replace direct cast-hidden fixtures with an `Omit<..., capabilityManifest>` fixture input and compiler-backed build helper; list custom MCP names explicitly. |
+| Stage 4 Part 1 independent Standards review found manual pseudo-manifests in full-stack/tool-retry fixtures and executor/manifest background inventory drift risk | 1 | Convert both fixtures to compiler-backed manifests; derive executor background tool surface from the immutable manifest instead of a second mode contract. |
+| Stage 4 Part 1 Spec reviewer first run hit provider HTTP 429 | 1 | Retry with a narrower read-only review prompt after recording the Standards findings; no code action depends on the failed report. |
 
 ## Review Notes
 

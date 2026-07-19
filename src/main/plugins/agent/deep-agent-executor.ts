@@ -117,7 +117,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         capabilities: options.capabilities,
         capabilityManifest: input.snapshot.capabilityManifest,
         enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
-        backgroundTaskToolMode: mode === 'plan' ? null : readBackgroundTaskToolMode(input.snapshot),
         runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         shellExecutionService,
         mode
@@ -204,6 +203,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           webReadTool: tools.webReadTool
         }),
         tools: contextHarness.tools,
+        capabilityManifest: input.snapshot.capabilityManifest,
         filesystemPermissions:
           mode === 'plan'
             ? createRocReadOnlyFilesystemPermissions()
@@ -460,7 +460,6 @@ async function createExecutorTools(input: {
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
   enabledCapabilities: TaskRun['enabledCapabilities'];
-  backgroundTaskToolMode: 'all' | 'change' | null;
   runtimeWorkspacePath: string | null;
   shellExecutionService: AgentExecuteAdapter;
   mode: ChatRunMode;
@@ -484,40 +483,64 @@ async function createExecutorTools(input: {
     createRocWindowsCommandTool(input.shellExecutionService),
     ...mcpTools
   ];
-  if (input.backgroundTaskToolMode !== null) {
-    const backgroundTaskTools = createBackgroundTaskTools({
-      enabledCapabilities: input.enabledCapabilities,
-      previewStore: new PreviewStore(),
-      runtimeWorkspacePath: input.runtimeWorkspacePath,
-      toolMode: input.backgroundTaskToolMode,
-      taskAdapter: {
-        createBackgroundTaskPreview: async (request) =>
-          await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
-        createBackgroundTask: async (request) =>
-          await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', request),
-        readBackgroundTask: async (taskId) =>
-          await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
-        updateBackgroundTask: async (request) =>
-          await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
-        cancelBackgroundTask: async (taskId) =>
-          await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
-      },
-      schedulerAdapter: {
-        refreshTask: () => {},
-        registerTask: () => {},
-        unregisterTask: () => {}
-      }
-    });
-    if (input.backgroundTaskToolMode === 'all') {
-      runTools.splice(2, 0, createResolveBackgroundTaskTimeTool(), ...backgroundTaskTools);
-    } else {
-      runTools.splice(2, 0, ...backgroundTaskTools);
-    }
+  const backgroundTaskTools = createManifestAuthorizedBackgroundTaskTools(input);
+  if (backgroundTaskTools.length > 0) {
+    runTools.splice(2, 0, ...backgroundTaskTools);
   }
   return {
     runTools,
     webReadTool
   };
+}
+
+function createManifestAuthorizedBackgroundTaskTools(input: {
+  capabilities: RocCapabilityRegistry;
+  capabilityManifest: RunCapabilityManifestV1;
+  enabledCapabilities: TaskRun['enabledCapabilities'];
+  runtimeWorkspacePath: string | null;
+}): ClientTool[] {
+  const previewStore = new PreviewStore();
+  const taskAdapter = {
+    createBackgroundTaskPreview: async (request: BackgroundTaskPreviewRequest) =>
+      await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTaskPreview>('task.background.preview', request),
+    createBackgroundTask: async (request: BackgroundTaskPreviewRequest) =>
+      await input.capabilities.invoke<BackgroundTaskPreviewRequest, BackgroundTask>('task.background.create', request),
+    readBackgroundTask: async (taskId: string) =>
+      await input.capabilities.invoke<{ taskId: string }, TaskDetail>('task.detail.get', { taskId }),
+    updateBackgroundTask: async (request: UpdateBackgroundTaskRequest) =>
+      await input.capabilities.invoke<UpdateBackgroundTaskRequest, BackgroundTask>('task.background.update', request),
+    cancelBackgroundTask: async (taskId: string) =>
+      await input.capabilities.invoke<{ id: string }, BackgroundTask>('task.background.cancel', { id: taskId })
+  };
+  const schedulerAdapter = {
+    refreshTask: () => {},
+    registerTask: () => {},
+    unregisterTask: () => {}
+  };
+  const toolDependencies = {
+    enabledCapabilities: input.enabledCapabilities,
+    previewStore,
+    runtimeWorkspacePath: input.runtimeWorkspacePath,
+    taskAdapter,
+    schedulerAdapter
+  };
+  const candidates: ClientTool[] = [
+    createResolveBackgroundTaskTimeTool(),
+    ...createBackgroundTaskTools({ ...toolDependencies, toolMode: 'all' }),
+    ...createBackgroundTaskTools({ ...toolDependencies, toolMode: 'change' })
+  ];
+  const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
+  const seenToolNames = new Set<string>();
+  return candidates.filter((tool) => {
+    if (!manifestToolNames.has(tool.name)) {
+      return false;
+    }
+    if (seenToolNames.has(tool.name)) {
+      return false;
+    }
+    seenToolNames.add(tool.name);
+    return true;
+  });
 }
 
 async function loadSelectedMcpTools(
@@ -544,16 +567,6 @@ async function loadSelectedMcpTools(
 
 function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): boolean {
   return snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change';
-}
-
-function readBackgroundTaskToolMode(snapshot: RunExecutionSnapshotV1): 'all' | 'change' | null {
-  if (snapshot.workflowHint === 'propose_background_task') {
-    return 'all';
-  }
-  if (snapshot.workflowHint === 'background_task_change') {
-    return 'change';
-  }
-  return null;
 }
 
 function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): void {

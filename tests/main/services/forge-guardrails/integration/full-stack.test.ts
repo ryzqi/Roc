@@ -4,6 +4,7 @@ import { Command } from '@langchain/langgraph';
 import { MiddlewareError } from 'langchain';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
+import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import type { RocCompositeBackend } from '../../../../../src/main/services/deep-agent/backend';
 import type { DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
 import { RocDomainError } from '../../../../../src/main/services/errors';
@@ -51,6 +52,18 @@ function fakeTool(name: string): ClientTool {
 async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<MiddlewareDescriptor[]> {
   mocked.createDeepAgentMock.mockClear();
   const { buildDeepAgent } = await import('../../../../../src/main/services/deep-agent/agent-builder');
+  const capabilityManifest = compileRunCapabilityManifest({
+    deleteFileApprovalMode: 'fully_automatic',
+    mcpApprovalMode: 'fully_automatic',
+    mcpServers: [],
+    mode: 'chat',
+    workflowHint: 'propose_background_task',
+    requestedCapabilities: {
+      mcpServers: [],
+      skills: []
+    },
+    skills: []
+  }).manifest;
   buildDeepAgent({
     mode: 'chat',
     model: 'model-ready' as never,
@@ -61,6 +74,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     skillSources: [],
     subagents: [],
     tools: [fakeTool('propose_background_task'), fakeTool('schedule_background_task')],
+    capabilityManifest,
     filesystemPermissions: [],
     workspacePath: 'F:\\Code\\Roc',
     interruptOn: undefined,

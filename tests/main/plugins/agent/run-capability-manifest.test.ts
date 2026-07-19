@@ -26,7 +26,8 @@ describe('run capability manifest', () => {
         skill({ id: 'research' }),
         skill({ id: 'invalid', status: 'invalid' })
       ],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
 
     expect(compiled.manifest).toMatchObject({
@@ -112,7 +113,8 @@ describe('run capability manifest', () => {
           skill({ id: 'research' }),
           skill({ id: 'invalid', status: 'invalid' })
         ],
-        mode: 'chat'
+        mode: 'chat',
+        workflowHint: null
       }).manifest.manifestHash
     );
   });
@@ -131,7 +133,8 @@ describe('run capability manifest', () => {
           skills: []
         },
         skills: [],
-        mode: 'chat'
+        mode: 'chat',
+        workflowHint: null
       })
     ).toThrow('run_capability_model_visible_name_collision:search_docs');
   });
@@ -143,6 +146,7 @@ describe('run capability manifest', () => {
       mcpApprovalMode: 'fully_automatic',
       mcpServers: [],
       mode: 'chat',
+      workflowHint: null,
       requestedCapabilities: {
         mcpServers: [],
         skills: ['typescript']
@@ -163,6 +167,7 @@ describe('run capability manifest', () => {
         mcpApprovalMode: 'fully_automatic',
         mcpServers: [],
         mode: 'chat',
+        workflowHint: null,
         requestedCapabilities: {
           mcpServers: [],
           skills: []
@@ -187,7 +192,8 @@ describe('run capability manifest', () => {
         skills: ['research']
       },
       skills: [skill({ id: 'research' })],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
     const relocated = compileRunCapabilityManifest({
       deleteFileApprovalMode: 'fully_automatic',
@@ -203,20 +209,22 @@ describe('run capability manifest', () => {
           path: 'F:\\Skills\\relocated-research'
         }
       ],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
 
     expect(relocated.manifest.manifestHash).not.toBe(original.manifest.manifestHash);
     const automaticMcp = compileRunCapabilityManifest({
       deleteFileApprovalMode: 'fully_automatic',
       mcpApprovalMode: 'fully_automatic',
-      mcpServers: [mcpServer({ id: 'docs', allowedTools: ['search_docs', 'propose_background_task'] })],
+      mcpServers: [mcpServer({ id: 'docs', allowedTools: ['search_docs'] })],
       requestedCapabilities: {
         mcpServers: ['docs'],
         skills: []
       },
       skills: [],
-      mode: 'chat'
+      mode: 'chat',
+      workflowHint: null
     });
     expect(automaticMcp.manifest.tools).toEqual(
       expect.arrayContaining([
@@ -231,13 +239,28 @@ describe('run capability manifest', () => {
       compileRunCapabilityManifest({
         deleteFileApprovalMode: 'fully_automatic',
         mcpApprovalMode: 'fully_automatic',
+        mcpServers: [mcpServer({ id: 'unsafe', allowedTools: ['propose_background_task'] })],
+        requestedCapabilities: {
+          mcpServers: ['unsafe'],
+          skills: []
+        },
+        skills: [],
+        mode: 'chat',
+        workflowHint: null
+      })
+    ).toThrow('run_capability_model_visible_name_reserved:propose_background_task');
+    expect(() =>
+      compileRunCapabilityManifest({
+        deleteFileApprovalMode: 'fully_automatic',
+        mcpApprovalMode: 'fully_automatic',
         mcpServers: [mcpServer({ id: 'unsafe', allowedTools: ['write_file'] })],
         requestedCapabilities: {
           mcpServers: ['unsafe'],
           skills: []
         },
         skills: [],
-        mode: 'chat'
+        mode: 'chat',
+        workflowHint: null
       })
     ).toThrow('run_capability_model_visible_name_reserved:write_file');
   });
@@ -252,7 +275,8 @@ describe('run capability manifest', () => {
         skills: []
       },
       skills: [],
-      mode: 'plan'
+      mode: 'plan',
+      workflowHint: null
     });
 
     expect(compiled.manifest.tools).toEqual(
@@ -280,6 +304,54 @@ describe('run capability manifest', () => {
         })
       ])
     );
+  });
+
+  it('records every model-visible Roc runtime tool with its frozen execution scope', () => {
+    const compiled = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      mode: 'chat',
+      workflowHint: null
+    });
+    const backgroundCompiled = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      mode: 'chat',
+      workflowHint: 'propose_background_task'
+    });
+
+    expect(compiled.manifest.tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        canonicalIdentity: 'builtin:write_file',
+        executionScopes: ['main', 'subagent'],
+        effectClass: 'workspace_mutation'
+      }),
+      expect.objectContaining({
+        canonicalIdentity: 'builtin:session_search',
+        executionScopes: ['main'],
+        resourceScope: 'memory'
+      })
+    ]));
+    expect(compiled.subagents.find((subagent) => subagent.id === 'general-purpose')?.tools).toEqual(
+      expect.arrayContaining(['write_file'])
+    );
+    expect(compiled.subagents.find((subagent) => subagent.id === 'general-purpose')?.tools).not.toEqual(
+      expect.arrayContaining(['schedule_background_task'])
+    );
+    expect(compiled.manifest.tools.map((tool) => tool.modelVisibleName)).not.toContain('schedule_background_task');
+    expect(backgroundCompiled.manifest.tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        canonicalIdentity: 'builtin:schedule_background_task',
+        executionScopes: ['main'],
+        effectClass: 'external_call'
+      })
+    ]));
   });
 });
 

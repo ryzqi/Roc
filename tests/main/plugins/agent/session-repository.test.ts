@@ -981,7 +981,8 @@ function createCapabilityPreview(requestedCapabilities: EnabledCapabilities): Ag
       description: `${id} skill`,
       status: 'ready' as const
     })),
-    mode: 'chat'
+    mode: 'chat',
+    workflowHint: null
   });
 }
 

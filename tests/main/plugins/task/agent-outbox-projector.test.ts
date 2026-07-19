@@ -426,7 +426,8 @@ function createCapabilityPreview(): AgentCapabilityPreview {
     requestedCapabilities: enabledCapabilities,
     runtimeStatus: readyRuntimeStatus(),
     skills: [],
-    mode: 'task'
+    mode: 'task',
+    workflowHint: null
   });
 }
 

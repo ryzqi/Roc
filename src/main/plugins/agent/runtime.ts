@@ -53,6 +53,7 @@ export type AgentCapabilityPreviewProvider = (input: {
   mode: ChatStartRunRequest['mode'];
   requestedCapabilities: EnabledCapabilities;
   runtimeStatus: AgentRuntimeStatus;
+  workflowHint: WorkflowHint;
 }) => Promise<AgentCapabilityPreview>;
 
 type AgentResumePayload = HITLResponse | { answer: string };
@@ -133,6 +134,7 @@ export class AgentPluginRuntime {
     explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
+    workflowHint?: WorkflowHint;
   }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider === undefined) {
       throw new Error('agent_capability_preview_unavailable');
@@ -141,7 +143,8 @@ export class AgentPluginRuntime {
       explicitSkillIds: input.explicitSkillIds,
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
-      runtimeStatus: this.getStatus()
+      runtimeStatus: this.getStatus(),
+      workflowHint: input.workflowHint === undefined ? null : input.workflowHint
     });
   }
 
@@ -162,6 +165,7 @@ export class AgentPluginRuntime {
       explicitSkillIds: request.explicitSkillIds,
       mode: request.mode,
       requestedCapabilities: request.enabledCapabilities,
+      workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
       modelHandle
     });
     const preparedAttachments = await prepareChatImageAttachments(request.attachments);
@@ -907,13 +911,15 @@ export class AgentPluginRuntime {
     explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
+    workflowHint: WorkflowHint;
     modelHandle: AgentModelHandle;
   }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider !== undefined) {
       return await this.getCapabilityPreview({
         explicitSkillIds: input.explicitSkillIds,
         mode: input.mode,
-        requestedCapabilities: input.requestedCapabilities
+        requestedCapabilities: input.requestedCapabilities,
+        workflowHint: input.workflowHint
       });
     }
     if (input.requestedCapabilities.mcpServers.length > 0 || input.requestedCapabilities.skills.length > 0) {
@@ -928,7 +934,8 @@ export class AgentPluginRuntime {
       mcpServers: [],
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
-      skills: []
+      skills: [],
+      workflowHint: input.workflowHint
     });
     return {
       runnable: false,
