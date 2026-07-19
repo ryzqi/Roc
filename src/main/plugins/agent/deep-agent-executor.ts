@@ -27,7 +27,7 @@ import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, cre
 import { createRunSubagents } from '../../services/deep-agent/tools';
 import { defaultErrorTracker, PreviewStore } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
-import type { WebReadRequest } from '../../services/web-read-service';
+import type { WebReadExecutionRequest, WebReadRequest, WebReadResult } from '../../services/web-read-service';
 import { webReadToolSchema } from '../../services/web-read-request-schema';
 import type { RocPaths } from '../../services/paths';
 import { createBackgroundTaskTools } from '../../services/deep-agent/background-task-tools';
@@ -188,6 +188,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             modelId: input.modelHandle.modelId,
             workflowHint: hookRunContext.workflowHint
           }
+        }, {
+          signal: executionAbortController.signal
         });
         for (const event of sessionStart.events) {
           emitRuntimeEvent(event);
@@ -252,7 +254,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
                 hookRuntime: options.hookRuntime,
                 runContext: hookRunContext,
                 emitHookEvent: emitRuntimeEvent,
-                initialContexts: initialHookContexts
+                initialContexts: initialHookContexts,
+                signal: executionAbortController.signal
               }
       });
       const runInput =
@@ -640,9 +643,15 @@ function createWebReadTool(capabilities: RocCapabilityRegistry): StringDynamicSt
   const schema = webReadToolSchema;
   return new DynamicStructuredTool<typeof schema, WebReadRequest, WebReadRequest, string>({
     name: 'web_read',
-    description: '读取公开网页正文，返回适合继续分析的文本内容。',
+    description: '读取公开网页正文，返回来源、Jina 代理、抓取时间、内容哈希、不可信标记与正文。',
     schema,
-    func: async (request) => await capabilities.invoke<WebReadRequest, string>('web.read', request)
+    func: async (request, _runManager, config) => {
+      const result = await capabilities.invoke<WebReadExecutionRequest, WebReadResult>('web.read', {
+        ...request,
+        signal: config?.signal
+      });
+      return JSON.stringify(result, null, 2);
+    }
   });
 }
 

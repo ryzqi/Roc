@@ -10,8 +10,8 @@ import type {
 import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
 import type { WorkspaceConfigService } from '../../services/workspace-service';
-import type { WebReadRequest } from '../../services/web-read-service';
-import { webReadRequestSchema } from '../../services/web-read-request-schema';
+import type { WebReadExecutionRequest, WebReadResult } from '../../services/web-read-service';
+import { webReadExecutionRequestSchema } from '../../services/web-read-request-schema';
 import { createRtkService } from './rtk-adapter';
 import {
   createShellExecutionService,
@@ -42,12 +42,20 @@ const shellConfirmationResultSchema = z.object({
   confirmed: z.boolean(),
   response: z.number().int()
 }) satisfies z.ZodType<ShellConfirmationResult>;
+const webReadResultSchema = z.object({
+  content: z.string().min(1),
+  source: z.string().url(),
+  proxy: z.literal('https://r.jina.ai/'),
+  fetchedAt: z.string().min(1),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  untrusted: z.literal(true)
+}) satisfies z.ZodType<WebReadResult>;
 
 const runtimeToolsCapabilityDescriptors = [
   descriptor('rtk.status', emptyInputSchema, z.custom<RtkStatus>()),
   descriptor('shell.execute', shellExecutionRequestSchema, z.custom<ShellExecutionResult>()),
   descriptor('shell.confirm', shellConfirmationRequestSchema, shellConfirmationResultSchema),
-  descriptor('web.read', webReadRequestSchema, z.string())
+  descriptor('web.read', webReadExecutionRequestSchema, webReadResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type RuntimeToolsPluginOptions = {
@@ -94,7 +102,7 @@ export function createRuntimeToolsPlugin(options: RuntimeToolsPluginOptions = {}
         confirmShell(input as ShellConfirmationRequest, options.confirmShellRequest)
       );
       context.capabilities.register(pluginId, runtimeToolsCapabilityDescriptors[3], async (input) =>
-        webReadService.read(input as WebReadRequest)
+        webReadService.read(input as WebReadExecutionRequest)
       );
     },
     shutdown: async () => {},

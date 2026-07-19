@@ -52,7 +52,12 @@ describe('runtime tools plugin', () => {
       maxTokens: 1000
     });
 
-    expect(output).toBe('Reader output body');
+    expect(output).toMatchObject({
+      content: 'Reader output body',
+      source: 'https://example.com/docs',
+      proxy: 'https://r.jina.ai/',
+      untrusted: true
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://r.jina.ai/https://example.com/docs',
       expect.objectContaining({
@@ -83,7 +88,10 @@ describe('runtime tools plugin', () => {
       timeoutSeconds: 10
     });
 
-    expect(output).toBe('Fallback markdown body');
+    expect(output).toMatchObject({
+      content: 'Fallback markdown body',
+      source: 'https://finance.sina.com.cn/nmetal/quotation.shtml'
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'https://r.jina.ai/https://finance.sina.com.cn/nmetal/quotation.shtml',

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import type { RocHookCommandInput, RocHookCommandOutput } from '../../../shared/types';
 import { HookCommandOutputSchema } from './schema';
 
@@ -8,6 +8,7 @@ export type HookCommandRunRequest = {
   command: string;
   cwd: string;
   timeoutSeconds: number;
+  signal?: AbortSignal;
   input: RocHookCommandInput;
 };
 
@@ -39,6 +40,15 @@ export class HookCommandRunner {
         error: 'hook_cwd_virtual_path'
       };
     }
+    if (request.signal?.aborted === true) {
+      return {
+        status: 'failed',
+        durationMs: 0,
+        stdout: '',
+        stderr: '',
+        error: 'hook_command_aborted'
+      };
+    }
     return await new Promise<HookCommandRunResult>((resolve) => {
       const child = spawn(request.command, {
         cwd: request.cwd,
@@ -54,6 +64,7 @@ export class HookCommandRunner {
           return;
         }
         settled = true;
+        request.signal?.removeEventListener('abort', abort);
         terminateProcessTree(child);
         resolve({
           status: 'failed',
@@ -63,6 +74,26 @@ export class HookCommandRunner {
           error: 'hook_command_timeout'
         });
       }, request.timeoutSeconds * 1000);
+      const abort = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        terminateProcessTree(child);
+        resolve({
+          status: 'failed',
+          durationMs: Date.now() - startedAt,
+          stdout: truncateOutput(stdout),
+          stderr: truncateOutput(stderr),
+          error: 'hook_command_aborted'
+        });
+      };
+      if (request.signal?.aborted === true) {
+        abort();
+      } else {
+        request.signal?.addEventListener('abort', abort, { once: true });
+      }
 
       child.stdout.on('data', (chunk: Buffer | string) => {
         stdout = truncateOutput(stdout + chunkToString(chunk));
@@ -77,6 +108,7 @@ export class HookCommandRunner {
         }
         settled = true;
         clearTimeout(timeout);
+        request.signal?.removeEventListener('abort', abort);
         resolve({
           status: 'failed',
           durationMs: Date.now() - startedAt,
@@ -91,6 +123,7 @@ export class HookCommandRunner {
         }
         settled = true;
         clearTimeout(timeout);
+        request.signal?.removeEventListener('abort', abort);
         const trimmedStdout = stdout.trim();
         if (code !== 0) {
           resolve({
@@ -149,12 +182,14 @@ export function isVirtualHookCwd(cwd: string): boolean {
 
 function terminateProcessTree(child: ReturnType<typeof spawn>): void {
   if (process.platform === 'win32' && child.pid !== undefined) {
-    const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
-      windowsHide: true,
-      stdio: 'ignore'
-    });
-    killer.on('error', () => child.kill());
-    killer.unref();
+    try {
+      execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+    } catch {
+      child.kill();
+    }
     return;
   }
   // Non-Windows fallback signals only the direct child; Windows uses taskkill /t for process-tree cleanup.

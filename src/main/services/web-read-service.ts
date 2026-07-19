@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import { RocDomainError } from './errors';
 
 export type WebReadResponseMode =
@@ -78,19 +80,43 @@ export type WebReadRequest = {
   markdown?: WebReadMarkdownOptions;
 };
 
+export type WebReadExecutionRequest = WebReadRequest & {
+  signal?: AbortSignal;
+};
+
+export type WebReadResult = {
+  content: string;
+  source: string;
+  proxy: 'https://r.jina.ai/';
+  fetchedAt: string;
+  contentHash: string;
+  untrusted: true;
+};
+
 type FetchLike = typeof fetch;
 
 const defaultTimeoutSeconds = 20;
+const maxResponseBytes = 2 * 1024 * 1024;
 
 export class WebReadService {
   constructor(private readonly fetchImpl: FetchLike = (input, init) => fetch(input, init)) {}
 
-  async read(request: WebReadRequest): Promise<string> {
+  async read(request: WebReadExecutionRequest): Promise<WebReadResult> {
     const targetUrl = this.requirePublicUrl(request.url);
     const responseMode = request.responseMode ?? 'markdown';
     const timeoutSeconds = this.normalizeTimeoutSeconds(request.timeoutSeconds);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+    let timedOut = false;
+    const abortFromCaller = () => controller.abort(request.signal?.reason);
+    if (isSignalAborted(request.signal)) {
+      abortFromCaller();
+    } else {
+      request.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    }
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutSeconds * 1000);
 
     try {
       const response = await this.fetchReader(targetUrl, {
@@ -108,6 +134,9 @@ export class WebReadService {
               timeoutSeconds
             })
           : response;
+      if (isSignalAborted(request.signal)) {
+        throw createWebReadAbortedError();
+      }
       if (!finalResponse.ok) {
         throw new RocDomainError({
           code: 'web_read_http_error',
@@ -118,7 +147,10 @@ export class WebReadService {
         });
       }
 
-      const body = await finalResponse.text();
+      const body = await this.readResponseBody(finalResponse);
+      if (isSignalAborted(request.signal)) {
+        throw createWebReadAbortedError();
+      }
       if (body.trim().length === 0) {
         throw new RocDomainError({
           code: 'web_read_empty_response',
@@ -128,12 +160,23 @@ export class WebReadService {
           userAction: '请稍后重试，或换一个可公开访问的网址。'
         });
       }
-      return body;
+      const contentHash = createHash('sha256').update(body, 'utf8').digest('hex');
+      return {
+        content: body,
+        source: targetUrl.toString(),
+        proxy: 'https://r.jina.ai/',
+        fetchedAt: new Date().toISOString(),
+        contentHash,
+        untrusted: true
+      };
     } catch (error) {
       if (error instanceof RocDomainError) {
         throw error;
       }
-      if (this.isAbortError(error)) {
+      if (isSignalAborted(request.signal)) {
+        throw createWebReadAbortedError();
+      }
+      if (timedOut || this.isAbortError(error)) {
         throw new RocDomainError({
           code: 'web_read_timeout',
           message: 'web_read 请求超时。',
@@ -160,6 +203,7 @@ export class WebReadService {
       });
     } finally {
       clearTimeout(timeoutId);
+      request.signal?.removeEventListener('abort', abortFromCaller);
     }
   }
 
@@ -230,6 +274,58 @@ export class WebReadService {
       headers,
       signal: input.signal
     });
+  }
+
+  private async readResponseBody(response: Response): Promise<string> {
+    const contentLength = response.headers.get('content-length');
+    if (contentLength !== null && Number.parseInt(contentLength, 10) > maxResponseBytes) {
+      throw new RocDomainError({
+        code: 'web_read_response_too_large',
+        message: 'web_read 响应超过本地大小上限。',
+        category: 'external',
+        retryable: false,
+        userAction: '请使用更小的阅读范围。'
+      });
+    }
+    if (response.body === null) {
+      const body = await response.text();
+      if (Buffer.byteLength(body, 'utf8') > maxResponseBytes) {
+        throw new RocDomainError({
+          code: 'web_read_response_too_large',
+          message: 'web_read 响应超过本地大小上限。',
+          category: 'external',
+          retryable: false,
+          userAction: '请使用更小的阅读范围。'
+        });
+      }
+      return body;
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) {
+          break;
+        }
+        total += next.value.byteLength;
+        if (total > maxResponseBytes) {
+          await reader.cancel();
+          throw new RocDomainError({
+            code: 'web_read_response_too_large',
+            message: 'web_read 响应超过本地大小上限。',
+            category: 'external',
+            retryable: false,
+            userAction: '请使用更小的阅读范围。'
+          });
+        }
+        chunks.push(next.value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return new TextDecoder().decode(concatBytes(chunks, total));
   }
 
   private setStringHeader(headers: Record<string, string>, name: string, value: string | undefined): void {
@@ -304,6 +400,24 @@ export class WebReadService {
         userAction: '请提供合法的公开网页 URL。'
       });
     }
+    if (parsed.username.length > 0 || parsed.password.length > 0) {
+      throw new RocDomainError({
+        code: 'web_read_url_credentials',
+        message: 'web_read 拒绝包含 credentials 的 URL。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请移除 URL 中的用户名和密码。'
+      });
+    }
+    if (isPrivateOrLinkLocalHost(parsed.hostname)) {
+      throw new RocDomainError({
+        code: 'web_read_private_url',
+        message: 'web_read 只允许公开网络地址。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请提供公开可访问的网址。'
+      });
+    }
     return parsed;
   }
 
@@ -330,4 +444,62 @@ export class WebReadService {
     const record = error as { name?: unknown; code?: unknown };
     return record.name === 'AbortError' || record.code === 'ABORT_ERR';
   }
+}
+
+function concatBytes(chunks: readonly Uint8Array[], total: number): Uint8Array {
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+function isPrivateOrLinkLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === 'localhost.localdomain' || host === '::1') {
+    return true;
+  }
+  const octets = host.split('.').map((part) => Number.parseInt(part, 10));
+  if (isIP(host) === 4 && octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
+    const [first, second] = octets;
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      (first === 169 && second === 254)
+    );
+  }
+  if (isIP(host) === 6) {
+    const normalized = host.split('%', 1)[0];
+    return (
+      normalized === '::1' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      /^fe[89ab]/u.test(normalized) ||
+      normalized.startsWith('::ffff:0.') ||
+      normalized.startsWith('::ffff:10.') ||
+      normalized.startsWith('::ffff:127.') ||
+      normalized.startsWith('::ffff:169.254.') ||
+      normalized.startsWith('::ffff:192.168.')
+    );
+  }
+  return host.endsWith('.localhost') || host.endsWith('.local');
+}
+
+function createWebReadAbortedError(): RocDomainError {
+  return new RocDomainError({
+    code: 'web_read_aborted',
+    message: 'web_read 已取消。',
+    category: 'external',
+    retryable: false,
+    userAction: '请重新发起读取。'
+  });
+}
+
+function isSignalAborted(signal: AbortSignal | undefined): boolean {
+  return signal !== undefined && signal.aborted;
 }

@@ -20,7 +20,12 @@ describe('WebReadService', () => {
       noCache: true
     });
 
-    expect(result).toBe('Reader output body');
+    expect(result).toMatchObject({
+      content: 'Reader output body',
+      source: 'https://example.com/docs',
+      proxy: 'https://r.jina.ai/',
+      untrusted: true
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://r.jina.ai/https://example.com/docs',
       expect.objectContaining({
@@ -65,7 +70,7 @@ describe('WebReadService', () => {
       timeoutSeconds: 10
     });
 
-    expect(result).toBe('Fallback markdown body');
+    expect(result.content).toBe('Fallback markdown body');
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'https://r.jina.ai/https://finance.sina.com.cn/nmetal/quotation.shtml',
@@ -222,5 +227,61 @@ describe('WebReadService', () => {
       'X-Respond-With': 'markdown',
       'X-Timeout': '20'
     });
+  });
+
+  it('rejects URL credentials and private or link-local destinations before proxy fetch', async () => {
+    const fetchMock = vi.fn();
+    const service = new WebReadService(fetchMock);
+
+    for (const url of [
+      'https://user:pass@example.com/docs',
+      'http://localhost:8080/health',
+      'http://127.0.0.1/admin',
+      'http://169.254.169.254/latest',
+      'http://[::1]/admin',
+      'http://[fe80::1]/admin',
+      'http://[fc00::1]/admin'
+    ]) {
+      await expect(service.read({ url })).rejects.toMatchObject({
+        code: url.includes('@') ? 'web_read_url_credentials' : 'web_read_private_url'
+      });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns provenance and rejects oversized reader bodies', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('Reader output body', { status: 200 }));
+    const service = new WebReadService(fetchMock);
+
+    const result = await service.read({ url: 'https://example.com/docs' });
+
+    expect(result).toMatchObject({
+      content: 'Reader output body',
+      source: 'https://example.com/docs',
+      untrusted: true
+    });
+    expect(result.fetchedAt).toEqual(expect.any(String));
+    expect(result.contentHash).toMatch(/^[a-f0-9]{64}$/);
+
+    const oversized = new WebReadService(vi.fn().mockResolvedValue(new Response('x'.repeat(2_100_000), { status: 200 })));
+    await expect(oversized.read({ url: 'https://example.com/large' })).rejects.toMatchObject({
+      code: 'web_read_response_too_large'
+    });
+  });
+
+  it('forwards caller cancellation to the reader fetch', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+      });
+    });
+    const service = new WebReadService(fetchMock);
+    const execution = service.read({ url: 'https://example.com/slow', signal: controller.signal });
+
+    controller.abort();
+
+    await expect(execution).rejects.toMatchObject({ code: 'web_read_aborted' });
   });
 });

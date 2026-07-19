@@ -146,6 +146,26 @@ describe('deep agent error mapping', () => {
       message: 'web_read timeoutSeconds 必须是 1 到 180 之间的整数。',
       retryable: false
     });
+    expect(toRunFailure(new Error('web_read 拒绝包含 credentials 的 URL。'))).toEqual({
+      code: 'web_read_url_credentials',
+      message: 'web_read 拒绝包含 credentials 的 URL。',
+      retryable: false
+    });
+    expect(toRunFailure(new Error('web_read 只允许公开网络地址。'))).toEqual({
+      code: 'web_read_private_url',
+      message: 'web_read 只允许公开网络地址。',
+      retryable: false
+    });
+    expect(toRunFailure(new Error('web_read 响应超过本地大小上限。'))).toEqual({
+      code: 'web_read_response_too_large',
+      message: 'web_read 响应超过本地大小上限。',
+      retryable: false
+    });
+    expect(toRunFailure(new Error('web_read 已取消。'))).toEqual({
+      code: 'web_read_aborted',
+      message: 'web_read 已取消。',
+      retryable: false
+    });
   });
 
   it('preserves web_search unavailable fallback text for plain errors', () => {

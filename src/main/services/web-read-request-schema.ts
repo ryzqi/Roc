@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { WebReadRequest } from './web-read-service';
+import type { WebReadExecutionRequest, WebReadRequest } from './web-read-service';
 
 const responseModeValues = ['content', 'markdown', 'html', 'text', 'frontmatter', 'readerlm-v2'] as const;
 const engineValues = ['auto', 'browser', 'curl', 'cf-browser-rendering'] as const;
@@ -58,6 +58,10 @@ export const webReadRequestSchema = z.object({
     linkReferenceStyle: z.enum(['full', 'collapsed', 'shortcut', 'discarded']).optional()
   }).optional()
 }) satisfies z.ZodType<WebReadRequest>;
+
+export const webReadExecutionRequestSchema = webReadRequestSchema.extend({
+  signal: z.custom<AbortSignal>().optional()
+}) satisfies z.ZodType<WebReadExecutionRequest>;
 
 export const webReadToolSchema = webReadRequestSchema.extend({
   url: z.string().url(),

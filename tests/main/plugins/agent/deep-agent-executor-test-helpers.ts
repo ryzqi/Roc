@@ -263,6 +263,16 @@ export function createCapabilities(
           usedRtk: false
         } satisfies ShellExecutionResult as TOutput;
       }
+      if (name === 'web.read') {
+        return {
+          content: 'Reader output body',
+          source: (input as { url: string }).url,
+          proxy: 'https://r.jina.ai/',
+          fetchedAt: '2026-06-04T00:00:00.000Z',
+          contentHash: 'a'.repeat(64),
+          untrusted: true
+        } as TOutput;
+      }
       if (name === 'files.delete') {
         const request = input as { relativePath: string };
         return {
@@ -481,12 +491,12 @@ export function findTool(tools: ClientTool[], name: string): ClientTool {
   return tool;
 }
 
-export async function invokeTool(tool: ClientTool, input: Record<string, unknown>): Promise<unknown> {
+export async function invokeTool(tool: ClientTool, input: Record<string, unknown>, config?: { signal?: AbortSignal }): Promise<unknown> {
   const invoke = Reflect.get(tool, 'invoke');
   if (typeof invoke !== 'function') {
     throw new Error(`tool_not_invokable:${tool.name}`);
   }
-  return await invoke.call(tool, input);
+  return await invoke.call(tool, input, config);
 }
 
 export function readJson(value: unknown): unknown {

@@ -53,13 +53,20 @@ describe.skipIf(process.platform !== 'win32')('ShellExecutionService cancellatio
       source: 'agent',
       signal: controller.signal
     });
-    const childPid = await waitForChildPid(pidPath);
-
-    controller.abort(new Error('test_abort'));
-
-    await expect(execution).rejects.toThrow('shell_execution_aborted');
-    await waitForProcessExit(childPid);
-    expect(isProcessRunning(childPid)).toBe(false);
+    let childPid: number | null = null;
+    try {
+      childPid = await waitForChildPid(pidPath);
+      controller.abort(new Error('test_abort'));
+      await expect(execution).rejects.toThrow('shell_execution_aborted');
+      await waitForProcessExit(childPid);
+      expect(isProcessRunning(childPid)).toBe(false);
+    } finally {
+      controller.abort(new Error('test_cleanup'));
+      await execution.catch(() => undefined);
+      if (childPid !== null && isProcessRunning(childPid)) {
+        execFileSync('taskkill.exe', ['/PID', String(childPid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      }
+    }
   }, 15_000);
 });
 
@@ -83,12 +90,27 @@ function createService(): ShellExecutionService {
 }
 
 async function waitForChildPid(pidPath: string): Promise<number> {
-  await waitUntil(() => existsSync(pidPath));
-  const pid = Number.parseInt(readFileSync(pidPath, 'utf8').trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0) {
+  let pid: number | null = null;
+  await waitUntil(() => {
+    if (!existsSync(pidPath)) {
+      return false;
+    }
+    try {
+      const parsed = Number.parseInt(readFileSync(pidPath, 'utf8').trim(), 10);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return false;
+      }
+      pid = parsed;
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  const validPid = pid;
+  if (validPid === null || !Number.isInteger(validPid) || validPid <= 0) {
     throw new Error('shell_cancellation_child_pid_invalid');
   }
-  return pid;
+  return validPid;
 }
 
 async function waitForProcessExit(pid: number): Promise<void> {

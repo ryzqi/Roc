@@ -56,10 +56,20 @@ export type HookRuntimeOutcome = {
 export class HookRuntime {
   constructor(private readonly deps: HookRuntimeDeps) {}
 
-  async runEvent(input: RocHookCommandInput): Promise<HookRuntimeOutcome> {
+  async runEvent(input: RocHookCommandInput, options: { signal?: AbortSignal } = {}): Promise<HookRuntimeOutcome> {
     const config = await this.deps.configService.loadConfig();
     const selected = selectConfiguredHandlers(config, input);
-    const executions = await Promise.all(selected.map(async (selectedHandler) => await this.executeSelectedHandler(input, selectedHandler)));
+    const executions: HookExecution[] = [];
+    for (const selectedHandler of selected) {
+      if (options.signal?.aborted === true) {
+        break;
+      }
+      const execution = await this.executeSelectedHandler(input, selectedHandler, options.signal);
+      executions.push(execution);
+      if (processExecution(input.event, execution).blocked) {
+        break;
+      }
+    }
     const outcome = mergeHookExecutions(input.event, executions);
     for (const event of outcome.events) {
       if (event.type === 'hook_completed') {
@@ -69,7 +79,11 @@ export class HookRuntime {
     return outcome;
   }
 
-  private async executeSelectedHandler(input: RocHookCommandInput, selectedHandler: SelectedHookHandler): Promise<HookExecution> {
+  private async executeSelectedHandler(
+    input: RocHookCommandInput,
+    selectedHandler: SelectedHookHandler,
+    signal?: AbortSignal
+  ): Promise<HookExecution> {
     const hookRunId = createHookRunId({ parentRunId: input.runId, handlerId: selectedHandler.handlerId });
     if (!selectedHandler.handler.enabled) {
       return skippedExecution({ selectedHandler, parentRunId: input.runId, hookRunId, message: 'disabled' });
@@ -125,6 +139,7 @@ export class HookRuntime {
           command: resolveCommand(selectedHandler.handler),
           cwd: input.cwd,
           timeoutSeconds: selectedHandler.handler.timeoutSeconds,
+          signal,
           input
         }),
         skippedMessage: null

@@ -396,3 +396,14 @@
 - 当前状态：Changed, verified；最终 RTK 边界修复后仍通过 focused、typecheck、strict unused、IPC、路径、build、full test 与 diff check，待提交独立 Part 3 commit，继续保留未跟踪用户文件 `plan.md`。
 
 - Final review repair：发现并修复通用 RTK middleware 对 `run_shell_command` 的重复 rewrite；新增 middleware regression，确认 Roc shell 只由 `ShellExecutionService` 执行。
+
+## 2026-07-19 — Stage 4 Part 3 committed / Part 4 red gate
+
+- Part 3 已提交 `20c235d feat(agent): harden host shell execution`；用户未跟踪 `plan.md` 未纳入提交。
+- Part 4 定位：`WebReadService` 仅校验 HTTP(S) 协议并返回裸字符串，只有内部 timeout signal；`HookRuntime` 使用 `Promise.all` 并行启动同组 handlers，`HookCommandRunner` 没有外部 abort 入口。
+- Red confirmed：3 files / 5 targeted failures，分别证明 URL credentials/private destination 未拒绝、web provenance/size cap/graph abort 缺失、hook block 后仍启动后续 handler、hook abort 后命令继续运行至测试超时。
+- 实现边界：复用 LangChain tool `RunnableConfig.signal`；模型可见 web schema 不暴露内部 signal。Web 保持 Jina proxy 单一路径，服务结果显式携带 source/proxy/fetchedAt/SHA-256/untrusted；hooks 按配置顺序串行并在 block 后短路。
+- Part 4 implementation：`WebReadService` 拒绝 credentials、localhost/private/link-local IPv4/IPv6、固定 2 MiB 响应上限；body 结果带 `source`、`proxy`、`fetchedAt`、`contentHash`/`contentSha256` 与 `untrusted`。LangChain `config.signal` 经 `web_read -> web.read -> WebReadService` 传入合并 timeout controller。
+- Hook implementation：`HookRuntime.runEvent()` 按配置顺序串行执行，block 后不启动后续 handler；`RocHookMiddleware`、runtime executor 与 lifecycle `SessionEnd` 传递同一 run signal；runner 已支持预取消、运行中 abort、timeout 和 Windows tree termination。
+- Verified passing：focused 8 files / 74 tests、真实 Windows Hook child-tree fixture 通过；`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm verify:paths`、`pnpm build`、`pnpm test`（299 files / 1604 tests）和 `git diff --check` 均通过。Full test 仅有已知 `node-pty AttachConsole failed` teardown 噪音，Vitest exit 0。
+- 当前状态：Verified passing；准备独立 Part 4 commit，继续保留未跟踪用户文件 `plan.md`。

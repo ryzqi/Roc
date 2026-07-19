@@ -79,6 +79,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
           input: 'Summarize this workspace',
           workspacePath
         }),
+        signal: expect.any(AbortSignal),
         status: 'completed',
         error: null
       })
@@ -109,6 +110,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
       expect.objectContaining({
         runId: result.runId,
         threadId: result.threadId,
+        signal: expect.any(AbortSignal),
         status: 'failed',
         error: 'executor_failed'
       })
@@ -140,6 +142,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
       expect.objectContaining({
         runId: result.runId,
         threadId: result.threadId,
+        signal: expect.objectContaining({ aborted: true }),
         status: 'cancelled',
         error: null
       })

@@ -354,6 +354,72 @@ describe('HookRuntime', () => {
     expect(outcome.runs.map((run) => run.handlerId)).toEqual(['PostToolUse:0:0', 'PostToolUse:0:1']);
   });
 
+  it('runs handlers serially and stops launching later handlers after block', async () => {
+    const commands: string[] = [];
+    const { commandRunner, runtime } = createRuntime(
+      {
+        schemaVersion: 1,
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: '^read_file$',
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node first.js',
+                  timeoutSeconds: 30,
+                  enabled: true,
+                  failureMode: 'block'
+                },
+                {
+                  type: 'command',
+                  command: 'node second.js',
+                  timeoutSeconds: 30,
+                  enabled: true,
+                  failureMode: 'block'
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        run: async (request) => {
+          commands.push(request.command);
+          return {
+            status: 'completed',
+            durationMs: 1,
+            stdout: '{"action":"block"}',
+            stderr: '',
+            output: { action: 'block' }
+          };
+        }
+      }
+    );
+
+    const outcome = await runtime.runEvent(input('PreToolUse', { toolName: 'read_file', toolCallId: 'call_1', toolInput: {} }));
+
+    expect(commands).toEqual(['node first.js']);
+    expect(commandRunner.run).toHaveBeenCalledTimes(1);
+    expect(outcome.blocked).toBe(true);
+    expect(outcome.runs).toHaveLength(1);
+  });
+
+  it('does not start handlers when the run signal is already aborted', async () => {
+    const { commandRunner, runtime } = createRuntime(preToolConfig(), {});
+    const controller = new AbortController();
+    controller.abort();
+
+    const outcome = await runtime.runEvent(
+      input('PreToolUse', { toolName: 'run_shell_command', toolCallId: 'call_1', toolInput: {} }),
+      { signal: controller.signal }
+    );
+
+    expect(commandRunner.run).not.toHaveBeenCalled();
+    expect(outcome.runs).toEqual([]);
+    expect(outcome.events).toEqual([]);
+  });
+
   it('copies hook output context fields into completed run summaries', async () => {
     const { runtime } = createRuntime(
       {

@@ -461,7 +461,7 @@ function createWebReadCard(): AgentCapabilityCard {
     id: 'web:web_read',
     name: 'web_read',
     capabilityType: 'web_read',
-    description: '读取指定 URL 的网页正文，返回可继续分析的文本内容。',
+    description: '读取公开网页正文；目标 URL 会发送给 Jina Reader 代理，结果带来源、抓取时间、SHA-256 和不可信标记。',
     requiredInput: 'url',
     scope: 'network',
     dependencies: ['explicit_url'],

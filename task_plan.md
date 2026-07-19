@@ -59,7 +59,7 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 - [x] Part 1：main/subagent 共享安全装配与 immutable manifest 合同；scope exposure 与 background inventory drift 已修复，独立复核无新 finding，focused/static/build/full-test gate 通过，已提交。
 - [x] Part 2：native model/tool budget 与结构化终止；review repair、IPC、build、full-test gate 通过，已提交。
 - [x] Part 3：shell host execution、background pre-authorization、path/env/output/abort；interactive 无审批，background 白名单冻结进 occurrence/run，旧 background snapshot fail-closed，Windows tree abort 与 output artifact 已覆盖。
-- [ ] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交。
+- [x] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交（credentials/private URL、Jina provenance、2 MiB byte cap、caller abort、串行 hook/block short-circuit、SessionEnd/lifecycle signal、Windows Hook child-tree、full verification 已完成；待 commit）。
 - [ ] Part 5：effect state、subagent execution path 与 reconcile 合同；独立 review、修复、验证、提交。
 - [ ] Stage exit：全量验证、最终独立 review、提交。
 - **Status:** in_progress
@@ -164,6 +164,8 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 | Stage 4 Part 3 executor still registered shell after manifest filtering | 1 | Register `run_shell_command` only when the frozen manifest and shell pre-authorization policy both allow it. |
 | Stage 4 Part 3 renderer could inject internal shell authorization fields | 1 | Strip `shellAllowedCommands`, `signal`, and `allowedCommands` in the IPC adapter; missing background authorization resolves to an empty allowlist. |
 | Stage 4 Part 3 review found generic RTK middleware rewrote `run_shell_command` before Roc shell service | 1 | Remove Roc tool from generic RTK middleware inventory; service owns rewrite so authorization, env, signal, deadline, and tree termination share one boundary. |
+| Stage 4 Part 4 red hook abort fixture reached the 20s test timeout | 1 | Expected reproduction: runner ignores the caller signal. Add signal-driven tree termination and settle with `hook_command_aborted`, then rerun the same fixture. |
+| Stage 4 Part 4 first full suite hit `EBUSY` reading the existing shell cancellation PID barrier | 1 | Isolated rerun passed 2/2. Stabilize the barrier by waiting for an unlocked valid PID and always abort/settle execution before temp cleanup, then rerun the full suite. |
 
 ## Review Notes
 

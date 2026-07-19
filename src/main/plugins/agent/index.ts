@@ -385,6 +385,8 @@ function resolveLifecycleHooks(
           status: input.status,
           error: input.error
         }
+      }, {
+        signal: input.signal
       });
       for (const event of outcome.events) {
         await context.eventBus.publish({

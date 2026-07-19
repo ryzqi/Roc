@@ -300,7 +300,10 @@ export class AgentPluginRuntime {
     const metadata = this.activeRunMetadata.get(input.runId);
     this.activeRunMetadata.delete(input.runId);
     const abortController = this.abortControllers.get(input.runId);
-    abortController?.abort();
+    if (abortController === undefined) {
+      throw new Error('agent_run_abort_controller_missing');
+    }
+    abortController.abort();
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
     void this.publish('agent.run.cancelled', {
@@ -319,6 +322,7 @@ export class AgentPluginRuntime {
         runId: input.runId,
         threadId: metadata.threadId,
         request: metadata.request,
+        signal: abortController.signal,
         status: 'cancelled',
         error: null
       });
@@ -689,6 +693,7 @@ export class AgentPluginRuntime {
           runId: input.runId,
           threadId: input.threadId,
           request: input.request,
+          signal: input.abortSignal,
           status: 'completed',
           error: null
         });
@@ -784,6 +789,7 @@ export class AgentPluginRuntime {
       runId: input.input.runId,
       threadId: input.input.threadId,
       request: input.input.request,
+      signal: input.input.abortSignal,
       status: 'failed',
       error: input.failure.message
     });

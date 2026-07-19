@@ -50,7 +50,10 @@ describe('createAgentDeepAgentExecutor hooks', () => {
         payload: expect.objectContaining({
           source: 'chat'
         })
-      })
+      }),
+      {
+        signal: expect.any(AbortSignal)
+      }
     );
   });
 

@@ -20,6 +20,7 @@ export type AgentLifecycleHookEmitter = {
     runId: string;
     threadId: string | null;
     request: ChatStartRunRequest;
+    signal: AbortSignal;
     status: RocHookSessionEndStatus;
     error: string | null;
   }): Promise<void>;

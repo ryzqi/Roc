@@ -28,6 +28,7 @@ export type RocHookMiddlewareOptions = {
   emitHookEvent: (event: ChatRunEvent) => void;
   initialContexts?: string[];
   scope?: 'run' | 'tool';
+  signal?: AbortSignal;
 };
 
 export function createRocHookMiddleware(options: RocHookMiddlewareOptions) {
@@ -40,7 +41,9 @@ export function createRocHookMiddleware(options: RocHookMiddlewareOptions) {
   }
 
   const runHook = async (event: RocHookCommandInput['event'], payload: RocHookCommandInput['payload']): Promise<HookRuntimeOutcome> => {
-    const outcome = await options.hookRuntime.runEvent(createHookInput(options.runContext, event, payload));
+    const outcome = await options.hookRuntime.runEvent(createHookInput(options.runContext, event, payload), {
+      signal: options.signal
+    });
     emitHookEvents(options, outcome.events);
     return outcome;
   };

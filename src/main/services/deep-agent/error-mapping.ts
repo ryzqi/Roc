@@ -105,6 +105,34 @@ function readToolFailure(error: Error): RunFailure | null {
       retryable: true
     };
   }
+  if (message.startsWith('web_read 已取消。')) {
+    return {
+      code: 'web_read_aborted',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read 拒绝包含 credentials')) {
+    return {
+      code: 'web_read_url_credentials',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read 只允许公开网络地址')) {
+    return {
+      code: 'web_read_private_url',
+      message,
+      retryable: false
+    };
+  }
+  if (message.startsWith('web_read 响应超过本地大小上限')) {
+    return {
+      code: 'web_read_response_too_large',
+      message,
+      retryable: false
+    };
+  }
   if (message.startsWith('web_read 请求失败：HTTP ')) {
     const statusMatch = /\bHTTP\s+(\d{3})\b/iu.exec(message);
     const status = statusMatch === null ? null : Number(statusMatch[1]);

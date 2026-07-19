@@ -203,6 +203,20 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(readBuiltTools().map((tool) => tool.name)).not.toContain('run_shell_command');
   });
 
+  it('passes LangChain tool cancellation to web.read without exposing it in model input', async () => {
+    const capabilityCalls: Array<{ name: string; input: unknown }> = [];
+    await buildExecutorOnce(createCapabilities(capabilityCalls), {
+      mode: 'chat',
+      taskSource: null
+    });
+    const controller = new AbortController();
+    const output = await invokeTool(findTool(readBuiltTools(), 'web_read'), { url: 'https://example.com/docs' }, { signal: controller.signal });
+
+    expect(output).toContain('"source"');
+    const webCall = capabilityCalls.find((call) => call.name === 'web.read');
+    expect(webCall?.input).toMatchObject({ url: 'https://example.com/docs', signal: controller.signal });
+  });
+
 
   it('converts delete_file /workspace file_path to files.delete relativePath', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
