@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -257,7 +257,50 @@ describe('runtime tools shell adapter', () => {
       cwd: workspaceRoot
     });
   });
+
+  it('rejects a background command that is not exactly pre-authorized', async () => {
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'git status',
+      cwd: workspaceRoot,
+      source: 'agent',
+      allowedCommands: []
+    });
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stdout: '',
+      bypassReason: 'background_shell_command_not_pre_authorized',
+      truncated: false
+    });
+    expect(commandCalls).toHaveLength(0);
+  });
+
+  it('caps shell output and records the full output artifact', async () => {
+    const fullOutput = 'x'.repeat(70 * 1024);
+    const { capabilities } = await initializePlugin({
+      commandExecutor: () => ({ stdout: fullOutput, stderr: '', exitCode: 0 })
+    });
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'Write-Output huge',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.stdout).toContain('[truncated; full output: tee artifact]');
+    expect(result.teePath).toBeTruthy();
+    expect(existsSync(result.teePath as string)).toBe(true);
+  });
 });
+
+type CommandResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
 
 type CommandCall = {
   file: string;
@@ -266,7 +309,7 @@ type CommandCall = {
   extraEnv: Record<string, string>;
 };
 
-async function initializePlugin(options: { workspacePath?: string } = { workspacePath: workspaceRoot }): Promise<{
+async function initializePlugin(options: { workspacePath?: string; commandExecutor?: (file: string, args: string[], cwd: string, extraEnv: Record<string, string>, signal?: AbortSignal) => CommandResult } = { workspacePath: workspaceRoot }): Promise<{
   capabilities: CapabilityRegistry;
   commandCalls: CommandCall[];
 }> {
@@ -276,11 +319,11 @@ async function initializePlugin(options: { workspacePath?: string } = { workspac
     workspacePath: options.workspacePath,
     commandExecutor: (file, args, cwd, extraEnv) => {
       commandCalls.push({ file, args, cwd, extraEnv });
-      return {
+      return options.commandExecutor === undefined ? {
         stdout: 'notes.txt\n',
         stderr: '',
         exitCode: 0
-      };
+      } : options.commandExecutor(file, args, cwd, extraEnv);
     },
     confirmShellRequest: async () => ({ confirmed: true, response: 0 })
   });

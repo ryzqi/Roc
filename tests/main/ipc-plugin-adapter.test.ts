@@ -75,6 +75,28 @@ describe('plugin capability IPC adapter', () => {
     });
   });
 
+  it('strips main-process-only shell authorization fields from renderer IPC', async () => {
+    const adapter = createPluginCapabilityAdapter({
+      invokeCapability: async <TInput, TOutput>(capabilityName: string, input: TInput): Promise<TOutput> =>
+        ({ capabilityName, input }) as TOutput
+    });
+
+    await expect(adapter.invoke('chat.startRun', [{ ...chatRequest(), shellAllowedCommands: ['Remove-Item secret.txt'] }])).resolves.toEqual({
+      ok: true,
+      data: {
+        capabilityName: 'agent.run.start',
+        input: chatRequest()
+      }
+    });
+    await expect(adapter.invoke('shell.execute', [{ command: 'dir', source: 'terminal', signal: {}, allowedCommands: ['dir'] }])).resolves.toEqual({
+      ok: true,
+      data: {
+        capabilityName: 'shell.execute',
+        input: { command: 'dir', source: 'terminal' }
+      }
+    });
+  });
+
   it('registers explicit generated channels without wildcard handlers', async () => {
     const handlers = new Map<string, IpcMainHandler>();
     registerPluginCapabilityIpc((channel, handler) => {
@@ -169,7 +191,7 @@ function requiredMappings(): Array<{
   ];
 }
 
-function chatRequest(): unknown {
+function chatRequest(): Record<string, unknown> {
   return {
     enabledCapabilities: {
       mcpServers: [],

@@ -75,6 +75,7 @@ const chatStartRunRequestSchema = z.object({
   workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
   taskSource: z.enum(['background_schedule', 'workbench']).nullable().optional(),
   workspacePath: z.string().nullable().optional(),
+  shellAllowedCommands: z.array(z.string().trim().min(1)).optional(),
   attachments: z.array(chatImageAttachmentSchema).max(4).optional(),
   dispatchKey: z.string().trim().min(1).optional(),
   explicitSkillIds: z.array(z.string().trim().min(1)).optional()
@@ -320,7 +321,7 @@ function createCapabilityPreviewProvider(
     return undefined;
   }
   const capabilityPreviewOptions = options.capabilityPreview;
-  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, workflowHint }) =>
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, workflowHint }) =>
     buildAgentCapabilityPreview({
       deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
       explicitSkillIds,
@@ -328,6 +329,7 @@ function createCapabilityPreviewProvider(
       mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
       mode,
       requestedCapabilities,
+      shellAllowedCommands,
       runtimeStatus,
       skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
       workflowHint

@@ -112,13 +112,27 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         modelId: input.modelHandle.modelId,
         workflowHint
       };
-      const shellExecutionService = createShellExecutionAdapter(options.capabilities, runtimeWorkspace === null ? null : runtimeWorkspace.path);
+      const shellAllowedCommands =
+        input.snapshot.runOrigin === 'background_schedule'
+          ? input.snapshot.shellAllowedCommands === undefined
+            ? []
+            : input.snapshot.shellAllowedCommands
+          : input.snapshot.shellAllowedCommands;
+      const shellExecutionService = createShellExecutionAdapter({
+        capabilities: options.capabilities,
+        defaultCwd: runtimeWorkspace === null ? null : runtimeWorkspace.path,
+        allowedCommands: shellAllowedCommands,
+        abortSignal: executionAbortController.signal,
+        runId: input.run.id,
+        threadId: input.run.threadId
+      });
       const tools = await createExecutorTools({
         capabilities: options.capabilities,
         capabilityManifest: input.snapshot.capabilityManifest,
         enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
         runtimeWorkspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         shellExecutionService,
+        shellAllowedCommands,
         mode
       });
       const explicitSkillContexts = loadExplicitSkillContexts({
@@ -466,6 +480,7 @@ async function createExecutorTools(input: {
   enabledCapabilities: TaskRun['enabledCapabilities'];
   runtimeWorkspacePath: string | null;
   shellExecutionService: AgentExecuteAdapter;
+  shellAllowedCommands?: readonly string[];
   mode: ChatRunMode;
 }): Promise<{
   runTools: ClientTool[];
@@ -484,9 +499,12 @@ async function createExecutorTools(input: {
     webReadTool,
     askUserTool,
     createDeleteFileTool(input.capabilities),
-    createRocWindowsCommandTool(input.shellExecutionService),
     ...mcpTools
   ];
+  const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
+  if (manifestToolNames.has('run_shell_command') && (input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0)) {
+    runTools.splice(3, 0, createRocWindowsCommandTool(input.shellExecutionService));
+  }
   const backgroundTaskTools = createManifestAuthorizedBackgroundTaskTools(input);
   if (backgroundTaskTools.length > 0) {
     runTools.splice(2, 0, ...backgroundTaskTools);
@@ -681,27 +699,38 @@ function createRuntimeBackend(input: {
   });
 }
 
-function createShellExecutionAdapter(capabilities: RocCapabilityRegistry, defaultCwd: string | null): AgentExecuteAdapter {
+function createShellExecutionAdapter(input: {
+  capabilities: RocCapabilityRegistry;
+  defaultCwd: string | null;
+  allowedCommands?: readonly string[];
+  abortSignal: AbortSignal;
+  runId: string;
+  threadId: string;
+}): AgentExecuteAdapter {
   return {
     executeAgentCommand: async ({ command, cwd }) => {
-      const requestCwd = cwd === undefined ? defaultCwd : cwd;
+      const requestCwd = cwd === undefined ? input.defaultCwd : cwd;
       if (requestCwd === null) {
         throw new Error('agent_workspace_required_for_shell');
       }
-      const result = await capabilities.invoke<
-        { command: string; cwd?: string; source: 'agent' },
+      const result = await input.capabilities.invoke<
+        import('../../../shared/types').ShellExecutionRequest,
         import('../../../shared/types').ShellExecutionResult
       >('shell.execute', {
         command,
         cwd: requestCwd,
-        source: 'agent'
+        source: 'agent',
+        signal: input.abortSignal,
+        runId: input.runId,
+        threadId: input.threadId,
+        allowedCommands: input.allowedCommands === undefined ? undefined : [...input.allowedCommands]
       });
       return {
         command: result.command,
         cwd: result.cwd,
         exitCode: result.exitCode,
         output: formatShellOutput(result),
-        truncated: false,
+        truncated: result.truncated === true,
         usedRtk: result.usedRtk,
         bypassReason: result.bypassReason
       };

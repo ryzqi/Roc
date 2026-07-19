@@ -50,7 +50,12 @@ export function resolveRtkRoute(command: string): RtkRoutingDecision {
   };
 }
 
-export async function resolveRtkRouteAsync(command: string, metadata: RtkExecutionMetadata): Promise<RtkRoutingDecision> {
+export async function resolveRtkRouteAsync(
+  command: string,
+  metadata: RtkExecutionMetadata,
+  signal?: AbortSignal,
+  environment?: NodeJS.ProcessEnv
+): Promise<RtkRoutingDecision> {
   const explicitRtkArgs = parseRtkArgs(command.trim());
   if (explicitRtkArgs !== null) {
     return resolveExplicitRtkRoute(explicitRtkArgs);
@@ -64,7 +69,7 @@ export async function resolveRtkRouteAsync(command: string, metadata: RtkExecuti
     };
   }
 
-  const rewritten = await new CommandRewriter(metadata.binaryPath).rewrite(command);
+  const rewritten = await new CommandRewriter(metadata.binaryPath, { environment }).rewrite(command, signal);
   if (rewritten.rtkArgs === null || isWindowsRtkDeniedSubcommand(rewritten.rtkArgs)) {
     return resolveRtkRoute(command);
   }

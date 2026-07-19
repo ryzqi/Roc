@@ -14,7 +14,7 @@ export type RTKMiddlewareOptions = {
   createRewriter?: (binaryPath: string) => Rewriter;
 };
 
-const SHELL_TOOL_NAMES = new Set(['execute', 'bash', 'shell', 'terminal', 'run_shell_command']);
+const SHELL_TOOL_NAMES = new Set(['execute', 'bash', 'shell', 'terminal']);
 
 export function createRTKMiddleware(binaryManager: RTKBinaryManager, options: RTKMiddlewareOptions = {}) {
   const fallbackOnError = options.fallbackOnError === undefined ? true : options.fallbackOnError;

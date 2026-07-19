@@ -27,6 +27,7 @@ export type AgentExecuteAdapter = {
       command: string;
       cwd: string;
       usedRtk: boolean;
+      truncated?: boolean;
       bypassReason?: ShellExecutionResult['bypassReason'];
     }
   >;

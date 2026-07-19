@@ -9,7 +9,8 @@ export type ShellCommandExecutor = (
   file: string,
   args: string[],
   cwd: string,
-  extraEnv: Record<string, string>
+  extraEnv: Record<string, string>,
+  signal?: AbortSignal
 ) => {
   stdout: string;
   stderr: string;
@@ -64,9 +65,10 @@ class InjectableShellExecutionService extends ShellExecutionService {
     file: string,
     args: string[],
     cwd: string,
-    extraEnv: Record<string, string> = {}
+    extraEnv: Record<string, string> = {},
+    signal?: AbortSignal
   ): Promise<Omit<ShellExecutionResult, 'command' | 'normalizedCommand' | 'cwd' | 'durationMs' | 'usedRtk' | 'bypassReason'>> {
-    return this.commandExecutor(file, args, cwd, extraEnv);
+    return this.commandExecutor(file, args, cwd, extraEnv, signal);
   }
 }
 

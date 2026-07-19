@@ -53,6 +53,7 @@ export type AgentCapabilityPreviewProvider = (input: {
   explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
   mode: ChatStartRunRequest['mode'];
   requestedCapabilities: EnabledCapabilities;
+  shellAllowedCommands?: readonly string[];
   runtimeStatus: AgentRuntimeStatus;
   workflowHint: WorkflowHint;
 }) => Promise<AgentCapabilityPreview>;
@@ -135,6 +136,7 @@ export class AgentPluginRuntime {
     explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
+    shellAllowedCommands?: readonly string[];
     workflowHint?: WorkflowHint;
   }): Promise<AgentCapabilityPreview> {
     if (this.options.capabilityPreviewProvider === undefined) {
@@ -144,6 +146,7 @@ export class AgentPluginRuntime {
       explicitSkillIds: input.explicitSkillIds,
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
+      shellAllowedCommands: input.shellAllowedCommands,
       runtimeStatus: this.getStatus(),
       workflowHint: input.workflowHint === undefined ? null : input.workflowHint
     });
@@ -162,10 +165,12 @@ export class AgentPluginRuntime {
       }
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
+    const shellAllowedCommands = resolveShellAllowedCommands(request);
     const capabilityPreview = await this.getRunCapabilityPreview({
       explicitSkillIds: request.explicitSkillIds,
       mode: request.mode,
       requestedCapabilities: request.enabledCapabilities,
+      shellAllowedCommands,
       workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
       modelHandle
     });
@@ -183,6 +188,7 @@ export class AgentPluginRuntime {
           explicitSkillIds,
           modelHandle,
           request,
+          shellAllowedCommands,
           workspace
         }),
         threadKind: resolveNewRunThreadKind(request),
@@ -912,6 +918,7 @@ export class AgentPluginRuntime {
     explicitSkillIds?: ChatStartRunRequest['explicitSkillIds'];
     mode: ChatStartRunRequest['mode'];
     requestedCapabilities: EnabledCapabilities;
+    shellAllowedCommands?: readonly string[];
     workflowHint: WorkflowHint;
     modelHandle: AgentModelHandle;
   }): Promise<AgentCapabilityPreview> {
@@ -920,6 +927,7 @@ export class AgentPluginRuntime {
         explicitSkillIds: input.explicitSkillIds,
         mode: input.mode,
         requestedCapabilities: input.requestedCapabilities,
+        shellAllowedCommands: input.shellAllowedCommands,
         workflowHint: input.workflowHint
       });
     }
@@ -935,6 +943,7 @@ export class AgentPluginRuntime {
       mcpServers: [],
       mode: input.mode,
       requestedCapabilities: input.requestedCapabilities,
+      shellAllowedCommands: input.shellAllowedCommands,
       skills: [],
       workflowHint: input.workflowHint
     });
@@ -1020,6 +1029,7 @@ function createRunExecutionSnapshotSeed(input: {
   explicitSkillIds: string[];
   modelHandle: AgentModelHandle;
   request: ChatStartRunRequest;
+  shellAllowedCommands?: readonly string[];
   workspace: Workspace | null;
 }): RunExecutionSnapshotSeed {
   return {
@@ -1032,6 +1042,7 @@ function createRunExecutionSnapshotSeed(input: {
     mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
     workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
     capabilityManifest: input.capabilityManifest,
+    shellAllowedCommands: input.shellAllowedCommands === undefined ? undefined : [...input.shellAllowedCommands],
     budget: createRunBudget({
         contextBudgetTokens:
           input.modelHandle.langChainHandle === undefined
@@ -1044,6 +1055,29 @@ function createRunExecutionSnapshotSeed(input: {
     explicitSkillIds: input.explicitSkillIds,
     dispatchKey: input.dispatchKey
   };
+}
+
+function resolveShellAllowedCommands(request: ChatStartRunRequest): string[] | undefined {
+  if (request.shellAllowedCommands === undefined) {
+    return request.taskSource === 'background_schedule' ? [] : undefined;
+  }
+  if (request.mode !== 'task' || (request.taskSource !== 'background_schedule' && request.taskSource !== 'workbench')) {
+    throw new Error('agent_shell_preauthorization_source_invalid');
+  }
+  const commands: string[] = [];
+  const seen = new Set<string>();
+  for (const command of request.shellAllowedCommands) {
+    const value = command.trim();
+    if (value.length === 0) {
+      throw new Error('agent_shell_preauthorization_command_empty');
+    }
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    commands.push(value);
+  }
+  return commands;
 }
 
 

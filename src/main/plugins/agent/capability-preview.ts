@@ -18,6 +18,7 @@ export function buildAgentCapabilityPreview(input: {
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   requestedCapabilities: EnabledCapabilities;
+  shellAllowedCommands?: readonly string[];
   runtimeStatus: AgentRuntimeStatus;
   skills: SkillSnapshot[];
   mode: ChatRunMode;

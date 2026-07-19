@@ -184,9 +184,23 @@ describe('createAgentDeepAgentExecutor', () => {
       input: {
         command: 'python .\\create_docx.py',
         cwd: workspacePath,
-        source: 'agent'
+        source: 'agent',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        signal: expect.any(AbortSignal),
+        allowedCommands: undefined
       }
     });
+  });
+
+  it('does not expose shell to a background snapshot without pre-authorization', async () => {
+    await buildExecutorOnce(createCapabilities([]), {
+      mode: 'task',
+      taskSource: 'background_schedule',
+      shellAllowedCommands: []
+    });
+
+    expect(readBuiltTools().map((tool) => tool.name)).not.toContain('run_shell_command');
   });
 
 

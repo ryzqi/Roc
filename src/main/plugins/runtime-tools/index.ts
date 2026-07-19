@@ -28,7 +28,9 @@ const shellExecutionRequestSchema = z.object({
   cwd: z.string().optional(),
   source: z.enum(['agent', 'terminal']),
   threadId: z.string().optional(),
-  runId: z.string().optional()
+  runId: z.string().optional(),
+  signal: z.custom<AbortSignal>().optional(),
+  allowedCommands: z.array(z.string().trim().min(1)).optional()
 }) satisfies z.ZodType<ShellExecutionRequest>;
 const shellConfirmationRequestSchema = z.object({
   title: z.string(),

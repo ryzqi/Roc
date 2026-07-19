@@ -58,7 +58,7 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 
 - [x] Part 1：main/subagent 共享安全装配与 immutable manifest 合同；scope exposure 与 background inventory drift 已修复，独立复核无新 finding，focused/static/build/full-test gate 通过，已提交。
 - [x] Part 2：native model/tool budget 与结构化终止；review repair、IPC、build、full-test gate 通过，已提交。
-- [ ] Part 3：shell host execution、background pre-authorization、path/env/output/abort；独立 review、修复、验证、提交。
+- [x] Part 3：shell host execution、background pre-authorization、path/env/output/abort；interactive 无审批，background 白名单冻结进 occurrence/run，旧 background snapshot fail-closed，Windows tree abort 与 output artifact 已覆盖。
 - [ ] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交。
 - [ ] Part 5：effect state、subagent execution path 与 reconcile 合同；独立 review、修复、验证、提交。
 - [ ] Stage exit：全量验证、最终独立 review、提交。
@@ -160,6 +160,10 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 | Stage 4 Part 2 discovery batch referenced nonexistent `src/main/errors.ts` and invalid wildcard paths | 1 | Locate `src/main/services/errors.ts` and exact installed package directory; rerun commands separately. |
 | Stage 4 Part 2 first V2 focused run still wrote snapshot schemaVersion 1 and repository rejected V2 DB rows | 1 | Write schemaVersion 2, accept DB snapshot versions 1/2, and preserve explicit V1-to-V2 parser migration. |
 | Stage 4 Part 2 full-stack wiring expected the pre-budget middleware order | 1 | Add native model/tool limit middleware names to the exact expected stack assertion. |
+| Stage 4 Part 3 initial shell adapter passed no run signal, inherited full env, and always reported `truncated:false` | 1 | Thread run signal/cwd/source metadata into `shell.execute`; add minimal env, fixed deadline, Windows tree termination, streamed output cap and tee artifact. |
+| Stage 4 Part 3 executor still registered shell after manifest filtering | 1 | Register `run_shell_command` only when the frozen manifest and shell pre-authorization policy both allow it. |
+| Stage 4 Part 3 renderer could inject internal shell authorization fields | 1 | Strip `shellAllowedCommands`, `signal`, and `allowedCommands` in the IPC adapter; missing background authorization resolves to an empty allowlist. |
+| Stage 4 Part 3 review found generic RTK middleware rewrote `run_shell_command` before Roc shell service | 1 | Remove Roc tool from generic RTK middleware inventory; service owns rewrite so authorization, env, signal, deadline, and tree termination share one boundary. |
 
 ## Review Notes
 
@@ -180,3 +184,4 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 - Stage 1 discovery：Electron smoke 的 user/assistant/task-update 均来自 `AgentSessionRepository`；`capabilityPreview` 只被 EventBus 投影携带，未写 `agent_events`，所以没有 `context_manifest`。正确修复点是 run 创建事务。
 - Stage 1 final review：standards/spec review 提出的 run-origin provenance 与 explicit-skill audit-card 缺口均已 red-green 修复；final CodeGraph call-path review 与 whitespace check 未发现新的具体问题。Stage 2 outbox 与 subagent safety parity 仍按 `plan.md` 留在后续阶段，未在本 stage 提前实施。
 - Stage 2 re-review repair: `run_cancelled` renderer terminal state, overflow producer settlement, and legacy 10k non-terminal replay reconciliation are active P1 fixes. No Stage 2 completion/commit until their tests, aggregate verification, and a clean independent re-review pass.
+- Stage 4 Part 3 review：未发现新的 standards/spec blocker。Shell policy 沿用 RunExecutionSnapshot V2 的可选向后兼容字段；新 background occurrence 始终写入白名单，旧 background snapshot 缺字段时 executor fail-closed。IPC boundary 明确剥离 renderer-only 输入。

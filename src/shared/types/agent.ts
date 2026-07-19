@@ -181,6 +181,7 @@ export type RunExecutionSnapshotV1 = RunExecutionSnapshotFields & {
 export type RunExecutionSnapshotV2 = RunExecutionSnapshotFields & {
   schemaVersion: 2;
   budget: RunBudgetV2;
+  shellAllowedCommands?: string[];
 };
 
 export type AgentRuntimeStatus = {

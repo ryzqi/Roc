@@ -322,7 +322,8 @@ export class TaskRepository {
         mode: 'task',
         taskSource: 'background_schedule',
         threadId: task.threadId,
-        workspacePath: task.workspacePath
+        workspacePath: task.workspacePath,
+        shellAllowedCommands: [...task.allowedActions]
       };
       const existing = this.db
         .prepare('SELECT status FROM scheduled_occurrences WHERE occurrence_key = ?')
@@ -1095,6 +1096,7 @@ function parseScheduledOccurrenceRequest(serialized: string): ChatStartRunReques
   const taskSource = readScheduledOccurrenceText(value, 'taskSource');
   const threadId = readScheduledOccurrenceText(value, 'threadId');
   const workspacePath = readScheduledOccurrenceText(value, 'workspacePath');
+  const shellAllowedCommands = readOptionalScheduledOccurrenceTextArray(value, 'shellAllowedCommands');
   if (mode !== 'task' || taskSource !== 'background_schedule') {
     throw new Error('scheduled_occurrence_request_invalid');
   }
@@ -1111,7 +1113,8 @@ function parseScheduledOccurrenceRequest(serialized: string): ChatStartRunReques
     mode,
     taskSource,
     threadId,
-    workspacePath
+    workspacePath,
+    shellAllowedCommands
   };
 }
 
@@ -1129,6 +1132,14 @@ function readScheduledOccurrenceTextArray(value: object, key: string): string[] 
     throw new Error('scheduled_occurrence_request_invalid');
   }
   return field;
+}
+
+function readOptionalScheduledOccurrenceTextArray(value: object, key: string): string[] {
+  const field = Reflect.get(value, key);
+  if (field === undefined) {
+    return [];
+  }
+  return readScheduledOccurrenceTextArray(value, key);
 }
 
 function outboxTerminalOccurrenceStatus(event: AgentOutboxEvent): 'cancelled' | 'completed' | 'failed' | null {

@@ -1,5 +1,8 @@
 import type { ExecuteResponse } from 'deepagents';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
 import { containsVirtualWorkspacePath } from './deep-agent/shell-path-guard';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
@@ -23,7 +26,28 @@ type ExecutedShellCommand = {
   exitCode: number;
   usedRtk: boolean;
   bypassReason?: ShellExecutionResult['bypassReason'];
+  truncated?: boolean;
+  teePath?: string;
 };
+
+const maxOutputBytes = 64 * 1024;
+const shellDeadlineMs = 120 * 1000;
+const shellEnvironmentKeys = [
+  'APPDATA',
+  'COMSPEC',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LOCALAPPDATA',
+  'PATH',
+  'PATHEXT',
+  'PROGRAMDATA',
+  'SYSTEMDRIVE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'WINDIR'
+] as const;
 
 export type ShellTaskEventRecorder = {
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): unknown;
@@ -42,22 +66,25 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.rejectVirtualWorkspacePath({
+        ? (this.authorizeAgentCommand(request) ?? this.rejectVirtualWorkspacePath({
             command: request.command,
             cwd,
             fallbackCwd: this.readFallbackCwd()
           }) ?? this.runAgentCommand(request.command, cwd))
         : this.executeTerminalCommand(request.command, cwd);
+    const cappedExecution = this.capExecutionOutput(execution);
     const result: ShellExecutionResult = {
       command: request.command,
       normalizedCommand,
       cwd,
-      stdout: execution.stdout,
-      stderr: execution.stderr,
+      stdout: cappedExecution.stdout,
+      stderr: cappedExecution.stderr,
       exitCode: execution.exitCode,
       durationMs: Date.now() - startedAt,
-      usedRtk: execution.usedRtk,
-      bypassReason: execution.bypassReason
+      usedRtk: cappedExecution.usedRtk,
+      bypassReason: cappedExecution.bypassReason,
+      truncated: cappedExecution.truncated,
+      ...(cappedExecution.teePath === undefined ? {} : { teePath: cappedExecution.teePath })
     };
 
     if (request.source === 'agent' && request.threadId !== undefined && request.runId !== undefined) {
@@ -82,27 +109,33 @@ export class ShellExecutionService {
   }
 
   async executeAsync(request: ShellExecutionRequest): Promise<ShellExecutionResult> {
+    if (request.signal?.aborted) {
+      throw new Error('shell_execution_aborted');
+    }
     const normalizedCommand = normalizeShellCommand(request.command);
     const cwd = this.resolveCwd(request);
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.rejectVirtualWorkspacePath({
+        ? (this.authorizeAgentCommand(request) ?? this.rejectVirtualWorkspacePath({
             command: request.command,
             cwd,
             fallbackCwd: this.readFallbackCwd()
-          }) ?? (await this.runAgentCommandAsync(request.command, cwd)))
-        : await this.executeTerminalCommandAsync(request.command, cwd);
+          }) ?? (await this.runAgentCommandAsync(request.command, cwd, request.signal)))
+        : await this.executeTerminalCommandAsync(request.command, cwd, request.signal);
+    const cappedExecution = this.capExecutionOutput(execution);
     const result: ShellExecutionResult = {
       command: request.command,
       normalizedCommand,
       cwd,
-      stdout: execution.stdout,
-      stderr: execution.stderr,
+      stdout: cappedExecution.stdout,
+      stderr: cappedExecution.stderr,
       exitCode: execution.exitCode,
       durationMs: Date.now() - startedAt,
-      usedRtk: execution.usedRtk,
-      bypassReason: execution.bypassReason
+      usedRtk: cappedExecution.usedRtk,
+      bypassReason: cappedExecution.bypassReason,
+      truncated: cappedExecution.truncated,
+      ...(cappedExecution.teePath === undefined ? {} : { teePath: cappedExecution.teePath })
     };
 
     if (request.source === 'agent' && request.threadId !== undefined && request.runId !== undefined) {
@@ -310,10 +343,10 @@ export class ShellExecutionService {
     };
   }
 
-  private async runAgentCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
+  private async runAgentCommandAsync(command: string, cwd: string, signal?: AbortSignal): Promise<ExecutedShellCommand> {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
-      const fallback = await this.executePowerShellAsync(command, cwd);
+      const fallback = await this.executePowerShellAsync(command, cwd, signal);
       return {
         ...fallback,
         usedRtk: false,
@@ -321,9 +354,20 @@ export class ShellExecutionService {
       };
     }
 
-    const rtkRoute = await resolveRtkRouteAsync(command, rtk);
+    if (signal?.aborted) {
+      throw new Error('shell_execution_aborted');
+    }
+    const rtkRoute = await resolveRtkRouteAsync(
+      command,
+      rtk,
+      signal,
+      buildShellEnvironment(buildRtkEnvironment(rtk), false)
+    );
+    if (signal?.aborted) {
+      throw new Error('shell_execution_aborted');
+    }
     if (rtkRoute.kind === 'fallback') {
-      const fallback = await this.executePowerShellAsync(command, cwd);
+      const fallback = await this.executePowerShellAsync(command, cwd, signal);
       return {
         ...fallback,
         usedRtk: false,
@@ -331,7 +375,7 @@ export class ShellExecutionService {
       };
     }
 
-    const execution = await this.executeRtkAsync(rtkRoute.args, cwd, rtk);
+    const execution = await this.executeRtkAsync(rtkRoute.args, cwd, rtk, signal);
     return {
       ...execution,
       usedRtk: true
@@ -339,7 +383,7 @@ export class ShellExecutionService {
   }
 
   private executeTerminalCommand(command: string, cwd: string): ExecutedShellCommand {
-    const execution = this.executePowerShell(command, cwd);
+    const execution = this.executePowerShellWithEnvironment(command, cwd, true);
     return {
       ...execution,
       usedRtk: false,
@@ -347,8 +391,8 @@ export class ShellExecutionService {
     };
   }
 
-  private async executeTerminalCommandAsync(command: string, cwd: string): Promise<ExecutedShellCommand> {
-    const execution = await this.executePowerShellAsync(command, cwd);
+  private async executeTerminalCommandAsync(command: string, cwd: string, signal?: AbortSignal): Promise<ExecutedShellCommand> {
+    const execution = await this.executePowerShellAsync(command, cwd, signal, true);
     return {
       ...execution,
       usedRtk: false,
@@ -367,39 +411,48 @@ export class ShellExecutionService {
   private async executeRtkAsync(
     args: string[],
     cwd: string,
-    metadata: RtkExecutionMetadata
+    metadata: RtkExecutionMetadata,
+    signal?: AbortSignal
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
-    return await this.execFileAsync(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata));
+    return await this.execFileAsync(metadata.binaryPath, args, cwd, buildRtkEnvironment(metadata), signal);
   }
 
   private executePowerShell(command: string, cwd: string): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
+    return this.executePowerShellWithEnvironment(command, cwd, false);
+  }
+
+  private executePowerShellWithEnvironment(
+    command: string,
+    cwd: string,
+    inheritEnvironment: boolean
+  ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
     const encodedCommand = `${powershellUtf8Prefix} ${command}`;
-    return this.execFile('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd);
+    return this.execFile('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd, {}, inheritEnvironment);
   }
 
   private async executePowerShellAsync(
     command: string,
-    cwd: string
+    cwd: string,
+    signal?: AbortSignal,
+    inheritEnvironment = false
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
     const encodedCommand = `${powershellUtf8Prefix} ${command}`;
-    return await this.execFileAsync('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd);
+    return await this.execFileAsync('powershell.exe', ['-NoProfile', '-Command', encodedCommand], cwd, {}, signal, inheritEnvironment);
   }
 
   protected execFile(
     file: string,
     args: string[],
     cwd: string,
-    extraEnv: Record<string, string> = {}
+    extraEnv: Record<string, string> = {},
+    inheritEnvironment = false
   ): Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'> {
     try {
       return {
         stdout: execFileSync(file, args, {
           cwd,
           encoding: 'utf8',
-          env: {
-            ...process.env,
-            ...extraEnv
-          },
+          env: buildShellEnvironment(extraEnv, inheritEnvironment),
           windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe']
         }),
@@ -423,42 +476,143 @@ export class ShellExecutionService {
     file: string,
     args: string[],
     cwd: string,
-    extraEnv: Record<string, string> = {}
+    extraEnv: Record<string, string> = {},
+    signal?: AbortSignal,
+    inheritEnvironment = false
   ): Promise<Omit<ExecutedShellCommand, 'usedRtk' | 'bypassReason'>> {
     return await new Promise((resolve, reject) => {
-      execFile(
-        file,
-        args,
-        {
-          cwd,
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            ...extraEnv
-          },
-          windowsHide: true
-        },
-        (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => {
-          if (error === null) {
-            resolve({
-              stdout: typeof stdout === 'string' ? stdout : stdout.toString('utf8'),
-              stderr: typeof stderr === 'string' ? stderr : stderr.toString('utf8'),
-              exitCode: 0
-            });
-            return;
+      const metadata = this.rtkService.getExecutionMetadata();
+      mkdirSync(metadata.teeDir, { recursive: true });
+      const artifactPath = join(metadata.teeDir, `shell-${Date.now()}-${randomUUID()}.log`);
+      const artifact = createWriteStream(artifactPath, { encoding: 'utf8' });
+      let stdout = '';
+      let stderr = '';
+      let stdoutTruncated = false;
+      let stderrTruncated = false;
+      let settled = false;
+      const append = (current: string, chunk: Buffer | string): { value: string; truncated: boolean } => {
+        const result = capText(`${current}${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`, maxOutputBytes);
+        return result;
+      };
+      const child = spawn(file, args, {
+        cwd,
+        env: buildShellEnvironment(extraEnv, inheritEnvironment),
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      const cleanup = () => {
+        clearTimeout(deadline);
+        signal?.removeEventListener('abort', abort);
+      };
+      const finishArtifact = (truncated: boolean) => {
+        artifact.end(() => {
+          if (!truncated) {
+            rmSync(artifactPath, { force: true });
           }
-          if (typeof error === 'object' && error !== null && 'code' in error) {
-            resolve({
-              stdout: toText(stdout as Buffer | string | undefined),
-              stderr: toText(stderr as Buffer | string | undefined),
-              exitCode: typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : 1
-            });
-            return;
-          }
-          reject(error);
+        });
+      };
+      const abort = () => {
+        if (settled) {
+          return;
         }
-      );
+        settled = true;
+        terminateProcessTree(child);
+        cleanup();
+        finishArtifact(false);
+        reject(new Error('shell_execution_aborted'));
+      };
+      const deadline = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        terminateProcessTree(child);
+        cleanup();
+        finishArtifact(false);
+        reject(new Error('shell_execution_deadline_exceeded'));
+      }, shellDeadlineMs);
+      child.stdout.on('data', (chunk: Buffer | string) => {
+        artifact.write(`STDOUT\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
+        const result = append(stdout, chunk);
+        stdout = result.value;
+        stdoutTruncated = stdoutTruncated || result.truncated;
+      });
+      child.stderr.on('data', (chunk: Buffer | string) => {
+        artifact.write(`STDERR\n${typeof chunk === 'string' ? chunk : chunk.toString('utf8')}`);
+        const result = append(stderr, chunk);
+        stderr = result.value;
+        stderrTruncated = stderrTruncated || result.truncated;
+      });
+      child.on('error', (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        finishArtifact(false);
+        resolve({ stdout, stderr: `${stderr}${stderr.length === 0 ? '' : '\n'}${error.message}`, exitCode: 1 });
+      });
+      child.on('close', (code) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        const truncated = stdoutTruncated || stderrTruncated;
+        finishArtifact(truncated);
+        resolve({
+          stdout,
+          stderr,
+          exitCode: code === null ? 1 : code,
+          truncated,
+          ...(truncated ? { teePath: artifactPath } : {})
+        });
+      });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      signal?.addEventListener('abort', abort, { once: true });
     });
+  }
+
+  private authorizeAgentCommand(request: ShellExecutionRequest): ExecutedShellCommand | null {
+    if (request.allowedCommands === undefined) {
+      return null;
+    }
+    const normalized = normalizeShellCommand(request.command);
+    if (request.allowedCommands.some((allowed) => normalizeShellCommand(allowed) === normalized)) {
+      return null;
+    }
+    return {
+      stdout: '',
+      stderr: 'Error: this background shell command is not durably pre-authorized.',
+      exitCode: 1,
+      usedRtk: false,
+      bypassReason: request.allowedCommands.length === 0 ? 'background_shell_command_not_pre_authorized' : 'shell_run_not_authorized'
+    };
+  }
+
+  private capExecutionOutput(execution: ExecutedShellCommand): ExecutedShellCommand {
+    const stdout = capText(execution.stdout, maxOutputBytes);
+    const stderr = capText(execution.stderr, maxOutputBytes);
+    if (execution.truncated === true && execution.teePath !== undefined) {
+      return execution;
+    }
+    if (!stdout.truncated && !stderr.truncated) {
+      return { ...execution, truncated: false };
+    }
+    const metadata = this.rtkService.getExecutionMetadata();
+    mkdirSync(metadata.teeDir, { recursive: true });
+    const teePath = join(metadata.teeDir, `shell-${Date.now()}-${randomUUID()}.log`);
+    writeFileSync(teePath, `STDOUT\n${execution.stdout}\nSTDERR\n${execution.stderr}`, 'utf8');
+    return {
+      ...execution,
+      stdout: stdout.value,
+      stderr: stderr.value,
+      truncated: true,
+      teePath
+    };
   }
 
   private resolveCwd(request: ShellExecutionRequest): string {
@@ -486,4 +640,56 @@ export class ShellExecutionService {
     return this.workspaceService.getCurrentWorkspace()?.path ?? 'selected workspace root';
   }
 
+}
+
+function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessEnvironment: boolean): NodeJS.ProcessEnv {
+  if (inheritProcessEnvironment) {
+    return { ...process.env, ...extraEnv };
+  }
+  const environment: NodeJS.ProcessEnv = {};
+  for (const key of shellEnvironmentKeys) {
+    const value = readEnvironmentValue(key);
+    if (value !== undefined) {
+      environment[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(extraEnv)) {
+    environment[key] = value;
+  }
+  return environment;
+}
+
+function readEnvironmentValue(key: string): string | undefined {
+  for (const existingKey of Object.keys(process.env)) {
+    if (existingKey.toUpperCase() === key) {
+      return process.env[existingKey];
+    }
+  }
+  return undefined;
+}
+
+function capText(value: string, maxBytes: number): { value: string; truncated: boolean } {
+  const buffer = Buffer.from(value, 'utf8');
+  if (buffer.byteLength <= maxBytes) {
+    return { value, truncated: false };
+  }
+  return {
+    value: `${buffer.subarray(0, maxBytes).toString('utf8')}\n[truncated; full output: tee artifact]`,
+    truncated: true
+  };
+}
+
+function terminateProcessTree(child: ReturnType<typeof execFile>): void {
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    try {
+      execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+    } catch {
+      child.kill();
+    }
+    return;
+  }
+  child.kill();
 }

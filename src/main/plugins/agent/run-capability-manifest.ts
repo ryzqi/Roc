@@ -65,6 +65,7 @@ export function compileRunCapabilityManifest(input: {
   mcpApprovalMode: ApprovalMode;
   mcpServers: McpServerSnapshot[];
   mode: ChatRunMode;
+  shellAllowedCommands?: readonly string[];
   workflowHint: WorkflowHint;
   requestedCapabilities: EnabledCapabilities;
   skills: SkillSnapshot[];
@@ -129,7 +130,9 @@ export function compileRunCapabilityManifest(input: {
   }
 
   const allToolCards = [
-    createRunShellCommandCard(),
+    ...(input.shellAllowedCommands === undefined || input.shellAllowedCommands.length > 0
+      ? [createRunShellCommandCard()]
+      : []),
     createWebReadCard(),
     createDeleteFileCard(input.deleteFileApprovalMode),
     ...selectedMcpCards
@@ -477,15 +480,15 @@ function createRunShellCommandCard(): AgentCapabilityCard {
     id: 'builtin:run_shell_command',
     name: 'run_shell_command',
     capabilityType: 'terminal_tool',
-    description: '通过 Roc Windows 命令工具在当前工作区执行 PowerShell 命令，由 Roc 的 RTK 与审计层统一包裹。',
+    description: '以当前 Windows 用户权限执行宿主机 PowerShell 命令，由 Roc 的 RTK、审计、取消与输出限制统一包裹。',
     requiredInput: 'PowerShell command',
-    scope: 'workspace',
+    scope: 'external',
     dependencies: ['ShellExecutionService', 'RtkService'],
-    sideEffects: ['workspace_command_execution', 'task_trace_audit'],
+    sideEffects: ['host_code_execution', 'task_trace_audit'],
     requiresApproval: false,
     supportsLongTermGrant: false,
     revokeGrantHint: 'run_shell_command 由 Roc 内置工具提供，不创建长期授权。',
-    riskLevel: 'medium',
+    riskLevel: 'critical',
     auditCategory: 'agent_execute',
     untrustedContext: false
   };

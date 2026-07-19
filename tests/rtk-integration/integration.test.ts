@@ -45,7 +45,7 @@ describe('RTK integration', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: { command: 'htop' }
         }
       } as never,

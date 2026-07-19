@@ -118,7 +118,8 @@ export const runExecutionSnapshotV2Schema = z
     workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable(),
     explicitSkillIds: z.array(z.string()),
     inputMessageId: z.string().min(1),
-    dispatchKey: z.string().min(1).nullable()
+    dispatchKey: z.string().min(1).nullable(),
+    shellAllowedCommands: z.array(z.string().trim().min(1)).optional()
   })
   .strict() satisfies z.ZodType<RunExecutionSnapshotV2>;
 
@@ -164,7 +165,8 @@ function migrateRunExecutionSnapshotV1(snapshot: RunExecutionSnapshotV1): RunExe
       modelThreadCallLimit: limits.modelThread,
       toolCallLimit: limits.tool,
       toolThreadCallLimit: limits.toolThread
-    }
+    },
+    shellAllowedCommands: snapshot.runOrigin === 'background_schedule' ? [] : undefined
   };
 }
 
@@ -224,7 +226,15 @@ export function createChatStartRunRequestFromSnapshot(
   if (snapshot.dispatchKey !== null) {
     request.dispatchKey = snapshot.dispatchKey;
   }
+  const shellAllowedCommands = readShellAllowedCommands(snapshot);
+  if (shellAllowedCommands.length > 0) {
+    request.shellAllowedCommands = [...shellAllowedCommands];
+  }
   return request;
+}
+
+export function readShellAllowedCommands(snapshot: RunExecutionSnapshotV2): string[] {
+  return snapshot.shellAllowedCommands === undefined ? [] : [...snapshot.shellAllowedCommands];
 }
 
 export function readWorkflowHintFromSnapshot(value: string | null): WorkflowHint | null {

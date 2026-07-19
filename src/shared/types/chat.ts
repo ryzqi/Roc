@@ -273,6 +273,8 @@ export type ChatStartRunRequest = {
   workflowHint?: WorkflowHint;
   taskSource?: 'background_schedule' | 'workbench' | null;
   workspacePath?: string | null;
+  /** 仅由任务插件内部调度传入；renderer IPC adapter 会移除此字段。 */
+  shellAllowedCommands?: string[];
   attachments?: ChatImageAttachment[];
   dispatchKey?: string;
   explicitSkillIds?: string[];

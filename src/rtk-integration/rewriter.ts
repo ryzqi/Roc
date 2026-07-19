@@ -5,7 +5,7 @@ export type RewriteExecution = {
   exitCode: number;
 };
 
-export type RewriteRunner = (binaryPath: string, args: string[], timeoutMs: number) => Promise<RewriteExecution>;
+export type RewriteRunner = (binaryPath: string, args: string[], timeoutMs: number, signal?: AbortSignal) => Promise<RewriteExecution>;
 
 export type RewriteResult = {
   rewritten: string | null;
@@ -14,6 +14,7 @@ export type RewriteResult = {
 };
 
 export type RewriterOptions = {
+  environment?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   runRewrite?: RewriteRunner;
 };
@@ -29,14 +30,23 @@ export class CommandRewriter {
     options: RewriterOptions = {}
   ) {
     this.timeoutMs = options.timeoutMs ?? 2000;
-    this.runRewrite = options.runRewrite ?? defaultRunRewrite;
+    this.runRewrite =
+      options.runRewrite === undefined
+        ? (binaryPath, args, timeoutMs, signal) => defaultRunRewrite(binaryPath, args, timeoutMs, signal, options.environment)
+        : options.runRewrite;
   }
 
-  async rewrite(command: string): Promise<RewriteResult> {
+  async rewrite(command: string, signal?: AbortSignal): Promise<RewriteResult> {
     try {
-      const execution = await this.runRewrite(this.binaryPath, ['rewrite', command], this.timeoutMs);
+      const execution =
+        signal === undefined
+          ? await this.runRewrite(this.binaryPath, ['rewrite', command], this.timeoutMs)
+          : await this.runRewrite(this.binaryPath, ['rewrite', command], this.timeoutMs, signal);
       return this.toRewriteResult(execution);
     } catch {
+      if (signal?.aborted) {
+        throw new Error('shell_execution_aborted');
+      }
       return {
         rewritten: null,
         rtkArgs: null,
@@ -94,14 +104,22 @@ function splitCommandLine(command: string): string[] {
   return parts;
 }
 
-async function defaultRunRewrite(binaryPath: string, args: string[], timeoutMs: number): Promise<RewriteExecution> {
+async function defaultRunRewrite(
+  binaryPath: string,
+  args: string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+  environment?: NodeJS.ProcessEnv
+): Promise<RewriteExecution> {
   return await new Promise((resolve, reject) => {
     execFile(
       binaryPath,
       args,
       {
         encoding: 'utf8',
+        env: environment,
         timeout: timeoutMs,
+        signal,
         windowsHide: true
       },
       (error, stdout) => {

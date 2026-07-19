@@ -64,7 +64,7 @@ describe('run capability manifest', () => {
           effectClass: 'host_execution',
           approvalPolicy: { kind: 'none' },
           idempotencyStrategy: 'tool_call',
-          resourceScope: 'workspace'
+          resourceScope: 'external'
         }),
         expect.objectContaining({
           canonicalIdentity: 'mcp:docs:search_docs',
@@ -352,6 +352,32 @@ describe('run capability manifest', () => {
         effectClass: 'external_call'
       })
     ]));
+  });
+
+  it('does not expose host shell to a background run without durable pre-authorization', () => {
+    const blocked = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      mode: 'task',
+      shellAllowedCommands: [],
+      workflowHint: null
+    });
+    const authorized = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      mode: 'task',
+      shellAllowedCommands: ['git status'],
+      workflowHint: null
+    });
+
+    expect(blocked.manifest.tools.map((tool) => tool.modelVisibleName)).not.toContain('run_shell_command');
+    expect(authorized.manifest.tools.map((tool) => tool.modelVisibleName)).toContain('run_shell_command');
   });
 });
 

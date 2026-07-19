@@ -66,7 +66,7 @@ describe('TaskScheduler crash consistency characterization', () => {
         nextRunAt: '2026-07-15T00:00:01.000Z'
       },
       workspacePath: 'F:\\Code\\Roc',
-      allowedActions: [],
+      allowedActions: ['git status'],
       forbiddenActions: [],
       failurePolicy: 'pause_and_report',
       notificationPolicy: 'failures_and_confirmations'
@@ -105,8 +105,9 @@ describe('TaskScheduler crash consistency characterization', () => {
       return originalMarkDispatched(input);
     });
     const scheduler = new TaskScheduler(repository, {
-      startRun: async () => {
+      startRun: async (request) => {
         calls.push('start_agent');
+        expect(request.shellAllowedCommands).toEqual(['git status']);
         expect(
           db.prepare('SELECT status FROM scheduled_occurrences WHERE background_task_id = ?').all(task.id)
         ).toEqual([{ status: 'claimed' }]);

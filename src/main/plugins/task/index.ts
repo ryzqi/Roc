@@ -247,6 +247,7 @@ function registerTaskCapabilities(
       taskSource: 'workbench',
       threadId: task.threadId,
       enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities,
+      shellAllowedCommands: [...task.allowedActions],
       workspacePath: task.workspacePath
     });
     const result = scheduler.runNow(id, startResult.runId);

@@ -35,7 +35,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: { command: 'git status' }
         }
       } as never,
@@ -78,7 +78,7 @@ describe('createRTKMiddleware', () => {
     const request = {
       toolCall: {
         id: 'call-execute',
-        name: 'run_shell_command',
+        name: 'execute',
         args: { command: 'git status' }
       }
     };
@@ -108,7 +108,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: { command: 'rm -rf .' }
         }
       } as never,
@@ -150,6 +150,26 @@ describe('createRTKMiddleware', () => {
         args: 'rtk git status'
       })
     }));
+  });
+
+  it('leaves Roc run_shell_command untouched for ShellExecutionService routing', async () => {
+    const rewrite = vi.fn();
+    const middleware = createRTKMiddleware(createAvailableManager() as never, {
+      createRewriter: () => ({ rewrite })
+    });
+    const request = {
+      toolCall: {
+        id: 'call-roc-shell',
+        name: 'run_shell_command',
+        args: { command: 'git status' }
+      }
+    };
+    const handler = vi.fn().mockResolvedValue(new ToolMessage({ content: 'ok', tool_call_id: 'call-roc-shell' }));
+
+    await middleware.wrapToolCall?.(request as never, handler);
+
+    expect(handler).toHaveBeenCalledWith(request);
+    expect(rewrite).not.toHaveBeenCalled();
   });
 
   it('passes through rewritten Windows shell aliases that RTK cannot execute directly', async () => {
@@ -233,7 +253,7 @@ describe('createRTKMiddleware', () => {
     const missingCommandRequest = {
       toolCall: {
         id: 'call-empty',
-        name: 'run_shell_command',
+        name: 'execute',
         args: { path: 'notes.md' }
       }
     };
@@ -247,7 +267,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: { command: 'git status' }
         }
       } as never,
@@ -270,7 +290,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: { command: 'git status' }
         }
       } as never,
@@ -292,7 +312,7 @@ describe('createRTKMiddleware', () => {
       {
         toolCall: {
           id: 'call-execute',
-          name: 'run_shell_command',
+          name: 'execute',
           args: null
         }
       } as never,

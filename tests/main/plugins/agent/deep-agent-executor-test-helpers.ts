@@ -318,6 +318,7 @@ function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWork
       allowedTools: ['search']
     })),
     mode: request.mode,
+    shellAllowedCommands: request.shellAllowedCommands,
     workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
     requestedCapabilities: request.enabledCapabilities,
     skills: manifestSkillIds.map((id) => ({

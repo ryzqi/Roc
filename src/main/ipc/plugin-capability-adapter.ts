@@ -42,7 +42,7 @@ export const pluginCapabilityMappings = [
   mapping('agent', 'agent.getStatus', ipcChannels.agentGetStatus, 'agent.status.get', emptyInput),
   mapping('agent', 'agent.getConfigPreview', ipcChannels.agentGetConfigPreview, 'agent.config.preview', emptyInput),
   mapping('agent', 'agent.getCapabilityPreview', ipcChannels.agentGetCapabilityPreview, 'agent.capability.preview', firstArg),
-  mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', firstArg),
+  mapping('chat', 'chat.startRun', ipcChannels.chatStartRun, 'agent.run.start', chatStartRunInput),
   mapping('chat', 'chat.cancelRun', ipcChannels.chatCancelRun, 'agent.run.cancel', idInput('runId')),
   mapping('chat', 'chat.resumeRun', ipcChannels.chatResumeRun, 'agent.run.resume', firstArg),
   mapping('chat', 'chat.getRunEvents', ipcChannels.chatGetRunEvents, 'agent.run.events.list', firstArg),
@@ -133,7 +133,7 @@ export const pluginCapabilityMappings = [
   mapping('skills', 'skills.listFiles', ipcChannels.skillsListFiles, 'skills.files.list', firstArg),
   mapping('skills', 'skills.readFile', ipcChannels.skillsReadFile, 'skills.file.read', firstArg),
   mapping('rtk', 'rtk.status', ipcChannels.rtkStatus, 'rtk.status', emptyInput),
-  mapping('shell', 'shell.execute', ipcChannels.shellExecute, 'shell.execute', firstArg)
+  mapping('shell', 'shell.execute', ipcChannels.shellExecute, 'shell.execute', shellExecuteInput)
 ] as const satisfies readonly PluginCapabilityMapping[];
 
 export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker): PluginCapabilityAdapter {
@@ -187,6 +187,24 @@ function firstArg(args: readonly unknown[]): unknown {
     throw new Error('ipc_capability_missing_arg');
   }
   return value;
+}
+
+function chatStartRunInput(args: readonly unknown[]): unknown {
+  const value = firstArg(args);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const { shellAllowedCommands: _shellAllowedCommands, ...request } = value as Record<string, unknown>;
+  return request;
+}
+
+function shellExecuteInput(args: readonly unknown[]): unknown {
+  const value = firstArg(args);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const { signal: _signal, allowedCommands: _allowedCommands, ...request } = value as Record<string, unknown>;
+  return request;
 }
 
 function optionalFirstArg(args: readonly unknown[]): unknown {

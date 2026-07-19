@@ -379,3 +379,20 @@
 
 - Broad verification：`pnpm check:ipc`、`pnpm build` 成功；全量 Vitest 298 files / 1587 tests passed，exit 0；Windows node-pty `AttachConsole failed` 为既有 teardown 噪音。
 - Part 2 状态：Verified passing；准备独立 commit，排除未跟踪用户文件 `plan.md`。
+
+## 2026-07-19 — Stage 4 Part 2 committed / Part 3 discovery
+
+- 已提交 `031baea feat(agent): enforce native run call budgets`；`plan.md` 继续排除。
+- Part 3 目标：shell 保持 host code execution；background 仅使用 task 创建时 durable pre-authorization；补真实 cwd/source/run abort、最小环境与 output cap，不能用 prompt 或 cwd 文案替代执行边界。
+- 下一步：CodeGraph 定位 `createShellExecutionAdapter -> ShellExecutionService -> shell.execute`、task authorization 字段与现有 shell/path tests。
+
+## 2026-07-19 — Stage 4 Part 3 verified / commit gate
+
+- Red/green：background 空白名单不暴露 `run_shell_command`；有白名单时 scheduler occurrence 携带 exact commands；renderer IPC 剥离内部授权字段；shell 输出超限返回真实 `truncated` 与 tee artifact；AbortSignal 取消 Windows parent/child tree。
+- Production：`ShellExecutionService` 仅 agent shell 使用最小环境 allowlist；terminal 保留用户环境；agent 使用固定 deadline、streaming preview/artifact、同步 taskkill tree termination。旧 background snapshot 缺授权字段时 fail-closed。
+- Focused：8 files / 62 tests passed；cancellation 2/2、scheduler crash consistency 通过。
+- Static：`pnpm typecheck`、strict unused、`pnpm check:ipc`、`pnpm verify:paths`、`git diff --check` 通过。
+- Broad：`pnpm build` 成功；`pnpm test` 299 files / 1595 tests passed，Vitest exit 0；已知 Windows `node-pty AttachConsole failed` teardown 噪音仍为 exit 0。
+- 当前状态：Changed, verified；最终 RTK 边界修复后仍通过 focused、typecheck、strict unused、IPC、路径、build、full test 与 diff check，待提交独立 Part 3 commit，继续保留未跟踪用户文件 `plan.md`。
+
+- Final review repair：发现并修复通用 RTK middleware 对 `run_shell_command` 的重复 rewrite；新增 middleware regression，确认 Roc shell 只由 `ShellExecutionService` 执行。
