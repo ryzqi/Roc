@@ -8,7 +8,7 @@ import type {
   ChatPersistedAttachment,
   ChatRunEvent,
   EnabledCapabilities,
-  RunExecutionSnapshotV1,
+  RunExecutionSnapshotV2,
   SessionMessageEntry,
   SessionMessagePhase,
   SessionMessageSearchRequest,
@@ -329,7 +329,7 @@ export class AgentSessionRepository {
     };
   }
 
-  getRunExecutionSnapshot(runId: string): RunExecutionSnapshotV1 {
+  getRunExecutionSnapshot(runId: string): RunExecutionSnapshotV2 {
     const row = this.db
       .prepare(
         `SELECT id, thread_id, status, state_version, provider_id, model_id,
@@ -353,7 +353,7 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_json === null || row.snapshot_version !== 1) {
+    if (row.snapshot_json === null || (row.snapshot_version !== 1 && row.snapshot_version !== 2)) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_missing');
       throw new Error('run_execution_snapshot_missing');
     }

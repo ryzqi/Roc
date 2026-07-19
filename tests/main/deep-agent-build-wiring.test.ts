@@ -9,7 +9,8 @@ import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-c
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
 
-type BuildFixtureInput = Omit<DeepAgentBuildInput, 'capabilityManifest'>;
+type BuildFixtureInput = Omit<DeepAgentBuildInput, 'capabilityManifest' | 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'> &
+  Partial<Pick<DeepAgentBuildInput, 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'>>;
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -68,6 +69,40 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name'))).toEqual(
       expect.arrayContaining(['RocFilesystemPathPolicyMiddleware', 'RocShellPathPolicyMiddleware'])
     );
+  });
+
+  it('installs native model and tool call limit middleware from the frozen budget', () => {
+    const input = {
+      mode: 'chat',
+      model: {} as unknown,
+      systemPrompt: 'system',
+      backend: {} as unknown,
+      store: {} as unknown,
+      memorySources: [],
+      skillSources: [],
+      subagents: [],
+      tools: [],
+      filesystemPermissions: undefined,
+      workspacePath: 'F:\\Code\\Roc',
+      interruptOn: undefined,
+      checkpointer: undefined,
+      workflowHint: null,
+      contextBudgetTokens: 4096,
+      modelCallLimit: 7,
+      modelThreadCallLimit: 35,
+      toolCallLimit: 11,
+      toolThreadCallLimit: 55
+    } as unknown as BuildFixtureInput;
+
+    buildFixtureAgent(input, []);
+
+    const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
+    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+      Reflect.get(middleware as object, 'name')
+    ) ?? [];
+
+    expect(middlewareNames).toContain('ModelCallLimitMiddleware');
+    expect(middlewareNames).toContain('ToolCallLimitMiddleware');
   });
 
   it('adds plan model tool exposure middleware only for plan mode', () => {
@@ -854,7 +889,11 @@ function buildFixtureAgent(input: BuildFixtureInput, customToolNames: string[]):
 
   buildDeepAgent({
     ...input,
-    capabilityManifest
+    capabilityManifest,
+    modelCallLimit: input.modelCallLimit === undefined ? 20 : input.modelCallLimit,
+    modelThreadCallLimit: input.modelThreadCallLimit === undefined ? 100 : input.modelThreadCallLimit,
+    toolCallLimit: input.toolCallLimit === undefined ? 40 : input.toolCallLimit,
+    toolThreadCallLimit: input.toolThreadCallLimit === undefined ? 200 : input.toolThreadCallLimit
   });
 }
 

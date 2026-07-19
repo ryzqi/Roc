@@ -330,7 +330,7 @@ function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWork
     }))
   }).manifest;
   return {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     runId: run.id,
     threadId: run.threadId,
     runOrigin:
@@ -357,7 +357,11 @@ function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWork
           },
     capabilityManifest,
     budget: {
-      contextBudgetTokens: null
+      contextBudgetTokens: null,
+      modelCallLimit: 20,
+      modelThreadCallLimit: 100,
+      toolCallLimit: 40,
+      toolThreadCallLimit: 200
     },
     workflowHint: request.workflowHint === undefined ? null : request.workflowHint,
     explicitSkillIds,

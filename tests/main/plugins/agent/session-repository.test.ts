@@ -33,6 +33,38 @@ describe('AgentSessionRepository', () => {
     expect(columnNames('session_messages')).toContain('phase');
   });
 
+  it('migrates a persisted V1 execution snapshot to the frozen V2 call budget', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Resume legacy run'
+    });
+    const current = repository.getRunExecutionSnapshot(run.id);
+    const legacy = {
+      ...current,
+      schemaVersion: 1,
+      budget: {
+        contextBudgetTokens: current.budget.contextBudgetTokens
+      }
+    };
+    db.prepare('UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 1 WHERE id = ?')
+      .run(JSON.stringify(legacy), run.id);
+
+    expect(repository.getRunExecutionSnapshot(run.id)).toMatchObject({
+      schemaVersion: 2,
+      budget: {
+        contextBudgetTokens: null,
+        modelCallLimit: 20,
+        modelThreadCallLimit: 100,
+        toolCallLimit: 40,
+        toolThreadCallLimit: 200
+      }
+    });
+  });
+
   it('reads and writes agent threads, agent runs, agent events, and session messages', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
@@ -125,7 +157,7 @@ describe('AgentSessionRepository', () => {
       enabled_capabilities_json: JSON.stringify(enabledCapabilities),
       model_id: 'openai:gpt-4.1',
       provider_id: 'test-provider',
-      snapshot_version: 1,
+      snapshot_version: 2,
       thread_id: run.threadId
     });
     expect(rawRow('agent_events', event.id)).toMatchObject({
@@ -936,7 +968,7 @@ function createRun(
     attachments: input.attachments,
     capabilityPreview,
     snapshot: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       runOrigin: 'chat',
       model: {
         providerId: 'test-provider',
@@ -946,7 +978,11 @@ function createRun(
       workspace: null,
       capabilityManifest: capabilityPreview.manifest,
       budget: {
-        contextBudgetTokens: null
+        contextBudgetTokens: null,
+        modelCallLimit: 20,
+        modelThreadCallLimit: 100,
+        toolCallLimit: 40,
+        toolThreadCallLimit: 200
       },
       workflowHint: null,
       explicitSkillIds: [],

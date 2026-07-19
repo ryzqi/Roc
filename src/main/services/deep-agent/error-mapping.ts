@@ -22,6 +22,10 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
+    const budgetFailure = readBudgetFailure(error);
+    if (budgetFailure !== null) {
+      return budgetFailure;
+    }
     const toolFailure = readToolFailure(error);
     if (toolFailure !== null) {
       return toolFailure;
@@ -68,6 +72,24 @@ export function toRunFailure(error: unknown): RunFailure {
     message: 'Provider 执行失败。',
     retryable: true
   };
+}
+
+function readBudgetFailure(error: Error): RunFailure | null {
+  if (error.name === 'ModelCallLimitMiddlewareError' || error.message.startsWith('Model call limits exceeded')) {
+    return {
+      code: 'run_budget_exhausted',
+      message: '模型调用次数已达到本轮预算上限。',
+      retryable: false
+    };
+  }
+  if (error.name === 'ToolCallLimitExceededError' || error.message.includes('tool call limit reached')) {
+    return {
+      code: 'run_budget_exhausted',
+      message: '工具调用次数已达到本轮预算上限。',
+      retryable: false
+    };
+  }
+  return null;
 }
 
 function readToolFailure(error: Error): RunFailure | null {

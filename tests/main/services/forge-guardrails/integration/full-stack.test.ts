@@ -81,6 +81,10 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     checkpointer: undefined,
     workflowHint: 'propose_background_task',
     contextBudgetTokens: 4096,
+    modelCallLimit: 20,
+    modelThreadCallLimit: 100,
+    toolCallLimit: 40,
+    toolThreadCallLimit: 200,
     ...input
   });
   const calls = mocked.createDeepAgentMock.mock.calls as unknown as Array<[unknown]>;
@@ -185,6 +189,8 @@ describe('forge guardrails full stack', () => {
       'RTKMiddleware',
       'toolRetryMiddleware',
       'RocToolProtocolMiddleware',
+      'ModelCallLimitMiddleware',
+      'ToolCallLimitMiddleware',
       'ForgeErrorBudgetMiddleware',
       'ForgeIterationTrackingMiddleware',
       'RocFilesystemPathPolicyMiddleware',

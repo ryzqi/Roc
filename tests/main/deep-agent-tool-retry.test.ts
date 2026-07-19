@@ -67,7 +67,11 @@ function createBuildInput(): DeepAgentBuildInput {
     interruptOn: undefined,
     checkpointer: undefined,
     workflowHint: null,
-    contextBudgetTokens: undefined
+    contextBudgetTokens: undefined,
+    modelCallLimit: 20,
+    modelThreadCallLimit: 100,
+    toolCallLimit: 40,
+    toolThreadCallLimit: 200
   };
 }
 

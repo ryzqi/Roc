@@ -359,3 +359,23 @@
 - Final preview contract review：外部 `agent.capability.preview` 只服务普通能力预览；实际 workflow-aware preview 在 `startRun -> getRunCapabilityPreview -> compileRunCapabilityManifest` 内部冻结，未发生 preview/executor 分叉。
 - Broad verification：`pnpm build` 成功；`pnpm test` 298 files / 1583 tests passed，Vitest exit 0；Windows node-pty teardown `AttachConsole failed` 为既有噪音。
 - Part 1 状态：Verified passing；已提交独立 commit；未跟踪用户文件 `plan.md` 保持排除。
+
+## 2026-07-19 — Stage 4 Part 1 committed / Part 2 discovery
+
+- 已提交 `4ced164 feat(agent): enforce manifest safety across subagents`；`plan.md` 仍为未跟踪用户文件。
+- Part 2 目标：复用 LangChain 原生 `modelCallLimitMiddleware` / `toolCallLimitMiddleware`，Roc 只补 immutable budget policy、wall/deadline 与结构化 `run_budget_exhausted` 终态；避免继续把 recursion/error budget 当调用次数限制。
+- 下一步：CodeGraph 定位现有 model/tool middleware、retry/iteration/error budget 与 runtime terminal writer，随后建立稳定 red fixture。
+
+## 2026-07-19 — Stage 4 Part 2 implementation / focused green
+
+- Red：builder 缺少 native model/tool call limit middleware；native `ModelCallLimitMiddlewareError` 与 `ToolCallLimitExceededError` 被误归类为可恢复 `provider_execution_failed`。
+- Green：`buildDeepAgent()` 在 main/subagent safety stack 注入 LangChain 原生 model/tool limit middleware（`exitBehavior: 'error'`）；`RunBudgetV2` 冻结普通 chat 20/40、plan 12/24、background 8/16；V1 snapshot 读取时迁移到 V2；`toRunFailure()` 映射为不可恢复 `run_budget_exhausted`。
+- 回归：新增普通/plan/background budget assertions 与 V1 snapshot migration fixture；Part 2 focused 11 files / 96 tests passed。
+- 静态门：`pnpm typecheck`、strict unused scan、`git diff --check` passed。下一步独立 review 后执行 build/full-test。
+- Review repair：补齐 native `threadLimit`（普通 100/200、plan 60/120、background 40/80），builder limits 改为必填；V2 migration 保持 V1 可读。budget terminal 文案改为中文，并新增 runtime 回归证明 `run_budget_exhausted` 不触发 recovery。
+- Repair gate：focused 11 files / 97 tests、strict unused、`git diff --check` passed。下一步 IPC/build/full-test。
+
+## 2026-07-19 — Stage 4 Part 2 verified / commit gate
+
+- Broad verification：`pnpm check:ipc`、`pnpm build` 成功；全量 Vitest 298 files / 1587 tests passed，exit 0；Windows node-pty `AttachConsole failed` 为既有 teardown 噪音。
+- Part 2 状态：Verified passing；准备独立 commit，排除未跟踪用户文件 `plan.md`。

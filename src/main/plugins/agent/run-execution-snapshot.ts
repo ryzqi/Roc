@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { ChatStartRunRequest, RunExecutionSnapshotV1, TaskRun, WorkflowHint } from '../../../shared/types';
+import type { ChatStartRunRequest, RunExecutionSnapshotV1, RunExecutionSnapshotV2, TaskRun, WorkflowHint } from '../../../shared/types';
 import { isRunCapabilityManifestIntegrityValid } from './run-capability-manifest';
 
 const enabledCapabilitiesSchema = z
@@ -81,10 +81,9 @@ export const runExecutionSnapshotV1Schema = z
       .strict()
       .nullable(),
     capabilityManifest: runCapabilityManifestSchema,
-    budget: z
-      .object({
-        contextBudgetTokens: z.number().int().positive().nullable()
-      })
+    budget: z.object({
+      contextBudgetTokens: z.number().int().positive().nullable()
+    })
       .strict(),
     workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable(),
     explicitSkillIds: z.array(z.string()),
@@ -93,14 +92,44 @@ export const runExecutionSnapshotV1Schema = z
   })
   .strict() satisfies z.ZodType<RunExecutionSnapshotV1>;
 
-export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshotV1, 'runId' | 'threadId' | 'inputMessageId'>;
+export const runExecutionSnapshotV2Schema = z
+  .object({
+    schemaVersion: z.literal(2),
+    runId: z.string().min(1),
+    threadId: z.string().min(1),
+    runOrigin: z.enum(['background_schedule', 'chat', 'manual_task_run', 'workbench_creation']),
+    model: z.object({
+      providerId: z.string().min(1),
+      modelId: z.string().min(1)
+    }).strict(),
+    mode: z.enum(['plan', 'run', 'task']),
+    workspace: z.object({
+      path: z.string().min(1),
+      hash: z.string().min(1)
+    }).strict().nullable(),
+    capabilityManifest: runCapabilityManifestSchema,
+    budget: z.object({
+      contextBudgetTokens: z.number().int().positive().nullable(),
+      modelCallLimit: z.number().int().positive(),
+      modelThreadCallLimit: z.number().int().positive(),
+      toolCallLimit: z.number().int().positive(),
+      toolThreadCallLimit: z.number().int().positive()
+    }).strict(),
+    workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable(),
+    explicitSkillIds: z.array(z.string()),
+    inputMessageId: z.string().min(1),
+    dispatchKey: z.string().min(1).nullable()
+  })
+  .strict() satisfies z.ZodType<RunExecutionSnapshotV2>;
+
+export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshotV2, 'runId' | 'threadId' | 'inputMessageId'>;
 
 export function createRunExecutionSnapshot(input: {
   runId: string;
   threadId: string;
   inputMessageId: string;
   snapshot: RunExecutionSnapshotSeed;
-}): RunExecutionSnapshotV1 {
+}): RunExecutionSnapshotV2 {
   return parseRunExecutionSnapshot({
     ...input.snapshot,
     runId: input.runId,
@@ -109,16 +138,66 @@ export function createRunExecutionSnapshot(input: {
   });
 }
 
-export function parseRunExecutionSnapshot(value: unknown): RunExecutionSnapshotV1 {
-  const snapshot = runExecutionSnapshotV1Schema.parse(value);
+export function parseRunExecutionSnapshot(value: unknown): RunExecutionSnapshotV2 {
+  const version = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]) }).parse(value).schemaVersion;
+  if (version === 1) {
+    return migrateRunExecutionSnapshotV1(runExecutionSnapshotV1Schema.parse(value));
+  }
+  const snapshot = runExecutionSnapshotV2Schema.parse(value);
   if (!isRunCapabilityManifestIntegrityValid(snapshot.capabilityManifest)) {
     throw new Error('run_execution_snapshot_manifest_hash_invalid');
   }
   return snapshot;
 }
 
+function migrateRunExecutionSnapshotV1(snapshot: RunExecutionSnapshotV1): RunExecutionSnapshotV2 {
+  if (!isRunCapabilityManifestIntegrityValid(snapshot.capabilityManifest)) {
+    throw new Error('run_execution_snapshot_manifest_hash_invalid');
+  }
+  const limits = resolveRunCallLimits(snapshot.runOrigin, snapshot.mode);
+  return {
+    ...snapshot,
+    schemaVersion: 2,
+    budget: {
+      contextBudgetTokens: snapshot.budget.contextBudgetTokens,
+      modelCallLimit: limits.model,
+      modelThreadCallLimit: limits.modelThread,
+      toolCallLimit: limits.tool,
+      toolThreadCallLimit: limits.toolThread
+    }
+  };
+}
+
+export function createRunBudget(input: {
+  contextBudgetTokens: number | null;
+  mode: RunExecutionSnapshotV2['mode'];
+  runOrigin: RunExecutionSnapshotV2['runOrigin'];
+}): RunExecutionSnapshotV2['budget'] {
+  const limits = resolveRunCallLimits(input.runOrigin, input.mode);
+  return {
+    contextBudgetTokens: input.contextBudgetTokens,
+    modelCallLimit: limits.model,
+    modelThreadCallLimit: limits.modelThread,
+    toolCallLimit: limits.tool,
+    toolThreadCallLimit: limits.toolThread
+  };
+}
+
+function resolveRunCallLimits(
+  runOrigin: RunExecutionSnapshotV1['runOrigin'],
+  mode: RunExecutionSnapshotV1['mode']
+): { model: number; modelThread: number; tool: number; toolThread: number } {
+  if (runOrigin === 'background_schedule') {
+    return { model: 8, modelThread: 40, tool: 16, toolThread: 80 };
+  }
+  if (mode === 'plan') {
+    return { model: 12, modelThread: 60, tool: 24, toolThread: 120 };
+  }
+  return { model: 20, modelThread: 100, tool: 40, toolThread: 200 };
+}
+
 export function createChatStartRunRequestFromSnapshot(
-  snapshot: RunExecutionSnapshotV1,
+  snapshot: RunExecutionSnapshotV2,
   run: TaskRun
 ): ChatStartRunRequest {
   const request: ChatStartRunRequest = {

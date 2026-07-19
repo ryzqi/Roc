@@ -379,7 +379,7 @@ function createRun(repository: AgentSessionRepository, userInput: string): TaskR
   return repository.createTaskRun({
     capabilityPreview,
     snapshot: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       runOrigin: 'background_schedule',
       model: {
         providerId: 'test-provider',
@@ -389,7 +389,11 @@ function createRun(repository: AgentSessionRepository, userInput: string): TaskR
       workspace: null,
       capabilityManifest: capabilityPreview.manifest,
       budget: {
-        contextBudgetTokens: null
+        contextBudgetTokens: null,
+        modelCallLimit: 20,
+        modelThreadCallLimit: 100,
+        toolCallLimit: 40,
+        toolThreadCallLimit: 200
       },
       workflowHint: null,
       explicitSkillIds: [],

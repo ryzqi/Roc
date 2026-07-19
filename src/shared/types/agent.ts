@@ -145,8 +145,15 @@ export type RunBudgetV1 = {
   contextBudgetTokens: number | null;
 };
 
-export type RunExecutionSnapshotV1 = {
-  schemaVersion: 1;
+export type RunBudgetV2 = {
+  contextBudgetTokens: number | null;
+  modelCallLimit: number;
+  modelThreadCallLimit: number;
+  toolCallLimit: number;
+  toolThreadCallLimit: number;
+};
+
+type RunExecutionSnapshotFields = {
   runId: string;
   threadId: string;
   runOrigin: 'background_schedule' | 'chat' | 'manual_task_run' | 'workbench_creation';
@@ -160,11 +167,20 @@ export type RunExecutionSnapshotV1 = {
     hash: string;
   } | null;
   capabilityManifest: RunCapabilityManifestV1;
-  budget: RunBudgetV1;
   workflowHint: WorkflowHint;
   explicitSkillIds: string[];
   inputMessageId: string;
   dispatchKey: string | null;
+};
+
+export type RunExecutionSnapshotV1 = RunExecutionSnapshotFields & {
+  schemaVersion: 1;
+  budget: RunBudgetV1;
+};
+
+export type RunExecutionSnapshotV2 = RunExecutionSnapshotFields & {
+  schemaVersion: 2;
+  budget: RunBudgetV2;
 };
 
 export type AgentRuntimeStatus = {

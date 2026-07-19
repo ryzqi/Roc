@@ -141,6 +141,12 @@ describe('AgentPluginRuntime', () => {
         type: 'agent.run.started'
       })
     );
+    expect(repository.getRunExecutionSnapshot(result.runId).budget).toMatchObject({
+      modelCallLimit: 12,
+      modelThreadCallLimit: 60,
+      toolCallLimit: 24,
+      toolThreadCallLimit: 120
+    });
     await waitForEvent(() =>
       events.some(
         (event) =>
@@ -235,6 +241,12 @@ describe('AgentPluginRuntime', () => {
     const snapshot = repository.getRunExecutionSnapshot(result.runId);
 
     expect(snapshot.runOrigin).toBe('background_schedule');
+    expect(snapshot.budget).toMatchObject({
+      modelCallLimit: 8,
+      modelThreadCallLimit: 40,
+      toolCallLimit: 16,
+      toolThreadCallLimit: 80
+    });
     expect(createChatStartRunRequestFromSnapshot(snapshot, run).taskSource).toBe('background_schedule');
     expect(db.prepare('SELECT kind FROM agent_threads WHERE id = ?').get(result.threadId)).toEqual({ kind: 'background' });
     await waitForEvent(() =>
@@ -569,6 +581,42 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('terminates budget exhaustion without entering provider recovery', async () => {
+    const repository = new AgentSessionRepository(db);
+    let calls = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* () {
+          calls += 1;
+          throw new Error('Model call limits exceeded: run level call limit reached with 20 model calls');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(() =>
+      events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_failed')
+    );
+    const chatEvents = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload));
+
+    expect(calls).toBe(1);
+    expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(chatEvents).toContainEqual(expect.objectContaining({
+      type: 'run_failed',
+      runId: result.runId,
+      code: 'run_budget_exhausted',
+      message: '模型调用次数已达到本轮预算上限。',
+      retryable: false
+    }));
+    expect(chatEvents.map((event) => event?.type)).not.toContain('run_recovering');
+  });
+
   it('persists diagnostic and suggestion fields identically to the live terminal failure event', async () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
@@ -729,7 +777,7 @@ function capabilityPreview(
 
 function runSnapshot(preview: AgentCapabilityPreview, modelId: string) {
   return {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     runOrigin: 'chat' as const,
     model: {
       providerId: 'openai',
@@ -739,7 +787,11 @@ function runSnapshot(preview: AgentCapabilityPreview, modelId: string) {
     workspace: null,
     capabilityManifest: preview.manifest,
     budget: {
-      contextBudgetTokens: null
+      contextBudgetTokens: null,
+      modelCallLimit: 20,
+      modelThreadCallLimit: 100,
+      toolCallLimit: 40,
+      toolThreadCallLimit: 200
     },
     workflowHint: null,
     explicitSkillIds: [],

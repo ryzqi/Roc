@@ -3,7 +3,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { ClientTool } from '@langchain/core/tools';
 import type { FilesystemPermission, SubAgent } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import { toolRetryMiddleware } from 'langchain';
+import { modelCallLimitMiddleware, toolCallLimitMiddleware, toolRetryMiddleware } from 'langchain';
 import { z } from 'zod';
 import type { ChatStartRunRequest, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
@@ -59,6 +59,10 @@ export type DeepAgentBuildInput = {
   checkpointer: BaseCheckpointSaver | undefined;
   workflowHint: WorkflowHint;
   contextBudgetTokens: number | undefined;
+  modelCallLimit: number;
+  modelThreadCallLimit: number;
+  toolCallLimit: number;
+  toolThreadCallLimit: number;
   hookMiddleware?: RocHookMiddlewareOptions;
   toolEffectIdempotency?: {
     runId: string;
@@ -267,6 +271,7 @@ function createRunModeSubagentMiddleware(input: DeepAgentBuildInput) {
 }
 
 function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionScope: RunCapabilityExecutionScopeV1) {
+  const budgetMiddleware = createNativeBudgetMiddleware(input);
   return [
     createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     createRTKMiddleware(new RTKBinaryManager()),
@@ -279,11 +284,27 @@ function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionSc
       capabilityManifest: input.capabilityManifest,
       executionScope
     }),
+    ...budgetMiddleware,
     ...createToolEffectMiddleware(input),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
     createRocFilesystemPathPolicyMiddleware(),
     createFilesystemToolErrorMiddleware()
+  ];
+}
+
+function createNativeBudgetMiddleware(input: DeepAgentBuildInput) {
+  return [
+    modelCallLimitMiddleware({
+      runLimit: input.modelCallLimit,
+      threadLimit: input.modelThreadCallLimit,
+      exitBehavior: 'error'
+    }),
+    toolCallLimitMiddleware({
+      runLimit: input.toolCallLimit,
+      threadLimit: input.toolThreadCallLimit,
+      exitBehavior: 'error'
+    })
   ];
 }
 

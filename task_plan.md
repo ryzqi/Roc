@@ -57,7 +57,7 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 ### Stage 4: Execution Safety, Budgets, Cancellation
 
 - [x] Part 1：main/subagent 共享安全装配与 immutable manifest 合同；scope exposure 与 background inventory drift 已修复，独立复核无新 finding，focused/static/build/full-test gate 通过，已提交。
-- [ ] Part 2：native model/tool budget 与结构化终止；独立 review、修复、验证、提交。
+- [x] Part 2：native model/tool budget 与结构化终止；review repair、IPC、build、full-test gate 通过，已提交。
 - [ ] Part 3：shell host execution、background pre-authorization、path/env/output/abort；独立 review、修复、验证、提交。
 - [ ] Part 4：web 与 hooks 的 scope、abort、deadline、output 合同；独立 review、修复、验证、提交。
 - [ ] Part 5：effect state、subagent execution path 与 reconcile 合同；独立 review、修复、验证、提交。
@@ -157,6 +157,9 @@ Stage 4 — Execution Safety, Budgets, Cancellation (Shell scope confirmed)
 | Stage 4 Part 1 builder wiring suite failed 14/14 with missing manifest | 1 | Replace direct cast-hidden fixtures with an `Omit<..., capabilityManifest>` fixture input and compiler-backed build helper; list custom MCP names explicitly. |
 | Stage 4 Part 1 independent Standards review found manual pseudo-manifests in full-stack/tool-retry fixtures and executor/manifest background inventory drift risk | 1 | Convert both fixtures to compiler-backed manifests; derive executor background tool surface from the immutable manifest instead of a second mode contract. |
 | Stage 4 Part 1 Spec reviewer first run hit provider HTTP 429 | 1 | Retry with a narrower read-only review prompt after recording the Standards findings; no code action depends on the failed report. |
+| Stage 4 Part 2 discovery batch referenced nonexistent `src/main/errors.ts` and invalid wildcard paths | 1 | Locate `src/main/services/errors.ts` and exact installed package directory; rerun commands separately. |
+| Stage 4 Part 2 first V2 focused run still wrote snapshot schemaVersion 1 and repository rejected V2 DB rows | 1 | Write schemaVersion 2, accept DB snapshot versions 1/2, and preserve explicit V1-to-V2 parser migration. |
+| Stage 4 Part 2 full-stack wiring expected the pre-budget middleware order | 1 | Add native model/tool limit middleware names to the exact expected stack assertion. |
 
 ## Review Notes
 

@@ -15,7 +15,7 @@ import type {
   ChatValidatedImageAttachment,
   FileDeleteResult,
   RunCapabilityManifestV1,
-  RunExecutionSnapshotV1,
+  RunExecutionSnapshotV2,
   TaskDetail,
   TaskRun,
   UpdateBackgroundTaskRequest,
@@ -214,6 +214,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         workflowHint,
         contextBudgetTokens:
           input.snapshot.budget.contextBudgetTokens === null ? undefined : input.snapshot.budget.contextBudgetTokens,
+        modelCallLimit: input.snapshot.budget.modelCallLimit,
+        modelThreadCallLimit: input.snapshot.budget.modelThreadCallLimit,
+        toolCallLimit: input.snapshot.budget.toolCallLimit,
+        toolThreadCallLimit: input.snapshot.budget.toolThreadCallLimit,
         contextCompaction: {
           artifactStore: options.contextArtifactStore,
           emitEvent: emitContextMaintenanceEvent,
@@ -369,7 +373,7 @@ function recordPromptCacheMetrics(input: {
 
 function readInterruptPolicy(
   manifest: RunCapabilityManifestV1,
-  snapshot: RunExecutionSnapshotV1
+  snapshot: RunExecutionSnapshotV2
 ): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
   const backgroundTaskInterrupts = createBackgroundTaskInterruptPolicy(snapshot);
   const interruptOn: NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> = {};
@@ -390,7 +394,7 @@ function readInterruptPolicy(
 }
 
 function createBackgroundTaskInterruptPolicy(
-  snapshot: RunExecutionSnapshotV1
+  snapshot: RunExecutionSnapshotV2
 ): NonNullable<Parameters<typeof buildDeepAgent>[0]['interruptOn']> | undefined {
   if (!isBackgroundTaskWorkflow(snapshot) || snapshot.runOrigin !== 'workbench_creation') {
     return undefined;
@@ -429,7 +433,7 @@ function createInitialState(input: string, attachments: readonly ChatValidatedIm
   };
 }
 
-function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV1): Workspace | null {
+function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV2): Workspace | null {
   if (snapshot.workspace === null) {
     return null;
   }
@@ -565,11 +569,11 @@ async function loadSelectedMcpTools(
   });
 }
 
-function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): boolean {
+function isBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): boolean {
   return snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change';
 }
 
-function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV1): void {
+function requireWorkbenchSourceForBackgroundTaskWorkflow(snapshot: RunExecutionSnapshotV2): void {
   if (!isBackgroundTaskWorkflow(snapshot)) {
     return;
   }
@@ -600,7 +604,7 @@ function resolveManifestMcpToolName(
   return null;
 }
 
-function readExecutorMode(snapshot: RunExecutionSnapshotV1): ChatRunMode {
+function readExecutorMode(snapshot: RunExecutionSnapshotV2): ChatRunMode {
   return snapshot.mode === 'run' ? 'chat' : snapshot.mode;
 }
 

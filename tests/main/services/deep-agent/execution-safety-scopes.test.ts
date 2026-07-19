@@ -53,6 +53,10 @@ describe('execution safety middleware scopes', () => {
       checkpointer: {} as unknown,
       workflowHint: null,
       contextBudgetTokens: 4096,
+      modelCallLimit: 20,
+      modelThreadCallLimit: 100,
+      toolCallLimit: 40,
+      toolThreadCallLimit: 200,
       toolEffectIdempotency: {
         runId: 'run_1',
         threadId: 'thread_1',
@@ -119,7 +123,11 @@ describe('execution safety middleware scopes', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       workflowHint: null,
-      contextBudgetTokens: 4096
+      contextBudgetTokens: 4096,
+      modelCallLimit: 20,
+      modelThreadCallLimit: 100,
+      toolCallLimit: 40,
+      toolThreadCallLimit: 200
     } as unknown as DeepAgentBuildInput;
 
     expect(() => buildDeepAgent(input)).toThrow('agent_subagent_safety_contract_unsupported:compiled');
@@ -159,7 +167,11 @@ describe('execution safety middleware scopes', () => {
       interruptOn: undefined,
       checkpointer: undefined,
       workflowHint: null,
-      contextBudgetTokens: 4096
+      contextBudgetTokens: 4096,
+      modelCallLimit: 20,
+      modelThreadCallLimit: 100,
+      toolCallLimit: 40,
+      toolThreadCallLimit: 200
     } as unknown as DeepAgentBuildInput;
 
     buildDeepAgent(input);

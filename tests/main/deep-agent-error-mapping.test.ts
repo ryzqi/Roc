@@ -4,6 +4,19 @@ import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
 import { TOOL_ERROR_FIXTURES } from '../_fixtures/langchain-tool-errors';
 
 describe('deep agent error mapping', () => {
+  it('maps native model and tool call limit errors to a non-retryable budget failure', () => {
+    expect(toRunFailure(new Error('Model call limits exceeded: run level call limit reached with 8 model calls'))).toEqual({
+      code: 'run_budget_exhausted',
+      message: '模型调用次数已达到本轮预算上限。',
+      retryable: false
+    });
+    expect(toRunFailure(new Error("'run_shell_command' tool call limit reached: run limit exceeded (12/11 calls)."))).toEqual({
+      code: 'run_budget_exhausted',
+      message: '工具调用次数已达到本轮预算上限。',
+      retryable: false
+    });
+  });
+
   it('maps LangChain tool schema failures before provider network classification', () => {
     const error = new Error(
       "Error invoking tool 'propose_background_task' with kwargs {'trigger': {'schedule': '50 21 * * *'}} with error:\n" +

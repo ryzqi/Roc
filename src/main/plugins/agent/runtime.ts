@@ -22,7 +22,8 @@ import type {
   TaskRun,
   WorkflowHint,
   Workspace,
-  RunExecutionSnapshotV1
+  RunExecutionSnapshotV1,
+  RunExecutionSnapshotV2
 } from '../../../shared/types';
 import type { ActiveChatRun } from '../../../shared/types';
 import type { RocEventBus } from '../../kernel/types';
@@ -34,7 +35,7 @@ import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentRunEventLog } from './run-event-log';
 import { compileRunCapabilityManifest } from './run-capability-manifest';
-import { createChatStartRunRequestFromSnapshot, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
+import { createChatStartRunRequestFromSnapshot, createRunBudget, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
 import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
 import type { AgentSessionRepository } from './session-repository';
 import { toRecoveryDecision } from './recovery-policy';
@@ -60,7 +61,7 @@ type AgentResumePayload = HITLResponse | { answer: string };
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
-    snapshot: RunExecutionSnapshotV1;
+    snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
@@ -84,7 +85,7 @@ type ExecuteRunInput = {
   validatedAttachments?: ChatValidatedImageAttachment[];
   workflowHint: ChatStartRunRequest['workflowHint'] | null;
   enabledCapabilities: EnabledCapabilities;
-  snapshot: RunExecutionSnapshotV1;
+  snapshot: RunExecutionSnapshotV2;
 };
 
 export type AgentPluginRuntimeOptions = {
@@ -802,7 +803,7 @@ export class AgentPluginRuntime {
   }
 
   private async executeDeepAgentRun(input: {
-    snapshot: RunExecutionSnapshotV1;
+    snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
     run: TaskRun;
     modelHandle: AgentModelHandle;
@@ -1022,7 +1023,7 @@ function createRunExecutionSnapshotSeed(input: {
   workspace: Workspace | null;
 }): RunExecutionSnapshotSeed {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     runOrigin: resolveRunOrigin(input.request),
     model: {
       providerId: input.modelHandle.providerId,
@@ -1031,17 +1032,20 @@ function createRunExecutionSnapshotSeed(input: {
     mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
     workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
     capabilityManifest: input.capabilityManifest,
-    budget: {
-      contextBudgetTokens:
-        input.modelHandle.langChainHandle === undefined
-          ? null
-          : input.modelHandle.langChainHandle.runtime.contextBudgetTokens
-    },
+    budget: createRunBudget({
+        contextBudgetTokens:
+          input.modelHandle.langChainHandle === undefined
+            ? null
+            : input.modelHandle.langChainHandle.runtime.contextBudgetTokens,
+        mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
+        runOrigin: resolveRunOrigin(input.request)
+      }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,
     dispatchKey: input.dispatchKey
   };
 }
+
 
 function resolveDispatchKey(request: ChatStartRunRequest): string | null {
   if (request.dispatchKey === undefined) {
@@ -1069,7 +1073,7 @@ function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskR
   };
 }
 
-function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV1['runOrigin'] {
+function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV2['runOrigin'] {
   if (request.taskSource === 'background_schedule') {
     return 'background_schedule';
   }
@@ -1087,7 +1091,7 @@ function resolveRunOrigin(request: ChatStartRunRequest): RunExecutionSnapshotV1[
 
 function normalizeExplicitSkillIds(
   explicitSkillIds: ChatStartRunRequest['explicitSkillIds'],
-  capabilityManifest: RunExecutionSnapshotV1['capabilityManifest']
+  capabilityManifest: RunExecutionSnapshotV2['capabilityManifest']
 ): string[] {
   if (explicitSkillIds === undefined) {
     return [];
