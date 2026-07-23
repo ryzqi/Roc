@@ -28,11 +28,20 @@
 - 真实 route integration 使用未 mock 的 `createDeepAgent`、compiled research subagent、Roc compaction 与 `RocSqliteCheckpointer`，完成 `task -> write_todos -> return` 并触发 `context_summary_completed`；main 最终 middleware 不含 `SummarizationMiddleware`。
 - 双轴 review 的 Standards finding 已全部修复并复核无新增问题；Spec 初审的 mock vacuity、cache model compatibility、真实 route/checkpoint/long-context 证据均已补齐。Standards 与 Spec 最终复核均无本地未处理 finding。
 - 新鲜验证：focused 6 files / 26 tests、真实 route、`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm build`、full Vitest 304 files / 1634 tests、`git diff --check` 全部通过。
-- 状态：**Verified passing; pending commit**。真实 Anthropic provider cache usage 仍按 Stage 6 外部 integration 边界处理。
+- 状态：**Verified passing; committed**。提交 `639c019`；真实 Anthropic provider cache usage 仍按 Stage 6 外部 integration 边界处理。
+
+### Stage 5 Part 3A Saver Conformance
+
+- 原 Roc saver 的 `list` 未实现 metadata filter，且会在 filter 前应用 SQL limit；固定 conformance 红灯返回 `checkpoint_002`，upstream `MemorySaver` 返回 `checkpoint_001`。
+- 当前 filter 在 limit 前执行；filtered list 以 `(checkpoint_id DESC, thread_id ASC, checkpoint_ns ASC)` 做 64-row keyset metadata pagination，命中后才读取完整 checkpoint 与 pending writes；并发 retention 删除命中 row 时跳过且不消耗 limit。
+- pending writes 按 upstream insertion order 返回；regular write 保留首次值，`__error__`、`__scheduled__`、`__interrupt__`、`__resume__` 重试覆盖原值且保持位置。
+- shared conformance 精确覆盖两个 task 的完整 pending-write tuple、getTuple/list 双路径和 delete 后 write 无残留；不再用 Map 丢弃 taskId、重复 channel 或顺序。
+- 双轴最终 review 无 Standards/Spec finding；focused 3 files / 11 tests、typecheck、strict unused 与 diff check 通过。
+- 状态：**Verified passing; pending commit**。
 
 ### Remaining Stage 5 Gaps
 
-- Roc SQLite saver 的上游 conformance、multiple interrupt projection 和 resume failure preservation 尚未完成。
+- multiple interrupt projection 和 resume failure preservation 尚未完成。
 - checkpoint/artifact/event retention 规则尚未实现和验证。
 
 ### Durable Project Facts

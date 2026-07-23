@@ -16,7 +16,7 @@ Stage 5 - Context, Checkpoint, HITL Conformance
 
 **Status:** in_progress
 
-Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Convergence 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 Checkpoint/HITL 尚未开始。
+Stage 5 Part 1 与 Part 2 已提交；Part 3A saver conformance 已完成实现、双轴 review 与 focused verification，等待提交；随后依次处理 Part 3B interrupt/restart 与 Part 3C retention。
 
 ## Phase Status
 
@@ -27,7 +27,7 @@ Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Conver
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 已提交；Part 2 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 pending。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019` 已提交；Part 3A verified，等待提交。 |
 | Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
@@ -56,10 +56,19 @@ Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Conver
 
 ### Part 3 - Checkpoint And HITL
 
+#### Part 3A - Saver Conformance
+
+- [x] 用同一套上游 `BaseCheckpointSaver` 行为集覆盖 get/list/put/putWrites/delete。
+- [x] 覆盖 metadata filter、before/limit ordering、parent config 和 special writes。
+
+#### Part 3B - Interrupt Projection And Restart
+
 - [ ] pending interrupt 改为 collection projection；checkpoint 保持执行真相。
 - [ ] resume 使用 `interruptId -> value` map，dispatch 失败时保留 waiting projection。
-- [ ] 用上游 saver 行为集覆盖 get/list/put/putWrites/delete、metadata filter、ordering 和 special writes。
 - [ ] 用真实 Deep Agents + Roc saver 覆盖 approval、ask_user、multiple interrupts 和跨进程 restart/resume。
+
+#### Part 3C - Recovery-safe Retention
+
 - [ ] retention 以 terminal state 和 recovery safety window 为边界，覆盖 checkpoint/writes/artifacts/events。
 
 ## Acceptance Criteria

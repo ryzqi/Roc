@@ -3,9 +3,9 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：当前 Stage 5 Part 1 提交 `feat(agent): enforce context budget and artifact recovery`。
+- HEAD：`639c019 feat(agent): converge context compaction across subagents`。
 - Stage 0-4：完成并提交。
-- Stage 5：in progress；Part 1 已提交；Part 2 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 pending。
+- Stage 5：in progress；Part 1、Part 2 已提交；Part 3A 已完成实现、双轴 review 与 focused verification，等待提交；Part 3B/3C pending。
 - Stage 6-7：pending。
 - 用户未跟踪的 `plan.md` 保留为当前验收源，不纳入本次文档整理范围。
 
@@ -22,6 +22,8 @@
 | Stage 4.3 | Host shell pre-authorization、cwd/env/output/abort 边界完成。 | `20c235d` |
 | Stage 4.4 | Web/hook scope、deadline、abort、provenance 和 Windows child-tree 完成。 | `e75a754` |
 | Stage 4.5 | Effect state、execution path 和 restart reconcile 完成。 | `7e1ed9f` |
+| Stage 5.1 | Context hard budget、reducer compaction 与 scoped artifact recovery 完成。 | `b223636` |
+| Stage 5.2 | Main/subagent context pipeline 收敛并完成 native A/B。 | `639c019` |
 
 ## 2026-07-19 - Stage 5 Part 1 WIP
 
@@ -84,4 +86,14 @@
 - focused 6 files / 26 tests、真实 route、`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm build`、full Vitest（304 files / 1634 tests）和 `git diff --check` 全部通过。
 - 全量测试结束后仍输出 node-pty `AttachConsole failed` 子进程诊断，但 Vitest 退出码为 0；作为既有 Windows 环境残余风险记录。
 - 真实 Anthropic `cache_read` provider usage 未运行，需外部 provider 凭据，归 Stage 6 provider integration。
-- 状态：**Verified passing; pending commit**。
+- 状态：**Verified passing; committed**。提交：`639c019`。
+
+## 2026-07-23 - Stage 5 Part 3A Saver Conformance
+
+- 用同一套行为集对照 pinned LangGraph 1.4.7 `MemorySaver` 与 `RocSqliteCheckpointer`，覆盖 put/get/getTuple/list/deleteThread、parent config、metadata filter、before/limit 顺序和四类 special writes。
+- 红灯证明 Roc 原实现忽略 metadata filter，`before + filter + limit` 错误返回 `checkpoint_002`；修复后返回与 upstream 一致的 `checkpoint_001`。
+- filtered list 使用 64-row keyset metadata page；只有命中行读取 checkpoint BLOB 与 pending writes，130-row fixture 验证 3 页 metadata、1 次完整 tuple 读取。
+- pending writes 对齐 upstream insertion order；两个 task 的完整三元组在 getTuple/list 双路径精确一致，deleteThread 后重建同 checkpoint id 证明 writes 无残留。
+- 双轴 review 首轮发现 filtered list O(N) BLOB/N+1 查询、无效 timestamp fixture、delete writes 覆盖缺口和 pendingWrites Map 弱断言；全部修复。最终 Standards/Spec 复核均无 finding。
+- 新鲜验证：focused 3 files / 11 tests、`pnpm typecheck`、strict unused scan、`git diff --check` 通过。
+- 状态：**Verified passing; pending commit**。下一步 Part 3B interrupt projection/restart。

@@ -32,6 +32,19 @@ type CheckpointKey = {
   checkpointId: string;
 };
 
+type CheckpointMetadataRow = Pick<
+  CheckpointRow,
+  'thread_id' | 'checkpoint_ns' | 'checkpoint_id' | 'metadata_type' | 'metadata_blob'
+>;
+
+type CheckpointListCursor = {
+  threadId: string;
+  checkpointNs: string;
+  checkpointId: string;
+};
+
+const filteredListPageSize = 64;
+
 const writesIndexByChannel = new Map<string, number>([
   ['__error__', -1],
   ['__scheduled__', -2],
@@ -65,7 +78,7 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     if (row === undefined) {
       return undefined;
     }
-    return await this.rowToTuple(row);
+    return await this.rowToTuple(row, await this.readMetadata(row));
   }
 
   override async *list(
@@ -73,9 +86,23 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     options?: Parameters<BaseCheckpointSaver['list']>[1]
   ): AsyncGenerator<CheckpointTuple> {
     const key = readCheckpointKeyForList(config);
+    let remaining = options?.limit;
+    if (remaining !== undefined && remaining <= 0) {
+      return;
+    }
+    if (options?.filter !== undefined) {
+      yield* this.listFiltered(key, options, options.filter);
+      return;
+    }
     const rows = this.listRows(key, options);
     for (const row of rows) {
-      yield await this.rowToTuple(row);
+      yield await this.rowToTuple(row, await this.readMetadata(row));
+      if (remaining !== undefined) {
+        remaining -= 1;
+        if (remaining <= 0) {
+          return;
+        }
+      }
     }
   }
 
@@ -204,32 +231,91 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     return row === undefined ? null : row.checkpoint_id;
   }
 
+  private async *listFiltered(
+    key: ReturnType<typeof readCheckpointKeyForList>,
+    options: NonNullable<Parameters<BaseCheckpointSaver['list']>[1]>,
+    filter: Record<string, unknown>
+  ): AsyncGenerator<CheckpointTuple> {
+    let cursor: CheckpointListCursor | undefined;
+    let remaining = options.limit;
+    while (true) {
+      const rows = this.listMetadataPage(key, options, cursor);
+      for (const row of rows) {
+        const metadata = await this.readMetadata(row);
+        if (!matchesMetadataFilter(metadata, filter)) {
+          continue;
+        }
+        const checkpointRow = this.readCheckpointRow(row.thread_id, row.checkpoint_ns, row.checkpoint_id);
+        if (checkpointRow === undefined) {
+          continue;
+        }
+        yield await this.rowToTuple(checkpointRow, metadata);
+        if (remaining !== undefined) {
+          remaining -= 1;
+          if (remaining <= 0) {
+            return;
+          }
+        }
+      }
+      if (rows.length < filteredListPageSize) {
+        return;
+      }
+      const lastRow = rows[rows.length - 1];
+      if (lastRow === undefined) {
+        return;
+      }
+      cursor = {
+        checkpointId: lastRow.checkpoint_id,
+        checkpointNs: lastRow.checkpoint_ns,
+        threadId: lastRow.thread_id
+      };
+    }
+  }
+
+  private listMetadataPage(
+    key: ReturnType<typeof readCheckpointKeyForList>,
+    options: Parameters<BaseCheckpointSaver['list']>[1],
+    cursor: CheckpointListCursor | undefined
+  ): CheckpointMetadataRow[] {
+    const { clauses, params } = createListPredicate(key, options);
+    if (cursor !== undefined) {
+      clauses.push(
+        `(checkpoint_id < ?
+          OR (checkpoint_id = ? AND thread_id > ?)
+          OR (checkpoint_id = ? AND thread_id = ? AND checkpoint_ns > ?))`
+      );
+      params.push(
+        cursor.checkpointId,
+        cursor.checkpointId,
+        cursor.threadId,
+        cursor.checkpointId,
+        cursor.threadId,
+        cursor.checkpointNs
+      );
+    }
+    const whereClause = clauses.length === 0 ? '' : `WHERE ${clauses.join(' AND ')}`;
+    params.push(filteredListPageSize);
+    return this.db
+      .prepare(
+        `SELECT thread_id, checkpoint_ns, checkpoint_id, metadata_type, metadata_blob
+         FROM langgraph_checkpoints
+         ${whereClause}
+         ORDER BY checkpoint_id DESC, thread_id ASC, checkpoint_ns ASC
+         LIMIT ?`
+      )
+      .all(...params) as CheckpointMetadataRow[];
+  }
+
   private listRows(
     key: ReturnType<typeof readCheckpointKeyForList>,
     options: Parameters<BaseCheckpointSaver['list']>[1]
   ): CheckpointRow[] {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
-    if (key.threadId !== null) {
-      clauses.push('thread_id = ?');
-      params.push(key.threadId);
-    }
-    if (key.checkpointNs !== null) {
-      clauses.push('checkpoint_ns = ?');
-      params.push(key.checkpointNs);
-    }
-    if (key.checkpointId !== null) {
-      clauses.push('checkpoint_id = ?');
-      params.push(key.checkpointId);
-    }
-    if (options?.before?.configurable !== undefined && typeof options.before.configurable.checkpoint_id === 'string') {
-      clauses.push('checkpoint_id < ?');
-      params.push(options.before.configurable.checkpoint_id);
-    }
+    const { clauses, params } = createListPredicate(key, options);
     const whereClause = clauses.length === 0 ? '' : `WHERE ${clauses.join(' AND ')}`;
-    const limitClause = options?.limit === undefined ? '' : 'LIMIT ?';
-    if (options?.limit !== undefined) {
-      params.push(options.limit);
+    const sqlLimit = options?.limit;
+    const limitClause = sqlLimit === undefined ? '' : 'LIMIT ?';
+    if (sqlLimit !== undefined) {
+      params.push(sqlLimit);
     }
     return this.db
       .prepare(
@@ -237,13 +323,28 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
                 checkpoint_type, checkpoint_blob, metadata_type, metadata_blob
          FROM langgraph_checkpoints
          ${whereClause}
-         ORDER BY checkpoint_id DESC
+         ORDER BY checkpoint_id DESC, thread_id ASC, checkpoint_ns ASC
          ${limitClause}`
       )
       .all(...params) as CheckpointRow[];
   }
 
-  private async rowToTuple(row: CheckpointRow): Promise<CheckpointTuple> {
+  private readCheckpointRow(threadId: string, checkpointNs: string, checkpointId: string): CheckpointRow | undefined {
+    return this.db
+      .prepare(
+        `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id,
+                checkpoint_type, checkpoint_blob, metadata_type, metadata_blob
+         FROM langgraph_checkpoints
+         WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?`
+      )
+      .get(threadId, checkpointNs, checkpointId) as CheckpointRow | undefined;
+  }
+
+  private async readMetadata(row: CheckpointMetadataRow): Promise<CheckpointMetadata> {
+    return await this.serde.loadsTyped(row.metadata_type, row.metadata_blob);
+  }
+
+  private async rowToTuple(row: CheckpointRow, metadata: CheckpointMetadata): Promise<CheckpointTuple> {
     const pendingWrites = await this.readPendingWrites(row.thread_id, row.checkpoint_ns, row.checkpoint_id);
     const tuple: CheckpointTuple = {
       config: {
@@ -254,7 +355,7 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
         }
       },
       checkpoint: await this.serde.loadsTyped(row.checkpoint_type, row.checkpoint_blob),
-      metadata: await this.serde.loadsTyped(row.metadata_type, row.metadata_blob),
+      metadata,
       pendingWrites
     };
     if (row.parent_checkpoint_id !== null) {
@@ -279,7 +380,7 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
         `SELECT task_id, channel, value_type, value_blob
          FROM langgraph_checkpoint_writes
          WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
-         ORDER BY task_id ASC, idx ASC`
+         ORDER BY rowid ASC`
       )
       .all(threadId, checkpointNs, checkpointId) as WriteRow[];
     const pendingWrites: NonNullable<CheckpointTuple['pendingWrites']> = [];
@@ -288,6 +389,38 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
     }
     return pendingWrites;
   }
+}
+
+function createListPredicate(
+  key: ReturnType<typeof readCheckpointKeyForList>,
+  options: Parameters<BaseCheckpointSaver['list']>[1]
+): { clauses: string[]; params: unknown[] } {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  if (key.threadId !== null) {
+    clauses.push('thread_id = ?');
+    params.push(key.threadId);
+  }
+  if (key.checkpointNs !== null) {
+    clauses.push('checkpoint_ns = ?');
+    params.push(key.checkpointNs);
+  }
+  if (key.checkpointId !== null) {
+    clauses.push('checkpoint_id = ?');
+    params.push(key.checkpointId);
+  }
+  if (options?.before?.configurable !== undefined && typeof options.before.configurable.checkpoint_id === 'string') {
+    clauses.push('checkpoint_id < ?');
+    params.push(options.before.configurable.checkpoint_id);
+  }
+  return { clauses, params };
+}
+
+function matchesMetadataFilter(metadata: CheckpointMetadata | undefined, filter: Record<string, unknown>): boolean {
+  if (metadata === undefined) {
+    return false;
+  }
+  return Object.entries(filter).every(([key, value]) => Reflect.get(metadata, key) === value);
 }
 
 function readCheckpointKeyForGet(config: RunnableConfig): {

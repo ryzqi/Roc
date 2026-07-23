@@ -139,8 +139,8 @@ describe('RocSqliteCheckpointer', () => {
     const loaded = await checkpointer.getTuple(config);
 
     expect(loaded?.pendingWrites).toEqual([
-      ['task-writes-1', '__interrupt__', { value: 'interrupt-second' }],
-      ['task-writes-1', 'messages', 'regular-first']
+      ['task-writes-1', 'messages', 'regular-first'],
+      ['task-writes-1', '__interrupt__', { value: 'interrupt-second' }]
     ]);
   });
 });
