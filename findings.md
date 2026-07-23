@@ -19,9 +19,19 @@
 - 独立 risk review：未发现未处理 Critical/High/Medium finding。全量 Vitest 末尾 node-pty `AttachConsole failed` 为子进程诊断噪声，Vitest 退出码 0；不改变本 part 结论。
 - 状态：**Verified passing; committed**。Part 2 Native Convergence 与 Part 3 Checkpoint/HITL 仍 pending。
 
+### Stage 5 Part 2 Native Convergence
+
+- Deep Agents 1.10.7 的 harness profile 过滤只作用于 main middleware；declarative inline subagent 的 native summary 在 `normalizeSubagentSpec` 中固定前置，现有 profile 不能将其排除。
+- 生产路径选择 Roc pipeline：main 继续由 provider profile 排除 native summary；声明式 subagent 在 Roc builder 内编译为 runnable，保留官方 todo/filesystem/skills/patch/prompt-cache、权限覆盖、HITL 与 static response format。
+- Anthropic cache 识别已对齐 1.10.7：支持 `anthropic:*`、裸 `claude*`、`ChatAnthropic` 与 provider 为 anthropic 的 `ConfigurableModel`；静态 system breakpoint 在相同输入上保持稳定。
+- 固定 corpus A/B 本地结果：两条候选均完成并保留 PROJECT/DECISION/NEXT 标记；Roc summary input token 少于 native，structured summary output 较 native plain-text summary 更大；两者原文均可恢复，Roc checkpoint 经 saver 序列化后小于 native event + full message state。
+- 真实 route integration 使用未 mock 的 `createDeepAgent`、compiled research subagent、Roc compaction 与 `RocSqliteCheckpointer`，完成 `task -> write_todos -> return` 并触发 `context_summary_completed`；main 最终 middleware 不含 `SummarizationMiddleware`。
+- 双轴 review 的 Standards finding 已全部修复并复核无新增问题；Spec 初审的 mock vacuity、cache model compatibility、真实 route/checkpoint/long-context 证据均已补齐。Standards 与 Spec 最终复核均无本地未处理 finding。
+- 新鲜验证：focused 6 files / 26 tests、真实 route、`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm build`、full Vitest 304 files / 1634 tests、`git diff --check` 全部通过。
+- 状态：**Verified passing; pending commit**。真实 Anthropic provider cache usage 仍按 Stage 6 外部 integration 边界处理。
+
 ### Remaining Stage 5 Gaps
 
-- native summarization A/B conformance 尚未完成，生产路径尚未收敛。
 - Roc SQLite saver 的上游 conformance、multiple interrupt projection 和 resume failure preservation 尚未完成。
 - checkpoint/artifact/event retention 规则尚未实现和验证。
 
@@ -58,4 +68,5 @@
 - reducer update 已由真实 LangGraph + Roc saver restart integration 证明写入 checkpoint；尚未覆盖完整 Deep Agents model loop。
 - `context_budget_exhausted` 只有进入 runtime terminal path 后，才能证明不会触发 recovery 或继续 model call。
 - Stage 5 不得保留 Roc 与 native 两套长期并行的 summarization 事实源。
+- 本地 cache contract 已验证；真实 Anthropic `cache_read` usage 需要外部 provider 凭据，归 Stage 6 integration，当前不得表述为 provider hit 已验证。
 - Windows 全量测试偶发输出 node-pty `AttachConsole failed`，当前 Vitest 仍以退出码 0 完成；后续若转为非零退出再单独定位环境边界。

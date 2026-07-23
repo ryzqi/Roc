@@ -5,7 +5,7 @@
 - Branch：`main`。
 - HEAD：当前 Stage 5 Part 1 提交 `feat(agent): enforce context budget and artifact recovery`。
 - Stage 0-4：完成并提交。
-- Stage 5：in progress；Part 1 已完成实现、review、全门验证并提交；Part 2/3 pending。
+- Stage 5：in progress；Part 1 已提交；Part 2 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 pending。
 - Stage 6-7：pending。
 - 用户未跟踪的 `plan.md` 保留为当前验收源，不纳入本次文档整理范围。
 
@@ -73,3 +73,15 @@
 - broad：`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm build`、`pnpm test`（302 files / 1631 tests）、`git diff --check` 通过。
 - 全量测试末尾 node-pty `AttachConsole failed` 为子进程诊断噪声，Vitest 退出码 0；记录残余风险，不扩大本 part 范围。
 - 状态：**Verified passing; committed**。下一步进入 Part 2 Native Convergence。
+
+## 2026-07-23 - Stage 5 Part 2 Native Convergence
+
+- 本机 Deep Agents 1.10.7 的 provider profile 只过滤 main middleware；declarative inline subagent 会固定前置 native `SummarizationMiddleware`，与 Roc pipeline 形成双 producer。
+- Roc builder 现在把通过安全合同校验的声明式 subagent 编译为 runnable，显式保留官方 todo/filesystem/skills/patch/prompt-cache 基础栈、subagent permissions 与 static response format，只移除 native summary。
+- 固定 corpus A/B 覆盖 completion、data-derived fidelity、input/output token、native backend offload、Roc scoped artifact recovery，以及经 `RocSqliteCheckpointer` 序列化后的 checkpoint blob 体积。
+- 真实 integration 未 mock Deep Agents：Anthropic harness profile 后 main 仅有 Roc compaction；compiled research subagent 完成 `task -> write_todos -> return`，触发 Roc summary，并由 Roc saver 写入 checkpoint。
+- 双轴 review 首轮 finding：关键数组静默兜底、测试 helper 重复、main mock vacuity、Anthropic model 识别缺口与本地 conformance 证据不足；均已修复。Standards 与 Spec 最终复核均无本地未处理 finding。
+- focused 6 files / 26 tests、真实 route、`pnpm typecheck`、strict unused scan、`pnpm check:ipc`、`pnpm build`、full Vitest（304 files / 1634 tests）和 `git diff --check` 全部通过。
+- 全量测试结束后仍输出 node-pty `AttachConsole failed` 子进程诊断，但 Vitest 退出码为 0；作为既有 Windows 环境残余风险记录。
+- 真实 Anthropic `cache_read` provider usage 未运行，需外部 provider 凭据，归 Stage 6 provider integration。
+- 状态：**Verified passing; pending commit**。

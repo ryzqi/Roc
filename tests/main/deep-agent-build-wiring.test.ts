@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { AIMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { createDeepAgent } from 'deepagents';
-import type { SubAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { z } from 'zod';
 import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
+import { getSubagentMiddleware, getSubagentTools, isBuiltSubagent } from './deep-agent-test-helpers';
 
 type BuildFixtureInput = Omit<DeepAgentBuildInput, 'capabilityManifest' | 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'> &
   Partial<Pick<DeepAgentBuildInput, 'modelCallLimit' | 'modelThreadCallLimit' | 'toolCallLimit' | 'toolThreadCallLimit'>>;
@@ -472,31 +472,25 @@ describe('buildDeepAgent harness profile wiring', () => {
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const generalPurposeSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'general-purpose');
     const researchSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'research');
-    if (!isSubAgent(generalPurposeSubagent)) {
+    if (!isBuiltSubagent(generalPurposeSubagent)) {
       throw new Error('Expected general-purpose subagent.');
     }
-    if (!isSubAgent(researchSubagent)) {
+    if (!isBuiltSubagent(researchSubagent)) {
       throw new Error('Expected research subagent.');
     }
-    const generalPurposeMiddleware = generalPurposeSubagent.middleware;
-    const researchMiddleware = researchSubagent.middleware;
-    const generalPurposeMiddlewareNames =
-      generalPurposeMiddleware === undefined
-        ? []
-        : generalPurposeMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
-    const researchMiddlewareNames =
-      researchMiddleware === undefined
-        ? []
-        : researchMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
-    const generalPurposeHookMiddleware = generalPurposeSubagent.middleware?.find((middlewareItem) =>
+    const generalPurposeMiddleware = getSubagentMiddleware(generalPurposeSubagent);
+    const researchMiddleware = getSubagentMiddleware(researchSubagent);
+    const generalPurposeMiddlewareNames = generalPurposeMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
+    const researchMiddlewareNames = researchMiddleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
+    const generalPurposeHookMiddleware = generalPurposeMiddleware.find((middlewareItem) =>
       Reflect.get(middlewareItem as object, 'name') === 'RocHookMiddleware'
     );
-    const researchHookMiddleware = researchSubagent.middleware?.find((middlewareItem) =>
+    const researchHookMiddleware = researchMiddleware.find((middlewareItem) =>
       Reflect.get(middlewareItem as object, 'name') === 'RocHookMiddleware'
     );
 
-    expect(generalPurposeSubagent.tools).toEqual([inspectTool]);
-    expect(generalPurposeSubagent.skills).toEqual(['/skills/']);
+    expect(getSubagentTools(generalPurposeSubagent)).toEqual([inspectTool]);
+    expect(generalPurposeMiddlewareNames).toContain('SkillsMiddleware');
     expect(generalPurposeMiddlewareNames).toContain('RocHookMiddleware');
     expect(researchMiddlewareNames).toContain('RocHookMiddleware');
     expect(typeof Reflect.get(generalPurposeHookMiddleware as object, 'beforeModel')).toBe('function');
@@ -697,15 +691,15 @@ describe('buildDeepAgent harness profile wiring', () => {
       tools: [inspectTool]
     });
     const generalPurposeSubagent = createDeepAgentInput?.subagents?.find((subagent) => subagent.name === 'general-purpose');
-    if (!isSubAgent(generalPurposeSubagent)) {
+    if (!isBuiltSubagent(generalPurposeSubagent)) {
       throw new Error('Expected explicit general-purpose subagent.');
     }
-    const middlewareNames = generalPurposeSubagent.middleware?.map((middlewareItem) =>
+    const middlewareNames = getSubagentMiddleware(generalPurposeSubagent).map((middlewareItem) =>
       Reflect.get(middlewareItem as object, 'name')
-    ) ?? [];
+    );
 
-    expect(generalPurposeSubagent.tools).toEqual([inspectTool]);
-    expect(generalPurposeSubagent.skills).toEqual(['/skills/']);
+    expect(getSubagentTools(generalPurposeSubagent)).toEqual([inspectTool]);
+    expect(middlewareNames).toContain('SkillsMiddleware');
     expect(middlewareNames).toEqual(expect.arrayContaining([
       'RocShellPathPolicyMiddleware',
       'RocToolProtocolMiddleware',
@@ -784,19 +778,19 @@ describe('buildDeepAgent harness profile wiring', () => {
     const middlewareNames = middleware.map((middlewareItem) => Reflect.get(middlewareItem as object, 'name'));
     const generalPurposeSubagent = createDeepAgentInput.subagents?.find((subagent) => subagent.name === 'general-purpose');
     const researchSubagent = createDeepAgentInput.subagents?.find((subagent) => subagent.name === 'research');
-    if (!isSubAgent(generalPurposeSubagent)) {
+    if (!isBuiltSubagent(generalPurposeSubagent)) {
       throw new Error('Expected plan general-purpose subagent.');
     }
-    if (!isSubAgent(researchSubagent)) {
+    if (!isBuiltSubagent(researchSubagent)) {
       throw new Error('Expected plan research subagent.');
     }
-    const generalPurposeMiddlewareNames = generalPurposeSubagent?.middleware?.map((middlewareItem) =>
+    const generalPurposeMiddlewareNames = getSubagentMiddleware(generalPurposeSubagent).map((middlewareItem) =>
       Reflect.get(middlewareItem as object, 'name')
-    ) ?? [];
-    const generalPurposeToolNames = generalPurposeSubagent?.tools?.map((tool) => tool.name) ?? [];
-    const researchMiddlewareNames = researchSubagent?.middleware?.map((middlewareItem) =>
+    );
+    const generalPurposeToolNames = getSubagentTools(generalPurposeSubagent).map((tool) => tool.name);
+    const researchMiddlewareNames = getSubagentMiddleware(researchSubagent).map((middlewareItem) =>
       Reflect.get(middlewareItem as object, 'name')
-    ) ?? [];
+    );
 
     expect(toolNames).toEqual([
       'web_read',
@@ -903,8 +897,4 @@ function createNamedTool(name: string) {
     description: `${name} tool`,
     schema: z.object({})
   });
-}
-
-function isSubAgent(value: unknown): value is SubAgent {
-  return value !== null && typeof value === 'object' && Reflect.has(value, 'systemPrompt');
 }

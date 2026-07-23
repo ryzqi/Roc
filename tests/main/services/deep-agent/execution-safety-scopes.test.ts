@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { tool } from '@langchain/core/tools';
 import { createDeepAgent } from 'deepagents';
-import type { SubAgent } from 'deepagents';
 import { z } from 'zod';
 
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../../../src/main/services/deep-agent/harness-profiles';
+import { getSubagentMiddleware, getSubagentTools, isBuiltSubagent } from '../../deep-agent-test-helpers';
 
 vi.mock('deepagents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('deepagents')>();
@@ -112,13 +112,16 @@ describe('execution safety middleware scopes', () => {
     expect(mainMiddlewareNames).toEqual(expect.arrayContaining(expectedSafetyMiddleware));
     for (const subagentName of ['general-purpose', 'research']) {
       const subagent = createDeepAgentInput.subagents?.find((candidate) => candidate.name === subagentName);
-      if (!isSubAgent(subagent)) {
+      if (!isBuiltSubagent(subagent)) {
         throw new Error(`Expected ${subagentName} subagent.`);
       }
-      const middlewareNames = subagent.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
+      const middlewareNames = getSubagentMiddleware(subagent).map((middleware) =>
+        Reflect.get(middleware as object, 'name')
+      );
 
-      expect(subagent.interruptOn).toEqual(interruptOn);
+      expect(middlewareNames).toContain('HumanInTheLoopMiddleware');
       expect(middlewareNames).toEqual(expect.arrayContaining(expectedSafetyMiddleware));
+      expect(middlewareNames).not.toContain('SummarizationMiddleware');
     }
   });
 
@@ -201,10 +204,10 @@ describe('execution safety middleware scopes', () => {
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls.at(-1)?.[0];
     for (const subagentName of ['general-purpose', 'research']) {
       const subagent = createDeepAgentInput?.subagents?.find((candidate) => candidate.name === subagentName);
-      if (!isSubAgent(subagent)) {
+      if (!isBuiltSubagent(subagent)) {
         throw new Error(`Expected ${subagentName} subagent.`);
       }
-      expect(subagent.tools?.map((candidate) => candidate.name)).toEqual(['inspect_workspace']);
+      expect(getSubagentTools(subagent).map((candidate) => candidate.name)).toEqual(['inspect_workspace']);
     }
   });
 });
@@ -235,8 +238,4 @@ function createCapabilityManifest(customToolNames: string[] = []) {
     mode: 'chat',
     workflowHint: null
   }).manifest;
-}
-
-function isSubAgent(value: unknown): value is SubAgent {
-  return value !== null && typeof value === 'object' && Reflect.has(value, 'systemPrompt');
 }

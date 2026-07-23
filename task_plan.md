@@ -16,7 +16,7 @@ Stage 5 - Context, Checkpoint, HITL Conformance
 
 **Status:** in_progress
 
-Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Convergence 与 Part 3 Checkpoint/HITL 仍未开始。
+Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Convergence 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 Checkpoint/HITL 尚未开始。
 
 ## Phase Status
 
@@ -27,7 +27,7 @@ Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Conver
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 已由当前 `feat(agent): enforce context budget and artifact recovery` 提交；Part 2/3 pending。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 已提交；Part 2 已完成实现、双轴 review 与全部项目门，等待提交；Part 3 pending。 |
 | Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
@@ -48,9 +48,11 @@ Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Conver
 
 ### Part 2 - Native Convergence
 
-- [ ] 对 Deep Agents 1.10.7 native summarization 与 Roc pipeline 做固定 corpus A/B conformance。
-- [ ] 比较 summary fidelity、token、cache、artifact recovery、checkpoint size 和 subagent compatibility。
-- [ ] 只保留一个生产路径，不长期维护双栈。
+- [x] 对 Deep Agents 1.10.7 native summarization 与 Roc pipeline 做固定 corpus A/B conformance。
+- [x] 比较 completion、summary fidelity、input/output token、cache contract、artifact recovery、checkpoint size 和 subagent compatibility。
+- [x] 只保留一个生产路径，不长期维护双栈。
+
+结论：保留 Roc pipeline。harness profile 过滤 main 的 `SummarizationMiddleware`；Roc builder 将声明式 subagent 编译为 runnable，显式复用官方 todo/filesystem/skills/patch/cache middleware，仅保留 Roc context pipeline。真实 Anthropic `cache_read` 命中需外部 provider 请求，归 Stage 6 provider integration，不作为本地命中结论。
 
 ### Part 3 - Checkpoint And HITL
 
@@ -85,6 +87,9 @@ Stage 5 Part 1 已完成实现、review、验证并提交；Part 2 Native Conver
 | `rg` 查询 `MessagesAnnotation` 无匹配时返回 1，导致并行批处理整体失败 | 1 | 改用包导出运行探针与更窄的声明文件定位；未修改项目文件。 |
 | summary failure focused test 缺少 `context_compaction_failed` 事件 | 1 | 将失败事件移到 hard-trim 成功后的调用方；hard-trim 失败由外层 catch 单次发射。 |
 | profile 接口切换后 typecheck 报 10 个旧 `budgetTokens` 调用点 | 1 | 作为显式迁移清单；更新 agent-builder/executor 与测试为 `budgetProfile`，不保留兼容别名。 |
+| PowerShell `rg` 查询 native middleware 时双引号插值解析失败 | 1 | 改用单引号查询并拆分并行命令；仓库未修改。 |
+| compiled subagent 首次 typecheck 未传播声明式校验收窄 | 1 | `requireDeclarativeSubagents` 显式返回 `SubAgent[]`，不放宽 opaque subagent 拒绝合同。 |
+| 真实 route integration 首次调用缺少 `forge_error_tracker`，summary flush 随后因 thread fixture 缺失触发外键失败 | 2 | 按现有 state contract 初始化 tracker，并先持久化 `agent_threads`；未放宽生产 schema 或外键。 |
 | 恢复会话时两次 `functions.exec` 并行读取脚本因 JavaScript 括号/语句结构错误未执行 | 2 | 改为更简单的 `Promise.all` 调用结构；仓库未被修改，后续读取成功。 |
 | 2026-07-21 focused context 命令经 `pnpm test -- ...` 实际执行全套 301 files，4 tests 失败 | 1 | 3 个 pipeline 用例触发 `context_budget_exhausted`，1 个质量门发现 `context-token-budget.ts` 空 `catch`；先按失败边界修复，再改用 `pnpm exec vitest run <files>` 跑窄测试。 |
 | 新增 summary budget 测试后 10-file focused run 有 6 个 pipeline 失败 | 1 | 测试计数器匹配了不存在的 `You summarize old runtime context.`，真实 system message 为 `... for Roc.`；修正测试锚点，不放宽生产预算。 |

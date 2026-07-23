@@ -1,9 +1,25 @@
-import { GENERAL_PURPOSE_SUBAGENT, createDeepAgent } from 'deepagents';
+import {
+  GENERAL_PURPOSE_SUBAGENT,
+  createDeepAgent,
+  createFilesystemMiddleware,
+  createPatchToolCallsMiddleware,
+  createSkillsMiddleware,
+  createSubAgent,
+  type CompiledSubAgent
+} from 'deepagents';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ClientTool } from '@langchain/core/tools';
 import type { FilesystemPermission, SubAgent } from 'deepagents';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import { modelCallLimitMiddleware, toolCallLimitMiddleware, toolRetryMiddleware } from 'langchain';
+import {
+  anthropicPromptCachingMiddleware,
+  createMiddleware,
+  modelCallLimitMiddleware,
+  todoListMiddleware,
+  toolCallLimitMiddleware,
+  toolRetryMiddleware
+} from 'langchain';
+import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import type { ChatStartRunRequest, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
@@ -151,22 +167,29 @@ function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
 }
 
 function createDeepAgentSubagents(input: DeepAgentBuildInput, tools: ClientTool[]): RuntimeSubagent[] {
-  assertDeclarativeSubagents(input.subagents);
+  const declarativeSubagents = requireDeclarativeSubagents(input.subagents);
   if (input.mode === 'plan') {
-    return createPlanModeSubagents(input, tools);
+    return createPlanModeSubagents(input, tools, declarativeSubagents);
   }
-  return createRunModeSubagents(input, tools);
+  return createRunModeSubagents(input, tools, declarativeSubagents);
 }
 
-function assertDeclarativeSubagents(subagents: RuntimeSubagent[]): void {
+function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
+  const declarativeSubagents: SubAgent[] = [];
   for (const subagent of subagents) {
     if (!isSubAgentSpec(subagent)) {
       throw new Error(`agent_subagent_safety_contract_unsupported:${subagent.name}`);
     }
+    declarativeSubagents.push(subagent);
   }
+  return declarativeSubagents;
 }
 
-function createRunModeSubagents(input: DeepAgentBuildInput, tools: ClientTool[]): RuntimeSubagent[] {
+function createRunModeSubagents(
+  input: DeepAgentBuildInput,
+  tools: ClientTool[],
+  subagents: SubAgent[]
+): RuntimeSubagent[] {
   const scopedTools = filterToolsForExecutionScope(tools, input.capabilityManifest, 'subagent');
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
@@ -176,12 +199,18 @@ function createRunModeSubagents(input: DeepAgentBuildInput, tools: ClientTool[])
     ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn })
   };
   return [
-    generalPurposeSubagent,
-    ...input.subagents.map((subagent) => applyRunModeSubagentMiddleware(input, subagent, scopedTools))
+    compileRocSubagent(input, generalPurposeSubagent),
+    ...subagents.map((subagent) =>
+      compileRocSubagent(input, applyRunModeSubagentMiddleware(input, subagent, scopedTools))
+    )
   ];
 }
 
-function createPlanModeSubagents(input: DeepAgentBuildInput, planTools: ClientTool[]): RuntimeSubagent[] {
+function createPlanModeSubagents(
+  input: DeepAgentBuildInput,
+  planTools: ClientTool[],
+  subagents: SubAgent[]
+): RuntimeSubagent[] {
   const scopedTools = filterToolsForExecutionScope(planTools, input.capabilityManifest, 'subagent');
   const generalPurposeSubagent: SubAgent = {
     ...GENERAL_PURPOSE_SUBAGENT,
@@ -191,21 +220,109 @@ function createPlanModeSubagents(input: DeepAgentBuildInput, planTools: ClientTo
     ...(input.interruptOn === undefined ? {} : { interruptOn: input.interruptOn })
   };
   return [
-    generalPurposeSubagent,
-    ...input.subagents
-      .filter(isPlanModeInlineSubagent)
-      .map((subagent) => applyPlanModeSubagentMiddleware(input, subagent, scopedTools))
+    compileRocSubagent(input, generalPurposeSubagent),
+    ...subagents
+      .map((subagent) => compileRocSubagent(input, applyPlanModeSubagentMiddleware(input, subagent, scopedTools)))
   ];
+}
+
+function compileRocSubagent(input: DeepAgentBuildInput, spec: SubAgent): CompiledSubAgent {
+  const tools = spec.tools === undefined ? [] : spec.tools;
+  const model = spec.model === undefined ? input.model : spec.model;
+  const middleware = [
+    todoListMiddleware(),
+    createFilesystemMiddleware({
+      backend: input.backend,
+      permissions: spec.permissions === undefined ? input.filesystemPermissions : spec.permissions
+    }),
+    createPatchToolCallsMiddleware(),
+    ...(spec.skills === undefined || spec.skills.length === 0
+      ? []
+      : [createSkillsMiddleware({ backend: input.backend, sources: [...spec.skills] })]),
+    ...(spec.middleware === undefined ? [] : spec.middleware),
+    ...createRocSubagentCacheMiddleware(model)
+  ];
+  const runnable = createSubAgent({
+    ...spec,
+    model,
+    tools,
+    middleware
+  });
+  return {
+    name: spec.name,
+    description: spec.description,
+    runnable
+  };
+}
+
+function createRocSubagentCacheMiddleware(model: NonNullable<SubAgent['model']>) {
+  if (!isAnthropicModel(model)) {
+    return [];
+  }
+  return [
+    anthropicPromptCachingMiddleware({ unsupportedModelBehavior: 'ignore', minMessagesToCache: 1 }),
+    createRocCacheBreakpointMiddleware()
+  ];
+}
+
+function createRocCacheBreakpointMiddleware() {
+  return createMiddleware({
+    name: 'RocCacheBreakpointMiddleware',
+    wrapModelCall: (request, handler) => {
+      if (!isAnthropicModel(request.model)) {
+        return handler(request);
+      }
+      const content = request.systemMessage.content;
+      const blocks = typeof content === 'string'
+        ? [{ type: 'text' as const, text: content }]
+        : Array.isArray(content)
+          ? [...content]
+          : [];
+      if (blocks.length === 0) {
+        return handler(request);
+      }
+      blocks[blocks.length - 1] = {
+        ...blocks[blocks.length - 1],
+        cache_control: { type: 'ephemeral' }
+      };
+      return handler({
+        ...request,
+        systemMessage: new SystemMessage({ content: blocks })
+      });
+    }
+  });
+}
+
+function isAnthropicModel(model: unknown): boolean {
+  if (typeof model === 'string') {
+    if (model.includes(':')) {
+      return model.split(':')[0] === 'anthropic';
+    }
+    return model.startsWith('claude');
+  }
+  if (model === null || typeof model !== 'object') {
+    return false;
+  }
+  const getName = Reflect.get(model, 'getName');
+  if (typeof getName !== 'function') {
+    return false;
+  }
+  const modelName = getName.call(model);
+  if (modelName === 'ConfigurableModel') {
+    const defaultConfig = Reflect.get(model, '_defaultConfig');
+    if (defaultConfig === null || typeof defaultConfig !== 'object') {
+      return false;
+    }
+    return Reflect.get(defaultConfig, 'modelProvider') === 'anthropic';
+  }
+  return modelName === 'ChatAnthropic';
 }
 
 function applyPlanModeSubagentMiddleware(
   input: DeepAgentBuildInput,
-  subagent: RuntimeSubagent,
+  subagent: SubAgent,
   defaultTools: ClientTool[]
-): RuntimeSubagent {
-  if (!isSubAgentSpec(subagent)) {
-    return subagent;
-  }
+): SubAgent {
   const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
   const tools = subagent.tools === undefined
     ? defaultTools
@@ -220,12 +337,9 @@ function applyPlanModeSubagentMiddleware(
 
 function applyRunModeSubagentMiddleware(
   input: DeepAgentBuildInput,
-  subagent: RuntimeSubagent,
+  subagent: SubAgent,
   defaultTools: ClientTool[]
-): RuntimeSubagent {
-  if (!isSubAgentSpec(subagent)) {
-    return subagent;
-  }
+): SubAgent {
   const middleware = subagent.middleware === undefined ? [] : [...subagent.middleware];
   const tools = subagent.tools === undefined
     ? defaultTools
@@ -386,10 +500,6 @@ function createContextCompactionMiddleware(input: DeepAgentBuildInput) {
       workspacePath: input.workspacePath
     })
   ];
-}
-
-function isPlanModeInlineSubagent(subagent: RuntimeSubagent): boolean {
-  return !('graphId' in subagent);
 }
 
 function isSubAgentSpec(subagent: RuntimeSubagent): subagent is SubAgent {
