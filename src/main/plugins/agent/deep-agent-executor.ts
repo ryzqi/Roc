@@ -3,6 +3,7 @@ import { Command } from '@langchain/langgraph';
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import type { ClientTool } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
+import { GENERAL_PURPOSE_SUBAGENT } from 'deepagents';
 import { z } from 'zod';
 
 import type {
@@ -43,6 +44,11 @@ import { createRocWindowsCommandTool } from '../../services/deep-agent/command-t
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
 import type { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import type { ContextMaintenanceEvent } from '../../services/deep-agent/context/context-compaction-pipeline';
+import {
+  createContextTokenCounter,
+  deriveContextBudgetProfile
+} from '../../services/deep-agent/context/context-token-budget';
+import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import { createToolOutputProjector, type ToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
@@ -151,16 +157,66 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         store: options.store,
         workspace: runtimeWorkspace
       });
+      const mainManifestToolNames = input.snapshot.capabilityManifest.tools
+        .filter((tool) => tool.executionScopes.includes('main'))
+        .map((tool) => tool.modelVisibleName);
       const contextHarness = assembleContextHarness({
+        artifactStore: options.contextArtifactStore,
         mode,
         enabledCapabilities: input.snapshot.capabilityManifest.resolvedCapabilities,
         workflowHint,
         workspacePath: runtimeWorkspace === null ? null : runtimeWorkspace.path,
         memorySources: runtimeBackend.memorySources,
         baseTools: tools.runTools,
+        allowedToolNames: mainManifestToolNames,
         searchSessions: request => options.capabilities.invoke('agent.sessions.search', request),
+        threadId: input.run.threadId,
         explicitSkillContexts
       });
+      const contextWindowTokens = input.snapshot.budget.contextBudgetTokens;
+      if (contextWindowTokens === null) {
+        throw new Error('agent_context_budget_missing');
+      }
+      const contextTokenCounter = createContextTokenCounter(handle.model);
+      const contextTools = contextHarness.tools.map((tool): ContextToolDefinition => {
+        if (typeof tool.description !== 'string') {
+          throw new Error(`agent_tool_description_missing:${tool.name}`);
+        }
+        return {
+          name: tool.name,
+          description: tool.description,
+          schema: Reflect.get(tool, 'schema')
+        };
+      });
+      const runSubagents = createRunSubagents({
+        webReadTool: tools.webReadTool
+      });
+      const contextBudgetProfiles = await Promise.all([
+        deriveContextBudgetProfile({
+          contextWindowTokens,
+          counter: contextTokenCounter,
+          systemPrompt: contextHarness.systemPrompt,
+          tools: contextTools
+        }),
+        deriveContextBudgetProfile({
+          contextWindowTokens,
+          counter: contextTokenCounter,
+          systemPrompt: GENERAL_PURPOSE_SUBAGENT.systemPrompt,
+          tools: contextTools
+        }),
+        ...runSubagents.map((subagent) => {
+          if (!('systemPrompt' in subagent) || typeof subagent.systemPrompt !== 'string') {
+            throw new Error(`agent_subagent_system_prompt_missing:${subagent.name}`);
+          }
+          return deriveContextBudgetProfile({
+            contextWindowTokens,
+            counter: contextTokenCounter,
+            systemPrompt: subagent.systemPrompt,
+            tools: contextTools
+          });
+        })
+      ]);
+      const contextBudgetProfile = selectConservativeContextBudgetProfile(contextBudgetProfiles);
       const emitContextMaintenanceEvent = (event: ContextMaintenanceEvent) => {
         emitRuntimeEvent({
           type: 'context_maintenance',
@@ -170,7 +226,10 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           mode,
           stage: event.stage,
           ...(event.persistedChars === undefined ? {} : { persistedChars: event.persistedChars }),
-          ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars })
+          ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars }),
+          ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
+          ...(event.budgetTokens === undefined ? {} : { budgetTokens: event.budgetTokens }),
+          ...(event.estimated === undefined ? {} : { estimated: event.estimated })
         });
       };
       const initialHookContexts: string[] = [];
@@ -215,9 +274,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         store: options.store,
         memorySources: contextHarness.memorySources,
         skillSources: contextHarness.skillSources,
-        subagents: createRunSubagents({
-          webReadTool: tools.webReadTool
-        }),
+        subagents: runSubagents,
         tools: contextHarness.tools,
         capabilityManifest: input.snapshot.capabilityManifest,
         filesystemPermissions:
@@ -236,10 +293,13 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         toolThreadCallLimit: input.snapshot.budget.toolThreadCallLimit,
         contextCompaction: {
           artifactStore: options.contextArtifactStore,
+          artifactRecoveryEnabled: mainManifestToolNames.includes('read_context_artifact'),
+          budgetProfile: contextBudgetProfile,
           emitEvent: emitContextMaintenanceEvent,
           mode,
           runId: input.run.id,
           threadId: input.run.threadId,
+          tokenCounter: contextTokenCounter,
           workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
         },
         toolEffectIdempotency: {
@@ -358,6 +418,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       }
     }
   };
+}
+
+function selectConservativeContextBudgetProfile(profiles: readonly ContextBudgetProfile[]): ContextBudgetProfile {
+  const first = profiles[0];
+  if (first === undefined) {
+    throw new Error('agent_context_budget_profile_missing');
+  }
+  return profiles.slice(1).reduce(
+    (selected, candidate) => candidate.modelInputTokens < selected.modelInputTokens ? candidate : selected,
+    first
+  );
 }
 
 function recordPromptCacheMetrics(input: {

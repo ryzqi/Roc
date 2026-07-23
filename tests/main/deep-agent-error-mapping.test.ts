@@ -4,6 +4,19 @@ import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
 import { TOOL_ERROR_FIXTURES } from '../_fixtures/langchain-tool-errors';
 
 describe('deep agent error mapping', () => {
+  it('maps context budget contract failures to explicit non-retryable results', () => {
+    expect(toRunFailure(new Error('context_budget_profile_invalid'))).toEqual({
+      code: 'context_budget_profile_invalid',
+      message: '模型上下文窗口无法容纳系统、工具、输出和安全预留，已停止本轮执行。',
+      retryable: false
+    });
+    expect(toRunFailure(new Error('agent_context_budget_missing'))).toEqual({
+      code: 'agent_context_budget_missing',
+      message: '运行快照缺少模型上下文预算，已停止本轮执行。',
+      retryable: false
+    });
+  });
+
   it('maps native model and tool call limit errors to a non-retryable budget failure', () => {
     expect(toRunFailure(new Error('Model call limits exceeded: run level call limit reached with 8 model calls'))).toEqual({
       code: 'run_budget_exhausted',

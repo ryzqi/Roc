@@ -182,8 +182,19 @@ function isNetworkError(error: Error): boolean {
   return (
     /connection error/i.test(error.message) ||
     /fetch failed|network|socket|econn|enotfound|eai_again/i.test(error.message) ||
-    isRecord(error.cause)
+    isNetworkCause(error.cause)
   );
+}
+
+function isNetworkCause(cause: unknown): boolean {
+  if (!isRecord(cause)) {
+    return false;
+  }
+  const code = cause.code;
+  if (typeof code === 'string' && /^(ECONN|ENET|EHOST|ENOTFOUND|EAI_AGAIN|ETIMEDOUT)/iu.test(code)) {
+    return true;
+  }
+  return typeof cause.message === 'string' && /connection error|fetch failed|network|socket|econn|enotfound|eai_again/iu.test(cause.message);
 }
 
 function isAbortError(error: unknown): boolean {

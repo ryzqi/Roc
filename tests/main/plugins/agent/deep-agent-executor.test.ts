@@ -422,7 +422,10 @@ describe('createAgentDeepAgentExecutor', () => {
         threadId: 'thread-1',
         mode: 'task',
         stage: 'summary',
-        removedChars: 128
+        removedChars: 128,
+        inputTokens: 3072,
+        budgetTokens: 4096,
+        estimated: true
       },
       output: {
         messages: [
@@ -442,7 +445,10 @@ describe('createAgentDeepAgentExecutor', () => {
         event: 'context_summary_completed',
         mode: 'task',
         stage: 'summary',
-        removedChars: 128
+        removedChars: 128,
+        inputTokens: 3072,
+        budgetTokens: 4096,
+        estimated: true
       })
     ]));
   });

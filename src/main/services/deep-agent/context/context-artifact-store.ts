@@ -28,6 +28,13 @@ export type PersistedContextArtifact = {
   workspaceHash: string | null;
 };
 
+export type ReadContextArtifactInput = {
+  artifactId: string;
+  expectedSha256: string;
+  threadId: string;
+  workspaceHash: string | null;
+};
+
 type ContextArtifactRow = {
   id: string;
   run_id: string;
@@ -87,19 +94,21 @@ export class ContextArtifactStore {
     };
   }
 
-  readArtifact(input: { artifactId: string; expectedSha256?: string }): PersistedContextArtifact | null {
+  readArtifact(input: ReadContextArtifactInput): PersistedContextArtifact | null {
     const artifactId = requireNonEmpty(input.artifactId, 'context_artifact_id_empty');
+    const threadId = requireNonEmpty(input.threadId, 'context_artifact_thread_id_empty');
+    const expectedSha256 = requireNonEmpty(input.expectedSha256, 'context_artifact_hash_empty');
     const row = this.db
       .prepare(
         `SELECT id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash
          FROM context_artifacts
-         WHERE id = ?`
+         WHERE id = ? AND thread_id = ? AND workspace_hash IS ?`
       )
-      .get(artifactId) as ContextArtifactRow | undefined;
+      .get(artifactId, threadId, input.workspaceHash) as ContextArtifactRow | undefined;
     if (row === undefined) {
       return null;
     }
-    if (input.expectedSha256 !== undefined && input.expectedSha256 !== row.sha256) {
+    if (expectedSha256 !== row.sha256) {
       throw new Error('context_artifact_hash_mismatch');
     }
     return {
@@ -145,15 +154,28 @@ export class ContextArtifactStore {
 
 export function formatContextArtifactReference(artifact: PersistedContextArtifact): string {
   return [
+    ...createContextArtifactLocatorLines(artifact),
+    'preview:',
+    artifact.preview,
+    '</roc_context_artifact>'
+  ].join('\n');
+}
+
+export function formatContextArtifactLocator(artifact: PersistedContextArtifact): string {
+  return [
+    ...createContextArtifactLocatorLines(artifact),
+    '</roc_context_artifact>'
+  ].join('\n');
+}
+
+function createContextArtifactLocatorLines(artifact: PersistedContextArtifact): string[] {
+  return [
     '<roc_context_artifact>',
     `artifactId: ${artifact.artifactId}`,
     `sha256: ${artifact.sha256}`,
     `originalChars: ${artifact.originalChars}`,
-    'preview:',
-    artifact.preview,
-    'retrievalHint: use session_search for the summary/index and artifactId for exact old output',
-    '</roc_context_artifact>'
-  ].join('\n');
+    'retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit'
+  ];
 }
 
 function hashContent(content: string): string {

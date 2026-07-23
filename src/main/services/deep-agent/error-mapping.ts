@@ -22,6 +22,10 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
+    const contextBudgetFailure = readContextBudgetFailure(error);
+    if (contextBudgetFailure !== null) {
+      return contextBudgetFailure;
+    }
     const budgetFailure = readBudgetFailure(error);
     if (budgetFailure !== null) {
       return budgetFailure;
@@ -72,6 +76,31 @@ export function toRunFailure(error: unknown): RunFailure {
     message: 'Provider 执行失败。',
     retryable: true
   };
+}
+
+function readContextBudgetFailure(error: Error): RunFailure | null {
+  if (error.message === 'context_budget_exhausted') {
+    return {
+      code: 'context_budget_exhausted',
+      message: '上下文压缩后仍超过模型输入预算，已停止本轮执行。',
+      retryable: false
+    };
+  }
+  if (error.message === 'context_budget_profile_invalid') {
+    return {
+      code: 'context_budget_profile_invalid',
+      message: '模型上下文窗口无法容纳系统、工具、输出和安全预留，已停止本轮执行。',
+      retryable: false
+    };
+  }
+  if (error.message === 'agent_context_budget_missing') {
+    return {
+      code: 'agent_context_budget_missing',
+      message: '运行快照缺少模型上下文预算，已停止本轮执行。',
+      retryable: false
+    };
+  }
+  return null;
 }
 
 function readBudgetFailure(error: Error): RunFailure | null {

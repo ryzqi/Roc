@@ -58,6 +58,7 @@ describe('createAgentDeepAgentExecutor', () => {
     const toolNames = readBuiltTools().map((tool) => tool.name);
 
     expect(toolNames).toContain('session_search');
+    expect(toolNames).toContain('read_context_artifact');
     expect(toolNames).not.toContain('resolve_background_task_time');
     expect(toolNames).not.toContain('propose_background_task');
     expect(toolNames).not.toContain('schedule_background_task');
@@ -78,6 +79,7 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(readBuildInput().mode).toBe('plan');
     expect(toolNames).toContain('web_read');
     expect(toolNames).toContain('session_search');
+    expect(toolNames).toContain('read_context_artifact');
     expect(toolNames).not.toContain('run_shell_command');
     expect(toolNames).not.toContain('delete_file');
     expect(toolNames).not.toContain('resolve_background_task_time');

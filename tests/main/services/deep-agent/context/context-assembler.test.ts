@@ -5,6 +5,7 @@ import { assembleContextHarness } from '../../../../../src/main/services/deep-ag
 describe('assembleContextHarness', () => {
   it('adds session_search and serializes prompt markers', () => {
     const harness = assembleContextHarness({
+      artifactStore: {} as never,
       mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
@@ -12,10 +13,11 @@ describe('assembleContextHarness', () => {
       memorySources: ['/memory/global/AGENTS.md'],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      threadId: 'thread_context_assembler',
       explicitSkillContexts: []
     });
 
-    expect(harness.tools.map(tool => tool.name)).toContain('session_search');
+    expect(harness.tools.map(tool => tool.name)).toEqual(['session_search', 'read_context_artifact']);
     expect(harness.systemPrompt).toContain('<!-- BLOCK:static:static:');
     expect(harness.systemPrompt).toContain('<!-- BLOCK:context_recall:workspace:');
     expect(harness.skillSources).toEqual([]);
@@ -27,6 +29,7 @@ describe('assembleContextHarness', () => {
 
   it('exposes selected skills through /skills/', () => {
     const harness = assembleContextHarness({
+      artifactStore: {} as never,
       mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
@@ -34,6 +37,7 @@ describe('assembleContextHarness', () => {
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      threadId: 'thread_context_assembler_skills',
       explicitSkillContexts: []
     });
 
@@ -42,6 +46,7 @@ describe('assembleContextHarness', () => {
 
   it('keeps explicit skill prompt context compact while exposing /skills/', () => {
     const harness = assembleContextHarness({
+      artifactStore: {} as never,
       mode: 'chat',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
@@ -49,6 +54,7 @@ describe('assembleContextHarness', () => {
       memorySources: [],
       baseTools: [],
       searchSessions: () => ({ query: 'x', total: 0, items: [] }),
+      threadId: 'thread_context_assembler_explicit',
       explicitSkillContexts: [
         {
           id: 'typescript',

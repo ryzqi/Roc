@@ -1,7 +1,9 @@
-import { AIMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 
+import { classifyProviderRequestFailure, isRetryableProviderHttpStatus } from '../../provider-request-retry';
 import {
   createForgeTieredCompactionEdits,
   type ForgeTieredCompactionOptions
@@ -10,14 +12,24 @@ import { readIterationFromMessage } from '../../forge-guardrails/state-schema';
 import { isContextDigestMessage } from '../../forge-guardrails/context-digest';
 import {
   ContextArtifactStore,
-  formatContextArtifactReference
+  formatContextArtifactLocator,
+  formatContextArtifactReference,
+  type PersistedContextArtifact
 } from './context-artifact-store';
 import {
+  buildContextSummaryModelMessages,
+  contextSummarySchema,
   contextSummaryToDigestMessage,
   summarizeWithCurrentModel,
   type ContextSummary,
   type ContextSummaryInput
 } from './context-summary';
+import {
+  createContextTokenCounter,
+  deriveContextBudgetProfile,
+  type ContextBudgetProfile,
+  type ContextTokenCounter
+} from './context-token-budget';
 
 const DEFAULT_TOOL_RESULT_PERSIST_CHARS = 30_000;
 const SUMMARY_THRESHOLD = 0.9;
@@ -43,16 +55,21 @@ export type ContextMaintenanceEvent = {
   stage: ContextMaintenanceStage;
   persistedChars?: number;
   removedChars?: number;
+  inputTokens?: number;
+  budgetTokens?: number;
+  estimated?: boolean;
 };
 
 export type RocContextCompactionOptions = {
   artifactStore: ContextArtifactStore;
-  budgetTokens: number;
+  artifactRecoveryEnabled?: boolean;
+  budgetProfile: ContextBudgetProfile;
   emitEvent: (event: ContextMaintenanceEvent) => void;
   mode: ContextCompactionMode;
-  model: Pick<BaseChatModel, 'invoke'>;
+  model: Pick<BaseChatModel, 'invoke'> & Partial<Pick<BaseChatModel, 'getNumTokens'>>;
   runId: string;
   threadId: string;
+  tokenCounter?: ContextTokenCounter;
   toolResultPersistChars?: number;
   workspaceHash: string | null;
   workspacePath: string | null;
@@ -60,6 +77,7 @@ export type RocContextCompactionOptions = {
 
 type RunCompactionInput = RocContextCompactionOptions & {
   countTokens: (messages: BaseMessage[]) => Promise<number>;
+  countTokensEstimated?: () => boolean;
   messages: BaseMessage[];
   summarize?: (input: ContextSummaryInput) => Promise<ContextSummary>;
 };
@@ -70,25 +88,69 @@ type ToolPairSnapshot = {
 };
 
 export function createRocContextCompactionMiddleware(options: RocContextCompactionOptions) {
+  const tokenCounter = options.tokenCounter === undefined
+    ? createContextTokenCounter(options.model as Pick<BaseChatModel, 'getNumTokens'>)
+    : options.tokenCounter;
   return createMiddleware({
     name: 'RocContextCompactionPipeline',
     beforeModel: async (state) => {
-      await runContextCompactionForTest({
+      const originalMessages = state.messages;
+      let estimated = false;
+      const compactedMessages = await runContextCompactionForTest({
         ...options,
-        messages: state.messages,
-        countTokens: estimateTokens,
+        tokenCounter,
+        messages: [...originalMessages],
+        countTokens: async (messages) => {
+          const count = await tokenCounter.countMessages(messages);
+          estimated ||= count.estimated;
+          return count.tokens;
+        },
+        countTokensEstimated: () => estimated || tokenCounter.wasEstimated(),
         summarize: async (input) => await summarizeWithCurrentModel({ ...input, model: options.model })
       });
-      return undefined;
+      if (sameMessageSequence(originalMessages, compactedMessages)) {
+        return undefined;
+      }
+      return {
+        messages: [new RemoveMessage({ id: REMOVE_ALL_MESSAGES }), ...compactedMessages]
+      };
+    },
+    wrapModelCall: async (request, handler) => {
+      const tools = request.tools.map((tool) => {
+        const name = Reflect.get(tool, 'name');
+        const description = Reflect.get(tool, 'description');
+        if (typeof name !== 'string') {
+          throw new Error('agent_tool_name_missing');
+        }
+        if (typeof description !== 'string') {
+          throw new Error(`agent_tool_description_missing:${name}`);
+        }
+        return {
+          name,
+          description,
+          schema: Reflect.get(tool, 'schema')
+        };
+      });
+      const profile = await deriveContextBudgetProfile({
+        contextWindowTokens: options.budgetProfile.contextWindowTokens,
+        counter: tokenCounter,
+        systemPrompt: contentToString(request.systemMessage.content),
+        tools
+      });
+      const count = await tokenCounter.countMessages(request.messages);
+      if (count.tokens > profile.modelInputTokens) {
+        throw new Error('context_budget_exhausted');
+      }
+      return await handler(request);
     }
   });
 }
 
-export async function runContextCompactionForTest(input: RunCompactionInput): Promise<void> {
+export async function runContextCompactionForTest(input: RunCompactionInput): Promise<BaseMessage[]> {
   let stage: ContextMaintenanceStage = 'persist';
   try {
     input.emitEvent(createEvent(input, 'context_compaction_started', stage));
-    const artifactReferences = persistLargeToolResults(input);
+    const artifacts = persistLargeToolResults(input);
     const beforeDeterministicMessages = [...input.messages];
     const toolPairs = snapshotToolPairs(input.messages);
     const beforeDeterministicChars = measureMessages(input.messages);
@@ -97,24 +159,46 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
     await runDeterministicCompaction(input);
     restoreIncompleteToolPairs(input.messages, toolPairs);
     const afterDeterministicChars = measureMessages(input.messages);
+    const deterministicTokens = await input.countTokens(input.messages);
     input.emitEvent({
       ...createEvent(input, 'context_deterministic_compacted', stage),
-      removedChars: Math.max(0, beforeDeterministicChars - afterDeterministicChars)
+      removedChars: Math.max(0, beforeDeterministicChars - afterDeterministicChars),
+      inputTokens: deterministicTokens,
+      budgetTokens: input.budgetProfile.modelInputTokens,
+      estimated: input.countTokensEstimated?.() === true
     });
 
-    const tokensAfterDeterministic = await input.countTokens(input.messages);
-    if (tokensAfterDeterministic < input.budgetTokens * SUMMARY_THRESHOLD) {
+    const tokensAfterDeterministic = deterministicTokens;
+    if (tokensAfterDeterministic < input.budgetProfile.modelInputTokens * SUMMARY_THRESHOLD) {
       input.emitEvent(createEvent(input, 'context_summary_skipped', 'summary'));
-      return;
+      return input.messages;
     }
 
     stage = 'summary';
     input.emitEvent(createEvent(input, 'context_summary_started', stage));
-    const summary = await summarizeContextOrSkip(input, artifactReferences, beforeDeterministicMessages);
-    if (summary === null) {
-      return;
+    const preparedSummary = await prepareSummaryInput(
+      input,
+      artifacts,
+      selectMessagesToSummarize(input.messages),
+      beforeDeterministicMessages
+    );
+    if (preparedSummary.summaryInput === null) {
+      compactToArtifactReferenceTail(input, preparedSummary.artifactLocators);
+      await enforceHardContextLimit(input);
+      input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
+      return input.messages;
     }
-    const digestMessage = contextSummaryToDigestMessage(summary);
+    const summary = await summarizeContextOrSkip(input, preparedSummary.summaryInput);
+    if (summary === null) {
+      compactToArtifactReferenceTail(input, preparedSummary.artifactLocators);
+      await enforceHardContextLimit(input);
+      input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
+      return input.messages;
+    }
+    const digestMessage = contextSummaryToDigestMessage({
+      ...summary,
+      toolEvidence: [...new Set([...summary.toolEvidence, ...preparedSummary.artifactLocators])]
+    });
     compactToSummaryTail(input.messages, digestMessage);
     input.artifactStore.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
@@ -123,7 +207,14 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
       tokenCount: await input.countTokens([digestMessage]),
       workspaceHash: input.workspaceHash
     });
-    input.emitEvent(createEvent(input, 'context_summary_completed', stage));
+    await enforceHardContextLimit(input);
+    input.emitEvent({
+      ...createEvent(input, 'context_summary_completed', stage),
+      inputTokens: await input.countTokens(input.messages),
+      budgetTokens: input.budgetProfile.modelInputTokens,
+      estimated: input.countTokensEstimated?.() === true
+    });
+    return input.messages;
   } catch (error) {
     input.emitEvent(createEvent(input, 'context_compaction_failed', stage));
     throw error;
@@ -132,19 +223,23 @@ export async function runContextCompactionForTest(input: RunCompactionInput): Pr
 
 async function summarizeContextOrSkip(
   input: RunCompactionInput,
-  artifactReferences: readonly string[],
-  beforeDeterministicMessages: readonly BaseMessage[]
+  summaryInput: ContextSummaryInput
 ): Promise<ContextSummary | null> {
   try {
-    return await summarizeContext(input, artifactReferences, beforeDeterministicMessages);
-  } catch {
-    input.emitEvent(createEvent(input, 'context_compaction_failed', 'summary'));
-    return null;
+    return await summarizeContext(input, summaryInput);
+  } catch (error) {
+    if (isRecoverableSummaryFailure(error)) {
+      return null;
+    }
+    throw error;
   }
 }
 
-function persistLargeToolResults(input: RunCompactionInput): string[] {
-  const references: string[] = [];
+function persistLargeToolResults(input: RunCompactionInput): PersistedContextArtifact[] {
+  const artifacts: PersistedContextArtifact[] = [];
+  if (input.artifactRecoveryEnabled === false) {
+    return artifacts;
+  }
   const threshold =
     input.toolResultPersistChars === undefined ? DEFAULT_TOOL_RESULT_PERSIST_CHARS : input.toolResultPersistChars;
   for (let index = 0; index < input.messages.length; index += 1) {
@@ -166,7 +261,7 @@ function persistLargeToolResults(input: RunCompactionInput): string[] {
       workspaceHash: input.workspaceHash
     });
     const reference = formatContextArtifactReference(artifact);
-    references.push(reference);
+    artifacts.push(artifact);
     input.messages[index] = new ToolMessage({
       id: message.id,
       tool_call_id: message.tool_call_id,
@@ -189,12 +284,12 @@ function persistLargeToolResults(input: RunCompactionInput): string[] {
       persistedChars: artifact.originalChars
     });
   }
-  return references;
+  return artifacts;
 }
 
 async function runDeterministicCompaction(input: RunCompactionInput): Promise<void> {
   const options: ForgeTieredCompactionOptions = {
-    budgetTokens: input.budgetTokens
+    budgetTokens: input.budgetProfile.modelInputTokens
   };
   const edits = createForgeTieredCompactionEdits(options);
   for (const edit of edits) {
@@ -256,25 +351,174 @@ function restoreIncompleteToolPairs(messages: BaseMessage[], pairs: readonly Too
 
 async function summarizeContext(
   input: RunCompactionInput,
-  artifactReferences: readonly string[],
-  beforeDeterministicMessages: readonly BaseMessage[]
+  summaryInput: ContextSummaryInput
 ): Promise<ContextSummary> {
   const summarize =
     input.summarize === undefined
       ? async (summaryInput: ContextSummaryInput) => await summarizeWithCurrentModel({ ...summaryInput, model: input.model })
       : input.summarize;
-  return await summarize({
+  return await summarize(summaryInput);
+}
+
+async function prepareSummaryInput(
+  input: RunCompactionInput,
+  artifacts: readonly PersistedContextArtifact[],
+  messagesToSummarize: readonly BaseMessage[],
+  allMessages: readonly BaseMessage[]
+): Promise<{ artifactLocators: string[]; summaryInput: ContextSummaryInput | null }> {
+  const workingMessages = [...messagesToSummarize];
+  const references = artifacts.map(formatContextArtifactReference);
+  const artifactLocators = artifacts.map(formatContextArtifactLocator);
+  let summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
+  if (await countSummaryInput(input, summaryInput) <= input.budgetProfile.summaryInputTokens) {
+    return { artifactLocators, summaryInput };
+  }
+
+  if (workingMessages.length > 0 && input.artifactRecoveryEnabled !== false) {
+    const artifact = input.artifactStore.persistArtifact({
+      content: serializeMessages(workingMessages),
+      kind: 'transcript',
+      runId: input.runId,
+      threadId: input.threadId,
+      workspaceHash: input.workspaceHash
+    });
+    references.push(formatContextArtifactReference(artifact));
+    artifactLocators.push(formatContextArtifactLocator(artifact));
+  }
+
+  while (workingMessages.length > 0) {
+    removeMessageGroup(workingMessages, 0);
+    summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
+    if (await countSummaryInput(input, summaryInput) <= input.budgetProfile.summaryInputTokens) {
+      return { artifactLocators, summaryInput };
+    }
+  }
+  return { artifactLocators, summaryInput: null };
+}
+
+function createSummaryInput(
+  input: RunCompactionInput,
+  artifactReferences: readonly string[],
+  messages: readonly BaseMessage[],
+  allMessages: readonly BaseMessage[]
+): ContextSummaryInput {
+  return {
     artifactReferences,
-    goal: inferGoal(beforeDeterministicMessages),
-    messages: beforeDeterministicMessages,
-    recentMessages: input.messages.slice(-6),
-    userConstraints: inferUserConstraints(beforeDeterministicMessages),
+    goal: inferGoal(allMessages),
+    messages,
+    recentMessages: [],
+    userConstraints: inferUserConstraints(messages),
     workspacePath: input.workspacePath
-  });
+  };
+}
+
+async function countSummaryInput(input: RunCompactionInput, summaryInput: ContextSummaryInput): Promise<number> {
+  const messageTokens = await input.countTokens(buildContextSummaryModelMessages(summaryInput));
+  if (input.tokenCounter === undefined) {
+    return messageTokens;
+  }
+  const schema = Reflect.get(contextSummarySchema, 'toJSONSchema');
+  if (typeof schema !== 'function') {
+    throw new Error('context_summary_schema_serializer_missing');
+  }
+  const schemaText = JSON.stringify(schema.call(contextSummarySchema));
+  if (schemaText === undefined) {
+    throw new Error('context_summary_schema_unserializable');
+  }
+  const schemaCount = await input.tokenCounter.countText(schemaText);
+  return messageTokens + schemaCount.tokens;
+}
+
+function isRecoverableSummaryFailure(error: unknown): boolean {
+  if (error instanceof Error && (error.message === 'context_summary_failed' || error.message === 'context_summary_invalid')) {
+    return true;
+  }
+  const classification = classifyProviderRequestFailure(error);
+  if (classification.kind === 'http') {
+    return isRetryableProviderHttpStatus(classification.status);
+  }
+  return classification.kind === 'timeout' || classification.kind === 'network' || classification.kind === 'empty_response';
+}
+
+function selectMessagesToSummarize(messages: readonly BaseMessage[]): BaseMessage[] {
+  const protectedMessages = new Set([
+    ...selectProtectedHead(messages),
+    ...selectRecentSummaryTail(messages)
+  ]);
+  return messages.filter((message) => !protectedMessages.has(message) && !isContextDigestMessage(message));
+}
+
+async function enforceHardContextLimit(input: RunCompactionInput): Promise<void> {
+  const initialTokens = await input.countTokens(input.messages);
+  if (initialTokens <= input.budgetProfile.modelInputTokens) {
+    return;
+  }
+
+  const protectedMessages = selectProtectedHead(input.messages);
+  const latestDigest = [...input.messages].reverse().find(isContextDigestMessage);
+  if (latestDigest !== undefined && !protectedMessages.includes(latestDigest)) {
+    protectedMessages.push(latestDigest);
+  }
+  const protectedSet = new Set(protectedMessages);
+  const compacted = input.messages.filter(
+    (message) => protectedSet.has(message) || !isContextDigestMessage(message)
+  );
+  let tokens = await input.countTokens(compacted);
+  while (tokens > input.budgetProfile.modelInputTokens) {
+    const removableIndex = compacted.findIndex((message) => !protectedSet.has(message));
+    if (removableIndex === -1) {
+      break;
+    }
+    removeMessageGroup(compacted, removableIndex);
+    tokens = await input.countTokens(compacted);
+  }
+
+  if (tokens > input.budgetProfile.modelInputTokens) {
+    throw new Error('context_budget_exhausted');
+  }
+  input.messages.splice(0, input.messages.length, ...compacted);
+}
+
+function removeMessageGroup(messages: BaseMessage[], index: number): void {
+  const message = messages[index];
+  if (message === undefined) {
+    return;
+  }
+  if (AIMessage.isInstance(message) && message.tool_calls !== undefined) {
+    const toolCallIds = new Set(
+      message.tool_calls
+        .map((toolCall) => toolCall.id)
+        .filter((id): id is string => typeof id === 'string')
+    );
+    for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+      if (cursor === index) {
+        continue;
+      }
+      const candidate = messages[cursor];
+      if (ToolMessage.isInstance(candidate) && toolCallIds.has(candidate.tool_call_id)) {
+        messages.splice(cursor, 1);
+      }
+    }
+  } else if (ToolMessage.isInstance(message)) {
+    const pairIndex = messages.findIndex(
+      (candidate) =>
+        AIMessage.isInstance(candidate) &&
+        candidate.tool_calls?.some((toolCall) => toolCall.id === message.tool_call_id)
+    );
+    if (pairIndex >= 0) {
+      removeMessageGroup(messages, pairIndex);
+      return;
+    }
+  }
+  messages.splice(index, 1);
+}
+
+function sameMessageSequence(left: readonly BaseMessage[], right: readonly BaseMessage[]): boolean {
+  return left.length === right.length && left.every((message, index) => message === right[index]);
 }
 
 function compactToSummaryTail(messages: BaseMessage[], digestMessage: AIMessage): void {
-  const head = selectProtectedHead(messages);
+  const head = selectProtectedPrefix(messages);
   const tail = selectRecentSummaryTail(messages);
   const compacted = [
     ...head,
@@ -284,7 +528,35 @@ function compactToSummaryTail(messages: BaseMessage[], digestMessage: AIMessage)
   messages.splice(0, messages.length, ...compacted);
 }
 
+function compactToArtifactReferenceTail(
+  input: RunCompactionInput,
+  artifactLocators: readonly string[]
+): void {
+  if (artifactLocators.length === 0) {
+    return;
+  }
+  compactToSummaryTail(input.messages, contextSummaryToDigestMessage({
+    goal: inferGoal(input.messages),
+    facts: [],
+    decisions: [],
+    filesTouched: [],
+    toolEvidence: [...artifactLocators],
+    verification: [],
+    openQuestions: [],
+    nextActions: []
+  }));
+}
+
 function selectProtectedHead(messages: readonly BaseMessage[]): BaseMessage[] {
+  const protectedMessages = selectProtectedPrefix(messages);
+  const latestHuman = [...messages].reverse().find((message) => message.getType() === 'human');
+  if (latestHuman !== undefined && !protectedMessages.includes(latestHuman)) {
+    protectedMessages.push(latestHuman);
+  }
+  return protectedMessages;
+}
+
+function selectProtectedPrefix(messages: readonly BaseMessage[]): BaseMessage[] {
   const protectedMessages: BaseMessage[] = [];
   const first = messages[0];
   if (first !== undefined && first.getType() === 'system') {
@@ -313,6 +585,11 @@ function selectRecentSummaryTail(messages: readonly BaseMessage[]): BaseMessage[
     for (let index = start; index < messages.length; index += 1) {
       included.add(messages[index]!);
     }
+  }
+
+  const latestHuman = [...messages].reverse().find((message) => message.getType() === 'human');
+  if (latestHuman !== undefined) {
+    included.add(latestHuman);
   }
 
   for (const pair of snapshotToolPairs(messages)) {
@@ -362,8 +639,19 @@ function measureMessages(messages: readonly BaseMessage[]): number {
   return messages.reduce((total, message) => total + contentToString(message.content).length, 0);
 }
 
-async function estimateTokens(messages: BaseMessage[]): Promise<number> {
-  return Math.ceil(JSON.stringify(messages.map((message) => message.content)).length / 4);
+function serializeMessages(messages: readonly BaseMessage[]): string {
+  return JSON.stringify(
+    messages.map((message) => ({
+      content: contentToString(message.content),
+      id: message.id,
+      invalid_tool_calls: AIMessage.isInstance(message) ? message.invalid_tool_calls : undefined,
+      tool_call_id: ToolMessage.isInstance(message) ? message.tool_call_id : undefined,
+      tool_calls: AIMessage.isInstance(message) ? message.tool_calls : undefined,
+      tool_name: ToolMessage.isInstance(message) ? message.name : undefined,
+      tool_status: ToolMessage.isInstance(message) ? message.status : undefined,
+      type: message.getType()
+    }))
+  );
 }
 
 function createEvent(

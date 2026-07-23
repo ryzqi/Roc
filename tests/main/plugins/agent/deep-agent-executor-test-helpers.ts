@@ -144,7 +144,9 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
       providerId: 'test-provider',
       modelId: 'test-model',
       langChainHandle: {
-        model: {} as never,
+        model: {
+          getNumTokens: async (content: string) => Math.ceil(Buffer.byteLength(content, 'utf8') / 4)
+        } as never,
         modelId: 'test-model',
         provider: {
           id: 'test-provider',
@@ -160,7 +162,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
           baseUrl: null,
           streaming: true,
           modelKwargs: {},
-          contextBudgetTokens: 4096
+          contextBudgetTokens: 128_000
         }
       }
     },
@@ -368,7 +370,7 @@ function createSnapshot(request: ChatStartRunRequest, run: TaskRun, snapshotWork
           },
     capabilityManifest,
     budget: {
-      contextBudgetTokens: null,
+      contextBudgetTokens: 128_000,
       modelCallLimit: 20,
       modelThreadCallLimit: 100,
       toolCallLimit: 40,

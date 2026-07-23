@@ -1,10 +1,10 @@
-import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
 
 import { createContextDigestMessage } from '../../forge-guardrails/context-digest';
 
-const contextSummarySchema = z.object({
+export const contextSummarySchema = z.object({
   goal: z.string(),
   facts: z.array(z.string()),
   decisions: z.array(z.string()),
@@ -42,31 +42,23 @@ const contextSummaryInvokeConfig = {
 };
 
 export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModelInput): Promise<ContextSummary> {
-  const prompt = buildContextSummaryPrompt(input);
-  const structuredSummary = await summarizeWithStructuredOutput(input.model, prompt);
+  const messages = buildContextSummaryModelMessages(input);
+  const structuredSummary = await summarizeWithStructuredOutput(input.model, messages);
   if (structuredSummary !== null) {
     return structuredSummary;
   }
-  const first = await invokeSummaryModel(input.model, prompt);
+  const first = await invokeSummaryModel(input.model, messages);
   try {
     return parseContextSummary(first);
   } catch {
-    const correctivePrompt = [
-      'Return only valid JSON matching the required context summary schema.',
-      'Do not include Markdown fences or explanatory text.',
-      'Previous invalid output:',
-      first
-    ].join('\n');
-    const second = await invokeSummaryModel(input.model, correctivePrompt);
-    try {
-      return parseContextSummary(second);
-    } catch {
-      throw new Error('context_summary_failed');
-    }
+    throw new Error('context_summary_failed');
   }
 }
 
-async function summarizeWithStructuredOutput(model: ContextSummaryModel, prompt: string): Promise<ContextSummary | null> {
+async function summarizeWithStructuredOutput(
+  model: ContextSummaryModel,
+  messages: BaseMessage[]
+): Promise<ContextSummary | null> {
   const withStructuredOutput = model.withStructuredOutput;
   if (withStructuredOutput === undefined) {
     return null;
@@ -84,12 +76,20 @@ async function summarizeWithStructuredOutput(model: ContextSummaryModel, prompt:
     throw error;
   }
 
+  let summary: unknown;
   try {
-    const summary = await structuredModel.invoke(buildContextSummaryMessages(prompt), contextSummaryInvokeConfig);
-    return contextSummarySchema.parse(summary);
-  } catch {
+    summary = await structuredModel.invoke(messages, contextSummaryInvokeConfig);
+  } catch (error) {
+    if (isStructuredOutputUnavailable(error)) {
+      return null;
+    }
+    throw error;
+  }
+  const parsed = contextSummarySchema.safeParse(summary);
+  if (!parsed.success) {
     throw new Error('context_summary_failed');
   }
+  return parsed.data;
 }
 
 export function buildContextSummaryPrompt(input: ContextSummaryInput): string {
@@ -108,6 +108,13 @@ export function buildContextSummaryPrompt(input: ContextSummaryInput): string {
     'Recent messages to preserve continuity:',
     serializeMessages(input.recentMessages)
   ].join('\n');
+}
+
+export function buildContextSummaryModelMessages(input: ContextSummaryInput): BaseMessage[] {
+  return [
+    new SystemMessage('You summarize old runtime context for Roc.'),
+    new HumanMessage(buildContextSummaryPrompt(input))
+  ];
 }
 
 export function parseContextSummary(text: string): ContextSummary {
@@ -130,30 +137,19 @@ export function contextSummaryToDigestMessage(summary: ContextSummary): AIMessag
   });
 }
 
-async function invokeSummaryModel(model: Pick<BaseChatModel, 'invoke'>, prompt: string): Promise<string> {
-  const response = await model.invoke(buildContextSummaryMessages(prompt), contextSummaryInvokeConfig);
+async function invokeSummaryModel(model: Pick<BaseChatModel, 'invoke'>, messages: BaseMessage[]): Promise<string> {
+  const response = await model.invoke(messages, contextSummaryInvokeConfig);
   if (typeof response.content === 'string') {
     return response.content;
   }
   return JSON.stringify(response.content);
 }
 
-function buildContextSummaryMessages(prompt: string): BaseMessage[] {
-  return [
-    new SystemMessage('You summarize old runtime context for Roc.'),
-    new HumanMessage(prompt)
-  ];
-}
-
 function isStructuredOutputUnavailable(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return (
-    error.message.includes('withStructuredOutput') ||
-    error.message.includes('bindTools') ||
-    error.message.includes('structured output')
-  );
+  return /withStructuredOutput|bindTools|structured output|response_format|json_schema.+(?:not supported|unsupported)|(?:not supported|unsupported).+json schema/iu.test(error.message);
 }
 
 function formatList(values: readonly string[]): string[] {
@@ -169,7 +165,12 @@ function serializeMessages(messages: readonly BaseMessage[]): string {
       id: message.id,
       type: message.getType(),
       content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-      additional_kwargs: message.additional_kwargs
+      additional_kwargs: message.additional_kwargs,
+      invalid_tool_calls: AIMessage.isInstance(message) ? message.invalid_tool_calls : undefined,
+      tool_call_id: ToolMessage.isInstance(message) ? message.tool_call_id : undefined,
+      tool_calls: AIMessage.isInstance(message) ? message.tool_calls : undefined,
+      tool_name: ToolMessage.isInstance(message) ? message.name : undefined,
+      tool_status: ToolMessage.isInstance(message) ? message.status : undefined
     })),
     null,
     2

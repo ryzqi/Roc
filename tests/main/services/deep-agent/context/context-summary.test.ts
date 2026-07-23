@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { isContextDigestMessage } from '../../../../../src/main/services/forge-guardrails/context-digest';
 import {
+  buildContextSummaryModelMessages,
   buildContextSummaryPrompt,
   contextSummaryToDigestMessage,
   parseContextSummary,
@@ -38,6 +39,16 @@ describe('context-summary', () => {
       goal: 'Keep context compact.',
       messages: [
         new HumanMessage({ id: 'user-old', content: 'Original request' }),
+        new AIMessage({
+          id: 'ai-old',
+          content: '',
+          tool_calls: [{
+            id: 'call-old',
+            name: 'read_file',
+            args: { file_path: '/workspace/a.ts' },
+            type: 'tool_call'
+          }]
+        }),
         new ToolMessage({
           id: 'tool-old',
           tool_call_id: 'call-old',
@@ -54,6 +65,9 @@ describe('context-summary', () => {
     expect(prompt).toContain('Summarize old Roc DeepAgents runtime context.');
     expect(prompt).toContain('Use DeepAgents native features first.');
     expect(prompt).toContain('artifactId: ctx_artifact_1');
+    expect(prompt).toContain('"file_path": "/workspace/a.ts"');
+    expect(prompt).toContain('"tool_call_id": "call-old"');
+    expect(prompt).toContain('"tool_name": "read_file"');
     expect(prompt).not.toContain('<!-- BLOCK:static:static:');
   });
 
@@ -75,24 +89,14 @@ describe('context-summary', () => {
     expect(String(digest.content)).toContain('read_file showed existing context digest.');
   });
 
-  it('uses the current model and retries invalid JSON once', async () => {
+  it('fails invalid JSON without issuing an unbudgeted corrective model call', async () => {
     const model = {
       invoke: vi
         .fn()
-        .mockResolvedValueOnce(new AIMessage('not json'))
-        .mockResolvedValueOnce(new AIMessage(JSON.stringify({
-          goal: 'Recovered summary.',
-          facts: [],
-          decisions: [],
-          filesTouched: [],
-          toolEvidence: [],
-          verification: [],
-          openQuestions: [],
-          nextActions: ['Continue.']
-        })))
+        .mockResolvedValue(new AIMessage('not json'))
     };
 
-    const summary = await summarizeWithCurrentModel({
+    await expect(summarizeWithCurrentModel({
       artifactReferences: [],
       goal: 'Summarize.',
       messages: [new HumanMessage('old')],
@@ -100,10 +104,24 @@ describe('context-summary', () => {
       recentMessages: [],
       userConstraints: [],
       workspacePath: null
+    })).rejects.toThrow('context_summary_failed');
+
+    expect(model.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds the exact messages used by the summary model call', () => {
+    const messages = buildContextSummaryModelMessages({
+      artifactReferences: [],
+      goal: 'Summarize.',
+      messages: [new HumanMessage('old')],
+      recentMessages: [],
+      userConstraints: [],
+      workspacePath: null
     });
 
-    expect(summary.goal).toBe('Recovered summary.');
-    expect(model.invoke).toHaveBeenCalledTimes(2);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.getType()).toBe('system');
+    expect(String(messages[1]?.content)).toContain('Old messages:');
   });
 
   it('uses structured output and tags the summary call as internal', async () => {
@@ -148,5 +166,39 @@ describe('context-summary', () => {
         }
       })
     );
+  });
+
+  it('falls back to plain JSON when the provider rejects structured output at invocation', async () => {
+    const plainInvoke = vi.fn(async () => new AIMessage(JSON.stringify({
+      goal: 'Plain fallback.',
+      facts: [],
+      decisions: [],
+      filesTouched: [],
+      toolEvidence: [],
+      verification: [],
+      openQuestions: [],
+      nextActions: []
+    })));
+    const structuredInvoke = vi.fn(async () => {
+      throw new Error('HTTP 400 response_format json_schema is not supported');
+    });
+    const model = {
+      invoke: plainInvoke,
+      withStructuredOutput: vi.fn(() => ({ invoke: structuredInvoke }))
+    };
+
+    const summary = await summarizeWithCurrentModel({
+      artifactReferences: [],
+      goal: 'Summarize.',
+      messages: [new HumanMessage('old')],
+      model: model as never,
+      recentMessages: [],
+      userConstraints: [],
+      workspacePath: null
+    });
+
+    expect(summary.goal).toBe('Plain fallback.');
+    expect(structuredInvoke).toHaveBeenCalledTimes(1);
+    expect(plainInvoke).toHaveBeenCalledTimes(1);
   });
 });

@@ -208,6 +208,9 @@ export type ChatRunEvent =
       stage: 'persist' | 'deterministic' | 'summary';
       persistedChars?: number;
       removedChars?: number;
+      inputTokens?: number;
+      budgetTokens?: number;
+      estimated?: boolean;
     }
   | RocHookRunEvent
   | {

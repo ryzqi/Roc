@@ -22,6 +22,7 @@ import {
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import type { ContextArtifactStore } from './context/context-artifact-store';
+import type { ContextBudgetProfile, ContextTokenCounter } from './context/context-token-budget';
 import {
   createRocContextCompactionMiddleware,
   type ContextCompactionMode,
@@ -71,10 +72,13 @@ export type DeepAgentBuildInput = {
   };
   contextCompaction?: {
     artifactStore: ContextArtifactStore;
+    artifactRecoveryEnabled?: boolean;
+    budgetProfile: ContextBudgetProfile;
     emitEvent: RocContextCompactionOptions['emitEvent'];
     mode: ContextCompactionMode;
     runId: string;
     threadId: string;
+    tokenCounter: ContextTokenCounter;
     workspaceHash: string | null;
   };
 };
@@ -258,6 +262,7 @@ function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
     createRocPlanRuntimeToolGuardMiddleware(),
     createRocPlanFilesystemDefaultPathMiddleware(),
     ...createExecutionSafetyMiddleware(input, 'subagent'),
+    ...createContextCompactionMiddleware(input),
     ...createExecutionErrorEnvelopeMiddleware(),
   ];
 }
@@ -266,6 +271,7 @@ function createRunModeSubagentMiddleware(input: DeepAgentBuildInput) {
   return [
     ...createHookToolScopeMiddleware(input),
     ...createExecutionSafetyMiddleware(input, 'subagent'),
+    ...createContextCompactionMiddleware(input),
     ...createExecutionErrorEnvelopeMiddleware()
   ];
 }
@@ -368,12 +374,14 @@ function createContextCompactionMiddleware(input: DeepAgentBuildInput) {
   return [
     createRocContextCompactionMiddleware({
       artifactStore: input.contextCompaction.artifactStore,
-      budgetTokens: input.contextBudgetTokens === undefined ? 7168 : input.contextBudgetTokens,
+      artifactRecoveryEnabled: input.contextCompaction.artifactRecoveryEnabled,
+      budgetProfile: input.contextCompaction.budgetProfile,
       emitEvent: input.contextCompaction.emitEvent,
       mode: input.contextCompaction.mode,
       model: input.model,
       runId: input.contextCompaction.runId,
       threadId: input.contextCompaction.threadId,
+      tokenCounter: input.contextCompaction.tokenCounter,
       workspaceHash: input.contextCompaction.workspaceHash,
       workspacePath: input.workspacePath
     })

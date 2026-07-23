@@ -53,6 +53,27 @@ describe('execution safety middleware scopes', () => {
       checkpointer: {} as unknown,
       workflowHint: null,
       contextBudgetTokens: 4096,
+      contextCompaction: {
+        artifactStore: {} as never,
+        budgetProfile: {
+          contextWindowTokens: 4096,
+          modelInputTokens: 3000,
+          reservedOutputTokens: 512,
+          systemToolOverheadTokens: 384,
+          summaryInputTokens: 1500,
+          safetyMarginTokens: 200
+        },
+        emitEvent: vi.fn(),
+        mode: 'chat',
+        runId: 'run_1',
+        threadId: 'thread_1',
+        tokenCounter: {
+          countMessages: vi.fn(),
+          countText: vi.fn(),
+          wasEstimated: vi.fn(() => false)
+        },
+        workspaceHash: null
+      },
       modelCallLimit: 20,
       modelThreadCallLimit: 100,
       toolCallLimit: 40,
@@ -75,6 +96,7 @@ describe('execution safety middleware scopes', () => {
       'RocShellPathPolicyMiddleware',
       'RTKMiddleware',
       'RocToolProtocolMiddleware',
+      'RocContextCompactionPipeline',
       'RocToolEffectIdempotencyMiddleware',
       'ForgeErrorBudgetMiddleware',
       'ForgeIterationTrackingMiddleware',

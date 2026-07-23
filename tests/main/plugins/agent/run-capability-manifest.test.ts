@@ -363,10 +363,15 @@ describe('run capability manifest', () => {
         canonicalIdentity: 'builtin:session_search',
         executionScopes: ['main'],
         resourceScope: 'memory'
+      }),
+      expect.objectContaining({
+        canonicalIdentity: 'builtin:read_context_artifact',
+        executionScopes: ['main', 'subagent'],
+        resourceScope: 'memory'
       })
     ]));
     expect(compiled.subagents.find((subagent) => subagent.id === 'general-purpose')?.tools).toEqual(
-      expect.arrayContaining(['write_file'])
+      expect.arrayContaining(['write_file', 'read_context_artifact'])
     );
     expect(compiled.subagents.find((subagent) => subagent.id === 'general-purpose')?.tools).not.toEqual(
       expect.arrayContaining(['schedule_background_task'])

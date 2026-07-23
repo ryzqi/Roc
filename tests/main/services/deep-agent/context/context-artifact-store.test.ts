@@ -52,7 +52,9 @@ describe('ContextArtifactStore', () => {
 
     const loaded = store.readArtifact({
       artifactId: artifact.artifactId,
-      expectedSha256: artifact.sha256
+      expectedSha256: artifact.sha256,
+      threadId: 'thread_ctx_1',
+      workspaceHash: 'workspace_hash_a'
     });
 
     expect(loaded?.content).toBe(content);
@@ -75,7 +77,9 @@ describe('ContextArtifactStore', () => {
     expect(() =>
       store.readArtifact({
         artifactId: artifact.artifactId,
-        expectedSha256: '0'.repeat(64)
+        expectedSha256: '0'.repeat(64),
+        threadId: 'thread_ctx_2',
+        workspaceHash: null
       })
     ).toThrow('context_artifact_hash_mismatch');
   });
@@ -97,7 +101,31 @@ describe('ContextArtifactStore', () => {
     expect(reference).toContain('<roc_context_artifact>');
     expect(reference).toContain(`artifactId: ${artifact.artifactId}`);
     expect(reference).toContain(`sha256: ${artifact.sha256}`);
-    expect(reference).toContain('retrievalHint: use session_search for the summary/index and artifactId for exact old output');
+    expect(reference).toContain('retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit');
+  });
+
+  it('does not read an artifact outside the current thread and workspace scope', () => {
+    const store = new ContextArtifactStore(db);
+    const artifact = store.persistArtifact({
+      content: 'scoped evidence',
+      kind: 'tool_result',
+      runId: 'run_ctx_scope',
+      threadId: 'thread_ctx_scope',
+      workspaceHash: 'workspace_hash_scope'
+    });
+
+    expect(store.readArtifact({
+      artifactId: artifact.artifactId,
+      expectedSha256: artifact.sha256,
+      threadId: 'other_thread',
+      workspaceHash: 'workspace_hash_scope'
+    })).toBeNull();
+    expect(store.readArtifact({
+      artifactId: artifact.artifactId,
+      expectedSha256: artifact.sha256,
+      threadId: 'thread_ctx_scope',
+      workspaceHash: 'other_workspace'
+    })).toBeNull();
   });
 
   it('records a searchable pre-compaction flush row scoped to the workspace', () => {

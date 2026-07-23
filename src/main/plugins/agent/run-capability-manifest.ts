@@ -31,6 +31,7 @@ const runtimeManifestToolNames = [
   'grep',
   'ls',
   'propose_background_task',
+  'read_context_artifact',
   'read_background_task',
   'read_file',
   'resolve_background_task_time',
@@ -269,7 +270,8 @@ function createRuntimeManifestTools(input: {
     createRuntimeManifestTool('glob', ['main', 'subagent'], 'workspace', 'none', 'none'),
     createRuntimeManifestTool('grep', ['main', 'subagent'], 'workspace', 'none', 'none'),
     createRuntimeManifestTool('ask_user', ['main'], 'app', 'none', 'none'),
-    createRuntimeManifestTool('session_search', ['main'], 'memory', 'none', 'none')
+    createRuntimeManifestTool('session_search', ['main'], 'memory', 'none', 'none'),
+    createRuntimeManifestTool('read_context_artifact', ['main', 'subagent'], 'memory', 'none', 'none')
   ];
   if (input.mode === 'plan') {
     return tools;
