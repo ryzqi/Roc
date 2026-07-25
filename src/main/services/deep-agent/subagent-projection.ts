@@ -8,6 +8,7 @@ export type SubagentProjectionCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
+  observeMessageUsage?: (message: unknown) => void;
   projectToolOutput: ToolOutputProjector;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
 };
@@ -132,6 +133,7 @@ async function consumeMessages(
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
   for await (const message of messages) {
+    callbacks.observeMessageUsage?.(message);
     const textSource = recordUtils.readRecordValue(message, 'text');
     const textStream = recordUtils.readAsyncIterable(textSource);
     if (textStream !== null) {

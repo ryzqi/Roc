@@ -3,10 +3,10 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`fcc9c8c fix(agent): recover resume audits across restart`。
+- HEAD：`9942594 fix(agent): retain recovery-safe terminal state`。
 - Stage 0-4：完成并提交。
-- Stage 5：complete；Part 1、Part 2、Part 3A、Part 3B 已提交，Part 3C 已验证并待本次提交。
-- Stage 6-7：pending。
+- Stage 5：complete；Part 1、Part 2、Part 3A、Part 3B、Part 3C 均已验证并提交。
+- Stage 6：in progress；Part 1 usage accumulation changed, narrowly verified。Stage 7 pending。
 - 用户未跟踪的 `plan.md` 保留为当前验收源，不纳入本次文档整理范围。
 
 ## Completed Milestones
@@ -171,3 +171,9 @@
 - 首轮 Spec review 发现 P1：canonical terminal `agent_outbox` 未清理。已在相同事务按 expired run 集合删除，扩大 result 与 regression；Standards review 无 finding。修复后 focused retention + maintenance 6 tests、`pnpm typecheck`、`git diff --check` 通过，待 re-review 与 broad gates。
 - 修复后 Standards/Spec re-review 均无 residual finding。retention/schema/rebuild/maintenance focused 4 files / 14 tests、strict unused、typecheck、IPC check、build、full Vitest 308 files / 1658 tests、diff check 全部通过；Vitest 退出码 0，末尾 node-pty `AttachConsole failed` 为既有 Windows 子进程噪声。
 - Part 3C **Verified passing**；更新账本并提交后，Stage 5 complete，下一阶段为 Stage 6。
+
+## 2026-07-25 - Stage 6 Part 1 Per-model-call Usage Accumulation
+
+- 旧 accumulator 覆盖最后 usage；修复为 stable message id 按 call 合并、跨 call 累加。无 id usage 不计入，避免无法归属流分片重复计数。
+- Subagent projection 现将其 streamed messages 交给同一 run accumulator；review 首轮发现的 subagent 遗漏与 no-id duplication 均已修复并 re-review 无 residual finding。
+- focused 3 files / 26 tests、strict unused、typecheck、IPC check、build、full Vitest 309 files / 1662 tests、diff check 通过；node-pty `AttachConsole failed` 为退出码 0 的既有 Windows 噪声。待提交。

@@ -89,6 +89,12 @@
 - 修复后双轴 re-review 无 residual finding。新鲜验证：retention/schema/rebuild/maintenance focused 4 files / 14 tests、strict unused、typecheck、IPC check、build、full Vitest 308 files / 1658 tests、diff check 均通过。Vitest 的 `node-pty AttachConsole failed` 为既有 Windows 子进程噪声，命令退出码 0。
 - 状态：**Verified passing**。Part 3C 已完成，待本次独立提交后 Stage 5 全部闭环。
 
+### Stage 6 Part 1 Usage Accumulation
+
+- `stream-usage-accumulator.ts` 以前按每个字段覆盖最后一次观察到的 metadata；一个 agent run 出现 main、summary、subagent 或 retry call 时，先前 call 的 token/cache usage 会丢失。
+- 每个有稳定 message id 的 model call 现在保留最后合并的 usage snapshot，再跨 call 求和；同一 id 的 partial metadata 只补全其自身未报告字段，不会将同一 call 重复计入。无 id 的 metadata 明确不计入，避免把无法证明同源的流分片静默重复计数。
+- 独立 review 发现 subagent stream 未进入 aggregate、无 id stream 会重复计数；已将 subagent message usage 汇入同一 run accumulator，并新增 executor main+subagent regression。focused 3 files / 26 tests、`pnpm typecheck`、diff check 通过，待 re-review 与 full gates。
+
 ### Durable Project Facts
 
 - `.codegraph/` 存在；理解或定位代码时先使用 CodeGraph。

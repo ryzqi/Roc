@@ -370,6 +370,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
                 runId: input.run.id,
                 taskRun
               },
+              usageAccumulator,
               callbacks
             })
           ]);

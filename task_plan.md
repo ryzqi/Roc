@@ -12,11 +12,11 @@
 
 ## Current Phase
 
-Stage 5 Part 3C - Recovery-safe Retention
+Stage 6 Part 1 - Per-model-call Usage Accumulation
 
-**Status:** complete
+**Status:** in_progress
 
-Stage 5 Part 1、Part 2、Part 3A、Part 3B 与 Part 3C 均已完成实现、独立双轴 review、全量验证与提交。
+Stage 5 已完成实现、独立双轴 review、全量验证与提交。当前只处理 Stage 6 Part 1 usage telemetry；不在本提交引入持久 telemetry、LangSmith、integration/eval 或 performance gate。
 
 ## Phase Status
 
@@ -27,8 +27,8 @@ Stage 5 Part 1、Part 2、Part 3A、Part 3B 与 Part 3C 均已完成实现、独
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | complete | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23`、Part 3B `fcc9c8c`、Part 3C 本次提交。 |
-| Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | complete | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23`、Part 3B `fcc9c8c`、Part 3C `9942594`。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1：按 model call 累加 streamed usage，避免最后观察值覆盖。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
 ## Stage 5 Plan
@@ -72,6 +72,13 @@ Stage 5 Part 1、Part 2、Part 3A、Part 3B 与 Part 3C 均已完成实现、独
 #### Part 3C - Recovery-safe Retention
 
 - [x] retention 以 terminal state 和 recovery safety window 为边界，覆盖 checkpoint/writes/artifacts/events/outbox；独立双轴 review、focused 门禁、strict unused、typecheck、IPC check、build、full Vitest 与 diff check 全部通过。
+
+## Stage 6 Plan
+
+### Part 1 - Per-model-call Usage Accumulation
+
+- [x] 每个 model call 合并自己的 streaming usage snapshot，并累加 main/summary/subagent/retry/cache usage；同一 call 的分片不得重复计数。
+- [x] 补 deterministic unit regression，完成独立 review、全量门禁与提交。
 
 ## Acceptance Criteria
 

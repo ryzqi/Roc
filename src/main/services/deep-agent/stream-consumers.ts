@@ -224,12 +224,16 @@ export async function consumeToolCallStream(input: {
 export async function consumeSubagentStream(input: {
   subagents: AsyncIterable<unknown>;
   context: StreamConsumerContext;
+  usageAccumulator: ProviderUsageAccumulator;
   callbacks: StreamConsumerCallbacks;
 }): Promise<void> {
   await projectSubagentStream({
     subagents: input.subagents,
     runId: input.context.runId,
-    callbacks: input.callbacks
+    callbacks: {
+      ...input.callbacks,
+      observeMessageUsage: (message) => updateUsageAccumulator(input.usageAccumulator, message)
+    }
   });
 }
 

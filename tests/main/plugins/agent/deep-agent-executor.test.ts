@@ -156,6 +156,7 @@ describe('createAgentDeepAgentExecutor', () => {
       metricsService: { recordPromptCacheMetrics },
       messages: (async function* () {
         yield {
+          id: 'main-call',
           usage_metadata: {
             input_tokens: 600,
             input_token_details: {
@@ -180,6 +181,55 @@ describe('createAgentDeepAgentExecutor', () => {
         input_tokens: 600,
         cache_creation_tokens: 300,
         cache_read_tokens: 900
+      },
+      {
+        mode: 'task',
+        modelId: 'test-model',
+        providerId: 'test-provider',
+        source: 'chat'
+      }
+    );
+  });
+
+  it('accumulates main and subagent prompt-cache usage for one run', async () => {
+    const recordPromptCacheMetrics = vi.fn();
+
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      metricsService: { recordPromptCacheMetrics },
+      messages: (async function* () {
+        yield {
+          id: 'main-call',
+          usage_metadata: {
+            input_tokens: 100,
+            input_token_details: { cache_read: 40 }
+          }
+        };
+      })(),
+      subagents: (async function* () {
+        yield {
+          name: 'researcher',
+          taskInput: 'research',
+          messages: (async function* () {
+            yield {
+              id: 'subagent-call',
+              usage_metadata: {
+                input_tokens: 60,
+                input_token_details: { cache_creation: 20 }
+              }
+            };
+          })(),
+          output: 'done'
+        };
+      })(),
+      output: { messages: [] }
+    });
+
+    expect(recordPromptCacheMetrics).toHaveBeenCalledWith(
+      {
+        input_tokens: 160,
+        cache_creation_tokens: 20,
+        cache_read_tokens: 40
       },
       {
         mode: 'task',
