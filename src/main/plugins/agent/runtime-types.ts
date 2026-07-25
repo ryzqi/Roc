@@ -15,6 +15,12 @@ export type PendingInterrupt = {
   payload: ChatInterruptPayload;
 };
 
+export type PendingInterruptProjection = {
+  runId: string;
+  threadId: string;
+  interrupts: PendingInterrupt[];
+};
+
 export type AgentLifecycleHookEmitter = {
   emitSessionEnd(input: {
     runId: string;

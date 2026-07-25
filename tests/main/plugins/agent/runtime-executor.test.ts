@@ -411,7 +411,11 @@ describe('AgentPluginRuntime', () => {
       workspacePath: 'F:\\Code\\Roc',
       explicitSkillIds: ['typescript']
     });
-    expect(resumePayloads[1]).toEqual({ answer: 'Use F:\\Code\\Roc.' });
+    expect(resumePayloads[1]).toEqual({
+      'interrupt-question': {
+        answer: 'Use F:\\Code\\Roc.'
+      }
+    });
   });
 
 });

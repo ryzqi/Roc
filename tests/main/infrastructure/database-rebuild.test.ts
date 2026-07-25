@@ -58,6 +58,14 @@ describe('rebuildRocDatabases', () => {
       expect(agentDb.prepare('SELECT status FROM agent_threads WHERE id = ?').pluck().get('thread-1')).toBe('interrupted');
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_events').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM session_messages').pluck().get()).toBe(1);
+      expect(
+        agentDb
+          .prepare('SELECT interrupt_id, position FROM agent_pending_interrupts ORDER BY position ASC')
+          .all()
+      ).toEqual([
+        { interrupt_id: 'interrupt-primary', position: 0 },
+        { interrupt_id: 'interrupt-secondary', position: 1 }
+      ]);
       expect(agentDb.prepare('SELECT execution_path, checkpoint_id, status FROM agent_tool_effects').get()).toEqual({
         execution_path: 'main',
         checkpoint_id: 'checkpoint-1',
@@ -105,6 +113,22 @@ describe('rebuildRocDatabases', () => {
         reconcile_strategy: 'manual_confirmation',
         status: 'unknown'
       });
+      expect(
+        agentDb.prepare('SELECT run_id, thread_id, interrupt_id, position, payload_json FROM agent_pending_interrupts').all()
+      ).toEqual([
+        {
+          run_id: 'run-1',
+          thread_id: 'thread-1',
+          interrupt_id: 'interrupt-primary',
+          position: 0,
+          payload_json: '{"kind":"question","question":"Primary?"}'
+        }
+      ]);
+      expect(
+        (agentDb.prepare('PRAGMA table_info(agent_pending_interrupts)').all() as Array<{ name: string }>).map(
+          (column) => column.name
+        )
+      ).toEqual(['run_id', 'thread_id', 'interrupt_id', 'position', 'payload_json', 'created_at', 'updated_at']);
     } finally {
       agentDb.close();
     }
@@ -169,6 +193,21 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
           updated_at TEXT NOT NULL,
           PRIMARY KEY (run_id, tool_call_id)
         );
+
+        CREATE TABLE agent_pending_interrupts (
+          run_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL,
+          interrupt_id TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          task_source TEXT,
+          workflow_hint TEXT,
+          workspace_path_state TEXT NOT NULL,
+          workspace_path TEXT,
+          explicit_skill_ids_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
       `);
     } else {
       db.exec(`
@@ -188,6 +227,23 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           PRIMARY KEY (run_id, execution_path, checkpoint_id, tool_call_id)
+        );
+
+        CREATE TABLE agent_pending_interrupts (
+          run_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          interrupt_id TEXT NOT NULL,
+          position INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          task_source TEXT,
+          workflow_hint TEXT,
+          workspace_path_state TEXT NOT NULL,
+          workspace_path TEXT,
+          explicit_skill_ids_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, interrupt_id)
         );
       `);
     }
@@ -213,12 +269,28 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
     ).run();
     if (effectSchema === 'v8') {
       db.prepare(
+        `INSERT INTO agent_pending_interrupts
+         (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
+          workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+         VALUES ('run-1', 'thread-1', 'interrupt-primary', '{"kind":"question","question":"Primary?"}',
+          'snapshot', NULL, NULL, 'null', NULL, NULL, '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      ).run();
+      db.prepare(
         `INSERT INTO agent_tool_effects
          (run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at)
          VALUES ('run-1', 'thread-1', 'call-1', 'run_shell_command', 'hash-1', 'in_progress', NULL, NULL,
           '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
       ).run();
     } else {
+      const insertInterrupt = db.prepare(
+        `INSERT INTO agent_pending_interrupts
+         (run_id, thread_id, interrupt_id, position, payload_json, mode, task_source, workflow_hint,
+          workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+         VALUES ('run-1', 'thread-1', ?, ?, ?, 'snapshot', NULL, NULL, 'null', NULL, NULL,
+          '2026-07-06T00:00:00.000Z', '2026-07-06T00:00:00.000Z')`
+      );
+      insertInterrupt.run('interrupt-primary', 0, '{"kind":"question","question":"Primary?"}');
+      insertInterrupt.run('interrupt-secondary', 1, '{"kind":"question","question":"Secondary?"}');
       db.prepare(
         `INSERT INTO agent_tool_effects
          (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,

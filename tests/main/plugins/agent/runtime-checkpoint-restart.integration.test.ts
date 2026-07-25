@@ -16,6 +16,11 @@ const RestartState = Annotation.Root({
   result: Annotation<string>
 });
 
+const MultipleInterruptState = Annotation.Root({
+  firstAnswer: Annotation<string>,
+  secondAnswer: Annotation<string>
+});
+
 let db: Database.Database;
 let databasePath: string;
 let tempDir: string;
@@ -58,7 +63,8 @@ describe('RocSqliteCheckpointer restart integration', () => {
       messages: [new HumanMessage('Run Get-Location.')]
     }, config);
 
-    expect(readInterruptValues(interrupted)[0]).toMatchObject({
+    const approvalInterrupts = readInterrupts(interrupted);
+    expect(approvalInterrupts[0]?.value).toMatchObject({
       actionRequests: [
         {
           name: 'run_shell_command',
@@ -93,7 +99,11 @@ describe('RocSqliteCheckpointer restart integration', () => {
         ]
       })
     });
-    await restarted.invoke(new Command({ resume: { decisions: [{ type: 'approve' }] } }), config);
+    const approvalInterruptId = requireInterruptId(approvalInterrupts[0]);
+    await restarted.invoke(
+      new Command({ resume: { [approvalInterruptId]: { decisions: [{ type: 'approve' }] } } }),
+      config
+    );
 
     expect(executedCommands).toEqual(['Get-Location']);
   });
@@ -104,7 +114,8 @@ describe('RocSqliteCheckpointer restart integration', () => {
 
     const interrupted = await first.invoke({}, config);
 
-    expect(readInterruptValues(interrupted)).toEqual([
+    const questionInterrupts = readInterrupts(interrupted);
+    expect(questionInterrupts.map((interruptValue) => interruptValue.value)).toEqual([
       {
         kind: 'question',
         question: 'Which workspace should I use?'
@@ -115,9 +126,95 @@ describe('RocSqliteCheckpointer restart integration', () => {
     db.close();
     db = new Database(databasePath);
     const restarted = createQuestionGraph(new RocSqliteCheckpointer(db));
-    const resumed = await restarted.invoke(new Command({ resume: { answer: 'F:\\Code\\Roc' } }), config);
+    const questionInterruptId = requireInterruptId(questionInterrupts[0]);
+    const resumed = await restarted.invoke(
+      new Command({ resume: { [questionInterruptId]: { answer: 'F:\\Code\\Roc' } } }),
+      config
+    );
 
     expect(resumed.result).toBe('F:\\Code\\Roc');
+  });
+
+  it('resumes multiple parallel ask_user interrupts by id after recreating the graph', async () => {
+    const config = { configurable: { thread_id: 'thread_restart_multiple_questions' } };
+    const first = createMultipleQuestionGraph(new RocSqliteCheckpointer(db));
+
+    const interrupted = await first.invoke({}, config);
+    const interrupts = readInterrupts(interrupted);
+
+    expect(interrupts.map((interruptValue) => interruptValue.value)).toEqual(
+      expect.arrayContaining([
+        { kind: 'question', question: 'First workspace?' },
+        { kind: 'question', question: 'Second workspace?' }
+      ])
+    );
+    expect(interrupts).toHaveLength(2);
+    expect(countCheckpoints()).toBeGreaterThan(0);
+
+    const resumeByInterruptId = Object.fromEntries(
+      interrupts.map((interruptValue) => {
+        const question = readQuestion(interruptValue.value);
+        return [interruptValue.id, { answer: `${question} answered` }];
+      })
+    );
+    db.close();
+    db = new Database(databasePath);
+    const restarted = createMultipleQuestionGraph(new RocSqliteCheckpointer(db));
+    const resumed = await restarted.invoke(new Command({ resume: resumeByInterruptId }), config);
+
+    expect([resumed.firstAnswer, resumed.secondAnswer]).toEqual(
+      expect.arrayContaining(['First workspace? answered', 'Second workspace? answered'])
+    );
+  });
+
+  it('resumes multiple DeepAgent ask_user tool calls by id after restart', async () => {
+    const config = { configurable: { thread_id: 'thread_restart_deep_agent_questions' } };
+    const toolCalls = [
+      [
+        {
+          name: 'ask_user',
+          args: { question: 'Primary workspace?' },
+          id: 'call_primary_workspace'
+        },
+        {
+          name: 'ask_user',
+          args: { question: 'Fallback workspace?' },
+          id: 'call_fallback_workspace'
+        }
+      ],
+      []
+    ];
+    const first = createMultipleQuestionAgent(
+      new RocSqliteCheckpointer(db),
+      new FakeToolCallingModel({ toolCalls })
+    );
+
+    const interrupted = await first.invoke(
+      { messages: [new HumanMessage('Ask for both workspace choices.')] },
+      config
+    );
+    const interrupts = readInterrupts(interrupted);
+
+    expect(interrupts).toHaveLength(2);
+    expect(interrupts.map((interruptValue) => interruptValue.value)).toEqual(
+      expect.arrayContaining([
+        { kind: 'question', question: 'Primary workspace?' },
+        { kind: 'question', question: 'Fallback workspace?' }
+      ])
+    );
+
+    const resumeByInterruptId = Object.fromEntries(
+      interrupts.map((interruptValue) => [interruptValue.id, { answer: `${readQuestion(interruptValue.value)} answered` }])
+    );
+    db.close();
+    db = new Database(databasePath);
+    const restarted = createMultipleQuestionAgent(
+      new RocSqliteCheckpointer(db),
+      new FakeToolCallingModel({ index: 1, toolCalls })
+    );
+    const resumed = await restarted.invoke(new Command({ resume: resumeByInterruptId }), config);
+
+    expect(Reflect.get(resumed, '__interrupt__')).toBeUndefined();
   });
 });
 
@@ -132,6 +229,30 @@ function createQuestionGraph(checkpointer: RocSqliteCheckpointer) {
     .addEdge(START, 'question')
     .addEdge('question', END)
     .compile({ checkpointer });
+}
+
+function createMultipleQuestionGraph(checkpointer: RocSqliteCheckpointer) {
+  const askUser = createAskUserTool();
+  return new StateGraph(MultipleInterruptState)
+    .addNode('first-question', async () => ({
+      firstAnswer: await askUser.invoke({ question: 'First workspace?' })
+    }))
+    .addNode('second-question', async () => ({
+      secondAnswer: await askUser.invoke({ question: 'Second workspace?' })
+    }))
+    .addEdge(START, 'first-question')
+    .addEdge(START, 'second-question')
+    .addEdge('first-question', END)
+    .addEdge('second-question', END)
+    .compile({ checkpointer });
+}
+
+function createMultipleQuestionAgent(checkpointer: RocSqliteCheckpointer, model: FakeToolCallingModel) {
+  return createDeepAgent({
+    checkpointer,
+    model,
+    tools: [createAskUserTool()]
+  });
 }
 
 function createApprovalAgent(input: {
@@ -162,7 +283,7 @@ function createApprovalAgent(input: {
   });
 }
 
-function readInterruptValues(result: object): unknown[] {
+function readInterrupts(result: object): Array<{ id: string; value: unknown }> {
   const interrupts = Reflect.get(result, '__interrupt__');
   if (!Array.isArray(interrupts)) {
     throw new Error('graph_interrupt_missing');
@@ -171,8 +292,33 @@ function readInterruptValues(result: object): unknown[] {
     if (interruptValue === null || typeof interruptValue !== 'object') {
       throw new Error('graph_interrupt_invalid');
     }
-    return Reflect.get(interruptValue, 'value');
+    const id = Reflect.get(interruptValue, 'id');
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error('graph_interrupt_id_invalid');
+    }
+    return {
+      id,
+      value: Reflect.get(interruptValue, 'value')
+    };
   });
+}
+
+function requireInterruptId(interruptValue: { id: string; value: unknown } | undefined): string {
+  if (interruptValue === undefined) {
+    throw new Error('graph_interrupt_missing');
+  }
+  return interruptValue.id;
+}
+
+function readQuestion(value: unknown): string {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('graph_interrupt_question_invalid');
+  }
+  const question = Reflect.get(value, 'question');
+  if (typeof question !== 'string') {
+    throw new Error('graph_interrupt_question_invalid');
+  }
+  return question;
 }
 
 function countCheckpoints(): number {

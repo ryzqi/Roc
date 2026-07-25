@@ -483,40 +483,35 @@ function importPendingInterrupts(source: DatabaseConnection | null, target: Data
     run_id: string;
     thread_id: string;
     interrupt_id: string;
+    position: number;
     payload_json: string;
-    mode: string;
-    task_source: string | null;
-    workflow_hint: string | null;
-    workspace_path_state: string;
-    workspace_path: string | null;
-    explicit_skill_ids_json: string | null;
     created_at: string;
     updated_at: string;
   };
+  const columns = readRows<{ name: string }>(source, 'PRAGMA table_info(agent_pending_interrupts)');
+  const columnNames = new Set(columns.map((column) => column.name));
+  const requiredColumns = ['run_id', 'thread_id', 'interrupt_id', 'payload_json', 'created_at', 'updated_at'];
+  if (requiredColumns.some((column) => !columnNames.has(column))) {
+    return;
+  }
+  const positionColumn = columns.some((column) => column.name === 'position') ? 'position' : '0 AS position';
   const rows = readRows<Row>(
     source,
-    `SELECT run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-       workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at
+    `SELECT run_id, thread_id, interrupt_id, ${positionColumn}, payload_json, created_at, updated_at
      FROM agent_pending_interrupts`
   );
   const statement = target.prepare(
     `INSERT INTO agent_pending_interrupts (
-      run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-      workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at
+      run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   importRows(rows, statement, (row) => [
     row.run_id,
     row.thread_id,
     row.interrupt_id,
+    row.position,
     row.payload_json,
-    row.mode,
-    row.task_source,
-    row.workflow_hint,
-    row.workspace_path_state,
-    row.workspace_path,
-    row.explicit_skill_ids_json,
     row.created_at,
     row.updated_at
   ]);

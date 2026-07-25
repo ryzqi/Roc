@@ -196,6 +196,53 @@ describe('chat run state', () => {
     ]);
   });
 
+  it('accumulates distinct interrupts and removes only the resumed item', () => {
+    let state = applyChatRunEvent(createEmptyChatRunState(), runStarted('chat_parallel_interrupts'));
+    state = applyChatRunEvent(state, {
+      type: 'run_interrupted',
+      runId: 'chat_parallel_interrupts',
+      threadId: 'thread_chat_parallel_interrupts',
+      interruptId: 'interrupt-approval',
+      payload: approvalPayload()
+    });
+    state = applyChatRunEvent(state, {
+      type: 'run_interrupted',
+      runId: 'chat_parallel_interrupts',
+      threadId: 'thread_chat_parallel_interrupts',
+      interruptId: 'interrupt-question',
+      payload: {
+        kind: 'question',
+        question: 'Which workspace?'
+      }
+    });
+
+    expect(state.pendingInterrupts.map((interrupt) => interrupt.interruptId)).toEqual([
+      'interrupt-approval',
+      'interrupt-question'
+    ]);
+
+    state = applyChatRunEvent(state, {
+      type: 'run_resumed',
+      runId: 'chat_parallel_interrupts',
+      threadId: 'thread_chat_parallel_interrupts',
+      interruptId: 'interrupt-approval'
+    });
+
+    expect(state.status).toBe('waiting_user');
+    expect(state.pendingInterrupts.map((interrupt) => interrupt.interruptId)).toEqual(['interrupt-question']);
+
+    state = applyChatRunEvent(state, {
+      type: 'run_failed',
+      runId: 'chat_parallel_interrupts',
+      threadId: 'thread_chat_parallel_interrupts',
+      code: 'provider_network_error',
+      message: 'Provider failed after resume.',
+      retryable: false
+    });
+
+    expect(state.pendingInterrupts).toEqual([]);
+  });
+
   it('keeps multiple action requests in approval order until the matching interrupt resumes', () => {
     let state = createEmptyChatRunState();
 

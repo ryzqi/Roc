@@ -6,6 +6,7 @@ import type {
   AgentCapabilityPreview,
   ChatInterruptPayload,
   ChatPersistedAttachment,
+  ChatResumeDecision,
   ChatRunEvent,
   EnabledCapabilities,
   RunExecutionSnapshotV2,
@@ -21,7 +22,7 @@ import type {
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocDomainError } from '../../services/errors';
 import { agentRunEventLogMaxEvents } from './run-event-log';
-import type { PendingInterrupt } from './runtime-types';
+import type { PendingInterrupt, PendingInterruptProjection } from './runtime-types';
 import {
   createRunExecutionSnapshot,
   parseRunExecutionSnapshot,
@@ -69,6 +70,7 @@ type PendingInterruptRow = {
   run_id: string;
   thread_id: string;
   interrupt_id: string;
+  position: number;
   payload_json: string;
 };
 
@@ -104,14 +106,34 @@ type TerminalFailureInput = {
   suggestion?: RunFailure['suggestion'];
 };
 
+export type ResumeDispatchAudit =
+  | {
+      type: 'approval_decision';
+      payload: {
+        interruptId: string;
+        decisions: readonly ChatResumeDecision[];
+      };
+    }
+  | {
+      type: 'human_question_answered';
+      payload: {
+        interruptId: string;
+        answer: string;
+      };
+      sessionMessage: {
+        content: string;
+        workspaceHash: string | null;
+      };
+    };
+
 const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   draft: [],
   pending_confirmation: [],
-  dispatch_pending: ['running', 'recovering', 'failed', 'cancelled', 'interrupted'],
+  dispatch_pending: ['running', 'waiting_user', 'recovering', 'failed', 'cancelled', 'interrupted'],
   running: ['waiting_user', 'recovering', 'completed', 'failed', 'cancelled', 'interrupted'],
   recovering: ['running', 'failed', 'cancelled', 'interrupted'],
   paused: [],
-  waiting_user: ['running', 'cancelled', 'interrupted'],
+  waiting_user: ['dispatch_pending', 'running', 'cancelled', 'interrupted'],
   waiting_next_turn: ['dispatch_pending', 'running', 'waiting_user', 'recovering', 'completed', 'failed', 'cancelled', 'interrupted'],
   failed: [],
   cancelled: [],
@@ -546,11 +568,40 @@ export class AgentSessionRepository {
       this.markRestartedToolEffectsUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
       if (
+        candidate.status === 'dispatch_pending' &&
+        evidence.hasCheckpoint &&
+        !evidence.hasInFlightEffect &&
+        this.hasRecoverablePendingInterrupt(candidate)
+      ) {
+        this.rollbackResumeDispatch({
+          expectedStateVersion: candidate.state_version,
+          expectedStatus: candidate.status,
+          runId: candidate.id
+        });
+        continue;
+      }
+      if (
         candidate.status === 'waiting_user' &&
         evidence.hasCheckpoint &&
         !evidence.hasInFlightEffect &&
-        this.hasRecoverablePendingInterrupt(candidate.id)
+        this.hasRecoverablePendingInterrupt(candidate)
       ) {
+        this.verifyWaitingUserSnapshot(candidate.id);
+        continue;
+      }
+      if (
+        candidate.status === 'running' &&
+        evidence.hasCheckpoint &&
+        !evidence.hasInFlightEffect &&
+        this.hasRecoverablePendingInterrupt(candidate)
+      ) {
+        this.transitionRun({
+          endedAt: null,
+          expectedStateVersion: candidate.state_version,
+          expectedStatus: candidate.status,
+          runId: candidate.id,
+          status: 'waiting_user'
+        });
         this.verifyWaitingUserSnapshot(candidate.id);
         continue;
       }
@@ -577,10 +628,11 @@ export class AgentSessionRepository {
   markRunInterrupted(input: {
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
-    interrupt: PendingInterrupt;
+    interrupts: readonly PendingInterrupt[];
     runId: string;
     threadId: string;
-  }): TaskRun {
+  }): { events: TaskEvent[]; run: TaskRun } {
+    validatePendingInterrupts(input.interrupts);
     const now = new Date().toISOString();
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
@@ -594,58 +646,159 @@ export class AgentSessionRepository {
       if (transition.run.threadId !== input.threadId) {
         throw new Error('agent_pending_interrupt_thread_mismatch');
       }
-      this.db
-        .prepare(
-          `INSERT INTO agent_pending_interrupts
-           (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-            workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(run_id) DO UPDATE SET
-             thread_id = excluded.thread_id,
-             interrupt_id = excluded.interrupt_id,
-             payload_json = excluded.payload_json,
-             mode = excluded.mode,
-             task_source = excluded.task_source,
-             workflow_hint = excluded.workflow_hint,
-             workspace_path_state = excluded.workspace_path_state,
-             workspace_path = excluded.workspace_path,
-             explicit_skill_ids_json = excluded.explicit_skill_ids_json,
-             updated_at = excluded.updated_at`
-        )
-        .run(
+      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+      const insert = this.db.prepare(
+        `INSERT INTO agent_pending_interrupts
+         (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const [position, interrupt] of input.interrupts.entries()) {
+        insert.run(
           input.runId,
           input.threadId,
-          input.interrupt.interruptId,
-          JSON.stringify(input.interrupt.payload),
-          'snapshot',
-          null,
-          null,
-          'null',
-          null,
-          null,
+          interrupt.interruptId,
+          position,
+          JSON.stringify(interrupt.payload),
           now,
           now
         );
-      return transition.run;
+      }
+      const events = input.interrupts.map((interrupt): TaskEvent => ({
+        id: `event_${randomUUID()}`,
+        threadId: input.threadId,
+        runId: input.runId,
+        type: interrupt.payload.kind === 'approval' ? 'approval_requested' : 'human_question_requested',
+        payload:
+          interrupt.payload.kind === 'approval'
+            ? {
+                interruptId: interrupt.interruptId,
+                ...interrupt.payload.request
+              }
+            : {
+                interruptId: interrupt.interruptId,
+                question: interrupt.payload.question,
+                context: interrupt.payload.context === undefined ? null : interrupt.payload.context,
+                suggestedResponses:
+                  interrupt.payload.suggestedResponses === undefined ? [] : interrupt.payload.suggestedResponses
+              },
+        createdAt: now
+      }));
+      for (const event of events) {
+        this.insertEvent(event);
+      }
+      return {
+        events,
+        run: transition.run
+      };
     })();
   }
 
-  resumeRunAtomically(input: {
+  beginResumeDispatch(input: {
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
+    interruptId: string;
     runId: string;
-  }): TaskRun {
+  }): { run: TaskRun; stateVersion: number } {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
         endedAt: null,
         expectedStateVersion: input.expectedStateVersion,
         expectedStatus: input.expectedStatus,
         runId: input.runId,
-        status: 'running',
+        status: 'dispatch_pending',
         updatedAt: new Date().toISOString()
       });
-      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
-      return transition.run;
+      this.requirePendingInterrupt(input.runId, input.interruptId);
+      return transition;
+    })();
+  }
+
+  commitResumeDispatch(input: {
+    audit: ResumeDispatchAudit;
+    expectedStateVersion: number;
+    expectedStatus: TaskStatus;
+    interruptId: string;
+    runId: string;
+  }): { event: TaskEvent; run: TaskRun; stateVersion: number } {
+    return this.db.transaction(() => {
+      const createdAt = new Date().toISOString();
+      const transition = this.transitionRunInTransaction({
+        endedAt: null,
+        expectedStateVersion: input.expectedStateVersion,
+        expectedStatus: input.expectedStatus,
+        runId: input.runId,
+        status: 'running',
+        updatedAt: createdAt
+      });
+      const deleted = this.db
+        .prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
+        .run(input.runId, input.interruptId).changes;
+      if (deleted !== 1) {
+        throw new Error('agent_pending_interrupt_missing');
+      }
+      if (input.audit.type === 'human_question_answered') {
+        this.insertEvent({
+          id: `event_${randomUUID()}`,
+          threadId: transition.run.threadId,
+          runId: transition.run.id,
+          type: 'message',
+          payload: {
+            role: 'user',
+            content: input.audit.sessionMessage.content
+          },
+          createdAt
+        });
+        this.db
+          .prepare(
+            `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            `smsg_${randomUUID()}`,
+            transition.run.threadId,
+            'user',
+            input.audit.sessionMessage.content,
+            null,
+            'visible',
+            input.audit.sessionMessage.workspaceHash,
+            createdAt
+          );
+      }
+      const event: TaskEvent = {
+        id: `event_${randomUUID()}`,
+        threadId: transition.run.threadId,
+        runId: transition.run.id,
+        type: input.audit.type,
+        payload: input.audit.payload,
+        createdAt
+      };
+      this.insertEvent(event);
+      return {
+        event,
+        run: transition.run,
+        stateVersion: transition.stateVersion
+      };
+    })();
+  }
+
+  rollbackResumeDispatch(input: {
+    expectedStateVersion: number;
+    expectedStatus: TaskStatus;
+    runId: string;
+  }): { run: TaskRun; stateVersion: number } {
+    return this.db.transaction(() => {
+      const transition = this.transitionRunInTransaction({
+        endedAt: null,
+        expectedStateVersion: input.expectedStateVersion,
+        expectedStatus: input.expectedStatus,
+        runId: input.runId,
+        status: 'waiting_user',
+        updatedAt: new Date().toISOString()
+      });
+      if (!this.hasPendingInterruptRows(input.runId)) {
+        throw new Error('agent_pending_interrupt_collection_empty');
+      }
+      return transition;
     })();
   }
 
@@ -712,26 +865,27 @@ export class AgentSessionRepository {
     })();
   }
 
-  getPendingInterrupt(runId: string): { runId: string; threadId: string; interrupt: PendingInterrupt } | null {
-    const row = this.db
-      .prepare('SELECT run_id, thread_id, interrupt_id, payload_json FROM agent_pending_interrupts WHERE run_id = ?')
-      .get(runId) as
-      | PendingInterruptRow
-      | undefined;
-    if (row === undefined) {
-      return null;
-    }
+  getPendingInterrupts(runId: string): PendingInterruptProjection {
+    const run = this.getRun(runId);
+    const rows = this.db
+      .prepare(
+        `SELECT run_id, thread_id, interrupt_id, position, payload_json
+         FROM agent_pending_interrupts
+         WHERE run_id = ?
+         ORDER BY position ASC`
+      )
+      .all(runId) as PendingInterruptRow[];
     return {
-      runId: row.run_id,
-      threadId: row.thread_id,
-      interrupt: {
+      runId,
+      threadId: run.threadId,
+      interrupts: rows.map((row) => ({
         interruptId: row.interrupt_id,
         payload: JSON.parse(row.payload_json) as ChatInterruptPayload
-      }
+      }))
     };
   }
 
-  clearPendingInterrupt(runId: string): void {
+  clearPendingInterrupts(runId: string): void {
     this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
   }
 
@@ -1119,19 +1273,60 @@ export class AgentSessionRepository {
     })();
   }
 
-  private hasRecoverablePendingInterrupt(runId: string): boolean {
+  private hasRecoverablePendingInterrupt(run: StartupRunRow): boolean {
+    const rows = this.db
+      .prepare('SELECT interrupt_id, payload_json FROM agent_pending_interrupts WHERE run_id = ? ORDER BY position ASC')
+      .all(run.id) as Array<{ interrupt_id: string; payload_json: string }>;
+    if (rows.length === 0) {
+      return false;
+    }
+    for (const row of rows) {
+      if (row.interrupt_id.trim().length === 0) {
+        return false;
+      }
+      try {
+        const payload = JSON.parse(row.payload_json) as unknown;
+        if (typeof payload !== 'object' || payload === null || Array.isArray(payload) || !('kind' in payload)) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+    const currentCheckpointInterrupt = this.db
+      .prepare(
+        `SELECT 1
+         FROM langgraph_checkpoint_writes
+         WHERE thread_id = ?
+           AND checkpoint_ns = ''
+           AND checkpoint_id = (
+             SELECT checkpoint_id
+             FROM langgraph_checkpoints
+             WHERE thread_id = ? AND checkpoint_ns = ''
+             ORDER BY checkpoint_id DESC
+             LIMIT 1
+           )
+           AND channel = '__interrupt__'
+         LIMIT 1`
+      )
+      .get(run.thread_id, run.thread_id) as { 1: number } | undefined;
+    return currentCheckpointInterrupt !== undefined;
+  }
+
+  private requirePendingInterrupt(runId: string, interruptId: string): void {
     const row = this.db
-      .prepare('SELECT interrupt_id, payload_json FROM agent_pending_interrupts WHERE run_id = ?')
-      .get(runId) as { interrupt_id: string; payload_json: string } | undefined;
-    if (row === undefined || row.interrupt_id.trim().length === 0) {
-      return false;
+      .prepare('SELECT 1 FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
+      .get(runId, interruptId) as { 1: number } | undefined;
+    if (row === undefined) {
+      throw new Error('agent_pending_interrupt_missing');
     }
-    try {
-      const payload = JSON.parse(row.payload_json) as unknown;
-      return typeof payload === 'object' && payload !== null && !Array.isArray(payload) && 'kind' in payload;
-    } catch {
-      return false;
-    }
+  }
+
+  private hasPendingInterruptRows(runId: string): boolean {
+    const row = this.db
+      .prepare('SELECT 1 FROM agent_pending_interrupts WHERE run_id = ? LIMIT 1')
+      .get(runId) as { 1: number } | undefined;
+    return row !== undefined;
   }
 
   private readRestartEvidence(candidate: StartupRunRow): RestartEvidence {
@@ -1295,6 +1490,23 @@ function mapSessionMessage(row: SessionMessageRow): SessionMessageEntry {
     workspaceHash: row.workspace_hash,
     createdAt: row.created_at
   };
+}
+
+function validatePendingInterrupts(interrupts: readonly PendingInterrupt[]): void {
+  if (interrupts.length === 0) {
+    throw new Error('agent_pending_interrupt_collection_empty');
+  }
+  const interruptIds = new Set<string>();
+  for (const interrupt of interrupts) {
+    const interruptId = interrupt.interruptId.trim();
+    if (interruptId.length === 0) {
+      throw new Error('agent_pending_interrupt_id_empty');
+    }
+    if (interruptIds.has(interruptId)) {
+      throw new Error('agent_pending_interrupt_id_duplicate');
+    }
+    interruptIds.add(interruptId);
+  }
 }
 
 function requireNonEmpty(value: string | null, code: string): string {

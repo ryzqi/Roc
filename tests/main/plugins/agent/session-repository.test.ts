@@ -192,68 +192,394 @@ describe('AgentSessionRepository', () => {
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
       threadId: run.threadId,
-      interrupt: {
-        interruptId: 'interrupt_repository_1',
-        payload: {
-          kind: 'approval',
-          request: {
-            actionRequests: [
-              {
-                name: 'run_shell_command',
-                args: {
-                  command: 'git status'
+      interrupts: [
+        {
+          interruptId: 'interrupt_repository_1',
+          payload: {
+            kind: 'approval',
+            request: {
+              actionRequests: [
+                {
+                  name: 'run_shell_command',
+                  args: {
+                    command: 'git status'
+                  }
                 }
-              }
-            ],
-            reviewConfigs: [
-              {
-                actionName: 'run_shell_command',
-                allowedDecisions: ['approve', 'reject']
-              }
-            ]
+              ],
+              reviewConfigs: [
+                {
+                  actionName: 'run_shell_command',
+                  allowedDecisions: ['approve', 'reject']
+                }
+              ]
+            }
+          }
+        },
+        {
+          interruptId: 'interrupt_repository_2',
+          payload: {
+            kind: 'question',
+            question: 'Which workspace?'
           }
         }
-      }
+      ]
     });
 
-    expect(interruptedRun.status).toBe('waiting_user');
+    expect(interruptedRun.run.status).toBe('waiting_user');
+    expect(interruptedRun.events.map((event) => event.type)).toEqual([
+      'approval_requested',
+      'human_question_requested'
+    ]);
     expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 2, status: 'waiting_user' });
-    expect(repository.getPendingInterrupt(run.id)).toEqual({
+    expect(repository.getPendingInterrupts(run.id)).toEqual({
       runId: run.id,
       threadId: run.threadId,
-      interrupt: {
-        interruptId: 'interrupt_repository_1',
-        payload: {
-          kind: 'approval',
-          request: {
-            actionRequests: [
-              {
-                name: 'run_shell_command',
-                args: {
-                  command: 'git status'
+      interrupts: [
+        {
+          interruptId: 'interrupt_repository_1',
+          payload: {
+            kind: 'approval',
+            request: {
+              actionRequests: [
+                {
+                  name: 'run_shell_command',
+                  args: {
+                    command: 'git status'
+                  }
                 }
-              }
-            ],
-            reviewConfigs: [
-              {
-                actionName: 'run_shell_command',
-                allowedDecisions: ['approve', 'reject']
-              }
-            ]
+              ],
+              reviewConfigs: [
+                {
+                  actionName: 'run_shell_command',
+                  allowedDecisions: ['approve', 'reject']
+                }
+              ]
+            }
+          }
+        },
+        {
+          interruptId: 'interrupt_repository_2',
+          payload: {
+            kind: 'question',
+            question: 'Which workspace?'
           }
         }
-      }
+      ]
     });
 
-    const resumedRun = repository.resumeRunAtomically({
+    const firstDispatch = repository.beginResumeDispatch({
       expectedStateVersion: 2,
       expectedStatus: 'waiting_user',
+      interruptId: 'interrupt_repository_1',
       runId: run.id
     });
 
-    expect(resumedRun).toMatchObject({ status: 'running' });
-    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 3, status: 'running' });
-    expect(repository.getPendingInterrupt(run.id)).toBeNull();
+    expect(firstDispatch.run).toMatchObject({ status: 'dispatch_pending' });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toHaveLength(2);
+
+    const rolledBack = repository.rollbackResumeDispatch({
+      expectedStateVersion: firstDispatch.stateVersion,
+      expectedStatus: 'dispatch_pending',
+      runId: run.id
+    });
+
+    expect(rolledBack.run).toMatchObject({ status: 'waiting_user' });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toHaveLength(2);
+
+    const secondDispatch = repository.beginResumeDispatch({
+      expectedStateVersion: rolledBack.stateVersion,
+      expectedStatus: 'waiting_user',
+      interruptId: 'interrupt_repository_1',
+      runId: run.id
+    });
+    const resumed = repository.commitResumeDispatch({
+      audit: {
+        type: 'approval_decision',
+        payload: {
+          interruptId: 'interrupt_repository_1',
+          decisions: [{ type: 'approve' }]
+        }
+      },
+      expectedStateVersion: secondDispatch.stateVersion,
+      expectedStatus: 'dispatch_pending',
+      interruptId: 'interrupt_repository_1',
+      runId: run.id
+    });
+
+    expect(resumed.run).toMatchObject({ status: 'running' });
+    expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 6, status: 'running' });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+      {
+        interruptId: 'interrupt_repository_2',
+        payload: {
+          kind: 'question',
+          question: 'Which workspace?'
+        }
+      }
+    ]);
+  });
+
+  it('reconciles a running partial resume back to waiting_user when another projection remains', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Recover the remaining question'
+    });
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts: [
+        {
+          interruptId: 'interrupt_partial_first',
+          payload: {
+            kind: 'question',
+            question: 'First answer?'
+          }
+        },
+        {
+          interruptId: 'interrupt_partial_remaining',
+          payload: {
+            kind: 'question',
+            question: 'Remaining answer?'
+          }
+        }
+      ]
+    });
+    const dispatch = repository.beginResumeDispatch({
+      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
+      expectedStatus: 'waiting_user',
+      interruptId: 'interrupt_partial_first',
+      runId: run.id
+    });
+    repository.commitResumeDispatch({
+      audit: {
+        type: 'human_question_answered',
+        payload: {
+          interruptId: 'interrupt_partial_first',
+          answer: 'First answer'
+        },
+        sessionMessage: {
+          content: 'First answer',
+          workspaceHash: null
+        }
+      },
+      expectedStateVersion: dispatch.stateVersion,
+      expectedStatus: 'dispatch_pending',
+      interruptId: 'interrupt_partial_first',
+      runId: run.id
+    });
+    seedCheckpoint(run.threadId);
+
+    repository.reconcileStartupRuns();
+
+    expect(repository.getRunTransitionState(run.id)).toEqual({
+      stateVersion: 5,
+      status: 'waiting_user'
+    });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+      {
+        interruptId: 'interrupt_partial_remaining',
+        payload: {
+          kind: 'question',
+          question: 'Remaining answer?'
+        }
+      }
+    ]);
+  });
+
+  it('rolls back question audit and session message writes as one resume transaction', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Answer transactionally'
+    });
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts: [
+        {
+          interruptId: 'interrupt_question_transaction',
+          payload: {
+            kind: 'question',
+            question: 'Transaction question?'
+          }
+        }
+      ]
+    });
+    const dispatch = repository.beginResumeDispatch({
+      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
+      expectedStatus: 'waiting_user',
+      interruptId: 'interrupt_question_transaction',
+      runId: run.id
+    });
+    db.exec(`
+      CREATE TRIGGER fail_resume_question_session_message
+      BEFORE INSERT ON session_messages
+      BEGIN
+        SELECT RAISE(ABORT, 'resume_question_session_message_failed');
+      END;
+    `);
+
+    expect(() =>
+      repository.commitResumeDispatch({
+        audit: {
+          type: 'human_question_answered',
+          payload: {
+            interruptId: 'interrupt_question_transaction',
+            answer: 'Must not persist'
+          },
+          sessionMessage: {
+            content: 'Must not persist',
+            workspaceHash: null
+          }
+        },
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        interruptId: 'interrupt_question_transaction',
+        runId: run.id
+      })
+    ).toThrow('resume_question_session_message_failed');
+
+    expect(repository.getRunTransitionState(run.id)).toEqual({
+      stateVersion: dispatch.stateVersion,
+      status: 'dispatch_pending'
+    });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+      {
+        interruptId: 'interrupt_question_transaction',
+        payload: {
+          kind: 'question',
+          question: 'Transaction question?'
+        }
+      }
+    ]);
+    expect(repository.listSessionMessages({ threadId: run.threadId }).map((message) => message.content)).toEqual([]);
+    expect(repository.listThreadEvents(run.threadId).some((event) => event.type === 'human_question_answered')).toBe(false);
+    expect(
+      repository.listThreadEvents(run.threadId).some((event) => {
+        return (
+          event.type === 'message' &&
+          typeof event.payload === 'object' &&
+          event.payload !== null &&
+          Reflect.get(event.payload, 'content') === 'Must not persist'
+        );
+      })
+    ).toBe(false);
+  });
+
+  it('does not restore a stale waiting projection when the latest checkpoint has no interrupt', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Do not restore stale projection'
+    });
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts: [
+        {
+          interruptId: 'interrupt_stale_projection',
+          payload: {
+            kind: 'question',
+            question: 'Stale?'
+          }
+        }
+      ]
+    });
+    seedCheckpoint(run.threadId);
+    db.prepare(
+      `INSERT INTO langgraph_checkpoints
+       (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      run.threadId,
+      '',
+      'checkpoint_restart_reconcile_z',
+      'checkpoint_restart_reconcile',
+      'json',
+      Buffer.from('{}'),
+      'json',
+      Buffer.from('{}'),
+      '2026-07-17T01:00:01.000Z'
+    );
+
+    repository.reconcileStartupRuns();
+
+    expect(repository.getRun(run.id).status).toBe('interrupted');
+  });
+
+  it('orders question resume message and audit events after the requested event', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Record question order'
+    });
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts: [
+        {
+          interruptId: 'interrupt_question_order',
+          payload: {
+            kind: 'question',
+            question: 'Order question?'
+          }
+        }
+      ]
+    });
+    const dispatch = repository.beginResumeDispatch({
+      expectedStateVersion: repository.getRunTransitionState(run.id).stateVersion,
+      expectedStatus: 'waiting_user',
+      interruptId: 'interrupt_question_order',
+      runId: run.id
+    });
+    repository.commitResumeDispatch({
+      audit: {
+        type: 'human_question_answered',
+        payload: {
+          interruptId: 'interrupt_question_order',
+          answer: 'Ordered answer'
+        },
+        sessionMessage: {
+          content: 'Ordered answer',
+          workspaceHash: null
+        }
+      },
+      expectedStateVersion: dispatch.stateVersion,
+      expectedStatus: 'dispatch_pending',
+      interruptId: 'interrupt_question_order',
+      runId: run.id
+    });
+
+    const runEvents = repository.listThreadEvents(run.threadId).filter((event) => event.runId === run.id);
+    expect(runEvents.slice(-3).map((event) => event.type)).toEqual([
+      'human_question_requested',
+      'message',
+      'human_question_answered'
+    ]);
+    expect(repository.listSessionMessages({ threadId: run.threadId }).map((message) => message.content)).toEqual([
+      'Ordered answer'
+    ]);
   });
 
   it('applies run status transitions with status and state-version CAS', () => {
@@ -605,6 +931,12 @@ describe('AgentSessionRepository', () => {
       threadKind: 'chat',
       userInput: 'Wait for explicit approval'
     });
+    const resumeDispatchPending = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Restart while dispatching a resume'
+    });
 
     transitionRun(repository, dispatchPending.id, 'dispatch_pending');
     transitionRun(repository, running.id, 'running');
@@ -615,18 +947,43 @@ describe('AgentSessionRepository', () => {
       expectedStatus: waitingUserState.status,
       runId: waitingUser.id,
       threadId: waitingUser.threadId,
-      interrupt: {
-        interruptId: 'interrupt_restart_reconcile',
-        payload: {
-          kind: 'approval',
-          request: {
-            actionRequests: [],
-            reviewConfigs: []
+      interrupts: [
+        {
+          interruptId: 'interrupt_restart_reconcile',
+          payload: {
+            kind: 'approval',
+            request: {
+              actionRequests: [],
+              reviewConfigs: []
+            }
           }
         }
-      }
+      ]
     });
-    for (const run of [waitingNextTurn, dispatchPending, running, recovering, waitingUser]) {
+    const resumeWaitingState = repository.getRunTransitionState(resumeDispatchPending.id);
+    repository.markRunInterrupted({
+      expectedStateVersion: resumeWaitingState.stateVersion,
+      expectedStatus: resumeWaitingState.status,
+      runId: resumeDispatchPending.id,
+      threadId: resumeDispatchPending.threadId,
+      interrupts: [
+        {
+          interruptId: 'interrupt_resume_dispatch_restart',
+          payload: {
+            kind: 'question',
+            question: 'Resume after restart?'
+          }
+        }
+      ]
+    });
+    const resumeDispatchState = repository.getRunTransitionState(resumeDispatchPending.id);
+    repository.beginResumeDispatch({
+      expectedStateVersion: resumeDispatchState.stateVersion,
+      expectedStatus: resumeDispatchState.status,
+      interruptId: 'interrupt_resume_dispatch_restart',
+      runId: resumeDispatchPending.id
+    });
+    for (const run of [waitingNextTurn, dispatchPending, running, recovering, waitingUser, resumeDispatchPending]) {
       seedCheckpoint(run.threadId);
     }
 
@@ -682,8 +1039,15 @@ describe('AgentSessionRepository', () => {
     expect(repository.getRunTransitionState(recovering.id).stateVersion).toBe(3);
     expect(db.prepare("SELECT COUNT(*) AS count FROM agent_outbox WHERE event_type = 'run_failed'").get()).toEqual({ count: 4 });
     expect(repository.getRun(waitingUser.id).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupt(waitingUser.id)).toMatchObject({
-      interrupt: { interruptId: 'interrupt_restart_reconcile' }
+    expect(repository.getPendingInterrupts(waitingUser.id)).toMatchObject({
+      interrupts: [{ interruptId: 'interrupt_restart_reconcile' }]
+    });
+    expect(repository.getRunTransitionState(resumeDispatchPending.id)).toEqual({
+      stateVersion: 4,
+      status: 'waiting_user'
+    });
+    expect(repository.getPendingInterrupts(resumeDispatchPending.id)).toMatchObject({
+      interrupts: [{ interruptId: 'interrupt_resume_dispatch_restart' }]
     });
 
     repository.reconcileStartupRuns();
@@ -956,6 +1320,21 @@ function seedCheckpoint(threadId: string): void {
     Buffer.from('{}'),
     'json',
     Buffer.from('{}'),
+    '2026-07-17T01:00:00.000Z'
+  );
+  db.prepare(
+    `INSERT INTO langgraph_checkpoint_writes
+     (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    threadId,
+    '',
+    'checkpoint_restart_reconcile',
+    'task_restart_reconcile',
+    -3,
+    '__interrupt__',
+    'json',
+    Buffer.from('[]'),
     '2026-07-17T01:00:00.000Z'
   );
 }

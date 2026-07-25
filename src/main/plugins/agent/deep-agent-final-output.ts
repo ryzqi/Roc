@@ -7,24 +7,28 @@ export function readInterrupted(run: unknown): boolean {
   return typeof run === 'object' && run !== null && Reflect.get(run, 'interrupted') === true;
 }
 
-export function readRunInterruptedEvent(run: unknown, runId: string, threadId: string): ChatRunEvent {
+export function readRunInterruptedEvents(run: unknown, runId: string, threadId: string): ChatRunEvent[] {
   const interrupts = typeof run === 'object' && run !== null ? Reflect.get(run, 'interrupts') : undefined;
-  const firstInterrupt = Array.isArray(interrupts) ? interrupts[0] : undefined;
-  if (typeof firstInterrupt !== 'object' || firstInterrupt === null) {
+  if (!Array.isArray(interrupts) || interrupts.length === 0) {
     throw new Error('agent_interrupt_payload_missing');
   }
-  const interruptId = Reflect.get(firstInterrupt, 'interruptId');
-  const payload = Reflect.get(firstInterrupt, 'payload');
-  if (typeof interruptId !== 'string') {
-    throw new Error('agent_interrupt_payload_invalid');
-  }
-  return {
-    type: 'run_interrupted',
-    runId,
-    threadId,
-    interruptId,
-    payload: normalizeInterruptPayload(payload)
-  };
+  return interrupts.map((interrupt) => {
+    if (typeof interrupt !== 'object' || interrupt === null) {
+      throw new Error('agent_interrupt_payload_invalid');
+    }
+    const interruptId = Reflect.get(interrupt, 'interruptId');
+    const payload = Reflect.get(interrupt, 'payload');
+    if (typeof interruptId !== 'string' || interruptId.length === 0) {
+      throw new Error('agent_interrupt_payload_invalid');
+    }
+    return {
+      type: 'run_interrupted',
+      runId,
+      threadId,
+      interruptId,
+      payload: normalizeInterruptPayload(payload)
+    } satisfies ChatRunEvent;
+  });
 }
 
 function normalizeInterruptPayload(payload: unknown): ChatInterruptPayload {

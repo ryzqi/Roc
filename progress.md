@@ -3,9 +3,9 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`639c019 feat(agent): converge context compaction across subagents`。
+- HEAD：`873df23 fix(agent): align sqlite saver with upstream contracts`。
 - Stage 0-4：完成并提交。
-- Stage 5：in progress；Part 1、Part 2 已提交；Part 3A 已完成实现、双轴 review 与 focused verification，等待提交；Part 3B/3C pending。
+- Stage 5：in progress；Part 1、Part 2、Part 3A 已提交；Part 3B changed, partially verified；Part 3C pending。
 - Stage 6-7：pending。
 - 用户未跟踪的 `plan.md` 保留为当前验收源，不纳入本次文档整理范围。
 
@@ -24,6 +24,7 @@
 | Stage 4.5 | Effect state、execution path 和 restart reconcile 完成。 | `7e1ed9f` |
 | Stage 5.1 | Context hard budget、reducer compaction 与 scoped artifact recovery 完成。 | `b223636` |
 | Stage 5.2 | Main/subagent context pipeline 收敛并完成 native A/B。 | `639c019` |
+| Stage 5.3A | SQLite saver 对齐 upstream contract。 | `873df23` |
 
 ## 2026-07-19 - Stage 5 Part 1 WIP
 
@@ -96,4 +97,38 @@
 - pending writes 对齐 upstream insertion order；两个 task 的完整三元组在 getTuple/list 双路径精确一致，deleteThread 后重建同 checkpoint id 证明 writes 无残留。
 - 双轴 review 首轮发现 filtered list O(N) BLOB/N+1 查询、无效 timestamp fixture、delete writes 覆盖缺口和 pendingWrites Map 弱断言；全部修复。最终 Standards/Spec 复核均无 finding。
 - 新鲜验证：focused 3 files / 11 tests、`pnpm typecheck`、strict unused scan、`git diff --check` 通过。
-- 状态：**Verified passing; pending commit**。下一步 Part 3B interrupt projection/restart。
+- 状态：**Verified passing; committed**。提交：`873df23`。下一步 Part 3B interrupt projection/restart。
+
+## 2026-07-24 - Stage 5 Part 3B Resume
+
+- 从四份计划文件、Git 历史、工作树与 CodeGraph 恢复上下文；实际 HEAD 为 `873df23`，旧账本中的 Part 3A pending 状态已纠正。
+- 当前未提交 diff：pending interrupt collection schema/migration/rebuild、runtime/repository/renderer collection projection、interrupt-id resume map、真实 restart tests 和 multiple-interrupt tests。
+- 新鲜 focused verification：8 files / 52 tests 通过。
+- Review 发现 plan 5.3 阻断：projection 在 executor dispatch 前删除；现有 executor-missing test 不是 dispatch rejection test。
+- 下一步：新增稳定红灯覆盖 executor dispatch rejection；实现两阶段 resume claim/commit/rollback；复跑 focused tests 后做 Part 3B 完整 review。
+- 状态：**Changed, partially verified**。
+
+## 2026-07-24 - Stage 5 Part 3B Review Continuation
+
+- session catchup 检出 61 条未同步上下文；已用当前 diff、计划文件和 reviewer 消息恢复，不重复已完成工作。
+- dispatch rejection 红灯与两阶段 claim/prime/commit/rollback 已实现；runtime multiple-interrupt、repository、typecheck、strict unused 与 diff check 曾通过，但代码仍在变动，最终需重跑。
+- Preliminary review 新增阻断：resume audit 不在 commit transaction；部分 resume commit 后崩溃会丢剩余可恢复状态；interrupt event 可能早于 pending collection 持久化；projection 仍复制 immutable run 配置；legacy rebuild fallback 缺直接断言；生产 multiple-interrupt partial-map 语义未证明。
+- 下一步：先用 CodeGraph 核对 runtime/repository/executor 调用链，补稳定回归，再做最小事务与时序修复；diff 稳定后请求 Standards/Spec 最终复核并执行 risk review。
+- CodeGraph 已确认 `resumeRun()` 在 `commitResumeDispatch()` 后才写 approval/question audit，且 `executeDeepAgentRun()` 逐事件先 publish、流结束后才批量 `handleRunInterrupted()`；首事件 prime 还可能只是 agent stream 前的 hook event。
+- Spec reviewer 又确认 obsolete projection columns 与 rebuild source/target 查询必须联动修改；不能让旧列删除后的读取失败静默变成空 collection。
+- 无写入 LangGraph probe 已证明 pinned 版本支持 sequential partial resume map：第一次回答一个并行 interrupt 后只保留另一项，第二次回答后得到两个具体业务结果。
+- 状态：**Changed, partially verified; preliminary review findings unresolved**。
+- 第一轮 `pnpm typecheck` 失败：仅有 `session-repository.test.ts` 两处旧调用未适配新事务返回/required audit；已按新合同更新测试，生产类型未放宽。
+
+## 2026-07-24 - Stage 5 Part 3B Current Resume
+
+- 按用户要求从 `findings.md`、`task_plan.md`、`progress.md`、`plan.md`、当前 diff 与 CodeGraph 调用链继续；session catchup 无新增未同步输出。
+- 当前权威状态仍为 Part 3B changed, partially verified；preliminary review 阻断未闭环，不提交。
+- 本轮边界：只完成 Part 3B review finding、验证、独立 review 与提交；完成后再进入 Part 3C。
+
+## 2026-07-25 - Stage 5 Part 3B Review Fixes
+
+- 双轴首轮 review 发现两项 P1：prime 在 durable audit 前消费真实 executor，及 startup 只信 projection 未核对 current checkpoint；均未提交。
+- 移除 resume pre-consume。`execute()` 返回 stream 作为 dispatch acceptance；commit 之后才消费 stream，避免 SessionStart、`Command(resume)`、模型与工具在 audit/projection durable 前运行。executor promise rejection 仍 rollback waiting；已提交 stream 的失败按 run failure 处理。
+- startup reconcile 现在要求合法 collection 与最新 main checkpoint 的 `__interrupt__` write 同时存在；新增 stale projection regression。真实 Deep Agents + Roc saver partial restart、repository、runtime multiple 共 27 tests 与 `pnpm typecheck` 通过。
+- 下一步：完整 Part 3B focused/quality gates，重跑 Standards/Spec review；无 finding 后 broad verification 与独立提交。

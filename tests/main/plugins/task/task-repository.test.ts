@@ -341,21 +341,15 @@ function insertAgentThreadResidue(input: { runId: string; threadId: string; crea
   agentDb
     .prepare(
       `INSERT INTO agent_pending_interrupts
-       (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-        workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.runId,
       input.threadId,
       'interrupt_delete_thread',
+      0,
       '{}',
-      'task',
-      'workbench',
-      'background_task',
-      'value',
-      'F:\\Code\\Roc',
-      '[]',
       input.createdAt,
       input.createdAt
     );

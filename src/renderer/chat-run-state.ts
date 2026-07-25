@@ -177,35 +177,35 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   if (event.type === 'run_interrupted') {
+    const pendingInterrupt: ChatPendingInterrupt =
+      event.payload.kind === 'approval'
+        ? {
+            kind: 'approval',
+            interruptId: event.interruptId,
+            ...event.payload.request
+          }
+        : {
+            interruptId: event.interruptId,
+            ...event.payload
+          };
     return {
       ...state,
       threadId: event.threadId,
       status: 'waiting_user',
-      pendingInterrupts:
-        event.payload.kind === 'approval'
-          ? [
-              {
-                kind: 'approval',
-                interruptId: event.interruptId,
-                ...event.payload.request
-              }
-            ]
-          : [
-              {
-                interruptId: event.interruptId,
-                ...event.payload
-              }
-            ],
+      pendingInterrupts: upsertPendingInterrupt(state.pendingInterrupts, pendingInterrupt),
       resumeBusy: false
     };
   }
 
   if (event.type === 'run_resumed') {
+    const pendingInterrupts = state.pendingInterrupts.filter(
+      (interrupt) => interrupt.interruptId !== event.interruptId
+    );
     return {
       ...state,
       threadId: event.threadId,
-      status: 'running',
-      pendingInterrupts: state.pendingInterrupts.filter((interrupt) => interrupt.interruptId !== event.interruptId),
+      status: pendingInterrupts.length === 0 ? 'running' : 'waiting_user',
+      pendingInterrupts,
       resumeBusy: false
     };
   }
@@ -251,6 +251,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       status: 'failed',
       errorCode: event.code,
       errorMessage: event.message,
+      pendingInterrupts: [],
       recoveryAttempt: null,
       retryable: event.retryable,
       resumeBusy: false
@@ -258,6 +259,19 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   return state;
+}
+
+function upsertPendingInterrupt(
+  interrupts: readonly ChatPendingInterrupt[],
+  pendingInterrupt: ChatPendingInterrupt
+): ChatPendingInterrupt[] {
+  const existingIndex = interrupts.findIndex(
+    (interrupt) => interrupt.interruptId === pendingInterrupt.interruptId
+  );
+  if (existingIndex === -1) {
+    return [...interrupts, pendingInterrupt];
+  }
+  return interrupts.map((interrupt, index) => (index === existingIndex ? pendingInterrupt : interrupt));
 }
 
 function applyAssistantBlock(state: ChatRunState, block: ChatAssistantBlock): ChatRunState {

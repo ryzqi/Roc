@@ -129,21 +129,15 @@ function insertPendingInterrupt(runId: string, threadId: string): void {
   agentDb
     .prepare(
       `INSERT INTO agent_pending_interrupts
-       (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-        workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       runId,
       threadId,
       'interrupt_1',
+      0,
       '{"kind":"approval"}',
-      'task',
-      'workbench',
-      null,
-      'null',
-      null,
-      null,
       '2026-05-01T00:00:00.000Z',
       '2026-05-01T00:00:00.000Z'
     );

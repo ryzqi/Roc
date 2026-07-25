@@ -16,7 +16,7 @@ Stage 5 - Context, Checkpoint, HITL Conformance
 
 **Status:** in_progress
 
-Stage 5 Part 1 与 Part 2 已提交；Part 3A saver conformance 已完成实现、双轴 review 与 focused verification，等待提交；随后依次处理 Part 3B interrupt/restart 与 Part 3C retention。
+Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/restart。collection projection、interrupt-id resume map 与两阶段 dispatch 已有部分实现和窄验证；preliminary review 仍要求闭环 resume audit 原子性、部分 resume 后崩溃、interrupt 发布/持久化竞态、projection 旧配置列清理，以及真实生产 multiple-interrupt 语义。完成 review、全量验证和独立提交后再处理 Part 3C retention。
 
 ## Phase Status
 
@@ -27,7 +27,7 @@ Stage 5 Part 1 与 Part 2 已提交；Part 3A saver conformance 已完成实现�
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019` 已提交；Part 3A verified，等待提交。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23` 已提交；Part 3B changed, partially verified。 |
 | Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
@@ -60,12 +60,14 @@ Stage 5 Part 1 与 Part 2 已提交；Part 3A saver conformance 已完成实现�
 
 - [x] 用同一套上游 `BaseCheckpointSaver` 行为集覆盖 get/list/put/putWrites/delete。
 - [x] 覆盖 metadata filter、before/limit ordering、parent config 和 special writes。
+- [x] 独立 review、focused verification 与提交 `873df23` 完成。
 
 #### Part 3B - Interrupt Projection And Restart
 
 - [ ] pending interrupt 改为 collection projection；checkpoint 保持执行真相。
 - [ ] resume 使用 `interruptId -> value` map，dispatch 失败时保留 waiting projection。
 - [ ] 用真实 Deep Agents + Roc saver 覆盖 approval、ask_user、multiple interrupts 和跨进程 restart/resume。
+- [ ] focused tests、typecheck、strict unused、IPC check、build、full Vitest、diff check 与独立 review 通过后提交。
 
 #### Part 3C - Recovery-safe Retention
 
@@ -100,6 +102,12 @@ Stage 5 Part 1 与 Part 2 已提交；Part 3A saver conformance 已完成实现�
 | compiled subagent 首次 typecheck 未传播声明式校验收窄 | 1 | `requireDeclarativeSubagents` 显式返回 `SubAgent[]`，不放宽 opaque subagent 拒绝合同。 |
 | 真实 route integration 首次调用缺少 `forge_error_tracker`，summary flush 随后因 thread fixture 缺失触发外键失败 | 2 | 按现有 state contract 初始化 tracker，并先持久化 `agent_threads`；未放宽生产 schema 或外键。 |
 | 恢复会话时两次 `functions.exec` 并行读取脚本因 JavaScript 括号/语句结构错误未执行 | 2 | 改为更简单的 `Promise.all` 调用结构；仓库未被修改，后续读取成功。 |
+| 读取四个测试片段的并行 PowerShell 命令因一段字符串未闭合退出 1 | 1 | 改用各自 `Get-Content | Select-Object` 命令并行读取；未修改仓库。 |
+| Part 3B 第一轮 typecheck 报 repository 新返回结构与 required resume audit 的两个旧测试调用未迁移 | 1 | 更新测试为 `interruptedRun.run.status`，并传入具体 approval audit；不放宽生产类型。 |
 | 2026-07-21 focused context 命令经 `pnpm test -- ...` 实际执行全套 301 files，4 tests 失败 | 1 | 3 个 pipeline 用例触发 `context_budget_exhausted`，1 个质量门发现 `context-token-budget.ts` 空 `catch`；先按失败边界修复，再改用 `pnpm exec vitest run <files>` 跑窄测试。 |
 | 新增 summary budget 测试后 10-file focused run 有 6 个 pipeline 失败 | 1 | 测试计数器匹配了不存在的 `You summarize old runtime context.`，真实 system message 为 `... for Roc.`；修正测试锚点，不放宽生产预算。 |
 | 使用 PowerShell 通配路径检索 pnpm 声明时，`rg` 将 `node_modules/.pnpm/langchain@*` 当作字面路径并返回 os error 123 | 1 | 改用 `.pnpm` 根目录检索；未修改仓库。 |
+| Part 3B 当前 focused/typecheck 并行验证被测试类型错误阻断：`session-repository.test.ts:468` 的 `payload.content` 未收窄 | 1 | 已对 unknown payload 做 object/null 收窄并通过 `Reflect.get` 精确断言；生产类型未放宽。 |
+| Part 3B runtime red test：resume audit 事务失败后 run 停在 `dispatch_pending` | 1 | 增加 primed stream 显式 close；commit 异常时 abort、rollback 到 `waiting_user` 后关闭 stream，再抛出原错误。 |
+| Part 3B 双轴 review worker 失败 | 1 | Standards worker SSE idle timeout，Spec worker 429；无 review 结论，修复后重试。 |
+| Part 3B 查询 LangGraph serializer 时 PowerShell 将 pnpm 通配目录当作字面路径，返回 os error 123 | 1 | 改用 `node_modules/.pnpm` 根目录配合 `rg --glob`；不重试通配路径。 |

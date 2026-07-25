@@ -191,10 +191,9 @@ function insertAgentHistoryResidue(input: { runId: string; threadId: string; cre
   ).run('smsg_delete_thread', input.threadId, 'assistant', 'delete thread residue', 10, 'visible', 'workspace_hash', input.createdAt);
   db.prepare(
     `INSERT INTO agent_pending_interrupts
-     (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
-      workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(input.runId, input.threadId, 'interrupt_delete_thread', '{}', 'chat', null, null, 'null', null, null, input.createdAt, input.createdAt);
+     (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(input.runId, input.threadId, 'interrupt_delete_thread', 0, '{}', input.createdAt, input.createdAt);
   db.prepare('INSERT INTO agent_run_events (run_id, sequence, event_json, created_at) VALUES (?, ?, ?, ?)')
     .run(input.runId, 1, '{"type":"started"}', input.createdAt);
   db.prepare(

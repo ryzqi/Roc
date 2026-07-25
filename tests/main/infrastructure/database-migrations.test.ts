@@ -122,7 +122,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 9 without changing earlier versions', () => {
+  it('applies agent migrations through version 11 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -140,12 +140,60 @@ describe('database migrations', () => {
       { version: 6, name: 'agent_event_sequence_cursors' },
       { version: 7, name: 'agent_outbox_monotonic_sequence' },
       { version: 8, name: 'agent_notification_metrics' },
-      { version: 9, name: 'agent_effect_execution_identity' }
+      { version: 9, name: 'agent_effect_execution_identity' },
+      { version: 10, name: 'agent_pending_interrupt_collection' },
+      { version: 11, name: 'agent_pending_interrupt_projection_minimal' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 9
+      currentVersion: 11
     });
+  });
+
+  it('migrates the v9 single pending interrupt projection into an ordered collection', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 9),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES ('thread_interrupt_migration', 'chat', 'Migration', 'Migration', 'waiting_user', ?, ?)`
+    ).run('2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z');
+    db.prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+       VALUES ('run_interrupt_migration', 'thread_interrupt_migration', 1, 'Migration', 'waiting_user', ?, NULL,
+         'openai', 'gpt-test', '{"mcpServers":[],"skills":[]}', NULL, NULL, NULL)`
+    ).run('2026-07-10T01:00:00.000Z');
+    db.prepare(
+      `INSERT INTO agent_pending_interrupts
+       (run_id, thread_id, interrupt_id, payload_json, mode, task_source, workflow_hint,
+        workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+       VALUES ('run_interrupt_migration', 'thread_interrupt_migration', 'interrupt-legacy',
+         '{"kind":"question","question":"Legacy?"}', 'snapshot', NULL, NULL, 'null', NULL, NULL, ?, ?)`
+    ).run('2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z');
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(
+      db.prepare('SELECT run_id, interrupt_id, position FROM agent_pending_interrupts ORDER BY position').all()
+    ).toEqual([{ run_id: 'run_interrupt_migration', interrupt_id: 'interrupt-legacy', position: 0 }]);
+    expect(
+      (db.prepare('PRAGMA table_info(agent_pending_interrupts)').all() as Array<{ name: string }>).map((column) => column.name)
+    ).toEqual(['run_id', 'thread_id', 'interrupt_id', 'position', 'payload_json', 'created_at', 'updated_at']);
+    db.prepare(
+      `INSERT INTO agent_pending_interrupts
+       (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+       VALUES ('run_interrupt_migration', 'thread_interrupt_migration', 'interrupt-second', 1,
+         '{"kind":"question","question":"Second?"}', ?, ?)`
+    ).run('2026-07-10T01:00:01.000Z', '2026-07-10T01:00:01.000Z');
+    expect(db.prepare('SELECT COUNT(*) FROM agent_pending_interrupts').pluck().get()).toBe(2);
   });
 
   it('migrates v8 tool effects without treating a restarted effect as still in progress', () => {

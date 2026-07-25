@@ -37,11 +37,30 @@
 - pending writes 按 upstream insertion order 返回；regular write 保留首次值，`__error__`、`__scheduled__`、`__interrupt__`、`__resume__` 重试覆盖原值且保持位置。
 - shared conformance 精确覆盖两个 task 的完整 pending-write tuple、getTuple/list 双路径和 delete 后 write 无残留；不再用 Map 丢弃 taskId、重复 channel 或顺序。
 - 双轴最终 review 无 Standards/Spec finding；focused 3 files / 11 tests、typecheck、strict unused 与 diff check 通过。
-- 状态：**Verified passing; pending commit**。
+- 状态：**Verified passing; committed**。提交 `873df23`。
+
+### Stage 5 Part 3B Interrupt Projection Review
+
+- 当前工作树已把 `agent_pending_interrupts` 迁移为 `(run_id, interrupt_id)` collection，并用 `position` 保持 framework interrupt 顺序；rebuild 同时兼容 v9 单行 schema 与 v10 collection schema。
+- executor adapter 已投影全部 framework interrupts；runtime 与 renderer 均按 interrupt id 维护 collection；resume payload 已改为 `{ [interruptId]: value }`。
+- 真实 LangGraph/Deep Agents + `RocSqliteCheckpointer` restart tests 已覆盖 approval、单个 ask_user、并行 ask_user 与 DeepAgent multiple ask_user。
+- 已补两阶段 resume dispatch：`beginResumeDispatch` claim 后调用 executor 并取得有效 stream；commit 事务同时写 canonical audit、session message（question）与 projection deletion。executor promise rejection 或 audit 事务失败均 rollback 并保留 projection。
+- Review finding 已修复：不再在 commit 前消费 executor stream。SessionStart、`Command(resume)`、model/tool execution 只在 commit 后的 detached run 内发生；已提交 stream 的首事件失败按 run failure 处理。
+- Review finding 已修复：`executeDeepAgentRun` 缓冲全部 `run_interrupted`，先事务写 collection projection，再向 renderer 发布；renderer 不会在投影未落库时 resume。
+- Review finding 已修复：startup 恢复 waiting projection 除 collection 合法性外，必须命中最新 main checkpoint 的 `__interrupt__` pending write。stale projection 遇到无 interrupt 的新 checkpoint 不会回到 `waiting_user`；repository regression 与真实 Deep Agents + Roc saver restart 已通过。
+- Preliminary Spec finding：`plan.md` 要求 pending projection 删除复制的 mode/workspace/capability 配置；v10 schema 仍保留 `mode`、`task_source`、`workflow_hint`、`workspace_path_state`、`workspace_path`、`explicit_skill_ids_json`，需在本 migration 中删除。
+- Preliminary Spec/test finding：必须用生产 runtime/executor 路径证明真实 parallel interrupt 的完整 map 或 partial-map 合同；rebuild 的 legacy `position=0` fallback 也需要直接结果断言。
+- Pinned LangGraph probe（`MemorySaver` + 两个并行 `interrupt()`）确认 partial resume map 可用：第一次只提交一个 interrupt id 后，已回答分支写入 state，另一 id 继续出现在 `__interrupt__`；第二次提交剩余 id 后完成。产品可保留单 interrupt IPC，但仍需用 Roc saver 与生产 runtime/executor 固化该合同。
+- Preliminary Spec/rebuild finding：删除 obsolete columns 后 rebuild 不能无条件读取旧列；必须同时支持 legacy source 表和当前 minimal 表，否则 `readRows` 的失败路径会静默丢掉 pending projection。旧 v8/single-row fixture 还要断言 row、interrupt id 与 `position=0`。
+- 状态：**Changed, partially verified; preliminary review findings unresolved**。
 
 ### Remaining Stage 5 Gaps
 
-- multiple interrupt projection 和 resume failure preservation 尚未完成。
+- Final review 阻断：第二个快速 resume 在 run 已变 `running` 时曾清空余下 projection；已删除该错误清理，仍需补并发回归。
+- Final review 阻断：`ChatTranscriptMessage` 仍是单 `interrupt` 字段，持久和 live transcript 都只展示 collection 首项；需扩为 collection，并同步 `chat-message-row`/`chat-view` 的逐项 resume UI。
+- Final review 阻断：commit 删除最后 projection 到 executor 实际消费之间崩溃，checkpoint 仍有 interrupt 但 repository 无 projection，restart 会 terminal；需以 checkpoint 重建 projection 或保留可恢复 dispatch intent，并补 crash/event-publish regression。
+
+- multiple interrupt collection 与 dispatch failure preservation 已有部分实现，但上述原子性、竞态、schema 和生产语义 finding 尚未完成 review closure。
 - checkpoint/artifact/event retention 规则尚未实现和验证。
 
 ### Durable Project Facts

@@ -114,11 +114,13 @@ describe('AgentPluginRuntime', () => {
       threadId: started.threadId
     });
     expect(resumePayload).toEqual({
-      decisions: [
-        {
-          type: 'approve'
-        }
-      ]
+      interrupt_resume_1: {
+        decisions: [
+          {
+            type: 'approve'
+          }
+        ]
+      }
     });
     expect(resumedTaskSource).toBe('workbench');
     expect(resumedWorkflowHint).toBe('propose_background_task');
@@ -225,7 +227,9 @@ describe('AgentPluginRuntime', () => {
     ]);
     expect(resumePayloads).toEqual([
       {
-        decisions: [{ type: 'approve' }]
+        interrupt_rebuilt_runtime: {
+          decisions: [{ type: 'approve' }]
+        }
       }
     ]);
     expect(rebuiltRepository.getRun(started.runId).status).toBe('completed');

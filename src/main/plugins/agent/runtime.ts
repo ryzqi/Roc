@@ -5,7 +5,6 @@ import type {
   AgentRuntimeStatus,
   ChatAssistantBlock,
   ChatCancelRunResult,
-  ChatInterruptPayload,
   ChatRunEventsReplayRequest,
   ChatRunEventsReplayResult,
   ChatRunEvent,
@@ -37,7 +36,7 @@ import type { AgentRunEventLog } from './run-event-log';
 import { compileRunCapabilityManifest } from './run-capability-manifest';
 import { createChatStartRunRequestFromSnapshot, createRunBudget, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
 import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
-import type { AgentSessionRepository } from './session-repository';
+import type { AgentSessionRepository, ResumeDispatchAudit } from './session-repository';
 import { toRecoveryDecision } from './recovery-policy';
 import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
 import {
@@ -58,7 +57,8 @@ export type AgentCapabilityPreviewProvider = (input: {
   workflowHint: WorkflowHint;
 }) => Promise<AgentCapabilityPreview>;
 
-type AgentResumePayload = HITLResponse | { answer: string };
+type AgentResumeValue = HITLResponse | { answer: string };
+type AgentResumePayload = Record<string, AgentResumeValue>;
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
@@ -72,6 +72,7 @@ export type AgentDeepAgentExecutor = {
 };
 
 type ExecuteRunInput = {
+  executionStream?: AsyncIterable<ChatRunEvent>;
   runId: string;
   providerId: string;
   modelId: string;
@@ -113,7 +114,7 @@ export class AgentPluginRuntime {
       threadId: string | null;
     }
   >();
-  private readonly pendingInterrupts = new Map<string, PendingInterrupt>();
+  private readonly pendingInterrupts = new Map<string, PendingInterrupt[]>();
   private readonly pendingRuns = new Set<Promise<void>>();
   private readonly scheduledRuns = new Set<NodeJS.Timeout>();
   private readonly pluginId: string;
@@ -273,10 +274,7 @@ export class AgentPluginRuntime {
         validatedAttachments: preparedAttachments.images,
         workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
       });
-      this.pendingRuns.add(pendingRun);
-      void pendingRun.finally(() => {
-        this.pendingRuns.delete(pendingRun);
-      });
+      this.trackPendingRun(pendingRun);
     }, 0);
     this.scheduledRuns.add(timer);
     return result;
@@ -334,11 +332,12 @@ export class AgentPluginRuntime {
   }
 
   async resumeRun(request: ChatResumeRunRequest): Promise<ChatResumeRunResult> {
-    const pendingInterrupt = this.resolvePendingInterrupt(request.runId);
-    if (pendingInterrupt === undefined) {
+    const pendingInterrupts = this.resolvePendingInterrupts(request.runId);
+    if (pendingInterrupts.length === 0) {
       throw new Error('chat_resume_no_pending_interrupt');
     }
-    if (request.interruptId !== pendingInterrupt.interruptId) {
+    const pendingInterrupt = pendingInterrupts.find((interrupt) => interrupt.interruptId === request.interruptId);
+    if (pendingInterrupt === undefined) {
       throw new Error('chat_resume_interrupt_mismatch');
     }
     if (request.kind !== pendingInterrupt.payload.kind) {
@@ -349,14 +348,11 @@ export class AgentPluginRuntime {
       throw new Error('chat_resume_thread_mismatch');
     }
     if (run.status !== 'waiting_user') {
-      this.pendingInterrupts.delete(request.runId);
-      this.options.repository.clearPendingInterrupt(request.runId);
       throw new Error('chat_resume_run_not_waiting_user');
     }
     if (run.modelId === null) {
       throw new Error('chat_resume_run_missing');
     }
-    const resumeState = this.options.repository.getRunTransitionState(run.id);
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
@@ -365,18 +361,87 @@ export class AgentPluginRuntime {
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
     }
-    const resumedRun = this.options.repository.resumeRunAtomically({
+    if (this.options.deepAgentExecutor === undefined) {
+      throw new Error('agent_deep_agent_executor_missing');
+    }
+    const deepAgentExecutor = this.options.deepAgentExecutor;
+    const resumeValue: AgentResumeValue =
+      request.kind === 'approval' ? { decisions: request.decisions } : { answer: request.answer };
+    const resumePayload: AgentResumePayload = {
+      [request.interruptId]: resumeValue
+    };
+    const resumeAudit: ResumeDispatchAudit =
+      request.kind === 'approval'
+        ? {
+            type: 'approval_decision',
+            payload: {
+              interruptId: request.interruptId,
+              decisions: request.decisions
+            }
+          }
+        : {
+            type: 'human_question_answered',
+            payload: {
+              interruptId: request.interruptId,
+              answer: request.answer
+            },
+            sessionMessage: {
+              content: request.answer,
+              workspaceHash: null
+            }
+          };
+    const resumeState = this.options.repository.getRunTransitionState(run.id);
+    const dispatch = this.options.repository.beginResumeDispatch({
       expectedStateVersion: resumeState.stateVersion,
       expectedStatus: resumeState.status,
+      interruptId: request.interruptId,
       runId: run.id
     });
+    const abortController = new AbortController();
+    let executionStream: AsyncIterable<ChatRunEvent>;
+    try {
+      executionStream = requireExecutionStream(
+        await deepAgentExecutor.execute({
+          abortSignal: abortController.signal,
+          modelHandle,
+          resumePayload,
+          run: dispatch.run,
+          snapshot
+        })
+      );
+    } catch (error) {
+      this.options.repository.rollbackResumeDispatch({
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        runId: run.id
+      });
+      throw error;
+    }
+    let resumed: ReturnType<AgentSessionRepository['commitResumeDispatch']>;
+    try {
+      resumed = this.options.repository.commitResumeDispatch({
+        audit: resumeAudit,
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        interruptId: request.interruptId,
+        runId: run.id
+      });
+    } catch (error) {
+      abortController.abort();
+      this.options.repository.rollbackResumeDispatch({
+        expectedStateVersion: dispatch.stateVersion,
+        expectedStatus: 'dispatch_pending',
+        runId: run.id
+      });
+      throw error;
+    }
+    const resumedRun = resumed.run;
     this.activeRuns.add(run.id);
     const resumedRequest = createChatStartRunRequestFromSnapshot(snapshot, resumedRun);
     this.activeRunMetadata.set(run.id, {
       request: resumedRequest,
       threadId: resumedRun.threadId
     });
-    const abortController = new AbortController();
     this.abortControllers.set(run.id, abortController);
     const resumedAt = new Date().toISOString();
     const result: ChatResumeRunResult = {
@@ -384,7 +449,14 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       resumedAt
     };
-    this.pendingInterrupts.delete(run.id);
+    const remainingInterrupts = pendingInterrupts.filter(
+      (interrupt) => interrupt.interruptId !== request.interruptId
+    );
+    if (remainingInterrupts.length === 0) {
+      this.pendingInterrupts.delete(run.id);
+    } else {
+      this.pendingInterrupts.set(run.id, remainingInterrupts);
+    }
     await this.publish('agent.run.resumed', result);
     await this.publishChatRunEvent({
       type: 'run_resumed',
@@ -392,46 +464,7 @@ export class AgentPluginRuntime {
       threadId: run.threadId,
       interruptId: pendingInterrupt.interruptId
     });
-    if (request.kind === 'approval') {
-      await this.recordRunTaskEvent({
-        runId: run.id,
-        threadId: run.threadId,
-        type: 'approval_decision',
-        payload: {
-          interruptId: request.interruptId,
-          decisions: request.decisions
-        }
-      });
-    }
-    if (request.kind === 'question') {
-      this.options.repository.recordEvent({
-        runId: run.id,
-        threadId: run.threadId,
-        type: 'message',
-        payload: {
-          role: 'user',
-          content: request.answer
-        }
-      });
-      this.options.repository.recordSessionMessage({
-        threadId: run.threadId,
-        role: 'user',
-        content: request.answer
-      });
-      await this.recordRunTaskEvent({
-        runId: run.id,
-        threadId: run.threadId,
-        type: 'human_question_answered',
-        payload: {
-          interruptId: request.interruptId,
-          answer: request.answer
-        }
-      });
-    }
-    const resumePayload: AgentResumePayload =
-      request.kind === 'approval'
-        ? { decisions: request.decisions }
-        : { answer: request.answer };
+    await this.publishTaskEvent(resumed.event);
     const pendingRun = this.executeRun({
       abortSignal: abortController.signal,
       enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities,
@@ -441,6 +474,7 @@ export class AgentPluginRuntime {
       modelId: modelHandle.modelId,
       providerId: modelHandle.providerId,
       request: resumedRequest,
+      executionStream,
       resumePayload,
       run: resumedRun,
       runId: run.id,
@@ -448,10 +482,7 @@ export class AgentPluginRuntime {
       threadId: resumedRun.threadId,
       workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
     });
-    this.pendingRuns.add(pendingRun);
-    pendingRun.finally(() => {
-      this.pendingRuns.delete(pendingRun);
-    });
+    this.trackPendingRun(pendingRun);
     return result;
   }
 
@@ -622,6 +653,20 @@ export class AgentPluginRuntime {
     }
   }
 
+  private trackPendingRun(pendingRun: Promise<void>): void {
+    this.pendingRuns.add(pendingRun);
+    void pendingRun.then(
+      () => {
+        this.pendingRuns.delete(pendingRun);
+      },
+      (error: unknown) => {
+        this.pendingRuns.delete(pendingRun);
+        this.recordNotificationFailure('agent_pending_run_rejected');
+        console.error('[AgentPluginRuntime] Detached run execution rejected.', error);
+      }
+    );
+  }
+
   private async recordRunTaskEvent(input: {
     runId: string;
     threadId: string;
@@ -632,6 +677,15 @@ export class AgentPluginRuntime {
     await this.publish('agent.run.task-event', input);
   }
 
+  private async publishTaskEvent(event: TaskEvent): Promise<void> {
+    await this.publish('agent.run.task-event', {
+      runId: event.runId,
+      threadId: event.threadId,
+      type: event.type,
+      payload: event.payload
+    });
+  }
+
   private async executeRun(input: ExecuteRunInput): Promise<void> {
     if (!this.activeRuns.has(input.runId)) {
       return;
@@ -639,13 +693,17 @@ export class AgentPluginRuntime {
     const startedAtMs = Date.now();
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
+    let executionStream = input.executionStream;
     while (this.activeRuns.has(input.runId)) {
       try {
         if (this.options.deepAgentExecutor === undefined) {
           throw new Error('agent_deep_agent_executor_missing');
         }
+        const currentExecutionStream = executionStream;
+        executionStream = undefined;
         const execution = await this.executeDeepAgentRun({
           abortSignal: input.abortSignal,
+          executionStream: currentExecutionStream,
           modelHandle: input.modelHandle,
           resumePayload: input.resumePayload,
           run: input.run,
@@ -817,6 +875,7 @@ export class AgentPluginRuntime {
   private async executeDeepAgentRun(input: {
     snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
+    executionStream?: AsyncIterable<ChatRunEvent>;
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
@@ -826,13 +885,27 @@ export class AgentPluginRuntime {
     const hookDisplayTexts: string[] = [];
     const successfulToolBlockIds = new Set<string>();
     const successfulToolNamesByBlockId = new Map<string, string>();
-    for await (const event of await this.options.deepAgentExecutor!.execute(input)) {
+    const pendingInterrupts: PendingInterrupt[] = [];
+    const pendingInterruptEvents: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>> = [];
+    const executionStream =
+      input.executionStream === undefined
+        ? requireExecutionStream(await this.options.deepAgentExecutor!.execute(input))
+        : input.executionStream;
+    for await (const event of executionStream) {
       if (!this.activeRuns.has(input.run.id)) {
         return {
           status: 'completed',
           assistantMessage: '',
           successfulToolNames: []
         };
+      }
+      if (event.type === 'run_interrupted') {
+        pendingInterrupts.push({
+          interruptId: event.interruptId,
+          payload: event.payload
+        });
+        pendingInterruptEvents.push(event);
+        continue;
       }
       await this.publishChatRunEvent(event);
       if (event.type === 'hook_started' || event.type === 'hook_completed') {
@@ -845,17 +918,6 @@ export class AgentPluginRuntime {
           payload: event.hook
         });
         continue;
-      }
-      if (event.type === 'run_interrupted') {
-        await this.handleRunInterrupted({
-          interruptId: event.interruptId,
-          payload: event.payload,
-          runId: input.run.id,
-          threadId: input.run.threadId
-        });
-        return {
-          status: 'interrupted'
-        };
       }
       if (event.type === 'assistant_block') {
         if (event.block.kind === 'text' && typeof event.block.text === 'string') {
@@ -884,6 +946,19 @@ export class AgentPluginRuntime {
           }
         });
       }
+    }
+    if (pendingInterrupts.length > 0) {
+      await this.handleRunInterrupted({
+        interrupts: pendingInterrupts,
+        runId: input.run.id,
+        threadId: input.run.threadId
+      });
+      for (const event of pendingInterruptEvents) {
+        await this.publishChatRunEvent(event);
+      }
+      return {
+        status: 'interrupted'
+      };
     }
     const assistantMessage = stripHookDisplayText(assistantChunks.join('').trim(), hookDisplayTexts);
     if (assistantMessage.length === 0 && successfulToolBlockIds.size === 0 && hookDisplayTexts.length === 0) {
@@ -970,63 +1045,46 @@ export class AgentPluginRuntime {
     };
   }
 
-  private resolvePendingInterrupt(runId: string): PendingInterrupt | undefined {
-    const pendingInterrupt = this.pendingInterrupts.get(runId);
-    if (pendingInterrupt !== undefined) {
-      return pendingInterrupt;
+  private resolvePendingInterrupts(runId: string): PendingInterrupt[] {
+    const pendingInterrupts = this.pendingInterrupts.get(runId);
+    if (pendingInterrupts !== undefined) {
+      return pendingInterrupts;
     }
-    const persistedInterrupt = this.options.repository.getPendingInterrupt(runId);
-    if (persistedInterrupt === null) {
-      return undefined;
+    const persistedInterrupts = this.options.repository.getPendingInterrupts(runId).interrupts;
+    if (persistedInterrupts.length > 0) {
+      this.pendingInterrupts.set(runId, persistedInterrupts);
     }
-    this.pendingInterrupts.set(runId, persistedInterrupt.interrupt);
-    return persistedInterrupt.interrupt;
+    return persistedInterrupts;
   }
 
   private async handleRunInterrupted(input: {
+    interrupts: readonly PendingInterrupt[];
     runId: string;
     threadId: string;
-    interruptId: string;
-    payload: ChatInterruptPayload;
   }): Promise<void> {
-    const pendingInterrupt: PendingInterrupt = {
-      interruptId: input.interruptId,
-      payload: input.payload
-    };
     const interruptState = this.options.repository.getRunTransitionState(input.runId);
-    this.options.repository.markRunInterrupted({
+    const interrupted = this.options.repository.markRunInterrupted({
       expectedStateVersion: interruptState.stateVersion,
       expectedStatus: interruptState.status,
+      interrupts: input.interrupts,
       runId: input.runId,
-      threadId: input.threadId,
-      interrupt: pendingInterrupt
+      threadId: input.threadId
     });
-    this.pendingInterrupts.set(input.runId, pendingInterrupt);
-    if (input.payload.kind === 'approval') {
-      await this.recordRunTaskEvent({
-        runId: input.runId,
-        threadId: input.threadId,
-        type: 'approval_requested',
-        payload: {
-          interruptId: input.interruptId,
-          ...input.payload.request
-        }
-      });
-      return;
+    this.pendingInterrupts.set(input.runId, [...input.interrupts]);
+    for (const event of interrupted.events) {
+      await this.publishTaskEvent(event);
     }
-
-    await this.recordRunTaskEvent({
-      runId: input.runId,
-      threadId: input.threadId,
-      type: 'human_question_requested',
-      payload: {
-        interruptId: input.interruptId,
-        question: input.payload.question,
-        context: input.payload.context ?? null,
-        suggestedResponses: input.payload.suggestedResponses ?? []
-      }
-    });
   }
+}
+
+function requireExecutionStream(value: unknown): AsyncIterable<ChatRunEvent> {
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+    throw new Error('agent_deep_agent_execution_stream_invalid');
+  }
+  if (typeof Reflect.get(value, Symbol.asyncIterator) !== 'function') {
+    throw new Error('agent_deep_agent_execution_stream_invalid');
+  }
+  return value as AsyncIterable<ChatRunEvent>;
 }
 
 function createRunExecutionSnapshotSeed(input: {

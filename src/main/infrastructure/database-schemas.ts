@@ -479,6 +479,76 @@ export const agentMigrations: RocDatabaseMigration[] = [
       CREATE INDEX idx_agent_tool_effects_run_status
         ON agent_tool_effects(run_id, status);
     `
+  },
+  {
+    version: 10,
+    name: 'agent_pending_interrupt_collection',
+    sql: `
+      ALTER TABLE agent_pending_interrupts RENAME TO agent_pending_interrupts_legacy;
+
+      CREATE TABLE agent_pending_interrupts (
+        run_id                  TEXT NOT NULL,
+        thread_id               TEXT NOT NULL,
+        interrupt_id            TEXT NOT NULL,
+        position                INTEGER NOT NULL DEFAULT 0,
+        payload_json            TEXT NOT NULL,
+        mode                    TEXT NOT NULL,
+        task_source             TEXT,
+        workflow_hint           TEXT,
+        workspace_path_state    TEXT NOT NULL CHECK(workspace_path_state IN ('undefined','null','value')),
+        workspace_path          TEXT,
+        explicit_skill_ids_json TEXT,
+        created_at              TEXT NOT NULL,
+        updated_at              TEXT NOT NULL,
+        PRIMARY KEY(run_id, interrupt_id),
+        UNIQUE(run_id, position),
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id),
+        FOREIGN KEY(thread_id) REFERENCES agent_threads(id)
+      );
+
+      INSERT INTO agent_pending_interrupts
+        (run_id, thread_id, interrupt_id, position, payload_json, mode, task_source, workflow_hint,
+         workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at)
+      SELECT run_id, thread_id, interrupt_id, 0, payload_json, mode, task_source, workflow_hint,
+             workspace_path_state, workspace_path, explicit_skill_ids_json, created_at, updated_at
+      FROM agent_pending_interrupts_legacy;
+
+      DROP TABLE agent_pending_interrupts_legacy;
+
+      CREATE INDEX idx_agent_pending_interrupts_thread
+        ON agent_pending_interrupts(thread_id);
+    `
+  },
+  {
+    version: 11,
+    name: 'agent_pending_interrupt_projection_minimal',
+    sql: `
+      ALTER TABLE agent_pending_interrupts RENAME TO agent_pending_interrupts_with_run_config;
+
+      CREATE TABLE agent_pending_interrupts (
+        run_id       TEXT NOT NULL,
+        thread_id    TEXT NOT NULL,
+        interrupt_id TEXT NOT NULL,
+        position     INTEGER NOT NULL DEFAULT 0,
+        payload_json TEXT NOT NULL,
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL,
+        PRIMARY KEY(run_id, interrupt_id),
+        UNIQUE(run_id, position),
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id),
+        FOREIGN KEY(thread_id) REFERENCES agent_threads(id)
+      );
+
+      INSERT INTO agent_pending_interrupts
+        (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+      SELECT run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at
+      FROM agent_pending_interrupts_with_run_config;
+
+      DROP TABLE agent_pending_interrupts_with_run_config;
+
+      CREATE INDEX idx_agent_pending_interrupts_thread
+        ON agent_pending_interrupts(thread_id);
+    `
   }
 ];
 

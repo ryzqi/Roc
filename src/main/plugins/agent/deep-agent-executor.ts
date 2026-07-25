@@ -63,7 +63,7 @@ import { createChatRunEventQueue } from './chat-run-event-queue';
 import {
   readFinalAssistantText,
   readInterrupted,
-  readRunInterruptedEvent
+  readRunInterruptedEvents
 } from './deep-agent-final-output';
 
 export type AgentDeepAgentExecutorOptions = {
@@ -382,7 +382,9 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             usageAccumulator
           });
           if (readInterrupted(run)) {
-            emitRuntimeEvent(readRunInterruptedEvent(run, input.run.id, input.run.threadId));
+            for (const event of readRunInterruptedEvents(run, input.run.id, input.run.threadId)) {
+              emitRuntimeEvent(event);
+            }
           } else {
             const output = await Promise.resolve(run.output);
             const finalAssistantText = readFinalAssistantText(output);
