@@ -118,7 +118,7 @@ describe('chat transcript helpers', () => {
         content: '请继续历史会话',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -127,7 +127,7 @@ describe('chat transcript helpers', () => {
         content: '历史线程回复',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);
@@ -190,7 +190,7 @@ describe('chat transcript helpers', () => {
         content: '第一轮输入',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -199,7 +199,7 @@ describe('chat transcript helpers', () => {
         content: '第一轮回复',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -208,7 +208,7 @@ describe('chat transcript helpers', () => {
         content: '第二轮输入',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);
@@ -279,7 +279,7 @@ describe('chat transcript helpers', () => {
         content: '请执行 git status',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -295,9 +295,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        interrupt: expect.objectContaining({
-          interruptId: 'interrupt-1'
-        }),
+        interrupts: [expect.objectContaining({ interruptId: 'interrupt-1' })],
         isStreaming: false
       }
     ]);
@@ -374,7 +372,7 @@ describe('chat transcript helpers', () => {
         content: '请执行 git status',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -390,9 +388,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        interrupt: expect.objectContaining({
-          interruptId: 'interrupt-1'
-        }),
+        interrupts: [expect.objectContaining({ interruptId: 'interrupt-1' })],
         isStreaming: false
       }
     ]);

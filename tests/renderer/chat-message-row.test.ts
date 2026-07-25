@@ -32,7 +32,7 @@ describe('chat message row', () => {
           content: '最终答案',
           reasoning: '第一段\n\n- 列表项\n\n```ts\nconst ok = true;\n```',
           blocks: [],
-          interrupt: null,
+          interrupts: [],
           isStreaming: false
         }
       })
@@ -60,7 +60,7 @@ describe('chat message row', () => {
           content: '最终答案',
           reasoning: '先整理上下文，再输出结论。',
           blocks: [],
-          interrupt: {
+          interrupts: [{
             kind: 'approval',
             interruptId: 'interrupt-1',
             actionRequests: [
@@ -77,7 +77,7 @@ describe('chat message row', () => {
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
-          },
+          }],
           isStreaming: true
         }
       })
@@ -100,13 +100,13 @@ describe('chat message row', () => {
           content: '',
           reasoning: null,
           blocks: [],
-          interrupt: {
+          interrupts: [{
             kind: 'question',
             interruptId: 'interrupt-question',
             question: 'Which path should I inspect?',
             context: 'Two paths match.',
             suggestedResponses: ['F:\\Code\\Roc']
-          },
+          }],
           isStreaming: false
         }
       })
@@ -115,6 +115,39 @@ describe('chat message row', () => {
     expect(html).toContain('data-testid="chat-question-card"');
     expect(html).toContain('Which path should I inspect?');
     expect(html).toContain('F:\\Code\\Roc');
+  });
+
+  it('renders every pending interrupt in the assistant message', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ChatMessageRow, {
+        message: {
+          key: 'multiple-interrupts',
+          source: 'persisted',
+          role: 'assistant',
+          content: '',
+          reasoning: null,
+          blocks: [],
+          interrupts: [
+            {
+              kind: 'approval',
+              interruptId: 'interrupt-approval',
+              actionRequests: [{ name: 'run_shell_command', args: { command: 'git status' } }],
+              reviewConfigs: [{ actionName: 'run_shell_command', allowedDecisions: ['approve'] }]
+            },
+            {
+              kind: 'question',
+              interruptId: 'interrupt-question',
+              question: 'Which workspace should I use?',
+              suggestedResponses: ['F:\\Code\\Roc']
+            }
+          ],
+          isStreaming: false
+        }
+      })
+    );
+
+    expect(html).toContain('data-testid="chat-approval-card"');
+    expect(html).toContain('data-testid="chat-question-card"');
   });
 
   it('renders reasoning and tool activity blocks separately from assistant Markdown content', () => {
@@ -143,7 +176,7 @@ describe('chat message row', () => {
               error: null
             }
           ],
-          interrupt: null,
+          interrupts: [],
           isStreaming: false
         }
       })
@@ -184,7 +217,7 @@ describe('chat message row', () => {
               requestContinue: 'Please continue.'
             }
           ],
-          interrupt: null,
+          interrupts: [],
           isStreaming: false
         }
       })
@@ -233,7 +266,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          interrupt: null,
+          interrupts: [],
           isStreaming: false,
           blocks: [
             {
@@ -327,7 +360,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          interrupt: null,
+          interrupts: [],
           isStreaming: true,
           blocks: [
             {
@@ -373,7 +406,7 @@ describe('chat message row', () => {
           role: 'assistant',
           content: '',
           reasoning: null,
-          interrupt: null,
+          interrupts: [],
           isStreaming: true,
           blocks: [
             {
@@ -461,7 +494,7 @@ describe('chat message row', () => {
               error: null
             }
           ],
-          interrupt: null,
+          interrupts: [],
           isStreaming: true
         }
       })
@@ -502,7 +535,7 @@ describe('chat message row', () => {
               error: 'permission denied'
             }
           ],
-          interrupt: null,
+          interrupts: [],
           isStreaming: false
         }
       })
@@ -522,7 +555,7 @@ describe('chat message row', () => {
           content: '',
           reasoning: '需要你确认这一步。',
           blocks: [],
-          interrupt: {
+          interrupts: [{
             kind: 'approval',
             interruptId: 'interrupt-1',
             actionRequests: [
@@ -539,7 +572,7 @@ describe('chat message row', () => {
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
-          },
+          }],
           isStreaming: false
         }
       })
@@ -562,7 +595,7 @@ describe('chat message row', () => {
           content: '',
           reasoning: null,
           blocks: [],
-          interrupt: {
+          interrupts: [{
             kind: 'approval',
             interruptId: 'interrupt-task-1',
             actionRequests: [
@@ -592,7 +625,7 @@ describe('chat message row', () => {
                 allowedDecisions: ['approve', 'edit', 'reject']
               }
             ]
-          },
+          }],
           isStreaming: false
         }
       })
@@ -615,7 +648,7 @@ describe('chat message row', () => {
           content: '',
           reasoning: null,
           blocks: [],
-          interrupt: {
+          interrupts: [{
             kind: 'approval',
             interruptId: 'interrupt-mixed-task',
             actionRequests: [
@@ -651,7 +684,7 @@ describe('chat message row', () => {
                 allowedDecisions: ['approve', 'reject']
               }
             ]
-          },
+          }],
           isStreaming: false
         }
       })

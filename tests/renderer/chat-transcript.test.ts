@@ -163,13 +163,15 @@ describe('chat transcript helpers', () => {
     );
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.interrupt).toEqual({
-      kind: 'question',
-      interruptId: 'interrupt-question',
-      question: 'Which branch should I use?',
-      context: 'Current branch is main.',
-      suggestedResponses: ['main']
-    });
+    expect(messages[0]?.interrupts).toEqual([
+      {
+        kind: 'question',
+        interruptId: 'interrupt-question',
+        question: 'Which branch should I use?',
+        context: 'Current branch is main.',
+        suggestedResponses: ['main']
+      }
+    ]);
   });
 
   it('keeps persisted message object references stable while appending live output', () => {
@@ -181,7 +183,7 @@ describe('chat transcript helpers', () => {
       attachments: [],
       reasoning: null,
       blocks: [],
-      interrupt: null,
+      interrupts: [],
       isStreaming: false
     };
 
@@ -291,7 +293,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -309,7 +311,7 @@ describe('chat transcript helpers', () => {
             isStreaming: true
           }
         ],
-        interrupt: null,
+        interrupts: [],
         isStreaming: true
       }
     ]);
@@ -704,7 +706,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -722,7 +724,7 @@ describe('chat transcript helpers', () => {
             isStreaming: false
           }
         ],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);
@@ -851,7 +853,7 @@ describe('chat transcript helpers', () => {
         attachments: [],
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -878,7 +880,7 @@ describe('chat transcript helpers', () => {
             error: null
           }
         ],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);

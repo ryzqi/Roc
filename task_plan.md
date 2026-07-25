@@ -64,8 +64,8 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 
 #### Part 3B - Interrupt Projection And Restart
 
-- [ ] pending interrupt 改为 collection projection；checkpoint 保持执行真相。
-- [ ] resume 使用 `interruptId -> value` map，dispatch 失败时保留 waiting projection。
+- [x] pending interrupt 改为 collection projection；checkpoint 保持执行真相。
+- [x] resume 使用 `interruptId -> value` map，dispatch 失败时保留 waiting projection。
 - [ ] 用真实 Deep Agents + Roc saver 覆盖 approval、ask_user、multiple interrupts 和跨进程 restart/resume。
 - [ ] focused tests、typecheck、strict unused、IPC check、build、full Vitest、diff check 与独立 review 通过后提交。
 
@@ -111,3 +111,7 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 | Part 3B runtime red test：resume audit 事务失败后 run 停在 `dispatch_pending` | 1 | 增加 primed stream 显式 close；commit 异常时 abort、rollback 到 `waiting_user` 后关闭 stream，再抛出原错误。 |
 | Part 3B 双轴 review worker 失败 | 1 | Standards worker SSE idle timeout，Spec worker 429；无 review 结论，修复后重试。 |
 | Part 3B 查询 LangGraph serializer 时 PowerShell 将 pnpm 通配目录当作字面路径，返回 os error 123 | 1 | 改用 `node_modules/.pnpm` 根目录配合 `rg --glob`；不重试通配路径。 |
+| Part 3B transcript UI 首次读取使用了错误的 `chat-message-row.tsx` 路径 | 1 | 先用 `rg --files` 定位实际组件路径，再读取目标；未修改代码。 |
+| Part 3B transcript fixture 批量 patch 因重复 `interrupt` 区块无法匹配 | 1 | 改用局部文件段落的结构化机械替换，再以 focused renderer tests 验证。 |
+| Part 3B focused renderer test 仍断言废弃单值 `message.interrupt` | 1 | 改为 collection `message.interrupts` 断言，并补多项 interrupt 可见性回归。 |
+| Part 3B transcript collection 首轮 typecheck 的 edit decision 变量名错误 | 1 | 使用已收窄的 `editableAction` 显式赋给 `editedAction` 字段。 |

@@ -23,7 +23,7 @@ describe('reasoning motion', () => {
           attachments: [],
           reasoning: '正在检查执行路径。',
           blocks: [],
-          interrupt: null,
+          interrupts: [],
           isStreaming: true
         }
       })

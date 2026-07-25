@@ -429,7 +429,7 @@ describe('chat transcript helpers', () => {
         content: '新的用户输入',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);
@@ -485,7 +485,7 @@ describe('chat transcript helpers', () => {
         content: '请继续历史会话',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -494,7 +494,7 @@ describe('chat transcript helpers', () => {
         content: '历史线程回复',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);

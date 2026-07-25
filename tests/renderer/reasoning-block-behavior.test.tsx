@@ -64,7 +64,7 @@ beforeEach(() => {
                 error: 'permission denied'
               }
             ],
-            interrupt: null,
+            interrupts: [],
             isStreaming: true
           }}
         />
@@ -102,7 +102,7 @@ beforeEach(() => {
                 error: 'permission denied'
               }
             ],
-            interrupt: null,
+            interrupts: [],
             isStreaming: false
           }}
         />
@@ -140,7 +140,7 @@ beforeEach(() => {
                 isStreaming: true
               }
             ],
-            interrupt: null,
+            interrupts: [],
             isStreaming: true
           }}
         />
@@ -175,7 +175,7 @@ beforeEach(() => {
             content: '正式回答',
             reasoning: '内部推理',
             blocks: [],
-            interrupt: null,
+            interrupts: [],
             isStreaming: false
           }}
         />

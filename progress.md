@@ -132,3 +132,15 @@
 - 移除 resume pre-consume。`execute()` 返回 stream 作为 dispatch acceptance；commit 之后才消费 stream，避免 SessionStart、`Command(resume)`、模型与工具在 audit/projection durable 前运行。executor promise rejection 仍 rollback waiting；已提交 stream 的失败按 run failure 处理。
 - startup reconcile 现在要求合法 collection 与最新 main checkpoint 的 `__interrupt__` write 同时存在；新增 stale projection regression。真实 Deep Agents + Roc saver partial restart、repository、runtime multiple 共 27 tests 与 `pnpm typecheck` 通过。
 - 下一步：完整 Part 3B focused/quality gates，重跑 Standards/Spec review；无 finding 后 broad verification 与独立提交。
+
+## 2026-07-25 - Stage 5 Part 3B Continuation
+
+- 已从 `task_plan.md`、`findings.md`、`progress.md`、`plan.md`、当前提交与 CodeGraph 恢复上下文。
+- 当前 HEAD：`a810b8f`；工作树只含未跟踪验收源 `plan.md`，保持不变。
+- 当前处理：按最终 review 阻断补 transcript collection、dispatch crash recovery 与快速并发 resume 回归；完成后进入独立 review、全量验证和提交。
+- 已确认 schema migration v11 已移除复制的 run 配置；本轮不再扩展该 migration，只补对应 regression。
+- 已确认 restart 恢复当前依赖 projection 与 checkpoint 双证据；开始实现缺 projection 时的 checkpoint 重建，避免 commit 后、stream 消费前崩溃终止可恢复 run。
+- Transcript collection production code 已改；renderer fixtures 正在迁移为 `interrupts` 数组，首次多区块 patch 未匹配，改用局部机械替换。
+- Focused renderer 首跑：4 files、47 tests，1 个旧单值断言失败；生产 collection 路径已执行，待更新断言和追加多 interrupt UI 回归后重跑。
+- Transcript diff review 后首轮 `pnpm typecheck` 仅报 `editedAction` 变量名错误；已修复，待重跑 typecheck 与 focused renderer。
+- Transcript collection review：未发现剩余实现风险。复跑 focused renderer 4 files / 48 tests、`pnpm typecheck`、`git diff --check` 通过；准备独立提交。

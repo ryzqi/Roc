@@ -114,7 +114,7 @@ function createMessages(count: number): ChatTranscriptMessage[] {
     attachments: [],
     reasoning: null,
     blocks: [],
-    interrupt: null,
+    interrupts: [],
     isStreaming: false
   }));
 }

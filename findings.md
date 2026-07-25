@@ -56,8 +56,12 @@
 
 ### Remaining Stage 5 Gaps
 
+- Schema v11 已删除 projection 中复制的 mode/workspace/capability 配置；rebuild 通过 source-column 检测兼容 legacy 与 minimal collection。剩余要求是 focused migration/rebuild 回归确认。
 - Final review 阻断：第二个快速 resume 在 run 已变 `running` 时曾清空余下 projection；已删除该错误清理，仍需补并发回归。
 - Final review 阻断：`ChatTranscriptMessage` 仍是单 `interrupt` 字段，持久和 live transcript 都只展示 collection 首项；需扩为 collection，并同步 `chat-message-row`/`chat-view` 的逐项 resume UI。
+- 已定位 UI 根因：`chat-transcript.ts` 将 persisted event 覆盖到单 `message.interrupt`，live projection 读取 `pendingInterrupts[0]`；`chat-message-row.tsx` 也只渲染单卡片。
+- Transcript collection 已完成：persisted event 按 `interruptId` 合并/移除，live state 保留全量，assistant bubble 逐项渲染 approval/question；focused renderer 4 files / 48 tests、`pnpm typecheck` 与 `git diff --check` 通过。
+- Restart reconcile 仅在 projection 已存在且 checkpoint 最新 main write 含 `__interrupt__` 时恢复 `dispatch_pending`/`running` 为 `waiting_user`。commit 删除最后 projection 后崩溃仍会进入 terminal；需从 latest checkpoint 的 `__interrupt__` 重建 projection。
 - Final review 阻断：commit 删除最后 projection 到 executor 实际消费之间崩溃，checkpoint 仍有 interrupt 但 repository 无 projection，restart 会 terminal；需以 checkpoint 重建 projection 或保留可恢复 dispatch intent，并补 crash/event-publish regression。
 
 - multiple interrupt collection 与 dispatch failure preservation 已有部分实现，但上述原子性、竞态、schema 和生产语义 finding 尚未完成 review closure。
@@ -98,3 +102,8 @@
 - Stage 5 不得保留 Roc 与 native 两套长期并行的 summarization 事实源。
 - 本地 cache contract 已验证；真实 Anthropic `cache_read` usage 需要外部 provider 凭据，归 Stage 6 integration，当前不得表述为 provider hit 已验证。
 - Windows 全量测试偶发输出 node-pty `AttachConsole failed`，当前 Vitest 仍以退出码 0 完成；后续若转为非零退出再单独定位环境边界。
+
+## 2026-07-25 Resume Audit
+
+- 当前 HEAD 为 `a810b8f wip(agent): project pending interrupt collections`；工作树仅有用户未跟踪的 `plan.md`，本轮不修改或提交该文件。
+- Part 3B 仍须闭环三项：collection interrupt 在 renderer transcript 的逐项呈现与逐项 resume、commit 后 executor 消费前崩溃的 checkpoint projection 重建、快速双 resume 的并发回归。

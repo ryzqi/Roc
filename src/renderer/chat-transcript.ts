@@ -90,7 +90,7 @@ export type ChatTranscriptMessage = {
   attachments?: ChatPersistedAttachment[];
   reasoning: string | null;
   blocks: ChatTranscriptActivityBlock[];
-  interrupt: ChatPendingInterrupt | null;
+  interrupts: ChatPendingInterrupt[];
   isStreaming: boolean;
 };
 
@@ -386,7 +386,7 @@ function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
     attachments: event.payload.attachments === undefined ? [] : event.payload.attachments,
     reasoning: null,
     blocks: [],
-    interrupt: null,
+    interrupts: [],
     isStreaming: false
   };
 }
@@ -401,7 +401,7 @@ function createAssistantDraft(runId: string): AssistantDraft {
       attachments: [],
       reasoning: null,
       blocks: [],
-      interrupt: null,
+      interrupts: [],
       isStreaming: false
     },
     reasoningBlock: null,
@@ -425,6 +425,19 @@ function getAssistantDraft(
   drafts.set(runId, draft);
   messages.push(draft.message);
   return draft;
+}
+
+function appendPendingInterrupt(message: ChatTranscriptMessage, interrupt: ChatPendingInterrupt): void {
+  const existingIndex = message.interrupts.findIndex((candidate) => candidate.interruptId === interrupt.interruptId);
+  if (existingIndex === -1) {
+    message.interrupts.push(interrupt);
+    return;
+  }
+  message.interrupts[existingIndex] = interrupt;
+}
+
+function removePendingInterrupt(message: ChatTranscriptMessage, interruptId: string): void {
+  message.interrupts = message.interrupts.filter((interrupt) => interrupt.interruptId !== interruptId);
 }
 
 function applyAssistantBlock(draft: AssistantDraft, block: ChatAssistantBlock, isStreaming: boolean): void {
@@ -818,34 +831,34 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
     }
 
     if (event.type === 'approval_requested' && isApprovalPayload(event.payload)) {
-      getAssistantDraft(drafts, messages, event.runId).message.interrupt = {
+      appendPendingInterrupt(getAssistantDraft(drafts, messages, event.runId).message, {
         kind: 'approval',
         ...event.payload
-      };
+      });
       continue;
     }
 
     if (isHumanQuestionRequestedEvent(event)) {
       const draft = getAssistantDraft(drafts, messages, event.runId);
-      draft.message.interrupt = {
+      appendPendingInterrupt(draft.message, {
         kind: 'question',
         interruptId: event.payload.interruptId,
         question: event.payload.question,
         ...(event.payload.context === null ? {} : { context: event.payload.context }),
         suggestedResponses: event.payload.suggestedResponses
-      };
+      });
       continue;
     }
 
     if (event.type === 'approval_decision' && isApprovalDecisionPayload(event.payload)) {
-      getAssistantDraft(drafts, messages, event.runId).message.interrupt = null;
+      removePendingInterrupt(getAssistantDraft(drafts, messages, event.runId).message, event.payload.interruptId);
     }
   }
 
   return messages
     .map((message) => (message.role === 'assistant' ? filterRedundantSubagentTaskBlocksFromMessage(message) : message))
     .filter(
-      (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.interrupt !== null
+      (message) => message.role === 'user' || message.content.length > 0 || message.blocks.length > 0 || message.interrupts.length > 0
     );
 }
 
@@ -934,7 +947,7 @@ function createPendingUserMessage(content: string, runId: string | null): ChatTr
     attachments: [],
     reasoning: null,
     blocks: [],
-    interrupt: null,
+    interrupts: [],
     isStreaming: false
   };
 }
@@ -956,7 +969,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
     attachments: [],
     reasoning: liveReasoning.length === 0 ? null : liveReasoning,
     blocks: liveBlocks,
-    interrupt: chatRunState.pendingInterrupts[0] ?? null,
+    interrupts: chatRunState.pendingInterrupts,
     isStreaming: chatRunState.status === 'running'
   };
 }
@@ -996,7 +1009,7 @@ export function appendLiveTranscriptMessages(input: {
         ...messages[assistantIndex],
         reasoning: liveReasoning.length === 0 ? null : liveReasoning,
         blocks: liveBlocks.length === 0 ? messages[assistantIndex].blocks : liveBlocks,
-        interrupt: input.chatRunState.pendingInterrupts[0] ?? null,
+        interrupts: input.chatRunState.pendingInterrupts,
         isStreaming: false
       };
       return messages;

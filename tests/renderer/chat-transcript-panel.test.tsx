@@ -236,7 +236,7 @@ function createMessage(key: string, content: string): ChatTranscriptMessage {
     attachments: [],
     reasoning: null,
     blocks: [],
-    interrupt: null,
+    interrupts: [],
     isStreaming: true
   };
 }

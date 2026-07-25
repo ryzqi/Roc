@@ -158,7 +158,7 @@ describe('chat transcript helpers', () => {
         content: '搜索今日成都天气？',
         reasoning: null,
         blocks: [],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       },
       {
@@ -177,7 +177,7 @@ describe('chat transcript helpers', () => {
             error: null
           }
         ],
-        interrupt: null,
+        interrupts: [],
         isStreaming: false
       }
     ]);
