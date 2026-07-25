@@ -80,6 +80,15 @@
 - multiple interrupt collection 与 dispatch failure preservation 已有部分实现，但上述原子性、竞态、schema 和生产语义 finding 尚未完成 review closure。
 - checkpoint/artifact/event retention 规则尚未实现和验证。
 
+### Stage 5 Part 3C Retention
+
+- `agent_runs` 的可恢复非终态完整集合为 `dispatch_pending`、`waiting_next_turn`、`running`、`recovering`、`waiting_user`；现有 retention 只排除了后三项，会把前两项的 payload 与超额 checkpoint 当作可删数据。
+- `terminalRunRetentionDays` 已是唯一已配置的 recovery safety window，避免新增未经确认的第二个生命周期参数：窗口内终态 thread、任意非终态 thread、或存在 pending interrupt 的 thread 都保留其全部 run payload、checkpoint 与 writes；只对全部终态且已越过窗口的 thread 清理 terminal run payload，并按既有 checkpoint 上限裁剪 checkpoint/writes。
+- Part 3C red test 证明旧实现会删除 3 组受保护数据（`agentEvents`、`agentRunEvents`、`toolEffects`、`contextArtifacts`、checkpoint 和 writes 各 3 条）；最小修复后 focused retention test 和 `pnpm typecheck` 通过，待独立 review 与全量门禁。
+- 独立 Spec review 发现 terminal `agent_outbox` 是 canonical terminal event 却未参与清理；已在相同事务内按同一 expired run 集合删除，并将 result 与 protected-window regression 扩展到 outbox。focused retention + maintenance tests（6 tests）、typecheck、diff check 通过，需对修复重审。
+- 修复后双轴 re-review 无 residual finding。新鲜验证：retention/schema/rebuild/maintenance focused 4 files / 14 tests、strict unused、typecheck、IPC check、build、full Vitest 308 files / 1658 tests、diff check 均通过。Vitest 的 `node-pty AttachConsole failed` 为既有 Windows 子进程噪声，命令退出码 0。
+- 状态：**Verified passing**。Part 3C 已完成，待本次独立提交后 Stage 5 全部闭环。
+
 ### Durable Project Facts
 
 - `.codegraph/` 存在；理解或定位代码时先使用 CodeGraph。

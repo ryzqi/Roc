@@ -40,6 +40,7 @@ describe('runDatabaseRetention', () => {
     expect(result.deleted).toEqual({
       agentEvents: 1,
       agentRunEvents: 1,
+      agentOutbox: 1,
       checkpoints: 2,
       checkpointWrites: 2,
       toolEffects: 1,
@@ -55,6 +56,41 @@ describe('runDatabaseRetention', () => {
     expect(agentDb.prepare("SELECT COUNT(*) FROM agent_events WHERE run_id = 'pending_terminal_run'").pluck().get()).toBe(1);
     expect(memoryDb.prepare('SELECT COUNT(*) FROM memory_auto_audit').pluck().get()).toBe(1);
   });
+
+  it('keeps all checkpoint and run payload data inside the terminal recovery window or on a recoverable thread', () => {
+    seedRecoveryBoundaryRows();
+
+    const result = runDatabaseRetention({
+      agentDb,
+      memoryDb,
+      policy: {
+        terminalRunRetentionDays: 30,
+        maxCheckpointsPerThread: 2,
+        autoMemoryAuditRetentionDays: 30
+      },
+      now: new Date('2026-07-06T00:00:00.000Z')
+    });
+
+    expect(result.deleted).toEqual({
+      agentEvents: 0,
+      agentRunEvents: 0,
+      agentOutbox: 0,
+      checkpoints: 0,
+      checkpointWrites: 0,
+      toolEffects: 0,
+      contextArtifacts: 0,
+      memoryAudit: 0
+    });
+    expectRunPayload('recent_terminal_run', 1);
+    expectRunPayload('mixed_terminal_run', 1);
+    expectRunPayload('dispatch_pending_run', 1);
+    expectRunPayload('waiting_next_turn_run', 1);
+    expectCheckpointCount('recent_terminal_thread', 3);
+    expectCheckpointCount('mixed_thread', 3);
+    expectCheckpointCount('dispatch_pending_thread', 3);
+    expectCheckpointCount('waiting_next_turn_thread', 3);
+    expect(agentDb.prepare('SELECT COUNT(*) FROM agent_outbox').pluck().get()).toBe(2);
+  });
 });
 
 function seedAgentRows(): void {
@@ -68,6 +104,7 @@ function seedAgentRows(): void {
   insertRun('pending_terminal_run', 'waiting_thread', 'completed', '2026-05-01T00:00:00.000Z');
   insertPendingInterrupt('pending_terminal_run', 'waiting_thread');
   insertRunPayloadRows('old_run', 'old_thread', '2026-05-01T00:00:00.000Z');
+  insertOutbox('old_run', 'old_thread', 1, '2026-05-01T00:00:00.000Z');
   insertRunPayloadRows('active_run', 'active_thread', '2026-07-01T00:00:00.000Z');
   insertRunPayloadRows('pending_terminal_run', 'waiting_thread', '2026-05-01T00:00:00.000Z');
   insertCheckpoints('old_thread', 4);
@@ -89,6 +126,31 @@ function seedMemoryRows(): void {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run('audit_recent', 'upsert', 'fact', 'workspace', 'high', 'recent', 'recent', 'active_run', 'recent', null, null, '2026-07-01T00:00:00.000Z');
+}
+
+function seedRecoveryBoundaryRows(): void {
+  insertThread('recent_terminal_thread', 'completed');
+  insertRun('recent_terminal_run', 'recent_terminal_thread', 'completed', '2026-07-01T00:00:00.000Z');
+  insertRunPayloadRows('recent_terminal_run', 'recent_terminal_thread', '2026-07-01T00:00:00.000Z');
+  insertOutbox('recent_terminal_run', 'recent_terminal_thread', 2, '2026-07-01T00:00:00.000Z');
+  insertCheckpoints('recent_terminal_thread', 3);
+
+  insertThread('mixed_thread', 'waiting_user');
+  insertRun('mixed_terminal_run', 'mixed_thread', 'completed', '2026-05-01T00:00:00.000Z');
+  insertRun('waiting_user_run', 'mixed_thread', 'waiting_user', null);
+  insertRunPayloadRows('mixed_terminal_run', 'mixed_thread', '2026-05-01T00:00:00.000Z');
+  insertOutbox('mixed_terminal_run', 'mixed_thread', 3, '2026-05-01T00:00:00.000Z');
+  insertCheckpoints('mixed_thread', 3);
+
+  insertThread('dispatch_pending_thread', 'dispatch_pending');
+  insertRun('dispatch_pending_run', 'dispatch_pending_thread', 'dispatch_pending', null);
+  insertRunPayloadRows('dispatch_pending_run', 'dispatch_pending_thread', '2026-05-01T00:00:00.000Z');
+  insertCheckpoints('dispatch_pending_thread', 3);
+
+  insertThread('waiting_next_turn_thread', 'waiting_next_turn');
+  insertRun('waiting_next_turn_run', 'waiting_next_turn_thread', 'waiting_next_turn', null);
+  insertRunPayloadRows('waiting_next_turn_run', 'waiting_next_turn_thread', '2026-05-01T00:00:00.000Z');
+  insertCheckpoints('waiting_next_turn_thread', 3);
 }
 
 function insertThread(threadId: string, status: string): void {
@@ -182,6 +244,15 @@ function insertRunPayloadRows(runId: string, threadId: string, createdAt: string
     .run(`ctx_${runId}`, runId, threadId, 'tool_result', `tool_${runId}`, 'read_file', `sha_${runId}`, 10, 'preview', 'content', null, createdAt);
 }
 
+function insertOutbox(runId: string, threadId: string, sequence: number, createdAt: string): void {
+  agentDb
+    .prepare(
+      `INSERT INTO agent_outbox (sequence, id, event_type, run_id, thread_id, payload_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(sequence, `outbox_${runId}`, 'run_completed', runId, threadId, JSON.stringify({ runId }), createdAt);
+}
+
 function insertCheckpoints(threadId: string, count: number): void {
   for (let index = 1; index <= count; index += 1) {
     const checkpointId = `checkpoint_${threadId}_${index}`;
@@ -201,4 +272,16 @@ function insertCheckpoints(threadId: string, count: number): void {
       )
       .run(threadId, '', checkpointId, `task_${checkpointId}`, 0, 'messages', 'json', Buffer.from('{}'), createdAt);
   }
+}
+
+function expectRunPayload(runId: string, expected: number): void {
+  expect(agentDb.prepare('SELECT COUNT(*) FROM agent_events WHERE run_id = ?').pluck().get(runId)).toBe(expected);
+  expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_events WHERE run_id = ?').pluck().get(runId)).toBe(expected);
+  expect(agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects WHERE run_id = ?').pluck().get(runId)).toBe(expected);
+  expect(agentDb.prepare('SELECT COUNT(*) FROM context_artifacts WHERE run_id = ?').pluck().get(runId)).toBe(expected);
+}
+
+function expectCheckpointCount(threadId: string, expected: number): void {
+  expect(agentDb.prepare('SELECT COUNT(*) FROM langgraph_checkpoints WHERE thread_id = ?').pluck().get(threadId)).toBe(expected);
+  expect(agentDb.prepare('SELECT COUNT(*) FROM langgraph_checkpoint_writes WHERE thread_id = ?').pluck().get(threadId)).toBe(expected);
 }

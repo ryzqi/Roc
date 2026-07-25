@@ -177,6 +177,7 @@ function retentionResult(): RocDatabaseRetentionResult {
     deleted: {
       agentEvents: 0,
       agentRunEvents: 0,
+      agentOutbox: 0,
       checkpoints: 0,
       checkpointWrites: 0,
       toolEffects: 0,

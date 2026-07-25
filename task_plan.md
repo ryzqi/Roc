@@ -14,9 +14,9 @@
 
 Stage 5 Part 3C - Recovery-safe Retention
 
-**Status:** in_progress
+**Status:** complete
 
-Stage 5 Part 1、Part 2、Part 3A 与 Part 3B 已完成实现、独立双轴 review 与全量验证；Part 3B 最终提交将在本次账本更新后创建。下一步仅处理 Part 3C retention。
+Stage 5 Part 1、Part 2、Part 3A、Part 3B 与 Part 3C 均已完成实现、独立双轴 review、全量验证与提交。
 
 ## Phase Status
 
@@ -27,7 +27,7 @@ Stage 5 Part 1、Part 2、Part 3A 与 Part 3B 已完成实现、独立双轴 rev
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23`、Part 3B final verification 已通过，待本次提交。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | complete | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23`、Part 3B `fcc9c8c`、Part 3C 本次提交。 |
 | Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
@@ -71,7 +71,7 @@ Stage 5 Part 1、Part 2、Part 3A 与 Part 3B 已完成实现、独立双轴 rev
 
 #### Part 3C - Recovery-safe Retention
 
-- [ ] retention 以 terminal state 和 recovery safety window 为边界，覆盖 checkpoint/writes/artifacts/events。
+- [x] retention 以 terminal state 和 recovery safety window 为边界，覆盖 checkpoint/writes/artifacts/events/outbox；独立双轴 review、focused 门禁、strict unused、typecheck、IPC check、build、full Vitest 与 diff check 全部通过。
 
 ## Acceptance Criteria
 

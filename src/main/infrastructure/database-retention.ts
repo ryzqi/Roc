@@ -10,6 +10,7 @@ export type RocDatabaseRetentionResult = {
   deleted: {
     agentEvents: number;
     agentRunEvents: number;
+    agentOutbox: number;
     checkpoints: number;
     checkpointWrites: number;
     toolEffects: number;
@@ -44,12 +45,14 @@ function runAgentRetention(
 ): Omit<RocDatabaseRetentionResult['deleted'], 'memoryAudit'> {
   return agentDb.transaction(() => {
     try {
+      createProtectedThreadTempTable(agentDb, terminalCutoff);
       createOldRunTempTable(agentDb, terminalCutoff);
       createOldCheckpointTempTable(agentDb, policy.maxCheckpointsPerThread);
       const agentEvents = agentDb.prepare('DELETE FROM agent_events WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
       const agentRunEvents = agentDb.prepare('DELETE FROM agent_run_events WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
+      const agentOutbox = agentDb.prepare('DELETE FROM agent_outbox WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run().changes;
       const toolEffects = agentDb.prepare('DELETE FROM agent_tool_effects WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
       const contextArtifacts = agentDb
@@ -82,6 +85,7 @@ function runAgentRetention(
       return {
         agentEvents,
         agentRunEvents,
+        agentOutbox,
         checkpoints,
         checkpointWrites,
         toolEffects,
@@ -105,9 +109,30 @@ function createOldRunTempTable(agentDb: DatabaseConnection, terminalCutoff: stri
       `INSERT INTO retention_old_runs (run_id)
        SELECT id
        FROM agent_runs
-       WHERE status NOT IN ('running','recovering','waiting_user')
+       WHERE status IN ('failed','cancelled','completed','interrupted','archived')
          AND COALESCE(ended_at, started_at) < ?
-         AND id NOT IN (SELECT run_id FROM agent_pending_interrupts)`
+         AND thread_id NOT IN (SELECT thread_id FROM retention_protected_threads)`
+    )
+    .run(terminalCutoff);
+}
+
+function createProtectedThreadTempTable(agentDb: DatabaseConnection, terminalCutoff: string): void {
+  agentDb.exec(`
+    DROP TABLE IF EXISTS temp.retention_protected_threads;
+    CREATE TEMP TABLE retention_protected_threads (
+      thread_id TEXT PRIMARY KEY
+    );
+  `);
+  agentDb
+    .prepare(
+      `INSERT INTO retention_protected_threads (thread_id)
+       SELECT DISTINCT thread_id
+       FROM agent_runs
+       WHERE status NOT IN ('failed','cancelled','completed','interrupted','archived')
+          OR COALESCE(ended_at, started_at) >= ?
+       UNION
+       SELECT DISTINCT thread_id
+       FROM agent_pending_interrupts`
     )
     .run(terminalCutoff);
 }
@@ -136,12 +161,7 @@ function createOldCheckpointTempTable(agentDb: DatabaseConnection, maxCheckpoint
                 ) AS checkpoint_rank
          FROM langgraph_checkpoints
          WHERE thread_id NOT IN (
-           SELECT thread_id
-           FROM agent_runs
-           WHERE status IN ('running','recovering','waiting_user')
-           UNION
-           SELECT thread_id
-           FROM agent_pending_interrupts
+           SELECT thread_id FROM retention_protected_threads
          )
        )
        WHERE checkpoint_rank > ?`
@@ -159,6 +179,7 @@ function dropTempTables(agentDb: DatabaseConnection): void {
   agentDb.exec(`
     DROP TABLE IF EXISTS temp.retention_old_runs;
     DROP TABLE IF EXISTS temp.retention_old_checkpoints;
+    DROP TABLE IF EXISTS temp.retention_protected_threads;
   `);
 }
 

@@ -3,9 +3,9 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`873df23 fix(agent): align sqlite saver with upstream contracts`。
+- HEAD：`fcc9c8c fix(agent): recover resume audits across restart`。
 - Stage 0-4：完成并提交。
-- Stage 5：in progress；Part 1、Part 2、Part 3A 已提交；Part 3B changed, partially verified；Part 3C pending。
+- Stage 5：complete；Part 1、Part 2、Part 3A、Part 3B 已提交，Part 3C 已验证并待本次提交。
 - Stage 6-7：pending。
 - 用户未跟踪的 `plan.md` 保留为当前验收源，不纳入本次文档整理范围。
 
@@ -162,3 +162,12 @@
 - Audit resume-map 首轮验证：typecheck 暴露 readonly decisions 与 LangGraph response 不兼容；focused fake executor 需区分完整 map。已最小修复，待重跑。
 - Audit resume-map 第二轮：focused 5 files / 35 tests、`pnpm typecheck`、`git diff --check` 通过。请求独立复核；通过后重跑 strict/IPC/build/full Vitest 并提交 Part 3B final review fixes。
 - Part 3B final：Standards/Spec 复核无 residual finding；strict unused、IPC、build、full Vitest、diff check 退出码 0。准备提交并转入 Part 3C retention。
+
+## 2026-07-25 - Stage 5 Part 3C Recovery-safe Retention
+
+- 从当前提交、持久计划、retention 执行路径和 run state machine 继续；无 schema 或 IPC 改动。
+- 红灯证明：旧 SQL 只排除 `running`、`recovering`、`waiting_user`，会删除 `dispatch_pending` 和 `waiting_next_turn` 的 payload/checkpoint，也会在 terminal safety window 内按 checkpoint cap 裁剪数据。
+- 最小实现：临时 `retention_protected_threads` 集合统一包含任意非终态、window 内 terminal 或 pending-interrupt thread；expired terminal run、checkpoint 和 checkpoint writes 都按它筛选。未新增第二个 retention duration，`terminalRunRetentionDays` 是唯一既有 safety window。
+- 首轮 Spec review 发现 P1：canonical terminal `agent_outbox` 未清理。已在相同事务按 expired run 集合删除，扩大 result 与 regression；Standards review 无 finding。修复后 focused retention + maintenance 6 tests、`pnpm typecheck`、`git diff --check` 通过，待 re-review 与 broad gates。
+- 修复后 Standards/Spec re-review 均无 residual finding。retention/schema/rebuild/maintenance focused 4 files / 14 tests、strict unused、typecheck、IPC check、build、full Vitest 308 files / 1658 tests、diff check 全部通过；Vitest 退出码 0，末尾 node-pty `AttachConsole failed` 为既有 Windows 子进程噪声。
+- Part 3C **Verified passing**；更新账本并提交后，Stage 5 complete，下一阶段为 Stage 6。
