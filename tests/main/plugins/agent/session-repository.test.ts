@@ -393,18 +393,77 @@ describe('AgentSessionRepository', () => {
     });
     expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
       {
-        interruptId: 'interrupt_partial_first',
-        payload: {
-          kind: 'question',
-          question: 'First answer?'
-        }
-      },
-      {
         interruptId: 'interrupt_partial_remaining',
         payload: {
           kind: 'question',
           question: 'Remaining answer?'
         }
+      }
+    ]);
+  });
+
+  it('rebuilds an incomplete projection when no durable resume audit answers the missing interrupt', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Recover every unanswered interrupt'
+    });
+    const interrupts = [
+      { interruptId: 'interrupt-incomplete-first', payload: { kind: 'question' as const, question: 'First answer?' } },
+      { interruptId: 'interrupt-incomplete-second', payload: { kind: 'question' as const, question: 'Second answer?' } }
+    ];
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts
+    });
+    seedCheckpoint(run.threadId, interrupts.map((interrupt) => ({ id: interrupt.interruptId, payload: interrupt.payload })));
+    db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
+      .run(run.id, 'interrupt-incomplete-second');
+
+    repository.reconcileStartupRuns();
+
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual(interrupts);
+  });
+
+  it('rejects a corrupt persisted interrupt payload explicitly', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Validate stored interrupt payload'
+    });
+    repository.markRunInterrupted({
+      expectedStateVersion: 1,
+      expectedStatus: 'waiting_next_turn',
+      runId: run.id,
+      threadId: run.threadId,
+      interrupts: [{ interruptId: 'interrupt-corrupt', payload: { kind: 'question', question: 'Continue?' } }]
+    });
+    db.prepare('UPDATE agent_pending_interrupts SET payload_json = ? WHERE run_id = ?')
+      .run('{"kind":"approval"}', run.id);
+
+    expect(() => repository.getPendingInterrupts(run.id)).toThrow('agent_pending_interrupt_payload_invalid');
+    seedCheckpoint(run.threadId, [
+      {
+        id: 'interrupt-corrupt',
+        payload: { kind: 'question', question: 'Continue?' }
+      }
+    ]);
+
+    repository.reconcileStartupRuns();
+
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+      {
+        interruptId: 'interrupt-corrupt',
+        payload: { kind: 'question', question: 'Continue?' }
       }
     ]);
   });

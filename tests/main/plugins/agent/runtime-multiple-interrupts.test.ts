@@ -56,7 +56,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
             return;
           }
           resumePayloads.push(input.resumePayload);
-          if ('interrupt-approval' in input.resumePayload) {
+          if ('interrupt-approval' in input.resumePayload && !('interrupt-question' in input.resumePayload)) {
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
               kind: 'question',
               question: 'Which workspace should I use?'
@@ -114,6 +114,9 @@ describe('AgentPluginRuntime multiple interrupts', () => {
         }
       },
       {
+        'interrupt-approval': {
+          decisions: [{ type: 'approve' }]
+        },
         'interrupt-question': {
           answer: 'F:\\Code\\Roc'
         }

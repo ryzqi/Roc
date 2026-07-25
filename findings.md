@@ -68,6 +68,12 @@
 - 真实 partial resume 的 latest checkpoint 保留已回答与未回答 interrupt；持久 projection 为 remaining subset 时必须保留，只有 projection 缺失或含 checkpoint 外 id 才从 checkpoint 重建。
 - Checkpoint recovery 回归通过：缺 projection 的 partial resume crash 从 checkpoint 重建 collection；existing remaining subset 不会被旧 checkpoint 重新扩展。repository、真实 DeepAgent/Roc saver restart、runtime multiple 共 31 tests 通过。
 - Crash recovery/concurrency review：decoder 只接受 observed `json` typed payload、malformed checkpoint fail closed、projection remaining subset 保持；快速第二 resume 明确拒绝且不删除剩余 projection。focused 4 files / 32 tests、`pnpm typecheck`、`git diff --check` 通过，未发现未处理 finding。
+- Part 3B final independent review 新增待修：resume commit 后 observer publish reject 会阻断 accepted stream；latest checkpoint 的 historical interrupt collection 必须结合 durable resume audit 得出有效 pending 集合，不能裸按 subset 保留；持久 projection JSON 读取必须执行 shape validation。
+- 复核 Spec 的 observer finding：`runtime.publish()` 已在 event-bus boundary 捕获 reject 并记录 notification metric；`publishChatRunEvent`/`publishTaskEvent` 均经此边界，accepted stream 不会被 observer reject 阻断。此项不成立，不改生产路径。
+- Standards fixes：effective pending = checkpoint interrupt collection - canonical decision audit ids；projection 只在有序 id/payload 全量一致时保留。损坏 stored payload 通过同一 normalizer 明确拒绝。focused 5 files / 35 tests、`pnpm typecheck`、`git diff --check` 通过，等待复核。
+- Standards re-review 新增 P1：crash 在 audit commit 与 stream 首次消费之间时，startup 虽隐藏已答 interrupt，却未把 canonical audit answer 合并回 LangGraph resume map；必须从 durable audit 重建完整 `interruptId -> value`。
+- Audit resume-map 已修：repository 以 ordered canonical audit 重建 `interruptId -> {decisions|answer}`，runtime 将其与当前请求合并；focused 5 files / 35 tests、`pnpm typecheck`、`git diff --check` 通过，复核进行中。
+- Part 3B final review：Standards 与 Spec 复核均无 residual finding。final broad gate（strict unused、IPC、build、full Vitest、diff check）退出码 0；node-pty `AttachConsole failed` 为既有 Windows 子进程诊断噪声，不改变 Vitest 通过结论。
 - 现有 executor 已有 `normalizeInterruptPayload` 的 runtime shape validation；checkpoint recovery 需要复用等价严格语义，不能把 raw JSON 直接断言为 `ChatInterruptPayload`。
 - Final review 阻断：commit 删除最后 projection 到 executor 实际消费之间崩溃，checkpoint 仍有 interrupt 但 repository 无 projection，restart 会 terminal；需以 checkpoint 重建 projection 或保留可恢复 dispatch intent，并补 crash/event-publish regression。
 

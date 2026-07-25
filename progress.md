@@ -153,3 +153,12 @@
 - Checkpoint recovery 已修：latest main `json` rows 严格 decode，缺 projection 时重建，已有 projection 是 checkpoint id subset 时保持。focused 4 files / 31 tests 通过。下一步补快速双 resume 并发回归。
 - Crash/concurrency subpart review 首轮 typecheck 发现测试闭包 gate 的 TypeScript 收窄错误；已改为对象属性 gate，待重新验证和提交。
 - Crash recovery/concurrency subpart review 完成：focused 4 files / 32 tests、`pnpm typecheck`、`git diff --check` 通过，无未处理 finding；准备独立提交。
+- Stage 5 Part 3B final review：Standards 2 个 finding、Spec 1 个 finding。当前不关闭 Part 3B；按 checkpoint + durable audit、projection payload validation、observer failure 不阻断 execution 三项最小修复后重跑全门。
+- Review fixes 首轮：projection validation 将已持久化 approval wrapper 误判 invalid，导致 5 个 focused failure；已将该既有合同加入 normalizer，待重跑。
+- Review fixes 第二轮：repository/runtime/production restart/final-output focused 4 files / 29 tests、`pnpm typecheck`、`git diff --check` 通过。继续补 incomplete projection 与 corrupt payload 直接回归。
+- Review fixes 第三轮：新增 incomplete projection 与 corrupt payload regression；focused 5 files / 35 tests、`pnpm typecheck`、`git diff --check` 通过。独立复核进行中，随后重跑 strict/IPC/build/full Vitest。
+- Spec re-review 发现 corrupt projection 阻断 checkpoint rebuild；已让 reconcile 仅对该持久化格式错误执行覆盖重建，新增 startup recovery 断言，待重跑。
+- Standards re-review 发现 audit-to-resume map 缺失；当前不关闭 Part 3B。下一步从 canonical audit 读取 approval decisions/question answer，与当前 request 合并后再调 executor。
+- Audit resume-map 首轮验证：typecheck 暴露 readonly decisions 与 LangGraph response 不兼容；focused fake executor 需区分完整 map。已最小修复，待重跑。
+- Audit resume-map 第二轮：focused 5 files / 35 tests、`pnpm typecheck`、`git diff --check` 通过。请求独立复核；通过后重跑 strict/IPC/build/full Vitest 并提交 Part 3B final review fixes。
+- Part 3B final：Standards/Spec 复核无 residual finding；strict unused、IPC、build、full Vitest、diff check 退出码 0。准备提交并转入 Part 3C retention。

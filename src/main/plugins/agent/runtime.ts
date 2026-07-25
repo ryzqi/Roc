@@ -368,6 +368,7 @@ export class AgentPluginRuntime {
     const resumeValue: AgentResumeValue =
       request.kind === 'approval' ? { decisions: request.decisions } : { answer: request.answer };
     const resumePayload: AgentResumePayload = {
+      ...this.options.repository.getRecordedResumePayload(run.id),
       [request.interruptId]: resumeValue
     };
     const resumeAudit: ResumeDispatchAudit =

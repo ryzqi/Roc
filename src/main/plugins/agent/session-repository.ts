@@ -132,6 +132,14 @@ export type ResumeDispatchAudit =
       };
     };
 
+export type RecordedResumeValue =
+  | {
+      decisions: ChatResumeDecision[];
+    }
+  | {
+      answer: string;
+    };
+
 const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   draft: [],
   pending_confirmation: [],
@@ -573,7 +581,7 @@ export class AgentSessionRepository {
     for (const candidate of candidates) {
       this.markRestartedToolEffectsUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
-      const checkpointInterrupts = this.readCurrentCheckpointInterrupts(candidate.thread_id);
+      const checkpointInterrupts = this.readRecoverableCheckpointInterrupts(candidate.id, candidate.thread_id);
       if (
         candidate.status === 'dispatch_pending' &&
         evidence.hasCheckpoint &&
@@ -890,13 +898,33 @@ export class AgentSessionRepository {
       threadId: run.threadId,
       interrupts: rows.map((row) => ({
         interruptId: row.interrupt_id,
-        payload: JSON.parse(row.payload_json) as ChatInterruptPayload
+        payload: this.parsePendingInterruptPayload(row.payload_json)
       }))
     };
   }
 
   clearPendingInterrupts(runId: string): void {
     this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
+  }
+
+  getRecordedResumePayload(runId: string): Record<string, RecordedResumeValue> {
+    const rows = this.db
+      .prepare(
+        `SELECT type, payload_json
+         FROM agent_events
+         WHERE run_id = ? AND type IN ('approval_decision', 'human_question_answered')
+         ORDER BY sequence ASC`
+      )
+      .all(runId) as Array<{ type: 'approval_decision' | 'human_question_answered'; payload_json: string }>;
+    const resumePayload: Record<string, RecordedResumeValue> = {};
+    for (const row of rows) {
+      const payload = parseRecordedResumePayload(row);
+      if (Object.hasOwn(resumePayload, payload.interruptId)) {
+        throw new Error('agent_resume_audit_interrupt_duplicate');
+      }
+      resumePayload[payload.interruptId] = payload.value;
+    }
+    return resumePayload;
   }
 
   recordNotificationFailure(code: string): void {
@@ -1283,7 +1311,7 @@ export class AgentSessionRepository {
     })();
   }
 
-  private readCurrentCheckpointInterrupts(threadId: string): PendingInterrupt[] | null {
+  private readRecoverableCheckpointInterrupts(runId: string, threadId: string): PendingInterrupt[] | null {
     const rows = this.db
       .prepare(
         `SELECT value_type, value_blob
@@ -1323,16 +1351,31 @@ export class AgentSessionRepository {
         };
       });
       validatePendingInterrupts(interrupts);
-      return interrupts;
+      const answeredInterruptIds = this.readAnsweredInterruptIds(runId);
+      if (answeredInterruptIds === null) {
+        return null;
+      }
+      const pendingInterrupts = interrupts.filter((interrupt) => !answeredInterruptIds.has(interrupt.interruptId));
+      if (pendingInterrupts.length === 0) {
+        return null;
+      }
+      return pendingInterrupts;
     } catch {
       return null;
     }
   }
 
   private restorePendingInterruptProjection(runId: string, threadId: string, interrupts: readonly PendingInterrupt[]): void {
-    const existing = this.getPendingInterrupts(runId).interrupts;
-    const checkpointInterruptIds = new Set(interrupts.map((interrupt) => interrupt.interruptId));
-    if (existing.length > 0 && existing.every((interrupt) => checkpointInterruptIds.has(interrupt.interruptId))) {
+    let existing: PendingInterrupt[];
+    try {
+      existing = this.getPendingInterrupts(runId).interrupts;
+    } catch (error) {
+      if (!isInvalidPendingInterruptPayloadError(error)) {
+        throw error;
+      }
+      existing = [];
+    }
+    if (pendingInterruptCollectionsEqual(existing, interrupts)) {
       return;
     }
     validatePendingInterrupts(interrupts);
@@ -1348,6 +1391,22 @@ export class AgentSessionRepository {
         insert.run(runId, threadId, interrupt.interruptId, position, JSON.stringify(interrupt.payload), now, now);
       }
     })();
+  }
+
+  private parsePendingInterruptPayload(payloadJson: string): ChatInterruptPayload {
+    try {
+      return normalizeChatInterruptPayload(JSON.parse(payloadJson) as unknown);
+    } catch {
+      throw new Error('agent_pending_interrupt_payload_invalid');
+    }
+  }
+
+  private readAnsweredInterruptIds(runId: string): Set<string> | null {
+    try {
+      return new Set(Object.keys(this.getRecordedResumePayload(runId)));
+    } catch {
+      return null;
+    }
   }
 
   private requirePendingInterrupt(runId: string, interruptId: string): void {
@@ -1544,6 +1603,61 @@ function validatePendingInterrupts(interrupts: readonly PendingInterrupt[]): voi
     }
     interruptIds.add(interruptId);
   }
+}
+
+function parseRecordedResumePayload(input: {
+  type: 'approval_decision' | 'human_question_answered';
+  payload_json: string;
+}): { interruptId: string; value: RecordedResumeValue } {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(input.payload_json) as unknown;
+  } catch {
+    throw new Error('agent_resume_audit_payload_invalid');
+  }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new Error('agent_resume_audit_payload_invalid');
+  }
+  const interruptId = Reflect.get(payload, 'interruptId');
+  if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
+    throw new Error('agent_resume_audit_payload_invalid');
+  }
+  if (input.type === 'approval_decision') {
+    const decisions = Reflect.get(payload, 'decisions');
+    if (!Array.isArray(decisions)) {
+      throw new Error('agent_resume_audit_payload_invalid');
+    }
+    return {
+      interruptId,
+      value: { decisions: decisions as ChatResumeDecision[] }
+    };
+  }
+  const answer = Reflect.get(payload, 'answer');
+  if (typeof answer !== 'string') {
+    throw new Error('agent_resume_audit_payload_invalid');
+  }
+  return {
+    interruptId,
+    value: { answer }
+  };
+}
+
+function pendingInterruptCollectionsEqual(
+  left: readonly PendingInterrupt[],
+  right: readonly PendingInterrupt[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (interrupt, index) =>
+        interrupt.interruptId === right[index]?.interruptId &&
+        JSON.stringify(interrupt.payload) === JSON.stringify(right[index]?.payload)
+    )
+  );
+}
+
+function isInvalidPendingInterruptPayloadError(error: unknown): boolean {
+  return error instanceof Error && error.message === 'agent_pending_interrupt_payload_invalid';
 }
 
 function requireNonEmpty(value: string | null, code: string): string {

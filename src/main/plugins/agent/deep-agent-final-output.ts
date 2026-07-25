@@ -35,6 +35,9 @@ export function normalizeChatInterruptPayload(payload: unknown): ChatInterruptPa
   if (isQuestionInterruptPayload(payload)) {
     return payload;
   }
+  if (isApprovalInterruptPayload(payload)) {
+    return payload;
+  }
   if (isApprovalRequest(payload)) {
     return {
       kind: 'approval',
@@ -42,6 +45,13 @@ export function normalizeChatInterruptPayload(payload: unknown): ChatInterruptPa
     };
   }
   throw new Error('agent_interrupt_payload_invalid');
+}
+
+function isApprovalInterruptPayload(value: unknown): value is ChatInterruptPayload {
+  if (!recordUtils.isRecord(value) || recordUtils.readRecordValue(value, 'kind') !== 'approval') {
+    return false;
+  }
+  return isApprovalRequest(recordUtils.readRecordValue(value, 'request'));
 }
 
 function isQuestionInterruptPayload(value: unknown): value is ChatQuestionInterruptPayload {

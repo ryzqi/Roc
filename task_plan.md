@@ -12,11 +12,11 @@
 
 ## Current Phase
 
-Stage 5 - Context, Checkpoint, HITL Conformance
+Stage 5 Part 3C - Recovery-safe Retention
 
 **Status:** in_progress
 
-Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/restart。collection projection、interrupt-id resume map 与两阶段 dispatch 已有部分实现和窄验证；preliminary review 仍要求闭环 resume audit 原子性、部分 resume 后崩溃、interrupt 发布/持久化竞态、projection 旧配置列清理，以及真实生产 multiple-interrupt 语义。完成 review、全量验证和独立提交后再处理 Part 3C retention。
+Stage 5 Part 1、Part 2、Part 3A 与 Part 3B 已完成实现、独立双轴 review 与全量验证；Part 3B 最终提交将在本次账本更新后创建。下一步仅处理 Part 3C retention。
 
 ## Phase Status
 
@@ -27,7 +27,7 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 | Stage 2 - Durable Run State, Outbox, Bounded Timeline | complete | `1fbda30 feat(agent): harden durable run state and outbox` |
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00 feat(task): make scheduled occurrences durable` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
-| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23` 已提交；Part 3B changed, partially verified。 |
+| Stage 5 - Context, Checkpoint, HITL Conformance | in_progress | Part 1 `b223636`、Part 2 `639c019`、Part 3A `873df23`、Part 3B final verification 已通过，待本次提交。 |
 | Stage 6 - Observability, Integration Tests, Evals | pending | Stage 5 完成后开始。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始；最终做 current-tree completion audit。 |
 
@@ -66,8 +66,8 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 
 - [x] pending interrupt 改为 collection projection；checkpoint 保持执行真相。
 - [x] resume 使用 `interruptId -> value` map，dispatch 失败时保留 waiting projection。
-- [ ] 用真实 Deep Agents + Roc saver 覆盖 approval、ask_user、multiple interrupts 和跨进程 restart/resume。
-- [ ] focused tests、typecheck、strict unused、IPC check、build、full Vitest、diff check 与独立 review 通过后提交。
+- [x] 用真实 Deep Agents + Roc saver 覆盖 approval、ask_user、multiple interrupts 和跨进程 restart/resume。
+- [x] focused tests、typecheck、strict unused、IPC check、build、full Vitest、diff check 与独立 review 通过后提交。
 
 #### Part 3C - Recovery-safe Retention
 
@@ -119,4 +119,10 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 | Part 3B serializer 检索受默认 node_modules ignore 影响无结果 | 1 | 对已确认的 `node_modules/@langchain/*` 目录使用 `rg -uuu`；未修改生产代码。 |
 | Part 3B serializer symbol 三次静态检索均无结果 | 3 | 停止重复源码检索；改以真实 Roc saver integration 产生的 `value_type`/`value_blob` 为唯一解码依据，再实现受限 decoder。 |
 | Part 3B checkpoint recovery 首轮 focused tests 3 failed | 1 | 旧 repository fixtures 使用空 interrupt write；真实 saver payload 未匹配 plain `{id,value}` 假设。先读取真实 serialized value，更新 decoder 与 fixture 后重跑。 |
+| Part 3B projection validation 首轮 focused tests 5 failed | 1 | 已持久化 approval payload 是 `{kind:'approval',request}`，原 normalizer 只接受 bare HITL request；新增该已存合同分支后重跑。 |
+| Part 3B final spec re-review：corrupt projection 阻断 checkpoint recovery | 1 | reconcile 覆盖路径仅识别并替换 `agent_pending_interrupt_payload_invalid`；普通读取保持显式失败。 |
+| Part 3B audit resume-map focused command 发送时 JavaScript 参数缺少 JSON 引号 | 1 | 重发同一未执行的 PowerShell 命令；仓库未受影响。 |
+| Part 3B audit resume-map 首轮 focused：readonly decisions 不兼容 LangGraph mutable response，旧 fake executor 将含 approval 的完整 map 误判为首轮 resume | 1 | durable payload 使用 mutable decision array；fake executor 仅在缺 question 时模拟首轮 approval。 |
+| Part 3B final broad gate 首次发送时 JavaScript 参数缺少 JSON 引号 | 1 | 重发同一未执行的 PowerShell 命令；仓库未受影响。 |
+| Part 3B final status patch 未匹配已提前勾选的 checklist 行 | 1 | 读取当前 Stage 5 段落后按实际状态做局部更新；未修改代码。 |
 | Part 3B concurrency regression review 的 typecheck 将闭包赋值变量收窄为 `never` | 1 | 使用对象属性保存 gate release，等待后显式非空检查；不改变并发行为。 |
