@@ -26,12 +26,12 @@ export function readRunInterruptedEvents(run: unknown, runId: string, threadId: 
       runId,
       threadId,
       interruptId,
-      payload: normalizeInterruptPayload(payload)
+      payload: normalizeChatInterruptPayload(payload)
     } satisfies ChatRunEvent;
   });
 }
 
-function normalizeInterruptPayload(payload: unknown): ChatInterruptPayload {
+export function normalizeChatInterruptPayload(payload: unknown): ChatInterruptPayload {
   if (isQuestionInterruptPayload(payload)) {
     return payload;
   }

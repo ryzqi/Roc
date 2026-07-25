@@ -269,6 +269,67 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     ]);
     expect(runEvents('run_resumed')).toHaveLength(0);
   });
+
+  it('preserves the remaining projection when a second resume races after the first dispatch claim', async () => {
+    const repository = new AgentSessionRepository(db);
+    const firstResumeGate: { release: (() => void) | null } = { release: null };
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          if (input.resumePayload === undefined) {
+            yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
+            yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
+              kind: 'question',
+              question: 'Which workspace should I use?'
+            });
+            return;
+          }
+          await new Promise<void>((resolve) => {
+            firstResumeGate.release = resolve;
+          });
+          yield textBlock(input.run.id, 'First resume completed.');
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+    const started = await runtime.startRun({
+      enabledCapabilities: { mcpServers: [], skills: [] },
+      input: 'Resolve both pending requests.',
+      mode: 'task'
+    });
+    const threadId = requireThreadId(started.threadId);
+    await waitFor(() => runEvents('run_interrupted').length === 2);
+
+    await runtime.resumeRun({
+      kind: 'approval',
+      runId: started.runId,
+      threadId,
+      interruptId: 'interrupt-approval',
+      decisions: [{ type: 'approve' }]
+    });
+    await waitFor(() => firstResumeGate.release !== null);
+
+    await expect(
+      runtime.resumeRun({
+        kind: 'question',
+        runId: started.runId,
+        threadId,
+        interruptId: 'interrupt-question',
+        answer: 'F:\\Code\\Roc'
+      })
+    ).rejects.toThrow('chat_resume_run_not_waiting_user');
+    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+      expect.objectContaining({ interruptId: 'interrupt-question' })
+    ]);
+
+    if (firstResumeGate.release === null) {
+      throw new Error('first_resume_release_missing');
+    }
+    firstResumeGate.release();
+    await waitFor(() => runEvents('run_completed').length === 1);
+  });
 });
 
 function interrupted(

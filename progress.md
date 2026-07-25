@@ -144,3 +144,12 @@
 - Focused renderer 首跑：4 files、47 tests，1 个旧单值断言失败；生产 collection 路径已执行，待更新断言和追加多 interrupt UI 回归后重跑。
 - Transcript diff review 后首轮 `pnpm typecheck` 仅报 `editedAction` 变量名错误；已修复，待重跑 typecheck 与 focused renderer。
 - Transcript collection review：未发现剩余实现风险。复跑 focused renderer 4 files / 48 tests、`pnpm typecheck`、`git diff --check` 通过；准备独立提交。
+- Transcript collection 已提交 `24db71d`。开始 checkpoint-only interrupt recovery：当前 repository 仅检查 `__interrupt__` 行存在，尚未解码并重建 projection。
+- Serializer 静态检索连续三次无结果，停止重复检索；下一步用真实 saver 产生的 checkpoint write 校验 payload 编码，保持 recovery decoder 的格式边界显式。
+- 已定位 saver read path：`this.serde.loadsTyped(value_type, value_blob)`；现有 fixture 的 default interrupt write 是 `json`/UTF-8 JSON。下一步实现只接受该持久格式的 strict decoder 和 projection rebuild。
+- 设计确定：用 latest checkpoint interrupt collection 覆盖 stale/missing projection，恢复 `dispatch_pending`/`running`/`waiting_user`，不从 event history 复制 pending requested event。
+- Checkpoint recovery 首跑：4 files / 31 tests，3 failed。两个 repository fixture 的 `__interrupt__=[]` 已不满足新真相语义；真实 saver integration 显示 decoder 未匹配 production serialization，下一步先采样 payload，不重复当前实现。
+- Decoder 已对齐真实 write：每个 `__interrupt__` row 是单 `{id,value}` JSON，多个 task row 构成 collection。partial restart 首测显示 latest checkpoint 仍含已回答 id；将以 projection remaining subset 作为合法状态，避免重建回旧 interrupt。
+- Checkpoint recovery 已修：latest main `json` rows 严格 decode，缺 projection 时重建，已有 projection 是 checkpoint id subset 时保持。focused 4 files / 31 tests 通过。下一步补快速双 resume 并发回归。
+- Crash/concurrency subpart review 首轮 typecheck 发现测试闭包 gate 的 TypeScript 收窄错误；已改为对象属性 gate，待重新验证和提交。
+- Crash recovery/concurrency subpart review 完成：focused 4 files / 32 tests、`pnpm typecheck`、`git diff --check` 通过，无未处理 finding；准备独立提交。

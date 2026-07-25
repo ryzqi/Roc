@@ -115,3 +115,8 @@ Stage 5 Part 1、Part 2 与 Part 3A 已提交；当前处理 Part 3B interrupt/r
 | Part 3B transcript fixture 批量 patch 因重复 `interrupt` 区块无法匹配 | 1 | 改用局部文件段落的结构化机械替换，再以 focused renderer tests 验证。 |
 | Part 3B focused renderer test 仍断言废弃单值 `message.interrupt` | 1 | 改为 collection `message.interrupts` 断言，并补多项 interrupt 可见性回归。 |
 | Part 3B transcript collection 首轮 typecheck 的 edit decision 变量名错误 | 1 | 使用已收窄的 `editableAction` 显式赋给 `editedAction` 字段。 |
+| Part 3B checkpoint serializer 查询再次将 pnpm 通配目录作为字面路径 | 1 | 直接检索 `node_modules/.pnpm` 根目录并用 `--glob` 过滤包路径；不重复通配目录命令。 |
+| Part 3B serializer 检索受默认 node_modules ignore 影响无结果 | 1 | 对已确认的 `node_modules/@langchain/*` 目录使用 `rg -uuu`；未修改生产代码。 |
+| Part 3B serializer symbol 三次静态检索均无结果 | 3 | 停止重复源码检索；改以真实 Roc saver integration 产生的 `value_type`/`value_blob` 为唯一解码依据，再实现受限 decoder。 |
+| Part 3B checkpoint recovery 首轮 focused tests 3 failed | 1 | 旧 repository fixtures 使用空 interrupt write；真实 saver payload 未匹配 plain `{id,value}` 假设。先读取真实 serialized value，更新 decoder 与 fixture 后重跑。 |
+| Part 3B concurrency regression review 的 typecheck 将闭包赋值变量收窄为 `never` | 1 | 使用对象属性保存 gate release，等待后显式非空检查；不改变并发行为。 |

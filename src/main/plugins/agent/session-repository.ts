@@ -23,6 +23,7 @@ import type { RunFailure } from '../../services/deep-agent/types';
 import { RocDomainError } from '../../services/errors';
 import { agentRunEventLogMaxEvents } from './run-event-log';
 import type { PendingInterrupt, PendingInterruptProjection } from './runtime-types';
+import { normalizeChatInterruptPayload } from './deep-agent-final-output';
 import {
   createRunExecutionSnapshot,
   parseRunExecutionSnapshot,
@@ -89,6 +90,11 @@ type StartupRunRow = RunStateRow & {
 type RestartEvidence = {
   hasCheckpoint: boolean;
   hasInFlightEffect: boolean;
+};
+
+type CheckpointInterruptWriteRow = {
+  value_type: string;
+  value_blob: Buffer;
 };
 
 type TerminalFailureInput = {
@@ -567,12 +573,14 @@ export class AgentSessionRepository {
     for (const candidate of candidates) {
       this.markRestartedToolEffectsUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
+      const checkpointInterrupts = this.readCurrentCheckpointInterrupts(candidate.thread_id);
       if (
         candidate.status === 'dispatch_pending' &&
         evidence.hasCheckpoint &&
         !evidence.hasInFlightEffect &&
-        this.hasRecoverablePendingInterrupt(candidate)
+        checkpointInterrupts !== null
       ) {
+        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.rollbackResumeDispatch({
           expectedStateVersion: candidate.state_version,
           expectedStatus: candidate.status,
@@ -584,8 +592,9 @@ export class AgentSessionRepository {
         candidate.status === 'waiting_user' &&
         evidence.hasCheckpoint &&
         !evidence.hasInFlightEffect &&
-        this.hasRecoverablePendingInterrupt(candidate)
+        checkpointInterrupts !== null
       ) {
+        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.verifyWaitingUserSnapshot(candidate.id);
         continue;
       }
@@ -593,8 +602,9 @@ export class AgentSessionRepository {
         candidate.status === 'running' &&
         evidence.hasCheckpoint &&
         !evidence.hasInFlightEffect &&
-        this.hasRecoverablePendingInterrupt(candidate)
+        checkpointInterrupts !== null
       ) {
+        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.transitionRun({
           endedAt: null,
           expectedStateVersion: candidate.state_version,
@@ -1273,29 +1283,10 @@ export class AgentSessionRepository {
     })();
   }
 
-  private hasRecoverablePendingInterrupt(run: StartupRunRow): boolean {
+  private readCurrentCheckpointInterrupts(threadId: string): PendingInterrupt[] | null {
     const rows = this.db
-      .prepare('SELECT interrupt_id, payload_json FROM agent_pending_interrupts WHERE run_id = ? ORDER BY position ASC')
-      .all(run.id) as Array<{ interrupt_id: string; payload_json: string }>;
-    if (rows.length === 0) {
-      return false;
-    }
-    for (const row of rows) {
-      if (row.interrupt_id.trim().length === 0) {
-        return false;
-      }
-      try {
-        const payload = JSON.parse(row.payload_json) as unknown;
-        if (typeof payload !== 'object' || payload === null || Array.isArray(payload) || !('kind' in payload)) {
-          return false;
-        }
-      } catch {
-        return false;
-      }
-    }
-    const currentCheckpointInterrupt = this.db
       .prepare(
-        `SELECT 1
+        `SELECT value_type, value_blob
          FROM langgraph_checkpoint_writes
          WHERE thread_id = ?
            AND checkpoint_ns = ''
@@ -1307,10 +1298,56 @@ export class AgentSessionRepository {
              LIMIT 1
            )
            AND channel = '__interrupt__'
-         LIMIT 1`
+         ORDER BY rowid ASC`
       )
-      .get(run.thread_id, run.thread_id) as { 1: number } | undefined;
-    return currentCheckpointInterrupt !== undefined;
+      .all(threadId, threadId) as CheckpointInterruptWriteRow[];
+    if (rows.length === 0 || rows.some((row) => row.value_type !== 'json')) {
+      return null;
+    }
+    try {
+      const values = rows.flatMap((row) => {
+        const value = JSON.parse(row.value_blob.toString('utf8')) as unknown;
+        return Array.isArray(value) ? value : [value];
+      });
+      const interrupts = values.map((value): PendingInterrupt => {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          throw new Error('agent_checkpoint_interrupt_invalid');
+        }
+        const interruptId = Reflect.get(value, 'id');
+        if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
+          throw new Error('agent_checkpoint_interrupt_id_invalid');
+        }
+        return {
+          interruptId,
+          payload: normalizeChatInterruptPayload(Reflect.get(value, 'value'))
+        };
+      });
+      validatePendingInterrupts(interrupts);
+      return interrupts;
+    } catch {
+      return null;
+    }
+  }
+
+  private restorePendingInterruptProjection(runId: string, threadId: string, interrupts: readonly PendingInterrupt[]): void {
+    const existing = this.getPendingInterrupts(runId).interrupts;
+    const checkpointInterruptIds = new Set(interrupts.map((interrupt) => interrupt.interruptId));
+    if (existing.length > 0 && existing.every((interrupt) => checkpointInterruptIds.has(interrupt.interruptId))) {
+      return;
+    }
+    validatePendingInterrupts(interrupts);
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
+      const insert = this.db.prepare(
+        `INSERT INTO agent_pending_interrupts
+         (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const [position, interrupt] of interrupts.entries()) {
+        insert.run(runId, threadId, interrupt.interruptId, position, JSON.stringify(interrupt.payload), now, now);
+      }
+    })();
   }
 
   private requirePendingInterrupt(runId: string, interruptId: string): void {

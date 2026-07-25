@@ -319,7 +319,7 @@ describe('AgentSessionRepository', () => {
     ]);
   });
 
-  it('reconciles a running partial resume back to waiting_user when another projection remains', () => {
+  it('rebuilds a missing projection from the current checkpoint after a partial resume crash', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -373,7 +373,17 @@ describe('AgentSessionRepository', () => {
       interruptId: 'interrupt_partial_first',
       runId: run.id
     });
-    seedCheckpoint(run.threadId);
+    seedCheckpoint(run.threadId, [
+      {
+        id: 'interrupt_partial_first',
+        payload: { kind: 'question', question: 'First answer?' }
+      },
+      {
+        id: 'interrupt_partial_remaining',
+        payload: { kind: 'question', question: 'Remaining answer?' }
+      }
+    ]);
+    repository.clearPendingInterrupts(run.id);
 
     repository.reconcileStartupRuns();
 
@@ -382,6 +392,13 @@ describe('AgentSessionRepository', () => {
       status: 'waiting_user'
     });
     expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+      {
+        interruptId: 'interrupt_partial_first',
+        payload: {
+          kind: 'question',
+          question: 'First answer?'
+        }
+      },
       {
         interruptId: 'interrupt_partial_remaining',
         payload: {
@@ -983,9 +1000,21 @@ describe('AgentSessionRepository', () => {
       interruptId: 'interrupt_resume_dispatch_restart',
       runId: resumeDispatchPending.id
     });
-    for (const run of [waitingNextTurn, dispatchPending, running, recovering, waitingUser, resumeDispatchPending]) {
+    for (const run of [waitingNextTurn, dispatchPending, running, recovering]) {
       seedCheckpoint(run.threadId);
     }
+    seedCheckpoint(waitingUser.threadId, [
+      {
+        id: 'interrupt_restart_reconcile',
+        payload: { kind: 'question', question: 'Resume after restart?' }
+      }
+    ]);
+    seedCheckpoint(resumeDispatchPending.threadId, [
+      {
+        id: 'interrupt_resume_dispatch_restart',
+        payload: { kind: 'question', question: 'Resume after restart?' }
+      }
+    ]);
 
     db.prepare(
       `INSERT INTO agent_tool_effects
@@ -1306,7 +1335,10 @@ function transitionRun(repository: AgentSessionRepository, runId: string, status
   });
 }
 
-function seedCheckpoint(threadId: string): void {
+function seedCheckpoint(
+  threadId: string,
+  interrupts: ReadonlyArray<{ id: string; payload: unknown }> = []
+): void {
   db.prepare(
     `INSERT INTO langgraph_checkpoints
      (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
@@ -1322,21 +1354,24 @@ function seedCheckpoint(threadId: string): void {
     Buffer.from('{}'),
     '2026-07-17T01:00:00.000Z'
   );
-  db.prepare(
+  const insertInterrupt = db.prepare(
     `INSERT INTO langgraph_checkpoint_writes
      (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    threadId,
-    '',
-    'checkpoint_restart_reconcile',
-    'task_restart_reconcile',
-    -3,
-    '__interrupt__',
-    'json',
-    Buffer.from('[]'),
-    '2026-07-17T01:00:00.000Z'
   );
+  for (const [index, interrupt] of interrupts.entries()) {
+    insertInterrupt.run(
+      threadId,
+      '',
+      'checkpoint_restart_reconcile',
+      `task_restart_reconcile_${index}`,
+      -3,
+      '__interrupt__',
+      'json',
+      Buffer.from(JSON.stringify({ id: interrupt.id, value: interrupt.payload })),
+      '2026-07-17T01:00:00.000Z'
+    );
+  }
 }
 
 function createRun(

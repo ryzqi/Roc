@@ -62,6 +62,13 @@
 - 已定位 UI 根因：`chat-transcript.ts` 将 persisted event 覆盖到单 `message.interrupt`，live projection 读取 `pendingInterrupts[0]`；`chat-message-row.tsx` 也只渲染单卡片。
 - Transcript collection 已完成：persisted event 按 `interruptId` 合并/移除，live state 保留全量，assistant bubble 逐项渲染 approval/question；focused renderer 4 files / 48 tests、`pnpm typecheck` 与 `git diff --check` 通过。
 - Restart reconcile 仅在 projection 已存在且 checkpoint 最新 main write 含 `__interrupt__` 时恢复 `dispatch_pending`/`running` 为 `waiting_user`。commit 删除最后 projection 后崩溃仍会进入 terminal；需从 latest checkpoint 的 `__interrupt__` 重建 projection。
+- `langgraph_checkpoint_writes` 保存 `__interrupt__` 的 serde typed value；recovery 必须沿用 LangGraph serializer 解码其 `{ id, value }[]`，再写入最小 projection，不能从 session event 猜测。
+- Roc saver 的 pending write 读取已使用 `this.serde.loadsTyped`；现有 repository restart fixture 证明 default `json` write 为 UTF-8 JSON blob。recovery 仅接受 `value_type='json'`、非空 `{id,value}` 数组和符合 `ChatInterruptPayload` 的 value；其他类型或形态视为不可恢复。
+- Recovery 以 checkpoint 为执行真相：每次 startup 读取最新 main checkpoint 的 actual interrupt collection；projection 缺失或与该 collection 不同则原子重建，不重复写 UI history events。
+- 真实 partial resume 的 latest checkpoint 保留已回答与未回答 interrupt；持久 projection 为 remaining subset 时必须保留，只有 projection 缺失或含 checkpoint 外 id 才从 checkpoint 重建。
+- Checkpoint recovery 回归通过：缺 projection 的 partial resume crash 从 checkpoint 重建 collection；existing remaining subset 不会被旧 checkpoint 重新扩展。repository、真实 DeepAgent/Roc saver restart、runtime multiple 共 31 tests 通过。
+- Crash recovery/concurrency review：decoder 只接受 observed `json` typed payload、malformed checkpoint fail closed、projection remaining subset 保持；快速第二 resume 明确拒绝且不删除剩余 projection。focused 4 files / 32 tests、`pnpm typecheck`、`git diff --check` 通过，未发现未处理 finding。
+- 现有 executor 已有 `normalizeInterruptPayload` 的 runtime shape validation；checkpoint recovery 需要复用等价严格语义，不能把 raw JSON 直接断言为 `ChatInterruptPayload`。
 - Final review 阻断：commit 删除最后 projection 到 executor 实际消费之间崩溃，checkpoint 仍有 interrupt 但 repository 无 projection，restart 会 terminal；需以 checkpoint 重建 projection 或保留可恢复 dispatch intent，并补 crash/event-publish regression。
 
 - multiple interrupt collection 与 dispatch failure preservation 已有部分实现，但上述原子性、竞态、schema 和生产语义 finding 尚未完成 review closure。
