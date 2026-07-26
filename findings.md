@@ -83,6 +83,24 @@
 - Part 4 初次 Spec review 无 finding；Standards 仅发现账本状态与 live skip/fail 分支陈述过期，已按当前实现修正。review-fix focused 验证为 config 3/3、integration 1 passed / 1 skipped、typecheck 与 strict unused 通过；live opt-in 缺 key 在 4ms 内明确失败。
 - Part 4 最终 Standards / Spec / Risk review 无 residual finding；broad gate 为 build、IPC check、默认 Vitest 315 files / 1724 tests 与 diff check 通过。真实 Anthropic live turn 因未提供凭据未运行；其默认 skipped 与 opt-in missing-key failure 边界已验证。
 
+### Deterministic Agent Eval Discovery
+
+- Part 5 baseline 为 `da0eb8d`；repo 当前无 `eval:agent`、eval config、versioned dataset 或 `tests/evals/` 路径，默认 Vitest 也尚未排除该目录。
+- `agent-development` 的 eval ladder 要求 scenario eval 对 versioned dataset 分开评分 task outcome 与 critical trajectory；本 Part 不用 unit test 名称冒充 eval，也不接外部 LangSmith dataset/judge。
+- Part 4 已提供真实 `buildDeepAgent()`、`RocSqliteCheckpointer`、offline tracing isolation 与 trajectory extraction 的可复用形状；Part 5 保持 test-only，不改生产 harness。
+- 初始 corpus 只冻结两个高信号 case：native `write_todos` 成功并持久化 todos；Plan Mode 即使 fake model 产生隐藏的 `write_file` call，也必须返回 error tool result 且不产生 file side effect。
+- runner 只接受显式 `--mode deterministic`，missing/unknown mode fail closed；live/judge mode 与其 provider/cost/variance contract 留给后续独立 part，不增加空实现或静默 alias。
+- Config/CLI 红灯为既有 integration 合同 3 passed、新 eval 合同 5 expected failures；失败分别落在缺 script、缺 default exclude、缺 dedicated config，以及 missing/unsupported mode 尚无结构错误码。
+- Scenario 红灯在 0 case 执行前精确失败于缺失 `deterministic-trajectory.v1.json`，证明 dataset 是显式执行输入；尚未用实现后轨迹反推样例。
+- 实际 `pnpm eval:agent -- --mode deterministic` 会把一个前导 `--` 传给 Node script；runner 只规范化这一种 package-manager separator，missing/unsupported/extra args 继续 fail closed。
+- 固定 `@langchain/core 1.2.2` 的 `ToolMessage.status` 是 optional：native success result 省略 status，Plan Mode guard error 显式为 `error`。eval adapter 明确把 `undefined` 规范化为 `success`，不对其他未知值兜底。
+- Runner 通过当前 Node 直接启动安装包公开 `vitest.mjs` bin，避免 Windows `shell: true` 参数拼接和 Node 25 `DEP0190` 警告。
+- Focused green：deterministic dataset/schema/scenarios 1 file / 5 tests、config/CLI 2 files / 8 tests、Part 4 integration 1 passed / 1 skipped、typecheck 与 strict unused 均通过；生产代码无 diff。
+- 最终 Spec review 无 finding；Standards 仅发现 `progress.md` 顶部 HEAD/阶段陈述过期，已同步当前 baseline 与验证状态。
+- 本地 Risk review 未发现新增行为 finding；runner 相对 config 路径符合 package script 从仓库根执行的合同，Plan Mode case 同时在返回 state 与 SQLite checkpoint 证明无 file side effect，ambient tracing/key 与 fetch 均被显式隔离。
+- Broad 首轮与 build 并行的 full Vitest 有两个未改动测试超时；两个文件独占重跑全绿，随后 full suite 独占重跑 316 files / 1729 tests 全绿。该失败归因为并行资源竞争，不需要修改生产或测试 timeout。
+- Part 5 最终 Standards / Spec / Risk 无未处理 finding；IPC check、build、default full suite 与 diff check 全部通过。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。
@@ -153,7 +171,7 @@
 | 6.1 | `e538ba9` | Model usage 按 call 合并并跨 main/summary/subagent/retry/cache 累加。 |
 | 6.2 | `abc3220` | Versioned、redacted per-run telemetry 与 terminal/recovery/migration/retention/metrics durability。 |
 | 6.3 | `012c870`、`82164ab` | 默认关闭的 LangSmith native tracing、durable root lifecycle，以及独立可观测性 settings UI / IPC / secret controls。 |
-| 6.4 | 当前提交 | 独立 integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 |
+| 6.4 | `da0eb8d` | 独立 integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 |
 
 ## Verification Anchors
 

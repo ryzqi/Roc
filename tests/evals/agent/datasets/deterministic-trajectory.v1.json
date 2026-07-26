@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "native_write_todos",
+      "mode": "chat",
+      "prompt": "Record the completed deterministic evaluation step.",
+      "modelToolCalls": [
+        [
+          {
+            "name": "write_todos",
+            "id": "call_eval_write_todos",
+            "args": {
+              "todos": [
+                {
+                  "content": "Verify the deterministic agent trajectory.",
+                  "status": "completed"
+                }
+              ]
+            }
+          }
+        ],
+        []
+      ],
+      "expected": {
+        "trajectory": [
+          {
+            "kind": "assistant_tool_call",
+            "name": "write_todos",
+            "id": "call_eval_write_todos",
+            "args": {
+              "todos": [
+                {
+                  "content": "Verify the deterministic agent trajectory.",
+                  "status": "completed"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "tool_result",
+            "name": "write_todos",
+            "id": "call_eval_write_todos",
+            "status": "success"
+          }
+        ],
+        "todos": [
+          {
+            "content": "Verify the deterministic agent trajectory.",
+            "status": "completed"
+          }
+        ],
+        "files": []
+      }
+    },
+    {
+      "id": "plan_blocks_write_file",
+      "mode": "plan",
+      "prompt": "Attempt the requested mutation, then finish after the tool result.",
+      "modelToolCalls": [
+        [
+          {
+            "name": "write_file",
+            "id": "call_eval_blocked_write",
+            "args": {
+              "file_path": "/workspace/blocked.txt",
+              "content": "This write must not happen."
+            }
+          }
+        ],
+        []
+      ],
+      "expected": {
+        "trajectory": [
+          {
+            "kind": "assistant_tool_call",
+            "name": "write_file",
+            "id": "call_eval_blocked_write",
+            "args": {
+              "file_path": "/workspace/blocked.txt",
+              "content": "This write must not happen."
+            }
+          },
+          {
+            "kind": "tool_result",
+            "name": "write_file",
+            "id": "call_eval_blocked_write",
+            "status": "error"
+          }
+        ],
+        "todos": [],
+        "files": []
+      }
+    }
+  ]
+}

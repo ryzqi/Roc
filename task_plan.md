@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 6 Part 4 - Agent Integration Mode**
+**Stage 6 Part 5 - Deterministic Agent Eval Mode**
 
-**Status:** complete (`Part 3 complete at 82164ab; Part 4 verified passing in current commit`)
+**Status:** complete (`Verified passing; included in the current Part 5 commit`)
 
-- Review baseline：`82164ab feat(settings): add LangSmith observability controls`。
-- 当前范围：新增独立 `test:agent:integration` mode；用真实 Deep Agents harness 与 Roc SQLite 验证最小 agent execution/state contract，并把可选真实 provider case 与默认 CI 隔离。
-- 不在本 part 引入：deterministic eval dataset、LLM-as-judge/live eval、agent performance gate、Stage 7 cleanup。
-- 已知事实：现有 `core-plugins.integration.test.ts` 使用 static executor，不执行 Deep Agents；`buildDeepAgent()` 是 Roc guardrails 与 native harness 的单一组装入口；默认测试不能依赖 provider key 或外网。
+- Review baseline：`da0eb8d test(agent): add dedicated integration mode`。
+- 当前范围：新增本地 deterministic agent eval runner、专用 Vitest mode 与 strict versioned dataset；用真实 `buildDeepAgent()` / Roc SQLite 分别评分 outcome、critical trajectory 与持久 state。
+- 不在本 part 引入：真实 provider、LLM-as-judge/live eval、agent performance gate、生产 runtime 改动、Stage 7 cleanup，或一次覆盖 `plan.md` 列出的全部后续 eval 场景。
+- 已知事实：Part 4 已证明真实 harness/offline isolation；现有 repo 无 eval script/dataset；Plan Mode runtime guard 与 `FakeToolCallingModel` 可提供确定性的成功/安全拒绝轨迹。
 
 ## Phase Status
 
@@ -39,28 +39,28 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 为当前提交。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 为当前 commit。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
 
 ## Current Acceptance
 
-- [x] `package.json` 提供独立 `test:agent:integration` 命令，默认 `pnpm test` 不运行该 suite。
-- [x] 离线 integration 实际经过 Roc `buildDeepAgent()` / Deep Agents runnable 与 Roc SQLite owner，不用 static executor 伪造 agent loop。
-- [x] 默认未 opt-in 时 live provider case 显式 skipped；opt-in 后缺 `ANTHROPIC_API_KEY` 明确失败；离线 case 不因 ambient tracing/key 发起外网请求。
-- [x] integration 断言结构化结果、tool/trajectory、run/thread/state 或持久 side effect，不锁死模型文案。
-- [x] 失败边界可定位为 build、provider、tool、state 或 timeout；测试有明确清理，不残留进程、数据库或临时 workspace。
-- [x] Standards、Spec 与 Risk review 无未处理 finding；focused、typecheck、strict unused、build、default/full test、integration command 与 diff check 通过。
-- [x] Part 4 形成独立提交。
+- [x] `package.json` 提供 `eval:agent`，`pnpm eval:agent -- --mode deterministic` 运行专用 suite；missing/unknown mode 在启动 Vitest 前明确失败。
+- [x] 默认 `pnpm test` 排除 `tests/evals/**`；专用 config 只收集 `tests/evals/agent/**/*.eval.test.ts`。
+- [x] dataset 是 strict、versioned JSON，case id 唯一；invalid/unknown schema 明确失败，不静默补默认值。
+- [x] 每个 case 实际执行 Roc `buildDeepAgent()` 与 `RocSqliteCheckpointer`，显式关闭 ambient tracing 并拒绝外网。
+- [x] 初始 corpus 分别覆盖 native `write_todos` 成功和 Plan Mode `write_file` 拒绝；outcome、critical trajectory、state/side effect 分开断言，不锁死 terminal 文案。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；config/CLI、eval command、integration regression、typecheck、strict unused、build、default/full test 与 diff check 通过。
+- [x] Part 5 形成独立提交。
 
 ## Current Step
 
-**Close the dedicated integration mode**
+**Part 5 closure**
 
-**Status:** complete (`Verified passing; committed in current commit`)
+**Status:** complete (`Verified passing; included in the current Part 5 commit`)
 
-- Observable contract：离线 case 必须执行真实 Deep Agents runnable 并产生可断言的结构化 agent/native-tool 结果；live case 只有 `ROC_AGENT_INTEGRATION_LIVE=1` 且显式提供 provider 凭据时才执行。
-- Isolation contract：独立 config/include 与 script；默认 Vitest、开发环境和日志不读取或输出 provider secret，不把 skip 伪装成 pass。
-- Verification：config 3/3、integration 1 passed / 1 skipped、missing-key expected failure、typecheck、strict unused、IPC check、build、default Vitest 315 files / 1724 tests 与 diff check 全部完成；最终双轴/Risk review 无 residual finding。
+- Observable contract：每个 dataset case 返回明确 terminal outcome，并独立比较 critical tool-call/result trajectory 与 state/side effect；不同文案不改变评分。
+- Isolation contract：独立 runner/config/include；默认 suite 不收集；deterministic mode 不读取 provider key、不访问网络、不写真实 workspace。
+- Verification：先固定 CLI/config/dataset/case contract 红灯，再实现最小 runner与两 case corpus；随后 review、focused 与 broad gate。
 
 ## Next Steps
 
@@ -76,6 +76,10 @@
 10. [complete] 先增加独立命令/default exclusion/offline execution/live opt-in no-key failure 的稳定红测。
 11. [complete] 实现最小 integration config 与 harness，完成 focused verification。
 12. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与独立提交。
+13. [complete] 定位 eval script/config、真实 builder/checkpointer、trajectory 与 Plan Mode guard 复用边界，冻结 Part 5 contract。
+14. [complete] 增加 CLI/config/dataset 与两个 deterministic scenario 的稳定红测。
+15. [complete] 实现最小 runner、专用 config、strict dataset 与真实 eval harness，完成 focused verification。
+16. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与独立提交。
 
 ## Decisions
 
@@ -144,3 +148,7 @@
 | 撤回 tracing 试改与更新账本的合并 patch 包含空 hunk，`apply_patch` 拒绝解析 | 1 | 拆成有明确上下文的 hunk 重试；失败 patch 未修改文件。 |
 | Part 4 focused 首轮 typecheck 报 integration fixture 缺少必填 `contextBudgetTokens` | 1 | 对齐 `DeepAgentBuildInput`，显式传入 `undefined`；随后行为测试与 typecheck 均通过。 |
 | 归一化 `package.json` 混合换行时，整文件转录把 `better-sqlite3` 误写为 `better-sql3` | 1 | readback 前即发现并恢复原值；随后用 baseline diff、JSON/config test 与 EOL 检查确认只有目标脚本变更。 |
+| Part 5 runner 首次执行时，pnpm 把脚本分隔符作为字面 `--` 传入，parser 报 `agent_eval_unknown_arg:--` | 1 | 增加含分隔符的 CLI 红测，只剥离一个前导 `--`；实际计划命令随后通过。 |
+| 核对固定 LangChain ToolMessage 实现时再次把 wildcard 放进 Windows 路径参数，`rg` 返回路径语法错误 | 1 | 改用已解析的 `node_modules/@langchain/core/dist/messages` 路径；确认 success status 可省略、error 显式。 |
+| Part 5 broad gate 将 full Vitest 与 build 并行运行，两个未改动测试分别在 10s/20s 超时；314 files / 1727 tests 通过，主命令退出码 1 | 1 | 先分别单跑两个失败文件判断是否为资源竞争或既有波动，再让 full suite 独占重跑；不沿用该次失败结果宣称 broad passing。 |
+| 记录 Part 5 broad 失败的首个账本 patch 使用了与实际错误表不一致的上下文，`apply_patch` 整体拒绝 | 1 | 读取当前尾部后拆分为精确上下文 patch；失败 patch 未修改任何文件。 |

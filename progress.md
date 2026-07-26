@@ -5,11 +5,11 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`82164ab feat(settings): add LangSmith observability controls`。
+- Part 5 review baseline：`da0eb8d test(agent): add dedicated integration mode`。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1-3 已提交；Part 4 agent integration mode 已验证并在当前提交完成。
+- Stage 6：Part 1-5 已完成并分别提交；Part 5 位于当前 commit。
 - Stage 7：pending。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；是否纳入后续提交需单独决定。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 5 提交明确排除该文件。
 
 ## Completed Milestones
 
@@ -32,7 +32,7 @@
 | Stage 6.1 | Model usage 按 call 合并，跨 main/summary/subagent/retry/cache 累加。 | `e538ba9` |
 | Stage 6.2 | Durable per-run telemetry、runtime lifecycle、migration/retention/health 与 metrics cardinality。 | `abc3220` |
 | Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、`82164ab` |
-| Stage 6.4 | 独立 agent integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 | 当前提交 |
+| Stage 6.4 | 独立 agent integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 | `da0eb8d` |
 
 ## Verification Ledger
 
@@ -233,3 +233,25 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - Full Vitest 仍输出既有 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
 - 真实 Anthropic live turn 因未提供凭据未运行；默认 skipped 与 opt-in missing-key expected failure 已直接验证。
 - 当前状态：**Verified passing; committed in current commit**。
+
+## 2026-07-27 - Stage 6 Part 5 Deterministic Agent Eval Mode
+
+- Part 4 已独立提交为 `da0eb8d test(agent): add dedicated integration mode`；提交后工作树仅剩未跟踪只读 `plan.md`。
+- Part 5 baseline 固定为 `da0eb8d`；范围为本地 deterministic runner、专用 config、strict versioned dataset 与两个真实 harness scenario，不含 live/judge/performance 或生产 runtime 改动。
+- CodeGraph 与本地测试确认 `buildDeepAgent()`、`RocSqliteCheckpointer`、`FakeToolCallingModel`、Plan Mode runtime guard 和 Part 4 offline isolation 可形成单一 test-only 路径。
+- Observable contract：分别评分 terminal outcome、critical tool trajectory 与持久 state/side effect；初始 case 为 `write_todos` success 和 Plan Mode `write_file` denial。
+- 当前状态：**Located**。下一步增加 CLI/config/dataset/scenario red tests，不先实现 runner 或 config。
+- Config/CLI red：2 files / 8 tests 为既有 integration 3 passed、eval 5 expected failures；script、default exclude、dedicated config 与两个 fail-closed mode error 均有精确失败证据。
+- Scenario red：`deterministic-trajectory.eval.test.ts` 在 0 case 执行前以 `ENOENT` 精确失败于缺失 versioned dataset。
+- 当前状态：**Changed, red tests verified**。下一步实现 runner/config/dataset，再观察真实 Plan Mode trajectory，不修改生产 guard。
+- 首次实际 runner 执行在启动 Vitest 前失败为 `agent_eval_unknown_arg:--`；原因是 pnpm 保留计划命令中的 separator。含 separator 的两个 CLI 红测稳定复现后，parser 只剥离一个前导 `--`。
+- 首次 scenario green 为 2 cases 中 Plan Mode denial 通过、native `write_todos` 因 success `ToolMessage.status` 省略而失败；固定 SDK 类型/实现确认 optional contract 后，eval adapter 显式规范化 undefined success，未改 dataset 或生产 harness。
+- Runner 改为当前 Node 直接启动已安装 Vitest bin，移除 Windows shell 拼接与 `DEP0190` warning。
+- Focused green：`pnpm eval:agent -- --mode deterministic` 1 file / 5 tests；config/CLI 2 files / 8 tests；Part 4 integration 1 passed / 1 skipped；typecheck 与 strict unused passed。
+- Runner 收敛后的新鲜 focused gate：eval 1 file / 5 tests、config/CLI 2 files / 8 tests、Part 4 integration 1 passed / 1 skipped、typecheck、strict unused 与 `git diff --check da0eb8d --` 全部通过。
+- 最终 Spec review 无 finding；Standards 仅发现 `progress.md` 顶部 HEAD/阶段状态过期，已同步修正；本地 Risk review 对 cwd、CLI、dataset、tracing/network、checkpoint 与 side effect 边界未发现新增 finding。
+- Broad 首轮：`pnpm check:ipc`、`pnpm build` 与 diff check 通过；与 build 并行的默认 full Vitest 为 314 files passed、2 files timeout failed，失败位于未改动的 NVIDIA schema compatibility 与 production multiple-interrupt tests。
+- 两个 timeout 文件独占重跑分别为 1/1 与 3/3 passed；随后默认 full Vitest 独占重跑为 316 files / 1729 tests passed，确认首轮失败是并行资源竞争下的 timeout。
+- Full Vitest 仍输出仓库已记录的 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
+- Broad gate 最终证据：`pnpm check:ipc`、`pnpm build`（含 typecheck）、默认 `pnpm test`、strict unused 与 `git diff --check da0eb8d --` 全部通过。
+- 当前状态：**Verified passing; included in the current Part 5 commit**。
