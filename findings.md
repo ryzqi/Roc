@@ -58,6 +58,13 @@
 - Crash-window 修复后 repository 只枚举 `cancelled/completed/failed/interrupted` 四种 tracing terminal 状态；initialize 在 run startup reconciliation 之后查询，因此既覆盖本次新转为 interrupted 的 run，也覆盖此前已终态但未 cleanup 的 session。`waiting_user` regression 证明非终态 session 保留。
 - 最终 Spec 复审未发现 backend 行为错误或 scope creep；UI 数据外发/retention 提示仍按计划属于下一独立 renderer part，不阻断 backend commit。最终本地 Risk review 无新 finding；残余风险仅为多个 crash residue 串行 drain 可能放大 critical startup 延迟。
 - Standards 指出的测试证据缺口已补：repository parameterized matrix 精确覆盖 `cancelled/completed/failed/interrupted`；plugin enabled fixture 证明 persisted failed root 执行 POST/PATCH、使用 `agent_run_failed_before_trace_cleanup` 且 waiting session 保留。最终出站 error redaction 继续由 fake-fetch regression 独立证明。
+- Part 3 backend 已在最终 15 files / 124 tests、strict unused、typecheck、IPC check、diff check 通过且 Standards / Spec / Risk 无 residual finding 后独立提交为 `012c870 feat(agent): add opt-in LangSmith tracing`；UI review baseline 从该提交开始。
+- UI 校准继续使用现有 Roc settings sidebar、紧凑 tokens 与表单密度；只采用 visible labels、键盘 focus、`aria-live`/`role="alert"`、async loading/disabled/success 和响应式无横向溢出要求，不采用外部设计查询返回的 landing、dark-only、glow、装饰卡片或外部字体方向。
+- CodeGraph 已确认 LangSmith config/secret 不属于 `useSettingsDraft` / `SettingsSaveRequest` 的全局保存模型；renderer 应由独立 section 直接调用生成的 Agent capability client，并只保留公开 config 与 `apiKeyStored` 状态。
+- 可观测性 UI 已沿统一 plugin capability adapter 增加四条显式 IPC；preload 与 renderer 只接收 strict `AgentLangSmithSettings`，其 output schema 不含 API key 明文。
+- UI review 已关闭两个 Medium：清 key 同时约束 persisted/draft enabled，enabled config 保存再次检查 stored key；独立 section 不再遮蔽其他 section 的全局 dirty count 与保存入口。
+- 响应式 smoke fixture 已对齐真实 settings header，并在 320px 与 1280px 同时验证 page actions、表单、输入和 key actions 无横向溢出或重叠。
+- Part 3 backend 的 v13 migration 曾留下一个 kernel integration v12 期望；full Vitest 稳定暴露后已把唯一显式版本锚点同步为 13，focused 与 full suite 均转绿。
 
 ### Telemetry Contract
 
@@ -128,6 +135,7 @@
 | 5 | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` | Context hard budget、single compaction path、saver conformance、restart-safe HITL、recovery-safe retention。 |
 | 6.1 | `e538ba9` | Model usage 按 call 合并并跨 main/summary/subagent/retry/cache 累加。 |
 | 6.2 | `abc3220` | Versioned、redacted per-run telemetry 与 terminal/recovery/migration/retention/metrics durability。 |
+| 6.3 | `012c870` 与当前提交 | 默认关闭的 LangSmith native tracing、durable root lifecycle，以及独立可观测性 settings UI / IPC / secret controls。 |
 
 ## Verification Anchors
 
@@ -136,3 +144,4 @@
 - Metrics cardinality：`tests/main/metrics-service.test.ts`。
 - Backpressure：`tests/main/plugins/agent/run-event-backpressure.test.ts`。
 - Windows cancellation：`tests/main/services/shell-execution-cancellation.test.ts`、`tests/main/services/hooks/command-runner.test.ts`。
+- Observability settings：`tests/renderer/settings-view.observability.test.tsx`、`tests/main/preload-contract.test.ts`、`tests/main/ipc-plugin-adapter.test.ts`、`tests/smoke/responsive-layout-smoke.mjs`。

@@ -22,10 +22,10 @@
 
 **Stage 6 Part 3 - LangSmith Opt-in Tracing**
 
-**Status:** in_progress (`Backend verified passing; independent commit pending`)
+**Status:** complete (`Backend 012c870; UI in current commit`)
 
-- Review baseline：`abc3220 feat(agent): persist durable per-run telemetry`。
-- 当前范围：LangSmith 默认关闭、显式 opt-in、Roc run/thread correlation、原生 nested trace、metadata allowlist 和导出前 redaction。
+- Review baseline：`012c870 feat(agent): add opt-in LangSmith tracing`。
+- 当前范围：shared IPC / generator / preload / renderer 独立“可观测性”section，公开 tracing config、secret stored 状态、显式数据外发说明与保存反馈。
 - 不在本 part 引入：真实 provider integration、eval dataset、agent performance gate、Stage 7 cleanup。
 - 已知事实：Roc 使用 Deep Agents/LangGraph 执行层；runnable config 注入点、Agent plugin config/secret owner、本机 LangSmith SDK API 和 renderer 独立设置入口均已确认。
 
@@ -39,30 +39,29 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；当前 Part 3。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI 为当前提交。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
 
 ## Current Acceptance
 
-- [x] 未显式启用时不创建 LangSmith client、不向外发送 trace；启用合同、secret 来源和失败语义明确。
-- [x] 一个 Roc run 对应可关联的 trace root；thread、graph、model、tool、subagent 使用原生 nested runs，不复制产品 event log。
-- [x] 仅允许 run origin、manifest hash、app version 等低敏 metadata；run/thread correlation 只作 trace metadata。
-- [x] 导出前拒绝 secret、local absolute path、raw reasoning 和未截断的大 tool output。
-- [x] fake client regression 覆盖 disabled、enabled hierarchy/metadata/redaction 与 exporter failure boundary。
-- [x] Standards、Spec、Risk review 无未处理 finding。
-- [ ] Focused、strict unused、typecheck、IPC check、build、full Vitest、diff check 全部通过。
-- [ ] Part 3 形成独立提交。
+- [x] settings navigation 有独立“可观测性”section，不混入 provider/memory，也不新增全局 AppSettings 字段。
+- [x] renderer 通过生成的 preload IPC 读取/保存公开 config、设置/清除 API key；任何响应都不返回 key 明文。
+- [x] UI 明确说明启用后数据发送到 LangSmith、项目名用途、API key stored 状态和 retention 由 LangSmith workspace policy 控制。
+- [x] 表单有 visible labels、loading/disabled、成功/错误反馈；enabled 必须先有 key，清 key 必须先关闭 tracing。
+- [x] renderer regression 覆盖 load、save、set/clear secret、失败恢复与 section navigation；移动端无重叠/横向溢出。
+- [x] Standards、Spec、Risk 与 UI/UX review 无未处理 finding。
+- [x] Focused、strict unused、typecheck、IPC check、build、full Vitest、diff check 全部通过。
+- [x] Part 3 形成独立提交。
 
 ## Current Step
 
-**Commit verified backend tracing**
+**Close observability settings UI**
 
-**Status:** in_progress (`Reviews and direct gates passed; staged review pending`)
+**Status:** complete (`Verified passing; committed in current commit`)
 
-- Observable contract：disabled 即使存在 `LANGSMITH_*` / `LANGCHAIN_*` ambient env 也不创建 client 或 tracer；同一 Roc run 跨首次执行、HITL resume、recovery retry 和应用重启仍只有一个 SDK 原生 root trace。
-- Review root cause：run-scoped manager 仅在进程内保存 root；`waiting_user` 可跨应用重启恢复，因此 resume 会创建第二个 root。`RunTree.postRun()` 还会在 client redaction 前写入 `extra.runtime`。
-- Verification：先增加 restart continuity、manual root runtime redaction 与 root POST/PATCH exporter failure 红测，再修复 durable owner 和 export boundary；用真实 runnable 精确断言业务结果不变。
-- 当前 crash-window acceptance：启动时必须发现 `agent_langsmith_trace_sessions` 中对应已终态 run 的 row，使用原 terminal status best-effort finish，并最终删除本地 session；非终态 waiting/recovery session 不得被误清理。
+- Observable contract：renderer 只持有公开 config 与 `apiKeyStored` 布尔值；四个 command 通过现有 Agent capability IPC adapter 到唯一 backend owner，保存结果在 UI 立即可见且失败可恢复。
+- Visual contract：沿用现有紧凑 settings tokens、sidebar 和表单组件；不采用独立 landing、dark-only palette、glow 或装饰性卡片。
+- Verification：18-file direct gate、review-fix/settings gates、strict unused、typecheck、IPC check、build、314 files / 1721 tests full Vitest、320/1280px responsive smoke 与最终双轴/Risk/UI review 均通过。
 
 ## Next Steps
 
@@ -71,8 +70,10 @@
 3. [complete] 为 restart root continuity、manual root runtime redaction、root exporter failure 与 cancel/shutdown lifecycle 增加稳定红测。
 4. [complete] 修复 durable root identity、export boundary 与 tracing lifecycle owner，重跑 backend gate。
 5. [complete] 删除 Standards 复审确认的 unused import；用红测复现终态事务后崩溃遗留 trace session，并实现只处理四类 terminal session 的最小 startup reconciliation。
-6. [in_progress] 最终 Standards / Spec / Risk 无 residual finding；15-file direct gate、strict unused、typecheck、IPC check 与 diff check 通过，待 staged diff 复核后提交 backend 部分。
-7. 再实施 shared IPC / preload / renderer 独立“可观测性”section，review、验证并提交。
+6. [complete] 最终 Standards / Spec / Risk 无 residual finding；15-file direct gate、strict unused、typecheck、IPC check 与 diff check 通过；backend 已提交为 `012c870`。
+7. [complete] 定位 shared IPC / generator / preload / renderer settings 路径，固定 observable contract；5 files / 24 tests 红灯为 17 passed、7 expected failures。
+8. [complete] 实现独立“可观测性”section，生成 IPC，完成 review、focused/响应式与 broad verification。
+9. [pending] 按 `plan.md` 进入 Stage 6 integration mode / deterministic eval 的下一独立 part。
 
 ## Decisions
 
@@ -102,6 +103,9 @@
 | Medium | 同一 run 已持有 client 时关闭 tracing，下一次 provider lookup 直接删除 Map entry，未调用 client cleanup。 | 已增加 idempotent dispose 与配置关闭回归；2 files / 34 tests、typecheck 通过，待最终复审。 |
 | Low | `src/main/plugins/agent/index.ts` 的 `AgentLangSmithConfigV1` type import 未使用，strict unused 报 TS6196。 | import 已删除；strict unused 新鲜通过。 |
 | Medium | terminal DB transaction 提交后、`finishTracingBestEffort()` 前若进程崩溃，重启时现有 reconciliation 不扫描此前已终态 run，会遗留 durable trace session。 | 红绿修复；all-terminal/enabled PATCH regression、最终双轴/Risk review 与 15 files / 124 tests 全部通过。 |
+| Medium | 持久 tracing 已关闭但本地启用草稿未保存时仍可清 key，随后留下 enabled/no-key 无效草稿。 | Standards / Spec 共同发现；约束 clear 与 enabled save 后 review-fix gate 2 files / 5 tests 通过，最终双轴复审无 residual finding。 |
+| Medium | 切换到独立“可观测性”section 会隐藏其他 settings section 已存在的 dirty 计数和全局保存入口。 | Local Risk review 发现；恢复原有全局 header，跨 section regression 与最终 Risk/UI review 通过。 |
+| Low | 响应式 smoke 的可观测性 header fixture 使用了实际 UI 不存在的单 pill，未覆盖更宽的 dirty count 与全局操作按钮。 | fixture 已对齐真实 header，并把 page actions 纳入 overflow 断言；320/1280px smoke 与增量双轴复审通过。 |
 
 ## Errors Encountered
 
@@ -124,3 +128,9 @@
 | Risk review 的三个只读核对再次用 `Promise.all` 包含可能 non-match/越界的命令，单个退出码 1 中断整组 | 1 | 改用 `Promise.allSettled` 并分别报告结果；这是已记录错误模式的重复，后续 review 检索禁止再用会 fail-fast 的并行组。 |
 | Final-review fix 首次 green 并行 gate 的 typecheck 报 5 个测试类型错误：fake tracing 缺 `shutdown()`，tracer client 窄接口不暴露 drain/cleanup | 1 | 只补 fake lifecycle 方法，并在测试 spy 边界使用实际 `Client` 类型；生产实现方向不变。 |
 | Enabled startup PATCH 测试在 `Client.prototype.updateRun` spy 边界预期 `[REDACTED]`，实际为内部安全错误码 | 1 | 该 spy 位于 Client anonymizer 之前；改为断言 startup mapping 原始错误码，最终出站 `[REDACTED]` 继续由既有 fake-fetch regression 证明。 |
+| UI phase 账本更新把不存在的 findings 决策表行作为 patch context | 1 | 整体 patch 未应用；改为逐文件使用实际上下文更新。 |
+| 恢复阶段的首组只读并行检查包含预期可能失败的探测，单条非零使编排器未保留其余输出 | 1 | 改为逐项捕获并报告结果；确认失败调用未修改文件。 |
+| LangSmith surface 搜索包含不存在的 `tests\\preload` 路径，`rg` 在返回有效匹配后仍以路径错误退出 | 1 | 后续只对 `rg --files` 已确认存在的目录检索；失败命令未修改文件。 |
+| UI 首轮 green 的 checkbox updater 延迟读取 React synthetic event，`currentTarget` 已为 `null`；静态扫描同时发现两个新增状态背景 token 未定义 | 1 | 在 handler 内先复制 primitive 值再更新 state，并改用现有 `--surface-strong`；其余 23 tests、typecheck、IPC check、diff check 已通过。 |
+| UI expanded gate 的 strict unused 发现新 renderer test 在 automatic JSX runtime 下仍导入默认 `React` | 1 | 删除该单个 unused import；15 files / 60 settings tests 已通过，待重跑 strict unused。 |
+| UI broad gate 首次 full Vitest 发现 kernel integration 仍期望 Agent schema v12，而 Part 3 backend 已新增 canonical v13 migration | 1 | focused 1 file / 2 tests 稳定复现后只把显式版本锚点更新为 13；focused 2/2、双轴增量 review 与 full Vitest 314 files / 1721 tests 通过。 |

@@ -5,13 +5,10 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`abc3220 feat(agent): persist durable per-run telemetry`。
+- HEAD：当前 Part 3 UI 提交（`feat(settings): add LangSmith observability controls`）。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1、Part 2 已完成并提交；Part 3 LangSmith opt-in tracing 为 `Located`。
+- Stage 6：Part 1、Part 2 与 Part 3 backend 已提交；Part 3 observability settings UI 已在当前提交完成。
 - Stage 7：pending。
-- Stage 6 Part 3 已固定 strict config/secret、native callback、metadata allowlist 和 redaction 合同；下一步为红测。
-- Part 3 backend red gate：3 files；两个新 module import 缺失、executor provider 未调用/未注入共 4 个预期失败，既有 executor 16 tests 通过。
-- V1 migration blocker 已修复；最终 review、focused 与 broad verification 全部通过。
 - `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；是否纳入后续提交需单独决定。
 
 ## Completed Milestones
@@ -34,6 +31,7 @@
 | Stage 5.3C | Recovery-safe retention 覆盖 events、outbox、artifacts、checkpoint/writes。 | `9942594` |
 | Stage 6.1 | Model usage 按 call 合并，跨 main/summary/subagent/retry/cache 累加。 | `e538ba9` |
 | Stage 6.2 | Durable per-run telemetry、runtime lifecycle、migration/retention/health 与 metrics cardinality。 | `abc3220` |
+| Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、当前提交 |
 
 ## Verification Ledger
 
@@ -179,3 +177,24 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - 最终 Spec 复审：backend 无 residual finding；UI 数据外发/retention 提示仍属于下一独立 part。
 - 最终 backend direct gate：15 files / 124 tests passed；`pnpm typecheck`、strict unused、`pnpm check:ipc` 与 `git diff --check abc3220` 全部通过。
 - 当前状态：**Verified passing; backend independent commit pending**。
+
+## 2026-07-26 - Stage 6 Part 3 UI Resume
+
+- Backend 已独立提交为 `012c870 feat(agent): add opt-in LangSmith tracing`；提交后当前工作树仅有活动账本 `task_plan.md` 与未跟踪长期规格 `plan.md`。
+- UI review baseline 切换为 `012c870`；范围固定为 shared IPC / generator / preload / renderer 独立“可观测性”section，不扩展全局 `AppSettings` 或 settings “保存全部”dirty model。
+- 设计校准只采用现有 Roc settings 视觉语言、visible labels、明确 loading/error/success、键盘 focus 与响应式无溢出；拒绝与现有产品冲突的 landing、dark-only、glow、装饰卡片和外部字体建议。
+- CodeGraph 已确认 `SettingsView` / `SETTINGS_SECTIONS` 是 navigation owner，`useSettingsDraft` 只管理现有全局 settings；下一步定位 capability -> shared IPC -> generated preload -> renderer client 的完整路径并先加红测。
+- IPC/preload/renderer 红测：5 files / 24 tests，17 passed、7 failed；失败精确落在四条 adapter mapping、四个 schema channel、四个 preload method、可观测性 navigation 和尚不存在的 renderer panel。
+- 首轮实现后 direct gate 5 files / 24 tests、typecheck 与 IPC check 通过；expanded settings gate 15 files / 60 tests、strict unused 与响应式 smoke 通过。
+- Standards 与 Spec review 共同发现 1 个 Medium：持久配置关闭但本地启用草稿未保存时仍可清 key，留下 enabled/no-key 无效草稿。Local Risk review 另发现切换到独立 section 会遮蔽其他 section 的全局 dirty/save 状态。
+- Review-fix 红灯：1 renderer file / 4 tests，2 passed、2 failed；分别精确命中 clear 草稿约束和全局 dirty 状态遮蔽。
+- Review-fix green：2 files / 5 tests passed；direct gate 18 files / 71 tests、settings gate 15 files / 60 tests passed。
+- preload 四个方法均有精确 channel/参数断言；strict unused、typecheck、IPC check 与初始 diff check passed。
+- 最终 Standards / Spec 复审无 residual finding；本地 Risk / UI review 无生产逻辑 finding。
+- Risk/UI review 发现响应式 smoke 的 settings header fixture 与真实 UI 不一致；fixture 已改为真实 dirty count + reset/save actions，并把 `pageActions` 纳入 overflow 断言。
+- 修正后的 renderer focused 2 files / 15 tests 与 responsive smoke passed；320px、1280px 的 document/body、header actions、表单、输入和 key action 均无横向溢出或重叠。增量 Standards / Spec 复审无 finding。
+- 首次 full Vitest：314 files 中 313 passed；`kernel-runtime.test.ts` 唯一失败，仍期望 Agent schema v12，而 Part 3 backend canonical migration 已为 v13。
+- v13 integration red-green：focused 1 file / 2 tests 先稳定 1 failed，更新唯一显式版本锚点后 2/2 passed；增量 Standards / Spec 复审无 finding；独立补漏提交为 `77cf36a test(kernel): expect agent schema v13`。
+- Broad gate：strict unused、typecheck、IPC check、build、full Vitest 314 files / 1721 tests、responsive smoke 与 `git diff --check` passed。
+- Full Vitest 仍输出既有 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
+- 当前状态：**Verified passing; committed in current commit**。

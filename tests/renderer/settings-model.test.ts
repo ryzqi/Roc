@@ -58,12 +58,14 @@ describe('settings model helpers', () => {
       '任务与调度',
       '授权与安全',
       'Hooks',
+      '可观测性',
       '记忆策略'
     ]);
     expect(selectSettingsSection('providers', 'tasks')).toBe('tasks');
     expect(selectSettingsSection('providers', 'browser')).toBe('providers');
     expect(selectSettingsSection('providers', 'capabilities')).toBe('providers');
     expect(selectSettingsSection('providers', 'hooks')).toBe('hooks');
+    expect(selectSettingsSection('providers', 'observability')).toBe('observability');
     expect(selectSettingsSection('providers', 'memory')).toBe('memory');
     expect(selectSettingsSection('providers', 'unknown')).toBe('providers');
   });

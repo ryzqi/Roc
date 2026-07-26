@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react';
 import type React from 'react';
 import type {
+  AgentLangSmithConfigV1,
+  AgentLangSmithSetApiKeyRequest,
+  AgentLangSmithSettings,
+  AppSettings,
   McpServerSnapshot,
+  PermissionsConfig,
   ProviderConfig,
   ProviderSecretStatus,
   ProviderTestResult,
@@ -9,9 +14,7 @@ import type {
   SettingsSnapshot,
   SettingsSaveHookConfigRequest,
   SettingsTrustHookRequest,
-  SkillSnapshot,
-  PermissionsConfig,
-  AppSettings
+  SkillSnapshot
 } from '../../shared/types';
 import {
   applySettingsSnapshot,
@@ -40,6 +43,7 @@ import { AppBasicsSection } from './sections/app-basics-section';
 import { AuthSecuritySection } from './sections/auth-security-section';
 import { HooksSection } from './sections/hooks-section';
 import { MemorySection } from './sections/memory-section';
+import { ObservabilitySection } from './sections/observability-section';
 import { TaskSettingsSection } from './sections/task-settings-section';
 
 export type SettingsViewState = {
@@ -241,6 +245,40 @@ export function SettingsView({
     [client, updateLoadedState]
   );
 
+  const loadLangSmithSettings = useCallback(async (): Promise<AgentLangSmithSettings> => {
+    return unwrap<AgentLangSmithSettings>(
+      'LangSmith settings get',
+      await resolveClient().api.agent.getLangSmithSettings()
+    );
+  }, [client]);
+
+  const saveLangSmithSettings = useCallback(
+    async (config: AgentLangSmithConfigV1): Promise<AgentLangSmithSettings> => {
+      return unwrap<AgentLangSmithSettings>(
+        'LangSmith settings save',
+        await resolveClient().api.agent.saveLangSmithSettings(config)
+      );
+    },
+    [client]
+  );
+
+  const setLangSmithApiKey = useCallback(
+    async (request: AgentLangSmithSetApiKeyRequest): Promise<AgentLangSmithSettings> => {
+      return unwrap<AgentLangSmithSettings>(
+        'LangSmith API Key save',
+        await resolveClient().api.agent.setLangSmithApiKey(request)
+      );
+    },
+    [client]
+  );
+
+  const clearLangSmithApiKey = useCallback(async (): Promise<AgentLangSmithSettings> => {
+    return unwrap<AgentLangSmithSettings>(
+      'LangSmith API Key clear',
+      await resolveClient().api.agent.clearLangSmithApiKey()
+    );
+  }, [client]);
+
   async function saveProviderSecret(providerId: string, plaintext: string): Promise<SettingsSnapshot> {
     setSecretBusyProviderId(providerId);
     try {
@@ -393,6 +431,14 @@ export function SettingsView({
                 onRefresh={refreshHooks}
                 onSave={saveHooks}
                 onTrust={trustHook}
+              />
+            ) : null}
+            {activeSection === 'observability' ? (
+              <ObservabilitySection
+                onClearApiKey={clearLangSmithApiKey}
+                onLoad={loadLangSmithSettings}
+                onSaveConfig={saveLangSmithSettings}
+                onSetApiKey={setLangSmithApiKey}
               />
             ) : null}
             {activeSection === 'memory' ? (

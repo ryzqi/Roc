@@ -5,6 +5,7 @@ export type SettingsSectionId =
   | 'tasks'
   | 'auth-security'
   | 'hooks'
+  | 'observability'
   | 'memory';
 
 export type SettingsSection = {
@@ -19,6 +20,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'tasks', label: '任务与调度' },
   { id: 'auth-security', label: '授权与安全' },
   { id: 'hooks', label: 'Hooks' },
+  { id: 'observability', label: '可观测性' },
   { id: 'memory', label: '记忆策略' }
 ];
 

@@ -100,7 +100,11 @@ const rocApi: RocPreloadApi = {
   agent: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.agentGetStatus),
     getConfigPreview: () => ipcRenderer.invoke(ipcChannels.agentGetConfigPreview),
-    getCapabilityPreview: (request) => ipcRenderer.invoke(ipcChannels.agentGetCapabilityPreview, request)
+    getCapabilityPreview: (request) => ipcRenderer.invoke(ipcChannels.agentGetCapabilityPreview, request),
+    getLangSmithSettings: () => ipcRenderer.invoke(ipcChannels.agentLangSmithSettingsGet),
+    saveLangSmithSettings: (config) => ipcRenderer.invoke(ipcChannels.agentLangSmithSettingsSave, config),
+    setLangSmithApiKey: (request) => ipcRenderer.invoke(ipcChannels.agentLangSmithSecretSet, request),
+    clearLangSmithApiKey: () => ipcRenderer.invoke(ipcChannels.agentLangSmithSecretClear)
   },
   chat: {
     startRun: (request) => ipcRenderer.invoke(ipcChannels.chatStartRun, request),

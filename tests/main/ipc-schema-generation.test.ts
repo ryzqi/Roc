@@ -44,6 +44,19 @@ describe('IPC schema generation', () => {
     expect(ipcEventChannelKeys).toEqual(schema.events.map((entry) => entry.key));
   });
 
+  it('declares explicit LangSmith settings and secret request channels', () => {
+    const schema = readIpcSchema();
+
+    expect(schema.requests).toEqual(
+      expect.arrayContaining([
+        { key: 'agentLangSmithSettingsGet', channel: 'roc:agent:langsmith:settings:get' },
+        { key: 'agentLangSmithSettingsSave', channel: 'roc:agent:langsmith:settings:save' },
+        { key: 'agentLangSmithSecretSet', channel: 'roc:agent:langsmith:secret:set' },
+        { key: 'agentLangSmithSecretClear', channel: 'roc:agent:langsmith:secret:clear' }
+      ])
+    );
+  });
+
   it('keeps preload on generated channels without raw capability or wildcard IPC', () => {
     const schema = readIpcSchema();
     const preloadSource = readFileSync('src/preload/index.ts', 'utf8');

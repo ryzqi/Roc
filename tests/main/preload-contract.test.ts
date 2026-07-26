@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { ipcChannels, type RocPreloadApi } from '../../src/shared/ipc';
+
 const electronMock = vi.hoisted(() => ({
   exposed: new Map<string, unknown>(),
   contextBridge: {
@@ -24,7 +26,7 @@ describe('preload contract', () => {
     electronMock.exposed.clear();
     await import('../../src/preload/index');
 
-    const api = electronMock.exposed.get('roc') as Record<string, Record<string, unknown>>;
+    const api = electronMock.exposed.get('roc') as RocPreloadApi;
     expect(Object.keys(api).sort()).toEqual([
       'agent',
       'app',
@@ -65,6 +67,29 @@ describe('preload contract', () => {
       'setProviderSecret',
       'testProvider',
       'trustHook'
+    ]);
+    expect(Object.keys(api.agent).sort()).toEqual([
+      'clearLangSmithApiKey',
+      'getCapabilityPreview',
+      'getConfigPreview',
+      'getLangSmithSettings',
+      'getStatus',
+      'saveLangSmithSettings',
+      'setLangSmithApiKey'
+    ]);
+
+    electronMock.ipcRenderer.invoke.mockClear();
+    const config = { schemaVersion: 1 as const, enabled: false, projectName: 'roc' };
+    await api.agent.getLangSmithSettings();
+    await api.agent.saveLangSmithSettings(config);
+    await api.agent.setLangSmithApiKey({ apiKey: 'lsv2-test' });
+    await api.agent.clearLangSmithApiKey();
+
+    expect(electronMock.ipcRenderer.invoke.mock.calls).toEqual([
+      [ipcChannels.agentLangSmithSettingsGet],
+      [ipcChannels.agentLangSmithSettingsSave, config],
+      [ipcChannels.agentLangSmithSecretSet, { apiKey: 'lsv2-test' }],
+      [ipcChannels.agentLangSmithSecretClear]
     ]);
     expect(JSON.stringify(api)).not.toContain('invokeCapability');
     expect(JSON.stringify(api)).not.toContain('*');

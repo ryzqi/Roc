@@ -1,6 +1,9 @@
 import type {
   AgentCapabilityPreview,
   AgentCapabilityPreviewRequest,
+  AgentLangSmithConfigV1,
+  AgentLangSmithSetApiKeyRequest,
+  AgentLangSmithSettings,
   AgentRuntimeStatus,
   ActiveTaskItem,
   AppStatus,
@@ -206,6 +209,10 @@ export type RocPreloadApi = {
     getStatus: () => Promise<IpcResult<AgentRuntimeStatus>>;
     getConfigPreview: () => Promise<IpcResult<DeepAgentConfigPreview>>;
     getCapabilityPreview: (request: AgentCapabilityPreviewRequest) => Promise<IpcResult<AgentCapabilityPreview>>;
+    getLangSmithSettings: () => Promise<IpcResult<AgentLangSmithSettings>>;
+    saveLangSmithSettings: (config: AgentLangSmithConfigV1) => Promise<IpcResult<AgentLangSmithSettings>>;
+    setLangSmithApiKey: (request: AgentLangSmithSetApiKeyRequest) => Promise<IpcResult<AgentLangSmithSettings>>;
+    clearLangSmithApiKey: () => Promise<IpcResult<AgentLangSmithSettings>>;
   };
   chat: {
     startRun: (request: ChatStartRunRequest) => Promise<IpcResult<ChatStartRunResult>>;
