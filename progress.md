@@ -5,11 +5,11 @@
 ## Current State
 
 - Branch：`main`。
-- Part 5 review baseline：`da0eb8d test(agent): add dedicated integration mode`。
+- Part 6 review baseline：`332048d test(agent): stabilize multiple interrupt integration`。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1-5 已完成并分别提交；Part 5 位于当前 commit。
+- Stage 6：Part 1-5 已完成并分别提交；Part 6 manual live quality eval 的本地 review 与 broad gate 已闭环并 included in current commit；真实 provider 为 `Blocked, not run`。
 - Stage 7：pending。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 5 提交明确排除该文件。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 6 提交继续明确排除该文件。
 
 ## Completed Milestones
 
@@ -33,6 +33,8 @@
 | Stage 6.2 | Durable per-run telemetry、runtime lifecycle、migration/retention/health 与 metrics cardinality。 | `abc3220` |
 | Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、`82164ab` |
 | Stage 6.4 | 独立 agent integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 | `da0eb8d` |
+| Stage 6.5 | Deterministic trajectory eval runner、strict versioned dataset 与真实 harness scenarios。 | `298b2da` |
+| Stage 6.6 | Manual live quality eval、strict versioned dataset、真实 Anthropic harness 与独立 structured-output judge。 | current commit |
 
 ## Verification Ledger
 
@@ -255,3 +257,32 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - Full Vitest 仍输出仓库已记录的 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
 - Broad gate 最终证据：`pnpm check:ipc`、`pnpm build`（含 typecheck）、默认 `pnpm test`、strict unused 与 `git diff --check da0eb8d --` 全部通过。
 - 当前状态：**Verified passing; included in the current Part 5 commit**。
+
+## 2026-07-27 - Stage 6 Part 6 Manual Live Quality Eval
+
+- Part 5 已独立提交为 `298b2da test(agent): add deterministic trajectory evals`；提交后工作树仅剩未跟踪只读 `plan.md`。
+- Part 6 范围固定为显式 live runner/config、strict versioned quality dataset、一个真实 Anthropic Roc harness case 与独立 structured-output judge；不含 performance、多 provider 或生产 runtime 改动。
+- 结构/轨迹/state 继续使用确定性断言，LLM judge 只评分 quality；缺 key 必须在 Vitest/网络前失败，live 网络只允许 Anthropic HTTPS default port 且拒绝自动 redirect。
+- 当前进程无 `ANTHROPIC_API_KEY`；真实 provider turn 状态为 **Blocked, not run**，其余 contract 可继续红绿实现与验证。
+- 当前状态：**Located**。下一步增加 runner/config/missing-key 红测，再增加缺 dataset 的 live scenario 红测。
+- CLI/config 红灯：`agent-eval-mode.test.ts` 7 tests 为 5 passed、2 expected failures；live config 缺失，runner 对空-key live mode 仍返回 unsupported。
+- 当前状态：**Changed, CLI/config red tests verified**。下一步只实现 runner live dispatch 与独立 config，再进入 dataset/judge red test。
+- Runner/config green：config/CLI 7/7 与 deterministic eval 5/5 passed；live mode 空 key 在 Vitest 前明确失败。
+- 共享 eval helper 抽取前后 deterministic eval 均为 5/5，typecheck passed；抽取只收敛真实 builder/checkpointer 与 terminal/trajectory/state 读取。
+- Live suite dataset 红灯：0 tests，精确 `ENOENT` 缺 `live-quality.v1.json`，未进入 provider 或 network。
+- 当前状态：**Changed, CLI/config and live dataset red tests verified**。下一步加入 strict v1 dataset 并验证本地 contract。
+- Egress review 前的初始 live contract green：1 file / 6 passed / 1 live skipped；typecheck passed。真实 live case 因当前无 key 明确 skipped，其余 dataset/judge/hostname egress tests 均执行。
+- Focused gate：config 2 files / 10 tests、deterministic 5/5、live contract 6 passed / 1 skipped、integration 1 passed / 1 skipped、missing-key boundary、strict unused 与 diff check 全部通过。
+- Local Risk review 红灯：live contract 6 passed / 2 failed / 1 skipped；非默认 Anthropic port 被转交，允许请求未强制禁用 redirect。
+- Egress review-fix green：live contract 8 passed / 1 live skipped，typecheck passed；guard 只允许 Anthropic HTTPS default port 并设置 `redirect: 'error'`。
+- 最终 Standards / Spec review 均无 finding；本地 Risk finding 已由端口/redirect red-green 闭环。
+- Broad gate 的 IPC check 与 build passed；首次独占 full Vitest 为 315 files / 1730 tests passed、1 个未改动 multiple-interrupts test 在内部 10s deadline timeout，主命令退出码 1。
+- 当前状态：**Changed, reviews closed; broad full-suite retry pending; real provider Blocked, not run**。
+- 既有 multiple-interrupt integration 在独占 full suite 下再次越过 10s 内部 deadline；仅把 eventual-state wait 调整为 20s、test timeout 调整为 60s，focused 1/1、typecheck 与 full Vitest 316 files / 1731 tests 通过，双轴 review 无 finding。
+- 该稳定性修复已独立提交为 `332048d test(agent): stabilize multiple interrupt integration`，Part 6 最终 review baseline 随之切换为 `332048d`。
+- Part 6 最终 focused：config/CLI 2 files / 10 tests、deterministic 5/5、live contract 8 passed / 1 live skipped、integration 1 passed / 1 skipped、missing-key boundary、typecheck、strict unused 与 diff check 通过。
+- Part 6 最终 broad gate：`pnpm check:ipc`、`pnpm build`、默认 `pnpm test` 316 files / 1731 tests 与 `git diff --check 332048d --` 通过；full suite 仍有既有 Windows `node-pty AttachConsole failed` 噪声，但主命令退出码为 0。
+- 当前环境无 `ANTHROPIC_API_KEY`；真实 Anthropic agent turn、structured-output judge 与最低质量分验证为 **Blocked, not run**，未表述为 passing。
+- 当前状态：**Verified passing locally; reviews and broad gate closed; included in the current Part 6 commit; real provider Blocked, not run**。
+- 续接后的最终双轴复审：Standards 与 Spec 均无 finding；本地 Risk 复核未发现新增问题，10 文件范围与 `plan.md` 排除边界准确。
+- 续接后的新鲜 focused gate：config/CLI 2 files / 10 tests、deterministic 5/5、live contract 8 passed / 1 live skipped、integration 1 passed / 1 skipped、missing-key expected failure、typecheck、strict unused 与 `git diff --check 332048d --` 全部通过。

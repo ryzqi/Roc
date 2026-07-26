@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "agentModel": "claude-haiku-4-5-20251001",
+  "judgeModel": "claude-haiku-4-5-20251001",
+  "cases": [
+    {
+      "id": "explain_outcome_and_trajectory",
+      "mode": "chat",
+      "prompt": "In exactly two short bullet points, explain why agent evaluations should score task outcome and critical tool trajectory separately. Do not call tools.",
+      "expected": {
+        "trajectory": [],
+        "todos": [],
+        "files": []
+      },
+      "quality": {
+        "rubric": [
+          "The response distinguishes whether the task succeeded from how the agent produced that result.",
+          "The response explains that trajectory evaluation can catch unsafe or incorrect tool use even when the final answer looks acceptable.",
+          "The response contains exactly two short bullet points."
+        ],
+        "minimumScore": 3
+      }
+    }
+  ]
+}

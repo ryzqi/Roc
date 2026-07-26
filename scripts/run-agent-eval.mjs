@@ -5,14 +5,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 try {
-  requireDeterministicMode(process.argv.slice(2));
-  process.exitCode = runDeterministicEval();
+  const configFile = requireAgentEvalConfig(process.argv.slice(2), process.env);
+  process.exitCode = runAgentEval(configFile);
 } catch (error) {
   console.error(readErrorMessage(error));
   process.exitCode = 1;
 }
 
-function requireDeterministicMode(argv) {
+function requireAgentEvalConfig(argv, env) {
   const args = argv[0] === '--' ? argv.slice(1) : argv;
   if (args.length === 0) {
     throw new Error('agent_eval_mode_missing');
@@ -28,17 +28,25 @@ function requireDeterministicMode(argv) {
   if (args.length > 2) {
     throw new Error(`agent_eval_unknown_arg:${args[2]}`);
   }
-  if (mode !== 'deterministic') {
-    throw new Error(`agent_eval_mode_unsupported:${mode}`);
+  if (mode === 'deterministic') {
+    return 'vitest.agent-eval.config.ts';
   }
+  if (mode === 'live') {
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (apiKey === undefined || apiKey.trim().length === 0) {
+      throw new Error('agent_eval_anthropic_api_key_missing');
+    }
+    return 'vitest.agent-live-eval.config.ts';
+  }
+  throw new Error(`agent_eval_mode_unsupported:${mode}`);
 }
 
-function runDeterministicEval() {
+function runAgentEval(configFile) {
   const vitestPackagePath = fileURLToPath(import.meta.resolve('vitest/package.json'));
   const vitestCliPath = resolve(dirname(vitestPackagePath), 'vitest.mjs');
   const result = spawnSync(
     process.execPath,
-    [vitestCliPath, 'run', '--config', 'vitest.agent-eval.config.ts'],
+    [vitestCliPath, 'run', '--config', configFile],
     {
       env: process.env,
       stdio: 'inherit'

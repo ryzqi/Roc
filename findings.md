@@ -101,6 +101,25 @@
 - Broad 首轮与 build 并行的 full Vitest 有两个未改动测试超时；两个文件独占重跑全绿，随后 full suite 独占重跑 316 files / 1729 tests 全绿。该失败归因为并行资源竞争，不需要修改生产或测试 timeout。
 - Part 5 最终 Standards / Spec / Risk 无未处理 finding；IPC check、build、default full suite 与 diff check 全部通过。
 
+### Live Agent Quality Eval Discovery
+
+- Part 6 最终 review baseline 为 `332048d`；实现起点为 `298b2da`，期间既有 multiple-interrupt integration 的等待预算修复已独立提交。现有 runner 原只接受 `deterministic`，专用 config 只收集 `tests/evals/agent/**/*.eval.test.ts`，因此 live suite 使用不重叠的目录/config。
+- Part 4 已有固定 `ChatAnthropic` + `buildDeepAgent()` + `RocSqliteCheckpointer` 的真实 provider 路径；Part 6 复用该执行边界，不另建 agent 协议或生产 runtime。
+- `plan.md` 要求 live/judge 仅 manual/nightly；显式 `--mode live` 本身作为 opt-in，缺 `ANTHROPIC_API_KEY` 必须在 runner 启动 Vitest 前明确失败。
+- LLM judge 只评 response quality；terminal、trajectory、todos/files 与 checkpoint 仍由确定性断言拥有，避免高分掩盖错误工具或副作用。
+- 当前环境 `ANTHROPIC_API_KEY` 不存在；真实 provider turn 本轮只能标记 `Blocked, not run`，不能作为完成证据。
+- 最小 corpus 固定一个无工具质量 case；agent/judge 使用 bounded token、零 retry、deadline，并显式关闭 ambient LangSmith。网络边界只允许 Anthropic HTTPS default port 且拒绝自动 redirect。
+- CLI/config 红灯为 1 file / 7 tests 中 5 passed、2 expected failures：live config 无法解析；`--mode live` 在空 key 下仍报 `agent_eval_mode_unsupported:live`。失败均发生在 Vitest/live network 前。
+- Live suite 红灯在 0 test 执行前精确失败为缺少 `datasets/live-quality.v1.json`；证明 versioned dataset 是显式输入，且无 key 环境未进入 provider 或 judge network。
+- Egress review 前的初始 live contract green：1 file / 6 passed / 1 live skipped；strict v1 schema、case uniqueness、quality result parsing 与 non-Anthropic hostname rejection 均实际执行，typecheck 通过。
+- 共享 eval helper 抽取前后 deterministic suite 均为 5/5；Part 5 的 builder/checkpointer、terminal、trajectory 与 state 语义保持等价。
+- Local Risk review 发现 hostname-only egress guard 会允许 `api.anthropic.com:8443`，且底层 fetch 仍可自动跨域 redirect；两条红测稳定复现。
+- Egress guard 现要求 Anthropic HTTPS default port，并强制 `redirect: 'error'`；review-fix green 为 1 file / 8 passed / 1 live skipped，typecheck 通过。
+- Part 6 当前本地结论以 review-fix 后的 8 passed / 1 live skipped 为准；6 passed / 1 skipped 仅是发现 egress 缺口前的历史证据。
+- 最终 Standards / Spec review 无 finding，本地 Risk review 的端口与 redirect finding 已红绿关闭；config/CLI 10/10、deterministic 5/5、integration 1 passed / 1 skipped、typecheck 与 strict unused 均通过。
+- Part 6 broad gate 的 `pnpm check:ipc`、`pnpm build`、默认 `pnpm test` 316 files / 1731 tests 与 `git diff --check` 均通过；既有 multiple-interrupt timeout 已在独立 `332048d` 中稳定化并完成双轴 review。
+- 当前环境无 `ANTHROPIC_API_KEY`；真实 Anthropic agent turn、structured-output judge 与最低质量分仍为 `Blocked, not run`。本地合同为 **Verified passing**，Part 6 included in current commit。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。

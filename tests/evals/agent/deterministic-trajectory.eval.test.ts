@@ -1,28 +1,24 @@
 import Database from 'better-sqlite3';
 import { readFile } from 'node:fs/promises';
 
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
-import { InMemoryStore } from '@langchain/langgraph';
-import { StateBackend } from 'deepagents';
+import { HumanMessage } from '@langchain/core/messages';
 import { FakeToolCallingModel } from 'langchain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
 import { applyAgentPluginSchema } from '../../../src/main/plugins/agent/schema';
-import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
-import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
 import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../src/main/services/forge-guardrails';
-
-const todoItemSchema = z
-  .object({
-    content: z.string().min(1),
-    status: z.enum(['pending', 'in_progress', 'completed'])
-  })
-  .strict();
+import {
+  assertTerminalOutcome,
+  createEvalAgent,
+  readFilePaths,
+  readTodos,
+  readTrajectory,
+  todoItemSchema,
+  trajectoryEventSchema
+} from './eval-test-helpers';
 
 const toolCallSchema = z
   .object({
@@ -31,25 +27,6 @@ const toolCallSchema = z
     name: z.string().min(1)
   })
   .strict();
-
-const trajectoryEventSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      args: z.record(z.string(), z.unknown()),
-      id: z.string().min(1),
-      kind: z.literal('assistant_tool_call'),
-      name: z.string().min(1)
-    })
-    .strict(),
-  z
-    .object({
-      id: z.string().min(1),
-      kind: z.literal('tool_result'),
-      name: z.string().min(1),
-      status: z.enum(['success', 'error'])
-    })
-    .strict()
-]);
 
 const agentEvalCaseSchema = z
   .object({
@@ -73,9 +50,6 @@ const agentEvalDatasetSchema = z
     schemaVersion: z.literal(1)
   })
   .strict();
-
-type AgentEvalCase = z.infer<typeof agentEvalCaseSchema>;
-type TrajectoryEvent = z.infer<typeof trajectoryEventSchema>;
 
 const dataset = await loadDataset();
 
@@ -136,11 +110,12 @@ describe('deterministic Roc agent trajectory evals', () => {
       applyAgentPluginSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const result = await runWithLangSmithTracing(null, async () => {
-        const agent = createEvalAgent(
-          scenario,
-          new FakeToolCallingModel({ toolCalls: scenario.modelToolCalls }),
-          checkpointer
-        );
+        const agent = createEvalAgent({
+          mode: scenario.mode,
+          model: new FakeToolCallingModel({ toolCalls: scenario.modelToolCalls }),
+          checkpointer,
+          systemPrompt: 'Use tools only when the request requires them.'
+        });
         return await agent.invoke(
           {
             forge_error_tracker: defaultErrorTracker(),
@@ -195,132 +170,6 @@ function parseAgentEvalDataset(input: unknown) {
     caseIds.add(scenario.id);
   }
   return parsed.data;
-}
-
-function createEvalAgent(
-  scenario: AgentEvalCase,
-  model: BaseChatModel,
-  checkpointer: RocSqliteCheckpointer
-) {
-  const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
-  const capabilityManifest = compileRunCapabilityManifest({
-    deleteFileApprovalMode: 'fully_automatic',
-    mcpApprovalMode: 'fully_automatic',
-    mcpServers: [],
-    requestedCapabilities: { mcpServers: [], skills: [] },
-    skills: [],
-    mode: scenario.mode,
-    workflowHint: null
-  }).manifest;
-
-  return buildDeepAgent({
-    mode: scenario.mode,
-    model,
-    systemPrompt: 'Use tools only when the request requires them.',
-    backend,
-    store: new InMemoryStore(),
-    memorySources: [],
-    skillSources: [],
-    subagents: [],
-    tools: [],
-    capabilityManifest,
-    filesystemPermissions: [],
-    workspacePath: null,
-    interruptOn: undefined,
-    checkpointer,
-    workflowHint: null,
-    contextBudgetTokens: undefined,
-    modelCallLimit: 6,
-    modelThreadCallLimit: 6,
-    toolCallLimit: 4,
-    toolThreadCallLimit: 4
-  });
-}
-
-function assertTerminalOutcome(messages: readonly BaseMessage[]): void {
-  const terminalMessage = messages.at(-1);
-  if (!AIMessage.isInstance(terminalMessage)) {
-    throw new Error('agent_eval_terminal_ai_message_missing');
-  }
-  expect(readAiToolCalls(terminalMessage)).toEqual([]);
-  if (typeof terminalMessage.content !== 'string') {
-    throw new Error('agent_eval_terminal_content_not_text');
-  }
-  expect(terminalMessage.content.length).toBeGreaterThan(0);
-}
-
-function readTrajectory(messages: readonly BaseMessage[]): TrajectoryEvent[] {
-  const trajectory: TrajectoryEvent[] = [];
-  for (const message of messages) {
-    if (AIMessage.isInstance(message)) {
-      for (const toolCall of readAiToolCalls(message)) {
-        trajectory.push({
-          args: toolCall.args,
-          id: requireToolCallId(toolCall.id),
-          kind: 'assistant_tool_call',
-          name: toolCall.name
-        });
-      }
-    }
-    if (ToolMessage.isInstance(message)) {
-      if (message.name === undefined || message.name.length === 0) {
-        throw new Error('agent_eval_tool_result_name_missing');
-      }
-      trajectory.push({
-        id: message.tool_call_id,
-        kind: 'tool_result',
-        name: message.name,
-        status: readToolResultStatus(message.status)
-      });
-    }
-  }
-  return trajectory;
-}
-
-function readAiToolCalls(message: AIMessage) {
-  if (message.tool_calls === undefined) {
-    return [];
-  }
-  return message.tool_calls;
-}
-
-function requireToolCallId(id: string | undefined): string {
-  if (id === undefined || id.length === 0) {
-    throw new Error('agent_eval_tool_call_id_missing');
-  }
-  return id;
-}
-
-function readToolResultStatus(status: ToolMessage['status']): 'success' | 'error' {
-  // LangChain 1.2.x omits status for successful tool results; errors are explicit.
-  if (status === undefined || status === 'success') {
-    return 'success';
-  }
-  if (status === 'error') {
-    return 'error';
-  }
-  throw new Error('agent_eval_tool_result_status_invalid');
-}
-
-function readTodos(value: unknown) {
-  if (value === undefined) {
-    return [];
-  }
-  const parsed = z.array(todoItemSchema).safeParse(value);
-  if (!parsed.success) {
-    throw new Error('agent_eval_todos_invalid', { cause: parsed.error });
-  }
-  return parsed.data;
-}
-
-function readFilePaths(value: unknown): string[] {
-  if (value === undefined) {
-    return [];
-  }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('agent_eval_files_invalid');
-  }
-  return Object.keys(value).sort();
 }
 
 function enableThenDisableAmbientLangSmithTracing(): void {

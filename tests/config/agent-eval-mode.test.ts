@@ -32,29 +32,45 @@ describe('agent eval mode configuration', () => {
     expect(testConfig.include).toEqual(['tests/evals/agent/**/*.eval.test.ts']);
   });
 
+  it('collects only live agent eval cases in the live config', async () => {
+    const testConfig = await loadVitestTestConfig('vitest.agent-live-eval.config.ts');
+
+    expect(testConfig.include).toEqual(['tests/evals/live/agent/**/*.live.eval.test.ts']);
+  });
+
   it('fails before Vitest when eval mode is missing', () => {
-    const result = runEvalCli(['--']);
+    const result = runEvalCli(['--'], process.env);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('agent_eval_mode_missing');
   });
 
   it('fails before Vitest when eval mode is unsupported', () => {
-    const result = runEvalCli(['--', '--mode', 'live']);
+    const result = runEvalCli(['--', '--mode', 'unsupported'], process.env);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('agent_eval_mode_unsupported:live');
+    expect(result.stderr).toContain('agent_eval_mode_unsupported:unsupported');
+  });
+
+  it('fails before Vitest when live mode has no Anthropic key', () => {
+    const result = runEvalCli(
+      ['--', '--mode', 'live'],
+      { ...process.env, ANTHROPIC_API_KEY: '' }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('agent_eval_anthropic_api_key_missing');
   });
 });
 
-function runEvalCli(args: string[]) {
+function runEvalCli(args: string[], env: NodeJS.ProcessEnv) {
   const result = spawnSync(
     process.execPath,
     [resolve(repositoryRoot, 'scripts/run-agent-eval.mjs'), ...args],
     {
       cwd: repositoryRoot,
       encoding: 'utf8',
-      env: process.env
+      env
     }
   );
   if (result.error !== undefined) {

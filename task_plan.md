@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 6 Part 5 - Deterministic Agent Eval Mode**
+**Stage 6 Part 6 - Manual Live Quality Eval**
 
-**Status:** complete (`Verified passing; included in the current Part 5 commit`)
+**Status:** complete (`Verified passing locally; included in the current Part 6 commit; real provider Blocked, not run`)
 
-- Review baseline：`da0eb8d test(agent): add dedicated integration mode`。
-- 当前范围：新增本地 deterministic agent eval runner、专用 Vitest mode 与 strict versioned dataset；用真实 `buildDeepAgent()` / Roc SQLite 分别评分 outcome、critical trajectory 与持久 state。
-- 不在本 part 引入：真实 provider、LLM-as-judge/live eval、agent performance gate、生产 runtime 改动、Stage 7 cleanup，或一次覆盖 `plan.md` 列出的全部后续 eval 场景。
-- 已知事实：Part 4 已证明真实 harness/offline isolation；现有 repo 无 eval script/dataset；Plan Mode runtime guard 与 `FakeToolCallingModel` 可提供确定性的成功/安全拒绝轨迹。
+- Review baseline：`332048d test(agent): stabilize multiple interrupt integration`。
+- 当前范围：让现有 `eval:agent` 显式支持 manual/nightly `--mode live`；用 strict versioned dataset、真实 Anthropic agent turn 与独立 structured-output judge 分开验证结构/轨迹和质量。
+- 不在本 part 引入：多 provider/model matrix、在线 LangSmith dataset、默认/PR live 网络调用、agent performance gate、生产 runtime 改动或 Stage 7 cleanup。
+- 已知事实：Part 4 已有真实 Anthropic builder/checkpointer 路径；Part 5 baseline runner 只接受 deterministic；当前进程没有 `ANTHROPIC_API_KEY`，真实 live turn 本地不可运行。
 
 ## Phase Status
 
@@ -39,28 +39,29 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 为当前 commit。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；独立稳定性修复 `332048d`；Part 6 included in current commit。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
 
 ## Current Acceptance
 
-- [x] `package.json` 提供 `eval:agent`，`pnpm eval:agent -- --mode deterministic` 运行专用 suite；missing/unknown mode 在启动 Vitest 前明确失败。
-- [x] 默认 `pnpm test` 排除 `tests/evals/**`；专用 config 只收集 `tests/evals/agent/**/*.eval.test.ts`。
-- [x] dataset 是 strict、versioned JSON，case id 唯一；invalid/unknown schema 明确失败，不静默补默认值。
-- [x] 每个 case 实际执行 Roc `buildDeepAgent()` 与 `RocSqliteCheckpointer`，显式关闭 ambient tracing 并拒绝外网。
-- [x] 初始 corpus 分别覆盖 native `write_todos` 成功和 Plan Mode `write_file` 拒绝；outcome、critical trajectory、state/side effect 分开断言，不锁死 terminal 文案。
-- [x] Standards、Spec 与 Risk review 无未处理 finding；config/CLI、eval command、integration regression、typecheck、strict unused、build、default/full test 与 diff check 通过。
-- [x] Part 5 形成独立提交。
+- [x] `pnpm eval:agent -- --mode live` 只启动 live eval config；deterministic mode 与默认 suite 收集边界保持不变。
+- [x] live mode 缺少 `ANTHROPIC_API_KEY` 时在 Vitest/网络前以稳定错误明确失败；不会静默 skip 或读取 Roc 用户配置。
+- [x] live dataset 是 strict、versioned JSON，case id 唯一，并显式固定 agent model、judge model、rubric 与最低质量分。
+- [x] live case 使用真实 `buildDeepAgent()`、`RocSqliteCheckpointer` 与 Anthropic model；ambient LangSmith tracing/key 关闭，网络仅允许 Anthropic HTTPS default port 且拒绝自动 redirect。
+- [x] terminal outcome、critical trajectory、state/checkpoint 与 judge quality score 分开断言；judge 只评质量，不替代结构/副作用检查。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；config/CLI、live contract、deterministic/integration regression、typecheck、strict unused、build、default/full test 与 diff check 通过。
+- [x] 当前无 `ANTHROPIC_API_KEY`，真实 Anthropic agent turn、structured judge 与最低分验证记录为 `Blocked, not run`，未伪称通过。
+- [x] Part 6 形成独立提交。
 
 ## Current Step
 
-**Part 5 closure**
+**Part 6 closure**
 
-**Status:** complete (`Verified passing; included in the current Part 5 commit`)
+**Status:** complete (`Verified passing locally; included in the current Part 6 commit; real provider unavailable`)
 
-- Observable contract：每个 dataset case 返回明确 terminal outcome，并独立比较 critical tool-call/result trajectory 与 state/side effect；不同文案不改变评分。
-- Isolation contract：独立 runner/config/include；默认 suite 不收集；deterministic mode 不读取 provider key、不访问网络、不写真实 workspace。
-- Verification：先固定 CLI/config/dataset/case contract 红灯，再实现最小 runner与两 case corpus；随后 review、focused 与 broad gate。
+- Observable contract：live case 的结构结果、critical trajectory、持久 state 与 1-4 quality score 独立；只对 quality 使用 LLM judge。
+- Isolation contract：只有显式 `--mode live` 可进入真实网络路径；缺 key 在 runner 边界失败，ambient LangSmith 关闭，provider fetch 仅允许 Anthropic HTTPS default port 且拒绝自动 redirect。
+- Verification：先固定 runner/config/missing-key 与 dataset/judge contract 红灯，再实现一个 bounded live case；随后 review、focused 与 broad gate。
 
 ## Next Steps
 
@@ -80,6 +81,10 @@
 14. [complete] 增加 CLI/config/dataset 与两个 deterministic scenario 的稳定红测。
 15. [complete] 实现最小 runner、专用 config、strict dataset 与真实 eval harness，完成 focused verification。
 16. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与独立提交。
+17. [complete] 定位 live provider、structured judge、runner/config 与 dataset 边界，冻结 Part 6 contract。
+18. [complete] 增加 live CLI/config、dataset/judge 与真实 harness case 红测。
+19. [complete] 实现最小 live eval mode，并完成 focused verification。
+20. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与 Part 6 独立提交。
 
 ## Decisions
 
@@ -114,6 +119,8 @@
 | Low | 响应式 smoke 的可观测性 header fixture 使用了实际 UI 不存在的单 pill，未覆盖更宽的 dirty count 与全局操作按钮。 | fixture 已对齐真实 header，并把 page actions 纳入 overflow 断言；320/1280px smoke 与增量双轴复审通过。 |
 | Medium | Live provider case 仅依赖 disabled tracing context，已知 direct `agent.invoke` 在 ambient LangSmith env/key 下仍可能额外外发。 | offline/live 共用显式 env/key isolation；offline regression 先模拟 ambient tracing/key 再证明零 fetch，专用命令通过。 |
 | Low | Part 4 账本仍写 discovery，并把 live 缺 key 分支误写为 skipped。 | 已同步为 verified passing，并明确区分默认未 opt-in skipped 与 opt-in 缺 key failure；最终 Standards 复审无 residual finding。 |
+| Medium | Part 6 live egress guard 仅校验 hostname，会接受非默认端口，且 provider fetch 可能自动跨域 redirect。 | 两条稳定红测后收紧为 Anthropic HTTPS default port，并强制 `redirect: 'error'`；live contract 8 passed / 1 skipped。 |
+| Medium | Part 6 broad suite 中既有 multiple-interrupt integration 再次越过 10s 内部 deadline。 | 单文件复现后仅调整测试等待预算，双轴 review 无 finding；独立提交为 `332048d`，随后 full Vitest 316 files / 1731 tests 通过。 |
 
 ## Errors Encountered
 
@@ -152,3 +159,7 @@
 | 核对固定 LangChain ToolMessage 实现时再次把 wildcard 放进 Windows 路径参数，`rg` 返回路径语法错误 | 1 | 改用已解析的 `node_modules/@langchain/core/dist/messages` 路径；确认 success status 可省略、error 显式。 |
 | Part 5 broad gate 将 full Vitest 与 build 并行运行，两个未改动测试分别在 10s/20s 超时；314 files / 1727 tests 通过，主命令退出码 1 | 1 | 先分别单跑两个失败文件判断是否为资源竞争或既有波动，再让 full suite 独占重跑；不沿用该次失败结果宣称 broad passing。 |
 | 记录 Part 5 broad 失败的首个账本 patch 使用了与实际错误表不一致的上下文，`apply_patch` 整体拒绝 | 1 | 读取当前尾部后拆分为精确上下文 patch；失败 patch 未修改任何文件。 |
+| Part 6 独占 full Vitest 时，未改动的 production multiple-interrupts test 再次越过内部 10s deadline；315 files / 1730 tests 通过，主命令退出码 1 | 1 | 单文件确认行为后仅调整测试等待预算，双轴 review、focused、typecheck 与 full suite 通过；以独立 `332048d` 提交，不把首次失败写成 broad passing。 |
+| 稳定性提交的 staged-boundary 断言把单行 `git diff --cached --name-only` 当作字符串，`$staged[0]` 读取首字符而误报 | 1 | 用 `@(...)` 强制数组后复核；cached name-status 已显示仅目标测试文件，错误命令未修改文件或 index。 |
+| 稳定性提交后的并行只读审计在调用 shell 前引用未定义 JavaScript `result`，四项均返回 `ReferenceError` | 1 | 改回逐项 `await tools[name](args)` 并捕获结果；失败脚本未执行任何命令或修改状态。 |
+| Part 6 最终 missing-key 边界包装器虽验证到预期 exit 1 与错误码，但未重置 PowerShell native exit code，导致后续串行检查未启动 | 1 | 在验证分支末尾显式 `exit 0` 后单独重跑；首次调用未修改代码，typecheck/unused/diff check 尚未执行。 |
