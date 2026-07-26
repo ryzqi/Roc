@@ -549,6 +549,75 @@ export const agentMigrations: RocDatabaseMigration[] = [
       CREATE INDEX idx_agent_pending_interrupts_thread
         ON agent_pending_interrupts(thread_id);
     `
+  },
+  {
+    version: 12,
+    name: 'agent_run_telemetry',
+    sql: `
+      CREATE TABLE agent_run_telemetry (
+        run_id         TEXT PRIMARY KEY,
+        schema_version INTEGER NOT NULL,
+        telemetry_json TEXT NOT NULL,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+      );
+
+      INSERT INTO agent_run_telemetry (run_id, schema_version, telemetry_json, created_at, updated_at)
+      SELECT id,
+             1,
+             json_object(
+               'schemaVersion', 1,
+               'correlation', json_object(
+                 'runId', id,
+                 'threadId', thread_id,
+                 'runOrigin', json_extract(snapshot_json, '$.runOrigin'),
+                 'dispatchKey', json_extract(snapshot_json, '$.dispatchKey'),
+                 'snapshotVersion', 2,
+                 'manifestHash', json_extract(snapshot_json, '$.capabilityManifest.manifestHash'),
+                 'providerId', json_extract(snapshot_json, '$.model.providerId'),
+                 'modelId', json_extract(snapshot_json, '$.model.modelId')
+               ),
+               'model', json_object(
+                 'callCount', 0,
+                 'inputTokens', NULL,
+                 'outputTokens', NULL,
+                 'totalTokens', NULL,
+                 'cacheReadTokens', NULL,
+                 'cacheCreationTokens', NULL,
+                 'reportedCostUsd', NULL
+               ),
+               'tool', json_object('callCount', 0, 'errorCount', 0),
+               'subagent', json_object('count', 0, 'failedCount', 0, 'maxDepth', 0),
+               'context', json_object(
+                 'compactionCount', 0,
+                 'summaryCount', 0,
+                 'artifactCount', 0,
+                 'failureCount', 0,
+                 'estimatedCount', 0,
+                 'inputTokens', NULL,
+                 'budgetTokens', NULL,
+                 'removedChars', 0,
+                 'persistedChars', 0
+               ),
+               'runtime', json_object('firstOutputMs', NULL, 'totalDurationMs', 0, 'recoveryCount', 0),
+               'terminal', json_object(
+                 'status', CASE
+                   WHEN status IN ('cancelled','completed','failed','interrupted') THEN status
+                   ELSE NULL
+                 END,
+                 'errorCode', NULL,
+                 'retryable', NULL,
+                 'cancelSource', CASE WHEN status = 'cancelled' THEN 'user_cancelled' ELSE NULL END
+               )
+             ),
+             started_at,
+             COALESCE(ended_at, started_at)
+      FROM agent_runs
+      WHERE snapshot_version IN (1, 2)
+        AND snapshot_json IS NOT NULL
+        AND json_valid(snapshot_json);
+    `
   }
 ];
 

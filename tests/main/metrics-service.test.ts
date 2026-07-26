@@ -100,6 +100,15 @@ describe('MetricsService', () => {
     });
   });
 
+  it.each(['runId', 'threadId', 'occurrenceId', 'dispatchKey']) (
+    'rejects high-cardinality %s labels',
+    (label) => {
+      expect(() => metricsService.incrementCounter('agent.run.started', { [label]: 'unique-value' })).toThrow(
+        `metrics_high_cardinality_label_forbidden:${label}`
+      );
+    }
+  );
+
   it('builds snapshots with summary counts', () => {
     metricsService.incrementCounter('agent.run.started');
     metricsService.setGauge('scheduler.registered_tasks', 4);

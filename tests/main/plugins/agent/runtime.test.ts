@@ -11,6 +11,7 @@ import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schem
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { buildWorkspaceHash } from '../../../../src/main/services/paths';
 import type { AgentCapabilityPreview, ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
+import { createTerminalRunTelemetry } from './run-telemetry-test-helpers';
 
 let db: Database.Database;
 let events: RocEventEnvelope[];
@@ -391,8 +392,20 @@ describe('AgentPluginRuntime', () => {
       assistantMessage: 'Done',
       summary: 'Done',
       durationMs: 10,
+      endedAt: new Date(Date.parse(run.startedAt) + 10).toISOString(),
       providerId: 'openai',
       modelId: 'gpt-4.1',
+      telemetry: createTerminalRunTelemetry({
+        repository,
+        run,
+        terminal: {
+          status: 'completed',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspacePath: 'F:\\Code\\Roc'
     });
 
@@ -485,11 +498,25 @@ describe('AgentPluginRuntime', () => {
 
   it('cancels only active plugin runs', async () => {
     const repository = new AgentSessionRepository(db);
-    const deferred = createDeferred<string>();
+    const usageReported = createDeferred<void>();
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute: async function* (input) {
-          yield createTextBlock(input.run.id, await deferred.promise);
+          try {
+            await new Promise<void>((resolve) => {
+              input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
+            });
+          } finally {
+            input.observeModelUsage({
+              callCount: 1,
+              inputTokens: 21,
+              outputTokens: 3,
+              totalTokens: 24,
+              cacheReadTokens: 5,
+              cacheCreationTokens: 2
+            });
+            usageReported.resolve(undefined);
+          }
         }
       },
       eventBus,
@@ -503,19 +530,34 @@ describe('AgentPluginRuntime', () => {
       repository
     });
     const result = await runtime.startRun(startRequest);
+    await waitForEvent(() => repository.getRun(result.runId).status === 'running');
 
-    expect(runtime.cancelRun({ runId: result.runId })).toEqual({
+    expect(await runtime.cancelRun({ runId: result.runId })).toEqual({
       cancelled: true,
       runId: result.runId
     });
-    expect(runtime.cancelRun({ runId: result.runId })).toEqual({
+    await usageReported.promise;
+    expect(await runtime.cancelRun({ runId: result.runId })).toEqual({
       cancelled: false,
       runId: result.runId
     });
-    deferred.resolve('Response after cancel.');
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(repository.getRun(result.runId).status).toBe('cancelled');
+    expect(repository.getRunTelemetry(result.runId)?.model).toEqual({
+      callCount: 1,
+      inputTokens: 21,
+      outputTokens: 3,
+      totalTokens: 24,
+      cacheReadTokens: 5,
+      cacheCreationTokens: 2,
+      reportedCostUsd: null
+    });
+    expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
+      status: 'cancelled',
+      errorCode: null,
+      retryable: null,
+      cancelSource: 'user_cancelled'
+    });
     expect(
       db.prepare('SELECT event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(result.runId)
     ).toContainEqual({ event_json: expect.stringContaining('run_cancelled') });
@@ -537,6 +579,41 @@ describe('AgentPluginRuntime', () => {
         })
       })
     );
+  });
+
+  it('keeps cancellation retryable when the terminal transaction fails', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          await new Promise<void>((resolve) => {
+            input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
+          });
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+    const result = await runtime.startRun(startRequest);
+    await waitForEvent(() => repository.getRun(result.runId).status === 'running');
+    db.exec(`
+      CREATE TRIGGER reject_cancel_telemetry_update
+      BEFORE UPDATE ON agent_run_telemetry
+      BEGIN
+        SELECT RAISE(ABORT, 'forced_cancel_telemetry_failure');
+      END
+    `);
+
+    await expect(runtime.cancelRun({ runId: result.runId })).rejects.toThrow('forced_cancel_telemetry_failure');
+    expect(repository.getRun(result.runId).status).toBe('running');
+
+    db.exec('DROP TRIGGER reject_cancel_telemetry_update');
+    await expect(runtime.cancelRun({ runId: result.runId })).resolves.toEqual({
+      cancelled: true,
+      runId: result.runId
+    });
+    expect(repository.getRun(result.runId).status).toBe('cancelled');
   });
 
 
@@ -566,6 +643,12 @@ describe('AgentPluginRuntime', () => {
     );
 
     expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
+      status: 'failed',
+      errorCode: 'provider_execution_failed',
+      retryable: true,
+      cancelSource: null
+    });
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'agent.chat.run-event',
@@ -607,6 +690,12 @@ describe('AgentPluginRuntime', () => {
 
     expect(calls).toBe(1);
     expect(repository.getRun(result.runId).status).toBe('failed');
+    expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
+      status: 'failed',
+      errorCode: 'run_budget_exhausted',
+      retryable: false,
+      cancelSource: null
+    });
     expect(chatEvents).toContainEqual(expect.objectContaining({
       type: 'run_failed',
       runId: result.runId,
@@ -688,6 +777,46 @@ describe('AgentPluginRuntime', () => {
     expect(repository.getRun(result.runId).status).toBe('completed');
     expect(repository.getRunTransitionState(result.runId).stateVersion).toBe(6);
     expect(calls).toBe(2);
+  });
+
+  it('records a successful recovery before the retry waits for user input', async () => {
+    const repository = new AgentSessionRepository(db);
+    let calls = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          calls += 1;
+          if (calls === 1) {
+            throw new Error('Connection error.');
+          }
+          yield {
+            type: 'run_interrupted',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            interruptId: 'interrupt_after_recovery',
+            payload: {
+              kind: 'question',
+              question: 'Continue after recovery?'
+            }
+          } satisfies ChatRunEvent;
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+
+    await waitForEvent(() => repository.getRun(result.runId).status === 'waiting_user', 1500);
+
+    expect(calls).toBe(2);
+    expect(repository.getRunTelemetry(result.runId)?.runtime.recoveryCount).toBe(1);
+    const chatEventTypes = events
+      .filter((event) => event.type === 'agent.chat.run-event')
+      .map((event) => readChatRunEvent(event.payload)?.type);
+    expect(chatEventTypes).toContain('run_recovered');
+    expect(chatEventTypes.indexOf('run_recovered')).toBeLessThan(chatEventTypes.indexOf('run_interrupted'));
   });
 
 });

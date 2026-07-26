@@ -37,6 +37,12 @@ import { compileRunCapabilityManifest } from './run-capability-manifest';
 import { createChatStartRunRequestFromSnapshot, createRunBudget, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
 import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
 import type { AgentSessionRepository, ResumeDispatchAudit } from './session-repository';
+import {
+  AgentRunTelemetryAccumulator,
+  calculateAgentRunTelemetryDurationMs,
+  type AgentModelUsageTelemetry,
+  type AgentRunTelemetryV1
+} from './run-telemetry';
 import { toRecoveryDecision } from './recovery-policy';
 import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
 import {
@@ -67,6 +73,7 @@ export type AgentDeepAgentExecutor = {
     run: TaskRun;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
+    observeModelUsage: (usage: AgentModelUsageTelemetry) => void;
     validatedAttachments?: ChatValidatedImageAttachment[];
   }): AsyncIterable<ChatRunEvent> | Promise<AsyncIterable<ChatRunEvent>>;
 };
@@ -115,7 +122,8 @@ export class AgentPluginRuntime {
     }
   >();
   private readonly pendingInterrupts = new Map<string, PendingInterrupt[]>();
-  private readonly pendingRuns = new Set<Promise<void>>();
+  private readonly pendingRuns = new Map<string, Promise<void>>();
+  private readonly runTelemetry = new Map<string, AgentRunTelemetryAccumulator>();
   private readonly scheduledRuns = new Set<NodeJS.Timeout>();
   private readonly pluginId: string;
 
@@ -274,34 +282,58 @@ export class AgentPluginRuntime {
         validatedAttachments: preparedAttachments.images,
         workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
       });
-      this.trackPendingRun(pendingRun);
+      this.trackPendingRun(run.id, pendingRun);
     }, 0);
     this.scheduledRuns.add(timer);
     return result;
   }
 
-  cancelRun(input: { runId: string }): ChatCancelRunResult {
+  async cancelRun(input: { runId: string }): Promise<ChatCancelRunResult> {
     if (!this.activeRuns.has(input.runId)) {
       return {
         runId: input.runId,
         cancelled: false
       };
     }
-    const terminalState = this.options.repository.getRunTransitionState(input.runId);
-    const terminal = this.options.repository.cancelRunAtomically({
-      endedAt: new Date().toISOString(),
-      expectedStateVersion: terminalState.stateVersion,
-      expectedStatus: terminalState.status,
-      runId: input.runId
-    });
-    this.activeRuns.delete(input.runId);
-    const metadata = this.activeRunMetadata.get(input.runId);
-    this.activeRunMetadata.delete(input.runId);
+    const run = this.options.repository.getRun(input.runId);
+    const snapshot = this.options.repository.getRunExecutionSnapshot(input.runId);
+    const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
     const abortController = this.abortControllers.get(input.runId);
     if (abortController === undefined) {
       throw new Error('agent_run_abort_controller_missing');
     }
+    this.activeRuns.delete(input.runId);
     abortController.abort();
+    const pendingRun = this.pendingRuns.get(input.runId);
+    if (pendingRun !== undefined) {
+      await pendingRun;
+    }
+    const endedAt = new Date().toISOString();
+    const terminalState = this.options.repository.getRunTransitionState(input.runId);
+    const durationMs = calculateAgentRunTelemetryDurationMs(run.startedAt, endedAt);
+    telemetry.markTerminal({
+      status: 'cancelled',
+      durationMs,
+      errorCode: null,
+      retryable: null,
+      cancelSource: 'user_cancelled'
+    });
+    let terminal: ReturnType<AgentSessionRepository['cancelRunAtomically']>;
+    try {
+      terminal = this.options.repository.cancelRunAtomically({
+        endedAt,
+        expectedStateVersion: terminalState.stateVersion,
+        expectedStatus: terminalState.status,
+        runId: input.runId,
+        telemetry: telemetry.snapshot()
+      });
+    } catch (error) {
+      this.activeRuns.add(input.runId);
+      throw error;
+    }
+    this.runTelemetry.delete(input.runId);
+    const metadata = this.activeRunMetadata.get(input.runId);
+    this.activeRunMetadata.delete(input.runId);
     this.abortControllers.delete(input.runId);
     this.pendingInterrupts.delete(input.runId);
     void this.publish('agent.run.cancelled', {
@@ -365,6 +397,7 @@ export class AgentPluginRuntime {
       throw new Error('agent_deep_agent_executor_missing');
     }
     const deepAgentExecutor = this.options.deepAgentExecutor;
+    const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
     const resumeValue: AgentResumeValue =
       request.kind === 'approval' ? { decisions: request.decisions } : { answer: request.answer };
     const resumePayload: AgentResumePayload = {
@@ -405,6 +438,7 @@ export class AgentPluginRuntime {
         await deepAgentExecutor.execute({
           abortSignal: abortController.signal,
           modelHandle,
+          observeModelUsage: usage => telemetry.observeModelUsage(usage),
           resumePayload,
           run: dispatch.run,
           snapshot
@@ -483,7 +517,7 @@ export class AgentPluginRuntime {
       threadId: resumedRun.threadId,
       workflowHint: readWorkflowHintFromSnapshot(snapshot.workflowHint)
     });
-    this.trackPendingRun(pendingRun);
+    this.trackPendingRun(run.id, pendingRun);
     return result;
   }
 
@@ -529,7 +563,7 @@ export class AgentPluginRuntime {
     }
     this.scheduledRuns.clear();
     if (this.pendingRuns.size > 0) {
-      await Promise.allSettled([...this.pendingRuns]);
+      await Promise.allSettled([...this.pendingRuns.values()]);
     }
   }
 
@@ -538,18 +572,19 @@ export class AgentPluginRuntime {
     assistantMessage: string;
     summary: string;
     durationMs: number;
+    endedAt: string;
     providerId: string;
     modelId: string;
+    telemetry: AgentRunTelemetryV1;
     workspacePath: ChatStartRunRequest['workspacePath'];
   }): Promise<{ run: TaskRun; message: SessionMessageEntry; event: TaskEvent }> {
     const workspaceIdentity = resolveRuntimeWorkspaceIdentity(input.workspacePath === undefined ? null : input.workspacePath);
     const currentRun = this.options.repository.getRun(input.runId);
     const terminalState = this.options.repository.getRunTransitionState(input.runId);
-    const endedAt = new Date().toISOString();
     const terminal = this.options.repository.completeRunAtomically({
       assistantMessage: input.assistantMessage,
       durationMs: input.durationMs,
-      endedAt,
+      endedAt: input.endedAt,
       expectedStateVersion: terminalState.stateVersion,
       expectedStatus: terminalState.status,
       modelId: input.modelId,
@@ -557,6 +592,7 @@ export class AgentPluginRuntime {
       runId: input.runId,
       runStartedAt: currentRun.startedAt,
       summary: input.summary,
+      telemetry: input.telemetry,
       workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
     });
     const run = terminal.run;
@@ -654,14 +690,21 @@ export class AgentPluginRuntime {
     }
   }
 
-  private trackPendingRun(pendingRun: Promise<void>): void {
-    this.pendingRuns.add(pendingRun);
+  private trackPendingRun(runId: string, pendingRun: Promise<void>): void {
+    if (this.pendingRuns.has(runId)) {
+      throw new Error('agent_pending_run_already_tracked');
+    }
+    this.pendingRuns.set(runId, pendingRun);
     void pendingRun.then(
       () => {
-        this.pendingRuns.delete(pendingRun);
+        if (this.pendingRuns.get(runId) === pendingRun) {
+          this.pendingRuns.delete(runId);
+        }
       },
       (error: unknown) => {
-        this.pendingRuns.delete(pendingRun);
+        if (this.pendingRuns.get(runId) === pendingRun) {
+          this.pendingRuns.delete(runId);
+        }
         this.recordNotificationFailure('agent_pending_run_rejected');
         console.error('[AgentPluginRuntime] Detached run execution rejected.', error);
       }
@@ -691,7 +734,8 @@ export class AgentPluginRuntime {
     if (!this.activeRuns.has(input.runId)) {
       return;
     }
-    const startedAtMs = Date.now();
+    const runStartedAtMs = parseTimestamp(input.run.startedAt, 'agent_run_telemetry_started_at_invalid');
+    const telemetry = this.getOrCreateRunTelemetry(input.run, input.snapshot);
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
     let executionStream = input.executionStream;
@@ -708,16 +752,13 @@ export class AgentPluginRuntime {
           modelHandle: input.modelHandle,
           resumePayload: input.resumePayload,
           run: input.run,
+          runStartedAtMs,
           snapshot: input.snapshot,
+          telemetry,
           validatedAttachments: input.validatedAttachments
         });
-        if (execution.status === 'interrupted') {
-          return;
-        }
-        if (!this.activeRuns.has(input.runId)) {
-          return;
-        }
         if (attempt > 0) {
+          telemetry.recordRecovery();
           const recoveredAt = new Date().toISOString();
           await this.publish('agent.run.recovery.succeeded', {
             runId: input.runId,
@@ -735,6 +776,32 @@ export class AgentPluginRuntime {
             recoveredAt
           });
         }
+        if (execution.status === 'interrupted') {
+          const interruptedAt = new Date().toISOString();
+          telemetry.updateDuration(calculateAgentRunTelemetryDurationMs(input.run.startedAt, interruptedAt));
+          await this.handleRunInterrupted({
+            interrupts: execution.interrupts,
+            runId: input.run.id,
+            telemetry: telemetry.snapshot(),
+            threadId: input.run.threadId
+          });
+          for (const event of execution.events) {
+            await this.publishChatRunEvent(event);
+          }
+          return;
+        }
+        if (!this.activeRuns.has(input.runId)) {
+          return;
+        }
+        const endedAt = new Date().toISOString();
+        const terminalDurationMs = calculateAgentRunTelemetryDurationMs(input.run.startedAt, endedAt);
+        telemetry.markTerminal({
+          status: 'completed',
+          durationMs: terminalDurationMs,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        });
         await this.completeRun({
           runId: input.runId,
           assistantMessage: execution.assistantMessage,
@@ -743,11 +810,14 @@ export class AgentPluginRuntime {
             successfulToolNames: execution.successfulToolNames,
             workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
           }),
-          durationMs: Date.now() - startedAtMs,
+          durationMs: terminalDurationMs,
+          endedAt,
           providerId: input.providerId,
+          telemetry: telemetry.snapshot(),
           modelId: input.modelId,
           workspacePath: input.request.workspacePath
         });
+        this.runTelemetry.delete(input.runId);
         await this.emitSessionEndBestEffort({
           runId: input.runId,
           threadId: input.threadId,
@@ -818,15 +888,26 @@ export class AgentPluginRuntime {
           });
           continue;
         }
-        await this.failRun({ input, failure });
+        await this.failRun({ input, failure, telemetry });
         return;
       }
     }
   }
 
-  private async failRun(input: { input: ExecuteRunInput; failure: RunFailure }): Promise<void> {
+  private async failRun(input: {
+    input: ExecuteRunInput;
+    failure: RunFailure;
+    telemetry: AgentRunTelemetryAccumulator;
+  }): Promise<void> {
     const terminalState = this.options.repository.getRunTransitionState(input.input.runId);
     const endedAt = new Date().toISOString();
+    input.telemetry.markTerminal({
+      status: 'failed',
+      durationMs: calculateAgentRunTelemetryDurationMs(input.input.run.startedAt, endedAt),
+      errorCode: input.failure.code,
+      retryable: input.failure.retryable,
+      cancelSource: null
+    });
     this.options.repository.failRunAtomically({
       code: input.failure.code,
       diagnostic: input.failure.diagnostic,
@@ -838,8 +919,10 @@ export class AgentPluginRuntime {
       providerId: input.input.providerId,
       retryable: input.failure.retryable,
       runId: input.input.runId,
-      suggestion: input.failure.suggestion
+      suggestion: input.failure.suggestion,
+      telemetry: input.telemetry.snapshot()
     });
+    this.runTelemetry.delete(input.input.runId);
     this.activeRuns.delete(input.input.runId);
     this.activeRunMetadata.delete(input.input.runId);
     this.abortControllers.delete(input.input.runId);
@@ -878,9 +961,11 @@ export class AgentPluginRuntime {
     resumePayload?: AgentResumePayload;
     executionStream?: AsyncIterable<ChatRunEvent>;
     run: TaskRun;
+    runStartedAtMs: number;
     modelHandle: AgentModelHandle;
     abortSignal: AbortSignal;
     validatedAttachments?: ChatValidatedImageAttachment[];
+    telemetry: AgentRunTelemetryAccumulator;
   }): Promise<DeepAgentExecutionResult> {
     const assistantChunks: string[] = [];
     const hookDisplayTexts: string[] = [];
@@ -890,7 +975,19 @@ export class AgentPluginRuntime {
     const pendingInterruptEvents: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>> = [];
     const executionStream =
       input.executionStream === undefined
-        ? requireExecutionStream(await this.options.deepAgentExecutor!.execute(input))
+        ? requireExecutionStream(
+            await this.options.deepAgentExecutor!.execute({
+              abortSignal: input.abortSignal,
+              modelHandle: input.modelHandle,
+              observeModelUsage: usage => input.telemetry.observeModelUsage(usage),
+              run: input.run,
+              snapshot: input.snapshot,
+              ...(input.resumePayload === undefined ? {} : { resumePayload: input.resumePayload }),
+              ...(input.validatedAttachments === undefined
+                ? {}
+                : { validatedAttachments: input.validatedAttachments })
+            })
+          )
         : input.executionStream;
     for await (const event of executionStream) {
       if (!this.activeRuns.has(input.run.id)) {
@@ -900,6 +997,7 @@ export class AgentPluginRuntime {
           successfulToolNames: []
         };
       }
+      input.telemetry.observeEvent(event, Date.now() - input.runStartedAtMs);
       if (event.type === 'run_interrupted') {
         pendingInterrupts.push({
           interruptId: event.interruptId,
@@ -949,16 +1047,10 @@ export class AgentPluginRuntime {
       }
     }
     if (pendingInterrupts.length > 0) {
-      await this.handleRunInterrupted({
-        interrupts: pendingInterrupts,
-        runId: input.run.id,
-        threadId: input.run.threadId
-      });
-      for (const event of pendingInterruptEvents) {
-        await this.publishChatRunEvent(event);
-      }
       return {
-        status: 'interrupted'
+        status: 'interrupted',
+        interrupts: pendingInterrupts,
+        events: pendingInterruptEvents
       };
     }
     const assistantMessage = stripHookDisplayText(assistantChunks.join('').trim(), hookDisplayTexts);
@@ -970,6 +1062,23 @@ export class AgentPluginRuntime {
       assistantMessage,
       successfulToolNames: [...successfulToolNamesByBlockId.values()]
     };
+  }
+
+  private getOrCreateRunTelemetry(
+    run: TaskRun,
+    snapshot: RunExecutionSnapshotV2
+  ): AgentRunTelemetryAccumulator {
+    const current = this.runTelemetry.get(run.id);
+    if (current !== undefined) {
+      return current;
+    }
+    const existing = this.options.repository.getRunTelemetry(run.id);
+    if (existing === null) {
+      throw new Error('agent_run_telemetry_missing');
+    }
+    const created = new AgentRunTelemetryAccumulator({ existing, run, snapshot });
+    this.runTelemetry.set(run.id, created);
+    return created;
   }
 
   private async resolveRunWorkspace(request: ChatStartRunRequest): Promise<Workspace | null> {
@@ -1061,6 +1170,7 @@ export class AgentPluginRuntime {
   private async handleRunInterrupted(input: {
     interrupts: readonly PendingInterrupt[];
     runId: string;
+    telemetry: AgentRunTelemetryV1;
     threadId: string;
   }): Promise<void> {
     const interruptState = this.options.repository.getRunTransitionState(input.runId);
@@ -1069,6 +1179,7 @@ export class AgentPluginRuntime {
       expectedStatus: interruptState.status,
       interrupts: input.interrupts,
       runId: input.runId,
+      telemetry: input.telemetry,
       threadId: input.threadId
     });
     this.pendingInterrupts.set(input.runId, [...input.interrupts]);
@@ -1269,4 +1380,12 @@ function waitForRecoveryDelay(delayMs: number, abortSignal: AbortSignal): Promis
       { once: true }
     );
   });
+}
+
+function parseTimestamp(timestamp: string, code: string): number {
+  const value = Date.parse(timestamp);
+  if (!Number.isFinite(value)) {
+    throw new Error(code);
+  }
+  return value;
 }

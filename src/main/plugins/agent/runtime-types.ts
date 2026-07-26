@@ -1,4 +1,9 @@
-import type { ChatInterruptPayload, ChatStartRunRequest, RocHookSessionEndStatus } from '../../../shared/types';
+import type {
+  ChatInterruptPayload,
+  ChatRunEvent,
+  ChatStartRunRequest,
+  RocHookSessionEndStatus
+} from '../../../shared/types';
 
 export type DeepAgentExecutionResult =
   | {
@@ -8,6 +13,8 @@ export type DeepAgentExecutionResult =
     }
   | {
       status: 'interrupted';
+      interrupts: PendingInterrupt[];
+      events: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>>;
     };
 
 export type PendingInterrupt = {

@@ -11,6 +11,7 @@ export type RocDatabaseRetentionResult = {
     agentEvents: number;
     agentRunEvents: number;
     agentOutbox: number;
+    runTelemetry: number;
     checkpoints: number;
     checkpointWrites: number;
     toolEffects: number;
@@ -53,6 +54,9 @@ function runAgentRetention(
       const agentRunEvents = agentDb.prepare('DELETE FROM agent_run_events WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
       const agentOutbox = agentDb.prepare('DELETE FROM agent_outbox WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run().changes;
+      const runTelemetry = agentDb
+        .prepare('DELETE FROM agent_run_telemetry WHERE run_id IN (SELECT run_id FROM retention_old_runs)')
+        .run().changes;
       const toolEffects = agentDb.prepare('DELETE FROM agent_tool_effects WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
       const contextArtifacts = agentDb
@@ -86,6 +90,7 @@ function runAgentRetention(
         agentEvents,
         agentRunEvents,
         agentOutbox,
+        runTelemetry,
         checkpoints,
         checkpointWrites,
         toolEffects,

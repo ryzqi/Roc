@@ -6,6 +6,7 @@ import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { createTerminalRunTelemetry, requireRunTelemetry } from './run-telemetry-test-helpers';
 
 let db: Database.Database;
 
@@ -191,6 +192,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [
         {
@@ -319,6 +321,48 @@ describe('AgentSessionRepository', () => {
     ]);
   });
 
+  it('rolls back the waiting-user transition when telemetry persistence fails', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Keep interruption state atomic'
+    });
+    db.exec(`
+      CREATE TRIGGER reject_agent_run_telemetry_update
+      BEFORE UPDATE ON agent_run_telemetry
+      BEGIN
+        SELECT RAISE(ABORT, 'forced_telemetry_update_failure');
+      END
+    `);
+
+    expect(() =>
+      repository.markRunInterrupted({
+        expectedStateVersion: 1,
+        expectedStatus: 'waiting_next_turn',
+        interrupts: [
+          {
+            interruptId: 'interrupt_atomic_telemetry',
+            payload: {
+              kind: 'question',
+              question: 'Continue?'
+            }
+          }
+        ],
+        runId: run.id,
+        telemetry: requireRunTelemetry(repository, run),
+        threadId: run.threadId
+      })
+    ).toThrow('forced_telemetry_update_failure');
+    expect(repository.getRunTransitionState(run.id)).toEqual({
+      stateVersion: 1,
+      status: 'waiting_next_turn'
+    });
+    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([]);
+  });
+
   it('rebuilds a missing projection from the current checkpoint after a partial resume crash', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
@@ -332,6 +376,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [
         {
@@ -419,6 +464,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts
     });
@@ -444,6 +490,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [{ interruptId: 'interrupt-corrupt', payload: { kind: 'question', question: 'Continue?' } }]
     });
@@ -481,6 +528,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [
         {
@@ -566,6 +614,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [
         {
@@ -612,6 +661,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
       runId: run.id,
+      telemetry: requireRunTelemetry(repository, run),
       threadId: run.threadId,
       interrupts: [
         {
@@ -719,6 +769,17 @@ describe('AgentSessionRepository', () => {
       runId: run.id,
       runStartedAt: run.startedAt,
       summary: 'Completed summary',
+      telemetry: createTerminalRunTelemetry({
+        repository,
+        run,
+        terminal: {
+          status: 'completed',
+          durationMs: 42,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: 'workspace_hash_terminal'
     });
 
@@ -763,6 +824,131 @@ describe('AgentSessionRepository', () => {
     ).toHaveLength(2);
     expect(db.prepare('SELECT * FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
     expect(db.prepare('SELECT * FROM agent_pending_interrupts WHERE run_id = ?').get(run.id)).toBeUndefined();
+  });
+
+  it('rejects terminal telemetry whose frozen correlation differs from the run snapshot', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Reject mismatched terminal telemetry'
+    });
+    const telemetry = createTerminalRunTelemetry({
+      repository,
+      run,
+      terminal: {
+        status: 'completed',
+        durationMs: 42,
+        errorCode: null,
+        retryable: null,
+        cancelSource: null
+      }
+    });
+    telemetry.correlation.manifestHash = 'tampered-manifest-hash';
+
+    expect(() =>
+      repository.completeRunAtomically({
+        assistantMessage: 'Must not persist',
+        durationMs: 42,
+        endedAt: '2026-07-17T01:00:00.000Z',
+        expectedStateVersion: 1,
+        expectedStatus: 'waiting_next_turn',
+        modelId: 'openai:gpt-4.1',
+        providerId: 'test-provider',
+        runId: run.id,
+        runStartedAt: run.startedAt,
+        summary: 'Must not persist',
+        telemetry,
+        workspaceHash: null
+      })
+    ).toThrow('agent_run_telemetry_identity_mismatch');
+    expect(repository.getRun(run.id).status).toBe('waiting_next_turn');
+  });
+
+  it('rejects persisted telemetry whose frozen correlation differs from the run snapshot', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Reject mismatched persisted telemetry'
+    });
+    const telemetry = repository.getRunTelemetry(run.id);
+    if (telemetry === null) {
+      throw new Error('test_agent_run_telemetry_missing');
+    }
+    const mutations = [
+      (candidate: typeof telemetry) => {
+        candidate.correlation.threadId = 'thread_tampered';
+      },
+      (candidate: typeof telemetry) => {
+        candidate.correlation.manifestHash = 'manifest_tampered';
+      },
+      (candidate: typeof telemetry) => {
+        candidate.correlation.providerId = 'provider_tampered';
+      },
+      (candidate: typeof telemetry) => {
+        candidate.correlation.modelId = 'model_tampered';
+      }
+    ];
+
+    for (const mutate of mutations) {
+      const candidate = structuredClone(telemetry);
+      mutate(candidate);
+      db.prepare('UPDATE agent_run_telemetry SET telemetry_json = ? WHERE run_id = ?').run(
+        JSON.stringify(candidate),
+        run.id
+      );
+
+      expect(() => repository.getRunTelemetry(run.id)).toThrow('agent_run_telemetry_identity_mismatch');
+    }
+  });
+
+  it('does not overwrite corrupt telemetry while committing a terminal run', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Preserve corrupt telemetry evidence'
+    });
+    const telemetry = createTerminalRunTelemetry({
+      repository,
+      run,
+      terminal: {
+        status: 'completed',
+        durationMs: 42,
+        errorCode: null,
+        retryable: null,
+        cancelSource: null
+      }
+    });
+    db.prepare('UPDATE agent_run_telemetry SET telemetry_json = ? WHERE run_id = ?').run('{not-json', run.id);
+
+    expect(() =>
+      repository.completeRunAtomically({
+        assistantMessage: 'Must not persist',
+        durationMs: 42,
+        endedAt: '2026-07-17T01:00:00.000Z',
+        expectedStateVersion: 1,
+        expectedStatus: 'waiting_next_turn',
+        modelId: 'openai:gpt-4.1',
+        providerId: 'test-provider',
+        runId: run.id,
+        runStartedAt: run.startedAt,
+        summary: 'Must not persist',
+        telemetry,
+        workspaceHash: null
+      })
+    ).toThrow('agent_run_telemetry_corrupt');
+    expect(repository.getRun(run.id).status).toBe('waiting_next_turn');
+    expect(
+      db.prepare('SELECT telemetry_json FROM agent_run_telemetry WHERE run_id = ?').pluck().get(run.id)
+    ).toBe('{not-json');
   });
 
   it('reserves the final timeline slot before accepting more streamed events', () => {
@@ -812,6 +998,17 @@ describe('AgentSessionRepository', () => {
       runId: run.id,
       runStartedAt: run.startedAt,
       summary: 'Terminal answer',
+      telemetry: createTerminalRunTelemetry({
+        repository,
+        run,
+        terminal: {
+          status: 'completed',
+          durationMs: 42,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
 
@@ -849,7 +1046,18 @@ describe('AgentSessionRepository', () => {
       providerId: 'test-provider',
       retryable: true,
       runId: run.id,
-      suggestion: 'Check the provider connection.'
+      suggestion: 'Check the provider connection.',
+      telemetry: createTerminalRunTelemetry({
+        repository,
+        run,
+        terminal: {
+          status: 'failed',
+          durationMs: 42,
+          errorCode: 'provider_unavailable',
+          retryable: true,
+          cancelSource: null
+        }
+      })
     });
 
     expect(terminal.run.status).toBe('failed');
@@ -1022,6 +1230,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: waitingUserState.stateVersion,
       expectedStatus: waitingUserState.status,
       runId: waitingUser.id,
+      telemetry: requireRunTelemetry(repository, waitingUser),
       threadId: waitingUser.threadId,
       interrupts: [
         {
@@ -1041,6 +1250,7 @@ describe('AgentSessionRepository', () => {
       expectedStateVersion: resumeWaitingState.stateVersion,
       expectedStatus: resumeWaitingState.status,
       runId: resumeDispatchPending.id,
+      telemetry: requireRunTelemetry(repository, resumeDispatchPending),
       threadId: resumeDispatchPending.threadId,
       interrupts: [
         {
@@ -1103,6 +1313,11 @@ describe('AgentSessionRepository', () => {
       expect(repository.getRun(run.id)).toMatchObject({
         status: 'interrupted',
         endedAt: expect.any(String)
+      });
+      expect(repository.getRunTelemetry(run.id)).toMatchObject({
+        terminal: {
+          status: 'interrupted'
+        }
       });
       expect(db.prepare('SELECT run_id FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
       expect(

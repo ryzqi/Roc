@@ -132,7 +132,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
 
     const result = await runtime.startRun(startRequest);
 
-    expect(runtime.cancelRun({ runId: result.runId })).toEqual({
+    expect(await runtime.cancelRun({ runId: result.runId })).toEqual({
       runId: result.runId,
       cancelled: true
     });

@@ -51,6 +51,7 @@ describe('rebuildRocDatabases', () => {
       );
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_threads').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_runs').pluck().get()).toBe(1);
+      expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry').pluck().get()).toBe(0);
       expect(agentDb.prepare('SELECT status, snapshot_error_code FROM agent_runs WHERE id = ?').get('run-1')).toEqual({
         status: 'interrupted',
         snapshot_error_code: 'legacy_snapshot_missing'
@@ -177,7 +178,7 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
         workspace_hash TEXT,
         created_at TEXT NOT NULL
       );
-    `);
+      `);
     if (effectSchema === 'v8') {
       db.exec(`
         CREATE TABLE agent_tool_effects (

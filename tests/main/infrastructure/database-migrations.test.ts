@@ -7,6 +7,10 @@ import {
   type RocDatabaseMigration
 } from '../../../src/main/infrastructure/database-migrations';
 import { agentMigrations, coreMigrations, taskMigrations } from '../../../src/main/infrastructure/database-schemas';
+import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
+import { parseRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
+import { AgentRunTelemetryRepository } from '../../../src/main/plugins/agent/run-telemetry';
+import type { RunExecutionSnapshotV1 } from '../../../src/shared/types';
 
 let db: Database.Database;
 
@@ -122,7 +126,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 11 without changing earlier versions', () => {
+  it('applies agent migrations through version 12 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -142,11 +146,140 @@ describe('database migrations', () => {
       { version: 8, name: 'agent_notification_metrics' },
       { version: 9, name: 'agent_effect_execution_identity' },
       { version: 10, name: 'agent_pending_interrupt_collection' },
-      { version: 11, name: 'agent_pending_interrupt_projection_minimal' }
+      { version: 11, name: 'agent_pending_interrupt_projection_minimal' },
+      { version: 12, name: 'agent_run_telemetry' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 11
+      currentVersion: 12
+    });
+  });
+
+  it('backfills valid V2 runs when migrating the agent database from v11 to v12', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 11),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES ('thread_telemetry_migration', 'chat', 'Telemetry', 'Telemetry', 'running', ?, ?)`
+    ).run('2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z');
+    db.prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, snapshot_json, snapshot_version, state_version, run_origin, dispatch_key)
+       VALUES ('run_telemetry_migration', 'thread_telemetry_migration', 1, 'Migrate telemetry',
+        'running', ?, NULL, 'openai', 'gpt-test', '{"mcpServers":[],"skills":[]}', ?, 2, 1, 'chat', NULL)`
+    ).run(
+      '2026-07-10T01:00:00.000Z',
+      JSON.stringify({
+        schemaVersion: 2,
+        runOrigin: 'chat',
+        dispatchKey: null,
+        capabilityManifest: { manifestHash: 'manifest_migration' },
+        model: { providerId: 'openai', modelId: 'gpt-test' }
+      })
+    );
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(new AgentRunTelemetryRepository(db).get('run_telemetry_migration')).toMatchObject({
+      schemaVersion: 1,
+      correlation: {
+        runId: 'run_telemetry_migration',
+        threadId: 'thread_telemetry_migration',
+        runOrigin: 'chat',
+        dispatchKey: null,
+        snapshotVersion: 2,
+        manifestHash: 'manifest_migration',
+        providerId: 'openai',
+        modelId: 'gpt-test'
+      },
+      terminal: {
+        status: null,
+        errorCode: null,
+        retryable: null,
+        cancelSource: null
+      }
+    });
+  });
+
+  it('backfills valid V1 runs when migrating the agent database from v11 to v12', () => {
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations.slice(0, 11),
+      now: () => '2026-07-10T01:00:00.000Z'
+    });
+    const capabilityManifest = compileRunCapabilityManifest({
+      deleteFileApprovalMode: 'fully_automatic',
+      mcpApprovalMode: 'fully_automatic',
+      mcpServers: [],
+      mode: 'chat',
+      requestedCapabilities: { mcpServers: [], skills: [] },
+      skills: [],
+      workflowHint: null
+    }).manifest;
+    const snapshot = {
+      schemaVersion: 1,
+      runId: 'run_telemetry_migration_v1',
+      threadId: 'thread_telemetry_migration_v1',
+      runOrigin: 'chat',
+      model: { providerId: 'openai', modelId: 'gpt-test-v1' },
+      mode: 'run',
+      workspace: null,
+      capabilityManifest,
+      budget: { contextBudgetTokens: null },
+      workflowHint: null,
+      explicitSkillIds: [],
+      inputMessageId: 'message_telemetry_migration_v1',
+      dispatchKey: null
+    } satisfies RunExecutionSnapshotV1;
+    expect(parseRunExecutionSnapshot(snapshot)).toMatchObject({
+      schemaVersion: 2,
+      runId: snapshot.runId,
+      threadId: snapshot.threadId
+    });
+    db.prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES (?, 'chat', 'Telemetry V1', 'Telemetry V1', 'running', ?, ?)`
+    ).run(snapshot.threadId, '2026-07-10T01:00:00.000Z', '2026-07-10T01:00:00.000Z');
+    db.prepare(
+      `INSERT INTO agent_runs
+       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+        enabled_capabilities_json, snapshot_json, snapshot_version, state_version, run_origin, dispatch_key)
+       VALUES (?, ?, 1, 'Migrate V1 telemetry', 'running', ?, NULL, 'openai', 'gpt-test-v1',
+        '{"mcpServers":[],"skills":[]}', ?, 1, 1, 'chat', NULL)`
+    ).run(snapshot.runId, snapshot.threadId, '2026-07-10T01:00:00.000Z', JSON.stringify(snapshot));
+
+    applyDatabaseMigrations(db, {
+      dbName: 'agent',
+      migrations: agentMigrations,
+      now: () => '2026-07-10T01:00:01.000Z'
+    });
+
+    expect(new AgentRunTelemetryRepository(db).get(snapshot.runId)).toMatchObject({
+      schemaVersion: 1,
+      correlation: {
+        runId: snapshot.runId,
+        threadId: snapshot.threadId,
+        runOrigin: snapshot.runOrigin,
+        dispatchKey: snapshot.dispatchKey,
+        snapshotVersion: 2,
+        manifestHash: capabilityManifest.manifestHash,
+        providerId: snapshot.model.providerId,
+        modelId: snapshot.model.modelId
+      },
+      terminal: {
+        status: null,
+        errorCode: null,
+        retryable: null,
+        cancelSource: null
+      }
     });
   });
 

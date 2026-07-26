@@ -4,6 +4,8 @@ type StoredMetric = Metric & {
   sequence: number;
 };
 
+const forbiddenHighCardinalityLabels = new Set(['dispatchKey', 'occurrenceId', 'runId', 'threadId']);
+
 export class MetricsService {
   private readonly metrics = new Map<string, StoredMetric[]>();
   private readonly maxSamplesPerMetric = 1000;
@@ -104,6 +106,11 @@ export class MetricsService {
   }
 
   private buildKey(name: string, labels: Record<string, string>): string {
+    for (const key of Object.keys(labels)) {
+      if (forbiddenHighCardinalityLabels.has(key)) {
+        throw new Error(`metrics_high_cardinality_label_forbidden:${key}`);
+      }
+    }
     const labelText = Object.entries(labels)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, value]) => `${key}=${value}`)

@@ -9,6 +9,7 @@ import { deleteAgentThreadHistory } from '../../../../src/main/infrastructure/ag
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
+import { createTerminalRunTelemetry } from '../agent/run-telemetry-test-helpers';
 
 let agentDb: Database.Database;
 let taskDb: Database.Database;
@@ -52,6 +53,17 @@ describe('agent outbox projector', () => {
       runId: run.id,
       runStartedAt: run.startedAt,
       summary: 'Completed scheduled task',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run,
+        terminal: {
+          status: 'completed',
+          durationMs: 50,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
 
@@ -110,7 +122,18 @@ describe('agent outbox projector', () => {
       providerId: 'test-provider',
       retryable: true,
       runId: run.id,
-      suggestion: '检查提供商凭据后重试。'
+      suggestion: '检查提供商凭据后重试。',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run,
+        terminal: {
+          status: 'failed',
+          durationMs: 50,
+          errorCode: 'provider_unavailable',
+          retryable: true,
+          cancelSource: null
+        }
+      })
     });
 
     const history = new AgentTaskHistoryReader(agentDb);
@@ -210,7 +233,18 @@ describe('agent outbox projector', () => {
       modelId: 'openai:gpt-4.1',
       providerId: 'test-provider',
       retryable: true,
-      runId: run.id
+      runId: run.id,
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run,
+        terminal: {
+          status: 'failed',
+          durationMs: 60,
+          errorCode: 'provider_unavailable',
+          retryable: true,
+          cancelSource: null
+        }
+      })
     });
 
     const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
@@ -235,7 +269,18 @@ describe('agent outbox projector', () => {
       endedAt: '2026-07-17T01:00:00.000Z',
       expectedStateVersion: 1,
       expectedStatus: 'waiting_next_turn',
-      runId: run.id
+      runId: run.id,
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run,
+        terminal: {
+          status: 'cancelled',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: 'user_cancelled'
+        }
+      })
     });
 
     const history = new AgentTaskHistoryReader(agentDb);
@@ -273,9 +318,22 @@ describe('agent outbox projector', () => {
       runId: deletedRun.id,
       runStartedAt: deletedRun.startedAt,
       summary: 'Deleted task completed',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run: deletedRun,
+        terminal: {
+          status: 'completed',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
+    expect(agentRepository.getRunTelemetry(deletedRun.id)).not.toBeNull();
     deleteAgentThreadHistory(agentDb, deletedRun.threadId);
+    expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry WHERE run_id = ?').pluck().get(deletedRun.id)).toBe(0);
 
     const history = new AgentTaskHistoryReader(agentDb);
     const repository = new TaskRepository(taskDb, history);
@@ -299,6 +357,17 @@ describe('agent outbox projector', () => {
       runId: activeRun.id,
       runStartedAt: activeRun.startedAt,
       summary: 'Active task completed',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run: activeRun,
+        terminal: {
+          status: 'completed',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
 
@@ -325,6 +394,17 @@ describe('agent outbox projector', () => {
       runId: firstRun.id,
       runStartedAt: firstRun.startedAt,
       summary: 'First task completed',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run: firstRun,
+        terminal: {
+          status: 'completed',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
     agentRepository.completeRunAtomically({
@@ -338,6 +418,17 @@ describe('agent outbox projector', () => {
       runId: secondRun.id,
       runStartedAt: secondRun.startedAt,
       summary: 'Second task completed',
+      telemetry: createTerminalRunTelemetry({
+        repository: agentRepository,
+        run: secondRun,
+        terminal: {
+          status: 'completed',
+          durationMs: 10,
+          errorCode: null,
+          retryable: null,
+          cancelSource: null
+        }
+      }),
       workspaceHash: null
     });
     const history = new AgentTaskHistoryReader(agentDb);

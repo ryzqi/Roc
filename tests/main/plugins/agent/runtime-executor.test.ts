@@ -142,6 +142,176 @@ describe('AgentPluginRuntime', () => {
     );
   });
 
+  it('persists a redacted per-run telemetry summary at completion', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute: async function* (input) {
+          input.observeModelUsage({
+            callCount: 2,
+            inputTokens: 120,
+            outputTokens: 30,
+            totalTokens: 150,
+            cacheReadTokens: 40,
+            cacheCreationTokens: 10
+          });
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-secret-call',
+            callId: 'call-secret',
+            name: 'web_read',
+            phase: 'start',
+            input: { url: 'https://secret.example.test' }
+          });
+          yield createToolBlock(input.run.id, {
+            kind: 'tool_call',
+            blockId: 'tool-secret-call',
+            callId: 'call-secret',
+            name: 'web_read',
+            phase: 'error',
+            error: 'secret-tool-error'
+          });
+          yield {
+            type: 'subagent_event',
+            runId: input.run.id,
+            sequence: 1,
+            identity: {
+              subagentId: 'subagent-secret',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 1,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'secret-subagent-task'
+            },
+            event: { kind: 'started' }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'subagent_event',
+            runId: input.run.id,
+            sequence: 2,
+            identity: {
+              subagentId: 'subagent-secret',
+              parentSubagentId: null,
+              name: 'research',
+              depth: 1,
+              path: ['research#0'],
+              execution: 'sync',
+              taskInput: 'secret-subagent-task'
+            },
+            event: { kind: 'failed', error: 'secret-subagent-error' }
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'context_maintenance',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            event: 'context_compaction_started',
+            mode: 'task',
+            stage: 'deterministic',
+            inputTokens: 7000,
+            budgetTokens: 7168,
+            estimated: true
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'context_maintenance',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            event: 'context_summary_completed',
+            mode: 'task',
+            stage: 'summary',
+            removedChars: 4000
+          } satisfies ChatRunEvent;
+          yield {
+            type: 'context_maintenance',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            event: 'context_tool_result_persisted',
+            mode: 'task',
+            stage: 'persist',
+            persistedChars: 2000
+          } satisfies ChatRunEvent;
+          yield createTextBlock(input.run.id, 'Telemetry response.');
+        }
+      },
+      capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
+      eventBus,
+      modelFactory,
+      repository,
+      workspaceProvider: async () => ({
+        id: 'workspace-secret',
+        path: 'F:\\private\\workspace',
+        displayName: 'Secret workspace',
+        lastOpenedAt: '2026-07-26T00:00:00.000Z',
+        trustState: 'trusted'
+      })
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: 'secret-user-input',
+      taskSource: 'workbench',
+      workspacePath: 'F:\\private\\workspace'
+    });
+
+    await waitForEvent(() => repository.getRun(result.runId).status === 'completed');
+
+    expect(repository.getRunTelemetry(result.runId)).toMatchObject({
+      schemaVersion: 1,
+      correlation: {
+        runId: result.runId,
+        threadId: result.threadId,
+        runOrigin: 'manual_task_run',
+        dispatchKey: null,
+        snapshotVersion: 2,
+        manifestHash: expect.any(String),
+        providerId: 'openai',
+        modelId: 'openai:gpt-4.1'
+      },
+      model: {
+        callCount: 2,
+        inputTokens: 120,
+        outputTokens: 30,
+        totalTokens: 150,
+        cacheReadTokens: 40,
+        cacheCreationTokens: 10,
+        reportedCostUsd: null
+      },
+      tool: { callCount: 1, errorCount: 1 },
+      subagent: { count: 1, failedCount: 1, maxDepth: 1 },
+      context: {
+        compactionCount: 1,
+        summaryCount: 1,
+        artifactCount: 1,
+        failureCount: 0,
+        estimatedCount: 1,
+        inputTokens: 7000,
+        budgetTokens: 7168,
+        removedChars: 4000,
+        persistedChars: 2000
+      },
+      runtime: {
+        firstOutputMs: expect.any(Number),
+        totalDurationMs: expect.any(Number),
+        recoveryCount: 0
+      },
+      terminal: {
+        status: 'completed',
+        errorCode: null,
+        retryable: null,
+        cancelSource: null
+      }
+    });
+    const telemetryJson = db
+      .prepare('SELECT telemetry_json FROM agent_run_telemetry WHERE run_id = ?')
+      .pluck()
+      .get(result.runId) as string;
+    expect(telemetryJson).not.toContain('secret-user-input');
+    expect(telemetryJson).not.toContain('F:\\private\\workspace');
+    expect(telemetryJson).not.toContain('secret-tool-error');
+    expect(telemetryJson).not.toContain('secret-subagent-task');
+    expect(telemetryJson).not.toContain('secret-subagent-error');
+  });
+
 
   it('requires the DeepAgent executor instead of using raw model streaming', async () => {
     const repository = new AgentSessionRepository(db);
@@ -312,6 +482,12 @@ describe('AgentPluginRuntime', () => {
     );
 
     expect(repository.getRun(result.runId).status).toBe('waiting_user');
+    expect(repository.getRunTelemetry(result.runId)?.terminal).toEqual({
+      status: null,
+      errorCode: null,
+      retryable: null,
+      cancelSource: null
+    });
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'agent.run.task-event',
@@ -343,6 +519,60 @@ describe('AgentPluginRuntime', () => {
     expect(events.some((event) => event.type === 'agent.run.failed' && readPayloadRunId(event.payload) === result.runId)).toBe(false);
   });
 
+  it('rejects resume after restart when the required telemetry row is missing', async () => {
+    const repository = new AgentSessionRepository(db);
+    const deepAgentExecutor: NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> = {
+      execute: async function* (input) {
+        if (input.resumePayload === undefined) {
+          yield {
+            type: 'run_interrupted',
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            interruptId: 'interrupt_missing_telemetry',
+            payload: {
+              kind: 'question',
+              question: 'Resume after restart?'
+            }
+          } satisfies ChatRunEvent;
+          return;
+        }
+        yield createTextBlock(input.run.id, 'resumed');
+      }
+    };
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor,
+      eventBus,
+      modelFactory,
+      repository
+    });
+    const started = await runtime.startRun(startRequest);
+    await waitForEvent(() => repository.getRun(started.runId).status === 'waiting_user');
+    if (started.threadId === null) {
+      throw new Error('test_started_thread_missing');
+    }
+    db.prepare('DELETE FROM agent_run_telemetry WHERE run_id = ?').run(started.runId);
+    const restartedRuntime = new AgentPluginRuntime({
+      deepAgentExecutor,
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    await expect(
+      restartedRuntime.resumeRun({
+        answer: 'Continue.',
+        interruptId: 'interrupt_missing_telemetry',
+        kind: 'question',
+        runId: started.runId,
+        threadId: started.threadId
+      })
+    ).rejects.toThrow('agent_run_telemetry_missing');
+    expect(repository.getRun(started.runId).status).toBe('waiting_user');
+    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+      expect.objectContaining({ interruptId: 'interrupt_missing_telemetry' })
+    ]);
+  });
+
   it('resumes question interrupts with answer payload and preserves run context', async () => {
     const repository = new AgentSessionRepository(db);
     const requests: ChatStartRunRequest[] = [];
@@ -353,6 +583,14 @@ describe('AgentPluginRuntime', () => {
           requests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           if (input.resumePayload === undefined) {
+            input.observeModelUsage({
+              callCount: 1,
+              inputTokens: 10,
+              outputTokens: 2,
+              totalTokens: 12,
+              cacheReadTokens: null,
+              cacheCreationTokens: null
+            });
             yield {
               type: 'run_interrupted',
               runId: input.run.id,
@@ -366,6 +604,14 @@ describe('AgentPluginRuntime', () => {
             } satisfies ChatRunEvent;
             return;
           }
+          input.observeModelUsage({
+            callCount: 2,
+            inputTokens: 20,
+            outputTokens: 4,
+            totalTokens: 24,
+            cacheReadTokens: 5,
+            cacheCreationTokens: 1
+          });
           yield createTextBlock(input.run.id, 'continued');
         }
       },
@@ -415,6 +661,15 @@ describe('AgentPluginRuntime', () => {
       'interrupt-question': {
         answer: 'Use F:\\Code\\Roc.'
       }
+    });
+    expect(repository.getRunTelemetry(start.runId)?.model).toEqual({
+      callCount: 3,
+      inputTokens: 30,
+      outputTokens: 6,
+      totalTokens: 36,
+      cacheReadTokens: 5,
+      cacheCreationTokens: 1,
+      reportedCostUsd: null
     });
   });
 

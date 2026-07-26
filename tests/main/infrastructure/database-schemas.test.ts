@@ -60,6 +60,7 @@ describe('target database schemas', () => {
         'session_messages_fts',
         'agent_pending_interrupts',
         'agent_run_events',
+        'agent_run_telemetry',
         'langgraph_checkpoints',
         'langgraph_checkpoint_writes',
         'agent_tool_effects',

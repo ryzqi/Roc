@@ -29,6 +29,13 @@ import {
   parseRunExecutionSnapshot,
   type RunExecutionSnapshotSeed
 } from './run-execution-snapshot';
+import {
+  AgentRunTelemetryAccumulator,
+  AgentRunTelemetryRepository,
+  assertAgentRunTelemetryIdentity,
+  calculateAgentRunTelemetryDurationMs,
+  type AgentRunTelemetryV1
+} from './run-telemetry';
 
 type TaskRunRow = {
   id: string;
@@ -157,7 +164,11 @@ const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>>
 };
 
 export class AgentSessionRepository {
-  constructor(private readonly db: DatabaseConnection) {}
+  private readonly runTelemetryRepository: AgentRunTelemetryRepository;
+
+  constructor(private readonly db: DatabaseConnection) {
+    this.runTelemetryRepository = new AgentRunTelemetryRepository(db);
+  }
 
   createTaskRun(input: {
     userInput: string;
@@ -188,6 +199,17 @@ export class AgentSessionRepository {
     }
     const enabledCapabilities = snapshot.capabilityManifest.resolvedCapabilities;
     const enabledCapabilitiesJson = JSON.stringify(enabledCapabilities);
+    const taskRun: TaskRun = {
+      id: runId,
+      threadId,
+      runNumber,
+      userInput: input.userInput,
+      status: 'waiting_next_turn',
+      startedAt: now,
+      endedAt: null,
+      modelId: snapshot.model.modelId,
+      enabledCapabilities
+    };
     const userMessagePayload: {
       role: 'user';
       content: string;
@@ -247,6 +269,11 @@ export class AgentSessionRepository {
             snapshot.runOrigin,
             snapshot.dispatchKey
           );
+
+        this.runTelemetryRepository.save(
+          new AgentRunTelemetryAccumulator({ existing: null, run: taskRun, snapshot }).snapshot(),
+          now
+        );
 
         this.db
           .prepare(
@@ -320,17 +347,7 @@ export class AgentSessionRepository {
       throw error;
     }
 
-    return {
-      id: runId,
-      threadId,
-      runNumber,
-      userInput: input.userInput,
-      status: 'waiting_next_turn',
-      startedAt: now,
-      endedAt: null,
-      modelId: snapshot.model.modelId,
-      enabledCapabilities
-    };
+    return taskRun;
   }
 
   getRun(id: string): TaskRun {
@@ -339,6 +356,15 @@ export class AgentSessionRepository {
       throw new Error('task_run_not_found');
     }
     return mapTaskRun(row);
+  }
+
+  getRunTelemetry(runId: string): AgentRunTelemetryV1 | null {
+    const telemetry = this.runTelemetryRepository.get(runId);
+    if (telemetry === null) {
+      return null;
+    }
+    assertAgentRunTelemetryIdentity(telemetry, this.getRun(runId), this.getRunExecutionSnapshot(runId));
+    return telemetry;
   }
 
   findRunByDispatchKey(dispatchKey: string): TaskRun | null {
@@ -441,6 +467,7 @@ export class AgentSessionRepository {
     runId: string;
     runStartedAt: string;
     summary: string;
+    telemetry: AgentRunTelemetryV1;
     workspaceHash: string | null;
   }): { event: TaskEvent; message: SessionMessageEntry; run: TaskRun; stateVersion: number } {
     return this.db.transaction(() => {
@@ -453,6 +480,7 @@ export class AgentSessionRepository {
         updatedAt: input.endedAt
       });
       this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+      this.saveTelemetryForRunState(input.telemetry, transition.run, input.endedAt);
 
       const message: SessionMessageEntry = {
         id: `smsg_${randomUUID()}`,
@@ -559,12 +587,20 @@ export class AgentSessionRepository {
     })();
   }
 
-  failRunAtomically(input: Omit<TerminalFailureInput, 'status'>): { event: TaskEvent; run: TaskRun; stateVersion: number } {
-    return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'failed' }))();
+  failRunAtomically(input: Omit<TerminalFailureInput, 'status'> & { telemetry: AgentRunTelemetryV1 }): {
+    event: TaskEvent;
+    run: TaskRun;
+    stateVersion: number;
+  } {
+    return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'failed' }, input.telemetry))();
   }
 
-  interruptRunAtomically(input: Omit<TerminalFailureInput, 'status'>): { event: TaskEvent; run: TaskRun; stateVersion: number } {
-    return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'interrupted' }))();
+  interruptRunAtomically(input: Omit<TerminalFailureInput, 'status'> & { telemetry: AgentRunTelemetryV1 }): {
+    event: TaskEvent;
+    run: TaskRun;
+    stateVersion: number;
+  } {
+    return this.db.transaction(() => this.writeTerminalFailureInTransaction({ ...input, status: 'interrupted' }, input.telemetry))();
   }
 
   reconcileStartupRuns(): TaskRun[] {
@@ -626,16 +662,35 @@ export class AgentSessionRepository {
       const providerId = requireNonEmpty(candidate.provider_id, 'agent_run_provider_missing');
       const modelId = requireNonEmpty(candidate.model_id, 'agent_run_model_missing');
       const restartFailure = readRestartFailure(evidence);
+      const endedAt = new Date().toISOString();
+      const run = this.getRun(candidate.id);
+      const existingTelemetry = this.runTelemetryRepository.get(candidate.id);
+      if (existingTelemetry === null) {
+        throw new Error('agent_run_telemetry_missing');
+      }
+      const telemetry = new AgentRunTelemetryAccumulator({
+        existing: existingTelemetry,
+        run,
+        snapshot: this.getRunExecutionSnapshot(candidate.id)
+      });
+      telemetry.markTerminal({
+        status: 'interrupted',
+        durationMs: calculateAgentRunTelemetryDurationMs(run.startedAt, endedAt),
+        errorCode: restartFailure.code,
+        retryable: restartFailure.retryable,
+        cancelSource: null
+      });
       const terminal = this.interruptRunAtomically({
         code: restartFailure.code,
-        endedAt: new Date().toISOString(),
+        endedAt,
         error: restartFailure.message,
         expectedStateVersion: candidate.state_version,
         expectedStatus: candidate.status,
         modelId,
         providerId,
         retryable: restartFailure.retryable,
-        runId: candidate.id
+        runId: candidate.id,
+        telemetry: telemetry.snapshot()
       });
       reconciled.push(terminal.run);
     }
@@ -648,6 +703,7 @@ export class AgentSessionRepository {
     expectedStatus: TaskStatus;
     interrupts: readonly PendingInterrupt[];
     runId: string;
+    telemetry: AgentRunTelemetryV1;
     threadId: string;
   }): { events: TaskEvent[]; run: TaskRun } {
     validatePendingInterrupts(input.interrupts);
@@ -664,6 +720,7 @@ export class AgentSessionRepository {
       if (transition.run.threadId !== input.threadId) {
         throw new Error('agent_pending_interrupt_thread_mismatch');
       }
+      this.saveTelemetryForRunState(input.telemetry, transition.run, now);
       this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
       const insert = this.db.prepare(
         `INSERT INTO agent_pending_interrupts
@@ -825,6 +882,7 @@ export class AgentSessionRepository {
     expectedStateVersion: number;
     expectedStatus: TaskStatus;
     runId: string;
+    telemetry: AgentRunTelemetryV1;
   }): { event: TaskEvent; run: TaskRun; stateVersion: number } {
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
@@ -836,6 +894,7 @@ export class AgentSessionRepository {
         updatedAt: input.endedAt
       });
       this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+      this.saveTelemetryForRunState(input.telemetry, transition.run, input.endedAt);
       const event: TaskEvent = {
         id: `event_${randomUUID()}`,
         threadId: transition.run.threadId,
@@ -1169,7 +1228,10 @@ export class AgentSessionRepository {
     };
   }
 
-  private writeTerminalFailureInTransaction(input: TerminalFailureInput): {
+  private writeTerminalFailureInTransaction(
+    input: TerminalFailureInput,
+    telemetry: AgentRunTelemetryV1 | null
+  ): {
     event: TaskEvent;
     run: TaskRun;
     stateVersion: number;
@@ -1183,6 +1245,9 @@ export class AgentSessionRepository {
       updatedAt: input.endedAt
     });
     this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+    if (telemetry !== null) {
+      this.saveTelemetryForRunState(telemetry, transition.run, input.endedAt);
+    }
 
     const event: TaskEvent = {
       id: `event_${randomUUID()}`,
@@ -1247,6 +1312,27 @@ export class AgentSessionRepository {
     };
   }
 
+  private saveTelemetryForRunState(telemetry: AgentRunTelemetryV1, run: TaskRun, updatedAt: string): void {
+    const persisted = this.runTelemetryRepository.get(run.id);
+    if (persisted === null) {
+      throw new Error('agent_run_telemetry_missing');
+    }
+    const snapshot = this.getRunExecutionSnapshot(run.id);
+    assertAgentRunTelemetryIdentity(persisted, run, snapshot);
+    assertAgentRunTelemetryIdentity(telemetry, run, snapshot);
+    if (persisted.terminal.status !== null) {
+      throw new Error('agent_run_telemetry_terminal_status_mismatch');
+    }
+    if (isTerminalRunStatus(run.status)) {
+      if (telemetry.terminal.status !== run.status) {
+        throw new Error('agent_run_telemetry_terminal_status_mismatch');
+      }
+    } else if (telemetry.terminal.status !== null) {
+      throw new Error('agent_run_telemetry_terminal_status_mismatch');
+    }
+    this.runTelemetryRepository.save(telemetry, updatedAt);
+  }
+
   private insertEvent(event: TaskEvent): void {
     this.db
       .prepare(
@@ -1295,7 +1381,7 @@ export class AgentSessionRepository {
           retryable: false,
           runId: row.id,
           status: 'interrupted'
-        });
+        }, null);
         this.db.prepare('UPDATE agent_runs SET snapshot_error_code = ? WHERE id = ?').run(code, row.id);
       }
       if (isTerminalRunStatus(row.status)) {

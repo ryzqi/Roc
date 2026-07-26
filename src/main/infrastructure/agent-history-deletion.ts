@@ -26,6 +26,8 @@ export function deleteAgentThreadHistory(db: DatabaseConnection, threadId: strin
     db.prepare('DELETE FROM agent_events WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
       .run(targetThreadId, targetThreadId);
     db.prepare('DELETE FROM agent_thread_event_cursors WHERE thread_id = ?').run(targetThreadId);
+    db.prepare('DELETE FROM agent_run_telemetry WHERE run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+      .run(targetThreadId);
     db.prepare('DELETE FROM agent_runs WHERE thread_id = ?').run(targetThreadId);
     db.prepare('DELETE FROM agent_threads WHERE id = ?').run(targetThreadId);
   })();

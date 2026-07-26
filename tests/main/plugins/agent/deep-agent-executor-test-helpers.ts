@@ -140,6 +140,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   const run = createRun(request);
   const execution = await executor.execute({
     abortSignal: new AbortController().signal,
+    observeModelUsage: () => {},
     modelHandle: {
       providerId: 'test-provider',
       modelId: 'test-model',

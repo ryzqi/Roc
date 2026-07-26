@@ -41,7 +41,7 @@ describe('runDatabaseFastProbe', () => {
     expect(report.databases.every((item) => item.writeLockProbe === 'ok')).toBe(true);
     expect(Object.fromEntries(report.databases.map((item) => [item.dbName, item.schemaVersion]))).toEqual({
       core: 2,
-      agent: 11,
+      agent: 12,
       memory: 1,
       task: 4,
       'plugin:@roc/plugin-workspace': 1,
@@ -71,5 +71,30 @@ describe('runDatabaseFastProbe', () => {
       })
     );
     expect(existsSync(taskPath)).toBe(true);
+  });
+
+  it('reports missing agent run telemetry as unhealthy', () => {
+    const agentDb = pool.getConnection('@roc/plugin-agent');
+    const firstReport = runDatabaseFastProbe({
+      pool,
+      now: () => '2026-07-10T00:00:00.000Z'
+    });
+    expect(firstReport.status).toBe('healthy');
+    agentDb.prepare('DROP TABLE agent_run_telemetry').run();
+
+    const report = runDatabaseFastProbe({
+      pool,
+      now: () => '2026-07-10T00:00:01.000Z'
+    });
+
+    expect(report.status).toBe('unhealthy');
+    expect(report.databases).toContainEqual(
+      expect.objectContaining({
+        dbName: 'agent',
+        readProbe: 'failed',
+        writeLockProbe: 'failed',
+        detail: 'schema_table_missing:agent_run_telemetry'
+      })
+    );
   });
 });

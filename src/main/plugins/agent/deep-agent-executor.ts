@@ -407,6 +407,15 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         } catch (error) {
           eventQueue.fail(error);
           throw error;
+        } finally {
+          input.observeModelUsage({
+            callCount: usageAccumulator.callUsage.size,
+            inputTokens: usageAccumulator.promptTokens,
+            outputTokens: usageAccumulator.completionTokens,
+            totalTokens: usageAccumulator.totalTokens,
+            cacheReadTokens: usageAccumulator.cacheReadTokens,
+            cacheCreationTokens: usageAccumulator.cacheCreationTokens
+          });
         }
       })();
       try {

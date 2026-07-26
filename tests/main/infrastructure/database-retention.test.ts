@@ -41,6 +41,7 @@ describe('runDatabaseRetention', () => {
       agentEvents: 1,
       agentRunEvents: 1,
       agentOutbox: 1,
+      runTelemetry: 1,
       checkpoints: 2,
       checkpointWrites: 2,
       toolEffects: 1,
@@ -75,6 +76,7 @@ describe('runDatabaseRetention', () => {
       agentEvents: 0,
       agentRunEvents: 0,
       agentOutbox: 0,
+      runTelemetry: 0,
       checkpoints: 0,
       checkpointWrites: 0,
       toolEffects: 0,
@@ -207,6 +209,12 @@ function insertPendingInterrupt(runId: string, threadId: string): void {
 
 function insertRunPayloadRows(runId: string, threadId: string, createdAt: string): void {
   agentDb
+    .prepare(
+      `INSERT INTO agent_run_telemetry (run_id, schema_version, telemetry_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(runId, 1, '{"schemaVersion":1}', createdAt, createdAt);
+  agentDb
     .prepare('INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(`event_${runId}`, threadId, runId, 1, 'agent_update', '{"status":"completed"}', createdAt);
   agentDb
@@ -279,6 +287,7 @@ function expectRunPayload(runId: string, expected: number): void {
   expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_events WHERE run_id = ?').pluck().get(runId)).toBe(expected);
   expect(agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects WHERE run_id = ?').pluck().get(runId)).toBe(expected);
   expect(agentDb.prepare('SELECT COUNT(*) FROM context_artifacts WHERE run_id = ?').pluck().get(runId)).toBe(expected);
+  expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry WHERE run_id = ?').pluck().get(runId)).toBe(expected);
 }
 
 function expectCheckpointCount(threadId: string, expected: number): void {
