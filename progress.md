@@ -5,9 +5,9 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：当前 Part 3 UI 提交（`feat(settings): add LangSmith observability controls`）。
+- HEAD：`82164ab feat(settings): add LangSmith observability controls`。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1、Part 2 与 Part 3 backend 已提交；Part 3 observability settings UI 已在当前提交完成。
+- Stage 6：Part 1-3 已提交；Part 4 agent integration mode 已验证并在当前提交完成。
 - Stage 7：pending。
 - `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；是否纳入后续提交需单独决定。
 
@@ -31,7 +31,8 @@
 | Stage 5.3C | Recovery-safe retention 覆盖 events、outbox、artifacts、checkpoint/writes。 | `9942594` |
 | Stage 6.1 | Model usage 按 call 合并，跨 main/summary/subagent/retry/cache 累加。 | `e538ba9` |
 | Stage 6.2 | Durable per-run telemetry、runtime lifecycle、migration/retention/health 与 metrics cardinality。 | `abc3220` |
-| Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、当前提交 |
+| Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、`82164ab` |
+| Stage 6.4 | 独立 agent integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 | 当前提交 |
 
 ## Verification Ledger
 
@@ -197,4 +198,38 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - v13 integration red-green：focused 1 file / 2 tests 先稳定 1 failed，更新唯一显式版本锚点后 2/2 passed；增量 Standards / Spec 复审无 finding；独立补漏提交为 `77cf36a test(kernel): expect agent schema v13`。
 - Broad gate：strict unused、typecheck、IPC check、build、full Vitest 314 files / 1721 tests、responsive smoke 与 `git diff --check` passed。
 - Full Vitest 仍输出既有 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
+- 当前状态：**Verified passing; committed as `82164ab`**。
+
+## 2026-07-26 - Stage 6 Part 4 Agent Integration Mode
+
+- Review baseline：`82164ab feat(settings): add LangSmith observability controls`；工作树恢复后仅有未跟踪只读 `plan.md`。
+- `agent-development` 合同确认：integration 应执行真实 Deep Agents/LangGraph harness 与 Roc state owner；真实 provider 是可选边界，离线 CI 仍需确定性结构证据。
+- CodeGraph 已定位 `buildDeepAgent()` 为 Roc middleware/native harness 单一组装入口；现有 `core-plugins.integration.test.ts` 使用 static executor，不足以证明真实 agent loop。
+- `package.json` 尚无 agent integration 命令；默认 Vitest include 会匹配 `*.int.test.ts`，因此单一路径冻结为专用目录/config/script + 默认 config 显式 exclude。
+- 无 provider key 时仍运行 deterministic offline Deep Agents/Roc SQLite case；只有 live provider case 显式 skipped，避免 integration command 空绿。
+- 已确认 `FakeToolCallingModel` 可驱动真实 `buildDeepAgent()` 与 `RocSqliteCheckpointer`；新 integration case 只覆盖 native `write_todos` trajectory + terminal result + checkpoint，不复制既有 summarization/subagent case或新增一次性 manifest。
+- Live provider 采用显式 `ROC_AGENT_INTEGRATION_LIVE=1` opt-in；默认 skipped，opt-in 后缺 `ANTHROPIC_API_KEY` 明确失败；离线 case 还需压制 ambient LangSmith tracing。
+- 当前状态：**Located**。下一步定位现有 live-provider 环境约定，并为 config/script/default exclusion 与最小 agent case先写稳定红测。
+- 恢复检查确认 HEAD/工作树与交接一致，session catchup 无额外未同步实现；memory 无 Roc 相关旧记录。
+- 已增加 config/script/default exclusion 合同测试与专用 integration 文件；生产 config/script 尚未修改，下一步运行红灯并记录精确失败。
+- Config 合同红灯：1 file / 3 tests 全部按预期失败，分别为 script undefined、default exclude undefined、专用 config 无法加载。
+- Offline harness 首跑：trajectory、terminal result、SQLite checkpoint 均已通过，唯一失败为 ambient LangSmith fetch 86 次；根因为 builder 在 disabled context 外构造，测试修正为 context 同时包住 build 与 invoke，待重跑。
+- Offline harness 第二次仍为 86 次 fetch；进一步定位为 `langsmith/singletons/traceable` 冷启动使用 no-op mock，既有 executor 测试因 import 顺序已初始化而未覆盖。已增加官方 `langsmith/traceable` 初始化 import，待重跑同一回归。
+- 第三次仅增加初始化 import 后仍为 86 次 fetch；pnpm 解析确认该路径统一为 LangSmith 0.8.1。扩大诊断后改用官方 `traceable(..., { tracingEnabled: false })` 传播 nested runnable config，替代 disabled 分支的手写 singleton context，待重跑。
+- 官方 disabled wrapper 重跑仍为 86 次 fetch；当前假设未成立。Fetch stub 已改为在拒绝错误中包含目标 URL，下一次只用于确定实际外发 owner，不继续试改生产逻辑。
+- 诊断确认唯一目标为 `https://api.smith.langchain.com/info`，是 direct `agent.invoke` nested harness 的 capability probe；没有证据表明生产 `streamEvents` 路径退化。撤回 tracing 生产试改，offline 专用进程改为显式关闭四个新旧 tracing env、清空 key 并拒绝全部 fetch。
+- Offline harness green：1 deterministic case passed、1 live case skipped；真实 builder/native `write_todos`、terminal AI、Roc SQLite checkpoint 与零 fetch 均通过。
+- 已增加 `test:agent:integration`、默认 `tests/integration/**` exclude 与专用 Vitest config；状态为 **Changed, unverified**，下一步重跑 config contract、专用命令、missing-key failure 和 typecheck。
+- Focused 首轮：config contract 3/3 passed；专用命令 1 passed / 1 skipped；typecheck 仅因 fixture 缺必填 `contextBudgetTokens` 失败。已显式补 `undefined`，待重跑。
+- Focused green：专用命令 1 passed / 1 skipped；typecheck 无错误。显式 live opt-in 且缺 key 的定向运行在 4ms 内按预期失败为 `agent_integration_anthropic_api_key_missing`，未进入 provider 构造或网络。
+- 当前状态：**Changed, focused verified; Standards / Spec / Risk review pending**。
+- 初次 Spec review 无 finding；Standards 仅有 1 个 Low 账本事实漂移。Local Risk review 发现 live case 未显式隔离 ambient LangSmith env/key，可能在 Anthropic 请求之外产生未声明外发。
+- Review fix：offline/live 共用 tracing isolation helper；offline 先模拟四个 tracing flag 与新旧 key 已启用，再关闭并断言零 fetch；账本明确区分默认未 opt-in skipped 与 opt-in 缺 key failure。
+- Review-fix focused gate：config contract 3/3 passed；专用命令 1 passed / 1 skipped；`pnpm typecheck`、strict unused 与 diff check passed。
+- Live opt-in missing-key boundary 在 4ms 内按预期失败为 `agent_integration_anthropic_api_key_missing`，未进入 provider 或 network。
+- 当前状态：**Changed, review fixes focused verified; final re-review and broad gate pending**。
+- 最终 Standards、Spec 与本地 Risk review 均无 residual finding；上一轮账本 Low 与 live ambient tracing 外发风险已关闭。
+- Broad gate：`pnpm build`（含 typecheck）、`pnpm check:ipc`、默认 `pnpm test` 315 files / 1724 tests 与 `git diff --check 82164ab` 全部通过。
+- Full Vitest 仍输出既有 Windows `node-pty AttachConsole failed` 子进程噪声，但主命令退出码为 0。
+- 真实 Anthropic live turn 因未提供凭据未运行；默认 skipped 与 opt-in missing-key expected failure 已直接验证。
 - 当前状态：**Verified passing; committed in current commit**。

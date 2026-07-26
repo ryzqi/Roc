@@ -10,6 +10,7 @@
     "build": "pnpm typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:agent:integration": "vitest run --config vitest.agent-integration.config.ts",
     "test:watch": "vitest",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",

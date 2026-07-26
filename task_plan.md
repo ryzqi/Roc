@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 6 Part 3 - LangSmith Opt-in Tracing**
+**Stage 6 Part 4 - Agent Integration Mode**
 
-**Status:** complete (`Backend 012c870; UI in current commit`)
+**Status:** complete (`Part 3 complete at 82164ab; Part 4 verified passing in current commit`)
 
-- Review baseline：`012c870 feat(agent): add opt-in LangSmith tracing`。
-- 当前范围：shared IPC / generator / preload / renderer 独立“可观测性”section，公开 tracing config、secret stored 状态、显式数据外发说明与保存反馈。
-- 不在本 part 引入：真实 provider integration、eval dataset、agent performance gate、Stage 7 cleanup。
-- 已知事实：Roc 使用 Deep Agents/LangGraph 执行层；runnable config 注入点、Agent plugin config/secret owner、本机 LangSmith SDK API 和 renderer 独立设置入口均已确认。
+- Review baseline：`82164ab feat(settings): add LangSmith observability controls`。
+- 当前范围：新增独立 `test:agent:integration` mode；用真实 Deep Agents harness 与 Roc SQLite 验证最小 agent execution/state contract，并把可选真实 provider case 与默认 CI 隔离。
+- 不在本 part 引入：deterministic eval dataset、LLM-as-judge/live eval、agent performance gate、Stage 7 cleanup。
+- 已知事实：现有 `core-plugins.integration.test.ts` 使用 static executor，不执行 Deep Agents；`buildDeepAgent()` 是 Roc guardrails 与 native harness 的单一组装入口；默认测试不能依赖 provider key 或外网。
 
 ## Phase Status
 
@@ -39,29 +39,28 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI 为当前提交。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 为当前提交。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
 
 ## Current Acceptance
 
-- [x] settings navigation 有独立“可观测性”section，不混入 provider/memory，也不新增全局 AppSettings 字段。
-- [x] renderer 通过生成的 preload IPC 读取/保存公开 config、设置/清除 API key；任何响应都不返回 key 明文。
-- [x] UI 明确说明启用后数据发送到 LangSmith、项目名用途、API key stored 状态和 retention 由 LangSmith workspace policy 控制。
-- [x] 表单有 visible labels、loading/disabled、成功/错误反馈；enabled 必须先有 key，清 key 必须先关闭 tracing。
-- [x] renderer regression 覆盖 load、save、set/clear secret、失败恢复与 section navigation；移动端无重叠/横向溢出。
-- [x] Standards、Spec、Risk 与 UI/UX review 无未处理 finding。
-- [x] Focused、strict unused、typecheck、IPC check、build、full Vitest、diff check 全部通过。
-- [x] Part 3 形成独立提交。
+- [x] `package.json` 提供独立 `test:agent:integration` 命令，默认 `pnpm test` 不运行该 suite。
+- [x] 离线 integration 实际经过 Roc `buildDeepAgent()` / Deep Agents runnable 与 Roc SQLite owner，不用 static executor 伪造 agent loop。
+- [x] 默认未 opt-in 时 live provider case 显式 skipped；opt-in 后缺 `ANTHROPIC_API_KEY` 明确失败；离线 case 不因 ambient tracing/key 发起外网请求。
+- [x] integration 断言结构化结果、tool/trajectory、run/thread/state 或持久 side effect，不锁死模型文案。
+- [x] 失败边界可定位为 build、provider、tool、state 或 timeout；测试有明确清理，不残留进程、数据库或临时 workspace。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；focused、typecheck、strict unused、build、default/full test、integration command 与 diff check 通过。
+- [x] Part 4 形成独立提交。
 
 ## Current Step
 
-**Close observability settings UI**
+**Close the dedicated integration mode**
 
 **Status:** complete (`Verified passing; committed in current commit`)
 
-- Observable contract：renderer 只持有公开 config 与 `apiKeyStored` 布尔值；四个 command 通过现有 Agent capability IPC adapter 到唯一 backend owner，保存结果在 UI 立即可见且失败可恢复。
-- Visual contract：沿用现有紧凑 settings tokens、sidebar 和表单组件；不采用独立 landing、dark-only palette、glow 或装饰性卡片。
-- Verification：18-file direct gate、review-fix/settings gates、strict unused、typecheck、IPC check、build、314 files / 1721 tests full Vitest、320/1280px responsive smoke 与最终双轴/Risk/UI review 均通过。
+- Observable contract：离线 case 必须执行真实 Deep Agents runnable 并产生可断言的结构化 agent/native-tool 结果；live case 只有 `ROC_AGENT_INTEGRATION_LIVE=1` 且显式提供 provider 凭据时才执行。
+- Isolation contract：独立 config/include 与 script；默认 Vitest、开发环境和日志不读取或输出 provider secret，不把 skip 伪装成 pass。
+- Verification：config 3/3、integration 1 passed / 1 skipped、missing-key expected failure、typecheck、strict unused、IPC check、build、default Vitest 315 files / 1724 tests 与 diff check 全部完成；最终双轴/Risk review 无 residual finding。
 
 ## Next Steps
 
@@ -73,7 +72,10 @@
 6. [complete] 最终 Standards / Spec / Risk 无 residual finding；15-file direct gate、strict unused、typecheck、IPC check 与 diff check 通过；backend 已提交为 `012c870`。
 7. [complete] 定位 shared IPC / generator / preload / renderer settings 路径，固定 observable contract；5 files / 24 tests 红灯为 17 passed、7 expected failures。
 8. [complete] 实现独立“可观测性”section，生成 IPC，完成 review、focused/响应式与 broad verification。
-9. [pending] 按 `plan.md` 进入 Stage 6 integration mode / deterministic eval 的下一独立 part。
+9. [complete] 定位 package/Vitest、真实 Deep Agents builder、Roc SQLite fixture 与 provider boundary，冻结 integration contract。
+10. [complete] 先增加独立命令/default exclusion/offline execution/live opt-in no-key failure 的稳定红测。
+11. [complete] 实现最小 integration config 与 harness，完成 focused verification。
+12. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与独立提交。
 
 ## Decisions
 
@@ -106,6 +108,8 @@
 | Medium | 持久 tracing 已关闭但本地启用草稿未保存时仍可清 key，随后留下 enabled/no-key 无效草稿。 | Standards / Spec 共同发现；约束 clear 与 enabled save 后 review-fix gate 2 files / 5 tests 通过，最终双轴复审无 residual finding。 |
 | Medium | 切换到独立“可观测性”section 会隐藏其他 settings section 已存在的 dirty 计数和全局保存入口。 | Local Risk review 发现；恢复原有全局 header，跨 section regression 与最终 Risk/UI review 通过。 |
 | Low | 响应式 smoke 的可观测性 header fixture 使用了实际 UI 不存在的单 pill，未覆盖更宽的 dirty count 与全局操作按钮。 | fixture 已对齐真实 header，并把 page actions 纳入 overflow 断言；320/1280px smoke 与增量双轴复审通过。 |
+| Medium | Live provider case 仅依赖 disabled tracing context，已知 direct `agent.invoke` 在 ambient LangSmith env/key 下仍可能额外外发。 | offline/live 共用显式 env/key isolation；offline regression 先模拟 ambient tracing/key 再证明零 fetch，专用命令通过。 |
+| Low | Part 4 账本仍写 discovery，并把 live 缺 key 分支误写为 skipped。 | 已同步为 verified passing，并明确区分默认未 opt-in skipped 与 opt-in 缺 key failure；最终 Standards 复审无 residual finding。 |
 
 ## Errors Encountered
 
@@ -134,3 +138,9 @@
 | UI 首轮 green 的 checkbox updater 延迟读取 React synthetic event，`currentTarget` 已为 `null`；静态扫描同时发现两个新增状态背景 token 未定义 | 1 | 在 handler 内先复制 primitive 值再更新 state，并改用现有 `--surface-strong`；其余 23 tests、typecheck、IPC check、diff check 已通过。 |
 | UI expanded gate 的 strict unused 发现新 renderer test 在 automatic JSX runtime 下仍导入默认 `React` | 1 | 删除该单个 unused import；15 files / 60 settings tests 已通过，待重跑 strict unused。 |
 | UI broad gate 首次 full Vitest 发现 kernel integration 仍期望 Agent schema v12，而 Part 3 backend 已新增 canonical v13 migration | 1 | focused 1 file / 2 tests 稳定复现后只把显式版本锚点更新为 13；focused 2/2、双轴增量 review 与 full Vitest 314 files / 1721 tests 通过。 |
+| Part 4 恢复阶段首组并行读取包含预期无匹配的 memory 搜索，单条退出码 1 使整组提前失败 | 1 | 改为逐项捕获并把预期无匹配转为成功；确认没有 Roc 相关 memory，失败调用未修改文件。 |
+| 统计 `agent-development` reference 行数时把 PowerShell 数组语法直接传入 JavaScript 编排层 | 1 | 改为 JavaScript 数组并逐项调用 PowerShell；成功取得行数，失败调用未修改文件。 |
+| Offline integration 的 ambient tracing 诊断多次触发 LangSmith fetch；builder 移动、ALS 初始化与官方 disabled wrapper 均未消除 direct-invoke probe | 6 | URL/stack 确认为 `/info` capability probe；撤回生产试改，专用 test process 显式关闭四个 tracing env、清空 key 并拒绝全部 fetch。 |
+| 撤回 tracing 试改与更新账本的合并 patch 包含空 hunk，`apply_patch` 拒绝解析 | 1 | 拆成有明确上下文的 hunk 重试；失败 patch 未修改文件。 |
+| Part 4 focused 首轮 typecheck 报 integration fixture 缺少必填 `contextBudgetTokens` | 1 | 对齐 `DeepAgentBuildInput`，显式传入 `undefined`；随后行为测试与 typecheck 均通过。 |
+| 归一化 `package.json` 混合换行时，整文件转录把 `better-sqlite3` 误写为 `better-sql3` | 1 | readback 前即发现并恢复原值；随后用 baseline diff、JSON/config test 与 EOL 检查确认只有目标脚本变更。 |

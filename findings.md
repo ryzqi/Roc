@@ -66,6 +66,23 @@
 - 响应式 smoke fixture 已对齐真实 settings header，并在 320px 与 1280px 同时验证 page actions、表单、输入和 key actions 无横向溢出或重叠。
 - Part 3 backend 的 v13 migration 曾留下一个 kernel integration v12 期望；full Vitest 稳定暴露后已把唯一显式版本锚点同步为 13，focused 与 full suite 均转绿。
 
+### Agent Integration Mode Discovery
+
+- 当前 `package.json` 只有默认 `vitest run`；`vitest.config.ts` include 为 `tests/**/*.test.ts(x)`，会同时匹配 `*.int.test.ts`，因此独立 mode 必须同时增加专用 config/script 和默认 config 的显式 exclude。
+- 仓库已有若干文件名含 `integration` 的默认-suite 测试，但 `core-plugins.integration.test.ts` 通过 static `AgentDeepAgentExecutor` 产生结果，不执行真实 Deep Agents runnable，不能满足 Stage 6 integration gate。
+- Part 4 的单一路径固定为 `tests/integration/agent/**/*.int.test.ts` + 独立 Vitest config；离线 case 使用 deterministic chat model 实际调用 Roc `buildDeepAgent()`，live provider case 只在显式凭据存在时运行。
+- “无 key”不能让整个 integration command 空跑：离线真实 harness case 必须始终执行；仅 live provider case 明确 skipped，且默认/full Vitest 必须证明专用目录未被收集。
+- `langchain` 已提供 `FakeToolCallingModel`；现有 native summarization route test 证明它可驱动真实 `buildDeepAgent()`、subagent 和 `RocSqliteCheckpointer`，无需为 integration mode 自建假的 runnable 协议。
+- 现有真实 route case 专注 summarization/subagent conformance且仍在默认 suite；Part 4 新 case 应保持更小，只证明 native `write_todos` trajectory、结构化 terminal message 与 SQLite checkpoint，避免复制上下文压缩断言或扩展一次性 manifest。
+- 仓库没有既有 live-provider test env 约定；为避免 ambient key 触发付费调用，live case 仅在 `ROC_AGENT_INTEGRATION_LIVE=1` 时启用，启用后缺 `ANTHROPIC_API_KEY` 明确失败，默认状态由 Vitest 报告 skipped。
+- 离线 direct-builder invocation 必须显式压制 ambient LangSmith tracing，确保普通 CI 即使继承 tracing 环境变量也不会产生外发。
+- `FakeToolCallingModel` 按调用序列返回真实 `AIMessage.tool_calls`，最终无 tool call 的 message 可作为稳定 terminal 结构；无需自建 BaseChatModel 或锁死自然语言文案。
+- Direct `agent.invoke` 在 ambient tracing 为 true 时，即使用 `runWithLangSmithTracing(null, ...)` 包裹仍会由 nested harness 产生一次 LangSmith `/info` 探测；这不等同于生产 `streamEvents` 路径回归。专用 offline process 必须显式把 `LANGSMITH_TRACING(_V2)` 与 `LANGCHAIN_TRACING(_V2)` 全部设为 `false`、清空 ambient key，并用拒绝任何 fetch 的断言证明零外发。
+- Deep Agents 原生 `write_todos` 返回 `Command`，同时写入 `todos` state 与带同一 `tool_call_id` 的 `ToolMessage`；latest Roc checkpoint 可回读两者，适合作为稳定 trajectory/state contract。
+- Local Risk review 发现同一 ambient tracing 边界也适用于可选 live case；否则继承 LangSmith env/key 的手动运行可能在 Anthropic 调用之外产生未声明外发。offline/live 现共用 isolation helper，同时清除新旧 tracing flag 与 `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY`；offline regression 先模拟启用状态再证明零 fetch。
+- Part 4 初次 Spec review 无 finding；Standards 仅发现账本状态与 live skip/fail 分支陈述过期，已按当前实现修正。review-fix focused 验证为 config 3/3、integration 1 passed / 1 skipped、typecheck 与 strict unused 通过；live opt-in 缺 key 在 4ms 内明确失败。
+- Part 4 最终 Standards / Spec / Risk review 无 residual finding；broad gate 为 build、IPC check、默认 Vitest 315 files / 1724 tests 与 diff check 通过。真实 Anthropic live turn 因未提供凭据未运行；其默认 skipped 与 opt-in missing-key failure 边界已验证。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。
@@ -135,7 +152,8 @@
 | 5 | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` | Context hard budget、single compaction path、saver conformance、restart-safe HITL、recovery-safe retention。 |
 | 6.1 | `e538ba9` | Model usage 按 call 合并并跨 main/summary/subagent/retry/cache 累加。 |
 | 6.2 | `abc3220` | Versioned、redacted per-run telemetry 与 terminal/recovery/migration/retention/metrics durability。 |
-| 6.3 | `012c870` 与当前提交 | 默认关闭的 LangSmith native tracing、durable root lifecycle，以及独立可观测性 settings UI / IPC / secret controls。 |
+| 6.3 | `012c870`、`82164ab` | 默认关闭的 LangSmith native tracing、durable root lifecycle，以及独立可观测性 settings UI / IPC / secret controls。 |
+| 6.4 | 当前提交 | 独立 integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 |
 
 ## Verification Anchors
 
@@ -145,3 +163,4 @@
 - Backpressure：`tests/main/plugins/agent/run-event-backpressure.test.ts`。
 - Windows cancellation：`tests/main/services/shell-execution-cancellation.test.ts`、`tests/main/services/hooks/command-runner.test.ts`。
 - Observability settings：`tests/renderer/settings-view.observability.test.tsx`、`tests/main/preload-contract.test.ts`、`tests/main/ipc-plugin-adapter.test.ts`、`tests/smoke/responsive-layout-smoke.mjs`。
+- Agent integration mode：`tests/config/agent-integration-mode.test.ts`、`tests/integration/agent/offline-harness.int.test.ts`、`vitest.agent-integration.config.ts`。
