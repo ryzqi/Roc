@@ -126,7 +126,7 @@ describe('database migrations', () => {
     });
   });
 
-  it('applies agent migrations through version 12 without changing earlier versions', () => {
+  it('applies agent migrations through version 13 without changing earlier versions', () => {
     applyDatabaseMigrations(db, {
       dbName: 'agent',
       migrations: agentMigrations,
@@ -147,11 +147,12 @@ describe('database migrations', () => {
       { version: 9, name: 'agent_effect_execution_identity' },
       { version: 10, name: 'agent_pending_interrupt_collection' },
       { version: 11, name: 'agent_pending_interrupt_projection_minimal' },
-      { version: 12, name: 'agent_run_telemetry' }
+      { version: 12, name: 'agent_run_telemetry' },
+      { version: 13, name: 'agent_langsmith_trace_sessions' }
     ]);
     expect(readSchemaMetadata(db, 'agent')).toMatchObject({
       dbName: 'agent',
-      currentVersion: 12
+      currentVersion: 13
     });
   });
 

@@ -197,3 +197,18 @@ export type AgentRuntimeStatus = {
   memoryAccess: 'store_backend';
   execution: 'blocked_until_provider_configured' | 'ready';
 };
+
+export type AgentLangSmithConfigV1 = {
+  schemaVersion: 1;
+  enabled: boolean;
+  projectName: string;
+};
+
+export type AgentLangSmithSettings = {
+  config: AgentLangSmithConfigV1;
+  apiKeyStored: boolean;
+};
+
+export type AgentLangSmithSetApiKeyRequest = {
+  apiKey: string;
+};

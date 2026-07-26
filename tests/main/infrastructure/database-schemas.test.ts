@@ -61,6 +61,7 @@ describe('target database schemas', () => {
         'agent_pending_interrupts',
         'agent_run_events',
         'agent_run_telemetry',
+        'agent_langsmith_trace_sessions',
         'langgraph_checkpoints',
         'langgraph_checkpoint_writes',
         'agent_tool_effects',

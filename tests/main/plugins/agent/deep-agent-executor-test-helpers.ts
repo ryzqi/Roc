@@ -22,7 +22,10 @@ import type {
   Workspace
 } from '../../../../src/shared/types';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
-import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
+import {
+  createAgentDeepAgentExecutor,
+  type AgentDeepAgentExecutorOptions
+} from '../../../../src/main/plugins/agent/deep-agent-executor';
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
@@ -53,6 +56,7 @@ interface ExecutorEventsInput {
   capabilities: RocCapabilityRegistry;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+  langSmithTracingProvider?: AgentDeepAgentExecutorOptions['langSmithTracingProvider'];
   metricsService?: {
     recordPromptCacheMetrics: (usage: {
       input_tokens: number;
@@ -62,6 +66,7 @@ interface ExecutorEventsInput {
   };
   contextMaintenanceEvent?: ContextMaintenanceEvent;
   messages?: AsyncIterable<unknown>;
+  observeStreamEventsConfig?: (config: unknown) => void | Promise<void>;
   output?: unknown;
   requestOverride?: Partial<ChatStartRunRequest>;
   snapshotWorkspacePath?: string | null;
@@ -102,6 +107,9 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
   mocked.buildDeepAgent.mockReturnValue({
     streamEvents: vi.fn(async (runInput: unknown, config: unknown) => {
       lastStreamEventsCall = { input: runInput, config };
+      if (input.observeStreamEventsConfig !== undefined) {
+        await input.observeStreamEventsConfig(config);
+      }
       if (input.contextMaintenanceEvent !== undefined) {
         const buildInput = readBuildInput();
         if (buildInput.contextCompaction === undefined) {
@@ -122,6 +130,7 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
     checkpointer: new MemorySaver(),
     getMemorySettings: input.getMemorySettings,
     hookRuntime: input.hookRuntime,
+    langSmithTracingProvider: input.langSmithTracingProvider,
     metricsService: input.metricsService,
     paths: new RocPaths(join(workspacePath, '.roc-test')),
     store: new InMemoryStore(),

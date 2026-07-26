@@ -284,7 +284,8 @@ describe('main kernel bootstrap integration', () => {
   it('reads provider settings saved after kernel startup before agent runs', async () => {
     const bootstrap = createMainKernelBootstrap({
       dataRoot: root,
-      safeStorage: safeStorage()
+      safeStorage: safeStorage(),
+      version: '0.1.0'
     });
     await bootstrap.start();
 
@@ -354,7 +355,8 @@ describe('main kernel bootstrap integration', () => {
     const bootstrap = createMainKernelBootstrap({
       dataRoot: root,
       performanceObserverService,
-      safeStorage: safeStorage()
+      safeStorage: safeStorage(),
+      version: '0.1.0'
     });
     await bootstrap.start();
 

@@ -90,7 +90,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
       paths,
       performanceObserverService,
       runtimeMetricsProvider: options.runtimeMetricsProvider,
-      version: options.version,
+      version: requireMainKernelVersion(options.version),
       isPackaged: options.isPackaged,
       getAppearance: options.getAppearance
     });
@@ -152,7 +152,7 @@ function createDefaultMainKernelPlugins(input: {
   modelFactory: LangChainModelFactory;
   performanceObserverService: PerformanceObserverService;
   runtimeMetricsProvider?: RuntimeMetricsProvider;
-  version?: string;
+  version: string;
   isPackaged?: boolean;
   getAppearance?: () => SystemAppearanceSnapshot;
 }): readonly RocPlugin[] {
@@ -169,7 +169,7 @@ function createDefaultMainKernelPlugins(input: {
           getAppearance: input.getAppearance,
           isPackaged: input.isPackaged === true,
           paths: input.paths,
-          version: input.version === undefined ? '0.1.0' : input.version
+          version: input.version
         });
       }
     }),
@@ -185,6 +185,7 @@ function createDefaultMainKernelPlugins(input: {
         }
       },
       deepAgentExecutor: {
+        appVersion: input.version,
         getMemorySettings: () => {
           configService.reloadSettingsDocument();
           return configService.getSettings().memory;
@@ -229,6 +230,13 @@ function createDefaultMainKernelPlugins(input: {
       runtimeMetricsProvider: input.runtimeMetricsProvider
     })
   ];
+}
+
+function requireMainKernelVersion(version: string | undefined): string {
+  if (version === undefined || version.trim().length === 0) {
+    throw new Error('main_kernel_version_missing');
+  }
+  return version;
 }
 
 function createAppStatus(input: {

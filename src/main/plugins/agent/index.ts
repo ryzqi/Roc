@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import type {
   AgentCapabilityPreview,
+  AgentLangSmithSetApiKeyRequest,
+  AgentLangSmithSettings,
   AgentRuntimeStatus,
   AppSettings,
   ApprovalMode,
@@ -25,8 +27,9 @@ import type {
 } from '../../../shared/types';
 import { applyMemoryDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
-import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
+import { AgentLangSmithRunTracingManager } from '../../services/deep-agent/langsmith-tracing';
+import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
@@ -34,6 +37,11 @@ import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
+import {
+  agentLangSmithConfigSchema,
+  AgentLangSmithSettingsStore
+} from './langsmith-settings';
+import { AgentLangSmithTraceSessionRepository } from './langsmith-trace-session-repository';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
 import { AgentRunEventLog } from './run-event-log';
 import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
@@ -225,6 +233,43 @@ const agentRuntimeStatusSchema = z.object({
 
 const agentCapabilityPreviewSchema = z.custom<AgentCapabilityPreview>();
 
+const agentLangSmithSettingsSchema = z
+  .object({
+    config: agentLangSmithConfigSchema,
+    apiKeyStored: z.boolean()
+  })
+  .strict() satisfies z.ZodType<AgentLangSmithSettings>;
+
+const agentLangSmithSetApiKeySchema = z
+  .object({
+    apiKey: z.string().trim().min(1)
+  })
+  .strict() satisfies z.ZodType<AgentLangSmithSetApiKeyRequest>;
+
+const agentLangSmithSettingsGetDescriptor = descriptor(
+  'agent.langsmith.settings.get',
+  z.object({}),
+  agentLangSmithSettingsSchema
+);
+
+const agentLangSmithSettingsSaveDescriptor = descriptor(
+  'agent.langsmith.settings.save',
+  agentLangSmithConfigSchema,
+  agentLangSmithSettingsSchema
+);
+
+const agentLangSmithSecretSetDescriptor = descriptor(
+  'agent.langsmith.secret.set',
+  agentLangSmithSetApiKeySchema,
+  agentLangSmithSettingsSchema
+);
+
+const agentLangSmithSecretClearDescriptor = descriptor(
+  'agent.langsmith.secret.clear',
+  z.object({}),
+  agentLangSmithSettingsSchema
+);
+
 const baseAgentCapabilityDescriptors = [
   descriptor('agent.status.get', z.object({}), agentRuntimeStatusSchema),
   descriptor('agent.config.preview', z.object({}), z.custom<DeepAgentConfigPreview>()),
@@ -234,7 +279,11 @@ const baseAgentCapabilityDescriptors = [
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
   descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
   descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
-  descriptor('agent.sessions.search', sessionSearchInputSchema, sessionSearchResultSchema)
+  descriptor('agent.sessions.search', sessionSearchInputSchema, sessionSearchResultSchema),
+  agentLangSmithSettingsGetDescriptor,
+  agentLangSmithSettingsSaveDescriptor,
+  agentLangSmithSecretSetDescriptor,
+  agentLangSmithSecretClearDescriptor
 ] as const satisfies readonly CapabilityDescriptor[];
 
 const agentCapabilityPreviewDescriptor = descriptor(
@@ -254,6 +303,7 @@ export type AgentPluginOptions = {
     mcpApprovalModeProvider: () => ApprovalMode;
   };
   deepAgentExecutor?: {
+    appVersion: string;
     paths: RocPaths;
     getMemorySettings?: () => AppSettings['memory'];
     hookRuntime?: Pick<HookRuntime, 'runEvent'>;
@@ -283,25 +333,61 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
       capabilities
     },
     initialize: async (context) => {
+      const langSmithSettings = new AgentLangSmithSettingsStore(context.config, context.secrets);
+      langSmithSettings.initialize();
       const db = context.database.getAgentConnection();
       applyAgentPluginSchema(db);
+      const langSmithTraceSessions = new AgentLangSmithTraceSessionRepository(db);
+      const langSmithTracingManager = createAgentLangSmithTracingManager(
+        langSmithSettings,
+        options.deepAgentExecutor,
+        langSmithTraceSessions
+      );
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
       const repository = new AgentSessionRepository(db);
       repository.reconcileStartupRuns();
+      if (langSmithTracingManager !== null) {
+        for (const terminal of langSmithTraceSessions.listTerminalRuns()) {
+          let error: string | null = null;
+          if (terminal.status === 'failed') {
+            error = 'agent_run_failed_before_trace_cleanup';
+          } else if (terminal.status === 'interrupted') {
+            error = 'agent_run_interrupted_on_startup_reconciliation';
+          }
+          try {
+            await langSmithTracingManager.finishRun({
+              error,
+              runId: terminal.runId,
+              status: terminal.status
+            });
+          } catch {
+            try {
+              repository.recordNotificationFailure('agent_langsmith_trace_finish_failed');
+            } catch {
+              context.logger.warn('agent_langsmith_trace_finish_metric_failed');
+            }
+          }
+        }
+      }
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
-        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor),
+        deepAgentExecutor: resolveDeepAgentExecutor(
+          context,
+          options.deepAgentExecutor,
+          langSmithTracingManager
+        ),
         eventBus: context.eventBus,
         lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
-      modelFactory,
-      pluginId,
-      repository,
-      runEventLog: new AgentRunEventLog(db),
-      status: options.status,
-      statusProvider: options.statusProvider,
-      workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {})
-    });
-      registerAgentCapabilities(context, runtime, options);
+        modelFactory,
+        pluginId,
+        repository,
+        runEventLog: new AgentRunEventLog(db),
+        ...(langSmithTracingManager === null ? {} : { tracingLifecycle: langSmithTracingManager }),
+        status: options.status,
+        statusProvider: options.statusProvider,
+        workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {})
+      });
+      registerAgentCapabilities(context, runtime, options, langSmithSettings);
     },
     shutdown: async () => {
       if (runtime !== null) {
@@ -338,13 +424,17 @@ function createCapabilityPreviewProvider(
 
 function resolveDeepAgentExecutor(
   context: RocPluginContext,
-  option: AgentPluginOptions['deepAgentExecutor']
+  option: AgentPluginOptions['deepAgentExecutor'],
+  langSmithTracingManager: AgentLangSmithRunTracingManager | null
 ): AgentDeepAgentExecutor | undefined {
   if (option === undefined) {
     return undefined;
   }
   if ('execute' in option) {
     return option;
+  }
+  if (langSmithTracingManager === null) {
+    throw new Error('agent_langsmith_tracing_manager_missing');
   }
   const agentDb = context.database.getAgentConnection();
   const memoryDb = context.database.getMemoryConnection();
@@ -355,6 +445,7 @@ function resolveDeepAgentExecutor(
     contextArtifactStore: new ContextArtifactStore(agentDb),
     getMemorySettings: option.getMemorySettings,
     hookRuntime: option.hookRuntime,
+    langSmithTracingProvider: (correlation) => langSmithTracingManager.getRunTracing(correlation),
     metricsService: option.metricsService,
     paths: option.paths,
     store: new RocSqliteStore(memoryDb),
@@ -366,10 +457,13 @@ function resolveLifecycleHooks(
   context: RocPluginContext,
   option: AgentPluginOptions['deepAgentExecutor']
 ): AgentLifecycleHookEmitter | undefined {
-  if (option === undefined || 'execute' in option || option.hookRuntime === undefined) {
+  if (option === undefined || 'execute' in option) {
     return undefined;
   }
   const hookRuntime = option.hookRuntime;
+  if (hookRuntime === undefined) {
+    return undefined;
+  }
   return {
     emitSessionEnd: async (input) => {
       const workspacePath = input.request.workspacePath === undefined ? null : input.request.workspacePath;
@@ -422,7 +516,12 @@ function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
   return [];
 }
 
-function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPluginRuntime, options: AgentPluginOptions): void {
+function registerAgentCapabilities(
+  context: RocPluginContext,
+  runtime: AgentPluginRuntime,
+  options: AgentPluginOptions,
+  langSmithSettings: AgentLangSmithSettingsStore
+): void {
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[0], async () => runtime.getStatus());
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[1], async () =>
     buildDeepAgentConfigPreview({
@@ -448,6 +547,18 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[8], async (input) =>
     runtime.searchSessionMessages(input as SessionMessageSearchRequest)
   );
+  context.capabilities.register(pluginId, agentLangSmithSettingsGetDescriptor, async () =>
+    langSmithSettings.getSnapshot()
+  );
+  context.capabilities.register(pluginId, agentLangSmithSettingsSaveDescriptor, async (input) =>
+    langSmithSettings.saveConfig(agentLangSmithConfigSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, agentLangSmithSecretSetDescriptor, async (input) =>
+    langSmithSettings.setApiKey(agentLangSmithSetApiKeySchema.parse(input).apiKey)
+  );
+  context.capabilities.register(pluginId, agentLangSmithSecretClearDescriptor, async () =>
+    langSmithSettings.clearApiKey()
+  );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
     context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) => {
       const request = agentCapabilityPreviewInputSchema.parse(input);
@@ -460,6 +571,30 @@ function registerAgentCapabilities(context: RocPluginContext, runtime: AgentPlug
       });
     });
   }
+}
+
+function createAgentLangSmithTracingManager(
+  settings: AgentLangSmithSettingsStore,
+  option: AgentPluginOptions['deepAgentExecutor'],
+  sessions: AgentLangSmithTraceSessionRepository
+): AgentLangSmithRunTracingManager | null {
+  if (option === undefined || 'execute' in option) {
+    return null;
+  }
+  return new AgentLangSmithRunTracingManager({
+    appVersion: option.appVersion,
+    getRuntimeSettings: () => {
+      const runtimeSettings = settings.getRuntimeSettings();
+      if (runtimeSettings === null) {
+        return null;
+      }
+      return {
+        apiKey: runtimeSettings.apiKey,
+        projectName: runtimeSettings.config.projectName
+      };
+    },
+    sessions
+  });
 }
 
 function descriptor<TInput, TOutput>(

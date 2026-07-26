@@ -59,6 +59,8 @@ import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
+import type { AgentLangSmithTracingProvider } from '../../services/deep-agent/langsmith-tracing';
+import { runWithLangSmithTracing } from '../../services/deep-agent/langsmith-tracing';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import {
   readFinalAssistantText,
@@ -72,6 +74,7 @@ export type AgentDeepAgentExecutorOptions = {
   contextArtifactStore: ContextArtifactStore;
   getMemorySettings?: () => AppSettings['memory'];
   hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+  langSmithTracingProvider?: AgentLangSmithTracingProvider;
   metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
   paths: RocPaths;
   store: BaseStore;
@@ -86,6 +89,15 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         throw new Error('agent_deep_agent_model_handle_missing');
       }
       const mode = readExecutorMode(input.snapshot);
+      const langSmithTracing =
+        options.langSmithTracingProvider === undefined
+          ? null
+          : options.langSmithTracingProvider({
+              runId: input.run.id,
+              threadId: input.run.threadId,
+              runOrigin: input.snapshot.runOrigin,
+              manifestHash: input.snapshot.capabilityManifest.manifestHash
+            });
       const workflowHint = input.snapshot.workflowHint;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
@@ -324,14 +336,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           : new Command({
               resume: input.resumePayload
             });
-      const run = await agent.streamEvents(runInput as never, {
-        version: 'v3',
-        configurable: {
-          run_id: input.run.id,
-          thread_id: input.run.threadId
-        },
-        signal: executionAbortController.signal
-      });
+      const run = await runWithLangSmithTracing(langSmithTracing, async () =>
+        await agent.streamEvents(runInput as never, {
+          version: 'v3',
+          ...(langSmithTracing === null ? {} : langSmithTracing.runnableConfig),
+          configurable: {
+            run_id: input.run.id,
+            thread_id: input.run.threadId
+          },
+          signal: executionAbortController.signal
+        })
+      );
       const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
         emitRuntimeEvent,
@@ -342,7 +357,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
         })
       });
-      const consumeRun = (async () => {
+      const consumeRun = runWithLangSmithTracing(langSmithTracing, async () => {
         try {
           await Promise.all([
             consumeToolCallStream({
@@ -417,7 +432,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             cacheCreationTokens: usageAccumulator.cacheCreationTokens
           });
         }
-      })();
+      });
       try {
         for await (const event of eventQueue) {
           yield event;

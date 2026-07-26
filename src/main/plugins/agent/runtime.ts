@@ -44,7 +44,12 @@ import {
   type AgentRunTelemetryV1
 } from './run-telemetry';
 import { toRecoveryDecision } from './recovery-policy';
-import type { AgentLifecycleHookEmitter, DeepAgentExecutionResult, PendingInterrupt } from './runtime-types';
+import type {
+  AgentLifecycleHookEmitter,
+  AgentRunTracingLifecycle,
+  DeepAgentExecutionResult,
+  PendingInterrupt
+} from './runtime-types';
 import {
   createBlockedAgentRuntimeStatus,
   createTaskEventFromAssistantBlock,
@@ -103,6 +108,7 @@ export type AgentPluginRuntimeOptions = {
   modelFactory: AgentModelFactoryAdapter;
   deepAgentExecutor?: AgentDeepAgentExecutor;
   lifecycleHooks?: AgentLifecycleHookEmitter;
+  tracingLifecycle?: AgentRunTracingLifecycle;
   capabilityPreviewProvider?: AgentCapabilityPreviewProvider;
   pluginId?: string;
   runEventLog?: AgentRunEventLog;
@@ -347,6 +353,11 @@ export class AgentPluginRuntime {
       threadId: terminal.run.threadId,
       reason: 'user_cancelled'
     }, false);
+    await this.finishTracingBestEffort({
+      runId: input.runId,
+      status: 'cancelled',
+      error: null
+    });
     if (metadata !== undefined) {
       void this.emitSessionEndBestEffort({
         runId: input.runId,
@@ -565,6 +576,7 @@ export class AgentPluginRuntime {
     if (this.pendingRuns.size > 0) {
       await Promise.allSettled([...this.pendingRuns.values()]);
     }
+    await this.shutdownTracingBestEffort();
   }
 
   async completeRun(input: {
@@ -646,6 +658,28 @@ export class AgentPluginRuntime {
       await this.options.lifecycleHooks.emitSessionEnd(input);
     } catch {
       this.recordNotificationFailure('agent_session_end_notification_failed');
+    }
+  }
+
+  private async finishTracingBestEffort(input: Parameters<AgentRunTracingLifecycle['finishRun']>[0]): Promise<void> {
+    if (this.options.tracingLifecycle === undefined) {
+      return;
+    }
+    try {
+      await this.options.tracingLifecycle.finishRun(input);
+    } catch {
+      this.recordNotificationFailure('agent_langsmith_trace_finish_failed');
+    }
+  }
+
+  private async shutdownTracingBestEffort(): Promise<void> {
+    if (this.options.tracingLifecycle === undefined) {
+      return;
+    }
+    try {
+      await this.options.tracingLifecycle.shutdown();
+    } catch {
+      this.recordNotificationFailure('agent_langsmith_trace_shutdown_failed');
     }
   }
 
@@ -818,14 +852,21 @@ export class AgentPluginRuntime {
           workspacePath: input.request.workspacePath
         });
         this.runTelemetry.delete(input.runId);
-        await this.emitSessionEndBestEffort({
-          runId: input.runId,
-          threadId: input.threadId,
-          request: input.request,
-          signal: input.abortSignal,
-          status: 'completed',
-          error: null
-        });
+        await Promise.all([
+          this.finishTracingBestEffort({
+            runId: input.runId,
+            status: 'completed',
+            error: null
+          }),
+          this.emitSessionEndBestEffort({
+            runId: input.runId,
+            threadId: input.threadId,
+            request: input.request,
+            signal: input.abortSignal,
+            status: 'completed',
+            error: null
+          })
+        ]);
         return;
       } catch (error) {
         if (!this.activeRuns.has(input.runId)) {
@@ -927,14 +968,21 @@ export class AgentPluginRuntime {
     this.activeRunMetadata.delete(input.input.runId);
     this.abortControllers.delete(input.input.runId);
     this.pendingInterrupts.delete(input.input.runId);
-    await this.emitSessionEndBestEffort({
-      runId: input.input.runId,
-      threadId: input.input.threadId,
-      request: input.input.request,
-      signal: input.input.abortSignal,
-      status: 'failed',
-      error: input.failure.message
-    });
+    await Promise.all([
+      this.finishTracingBestEffort({
+        runId: input.input.runId,
+        status: 'failed',
+        error: input.failure.message
+      }),
+      this.emitSessionEndBestEffort({
+        runId: input.input.runId,
+        threadId: input.input.threadId,
+        request: input.input.request,
+        signal: input.input.abortSignal,
+        status: 'failed',
+        error: input.failure.message
+      })
+    ]);
     await this.publish('agent.run.failed', {
       runId: input.input.runId,
       threadId: input.input.threadId,

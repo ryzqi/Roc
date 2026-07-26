@@ -5,10 +5,12 @@
 ## Current State
 
 - Branch：`main`。
-- HEAD：`e538ba9 fix(agent): accumulate usage per model call`。
+- HEAD：`abc3220 feat(agent): persist durable per-run telemetry`。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1 完成并提交；Part 2 durable per-run telemetry 为 `Verified passing`，待独立提交。
+- Stage 6：Part 1、Part 2 已完成并提交；Part 3 LangSmith opt-in tracing 为 `Located`。
 - Stage 7：pending。
+- Stage 6 Part 3 已固定 strict config/secret、native callback、metadata allowlist 和 redaction 合同；下一步为红测。
+- Part 3 backend red gate：3 files；两个新 module import 缺失、executor provider 未调用/未注入共 4 个预期失败，既有 executor 16 tests 通过。
 - V1 migration blocker 已修复；最终 review、focused 与 broad verification 全部通过。
 - `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；是否纳入后续提交需单独决定。
 
@@ -31,6 +33,7 @@
 | Stage 5.3B | Interrupt collection、resume audit、checkpoint restart recovery。 | `a810b8f`, `24db71d`, `1e79a9e`, `fcc9c8c` |
 | Stage 5.3C | Recovery-safe retention 覆盖 events、outbox、artifacts、checkpoint/writes。 | `9942594` |
 | Stage 6.1 | Model usage 按 call 合并，跨 main/summary/subagent/retry/cache 累加。 | `e538ba9` |
+| Stage 6.2 | Durable per-run telemetry、runtime lifecycle、migration/retention/health 与 metrics cardinality。 | `abc3220` |
 
 ## Verification Ledger
 
@@ -120,3 +123,59 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 
 - `session-catchup.py` 检出上一会话 17 条未同步消息；与工作树、四份账本和 review 子任务结果交叉核对后，确认内容仅为已完成的最终 review 与 broad gate。
 - 已把最终 review、focused 与 broad verification 结果同步到 `task_plan.md`、`findings.md`、`progress.md`；未修改长期规格 `plan.md`。
+- 独立提交：`abc3220 feat(agent): persist durable per-run telemetry`；提交后工作树仅剩未跟踪的 `plan.md`。
+
+## 2026-07-26 - Stage 6 Part 3 LangSmith Opt-in Tracing
+
+- Review baseline：`abc3220`。
+- 范围固定为默认关闭、显式 opt-in、原生 nested trace、Roc correlation metadata allowlist 与导出前 redaction；真实 provider integration、eval、agent performance gate 延后。
+- 已用 CodeGraph 开始定位 `createDeepAgent`、runtime invocation、settings/secret 与 app version owner；当前状态：**Located**，root cause 与单一实现路径待本机 SDK 类型核对后冻结。
+- Backend 初版已实现 strict config/secret store、原生 `LangChainTracer`、metadata allowlist/redaction、executor callback 注入和四个 plugin capabilities；focused 5 files / 61 tests、`pnpm typecheck`、`git diff --check` 曾通过，最后 Standards 修复后尚未重新验证。
+- Backend Spec review：2 个 High、1 个 Medium。High 分别为 ambient env 可绕过默认关闭，以及 HITL resume / recovery retry 会让同一 Roc run 产生多个 root；Medium 为 exporter/disabled regression 覆盖不足。
+- Backend Standards review确认 ambient bypass 为硬性 High；先前指出的 exporter 弱断言和 app version fallback 已修改，但当前补丁仍为 **Changed, unverified**。
+- 当前关闭顺序：先补 ambient 与 multi-invocation 红测，再修复 tracing lifecycle，完成 backend 双轴复审与 focused gate 后提交；随后进入 IPC/preload/renderer 部分。
+- Backend review red gate：2 files / 27 tests，22 passed、5 failed。四个 ambient env case 均收到 `['langchain_tracer']`；同 run manager case 以 `AgentLangSmithRunTracingManager is not a constructor` 失败。失败形态稳定且只覆盖 review finding。
+- Backend review green：disabled AsyncLocalStorage context 压制四个 ambient env；run-scoped manager 复用 SDK root，并由 terminal lifecycle PATCH。层级 fake fetch 证明 1 root + 2 invocation children 共用 root `trace_id`。
+- Latest backend focused gate：5 files / 66 tests passed；`pnpm typecheck` 与 `git diff --check` passed。状态为 **Changed, focused verified; final review pending**。
+- Backend 第二轮 Spec review：1 个 High、2 个 Medium。High 为跨进程 `waiting_user` resume 会丢失进程内 root 并创建第二个 trace；Medium 为 manual root 仍发送 `extra.runtime`，以及 exporter failure test 未覆盖 root POST/PATCH 和 terminal 业务结果。
+- 四种 ambient env 压制、同进程 resume/retry root 复用、hierarchy/correlation 与其余 redaction 已确认正确；未发现 scope creep。
+- 当前状态：**Located**。下一步先写 restart continuity、manual root runtime redaction 与 root exporter failure 红测，再修改生产代码。
+- Backend 第二轮 Standards review：共同 High 为跨进程 root identity；另有 Medium lifecycle finding，trace finish 混入 `SessionEnd` hook，cancel/shutdown 不追踪且失败不释放 Client/API key。`resolveLifecycleHooks` 的 Divergent Change 作为同一修复边界处理。
+- 实现方向固定为专用 Agent DB trace-session persistence，加独立 tracing lifecycle owner；不复用用户 settings，不扩展兼容路径。
+- Backend review-fix red gate：4 files；既有 15 tests passed。2 个 suite 因 trace-session repository 尚不存在而 import 失败；migration 精确缺 v13；cancel lifecycle 精确 timeout。失败形态与 review finding 一致。
+- Backend review-fix green：原红集 4 files / 27 tests passed。已证明同一 root identity 跨 manager 重建、manual root POST/PATCH 无 runtime、root exporter 失败不改变业务/terminal 返回、cancel 等待 tracing cleanup、shutdown 释放，以及 v13 migration。
+- Backend review closure direct gate：15 directly affected files / 115 tests passed；`pnpm typecheck` 与 `git diff --check` passed。状态为 **Changed, focused verified; final dual-axis review pending**。
+
+## 2026-07-26 - Stage 6 Part 3 Backend Review Resume
+
+- `session-catchup.py` 检出上一会话 13 条未同步消息；与交接摘要、当前账本和工作树核对后，确认它们描述的是 backend review-fix 后的复审启动与交接状态。
+- HEAD / review baseline 仍为 `abc3220`；`plan.md` 仍未跟踪并继续排除。当前 backend diff 另含两个未跟踪实现/测试文件，不能只依赖 `git diff --stat` 判断提交边界。
+- 上一轮 15 files / 115 tests、typecheck、diff check 后又修改了 cancel 与 `SessionEnd` 等待语义、trace-session identity 校验、restart fixture、history deletion regression 和 import 顺序，因此旧 gate 不能作为最终结论。
+- 当前状态：**Changed, unverified since latest edits**。Standards / Spec reviewer 正在复核；下一步重跑 15-file direct gate、typecheck 与 diff check，再完成 Risk review。
+- 最新 backend direct gate：15 files / 115 tests passed；`pnpm typecheck` 与 `git diff --check` 均退出码 0。
+- 当前状态提升为 **Changed, focused verified; final reviews pending**；未在 Standards / Spec / Risk review 闭环前宣称 backend complete。
+- 最终 Spec review：1 个 Medium，startup reconciliation 的 terminal `interrupted` run 未进入 tracing cleanup。
+- 最终 Standards review：1 个 High、2 个 Medium，分别为 serialized payload redaction、session read failure cleanup、shutdown auto-batch flush。
+- 当前状态回到 **Changed, review findings open**；上一条 direct gate 仍是修改前证据，不能支持后续修复完成结论。
+- Final-review red gate：2 files / 27 tests，22 passed、5 failed；失败精确对应 startup session 残留、session-read cleanup、shutdown batch drain、serialized 泄露与 `interrupted` terminal rejection。
+- 首次 green 并行 gate 的 typecheck 未通过：5 个错误均为测试 fixture/spy 未对齐新增 tracing shutdown 合同；状态为 **Changed, unverified**，尚无 green 结论。
+- Final-review fix green：3 files / 49 tests passed，`pnpm typecheck` passed；覆盖四项 review finding 及 executor fixture 合同。
+- 当前状态：**Changed, review-fix focused verified; final re-review pending**。
+- Risk review 新增配置关闭 cleanup 红灯：1 file / 12 tests，11 passed、1 failed，旧 client `cleanup()` 调用数为 0。
+- 配置关闭 cleanup green：2 files / 34 tests passed，`pnpm typecheck` passed；idempotent dispose 不删除 durable session，terminal cleanup 后 session 为 0。
+- 最新 Standards 复审：除 `src/main/plugins/agent/index.ts` 的未使用 `AgentLangSmithConfigV1` import 外无 residual finding；4 files / 37 tests、普通 typecheck、diff check 通过，strict unused 以单个 TS6196 失败。
+- 最终 Risk closure 的 Medium 已 `Located`：CodeGraph 确认 `reconcileStartupRuns()` 只扫描五类非终态 run，terminal transaction 后、tracing cleanup 前崩溃留下的终态 trace session 不会在下一次启动被发现。下一步先加稳定跨重启红测，不先改 reconciliation。
+- 修复边界已冻结：trace-session repository 增加终态 session 枚举，Agent plugin initialize 合并本次 startup-interrupted 与既有 terminal sessions 后交给 tracing manager best-effort finish；waiting/recovery session 必须保留。
+- Terminal crash-window red：`rtk pnpm exec vitest run tests/main/plugins/agent/plugin.test.ts`，1 file / 17 tests，16 passed、1 failed；`run_terminal_trace` 初始化后仍返回完整 session，稳定复现已终态 run 不被 startup cleanup 扫描。
+- Terminal crash-window green：repository 枚举四类 terminal trace sessions，plugin 在 run reconciliation 后统一 best-effort finish；同一 `plugin.test.ts` 17/17 passed，terminal session 删除且 waiting session 保留。
+- Review-fix focused gate：trace-session repository、plugin、LangSmith tracing 3 files / 32 tests passed；`pnpm typecheck` 与 strict unused 均退出码 0。当前状态：**Changed, focused verified; final reviews pending**。
+- Backend final direct gate：15 directly affected files / 120 tests passed。
+- 最终 Spec 复审：backend 无行为错误、无 scope creep；`plan.md` 的 UI 外发/retention 提示明确留给下一独立 part，不阻断 backend commit。
+- 最终本地 Risk review：无 residual finding；仅保留非阻断风险，多个异常残留 session 串行 drain 可能拉长 critical plugin 启动。
+- Standards 复审发现 Medium 测试证据缺口：startup 新分支未具体覆盖 enabled PATCH/error mapping 与 cancelled/failed 枚举；实现本身未发现错误，已补 all-terminal repository matrix 和 enabled failed PATCH assertion。
+- 新测试首跑 2 files / 24 tests 为 23 passed、1 failed：spy 位于 Client anonymizer 之前，正确收到内部错误码而非最终 `[REDACTED]`；断言边界已修正，待重跑。
+- Standards test-fix green：trace-session repository、plugin、LangSmith tracing 3 files / 36 tests passed；`pnpm typecheck` 与 strict unused 均退出码 0。当前状态：**Changed, test-fix focused verified; final re-review pending**。
+- 最终 Standards 复审：无 residual finding，上一轮 Medium 测试证据缺口已关闭。
+- 最终 Spec 复审：backend 无 residual finding；UI 数据外发/retention 提示仍属于下一独立 part。
+- 最终 backend direct gate：15 files / 124 tests passed；`pnpm typecheck`、strict unused、`pnpm check:ipc` 与 `git diff --check abc3220` 全部通过。
+- 当前状态：**Verified passing; backend independent commit pending**。

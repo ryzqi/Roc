@@ -149,6 +149,42 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
     );
   });
 
+  it('awaits tracing terminal cleanup on cancel and releases tracing state on shutdown', async () => {
+    const repository = new AgentSessionRepository(db);
+    let releaseFinish = (): void => {
+      throw new Error('trace_finish_release_missing');
+    };
+    const finishGate = new Promise<void>((resolve) => {
+      releaseFinish = resolve;
+    });
+    const tracingLifecycle = {
+      finishRun: vi.fn(async () => await finishGate),
+      shutdown: vi.fn(async () => undefined)
+    };
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: createTextDeepAgentExecutor('done'),
+      eventBus,
+      modelFactory,
+      repository,
+      tracingLifecycle
+    });
+    const result = await runtime.startRun(startRequest);
+    const cancellation = runtime.cancelRun({ runId: result.runId });
+
+    await waitForEvent(() => tracingLifecycle.finishRun.mock.calls.length === 1);
+    let cancellationSettled = false;
+    void cancellation.then(() => {
+      cancellationSettled = true;
+    });
+    await Promise.resolve();
+    expect(cancellationSettled).toBe(false);
+    releaseFinish();
+    await expect(cancellation).resolves.toEqual({ runId: result.runId, cancelled: true });
+
+    await runtime.shutdown();
+    expect(tracingLifecycle.shutdown).toHaveBeenCalledTimes(1);
+  });
+
   it('records hook runtime events as task events for persisted transcripts', async () => {
     const hookContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
     const repository = new AgentSessionRepository(db);

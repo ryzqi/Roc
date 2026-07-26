@@ -11,6 +11,54 @@
 
 ## Current Findings
 
+### LangSmith Discovery
+
+- `buildDeepAgent()` 只负责 Deep Agents model/backend/store/middleware/checkpointer 组装；per-run tracing 应从 executor 的 runnable invocation config 注入，不能成为第二套 agent/event 执行层。
+- 当前 `AppSettings` 为 schema v2、settings document 为 schema v4，均无 observability/tracing 字段；若产品级 opt-in 进入 settings，必须使用现有 schema/migration 单一事实源，而不是旁路环境默认值。
+- 当前 `AgentPluginOptions.deepAgentExecutor` 已是 main bootstrap 向 executor 注入运行时依赖的边界；具体 config/secret/app-version owner 仍需结合 bootstrap 与本机 LangSmith SDK 类型确认。
+- Part 3 测试必须用 fake client/callback，不触发真实 LangSmith、provider 或外网。
+- 本机固定依赖为 `langsmith 0.8.1`、`@langchain/core 1.2.2`、`deepagents 1.10.7`；executor 当前 runnable config 只有 stream events `version: 'v3'`、`run_id/thread_id` configurable 与 abort signal。
+- `LangChainTracer` 原生接受显式 client、project、metadata 与 tags，并由 callback hierarchy 产生 graph/model/tool/subagent nested runs；无需复制 event log。
+- LangSmith `Client` 原生提供 `hideInputs`、`hideOutputs`、`hideMetadata`、error anonymizer、`omitTracedRuntimeInfo` 和 `fetchImplementation`。Part 3 的可证明 redaction 策略固定为 inputs/outputs 全隐藏、metadata allowlist、error 全量替换、runtime info 省略。
+- Electron `app.getVersion()` 已传入 main kernel bootstrap；app version 可沿现有依赖注入进入 executor，无需从 package 或环境重复读取。
+- Kernel 已为每个 plugin 提供独立 `plugin_config` 与加密 `plugin_secrets` facade。LangSmith enabled/project 与 API key 由 Agent plugin 分别持有，避免扩展全局 `AppSettings`、复用 provider secret ID 或接受 ambient env 作为隐式事实源。
+- Agent settings UI 可通过新增 Agent IPC 读取公开 tracing config、secret stored 状态并执行 save/set/clear；executor 在每次 run 从同一 plugin config/secret 读取，因此配置变更不需要重建 kernel。
+- 当前 settings navigation 由 `SETTINGS_SECTIONS` 与 `SettingsView` active section 驱动；LangSmith 应作为独立“可观测性”section，不混入 provider 或 memory 表单。
+- `plugin_config` 是 generic JSON store，不做 schema validation；Agent plugin 必须在 initialize/read/save 边界用 strict versioned schema parse，missing row 只初始化 explicit disabled default，corrupt/unknown config 明确失败。
+- LangSmith config/secret 操作不进入全局 settings “保存全部”dirty model；独立 section 直接调用 Agent capabilities，避免 renderer 成为 config 或 secret 事实源。
+- 现有 Agent capability 通过统一 plugin-capability adapter 映射到 shared IPC/preload；新增 get/save/set-secret/clear-secret 应沿用同一路径并运行 IPC generator/check。
+- Roc run id 使用 `run_<uuid>`，不是 LangSmith 要求的裸 UUID；root trace 使用 SDK 生成的 UUID，并以 allowlist metadata 关联 Roc run/thread，不能把 Roc id 直接写入 RunnableConfig `runId`。
+- LangChain callback handler 默认 `raiseError: false`，LangSmith `RunTree.postRun/patchRun` 也隔离 client 错误；Part 3 仍需用抛错 fake client 固定 exporter failure 不改变业务结果的回归证据。
+- UI design-system 检索只采用可访问 label、明确 loading/error、focus 和响应式检查；视觉继续沿用 Roc 现有紧凑 settings tokens，不引入通用 dark/docs 主题。
+- Backend Spec / Standards review 证明：只在 runnable config 中省略 `callbacks` 不能表达“默认关闭”；`@langchain/core` callback manager 会在 `LANGSMITH_TRACING_V2`、`LANGCHAIN_TRACING_V2`、`LANGSMITH_TRACING` 或 `LANGCHAIN_TRACING` 为 true 时自动创建 `LangChainTracer`，绕过 plugin config、显式 client 和 Roc redaction。
+- 当前 runtime 对同一 durable run 会多次调用 executor：首次执行后，HITL resume 与 recovery retry 均可再次 invocation。若 tracing provider 每次 invocation 新建 tracer，则一个 Roc run 会形成多个 root trace；root tracing owner 必须跨这些 invocation 保持稳定。
+- 真实调用点已确认：resume 会在 `runtime.ts` 先调用 executor 取得 stream，再把该 stream交给 `executeRun`；recovery loop 会在 `executeDeepAgentRun` 内再次调用 executor。三条路径都沿用同一个 `TaskRun.id` 和 frozen snapshot，可作为 root trace 生命周期的稳定 key。
+- Exporter failure regression 必须经过真实 Runnable / callback lifecycle 并精确断言业务返回值不变；只断言 handler promise resolve 或只检查 mock config 都不足以证明边界。
+- 固定依赖提供正式的 per-async-context 控制：`langsmith/singletons/traceable.withRunTree` 使用 AsyncLocalStorage 传播 root；LangChain callback manager 会读取当前 context 的 `tracingEnabled` 和 root id。enabled 可将各次 runnable invocation 挂到同一显式 SDK `RunTree`，disabled 可用 `tracingEnabled: false` context 压制 ambient tracer，避免修改进程级环境变量。
+- Runtime 的 `emitSessionEnd` 仅在 durable run 的 `completed`、`failed`、`cancelled` 分支触发；`waiting_user` interrupt 不触发。可复用这一既有 terminal boundary 最终 PATCH LangSmith root，而不把单次 executor invocation 或 HITL 暂停误判为整个 run 终态。
+- 当前修复使用 run-scoped manager：同进程首次执行、HITL resume 和 recovery retry 按 `runId` 复用一个 SDK `RunTree`；各 runnable invocation 作为它的原生 child，terminal `emitSessionEnd` 最终 PATCH root。Spec review 已确认进程重启丢失 root 是 High blocker：`waiting_user` 可恢复，因此同一 Roc run 不能创建第二个 root。
+- `Client.omitTracedRuntimeInfo` 只控制 client 追加的 runtime info；SDK `RunTree.postRun()` 会先把 `extra.runtime` 写入 manual root payload。必须在 manual root export boundary 显式删除该字段，并通过实际 POST payload 测试证明。
+- Exporter failure boundary 不能只覆盖 `LangChainTracer` child callback；manual root 的初始 POST 与 terminal PATCH 也必须在 fake exporter 抛错时不改变 durable run 业务结果。
+- `resolveLifecycleHooks` 同时承担外部 hook notification 与 tracing terminal ownership，导致 cancel fire-and-forget、shutdown 不等待，且 `finishRun` 失败时不删除含 Client/API key 的 Map entry。Tracing 必须成为独立 lifecycle owner，并在 terminal/shutdown 明确释放进程内状态。
+- 最新 Risk review 调用链确认：durable trace-session 合同只保存 root identity、project、app version 与 Roc correlation，不保存 API key；API key 仅进入进程内 LangSmith client，terminal `finally` 与 runtime shutdown 负责释放 manager 引用。
+- 最新 runtime 调用链确认：cancel 只等待独立 tracing cleanup，随后仍以 fire-and-forget 方式发送 `SessionEnd` notification；shutdown 先等待 pending runs，再清空 tracing manager。repository strictness、migration/retention/history deletion 仍在本轮 Risk review 中继续核对。
+- 最终 Spec review 新 finding：`AgentSessionRepository.reconcileStartupRuns()` 返回已终态化的 `interrupted` runs，但 Agent plugin initialize 丢弃返回值；当前 tracing terminal union 也不接受 `interrupted`，因此 startup quarantine 可留下未结束 root 与 durable session。
+- 最终 Standards review 待独立复现的边界：LangChain `serialized` payload 可能绕过现有 redaction；`finishRun()` 的 session read 位于 cleanup `try/finally` 外；manager `shutdown()` 未显式等待 client auto-batch queue。
+- 上述 Standards findings 已独立复现：出站 POST 原样保留 `serialized.kwargs` 中的 Authorization 与本地路径；session read failure 时 `Client.cleanup()` 未调用且 durable session 未删除；manager shutdown 未调用固定 SDK 的 `awaitPendingTraceBatches()`。
+- `langsmith@0.8.1` 的 `Client.awaitPendingTraceBatches()` 会等待 pending drains、auto-batch item promises、batch ingest queue idle，并 force-flush OTEL；当前非 manual flush 配置可直接使用该公开 API，随后调用 `Client.cleanup()` 释放 client 资源。
+- Review-fix 后 cleanup 顺序已核对：manager 先移除 Map 引用，tracing shutdown 以单一 promise 等待 batch 并在 `finally` 调用 client cleanup，外层 `finally` 再删除 durable session；任一 exporter/drain 失败不会跳过本地 session 删除。
+- Risk review 确认：同一 run 已持有 client 时若用户关闭 tracing，下一次 `getRunTracing()` 直接删除 Map entry 而未调用 client cleanup；resume/retry 会触发该路径。durable session 应保留到终态，但旧 client 必须同步 dispose 并从 manager 释放。
+- 配置关闭 lifecycle 已修复为同步 idempotent dispose：旧 client 立即 `cleanup()` 并移出 manager，durable session 保留到 terminal；若随后 re-enable，仍从同一 persisted root identity 重建。
+- Risk review 确认 settings owner 严格：missing config 只初始化 explicit disabled default，corrupt/unknown config fail closed；enabled save 必须已有非空 secret，clear secret 必须先 disabled。
+- Risk review 确认 executor tracing context 覆盖 `streamEvents()` 创建和 async iterable 的完整消费；model/tool/subagent callback 不会在迭代阶段脱离 root，disabled context 也覆盖同一异步执行边界。
+- Risk review 尚余低概率性能问题：startup interrupted traces 当前逐条等待 finish，需在最终复审中判断罕见 crash cleanup 的确定性是否优先于批量启动延迟。
+- 最新 Standards 复审除 `src/main/plugins/agent/index.ts` 的一个未使用 type import 外无 residual finding；focused 4 files / 37 tests、普通 typecheck 与 diff check 通过，strict unused 仅以该 import 的 TS6196 失败。
+- Durable crash window 已定位：run terminal transaction 先于 `finishTracingBestEffort()` 提交；`AgentSessionRepository.reconcileStartupRuns()` 的查询只包含 `waiting_next_turn`、`dispatch_pending`、`running`、`recovering`、`waiting_user`。进程若在二者之间退出，下一次启动不会扫描已终态 run 对应的残留 trace session。
+- `AgentLangSmithTraceSessionRepository` 当前只有 `create/get/delete`；Agent plugin initialize 只遍历本次 `reconcileStartupRuns()` 返回的 interrupted runs。最小修复边界是 repository 查询“有 trace session 的终态 run”，由 tracing manager 继续持有远端 finish/client cleanup/local delete 语义；不把外部 tracing side effect 塞进 run state repository。
+- Crash-window 修复后 repository 只枚举 `cancelled/completed/failed/interrupted` 四种 tracing terminal 状态；initialize 在 run startup reconciliation 之后查询，因此既覆盖本次新转为 interrupted 的 run，也覆盖此前已终态但未 cleanup 的 session。`waiting_user` regression 证明非终态 session 保留。
+- 最终 Spec 复审未发现 backend 行为错误或 scope creep；UI 数据外发/retention 提示仍按计划属于下一独立 renderer part，不阻断 backend commit。最终本地 Risk review 无新 finding；残余风险仅为多个 crash residue 串行 drain 可能放大 critical startup 延迟。
+- Standards 指出的测试证据缺口已补：repository parameterized matrix 精确覆盖 `cancelled/completed/failed/interrupted`；plugin enabled fixture 证明 persisted failed root 执行 POST/PATCH、使用 `agent_run_failed_before_trace_cleanup` 且 waiting session 保留。最终出站 error redaction 继续由 fake-fetch regression 独立证明。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。
@@ -51,6 +99,12 @@
 | Severity | Risk | Closure |
 |---|---|---|
 | External | 真实 Anthropic `cache_read` usage 需要 provider 凭据。 | 留给 Stage 6 provider integration；当前不表述为 provider hit 已验证。 |
+| High | LangSmith root session 当前为进程内 run-scoped map；waiting_user 后进程重启再 resume 会新建 root。 | 已持久化最小 root identity；restart continuity regression 证明同一 root 重建，terminal 后清理。 |
+| Medium | Manual root payload 仍可能包含 SDK 写入的 `extra.runtime`。 | 已在 export boundary 删除 runtime/serialized，并用真实 POST/PATCH payload regression 证明。 |
+| Medium | Root exporter failure 未覆盖业务 terminal 结果。 | 已覆盖 root POST/PATCH failure，业务结果与 terminal 状态保持不变。 |
+| Medium | Tracing terminal lifecycle 与 hook notification 耦合，cancel/shutdown 无明确等待和释放语义。 | 已拆分 owner，覆盖 cancel、session read failure、batch drain、dispose 与 shutdown。 |
+| Medium | terminal transaction 后进程崩溃会留下已终态 run 对应的 durable trace session，现有 startup reconciliation 不扫描该状态组合。 | 已以持久数据库 fixture 红绿修复；最终 Standards/Spec/Risk 无 residual finding，15 files / 124 tests 通过。 |
+| Low | 多个异常残留 terminal sessions 在 critical plugin initialize 中逐条等待 exporter drain。 | 非阻断 residual risk；每条最终删除且异常继续下一条，本轮保留确定性顺序。 |
 
 ## Durable Project Facts
 
@@ -73,6 +127,7 @@
 | 4 | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` | Shared execution safety、native budgets、host shell、web/hooks cancellation、effect reconciliation。 |
 | 5 | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` | Context hard budget、single compaction path、saver conformance、restart-safe HITL、recovery-safe retention。 |
 | 6.1 | `e538ba9` | Model usage 按 call 合并并跨 main/summary/subagent/retry/cache 累加。 |
+| 6.2 | `abc3220` | Versioned、redacted per-run telemetry 与 terminal/recovery/migration/retention/metrics durability。 |
 
 ## Verification Anchors
 

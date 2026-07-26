@@ -618,6 +618,20 @@ export const agentMigrations: RocDatabaseMigration[] = [
         AND snapshot_json IS NOT NULL
         AND json_valid(snapshot_json);
     `
+  },
+  {
+    version: 13,
+    name: 'agent_langsmith_trace_sessions',
+    sql: `
+      CREATE TABLE agent_langsmith_trace_sessions (
+        run_id         TEXT PRIMARY KEY,
+        schema_version INTEGER NOT NULL,
+        session_json   TEXT NOT NULL,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+      );
+    `
   }
 ];
 

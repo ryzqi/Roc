@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import { getCallbackManagerForConfig, type RunnableConfig } from '@langchain/core/runnables';
 import { describe, expect, it, vi } from 'vitest';
 import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
 import { loadExplicitSkillContexts } from '../../../../src/main/services/deep-agent/context/explicit-skills';
@@ -26,6 +28,126 @@ vi.mock('@langchain/langgraph', async (importOriginal) => {
 });
 
 describe('createAgentDeepAgentExecutor', () => {
+  it.each([
+    'LANGSMITH_TRACING_V2',
+    'LANGCHAIN_TRACING_V2',
+    'LANGSMITH_TRACING',
+    'LANGCHAIN_TRACING'
+  ])('suppresses ambient %s tracing when the opt-in provider is disabled', async (environmentVariable) => {
+    const previousValue = process.env[environmentVariable];
+    process.env[environmentVariable] = 'true';
+    let handlerNames: string[] | null = null;
+
+    try {
+      await collectExecutorEvents({
+        capabilities: createCapabilities([]),
+        langSmithTracingProvider: () => null,
+        observeStreamEventsConfig: async (config) => {
+          const callbackManager = await getCallbackManagerForConfig(config as RunnableConfig);
+          handlerNames = callbackManager === undefined
+            ? []
+            : callbackManager.handlers.map((handler) => handler.name);
+        },
+        output: { messages: [] }
+      });
+    } finally {
+      if (previousValue === undefined) {
+        delete process.env[environmentVariable];
+      } else {
+        process.env[environmentVariable] = previousValue;
+      }
+    }
+
+    expect(handlerNames).toEqual([]);
+  });
+
+  it('leaves runnable tracing fields absent when the opt-in provider is disabled', async () => {
+    const langSmithTracingProvider = vi.fn(() => null);
+
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      langSmithTracingProvider,
+      output: { messages: [] }
+    });
+
+    expect(langSmithTracingProvider).toHaveBeenCalledWith({
+      runId: 'run-1',
+      threadId: 'thread-1',
+      runOrigin: 'manual_task_run',
+      manifestHash: expect.stringMatching(/^[a-f0-9]{64}$/u)
+    });
+    expect(readStreamEventsCall().config).toEqual({
+      version: 'v3',
+      configurable: {
+        run_id: 'run-1',
+        thread_id: 'thread-1'
+      },
+      signal: expect.any(AbortSignal)
+    });
+  });
+
+  it('injects the native tracer config without replacing checkpoint correlation', async () => {
+    const tracer = BaseCallbackHandler.fromMethods({});
+    const callbacks: [BaseCallbackHandler] = [tracer];
+    const langSmithTracingProvider = vi.fn(() => ({
+      rootId: '11111111-1111-4111-8111-111111111111',
+      session: {
+        schemaVersion: 1 as const,
+        runId: 'run-1',
+        threadId: 'thread-1',
+        runOrigin: 'manual_task_run' as const,
+        manifestHash: 'a'.repeat(64),
+        appVersion: '0.1.0',
+        projectName: 'roc-production',
+        rootId: '11111111-1111-4111-8111-111111111111',
+        traceId: '11111111-1111-4111-8111-111111111111',
+        dottedOrder: '20260726T000000000Z11111111-1111-4111-8111-111111111111',
+        startTime: 1_753_488_000_000
+      },
+      runnableConfig: {
+        callbacks,
+        metadata: {
+          roc_run_id: 'run-1',
+          roc_thread_id: 'thread-1',
+          roc_run_origin: 'manual_task_run' as const,
+          roc_manifest_hash: 'a'.repeat(64),
+          roc_app_version: '0.1.0'
+        },
+        runName: 'roc.agent.invocation' as const,
+        tags: ['roc', 'agent'] as ['roc', 'agent']
+      },
+      dispose: vi.fn(),
+      run: async <T>(operation: () => T | Promise<T>): Promise<T> => await operation(),
+      finish: vi.fn(),
+      shutdown: vi.fn()
+    }));
+
+    await collectExecutorEvents({
+      capabilities: createCapabilities([]),
+      langSmithTracingProvider,
+      output: { messages: [] }
+    });
+
+    expect(readStreamEventsCall().config).toEqual({
+      version: 'v3',
+      callbacks,
+      metadata: {
+        roc_run_id: 'run-1',
+        roc_thread_id: 'thread-1',
+        roc_run_origin: 'manual_task_run',
+        roc_manifest_hash: 'a'.repeat(64),
+        roc_app_version: '0.1.0'
+      },
+      runName: 'roc.agent.invocation',
+      tags: ['roc', 'agent'],
+      configurable: {
+        run_id: 'run-1',
+        thread_id: 'thread-1'
+      },
+      signal: expect.any(AbortSignal)
+    });
+  });
+
   it('wires background task creation tools during workbench proposal runs', async () => {
     const capabilityCalls: Array<{ name: string; input: unknown }> = [];
     await buildExecutorOnce(createCapabilities(capabilityCalls), {
