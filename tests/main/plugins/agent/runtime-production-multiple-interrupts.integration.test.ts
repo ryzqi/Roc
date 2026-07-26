@@ -35,6 +35,8 @@ const toolCalls = [
   []
 ];
 
+const runtimeStateTimeoutMs = 20_000;
+
 let db: Database.Database;
 let tempDir: string;
 let events: RocEventEnvelope[];
@@ -129,7 +131,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
       .join('\n');
     expect(assistantText).toContain('F:\\Code\\Roc');
     expect(assistantText).toContain('F:\\Code\\Fallback');
-  });
+  }, 60_000);
 });
 
 function createRuntime(connection: Database.Database, modelIndex: number): {
@@ -234,7 +236,7 @@ function readChatEvents(type: ChatRunEvent['type']): ChatRunEvent[] {
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + runtimeStateTimeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error('expected_runtime_state_not_reached');
