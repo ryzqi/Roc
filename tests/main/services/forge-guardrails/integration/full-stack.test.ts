@@ -187,7 +187,6 @@ describe('forge guardrails full stack', () => {
     expect(middlewareNames(middleware)).toEqual([
       'RocShellPathPolicyMiddleware',
       'RTKMiddleware',
-      'toolRetryMiddleware',
       'RocToolProtocolMiddleware',
       'RocSubagentStateIsolationMiddleware',
       'ModelCallLimitMiddleware',
@@ -198,8 +197,9 @@ describe('forge guardrails full stack', () => {
       'ForgeFilesystemToolErrorMiddleware',
       'ContextEditingMiddleware',
       'ForgeRescueParsingMiddleware',
-      'ForgeToolResolutionMiddleware',
+      'toolRetryMiddleware',
       'RocToolRuntimeErrorMiddleware',
+      'ForgeToolResolutionMiddleware',
       'ForgeCleanupMiddleware'
     ]);
   });
@@ -289,7 +289,7 @@ describe('forge guardrails full stack', () => {
     const middleware = await buildMiddleware();
     const names = middlewareNames(middleware);
     expect(names.indexOf('RTKMiddleware')).toBeLessThan(names.indexOf('toolRetryMiddleware'));
-    expect(names.indexOf('toolRetryMiddleware')).toBeLessThan(names.indexOf('ForgeErrorBudgetMiddleware'));
+    expect(names.indexOf('ForgeErrorBudgetMiddleware')).toBeLessThan(names.indexOf('toolRetryMiddleware'));
 
     const errorBudget = byName(middleware, 'ForgeErrorBudgetMiddleware');
     if (typeof errorBudget.wrapToolCall !== 'function') {

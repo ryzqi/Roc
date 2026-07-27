@@ -1,4 +1,5 @@
 import { ToolMessage } from '@langchain/core/messages';
+import { MiddlewareError } from 'langchain';
 import { describe, expect, it } from 'vitest';
 import {
   readForgeMessageTag,
@@ -33,6 +34,21 @@ describe('ForgeToolResolutionMiddleware', () => {
     const message = result as ToolMessage;
     expect(message.tool_call_id).toBe('call-read-missing');
     expect(message.name).toBe('read_background_task');
+    expect(message.content).toContain('[ToolResolutionError] Background task does not exist.');
+    expect(message.status).toBe('success');
+    expect(readForgeMessageTag(message)).toBe('forge:tool_resolution');
+  });
+
+  it('recognizes a resolution error wrapped by an inner effect middleware', async () => {
+    const result = await runWrapToolCall(async () => {
+      throw MiddlewareError.wrap(
+        new RocToolResolutionError('Background task does not exist.'),
+        'RocToolEffectIdempotencyMiddleware'
+      );
+    });
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    const message = result as ToolMessage;
     expect(message.content).toContain('[ToolResolutionError] Background task does not exist.');
     expect(message.status).toBe('success');
     expect(readForgeMessageTag(message)).toBe('forge:tool_resolution');

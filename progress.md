@@ -5,11 +5,10 @@
 ## Current State
 
 - Branch：`main`。
-- Part 7 review baseline：`2ea75fe test(agent): add manual live quality eval`。
-- Stage 0-5：完成并提交。
-- Stage 6：Part 1-6 已完成并分别提交；Part 7 agent performance gate 正在定位实现与测量边界。Part 6 真实 provider 验证仍为 `Blocked, not run`。
-- Stage 7：pending。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 7 提交继续明确排除该文件。
+- Stage 7.1 review baseline：`dd5af40 test(agent): add deterministic performance gate`。
+- Stage 0-6：完成并提交。
+- Stage 7：Part 1 middleware overlap 已完成最终 review、review-fix、broad gate 与独立提交边界；Part 2 patch upgrade 待开始。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Stage 7.1 提交继续明确排除该文件。
 
 ## Completed Milestones
 
@@ -386,3 +385,71 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - 不修改代码或阈值后，UI performance smoke 两次独占复验连续通过：profile-1k 406.61ms / 384.84ms，profile-10k 361.59ms / 365.10ms；两次 artifact 均 `passed:true`，Node ABI restore 后 `better-sqlite3` 加载验证通过。
 - Part 7 broad gate 最终证据：focused 5 files / 28 tests、contract 13/13、agent smoke 1/1、typecheck、strict unused、IPC check、build、默认 Vitest 319 files / 1752 tests、responsive smoke、UI performance smoke 与 tracked diff check 全部通过。
 - 当前状态：**Verified passing; staged-boundary audit and independent Part 7 commit pending**。
+
+## 2026-07-27 - Stage 6 Closure And Stage 7 Part 1 Start
+
+- Stage 6 Part 7 已形成独立提交 `dd5af40 test(agent): add deterministic performance gate`；提交后工作树仅有必须保持未跟踪的 `plan.md`。
+- Stage 6 已关闭：Part 1-7 的实现、双轴/Risk review、focused 与 broad verification 均有独立提交和新鲜证据。
+- Stage 7 Part 1 已启动，范围仅为 middleware overlap matrix、真实 Deep Agents 1.10.7 event fixture、deterministic trajectory 与有证据的 native convergence；1.10.8 升级保留给独立 Part 2。
+- 当前状态：**Located at discovery boundary**。下一步先用 CodeGraph 定位生产调用链、安装包实现与 owner tests，再决定是否存在可删除候选。
+
+## 2026-07-27 - Stage 7 Part 1 Middleware Overlap Red Gate
+
+- 已用 CodeGraph、安装包 source map 与真实 Deep Agents 1.10.7 agent fixture 固定生产调用链和责任边界；`PatchToolCallsMiddleware` 仅拥有消息 parity，Roc 现有 protocol、resolution、runtime mapping、retry、effect 与产品错误职责均无 native 等价删除候选。
+- 新增 `middleware-overlap-conformance.test.ts`，直接覆盖 parity、真实 stream event、rescue/protocol、resolution、runtime/effect、network retry/effect 与产品错误映射。
+- 稳定红灯：1 file / 7 tests 为 4 passed、3 failed。失败精确落在 resolution 被 runtime mapping 抢先转换，以及 main/effect 与 network retry 两条路径因不存在的 `runtime.executionInfo` 无法建立 execution identity。
+- 真实 runtime identity 已采样：`checkpoint_ns` 去掉最后一个 tool-task segment得到 agent namespace；checkpoint ID 从同 namespace 的 `checkpoint_map` 读取；`ls_agent_type` 必须与 main/subagent namespace 一致。
+- 当前状态：**Located, stable red; production unchanged**。下一步只修改 effect identity、middleware composition 及直接 owner tests，使新增 conformance suite 转绿。
+- 扩展 red gate 已确认：5 files / 39 tests 为 28 passed、11 failed。5 个 identity/effect 单测、3 个 wiring 测试和原 3 个真实 conformance failure 均落在预期边界；production 仍未修改。
+- 最小 production 修复后直接行为集为 7 files / 50 tests passed，tracked `git diff --check` 通过；首次 `pnpm typecheck` 仍失败于新增 overlap fixture 的 5 个静态类型问题，production 文件没有类型报错，当前不能标记 focused verified。
+- Fixture 类型修复后，7 files / 50 tests、`pnpm typecheck` 与 tracked `git diff --check` 均新鲜通过。当前状态：**Changed, focused verified; Standards / Spec / Risk review pending**。
+- 首轮 Spec review：3 个 Medium。effectful resolution 被误记为 `unknown`；unknown-tool、真实 subagent identity 与 CompiledSubAgent patch wiring 证据不足；六维责任矩阵尚未形成。
+- 首轮 Standards review：同一 effect Medium，另有 2 个 Low，分别为顶部状态过期和 conformance fixture 缩进。当前状态：**Changed, review findings open**。
+
+## 2026-07-27 - Stage 7 Part 1 Review-Fix Resume
+
+- Session catchup 检出 12 条未同步消息；与 `dd5af40` baseline、当前工作树及三份账本核对后，没有交接摘要之外的新实现或验证事实。
+- 当前 review-fix 只关闭三类证据缺口：effectful resolution 的确定性 `failed_final`、真实 unknown-tool/subagent trajectory 与 CompiledSubAgent patch wiring、逐层六维责任矩阵；不升级 Deep Agents 1.10.8，不做无证据 cleanup。
+- `plan.md` 继续作为未跟踪规格源，禁止纳入 Stage 7 Part 1 提交。当前状态：**Changed, review findings open; red tests pending**。
+- Review-fix 首轮 red gate 为 2 files / 21 tests：17 passed、4 failed。两条生产红灯均精确为 effectful `RocToolResolutionError` 被记作 `unknown`；unknown-tool 与 subagent 两条失败分别暴露 hard protocol boundary 和 native success status 省略的 fixture 预期错误。
+- 当前状态：**Stable production red with two characterization refinements pending**；先修正 fixture 并重跑，生产代码保持未改。
+- Characterization 修正后 red gate 为 2 files / 21 tests：19 passed、2 failed；仅 direct owner 与真实 background schedule trajectory 的 `unknown` / `failed_final` 断言失败。unknown-tool hard failure、真实 `task` subagent effect row 与 checkpoint 交叉验证均通过。
+- 当前状态：**Stable production red; minimal effect classification fix in progress**。
+- Effect classification 最小修复后 direct gate 为 2 files / 21 tests passed；generic manual failure 仍保持 `unknown`，pre-effect resolution 转为 `failed_final`。
+- Expanded focused gate 为 8 files / 56 tests passed，覆盖 owner/wiring、真实 event、unknown-tool、background resolution、native retry/effect、product error 与 CompiledSubAgent patch wiring；`pnpm typecheck`、tracked `git diff --check` 通过。
+- `findings.md` 已按 Deep Agents patch、Roc protocol、rescue、resolution、runtime mapping、native retry、effect ledger 七层写入 input/output/error/retry/effect/event 六维责任矩阵，并逐行引用 production owner 与 owner tests。
+- 当前状态：**Changed, focused verified; final Standards / Spec / Risk review pending**。
+
+## 2026-07-27 - Stage 7 Part 1 Final Review Resume
+
+- `session-catchup.py` 检出 15 条未同步消息；与 `dd5af40` baseline、当前工作树和三份账本核对后，focused 实现与验证事实一致。
+- Standards 最终 review 仅有 1 个 Low：`task_plan.md` 顶部仍写 red-green implementation；现已同步为 focused verified / final review findings open。
+- 两路最终 Spec reviewer 均因服务端 429 未产出结论，已重试一次；失败任务不计为通过，本地 Spec / Risk 审查继续执行。
+- 安装包核对确认 LangChain 1.5.3 retry 默认 `onFailure: 'continue'`、`retryOn: all errors`。真实 middleware 复现中，`web_read` scope denial 与 `AbortError` 均被执行 3 次并转换为 error `ToolMessage`。
+- Retry review-fix 红灯稳定：`deep-agent-tool-retry.test.ts` 为 3 tests / 1 passed / 2 failed；失败分别证明 protocol 索引 3 位于 retry 索引 2 内侧，以及生产配置缺少显式 retry predicate。
+- Retry 已移到 protocol、budget 与其他 safety owner 内侧、runtime mapper 外侧；显式 predicate 解包 `MiddlewareError` 并跳过 abort、GraphInterrupt 与 `retryable:false` 的 Roc error。
+- 新增安装包 conformance 锚点，确认默认耗尽执行 3 次后返回 error `ToolMessage`；3 files / 21 tests passed。
+- Risk 增量复审指出 predicate 返回 false 后，LangChain 默认 `onFailure: continue` 仍会吞掉 hard error；第二轮红灯为 4 tests / 2 passed / 2 failed，分别固定配置缺 `onFailure: error` 与真实 abort 被转成 ToolMessage。
+- Roc retry 现显式 `onFailure: error`；真实 middleware 回归证明 abort 只调用一次后抛出，retryable 网络错误执行三次后仍抛出。
+- `unwrapMiddlewareError` 已用 visited set 终止 branded cause 环，并新增自环/双环回归；full-stack 顺序快照同步为 safety owner 外、retry 内。
+- 最新增量 gate 为 3 files / 16 tests passed。当前状态：**Changed, review fixes focused verified**；下一步重跑完整 Stage 7.1 focused gate、typecheck 与 diff check，再完成增量双轴/Risk 复审。
+- Expanded focused gate 为 9 files / 62 tests passed；随后 `pnpm typecheck` 仅在新增 retry test 的零参数 mock 推断处报 TS2493/TS2339/TS7006，生产文件无类型错误。已补最小 mock 参数类型，待复验。
+- Mock 参数类型修复后 retry owner 4 tests、`pnpm typecheck` 与 tracked `git diff --check` 均通过。
+- 本地 Spec 对照 `plan.md:634-645` 与 Current Acceptance 未发现缺失需求、scope creep 或 1.10.8 混入；subagent checkpoint fixture 的动态自比较已改为具体 namespace/non-empty ID/status 断言，并保留 checkpoint DB 交叉验证，待 focused 复验。
+- 收紧后的首轮 subagent fixture 仅因错误假设 namespace 含 `effect-worker` 失败；真实值为父 `task` 的 `subagent/tools:<uuid>`。断言已按安装包 shape 修正，生产代码未变。
+- Standards 增量 review 发现 `onFailure: error` 改变既有 retry exhaustion soft-result 合同；新红灯为 retry owner 4 tests / 2 failed，固定配置必须使用 handler 且 retryable exhaustion 必须返回 ToolMessage。
+- 自定义 onFailure 现对 hard/non-retryable error 抛出原链，对 retryable exhaustion 返回现有 `toRunFailure` 脱敏文案；首轮 green 仅是测试误判 `fetch failed` 的既有 network 分类，断言已按实际产品文案修正。
+- 真实生产 exhaustion trajectory 已通过：handler 3 次，模型收到 error `ToolMessage`，effect ledger 保持 `failed_retryable`；安装包默认 fixture 与 Roc conditional policy 均有独立证据。
+- 最新 expanded focused gate 为 9 files / 63 tests；`pnpm typecheck` 与 tracked `git diff --check` 通过。本地 Spec 对照无 finding，当前等待 Standards / Risk 增量复审后进入 broad gate。
+- 最终 Standards / Spec / Risk 增量复审均为 No findings；conditional retry、effect 状态、resolution/manual/abort/interrupt 分叉、cause 环与 subagent checkpoint 均完成独立核对。
+- Broad static gate 已通过：strict unused、`pnpm typecheck`、`pnpm check:ipc` 与 tracked `git diff --check`。当前状态：**Verified passing (focused + static); build/full test/eval/smoke pending**。
+- Stage 7.1 broad behavior gate 已通过：`pnpm build`；默认 Vitest 320 files / 1773 tests；deterministic eval 1 file / 5 tests；独占 agent performance smoke 1 file / 1 test。
+- Agent performance artifact 为 schema v1、11/11 metrics passed、`error:null`；运行后两类 performance 临时目录均为 0。
+- 默认 Vitest 退出码为 0；汇总后出现 4 条 `node-pty` helper `AttachConsole failed` stderr，未改变 320/1773 的通过结果。
+- 最终 tracked `git diff --check` 通过，build/eval/smoke 未产生意外工作树变更；`plan.md` 仍保持未跟踪并排除在提交边界外。
+- 当前状态：**Verified passing; staged-boundary audit and independent Stage 7.1 commit pending**。
+- 最终 cached Standards review 新发现 1 个 Medium 与 2 个 Low：两处顺序测试可能因 `indexOf() === -1` 假通过、顶部 Current State 过期、conformance 尾注释为英文。
+- Review-fix 已显式断言 middleware 配置和全部顺序节点存在，同步 Current State，并把注释改为简体中文；直接 gate 3 files / 31 tests、完整 focused gate 9 files / 63 tests、`pnpm typecheck` 与 diff check 通过。
+- Standards 增量复审为 `No findings`；Spec 为 `No findings`；Risk 为 `No issues found`，只保留真实 provider 异常差异未被 deterministic local trajectory 覆盖的范围外 residual。
+- 最终 staged audit：16 个 Stage 7.1 文件、0 个未暂存 tracked 文件；`plan.md`、`package.json`、`pnpm-lock.yaml` 均不在 index，cached diff check 通过。
+- 当前状态：**Verified passing; Stage 7.1 isolated in this independent commit**。

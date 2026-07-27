@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import { createToolEffectIdempotencyMiddleware } from '../../../../src/main/services/deep-agent/tool-effect-idempotency';
+import { RocToolResolutionError } from '../../../../src/main/services/forge-guardrails';
 import type { RunCapabilityManifestV1 } from '../../../../src/shared/types';
 
 let db: Database.Database;
@@ -162,7 +163,7 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('uses checkpoint namespace as the subagent effect path instead of MCP readOnlyHint', async () => {
+  it('uses the runtime checkpoint map as the subagent effect identity instead of MCP readOnlyHint', async () => {
     const middleware = createToolEffectIdempotencyMiddleware({
       runId: 'run_1',
       threadId: 'thread_1',
@@ -179,14 +180,66 @@ describe('createToolEffectIdempotencyMiddleware', () => {
 
     await middleware.wrapToolCall?.({
       ...baseRequest,
-      runtime: { executionInfo: { checkpointNs: 'research#0', checkpointId: 'cp_1' } }
+      runtime: runtime('tools:research-parent', 'cp_1')
     } as never, handler as never);
     await middleware.wrapToolCall?.({
       ...baseRequest,
-      runtime: { executionInfo: { checkpointNs: 'research#1', checkpointId: 'cp_2' } }
+      runtime: runtime('tools:research-sibling', 'cp_2')
     } as never, handler as never);
 
     expect(handler).toHaveBeenCalledTimes(2);
+    expect(
+      db.prepare(
+        `SELECT execution_path AS executionPath, checkpoint_id AS checkpointId
+         FROM agent_tool_effects
+         ORDER BY execution_path`
+      ).all()
+    ).toEqual([
+      {
+        executionPath: 'subagent/tools:research-parent',
+        checkpointId: 'cp_1'
+      },
+      {
+        executionPath: 'subagent/tools:research-sibling',
+        checkpointId: 'cp_2'
+      }
+    ]);
+  });
+
+  it('rejects a runtime identity whose agent type conflicts with its namespace', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
+    });
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call_mismatch',
+      name: 'run_shell_command',
+      content: 'ran'
+    }));
+
+    const result = await middleware.wrapToolCall?.(
+      {
+        toolCall: {
+          id: 'call_mismatch',
+          name: 'run_shell_command',
+          args: { command: 'pnpm typecheck' }
+        },
+        runtime: {
+          configurable: {
+            ls_agent_type: 'root',
+            checkpoint_ns: 'tools:research-parent|tools:call-mismatch',
+            checkpoint_map: { 'tools:research-parent': 'cp_mismatch' }
+          }
+        }
+      } as never,
+      handler as never
+    );
+
+    expect((result as ToolMessage).content).toBe('agent_tool_effect_execution_info_missing');
+    expect((result as ToolMessage).status).toBe('error');
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('allows a retry-safe effect to retry after a retryable failure', async () => {
@@ -235,6 +288,71 @@ describe('createToolEffectIdempotencyMiddleware', () => {
     );
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  it('records a pre-effect tool resolution failure as final instead of unknown', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('schedule_background_task', 'external_call', 'tool_call')])
+    });
+    const request = {
+      toolCall: {
+        id: 'call_resolution',
+        name: 'schedule_background_task',
+        args: { previewId: 'missing-preview' }
+      },
+      runtime: runtime('')
+    };
+    const handler = vi.fn().mockRejectedValue(new RocToolResolutionError('preview missing'));
+
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow('preview missing');
+
+    expect(store.readState({
+      runId: 'run_1',
+      executionPath: 'main',
+      checkpointId: 'checkpoint_main',
+      toolCallId: 'call_resolution'
+    })).toEqual({ status: 'failed_final' });
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow(
+      'agent_tool_effect_failed_final'
+    );
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a returned error ToolMessage as a final failure instead of a reusable success', async () => {
+    const middleware = createToolEffectIdempotencyMiddleware({
+      runId: 'run_1',
+      threadId: 'thread_1',
+      store,
+      capabilityManifest: manifestFor([manifestTool('run_shell_command', 'host_execution', 'tool_call')])
+    });
+    const request = {
+      toolCall: { id: 'call_error', name: 'run_shell_command', args: { command: 'git status' } },
+      runtime: runtime('')
+    };
+    const handler = vi.fn(async () => new ToolMessage({
+      tool_call_id: 'call_error',
+      name: 'run_shell_command',
+      content: 'shell command failed',
+      status: 'error'
+    }));
+
+    const result = await middleware.wrapToolCall?.(request as never, handler as never);
+
+    expect((result as ToolMessage).status).toBe('error');
+    expect(
+      db.prepare(
+        `SELECT status
+         FROM agent_tool_effects
+         WHERE run_id = ? AND tool_call_id = ?`
+      ).get('run_1', 'call_error')
+    ).toEqual({ status: 'failed_final' });
+    await expect(middleware.wrapToolCall?.(request as never, handler as never)).rejects.toThrow(
+      'agent_tool_effect_failed_final'
+    );
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });
 
 function manifestFor(tools: RunCapabilityManifestV1['tools']): RunCapabilityManifestV1 {
@@ -265,11 +383,19 @@ function manifestTool(modelVisibleName: string, effectClass: RunCapabilityManife
   };
 }
 
-function runtime(checkpointNs: string) {
+function runtime(agentNamespace: string, checkpointId?: string) {
+  const resolvedCheckpointId = checkpointId === undefined
+    ? `checkpoint_${agentNamespace.length === 0 ? 'main' : agentNamespace}`
+    : checkpointId;
   return {
-    executionInfo: {
-      checkpointNs,
-      checkpointId: `checkpoint_${checkpointNs.length === 0 ? 'main' : checkpointNs}`
+    configurable: {
+      ls_agent_type: agentNamespace.length === 0 ? 'root' : 'subagent',
+      checkpoint_ns: agentNamespace.length === 0
+        ? 'tools:current-tool-task'
+        : `${agentNamespace}|tools:current-tool-task`,
+      checkpoint_map: {
+        [agentNamespace]: resolvedCheckpointId
+      }
     }
   };
 }

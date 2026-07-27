@@ -7,6 +7,8 @@ import type {
   RunCapabilityManifestV1,
   RunCapabilityReconcileStrategyV1
 } from '../../../shared/types';
+import { RocToolResolutionError } from '../forge-guardrails/errors';
+import { unwrapMiddlewareError } from '../forge-guardrails/middleware/middleware-error';
 import { toRunFailure } from './error-mapping';
 import { AgentToolEffectStore, hashToolInput, type ToolEffectKey } from './tool-effect-store';
 
@@ -25,10 +27,7 @@ type ToolCallRequest = {
     name: string;
   };
   runtime?: {
-    executionInfo?: {
-      checkpointId: string;
-      checkpointNs: string;
-    };
+    configurable?: unknown;
   };
 };
 
@@ -89,13 +88,32 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
       });
       try {
         const result = await handler(request);
+        if (!ToolMessage.isInstance(result)) {
+          throw new Error('agent_tool_effect_result_not_tool_message');
+        }
+        const storedResult = serializeToolResult(result);
+        if (result.status === 'error') {
+          options.store.finishError({
+            ...key,
+            error: createToolMessageFailure(result),
+            retryable: false
+          });
+          return result;
+        }
         options.store.finishSuccess({
           ...key,
-          result: serializeToolResult(result)
+          result: storedResult
         });
         return result;
       } catch (error) {
-        if (effectPolicy.reconcileStrategy === 'manual_confirmation') {
+        const toolError = unwrapMiddlewareError(error);
+        if (toolError instanceof RocToolResolutionError) {
+          options.store.finishError({
+            ...key,
+            error: toolError,
+            retryable: false
+          });
+        } else if (effectPolicy.reconcileStrategy === 'manual_confirmation') {
           options.store.finishUnknown({ ...key, error });
         } else {
           options.store.finishError({
@@ -136,19 +154,50 @@ function resolveLegacyReconcileStrategy(
 }
 
 function readExecutionIdentity(request: ToolCallRequest): { executionPath: string; checkpointId: string } | null {
-  const executionInfo = request.runtime?.executionInfo;
+  const configurable = request.runtime?.configurable;
+  if (!isRecord(configurable)) {
+    return null;
+  }
+  const checkpointNamespace = configurable.checkpoint_ns;
+  const checkpointMap = configurable.checkpoint_map;
+  const agentType = configurable.ls_agent_type;
   if (
-    executionInfo === undefined ||
-    typeof executionInfo.checkpointId !== 'string' ||
-    typeof executionInfo.checkpointNs !== 'string' ||
-    executionInfo.checkpointId.length === 0
+    typeof checkpointNamespace !== 'string' ||
+    !isRecord(checkpointMap) ||
+    typeof agentType !== 'string'
   ) {
     return null;
   }
+  const agentNamespace = readAgentNamespace(checkpointNamespace);
+  if (agentNamespace === null) {
+    return null;
+  }
+  const expectedAgentType = agentNamespace.length === 0 ? 'root' : 'subagent';
+  if (agentType !== expectedAgentType) {
+    return null;
+  }
+  const checkpointId = checkpointMap[agentNamespace];
+  if (typeof checkpointId !== 'string' || checkpointId.length === 0) {
+    return null;
+  }
   return {
-    executionPath: executionInfo.checkpointNs.length === 0 ? 'main' : `subagent/${executionInfo.checkpointNs}`,
-    checkpointId: executionInfo.checkpointId
+    executionPath: agentNamespace.length === 0 ? 'main' : `subagent/${agentNamespace}`,
+    checkpointId
   };
+}
+
+function readAgentNamespace(checkpointNamespace: string): string | null {
+  const separatorIndex = checkpointNamespace.lastIndexOf('|');
+  if (separatorIndex === 0) {
+    return null;
+  }
+  const toolSegment = separatorIndex === -1
+    ? checkpointNamespace
+    : checkpointNamespace.slice(separatorIndex + 1);
+  if (!toolSegment.startsWith('tools:') || toolSegment.length === 'tools:'.length) {
+    return null;
+  }
+  return separatorIndex === -1 ? '' : checkpointNamespace.slice(0, separatorIndex);
 }
 
 function createEffectErrorMessage(toolName: string, toolCallId: string, content: string): ToolMessage {
@@ -160,10 +209,14 @@ function createEffectErrorMessage(toolName: string, toolCallId: string, content:
   });
 }
 
-function serializeToolResult(result: unknown): StoredToolMessage {
-  if (!ToolMessage.isInstance(result)) {
-    throw new Error('agent_tool_effect_result_not_tool_message');
+function createToolMessageFailure(message: ToolMessage): Error {
+  if (typeof message.content === 'string' && message.content.length > 0) {
+    return new Error(message.content);
   }
+  return new Error('agent_tool_effect_tool_message_error');
+}
+
+function serializeToolResult(result: ToolMessage): StoredToolMessage {
   const name = readToolMessageName(result);
   return {
     kind: 'tool_message',

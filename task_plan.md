@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 6 Part 7 - Agent Performance Gate**
+**Stage 7 Part 1 - Middleware Overlap Matrix**
 
-**Status:** in_progress (`verified passing; independent Part 7 commit pending`)
+**Status:** complete (`verified, reviewed, and isolated in this commit`)
 
-- Review baseline：`2ea75fe test(agent): add manual live quality eval`。
-- 当前范围：新增独立 deterministic agent performance smoke，覆盖 agent build、first model token/tool call、tool roundtrip、simple completion、restart resume、10/100 model-tool iterations、subagent fan-out 与 event queue/outbox lag，并生成含阈值和原始 samples 的 versioned artifact。
-- 不在本 part 引入：真实 provider/network benchmark、UI/transcript performance 语义变更、生产 runtime 重构、未经测量的“漂亮阈值”、跨机器绝对性能承诺或 Stage 7 cleanup。
-- 已知事实：`plan.md` 要求 agent loop smoke 与现有 UI performance smoke 分离；阈值必须先采 baseline，artifact 同时保存 raw samples、运行环境和 threshold 结果。
+- Review baseline：`dd5af40 test(agent): add deterministic performance gate`。
+- 当前范围：记录 Deep Agents `PatchToolCallsMiddleware`、Roc tool protocol、rescue parsing、tool resolution、runtime error mapping、tool retry 与 effect idempotency 的 input/output/error/retry/effect/event 责任，并用真实安装包 event fixture 与 deterministic trajectory 证明等价后再删除 native 已覆盖的逻辑。
+- 保留 Roc 特有责任：Windows path、capability manifest、effect recovery、product error/audit。
+- 不在本 part 引入：Deep Agents 1.10.8 升级、无直接证据的 cleanup、兼容别名或与 middleware overlap 无关的重构。
 
 ## Phase Status
 
@@ -39,28 +39,29 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 为当前工作树。 |
-| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
+| Stage 6 - Observability, Integration Tests, Evals | complete | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 `dd5af40`。 |
+| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 middleware overlap 已完成 review、broad gate 与独立提交边界；Part 2 patch upgrade 待开始。 |
 
 ## Current Acceptance
 
-- [x] `pnpm smoke:agent-performance` 与现有 `smoke:performance` 独立，使用确定性本地 fixture 执行真实 Roc agent loop，不读取 provider key 或访问网络。
-- [x] versioned artifact 保存运行环境、scenario、每次 raw sample、聚合值、阈值、判定和失败原因；输出可被 strict parser 验证。
-- [x] 至少直接测量 agent build、first model token、first tool call、tool roundtrip、simple completion、restart resume、10/100 model-tool iterations、subagent fan-out 与 event queue/outbox lag。
-- [x] 各阈值来自同机 baseline samples，并同时使用回归比例与绝对上限；命令在 breach 或 artifact contract 损坏时明确非零失败。
-- [x] smoke 使用临时 SQLite/workspace 并清理资源；默认 Vitest、integration/eval 与 UI performance 收集边界不漂移。
-- [x] Standards、Spec 与 Risk review 无未处理 finding；contract/focused、typecheck、strict unused、build、default/full test、agent smoke 与 diff check 通过。
-- [ ] Part 7 形成独立提交。
+- [x] 责任矩阵逐层记录 input、output、error、retry、effect 与 event owner，并引用当前生产调用路径和 owner tests。
+- [x] fixture 使用当前安装的 Deep Agents 1.10.7 真实 event shape，不以手写近似 DTO 代替 native 行为。
+- [x] deterministic trajectory 覆盖成功、malformed tool call、unknown tool、runtime failure、retry 与 effect recovery 的可观察合同。
+- [x] 每个删除候选先有稳定红测或 fixture 证明 native 等价，删除后同一证据转绿；无充分证据则保留并记录 owner。
+- [x] Windows path、capability manifest、effect recovery、product error/audit 责任保持不变。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；focused、deterministic eval、strict unused、typecheck、IPC、build、full test 与 diff check 通过。
+- [x] Part 1 形成独立提交，且不包含 Deep Agents 1.10.8 升级。
 
 ## Current Step
 
-**Verify artifact/smoke orchestration, complete final reviews, then execute the broad gate**
+**Stage 7 Part 1 closure**
 
-**Status:** in_progress (`verified passing; staged-boundary audit and commit pending`)
+**Status:** complete (`reviews, broad verification, and staged boundary passed`)
 
-- Observable contract：artifact 中每项 metric 都有单位、raw samples、P95、relative/absolute threshold 与 pass/fail；命令退出码与 artifact 总结一致。
-- Isolation contract：deterministic local model 驱动真实 `buildDeepAgent()` / checkpoint/runtime 边界；临时资源隔离，禁止 provider/LangSmith 网络。
-- Verification：先跑 artifact contract、typecheck 与 diff check，随后独占复跑 agent smoke；双轴与 Risk review 闭环后再执行 Part 7 focused、UI performance、strict unused、IPC、build、full test 与最终 diff check。
+- Observable contract：真实 Deep Agents 1.10.7 fixture 已冻结；`PatchToolCallsMiddleware` 只拥有消息 parity，不拥有解析、resolution、retry、effect 或产品错误映射。
+- Reproduction：首轮 overlap 为 7 tests / 4 passed / 3 failed；review-fix 稳定红灯进一步证明 effectful pre-execution resolution 被误记为 `unknown`。
+- Implementation boundary：从真实 `runtime.configurable` 提取 identity，调整既有 wrapper 顺序，并把 `RocToolResolutionError` 记为确定性 `failed_final`；不增加旧字段兼容路径，不删除无等价证据的 Roc owner。
+- Verification：最终 Standards / Spec / Risk 均无 finding；9 files / 63 focused tests、strict unused、typecheck、IPC check、build、320 files / 1773 full tests、deterministic eval 1 file / 5 tests、独占 agent performance smoke 1 file / 1 test 与 diff check 均通过。
 
 ## Next Steps
 
@@ -87,7 +88,12 @@
 21. [complete] 定位现有 performance smoke/artifact、真实 agent loop、checkpoint/restart、subagent 与 event/outbox measurement owner，冻结 Part 7 contract。
 22. [complete] 增加独立命令、strict artifact schema、deterministic scenarios 与 threshold failure 红测。
 23. [complete] 实现最小 agent performance runner；为三路 subagent fan-out 增加 budget state isolation 红测与最小修复，完成 focused verification、五轮同机采样和有限 baseline 校准。
-24. [in_progress] 完成 Standards / Spec / Risk review、修复、独占 agent smoke、broad gate 与 Part 7 独立提交。
+24. [complete] 完成 Standards / Spec / Risk review、修复、独占 agent smoke、broad gate 与 Part 7 独立提交 `dd5af40`。
+25. [complete] 用 CodeGraph 定位 middleware、tool protocol、rescue parsing、resolution、error mapping、retry/effect 和 event 的真实生产调用链及 owner tests。
+26. [complete] 读取安装包 1.10.7 `PatchToolCallsMiddleware`，冻结 overlap matrix、真实 event fixture 与 deterministic trajectory contract。
+27. [complete] 修复真实 execution identity、wrapper 顺序与 pre-effect resolution 状态；补齐真实 unknown-tool/subagent trajectory 和六维矩阵，8 files / 56 tests focused verified；无等价删除候选。
+28. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与 Stage 7 Part 1 独立提交。
+29. [pending] 定位并独立实施 Deep Agents 1.10.8 patch upgrade，完成 review、验证与提交。
 
 ## Decisions
 
@@ -101,6 +107,7 @@
 | LangSmith tracing 默认关闭且显式 opt-in | 外部 trace 不能由隐式产品行为开启；导出必须经过 allowlist/redaction boundary。 |
 | LangSmith 配置与密钥归 Agent plugin config/secrets | 保持单一 owner；不升级全局 AppSettings，不复用 provider secret 语义。 |
 | Cleanup 只做 evidence-first deletion | 无调用、测试、unused scan 或重复证据时不删除。 |
+| Stage 7.1 与 1.10.8 升级分开提交 | 避免把 native overlap 行为变化与 framework patch 混成一个事实源。 |
 
 ## Review Closure Checks
 
@@ -128,6 +135,17 @@
 | Medium | Restart fixture 在临时目录 cleanup `try/finally` 外构造首个 file-backed SQLite connection。 | nested cleanup、agent smoke 与两类临时目录 0 残留已验证；最终复审无 finding。 |
 | Hard | Performance smoke 有 `expect` 与 `agentPerformanceMetricIds` 两个 unused import。 | 已删除；typecheck、strict unused 与最终 Standards 复审通过。 |
 | Hard | Artifact builder 缺 clean-pass 与 threshold-breach 两个确定性分支测试。 | 三分支测试已补，contract 13/13 passed；最终 Standards/Spec 复审无 finding。 |
+| Medium | Effectful `RocToolResolutionError` 明确发生在副作用前，却先被 effect middleware 记为 `unknown`。 | 已红绿改为 `failed_final` 后由 resolution 返回 soft result；direct + real schedule regression 与最终三轴复审通过。 |
+| Medium | Unknown-tool、真实 subagent effect identity 与 CompiledSubAgent patch wiring 缺直接 trajectory/wiring 证据。 | 已补 real unknown-tool hard boundary 与 real `task` subagent effect/checkpoint trajectory；既有 compiled wiring owner 纳入 focused gate，最终三轴复审通过。 |
+| Medium | Stage 7.1 尚未逐层形成 input/output/error/retry/effect/event 六维责任矩阵。 | `findings.md` 已逐层引用 production owner 与 owner tests，最终 Standards / Spec / Risk review 无 finding。 |
+| Low | `progress.md` 顶部仍写 Stage 6 Part 7 进行中、Stage 7 pending。 | 已同步为 Stage 7.1 review-fix 状态。 |
+| Low | overlap conformance fixture 的 `effectStore?` 多缩进 2 空格。 | 已修正；typecheck 与 diff check 通过。 |
+| Medium | Native retry 位于 protocol/cancellation 外侧且使用默认 all-error predicate；`web_read` / `web_search` 的 scope denial 或 abort 会重试三次并被转换为 error `ToolMessage`。 | 多轮红灯固定 order/predicate、hard onFailure 与 soft exhaustion；conditional handler 保留两类合同，真实 agent exhaustion/effect trajectory 与最终三轴复审通过。 |
+| Medium | `unwrapMiddlewareError()` 未检测 branded `cause` 环，自环/双环可同步无限循环并冻结 main process。 | 已加入 visited-set 终止条件及自环/双环回归；最终 Risk/Standards 复审无 finding。 |
+| Medium | `onFailure: error` 虽保住 hard boundary，却把已证明的 retry exhaustion error ToolMessage 改成 agent hard failure。 | Standards 增量红灯后改为 conditional onFailure；abort/non-retryable 外抛，真实 exhaustion 返回脱敏 error ToolMessage 且 ledger 为 `failed_retryable`，最终复审闭环。 |
+| Medium | 两处 middleware 顺序测试未先证明参与节点存在，`indexOf() === -1` 可能让安全顺序断言假通过。 | 已显式拒绝缺失 middleware 配置，并对全部参与节点做 concrete membership assertion 后再比较顺序；3 files / 31 tests、完整 9 files / 63 tests、typecheck 与 Standards 增量复审通过。 |
+| Low | `progress.md` 顶部 Current State 仍写首轮 findings 正在闭环。 | 已同步为 broad gate 通过、最终 review-fix 闭环与独立提交待完成；Standards 增量复审无 finding。 |
+| Low | overlap conformance 新增英文代码注释不符合仓库默认简体中文约定。 | 已改为简体中文；3-file direct gate、9-file focused gate 与 Standards 增量复审通过。 |
 
 ## Errors Encountered
 
@@ -143,6 +161,8 @@
 | 并行恢复检查中的 `git check-ignore plan.md` 以退出码 1 表示文件未忽略，导致 `Promise.all` 提前失败 | 1 | 将 expected non-match 显式转换为成功输出；确认 `plan.md` 未跟踪且未忽略。 |
 | Windows `rg` 参数使用 shell glob 路径，并包含可能无匹配的查询；产生路径错误/退出码 1 | 2 | 后续禁止把 glob 放在路径参数；只使用目录参数配合 `-g`，并把无匹配与命令错误分开处理；失败命令未修改文件。 |
 | `pnpm test -- tests/main/infrastructure/database-migrations.test.ts` 将 `--` 传给 Vitest并运行全部 310 个文件，而非只跑目标文件 | 1 | 红灯仍精确落在新增 V1 test；后续 focused 验证改用 `pnpm exec vitest run <path>`。 |
+| Stage 7.1 owner 检索重复使用 Windows 路径 glob，并两次假设不存在的 protocol/cleanup test 路径 | 3 | 调用均只读；后续先用 `rg --files` 固定真实路径，目录检索只配合 `-g`，禁止再猜文件名。 |
+| 首轮 review 账本 patch 使用了仅存在于 `findings.md` 的旧表格行作为 `task_plan.md` context | 1 | `apply_patch` 原子拒绝且未修改文件；读取真实 review table 后拆成精确 patch。 |
 | 首次生产修复把 telemetry `snapshotVersion` 写成数据库原始版本，V1 row 被 strict telemetry schema 判为 corrupt | 1 | 查明 telemetry contract 固定为 normalized V2；恢复常量 2，仅扩大 migration 的 V1/V2 row 选择。 |
 | 并行读取 skill 与 memory 时，预期的 memory 无匹配退出码 1 使整组 `Promise.all` 提前失败 | 2 | 本次续接再次触发后，所有可预期 non-match 均在 shell 内转换为成功输出，不再放入 fail-fast 并行组；确认无相关 memory 证据。 |
 | Windows `rg` 把 `electron.vite.config.*` 当字面路径，返回路径语法错误并使并行读取提前失败 | 1 | 改为目录参数配合 `-g 'electron.vite.config.*'`，并使用 `Promise.allSettled` 保留其他读取结果。 |
@@ -191,3 +211,10 @@
 | Broad gate 首轮 `pnpm smoke:performance` 超过既有 profile-1k 750ms 门，实际 `2474.7138ms` | 1 | seed/native rebuild 成功，artifact 明确失败；先核对测量路径与系统负载，再独占复验，不修改既有 UI 门槛。 |
 | Windows 本地化环境找不到 `\Processor(_Total)\% Processor Time` 性能计数器 | 1 | 只读探针未修改状态；改用 `Win32_Processor.LoadPercentage` 与可用内存判断复验环境。 |
 | `Win32_PerfFormattedData_PerfOS_Processor` 在本机同样返回 `Invalid class` | 1 | 只读探针未修改状态；停止继续依赖 unavailable perf counters，使用无遗留 Electron、可用内存与连续独占 smoke 作为环境证据。 |
+| Stage 7.1 review-fix 检索两次猜测不存在的源码路径（`middleware/index.ts`、`capability-catalog.ts`） | 2 | 调用均只读且未修改文件；第二次 `allSettled` 已保留其他结果，后续命令只使用 `rg --files` 实际返回的路径。 |
+| Stage 7.1 最终 Spec reviewer 两路均被服务端 `429 Too Many Requests` 终止 | 2 | 不把失败任务视为通过；复用既有 reviewer 重试一次，同时继续本地 Spec / Risk 审查。 |
+| Retry review-fix 首轮 expanded focused 行为通过后，`pnpm typecheck` 报新增 mock 为零参数 tuple 的 TS2493/TS2339/TS7006 | 1 | 生产文件无类型错误；为 `createDeepAgent` mock 增加最小配置参数类型后重跑 focused/typecheck。 |
+| 本轮本地 Spec inventory 的首个并行只读组因单条非零退出而未保留同组输出 | 1 | 命令均只读；改用 `Promise.allSettled` 后逐项保留结果并完成规格行、工作树与 subagent 断言核对。 |
+| Subagent namespace 收紧断言首次错误假设包含 declarative name `effect-worker` | 1 | 真实 fixture 显示 Deep Agents 以父 `task` 的 `tools:<uuid>` 作为 subagent namespace；测试改为直接断言该真实 shape，生产 identity 与 DB 交叉验证不变。 |
+| 自定义 retry exhaustion handler 首轮 green 的测试误期望 raw `fetch failed` | 1 | 既有 `toRunFailure` 正确分类为 network 并返回脱敏产品文案；断言同步为 `Provider 网络请求失败：fetch failed`，生产逻辑不变。 |
+| 最终本地补充扫描再次把允许无匹配的 `rg` 放入 fail-fast `Promise.all` | 1 | 三条调用均只读且未修改文件；改用显式吸收 exit 1 的 `Promise.allSettled` 后完成扫描。 |

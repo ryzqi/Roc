@@ -2,6 +2,7 @@ import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { RocToolResolutionError } from '../errors';
 import { tagForgeMessage } from '../message-tags';
+import { unwrapMiddlewareError } from './middleware-error';
 
 export function createToolResolutionMiddleware() {
   return createMiddleware({
@@ -10,14 +11,15 @@ export function createToolResolutionMiddleware() {
       try {
         return await handler(request);
       } catch (error) {
-        if (!(error instanceof RocToolResolutionError)) {
+        const toolError = unwrapMiddlewareError(error);
+        if (!(toolError instanceof RocToolResolutionError)) {
           throw error;
         }
         const toolCallId = request.toolCall.id === undefined ? `unknown_${request.toolCall.name}` : request.toolCall.id;
         const toolMessage = new ToolMessage({
           tool_call_id: toolCallId,
           name: request.toolCall.name,
-          content: `[ToolResolutionError] ${error.message}`,
+          content: `[ToolResolutionError] ${toolError.message}`,
           status: 'success'
         });
         return tagForgeMessage(toolMessage, 'forge:tool_resolution');

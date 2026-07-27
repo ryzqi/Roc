@@ -501,7 +501,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(Reflect.get(researchHookMiddleware as object, 'afterModel')).toBeUndefined();
   });
 
-  it('wires tool effect idempotency after tool protocol normalization when run context is provided', () => {
+  it('wires tool effects inside product error mapping and outside the tool handler', () => {
     const input = {
       mode: 'chat',
       model: {} as unknown,
@@ -528,16 +528,31 @@ describe('buildDeepAgent harness profile wiring', () => {
     buildFixtureAgent(input, []);
 
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
-    const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) =>
+    if (createDeepAgentInput?.middleware === undefined) {
+      throw new Error('Expected Deep Agents middleware configuration.');
+    }
+    const middlewareNames = createDeepAgentInput.middleware.map((middleware) =>
       Reflect.get(middleware as object, 'name')
-    ) ?? [];
-
-    expect(middlewareNames).toContain('RocToolEffectIdempotencyMiddleware');
-    expect(middlewareNames.indexOf('RocToolProtocolMiddleware')).toBeLessThan(
-      middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')
     );
-    expect(middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')).toBeLessThan(
+
+    expect(middlewareNames).toEqual(expect.arrayContaining([
+      'RocToolProtocolMiddleware',
+      'ForgeErrorBudgetMiddleware',
+      'RocToolRuntimeErrorMiddleware',
+      'ForgeToolResolutionMiddleware',
+      'RocToolEffectIdempotencyMiddleware'
+    ]));
+    expect(middlewareNames.indexOf('RocToolProtocolMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('ForgeErrorBudgetMiddleware')
+    );
+    expect(middlewareNames.indexOf('ForgeErrorBudgetMiddleware')).toBeLessThan(
       middlewareNames.indexOf('RocToolRuntimeErrorMiddleware')
+    );
+    expect(middlewareNames.indexOf('RocToolRuntimeErrorMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('ForgeToolResolutionMiddleware')
+    );
+    expect(middlewareNames.indexOf('ForgeToolResolutionMiddleware')).toBeLessThan(
+      middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')
     );
   });
 

@@ -1,7 +1,9 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { GraphInterrupt } from '@langchain/langgraph';
+import { MiddlewareError } from 'langchain';
 import { describe, expect, it } from 'vitest';
 import { RocDomainError } from '../../../../../src/main/services/errors';
+import { unwrapMiddlewareError } from '../../../../../src/main/services/forge-guardrails/middleware/middleware-error';
 import { createToolRuntimeErrorMiddleware } from '../../../../../src/main/services/forge-guardrails/middleware/tool-runtime-errors';
 
 async function runWrapToolCall(input: { toolName: string; handler: () => Promise<unknown> | unknown }) {
@@ -22,6 +24,18 @@ async function runWrapToolCall(input: { toolName: string; handler: () => Promise
 }
 
 describe('RocToolRuntimeErrorMiddleware', () => {
+  it('terminates cyclic branded middleware error chains', () => {
+    const selfCycle = brandedMiddlewareError('self cycle');
+    selfCycle.cause = selfCycle;
+    const first = brandedMiddlewareError('first cycle');
+    const second = brandedMiddlewareError('second cycle');
+    first.cause = second;
+    second.cause = first;
+
+    expect(unwrapMiddlewareError(selfCycle)).toBe(selfCycle);
+    expect(unwrapMiddlewareError(first)).toBe(first);
+  });
+
   it('turns delete_file RocDomainError into a hard ToolMessage for agent recovery', async () => {
     const result = await runWrapToolCall({
       toolName: 'delete_file',
@@ -44,6 +58,30 @@ describe('RocToolRuntimeErrorMiddleware', () => {
     expect(String(message.content)).toContain('delete_file_target_not_empty');
     expect(String(message.content)).toContain('只能删除空目录。');
     expect(String(message.content)).toContain('请先清空目录内容，或改为删除具体文件。');
+  });
+
+  it('preserves RocDomainError fields through nested middleware error wrappers', async () => {
+    const domainError = new RocDomainError({
+      code: 'delete_file_target_not_empty',
+      message: '只能删除空目录。',
+      category: 'validation',
+      retryable: false,
+      userAction: '请先清空目录内容。'
+    });
+    const result = await runWrapToolCall({
+      toolName: 'delete_file',
+      handler: async () => {
+        throw MiddlewareError.wrap(
+          MiddlewareError.wrap(domainError, 'RocToolEffectIdempotencyMiddleware'),
+          'ForgeToolResolutionMiddleware'
+        );
+      }
+    });
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toBe(
+      '[RocToolError] delete_file_target_not_empty: 只能删除空目录。\n请先清空目录内容。'
+    );
   });
 
   it('lets web_read errors bubble to the network retry middleware', async () => {
@@ -116,3 +154,9 @@ describe('RocToolRuntimeErrorMiddleware', () => {
     ).rejects.toBeInstanceOf(GraphInterrupt);
   });
 });
+
+function brandedMiddlewareError(message: string): Error & { cause?: unknown } {
+  const error = new Error(message) as Error & { cause?: unknown };
+  Reflect.set(error, '~brand', 'MiddlewareError');
+  return error;
+}

@@ -33,7 +33,9 @@ import {
   createRescueParsingMiddleware,
   createFilesystemToolErrorMiddleware,
   createToolResolutionMiddleware,
-  createToolRuntimeErrorMiddleware
+  createToolRuntimeErrorMiddleware,
+  handleNetworkToolRetryFailure,
+  shouldRetryNetworkToolError
 } from '../forge-guardrails';
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
@@ -141,7 +143,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
     ...planModeMiddleware,
     ...createExecutionSafetyMiddleware(input, 'main'),
     ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware(knownToolCandidates),
+    ...createExecutionErrorEnvelopeMiddleware(input, knownToolCandidates),
     createForgeCleanupMiddleware()
   ];
 
@@ -381,7 +383,7 @@ function createPlanModeSubagentMiddleware(input: DeepAgentBuildInput) {
     createRocPlanFilesystemDefaultPathMiddleware(),
     ...createExecutionSafetyMiddleware(input, 'subagent'),
     ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware(),
+    ...createExecutionErrorEnvelopeMiddleware(input)
   ];
 }
 
@@ -390,7 +392,7 @@ function createRunModeSubagentMiddleware(input: DeepAgentBuildInput) {
     ...createHookToolScopeMiddleware(input),
     ...createExecutionSafetyMiddleware(input, 'subagent'),
     ...createContextCompactionMiddleware(input),
-    ...createExecutionErrorEnvelopeMiddleware()
+    ...createExecutionErrorEnvelopeMiddleware(input)
   ];
 }
 
@@ -399,11 +401,6 @@ function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionSc
   return [
     createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
     createRTKMiddleware(new RTKBinaryManager()),
-    toolRetryMiddleware({
-      maxRetries: 2,
-      tools: [...NETWORK_SENSITIVE_TOOLS],
-      backoffFactor: 1.5
-    }),
     createToolProtocolMiddleware({
       capabilityManifest: input.capabilityManifest,
       executionScope
@@ -413,7 +410,6 @@ function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionSc
       : []),
     createRocSubagentStateIsolationMiddleware(),
     ...budgetMiddleware,
-    ...createToolEffectMiddleware(input),
     createErrorBudgetMiddleware(),
     createForgeIterationTrackingMiddleware(),
     createRocFilesystemPathPolicyMiddleware(),
@@ -436,14 +432,25 @@ function createNativeBudgetMiddleware(input: DeepAgentBuildInput) {
   ];
 }
 
-function createExecutionErrorEnvelopeMiddleware(knownToolCandidates?: () => RescueToolCandidate[]) {
+function createExecutionErrorEnvelopeMiddleware(
+  input: DeepAgentBuildInput,
+  knownToolCandidates?: () => RescueToolCandidate[]
+) {
   const rescueMiddleware = knownToolCandidates === undefined
     ? []
     : [createRescueParsingMiddleware({ availableTools: knownToolCandidates })];
   return [
     ...rescueMiddleware,
+    toolRetryMiddleware({
+      maxRetries: 2,
+      tools: [...NETWORK_SENSITIVE_TOOLS],
+      onFailure: handleNetworkToolRetryFailure,
+      retryOn: shouldRetryNetworkToolError,
+      backoffFactor: 1.5
+    }),
+    createToolRuntimeErrorMiddleware(),
     createToolResolutionMiddleware(),
-    createToolRuntimeErrorMiddleware()
+    ...createToolEffectMiddleware(input)
   ];
 }
 

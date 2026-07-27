@@ -104,8 +104,8 @@ describe('execution safety middleware scopes', () => {
       'ForgeIterationTrackingMiddleware',
       'RocFilesystemPathPolicyMiddleware',
       'ForgeFilesystemToolErrorMiddleware',
-      'ForgeToolResolutionMiddleware',
-      'RocToolRuntimeErrorMiddleware'
+      'RocToolRuntimeErrorMiddleware',
+      'ForgeToolResolutionMiddleware'
     ];
     const mainMiddlewareNames = createDeepAgentInput.middleware?.map((middleware) =>
       Reflect.get(middleware as object, 'name')
@@ -128,6 +128,18 @@ describe('execution safety middleware scopes', () => {
       expect(middlewareNames).toContain('RocSubagentBudgetStateInitializationMiddleware');
       expect(middlewareNames).toContain('RocSubagentStateIsolationMiddleware');
       expect(middlewareNames).not.toContain('SummarizationMiddleware');
+      expect(middlewareNames.indexOf('RocToolProtocolMiddleware')).toBeLessThan(
+        middlewareNames.indexOf('ForgeErrorBudgetMiddleware')
+      );
+      expect(middlewareNames.indexOf('ForgeErrorBudgetMiddleware')).toBeLessThan(
+        middlewareNames.indexOf('RocToolRuntimeErrorMiddleware')
+      );
+      expect(middlewareNames.indexOf('RocToolRuntimeErrorMiddleware')).toBeLessThan(
+        middlewareNames.indexOf('ForgeToolResolutionMiddleware')
+      );
+      expect(middlewareNames.indexOf('ForgeToolResolutionMiddleware')).toBeLessThan(
+        middlewareNames.indexOf('RocToolEffectIdempotencyMiddleware')
+      );
     }
   });
 

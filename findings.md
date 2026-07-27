@@ -198,6 +198,44 @@
 - 同一代码与门槛下随后两次独占 UI performance smoke 连续通过：profile-1k 分别 406.61ms、384.84ms，profile-10k 分别 361.59ms、365.10ms；Node ABI restore 后 `better-sqlite3` 均可加载。首轮记录为 broad suite 后环境抖动，不修改 UI performance 阈值。
 - Part 7 broad gate 最终通过：focused 5 files / 28 tests、agent smoke 1/1、contract 13/13、typecheck、strict unused、IPC check、build、default Vitest 319 files / 1752 tests、responsive smoke、连续两次 UI performance smoke 与 diff check。
 
+## Stage 7 Part 1 - Middleware Overlap Discovery
+
+- 权威目标来自 `plan.md` 7.1：逐层记录 Deep Agents `PatchToolCallsMiddleware`、Roc tool protocol、rescue parsing、tool resolution、runtime error mapping、tool retry/effect idempotency 的 input/output/error/retry/effect/event 责任。
+- 删除门槛是当前安装包 1.10.7 的真实 event fixture 与 deterministic trajectory 等价证据；静态名称、表面重复或单独的 unused scan 不构成删除依据。
+- Roc 必须继续拥有 Windows path、capability manifest、effect recovery、product error/audit；Deep Agents 1.10.8 patch 属于独立 7.2，不进入本部分提交。
+- Deep Agents 1.10.7 `PatchToolCallsMiddleware` 只修复消息 parity：删除没有前置 tool call 的 orphan `ToolMessage`，并为 dangling `AIMessage.tool_calls` 注入 cancellation `ToolMessage`；它不拥有文本解析、参数归一化、授权、resolution、retry、effect 或产品错误映射。
+- 真实 `run.toolCalls` event keys 为 `callId,error,input,name,output,status`；其中 `output` 是工具原始返回值，不是最终 `ToolMessage`。Roc 编译 subagent 时显式安装 patch middleware 必须保留，因为 `CompiledSubAgent` 不再经过 native declarative subagent normalization。
+- 新增 overlap conformance suite 稳定为 7 tests / 4 passed / 3 failed。失败分别证明：runtime error mapping 抢先吞掉 `RocToolResolutionError`；effect identity 缺失使 handler 未执行；network retry 同样在 effect 层之前失败。
+- LangChain middleware 数组第一项位于最外层。当前 Roc 组合让 resolution/effect 的原始异常先被错误层转换，且 error budget 可能把 `Command` 返回给只允许持久化 `ToolMessage` 的 effect 层。
+- `wrapToolCall` 的真实 runtime keys 为 `configurable,context,interrupt,signal,store,writer`，没有 `executionInfo`。主 agent identity 位于 `runtime.configurable` 的 `checkpoint_ns: 'tools:<tool-task-id>'` 与 `checkpoint_map['']`；subagent namespace 为去掉最后一个 `|tools:*` segment 后的前缀，checkpoint ID 取 `checkpoint_map[agentNamespace]`。
+- execution path 规则冻结为：agent namespace 为空时 `main`，非空时 `subagent/<agent-namespace>`；同时严格校验 `ls_agent_type` 与 namespace 一致，不增加不存在字段的 compatibility path。
+- 当前没有被 native middleware 完整覆盖的 Roc owner，因此不删除 production middleware；本 part 的最小修复是对齐真实 execution identity 与既有 wrapper 顺序。
+- `schedule_background_task` 在 `previewStore.take(previewId)` 返回 `null` 时、调用 `createBackgroundTask()` 与 `registerTask()` 之前抛 `RocToolResolutionError`；该失败确定尚未发生副作用，即使工具使用 `manual_confirmation` reconcile，也必须在 effect ledger 记为 `failed_final`，再由外层 resolution middleware 映射为 tagged soft result。
+- `compileRocSubagent()` 在 `createSubAgent()` 前显式加入 `createPatchToolCallsMiddleware()`；这是 CompiledSubAgent 的直接生产 owner。Stage 7.1 必须同时保留静态 wiring 回归与真实 `task` trajectory，不能只用 main agent event 或手写 subagent runtime fixture代替。
+- 生产 manifest 将内建 `task` 限定为 `main`，而 MCP/插件工具默认可授权 `main` 与 `subagent`；`applyRunModeSubagentMiddleware()` 会把 declarative subagent 的显式 tools 再按 subagent scope 过滤。真实 identity fixture 必须保留这两层 protocol，而不是直接调用 subagent runnable。
+- 现有真实 fan-out 测试已证明 main/subagent 使用独立 fake model 可稳定驱动 `task` 子图；Stage 7.1 单分支 fixture 可复用同一结构，让 subagent 调用一个 effectful tool，并把 effect row 与真实 checkpoint namespace/ID 交叉验证。
+- 真实 unknown-tool agent invocation 在 `RocToolProtocolMiddleware` 的 manifest 授权边界直接拒绝，错误为 `agent_capability_manifest_tool_not_authorized:<name>`；该层位于 runtime error mapper 外侧，因此合同是 invocation hard failure，不是 error `ToolMessage`。
+- Deep Agents 原生 `task` 成功结果的 `ToolMessage.status` 为 `undefined`，现有 trajectory adapter 将其规范化为 success；真实 subagent identity 测试应断言 trajectory success，不应要求框架写入显式 `status: 'success'`。
+- LangChain 1.5.3 `ToolRetryMiddlewareOptionsSchema` 的默认 `onFailure` 是 `continue`，重试耗尽会返回 `ToolMessage(status: 'error')`；默认 `retryOn` 接受所有 `Error`，不能把未显式配置的生产行为写成“耗尽继续抛出”。
+- 修复前 retry 位于 protocol 与其他 safety owner 外侧。用安装包真实 `toolRetryMiddleware` 复现后，名为 `web_read` 的 scope denial 和 `AbortError` 均执行 3 次并被转换为 error `ToolMessage`；现已把 retry 移到 safety owner 内侧，并用显式 predicate + conditional onFailure 保留 capability fail-closed、abort、interrupt 与 non-retryable product error，同时让真正的 retry exhaustion 继续返回可恢复的 error `ToolMessage`。
+- LangChain `MiddlewareError.isInstance` 只校验 `Error` 上可写的 `~brand`，而 `cause` 同样可写；工具错误可构造自环或双环。Roc 解包边界必须跟踪已访问对象，避免同步无限循环冻结 Electron main。
+
+### Stage 7.1 Middleware Responsibility Matrix
+
+当前相关 `wrapToolCall` 外到内顺序为 Roc protocol -> error budget 与其余 safety owner -> native network retry -> runtime mapping -> resolution mapping -> effect ledger -> tool handler。Rescue 是 `afterModel` owner，PatchToolCalls 同时修复 agent/model 前的 message parity；两者不与 tool handler wrapper 争夺同一错误责任。
+
+| Layer | Input | Output | Error | Retry | Effect | Event | Production owner | Owner tests |
+|---|---|---|---|---|---|---|---|---|
+| Deep Agents `PatchToolCallsMiddleware` | 当前 `messages`，包括 orphan `ToolMessage` 与 dangling `AIMessage.tool_calls` | 删除 orphan result，为 dangling call 注入 cancellation `ToolMessage`，并把同一 parity history 交给 model | 不分类 Roc domain/protocol/runtime error | 无 | 无 | 不直接 emit；修复后的 messages 是 native stream/message projection 的输入 | Deep Agents 1.10.7 `createPatchToolCallsMiddleware`；CompiledSubAgent 由 `src/main/services/deep-agent/agent-builder.ts:compileRocSubagent` 显式安装 | `tests/main/services/deep-agent/middleware-overlap-conformance.test.ts` parity + real event shape；`tests/main/services/deep-agent/context/native-summarization-conformance.test.ts` compiled wiring |
+| Roc tool protocol | `ToolCallRequest`、runtime tool identity、frozen capability manifest、main/subagent scope | 仅对已授权 call 规范化 background-task JSON handoff 参数，其余 args 原样透传 | 未注册、scope denied、runtime identity drift 直接 fail closed | 无；未知工具不进入 network retry | 无 | 不直接 emit；下游 native event 使用通过授权并规范化后的 call | `src/main/services/deep-agent/tool-protocol.ts:createToolProtocolMiddleware` | `tests/main/services/deep-agent/tool-protocol.test.ts`；overlap suite 的 rescue/protocol 与 real unknown-tool trajectory |
+| Rescue parsing | model 返回的最后一个 `AIMessage`、当前可用 tool candidates | 将受支持的文本/content-block 格式重建为 structured `tool_calls`，保留 reasoning 与 `forge_rescue` metadata；无法唯一解析则不改 | 不处理 tool execution error，不接受未知 tool name | 无 | 无 | 不直接 emit；生成的 structured call 由 native tool event owner 后续投影 | `src/main/services/forge-guardrails/middleware/rescue-parsing.ts:createRescueParsingMiddleware` 与 `rescue-parser.ts` | `tests/main/services/forge-guardrails/middleware/rescue-parsing.test.ts`、`rescue-parser.test.ts`；overlap rescue/protocol trajectory |
+| Tool resolution | 原始或 `MiddlewareError` 包裹的 `RocToolResolutionError` 与 call identity | tagged soft `ToolMessage(status: success)`，内容为 `[ToolResolutionError] ...`，让 model 可修正输入 | 仅消费 resolution error，其他异常原样抛出 | 无 | effectful call 必须先由内层 ledger 记 `failed_final`；本层不写 ledger | 不直接 emit；soft `ToolMessage` 进入 native tool-result/message projection | `src/main/services/forge-guardrails/middleware/tool-resolution.ts:createToolResolutionMiddleware` | `tests/main/services/forge-guardrails/middleware/tool-resolution.test.ts`；overlap read/schedule resolution trajectories |
+| Runtime error mapping | 内层未消费的 `RocDomainError` 或 generic tool error | product `ToolMessage(status: error)`；保留 Roc code/message/userAction | `GraphBubbleUp`、abort 与 `web_read`/`web_search` error 原样向外抛 | 不重试；network error 明确留给外层 native retry | effect ledger 已先记录 success/failure/unknown；本层不改变状态 | 不直接 emit；error `ToolMessage` 由 native stream 投影 | `src/main/services/forge-guardrails/middleware/tool-runtime-errors.ts:createToolRuntimeErrorMiddleware` | `tests/main/services/forge-guardrails/middleware/tool-runtime-errors.test.ts`；overlap product runtime trajectory |
+| Native tool retry | safety owner 已放行的 `web_read`、`web_search` handler failure，同一稳定 tool call | 成功时返回最终 handler result；真正耗尽时返回 `ToolMessage(status: error)` 与既有脱敏 failure message | 显式 predicate 解包 middleware error；abort、GraphBubbleUp 与 `retryable: false` failure 不重试，conditional onFailure 立即抛出原错误链；resolution soft result 不进入 retry | `maxRetries: 2`、`backoffFactor: 1.5` | 每次 attempt 进入内层 effect；retry-safe failure 为 `failed_retryable`，下一 attempt 原子回到 `in_progress`；耗尽后 ledger 保留可恢复的 `failed_retryable` | 不直接 emit 新产品事件；hard error 外抛，retry exhaustion 的 error ToolMessage 继续由 native stream/message owner 投影 | `src/main/services/deep-agent/agent-builder.ts:createExecutionErrorEnvelopeMiddleware` 的 LangChain `toolRetryMiddleware`；`tool-runtime-errors.ts:shouldRetryNetworkToolError/handleNetworkToolRetryFailure` | `tests/main/deep-agent-tool-retry.test.ts` product order/predicate/onFailure；overlap installed-default + product exhaustion/recovery trajectories；`tool-runtime-errors.test.ts` network bubble-up |
+| Roc effect idempotency | manifest effect policy、stable call ID/input hash、`runtime.configurable` checkpoint namespace/map/agent type | 首次执行返回并持久化 `ToolMessage`；成功 replay 反序列化同一 result；read-only tool 旁路 | 缺 identity fail closed；retry-safe -> `failed_retryable`；pre-effect resolution/error ToolMessage -> `failed_final`；不确定 manual effect -> `unknown` | 不调度 retry；只暴露可重试状态给外层 native retry，禁止 blind replay `unknown`/`failed_final` | 唯一 ledger owner：key 为 run + execution path + checkpoint + call；main/subagent 均绑定真实 checkpoint | 不直接 emit；ledger 是 durable audit/recovery 事实，native stream 继续拥有 tool event shape | `src/main/services/deep-agent/tool-effect-idempotency.ts:createToolEffectIdempotencyMiddleware` 与 `tool-effect-store.ts` | `tests/main/services/deep-agent/tool-effect-idempotency.test.ts`；overlap main retry、background resolution 与 real `task` subagent checkpoint trajectory |
+
+结论：上述各层在 input/output/error/retry/effect/event 六维均有非重叠 owner；当前没有可由 Deep Agents 1.10.7 native middleware 完整替代的 Roc 层，因此 Stage 7.1 不删除 production middleware。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。
@@ -281,3 +319,12 @@
 - Windows cancellation：`tests/main/services/shell-execution-cancellation.test.ts`、`tests/main/services/hooks/command-runner.test.ts`。
 - Observability settings：`tests/renderer/settings-view.observability.test.tsx`、`tests/main/preload-contract.test.ts`、`tests/main/ipc-plugin-adapter.test.ts`、`tests/smoke/responsive-layout-smoke.mjs`。
 - Agent integration mode：`tests/config/agent-integration-mode.test.ts`、`tests/integration/agent/offline-harness.int.test.ts`、`vitest.agent-integration.config.ts`。
+
+## Stage 7.1 Closure Evidence
+
+- 最终 Standards review 的 1 个 Medium 与 2 个 Low 已修复并增量复审为 `No findings`；Spec 为 `No findings`，Risk 为 `No issues found`。middleware 顺序、conditional retry、effect 状态、resolution/manual/abort/interrupt 分叉、cause 环与真实 subagent checkpoint 均有独立证据。
+- 最终 broad gate 通过：9 files / 63 focused tests、strict unused、typecheck、IPC check、build、320 files / 1773 full tests、deterministic eval 1 file / 5 tests、独占 agent performance smoke 1 file / 1 test 与 diff check。
+- Performance artifact 为 schema v1、11 metrics、0 failed、`passed: true`、`error: null`；运行后无 `roc-agent-performance-workspace-*` 或 `roc-agent-performance-restart-*` 临时目录残留。
+- Full Vitest 退出码为 0，测试全部通过；测试汇总后另有 4 条 `node-pty` helper 的 `AttachConsole failed` stderr，不改变本次测试断言或退出状态。
+- Stage 7.1 未修改 `package.json` 或 `pnpm-lock.yaml`，Deep Agents 仍为 1.10.7；没有原生等价证据支持删除任何现有 Roc middleware owner。
+- Risk residual 仅为 deterministic local trajectory 未覆盖真实 provider 的异常差异；该边界不改变 Stage 7.1 的 middleware overlap 合同。

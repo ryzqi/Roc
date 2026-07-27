@@ -1,7 +1,9 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { isGraphBubbleUp } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
+import { toRunFailure } from '../../deep-agent/error-mapping';
 import { RocDomainError } from '../../errors';
+import { unwrapMiddlewareError } from './middleware-error';
 
 const NETWORK_TOOL_NAMES = new Set(['web_read', 'web_search']);
 
@@ -12,18 +14,34 @@ export function createToolRuntimeErrorMiddleware() {
       try {
         return await handler(request);
       } catch (error) {
-        if (isGraphBubbleUp(error) || isAbortError(error) || NETWORK_TOOL_NAMES.has(request.toolCall.name)) {
+        const toolError = unwrapMiddlewareError(error);
+        if (isGraphBubbleUp(toolError) || isAbortError(toolError) || NETWORK_TOOL_NAMES.has(request.toolCall.name)) {
           throw error;
         }
         return new ToolMessage({
           tool_call_id: request.toolCall.id === undefined ? `unknown_${request.toolCall.name}` : request.toolCall.id,
           name: request.toolCall.name,
-          content: formatToolRuntimeError(error),
+          content: formatToolRuntimeError(toolError),
           status: 'error'
         });
       }
     }
   });
+}
+
+export function shouldRetryNetworkToolError(error: Error): boolean {
+  const toolError = unwrapMiddlewareError(error);
+  if (isGraphBubbleUp(toolError) || isAbortError(toolError)) {
+    return false;
+  }
+  return toRunFailure(toolError).retryable;
+}
+
+export function handleNetworkToolRetryFailure(error: Error): string {
+  if (!shouldRetryNetworkToolError(error)) {
+    throw error;
+  }
+  return toRunFailure(unwrapMiddlewareError(error)).message;
 }
 
 function formatToolRuntimeError(error: unknown): string {
