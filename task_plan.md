@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 7 Part 3 - Versioned Stream Adapter**
+**Stage 7 Part 4 - Evidence-Gated Performance Tuning**
 
-**Status:** in_progress (`reviews and broad gates complete; staged-boundary audit pending`)
+**Status:** complete (`evidence-backed no-change; verified, reviewed and staged as an independent part`)
 
-- Review baseline：`475b4d2 fix(agent): upgrade Deep Agents filesystem glob`。
-- 当前范围：把 Deep Agents 1.10.x / stream v3 的 reflection 读取集中到单一 adapter，以当前安装包真实 stream shape fixture 固定输入合同，并让 consumers/projection 只消费 adapter 输出。
-- 保留现有产品语义：message delta、reasoning、usage、tool call、subagent、final output 与错误传播结果不变。
-- 不在本 part 引入：Deep Agents/LangChain/LangGraph 升级、兼容别名、多版本迁移框架、Stage 7.4 性能调优或无证据 cleanup。
+- Review baseline：`e94a7fc fix(agent): centralize Deep Agents stream shape`。
+- 当前范围：对 `plan.md:670-678` 的五个性能候选读取现有 metrics、artifact、真实调用链与 owner tests；只实现能由稳定基线证明收益且不破坏隔离合同的最小优化。
+- 保留现有产品语义：per-run snapshot/config/secret 隔离、prompt/tool/capability 语义、event 顺序/backpressure、UI transcript 完整性与 restart/HITL 行为不变。
+- 不在本 part 引入：无指标支持的缓存/复用、依赖升级、全局可变 singleton、prompt 内容改写、UI 功能或无证据 cleanup。
 - `plan.md` 继续作为未跟踪规格源，不进入提交。
 
 ## Phase Status
@@ -41,21 +41,21 @@
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
 | Stage 6 - Observability, Integration Tests, Evals | complete | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 `dd5af40`。 |
-| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 `4f37f17`；Part 2 `475b4d2`；Part 3 stream adapter 已启动。 |
+| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | complete | Part 1 `4f37f17`；Part 2 `475b4d2`；Part 3 `e94a7fc`；Part 4 五项均为 evidence-backed no-change，performance/broad gates 与 review 已通过。 |
 
 ## Current Acceptance
 
-- [x] fixture 直接来自当前安装的 Deep Agents 1.10.8 stream v3 shape，并以具体字段/异步边界断言冻结合同。
-- [x] 单一 versioned adapter 拥有安装包 shape 的读取、校验和 DTO 转换；consumer/projection 不再分散猜测上游字段。
-- [x] message、tool call、subagent、usage 与 final output 的现有可观察结果保持不变，合同破坏显式失败。
-- [x] focused tests、typecheck、strict unused、IPC check、build、full Vitest 与 diff check 通过。
-- [ ] Standards、Spec 与 Risk review 无未处理 finding，Part 3 形成独立提交且不包含 `plan.md`。
+- [x] 五个候选均已审计现有指标或明确测量缺口、真实调用链、ownership 与隔离约束；无指标授权修改的候选明确不改。
+- [x] 没有候选通过实施门槛，因此未增加 performance/behavior regression 或 production 优化；现有 metrics/artifact 作为 no-change 证据。
+- [x] provider/config/secret、prompt/hash/order、event 顺序/terminal/backpressure 边界已审计并因 no-change 保持不变。
+- [x] production/tests 无改动，因此无新增 focused/eval gate；agent/UI performance、typecheck、strict unused、IPC check、build、full Vitest 与 diff check 均通过。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；Part 4 staged exact-set 仅三份账本，不包含 `plan.md`，形成独立 docs-only 提交。
 
-## Current Step
+## Stage 7.3 Closure Evidence
 
 **Migrate consumers and projections to the adapter DTO**
 
-**Status:** in_progress (`reviews and broad gates complete; staged-boundary audit pending`)
+**Status:** complete (`reviewed, verified and committed as e94a7fc`)
 
 - Observable contract：同一 Deep Agents run stream 输入产生与基线相同的 message/tool/subagent projection、usage accumulation 和 final output。
 - Characterization：用可控 model/tool/subagent 驱动当前安装包生成 fixture；先证明现有 projection 对上游 shape 的分散依赖，再建立 adapter contract。
@@ -97,6 +97,19 @@
 - Dynamic terminal incremental review：Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`；当前固定包在 mux finalize 后终态稳定，`run.output` rejection 已由早期 settlement 观察。
 - Final broad gate：`pnpm check:ipc`、最终 `pnpm build`、full Vitest 322 files / 1804 tests、独占 agent performance smoke 1/1、typecheck、strict unused 与 `git diff --check 475b4d2` 全部通过。full Vitest 后 4 条既有 `node-pty AttachConsole failed` helper stderr 不改变 exit 0。
 
+## Current Step
+
+**Review no-change decision and run verification**
+
+**Status:** complete (`verified, reviewed and exact staged boundary confirmed`)
+
+- Observable contract：同一 frozen run snapshot 与 provider/config version 产生相同 agent behavior、prompt/tool ordering、event transcript、usage 与 terminal result。
+- Measurement boundary：优先复用现有 agent/UI performance artifacts、metrics 和 deterministic fixtures；新增 measurement 只在现有证据无法区分候选时进行。
+- Decision rule：候选必须同时证明可复现成本、明确 owner、可隔离复用条件和直接等价验证；否则记录为 no-change。
+- Verification：candidate matrix 先经过 Standards / Spec / Risk review；本 part 没有 production 实施候选，review 关闭后直接进入 performance/broad gate。
+- Review closure：首轮 Standards 的 1 个 Medium 验收措辞 finding 已修正；增量 Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`。
+- Final rereview：新鲜 agent/UI artifact 与 broad-gate 记录更新后，Standards / Spec 仍为 `No findings`，Local Risk 仍为 `No issues found`。
+
 ## Next Steps
 
 1. [complete] 增加 disabled ambient env 与同 run multi-invocation red tests，并记录稳定失败。
@@ -135,7 +148,10 @@
 34. [complete] 增加真实安装包 fixture并完成稳定 characterization；真实 package gate、typecheck 与 diff check 通过。
 35. [complete] 增加 adapter 红合同，实现单一 Deep Agents 1.10.x/v3 adapter，并迁移 consumer/projection 的 shape 读取。
 36. [complete] 分段 review、修复并完成 focused/static/broad verification。
-37. [in_progress] 完成 Standards / Spec / Risk 最终 review、staged-boundary 审计与 Stage 7 Part 3 独立提交。
+37. [complete] 完成 Standards / Spec / Risk 最终 review、staged-boundary 审计与 Stage 7 Part 3 独立提交 `e94a7fc`。
+38. [complete] 定位五个 performance 候选的现有指标、artifact、真实调用链、隔离合同与 owner tests。
+39. [complete] 五个候选均无稳定指标支持 production 优化；明确保持现有 owner、隔离与行为合同不变。
+40. [complete] 完成 Standards / Spec / Risk review、broad/performance gate 与 Stage 7 Part 4 独立 staged boundary。
 
 ## Decisions
 
@@ -151,6 +167,7 @@
 | Cleanup 只做 evidence-first deletion | 无调用、测试、unused scan 或重复证据时不删除。 |
 | Stage 7.1 与 1.10.8 升级分开提交 | 避免把 native overlap 行为变化与 framework patch 混成一个事实源。 |
 | Stage 7.3 adapter 只支持当前 1.10.x / stream v3 合同 | 规格要求集中 shape owner，不要求提前建立多版本兼容或迁移机制。 |
+| Stage 7.4 不修改 production/tests | 五个候选均无稳定指标证明收益；缓存/重排/合并会扩大 config-secret、snapshot 或 event 语义风险。 |
 
 ## Review Closure Checks
 
@@ -297,3 +314,10 @@
 | 本轮恢复首个规划文件/memory 并行读取使用 fail-fast `Promise.all`，预期无匹配的 memory 搜索使成功结果未保留 | 1 | 调用只读且未修改文件；拆为规模探测并改用 `Promise.allSettled`，完成 session catch-up 与账本恢复。 |
 | Stage 7.3 首次 broad full Vitest 的 production multiple-interrupts 在 20 秒内未产生两个 interrupt event | 1 | 单文件有效复现后定位为 adapter 快照 LangGraph 动态 terminal getter；直接合同红绿、真实 production 1/1 与扩展 focused 9 files / 76 tests 已通过，待 full Vitest 重跑。 |
 | 诊断时使用 `pnpm test -- <file>` 被当前 pnpm/Vitest 组合转成字面 `vitest run "--" <file>`，实际再次运行全套 | 1 | 该次结果未当作单文件证据；改用 `pnpm exec vitest run <file>`，输出确认 `Test Files 1` 后完成稳定复现与验证。 |
+| Stage 7.4 首轮检索猜测不存在的 `tests/config/agent-performance-command.test.ts`，`rg` 在已有有效结果后仍以 exit 1 结束 | 1 | 调用只读且未修改文件；后续只使用 `rg --files` 或 runner 已引用的真实路径，不再猜测试文件名。 |
+| Stage 7.4 对 `.artifacts` / `test-results` 做递归 `Get-ChildItem` 超时 | 1 | 调用只读且未修改文件；停止宽扫描，改为精确读取已定位的 `.artifacts/wave1/agent-performance-smoke.json` 与 baseline。 |
+| 本次续接首组技能/memory 并行读取将预期无匹配的 memory `rg` 放入 fail-fast `Promise.all`，导致同组结果未回传 | 1 | 调用只读且未修改文件；改为逐项捕获并把 expected non-match 转为成功状态，确认无相关 memory 记录。 |
+| 本次续接仓库状态命令把 PowerShell 换行写成字面 `` `n ``，使 `Select-Object` 把后续 `git` 解析为参数 | 1 | 调用只读且未修改文件；改用独立 RTK Git 命令，确认 HEAD、工作树和 diff boundary。 |
+| Stage 7.4 candidate closure 合并 patch 使用了与当前 `Current Step` 不一致的状态上下文 | 1 | `apply_patch` 原子拒绝且未修改任何文件；读取三个文件的真实尾部后拆分为精确 patch。 |
+| Stage 7.4 Standards reviewer 的只读 PowerShell inventory 把 `foreach` 输出直接接入管道，触发 ParserError | 1 | reviewer 明确确认未修改文件；不沿用该命令结果，主审以已通过的 diff/status/check 和 reviewer 最终报告为准。 |
+| Stage 7.4 exact-set 首轮使用 filtered `rtk git diff --name-only`，输出混入 RTK 的 `Changes:` 摘要行 | 1 | 未使用污染结果；改用 `rtk proxy git` 取得 raw exact-set，确认 tracked 仅三份账本、untracked 仅 `plan.md`。 |

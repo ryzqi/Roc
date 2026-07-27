@@ -569,3 +569,44 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - Full Vitest retry exit 0：322 files / 1804 tests passed，production multiple-interrupts 已包含在全套中。汇总后 4 条既有 `node-pty AttachConsole failed` helper stderr 不改变主命令结果。
 - 独占 `pnpm smoke:agent-performance` 为 1 file / 1 test passed；最终 `pnpm check:ipc` 与 `git diff --check 475b4d2` 通过。
 - Dynamic terminal 增量 review 完成：Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`。当前状态：**Verified passing; staged-boundary audit and independent commit pending**。
+- Stage 7.3 staged exact-set 为 17 files；package/lock、shared/IPC、renderer/UI、smoke 与 `plan.md` 均未混入，cached whitespace 通过。已独立提交为 `e94a7fc fix(agent): centralize Deep Agents stream shape`。
+- 提交后 `main` ahead 33，工作树仅剩未跟踪 `plan.md`；Stage 7.3 关闭。
+
+## 2026-07-27 - Stage 7 Part 4 Evidence-Gated Performance Tuning Start
+
+- Part 4 固定范围为 `plan.md:670-678` 五个候选；先读取现有 artifact/metrics 与真实调用链，只有稳定指标支持才实现，不预设必须修改所有候选。
+- 当前状态：**Located at measurement discovery boundary; production unchanged since `e94a7fc`**。
+- 首轮 CodeGraph 已定位 per-invocation `buildDeepAgent()`、safety middleware 的 `new RTKBinaryManager()` 与 model adapter 的 `beforeCreate -> factory create` 路径；目前仅为 **Located**，没有指标支持任何复用修改。
+- 已用 performance runner 与 `.artifacts/wave1/agent-performance-smoke.json` 纠正首轮截断结论：现有 smoke 明确包含 `agent_build`。当前 P95 `16.5509ms`，优于 baseline `17.6593ms` 且远低于 `50ms` absolute max；`event_queue` P95 `0.2460ms` 也优于 baseline `0.9444ms`。
+- artifact 总体 `passed: true`；`iterations_10` ratio `1.4519` 仍在门限内。当前状态：**Measured; no stable performance evidence for agent-build or backend event-queue optimization, remaining ownership/isolation and renderer evidence audit pending**。
+- 第二轮 CodeGraph 确认 `RTKBinaryManager` 构造位于已测 `buildDeepAgent()` safety middleware 路径；仅有调用频率、没有成本异常，当前保持 no-change 倾向，待核实 manager 内部状态 owner。
+- Prompt block 已逐块计算内容 hash，但 tools/explicit skills 顺序沿用上游输入；canonical ordering 和 composite fingerprint 的真正 owner 尚未确认，下一步追到 capability manifest/skill resolution 与 metrics/persistence consumer。
+- RTK manager 精确审计完成：对象仅缓存 binary path，middleware 仍独立检查 availability 并创建 rewriter；复用 manager 无已测收益且不消除主要构造。候选 1 已判定 **no-change**，production/tests 不修改。
+- Model factory 已是 kernel-scope；adapter 每次 create 前 reload settings。候选 2 暂不允许缓存 handle，下一步确认 factory 是否每次重新读取 provider config 与 secret。
+- Capability compiler 已有 durable `manifestHash`，且 prompt blocks 自带内容 hash；候选 4 的审计目标收窄为现有 normalization 是否完整、hash 是否被 consumer 使用，以及 explicit skill 顺序是否属于请求语义。当前不新增第二套 fingerprint。
+- Model create 精确路径确认每次先 reload settings、再解析 provider/model，并从 `SecretService` 读取解密当前 secret；handle 绑定当次 provider snapshot 和 model instance。无 construction 指标且缓存会破坏版本隔离，候选 2 已判定 **no-change**，production/tests 不修改。
+- Manifest normalization 精确确认只做 trim/stable dedupe，保留请求顺序；prompt capability summary 已排序，explicit skills 仍保留 frozen request order。候选 4 是否改动仍取决于 prompt-cache/token 证据，当前不把 order-sensitive manifest hash 当作性能回归。
+- Cache telemetry 只在运行中记录真实 provider usage，现有 deterministic artifact 不含 token/cache baseline，fake model 也不能代表 provider prefix caching。候选 3 已判定 **no-change**。
+- Capability prompt 已排序，block/manifest 均已有各自 hash；保序 manifest 与 explicit skills 是 frozen request contract，且无 cache miss 证据。候选 4 已判定 **no-change**。
+- Event 路径已确认 main 按 persist -> awaited publish 严格串行，renderer reducer 对 assistant block 逐条更新；Virtuoso/RAF 只证明虚拟列表与滚动行为，尚未证明 delta batching。下一步精确读取 producer batcher 与 UI smoke artifact 后决定候选 5。
+- `TerminalOutputBatcher` 已排除：它只服务 terminal session，不在 chat event path。UI performance artifact 已定位到 1k/10k transcript profile；下一步只读精简指标和 runner failure thresholds，避免把历史加载性能误当 live delta 流畅度。
+- UI artifact 精简核对为 `passed: true`：1k/10k interactive `384.8380ms` / `365.1017ms`，两者 DOM rows 都为 15，RSS `225.4MB` / `229.8MB` 且未超预算；10k prepend P95 `204.9361ms`。它没有 live delta jank 指标。
+- backend queue 已显著优于 baseline，UI 长 transcript gate 通过且没有 live-delta 成本证据；新增窗口会改变 durable ordering/backpressure/terminal flush。候选 5 已判定 **no-change**。
+- 五个候选均未达到“稳定成本 + 明确 owner + 可隔离复用 + 直接等价验证”的实施门槛；Stage 7.4 production/tests 保持 `e94a7fc` 不变，当前进入 docs decision review 与独占 performance/broad verification。
+- Review fixed point 已解析为 `e94a7fc0abc2f035eb9efc55211598b71fa82356`；HEAD 与基线之间没有新 commit，本次 review 对象为 `git diff e94a7fc -- task_plan.md findings.md progress.md` 的 3-file WIP。`plan.md` 未进入 diff，`git diff --check` 已通过。
+- 首轮 Spec review 为 `No findings`；确认 `plan.md:672` 允许 evidence-backed no-change，五个候选均已覆盖且没有 scope creep。
+- 首轮 Standards review 定位 1 个 Medium hard finding：`task_plan.md` 将“已审计指标或测量缺口”误写为每个候选均有 artifact，与候选 2/3/5 的缺口记录冲突。本地 Risk 另定位 Stage 7.3 closure status 与 Part 4 phase 文案陈旧。
+- 已修正验收措辞、Stage 7.3 closure 状态、Part 4 phase evidence，并为 UI profile 补实际 failure thresholds；production/tests 仍未修改。当前状态：**Changed, review fixes unverified; incremental Standards / Spec / Risk rereview pending**。
+- 增量 Standards / Spec review 均为 `No findings`；本地 Risk review 为 `No issues found`。首轮 Medium 与两处本地文档一致性问题均已关闭。
+- `rtk proxy git` raw boundary 确认 tracked diff 仅 `findings.md`、`progress.md`、`task_plan.md`，untracked 仅 `plan.md`；当前状态：**Reviewed, docs-only WIP; fresh performance and broad gates pending**。
+- 新鲜独占 `pnpm smoke:agent-performance` 为 1 file / 1 test passed；artifact 绑定 `e94a7fc` 且总体 passed。`agent_build` / `event_queue` / `iterations_10` P95 分别为 `17.2894ms` / `0.2592ms` / `137.0611ms`，ratios `0.9791` / `0.2745` / `0.9345`，no-change 结论保持。
+- 新鲜独占 `pnpm smoke:performance` exit 0；profile seed 1/1 passed。UI artifact 为 passed，1k/10k interactive `368.9942ms` / `343.1448ms`，DOM rows 均 15，RSS `219.5MB` / `229.7MB` 未超预算，prepend P95 `210.8861ms`；候选 5 no-change 结论保持。
+- 静态 gate 新鲜通过：`pnpm typecheck` 无错误，`pnpm check:ipc` 确认 generated IPC current，strict unused scan exit 0。
+- `pnpm build` exit 0；build 内 typecheck、main/preload/renderer 构建全部通过。
+- 独占 full Vitest exit 0：322 files / 1804 tests passed。结束后 3 条既有 `node-pty AttachConsole failed` helper stderr 不改变主命令结果。
+- 最终 unstaged audit：`git diff --check` 通过；raw tracked exact-set 仅 `findings.md`、`progress.md`、`task_plan.md`，`src/`、`tests/`、`scripts/`、package/lock 均无 diff；唯一 untracked 为明确排除的 `plan.md`。
+- 当前状态：**Verified passing, docs-only; final numeric/gate rereview and independent commit pending**。
+- 最终 numeric/gate rereview：Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`；reviewers 确认当前 artifact 数值、缺失 baseline 表述、322 files / 1804 tests 与 exact-set 自洽。
+- 当前状态：**Verified passing and reviewed; exact staged-boundary audit and independent commit pending**。
+- Staged-boundary audit：cached name-status 仅 `findings.md`、`progress.md`、`task_plan.md`，cached diff check 通过，无 unstaged tracked diff；唯一 untracked `plan.md` 明确排除。
+- Stage 7.4 与总 Stage 7 均已满足规格门、review 和新鲜验证；当前三账本 staged set 作为独立 docs-only closure commit。

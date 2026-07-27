@@ -451,3 +451,47 @@
 - Dynamic terminal finding 已红绿闭环：adapter 适配时先验证 raw terminal 字段，DTO 的 getter 在消费后重新读取、校验并映射 interrupt；raw handle 不泄漏到 consumer。直接动态合同 1/1、production 双中断/两次 resume 1/1、扩展 focused 9 files / 76 tests、typecheck 与 strict unused 通过。
 - Dynamic terminal 增量 Standards / Spec review 均为 `No findings`，Local Risk 为 `No issues found`。当前 LangGraph 1.4.7 在 mux finalize 前同步更新并固定 terminal state，三个投影 stream 关闭后读取稳定；`run.output` 无论 pending/rejected 都已由早期 settlement 观察。
 - 最终 broad gate 通过：`check:ipc`、最终 build、322 files / 1804 full tests、agent performance smoke 1/1、typecheck、strict unused 与 diff check。Residual 仅为 final-output helper 对稳定 DTO getter 的两次读取未固定单次快照语义；当前包下不构成行为缺陷。
+
+## Stage 7.4 Performance Tuning Scope
+
+- Stage 7.3 已在完整 review、focused/static/broad gate 与 staged-boundary 审计后独立提交为 `e94a7fc`；提交后工作树仅剩未跟踪规格源 `plan.md`。
+- `plan.md:670-678` 是唯一性能调优规格：per-run agent/RTK 构造、provider model 复用、system/tool prompt 重复、selected skill/capability canonical ordering + fingerprint、event delta/UI 流畅度五个候选都必须先由指标证明。
+- 本 part 的 no-change 是有效结论：若现有 artifact 不显示成本、候选无法安全隔离 secret/config version，或收益无法稳定复现，则保留当前 owner，不以理论优化或名字相似为依据改代码。
+- 行为等价边界固定为 frozen run snapshot、provider/config/secret version、prompt/tool/capability 语义、event 顺序/backpressure、usage/terminal 结果与 restart/HITL；性能改动不能以弱化这些合同换取指标。
+- Construction ownership 首轮 CodeGraph：`createAgentDeepAgentExecutor.execute()` 每次 invocation 都调用 `buildDeepAgent()`；`createExecutionSafetyMiddleware()` 为其构造路径直接创建 `new RTKBinaryManager()`。同一 durable run 的 initial/HITL resume/recovery 可能多次 invocation，因此这是可测候选，但当前尚无耗时或分配证据。
+- Provider ownership 首轮 CodeGraph：`LangChainAgentModelFactoryAdapter` 的 default 与 provider/model 两条路径每次都先调用 `beforeCreate`，再向 `LangChainModelFactory` 创建新 handle。该 boundary 很可能承担 settings/secret refresh；在读取 factory 实现和版本语义前，不允许按 provider/model key 复用实例。
+- 现有 `MetricsService` 只有通用 histogram/gauge/counter 与 prompt-cache token 指标；但 deterministic agent performance smoke 已直接覆盖 `agent_build`，首轮 CodeGraph 截断造成的“artifact 是否覆盖 build 待确认”判断已由 runner 与当前 artifact 纠正。
+- 当前 `.artifacts/wave1/agent-performance-smoke.json` 中 `agent_build` P95 为 `17.2894ms`，低于 baseline `17.6593ms`（ratio `0.9791`）和 `50ms` absolute max；没有指标证明 per-run build/RTK 构造值得改变 owner 或生命周期。
+- 同一 artifact 的 `event_queue` P95 为 `0.2592ms`，低于 baseline `0.9444ms`（ratio `0.2745`）；`iterations_10` P95 为 `137.0611ms`，低于 baseline `146.6721ms`（ratio `0.9345`），artifact 总体 `passed: true`。backend queue 当前没有调优证据，UI 流畅度仍需读取独立 renderer smoke/measurement owner。
+- Construction source 进一步确认 `createExecutionSafetyMiddleware()` 在 `buildDeepAgent()` 内为 main/subagent safety chain 各自传入 `new RTKBinaryManager()`；但该构造已包含在总 `agent_build` 测量路径内，不能脱离总成本与生命周期状态，仅凭“每次 new”提升为 plugin-scope owner。
+- Prompt block owner 已存在逐 block 的 SHA-256 内容 hash（16 hex），其中 tools 与 explicit skills 通过输入数组直接 `map` 生成；block builder 自身不排序。是否需要 canonical sort/fingerprint 取决于上游 capability/skill resolution 是否已稳定排序，以及现有 hash 是否进入持久化/metrics/cache owner，仍需追踪。
+- `RTKBinaryManager` 只有构造时解析的 immutable `binaryPath`；`isRTKAvailable()` 每次仍执行文件存在/权限检查。`createRTKMiddleware()` 又在 middleware 构造时读取 path/availability 并创建独立 `CommandRewriter`，所以单独把 manager 提升到 plugin scope 不会复用 rewriter 或消除主要配置工作。
+- 候选 1 结论为 **no-change**：完整 `agent_build` P95 已优于 baseline，manager 本身没有被独立证明为瓶颈，且只复用 manager 不改变每个 middleware 的 rewriter 构造。当前 owner 简单且符合 per-build isolation，不新增 plugin-scope singleton。
+- Model bootstrap 已确认 `LangChainModelFactory` 本身是 kernel-scope，但 `LangChainAgentModelFactoryAdapter.beforeCreate` 在每次 agent model create 前调用 `configService.reloadSettingsDocument()`；model handle 缓存若绕过 adapter create，会直接跳过已存在的配置刷新边界。secret 的读取时机仍需从 factory 精确源码确认。
+- Capability owner 已存在 `RunCapabilityManifestV1.manifestHash`：compiler 先 normalize requested MCP/skill IDs、解析 selected capabilities/tools/skills，再对不含 hash 的完整 manifest `JSON.stringify` + SHA-256。run snapshot 持久化整个 manifest，因此 selected capability fingerprint 已有 durable owner，不应另建平行 key。
+- `loadExplicitSkillContexts()` 按 frozen `explicitSkillIds` 顺序映射已授权 manifest skills；prompt block 再按该顺序序列化。这一顺序可能是用户请求语义，而不是可任意排序的数据；需核实 `normalizeCapabilityIds` 与 snapshot creation 是否已 canonical，并区分 selected capability set 与 explicit skill request order。
+- Model handle 精确链为 `adapter.beforeCreate -> configService.reloadSettingsDocument -> LangChainModelFactory.create* -> createModelForProvider -> resolveCredential -> SecretService.getProviderSecret`。每次 create 都重新解析当前 provider/model config，并从磁盘读取、解密当前 provider secret；`LangChainChatModelHandle` 同时持有 provider snapshot 与已配置 model instance。
+- 候选 2 结论为 **no-change**：当前没有 model construction latency 或 allocation 指标；按 provider/model key 缓存 handle 会绕过 config reload/secret read，并把旧 endpoint/options/credential 固化到后续 invocation。保持 per-invocation handle creation 是明确的 version/isolation boundary。
+- Capability normalization 的当前合同是 trim + stable dedupe，保留第一次出现的请求顺序；explicit skill IDs 同样保序。manifest tools/skills 依照该解析顺序生成，所以 `manifestHash` 对等价集合的不同输入顺序敏感。
+- Prompt capability block 已由 `createCapabilitySummary()` 对 MCP server IDs 与 skill IDs 各自排序，因此等价 selected set 的 prompt 文本与 block hash 已稳定；explicit skills block 仍按 frozen request order，保留用户显式选择顺序。
+- `PromptBlock.hash` 当前由 serialization 写入每个 prompt block 的 HTML comment，未发现独立 composite prompt fingerprint consumer；manifest 另有 durable full hash。是否需要进一步 canonicalize manifest 或增加 fingerprint，只能由 cache read/creation/input-token 指标证明，不能仅因 hash order-sensitive 改 frozen contract。
+- Prompt cache telemetry 已存在：executor 把每次 usage 的 input/cache-read/cache-creation tokens 交给 in-memory `MetricsService`，记录 `prompt_cache_read_tokens`、`prompt_cache_creation_tokens` 和 `prompt_cache_hit_ratio`。它没有进入 deterministic performance artifact，当前也没有跨运行 token baseline 或稳定 provider cache sample。
+- 当前 agent performance artifact 使用 `RocPerformanceFakeModel`、network disabled，只测 11 个 duration metrics 与行为 evidence；它不能证明真实 provider 对 system/tool description 重复的 input-token 或 cache miss 成本。
+- 候选 3 结论为 **no-change**：缺少稳定 token/cache 成本基线；贸然缓存/改写 system prompt 或 tool description 会改变 provider input 与 run snapshot 行为，不能用理论上的重复成本授权修改。
+- 候选 4 结论为 **no-change**：selected capability prompt 已 canonical sort，prompt blocks 已有内容 hash，capability manifest 已有 durable SHA-256；未排序的 manifest/explicit-skill 顺序属于 frozen request contract，且没有 cache/token evidence 证明其造成成本。不新增 parallel fingerprint，也不重排持久化 snapshot。
+- Event delivery owner 当前对每个 `ChatRunEvent` 执行 `persistChatRunEvent()` 后 `await publish()`，显式把 durability、顺序和 subscriber backpressure 串联；renderer `applyChatRunEvent()` 收到每个 `assistant_block` 后立即应用 block 并返回新 state。
+- Transcript rendering 已使用 `react-virtuoso`，现有 `requestAnimationFrame` 测试覆盖流式更新/滚动行为，但尚未证明它在 IPC/reducer 层合并 delta。若新增 merge window，会同时改变持久化 event 粒度、发布 backpressure、终态 flush 与 UI update cadence，必须先有 UI frame/long-task evidence。
+- `src/main/terminal-output-batcher.ts` 只按 terminal session 合并原始终端输出，调用方是 main window terminal IPC；它不在 Agent `assistant_block` 路径上，不能作为 chat delta 已批处理或可复用的证据。
+- `.artifacts/wave1/performance-smoke.json` 的 UI profile 覆盖 1k/10k 历史事件、interactive time、prepend latency、DOM virtualization row count 与进程内存；10k profile 仍只渲染 15 个 DOM message rows。该 artifact 是否覆盖 live delta cadence/long tasks，需以 runner 精确 measurement 定义为准。
+- 当前 UI performance artifact 为 `passed: true`：1k/10k profile interactive 分别为 `368.9942ms` / `343.1448ms`（门限 `750ms` / `1000ms`），renderer ready 为 `1750.9251ms` / `1792.0388ms`，DOM message rows 都是 15（10k 门限 `<300`），RSS `219.5MB` / `229.7MB` 且未超 `500MB` budget；10k prepend P95 为 `210.8861ms`（门限 `250ms`）。
+- 候选 5 结论为 **no-change**：backend `event_queue` P95 已显著优于 baseline，长 transcript UI gate 通过，且没有 live delta frame/long-task artifact 证明卡顿。新增 merge window 会改变 durable event 粒度、严格顺序、terminal flush 与 subscriber backpressure，不以未测收益承担该行为风险。
+
+### Stage 7.4 Candidate Decision Matrix
+
+| Candidate | Current evidence | Isolation / behavior boundary | Decision |
+|---|---|---|---|
+| per-run agent / RTK construction | `agent_build` P95 `17.2894ms` vs baseline `17.6593ms`；manager 复用不复用 rewriter | per-build middleware/safety owner | no-change |
+| provider model instance reuse | 无 construction latency baseline | 每次 reload config、读取 secret，handle 绑定当次 provider/model/credential | no-change |
+| repeated system/tool prompt cost | 只有运行中 cache token metrics，无稳定 artifact/baseline | prompt 内容与 provider input 必须保持不变 | no-change |
+| canonical skill/capability + fingerprint | capability prompt 已排序；block hash + durable manifest hash 已存在 | manifest/explicit skill 保留 frozen request order | no-change |
+| event delta merge window | queue P95 `0.2592ms`；1k/10k UI smoke passed，无 live-delta jank evidence | durable ordering、terminal flush、backpressure、transcript 完整性 | no-change |
