@@ -359,3 +359,95 @@
 - 最终行为证据：1.10.8 direct 1 file / 3 tests、focused 4 files / 41 tests、official+junction 2 files / 12 tests、321 files / 1776 full tests、build、package directory 与 Electron smoke 全部通过。
 - 最终静态证据：`verify:paths`、typecheck、strict unused、两份 smoke MJS `node --check` 与 cached diff check 通过；测试后无 `roc-smoke-*`、`roc-deepagents-junction-*` 或 Roc/Electron process 残留。
 - 依赖边界仅为 `deepagents` 1.10.7 -> 1.10.8 package key/specifier/integrity/snapshot；LangChain/LangGraph/langsmith/fast-glob resolution 未改变。既有 langsmith peer warning 与 Windows-only junction coverage 作为 residual 保留。
+
+## Stage 7.3 Versioned Stream Adapter Scope
+
+- 权威规格是 `plan.md:666-668`：集中 Deep Agents 1.10.x reflection 读取，以安装包真实 stream shape 作为 fixture；升级时只改 adapter/contract，projection 不再拥有 shape 猜测。
+- 当前事实基线是提交 `475b4d2`，工作树仅有未跟踪 `plan.md`；Stage 7.3 尚无 production/test 修改。
+- 最小目标是一个当前版本 owner，不是通用兼容层：先冻结 1.10.8 `streamEvents(..., { version: 'v3' })` 的实际异步 shape，再定义 Roc 内部 DTO 和显式 contract failure。
+- 待重新验证的定位候选为 executor 入口、stream consumers、subagent projection、tool/usage/record helpers 与 final-output owner；只有直接读取上游 shape 的位置进入迁移范围。
+- CodeGraph 的首轮宽查询被同名 `run` / `read` 符号扩散，未返回目标 consumer 源码；该结果不足以支持设计，后续定位必须按 `consumeMessageStream`、`consumeToolCallStream`、`consumeSubagentStream` 和 executor 入口逐个查询。
+- 精确 CodeGraph 结果确认 `consumeMessageStream`、`consumeToolCallStream`、`consumeSubagentStream` 当前分别接收 `AsyncIterable<unknown>`；executor 是直接调用方。
+- `consumeMessageStream` 在业务投影内读取上游 `text`、`reasoning`、`output` 和 content blocks；`consumeToolCallStream` 直接读取 `name`、`input`、`output` 并自行猜测 call ID；subagent consumer 把未知 shape 继续传给 `projectSubagentStream`。这正是 Stage 7.3 要收敛的 shape ownership。
+- 边界候选因此是 executor 创建 adapter 后把 typed Roc DTO streams 交给现有 consumers；consumer 内仅保留 Roc 投影/过滤语义。最终位置仍需结合 subagent、usage、final output 的完整读路径确认。
+- `subagent-projection.ts` 当前直接读取 `name`、`taskInput`、`asyncTaskId`/`taskId`、`messages`、`toolCalls`、`subagents`、`output`，并自行识别 async iterables/Promises。adapter 应拥有这些读取和 contract 校验；projection 继续拥有 Roc `SubagentIdentity`、递归序列与事件顺序。
+- 当前 subagent tests 存在于 `tests/main/services/deep-agent/subagent-projection.test.ts`，但 CodeGraph 显示它们是 projection owner tests；是否来自真实安装包 shape 仍需直接审计，不能把手写对象当 Stage 7.3 fixture。
+- executor 在 `agent.streamEvents(..., { version: 'v3' })` 后把 `run.toolCalls/messages/subagents` 强转为 `AsyncIterable<unknown>`；完成消费后又直接读取 `run.interrupted` 和 Promise-like `run.output`。单一 run adapter 应同时拥有这五个边界，而不是只包装三个 iterable。
+- usage accumulator 当前从每个未知 message 反射读取 `usage_metadata`、`id` 及 token details。安装包公开 message-handle 合同另有 `usage` stream；必须用真实 fixture 判断当前逻辑是否只是被手写测试形状掩盖，不能先假设行为等价。
+- tool call helper 当前接受 `callId` 或 `id` 两种猜测；1.10.x/v3 公开 handle 使用 `callId`。adapter contract 应固定当前官方/真实字段，projection 不再保留升级猜测。
+- 本机安装路径已解析为 pnpm junction，package version 精确为 `deepagents@1.10.8`。其声明把 `streamEvents(..., { version: 'v3' })` 标为 experimental projection API，并说明未来版本可能变化，这直接支持版本化 adapter 边界。
+- `DeepAgentRunStream` 是对 LangChain `AgentRunStream` 的类型 overlay，仅把 `subagents` 收窄为 Deep Agents 声明的 subagent union；run/message/tool 基础 shape 的实际 owner 在 LangChain/LangGraph stream 包，fixture 必须通过 Deep Agents 创建的真实 run 采样而不是只摘抄 `.d.ts`。
+- LangChain 1.5.3 的真实 `SubagentRunStream` 合同是 `name/cause/output/messages/toolCalls/subagents`；没有 projection 当前猜测的 `taskInput`、`asyncTaskId` 或 `taskId`。`cause` 是触发 tool call 的 lifecycle cause，真实 fixture 必须固定其值并决定 Roc identity 的最小映射。
+- `ToolCallStream` 合同固定为同步 `name/callId/input`，Promise `output/status/error`；现有 `callId || id` fallback 与 projection 内 Promise 探测应迁入 adapter，且当前版本不应继续把 `id` 当上游合同。
+- `run.messages` 产出 `ChatModelStreamHandle`，即非 thenable 的 streaming handle，并附带 `namespace/node`；其 `.text/.reasoning/.usage/.output` 具体 contract 仍需从 Core 声明和真实 run fixture交叉确认。
+- Core 1.2.2 声明确认每个 message handle 同时提供 raw event async iterable、`.text`、`.toolCalls`、`.reasoning`、`.usage` 和 `.output`；`.usage` 本身是 async iterable + thenable 的 `UsageMetadataStream`。Stage 7.3 usage DTO 应由该公开 stream 生成，而不是继续依赖 handle 顶层不存在的 `usage_metadata/id`。
+- `deep-agent-final-output.ts` 直接反射 `run.interrupted/interrupts`，并在最终 `run.output` state 内猜测 `messages` 及 assistant message shape。adapter 至少应把 run terminal fields 转成明确 DTO；interrupt payload 的 Roc schema normalization 与最终可见文本过滤可继续由 projection owner 处理。
+- 当前实际版本组合为 `deepagents@1.10.8`、`langchain@1.5.3`、`@langchain/langgraph@1.4.7`、`@langchain/core@1.2.2`；adapter contract fixture 应冻结这组安装解析下的运行 shape，但版本名按规格只承诺 Deep Agents 1.10.x / v3。
+- `middleware-overlap-conformance.test.ts` 已用真实 agent v3 run 断言 tool handle keys 为 `callId/error/input/name/output/status`；可复用其可控 `BaseChatModel` 和 drain 模式，不必另造 tool fixture harness。
+- `subagent-budget-state-isolation.test.ts` 已通过真实 `task` tool 驱动 compiled subagents；可从该模式抽取最小 subagent stream fixture。相对地，executor/usage/subagent projection 单测当前大量手写 `usage_metadata`、`taskInput` 等旧近似对象，不能作为安装包真实 shape 证据。
+- `deep-agent-official-contracts.test.ts` 已有纯类型 required-key 锚点，但它只证明编译期声明，不证明 runtime property descriptor、Promise/iterable 行为或真实 values；Stage 7.3 仍需 runtime fixture。
+- 现有 `ScriptedToolModel` 返回真实 `AIMessage` 并通过真实 `agent.streamEvents(...v3)` 产出 handle；为响应加 `usage_metadata` 即可直接验证 `.usage`，无需 mock stream DTO。
+- 现有 subagent fixture 用主 `FakeToolCallingModel` 调用内建 `task`，子 model 返回终态，证明可稳定驱动真实 named subagent；Stage 7.3 可缩成单 subagent 并采样 `cause/messages/output`。
+- `subagent-projection.test.ts` 已有一条 `cause`/无 legacy task input 的手写 case，但同文件其余 identity 测试仍依赖 `taskInput`；迁移后 projection tests 应只构造 adapter DTO，不再构造 Deep Agents-like raw objects。
+- 首轮真实 fixture 显示 message handle 的 `node` 是 `model_request`，`namespace` 为 `model_request:<动态 UUID>`；不能把 root message namespace 假设为空数组。
+- `handle.output` 返回的 AIMessage 把字符串正文规范化为 `{ type: 'text', text }` content blocks；tool-call message 的 `output.tool_calls` 为空，因此 tool call 必须从 handle 的 `.toolCalls` stream 或 run-level `.toolCalls` 读取，不能从 final message output 反推。
+- 在当前非 streaming `_generate` fixture 中，message handle 虽暴露 `.toolCalls`，该 stream 仍为空；真实调用只稳定出现在 run-level `.toolCalls`。adapter 不能把 message-level toolCalls 当作 run projection 的替代来源。
+- 真实 named-subagent fixture 已确认公开 fields、`cause: { type: 'toolCall', tool_call_id }`、scoped message usage、空 nested tool/subagent streams 与 final output state；第二轮该 case 已直接通过。
+- reflection inventory 显示 Stage 7.3 owner 不仅是 executor 的三个 cast：message consumer 还猜测 content blocks、tool-call chunks、guardrail message、reasoning fallback；usage 猜旧 `usage_metadata/id`；subagent 猜 legacy identity fields；final-output 猜 run terminal fields。
+- `record-utils.ts` 不是整体迁移候选：它还由 final assistant content normalization 和独立 provider-message tests 使用。只把 Deep Agents handle/property/iterable/Promise contract 集中到 adapter；通用 message content/redaction 解析继续由现有 owner 使用。
+- `stream-tool-utils.ts` 的 `redactUnknown` 被 tool-output projection 共用，必须保留；`readToolCallId/readContentBlocks/buildToolCallChunkData/readToolChunkId` 是否继续存在取决于 adapter DTO 设计和 owner tests，不能整文件删除。
+- `stream-consumers.test.ts` 目前直接传 raw-like objects；tool cases只给 `id`，missing-callId case 期待静默跳过。新 contract 应让 consumer 只接受 typed DTO，并由 adapter 对缺 `callId/name/stream/promise` 显式失败。
+- `run-usage-telemetry.test.ts` 以 message `id + usage_metadata` 测累加/同 call 覆盖。迁移后仍要保留“一个 model call 的 partial usage 合并”，但 stable key 应由 adapter 的 message-handle identity 生成，usage 值来自 `.usage` stream。
+- executor test helper 返回的 synthetic run 只有 `toolCalls/messages/subagents/output`，缺 `interrupted/interrupts`，且三个 stream item 是 raw legacy shapes。helper 必须升级成完整 1.10.x/v3 run contract，避免 adapter 测试被不真实 fixture 绕过。
+- final-output interrupt test当前把整个 raw run 传入 projection；迁移后应直接传 adapter 已验证的 interrupt DTO，payload 的 Roc normalization/顺序断言保持不变。
+- `guardrail_nudge` 的 stream 入口只有 `stream-consumers.ts` 和一条手写 HumanMessage 单测；真实 v3 `run.messages` 合同只产 chat-model handles，无法产出该 BaseMessage 分支。Forge message tags 在 middleware/state 仍有独立 owner，adapter 迁移不删除那些职责。
+- tool progress 分支反射 message 顶层 content blocks；真实 handle 公共合同不含这些字段。OpenAI tool chunks 在 model normalization 层有独立 tests，但没有证据表明它们能经当前 v3 handle 顶层读取。Stage 7.3 不新增 raw-event feature，只移除 projection 的错误 shape ownership。
+- `consumeVisibleTextStream` 的 hosted-search prefix suppression 是纯 Roc 文本语义，和上游 handle shape 无关，应保留；redaction、tool output projection、event ordering 也继续由 consumers 拥有。
+- Deep Agents `AsyncSubAgent` 由独立 async-task middleware 和 `start/check/update/cancel/list_async_task` tools 驱动；`run.subagents` transformer 只报告嵌套 named `createAgent` runs。projection 对 `asyncTaskId/taskId` 的猜测不属于 1.10.x/v3 named-subagent contract。
+- Shared/UI 的 `SubagentIdentity` 仍可表达 async，但 Stage 7.3 adapter 的 named subagent 投影应使用 `execution: 'sync'`、`taskInput: null`；不修改 async task tools/state 的其他产品合同。
+- `readInterrupted/readRunInterruptedEvents/readFinalAssistantText` 只有 executor 生产调用与一个 interrupt owner test；可安全把前两者改成 adapter terminal DTO 输入，并把 final output 顶层 `messages` validation交给 adapter。
+- Adapter 红合同已固定五类输出/失败边界：真实 root run DTO、真实 named subagent/cause/递归 stream、partial usage null 语义、tool required/Promise 边界，以及 run/message/subagent contract drift 显式错误码。原始安装包 characterization 2/2 仍独立通过。
+- Adapter DTO 使用 stream path + ordinal 生成 usage key（如 `run/messages/0`、`run/subagents/0/messages/0`），不依赖 provider message `id`；这为同一 model call 的 partial usage 合并提供稳定内部 identity。
+- 红合同自查补齐两层 named-subagent recursion、`status/error` Promise 与 run/message terminal drift；最终 6 条 adapter cases 全部只因 stub 未实现而失败，typecheck/diff check 通过，未发现 fixture 假绿或行为先验冲突。
+- 安装包声明复核发现 `SubagentRunStream.cause` 合法为 `LifecycleCause | undefined`；真实 tool-dispatched fixture 有 cause，但恢复不到 originating tool 时为 undefined。adapter 应把该合法缺省规范化为 `null`，只有非 toolCall 或缺 `tool_call_id` 的对象才显式失败。
+- `cause: undefined` 红测先稳定失败为 `deep_agents_1_10_v3_subagent_cause_invalid`，最小映射为 `null` 后 adapter 9/9、typecheck 与 diff check 通过；tool status/error 类型也与 LangGraph 1.4.7 声明完全一致。
+- Typed consumer migration 红灯为 8 files / 57 tests：50 passed、7 failed。失败只覆盖 accumulator 3 条、executor main/subagent usage 2 条、tool contract error 1 条、subagent contract error 1 条；typecheck 6 个错误全部是旧 accumulator 两参数签名。这证明测试 DTO/fixture 已对齐，production 迁移边界稳定。
+- Consumer migration closure 的 CodeGraph 复核显示，新 `StreamConsumerCallbacks` 只包含 runtime/todo/tool projection 等现行回调；`createExecutorCallbacks()` 仍返回的空 `recordTaskEvent` 已不属于该合同，是旧 guardrail stream 分支删除后留下的候选本次-unused 项，仍需精确引用扫描确认后才能删除。
+- `createChatRunEventQueue()` 的生产 overflow 合同未变：默认最多 1000 个排队事件，第 1001 个不可合并事件会令队列以 `chat_run_event_queue_overflow` 失败。当前失败属于 tool producer 变慢后旧测试输入不再稳定形成 burst，修复边界应限定为测试 fixture，不修改产品容量或 overflow 语义。
+- 精确全仓扫描确认 `recordTaskEvent` 的代码引用只剩 executor 空实现与 consumer test 的多余 mock；移除两处不会删除现存事件 side effect。
+- Overflow owner test 可通过控制外层 iterator 形成确定性 backpressure：先读取首个 tool event 后暂停请求下一项，内部 `consumeRun` 继续生产而 executor 停在 `yield`，真实 1000-event queue 必然填满；producer `finally` 可作为 overflow 已发生的同步点，随后 drain 同一 iterator 应显式抛出 `chat_run_event_queue_overflow`。
+- Consumer migration 残余扫描显示，stream `AsyncIterable<unknown>`、上游 `tool_call_id` 与相关 `Reflect.get` 已集中在 versioned adapter；consumer、usage accumulator 与 subagent projection 均只接 `DeepAgents110V3*` DTO。已删除的 chunk/id helpers 无引用，`stream-tool-utils.ts` 只剩仍被三个 owner 使用的递归脱敏函数。
+- 待 review 定性的唯一 reflection 边界是 `deep-agent-final-output.ts`：interrupt payload 的 unknown 解析属于 Roc 产品 DTO，但 final output 仍从 adapter 的 `messages: readonly unknown[]` 读取 `role/type/content`。需对照 Stage 7.3 判断该 LangChain message 内容投影是否允许留在 final-output owner，或应由 adapter 提供更具体 DTO。
+- Final-output 调用链复核确认 adapter 只拥有 output record 与 `messages` array 的合同校验；末条消息的 assistant 身份、content block 与可见文本解析仍由既有 `record-utils`/final-output owner 完成。该逻辑不是本次新增，但当前 DTO 仍将 message 元素声明为 `unknown`，Spec review 需判断 Stage 7.3 的“shape 猜测不散布到 projection”是否要求继续收口。
+- Tool consumer 当前等待 `output/status/error` 三个 Promise，但只使用 `output` 值决定 end/error；owner tests 覆盖 output reject 与 status adapter-contract reject，未覆盖合法 `status: 'error'` + resolved error 值。是否为行为缺口取决于 1.10.8/LangGraph handle 是否保证 tool failure 同时使 output reject，需从安装包声明/实现取得直接证据。
+- LangGraph 1.4.7 `stream/types.d.ts:198-213` 明确说明 output 只在成功时解析，reject/hang 由 runner 决定，并建议与 status/error 配对；error Promise 在 status 为 `error` 时提供消息。故当前 `Promise.all` 等待并忽略 status/error 是实际兼容性/挂起风险，不是推测。修复 owner 应是 1.10.x adapter 的 tool terminal DTO，root 与 subagent projection 不应各自重新解释三 Promise。
+- Tool terminal finding 已闭环：adapter 在 raw handle 映射时立即配对 output/status/error 并暴露 discriminated outcome；error status 不等待 output，running/missing/unexpected error 属合同失败。root/subagent consumers 已无三字段读取，3 files / 25 tests、typecheck 与残余扫描通过。
+- Spec reviewer 确认 final/trailing message reflection 是 Medium 缺口：`DeepAgents110V3Message.output` 与 `DeepAgents110V3Output.messages` 仍暴露 unknown，升级 nested message shape 时还需改 consumer/projection。修复应由 adapter 输出 `trailingReasoning`/`finalAssistantText` 等稳定 DTO，并把现有内容解析测试迁到 adapter owner。
+- Nested message DTO finding 已闭环：adapter 现在把 raw message output 解析为 `trailingReasoning`，把 run/subagent final messages 解析为 `finalAssistantText`，并显式拒绝畸形 message 元素。projection 侧 role/type/content/output.messages 扫描为 0；3 files / 27 tests、typecheck 与 diff check 通过。
+- Standards review 发现派生 Promise 观察时序 High risk：root `consumeMessageStream` 只在三个 stream 完成后 await `trailingReasoning`；任一 stream 先失败时，已拒绝的 trailing Promise 无 handler，Node 会发 `unhandledRejection`。subagent 路径已把 trailing Promise 放在初始 Promise.all 内，不受此缺口影响。
+- High finding 已由稳定红测直接复现并闭环：同一 turn 内让 text stream 与 message output 同时拒绝，旧 consumer 捕获 text error 后仍产生 `Error: message output failed` 的 `unhandledRejection`。最小修复把 trailing Promise 纳入初始四路 `Promise.all`；最窄 owner gate 1 file / 10 tests passed，待增量复审。
+- 三条 review finding 的共同直接门禁为 adapter conformance、root consumer、subagent projection 3 files / 28 tests；typecheck 与 diff check 同时通过。当前 residual 仅为完整 focused/broad gate 与独立复审尚未执行。
+- 完整 focused gate 已恢复为 8 files / 63 tests 并通过。consumer/projection 对 `AsyncIterable<unknown>`、`message.output`、`output.messages`、`call.output/status/error`、raw adapter helper 的扫描均为 0；全仓 `recordTaskEvent` 为 0，adapter 入口只在 executor 调用一次。
+- Local Risk review 的同类时序已确认：adapter 在 root adaptation 时立即派生 `run.output`，executor 到三个 stream 消费完成后才 await；subagent output 也在 message/tool/nested-subagent streams 完成后才 await。同步失败红测稳定捕获 `run output failed` 与 `subagent output failed` 两个 `unhandledRejection`；2 files / 15 tests 为 13 passed、2 expected failures。
+- 同一根因还覆盖 adapter 的同步 validation 顺序：`run.output` 在 `interrupted/interrupts` 之前派生，后者合同失败时 caller 无法取得并观察派生 rejection。第三条红测在 12-test owner gate 中稳定捕获 `run output failed during contract drift`。
+- Output observation High 已闭环：root/subagent 在任何 callback 或 sibling stream await 前创建一元素 `Promise.allSettled`，但仍延后读取 settlement，保持原错误优先级和投影顺序；adapter 在全部同步 terminal validation 后才派生 output。3 files / 27 tests passed。
+- Standards 候选的三条 tool terminal contract 分支已补直接 owner 证据：missing error、`running` non-terminal status、finished + unexpected error 均抛各自稳定 contract code；adapter 15/15 passed，未发现实现偏差。
+- Spec 增量复审定位的 tool adapter ordering 已被组合红测确认：`adaptToolCall` 在确认全部三字段 Promise contract 前依次派生 output/status/error；rejected output + non-Promise status 时，status contract 同步失败后稳定捕获 `tool output failed during contract drift` 的 adapter 派生 `unhandledRejection`。adapter 16 tests 为 15 passed、1 expected failure。
+- Tool multi-Promise ordering finding 已闭环：adapter 先读取并同步验证 output/status/error 全部为 Promise-like，再派生投影与 outcome；组合 owner gate 16/16 passed。
+- 所有 review-fix 的共同门禁为 4 files / 41 tests；typecheck 与 diff check 同时通过。当前只剩最终双轴复审、完整 Risk 扫描和 broad gates。
+- Final Spec reviewer 与 Local Risk 独立确认 tool outcome 仍有同类 High：root/subagent consumers 先执行 start event/todo callbacks，之后才 await `call.outcome`。production eventQueue overflow 可同步抛；若 outcome 同时拒绝，reviewer inline probe 稳定捕获 `tool output failed` 的 `unhandledRejection`。最小修复必须在任何 callback 前建立 settlement，同时保留 callback error 优先级。
+- Tool outcome 两路 owner 红测已稳定为 18/20，分别捕获 `tool outcome failed` 与 `subagent tool outcome failed`；typed consumer finding 已确认。
+- Typed tool outcome finding 已闭环：root/subagent consumers 在取得 call 后、任何 start/todo callback 前建立 settlement，并在原 await 位置读取，保留 callback error 优先级及 ordinary/contract 分类；2 files / 20 tests passed。
+- Standards reviewer 进一步确认 adapter owner 不能把 raw rejected Promise 的观察责任退回 fixture：run/message/tool/subagent 四类都可在读取 promise-like 后、后续同步字段漂移时泄漏 rejection。修复必须让 adapter 对已识别 Promise 立即建立非拒绝 settlement，再继续可能抛出的同步校验；测试必须删除 raw Promise 的预 catch。
+- 四类无预 catch 红合同已稳定：adapter owner 1 file / 18 tests 为 14 passed、4 expected failures，具体捕获 run/message/tool/subagent 各自的 `... output failed during contract drift`。修复需保留既有字段 contract error 优先级，不能靠提前抛 output error 回避 sibling drift。
+- Adapter four-owner finding 已闭环：run/message/tool/subagent 在 capture 到 Promise-like 字段时立即建立非拒绝 settlement；missing/non-Promise 仍在原字段校验位置抛原 contract code；每个投影 Promise 与 tool outcome 也被立即观察但保留原 rejection。owner gate 18/18 passed。
+- 全部 rejection-observation review fixes 的共同门禁为 4 files / 45 tests；typecheck 与 diff check 同时通过。当前 residual 仅为最终双轴复审、完整 Risk 扫描与 broad gates。
+- 完整 focused gate 已恢复为 8 files / 74 tests 并通过；Final Spec rereview 为 `No findings`，确认 adapter/contract owner 收敛完整且无 Stage 7.4、依赖、IPC/UI scope creep。
+- 四个 rejection owner 文件的 45-test gate 连续三轮通过；event-loop regression 未表现出时序波动。Local Risk 残余扫描暂未发现新 finding，待 strict unused 与最终 Standards 结果收口。
+- Strict unused 新鲜通过；删除的 legacy helper/callback 与新增 adapter DTO 没有留下本次引入的 unused symbol。
+- Final Standards 与 Spec 增量复审均返回 `No findings`；Local Risk 对 Promise ownership、error priority、usage/final-output、queue/backpressure、递归 projection 与残余 shape 的复核也未发现新问题。剩余风险仅为 broad gates 尚未执行。
+- Broad full Vitest 暴露此前 focused/fake run 未覆盖的 HITL High：LangGraph 1.4.7 `GraphRunStream.interrupted` 与 `interrupts` 是转发到 `StreamMux` 的动态 getter，pump 只有在消费到 interrupt values chunk 后才调用 `markInterrupted()`。adapter 若在 `streamEvents()` 返回时快照，会永久保留初始 `false` / `[]`。
+- 真实失败链为：三个投影 stream 完成后 typed run 仍报告未中断，executor 进入 non-interrupt 分支并等待不会在暂停态结算的 `run.output`，因此 runtime 20 秒内收不到两个 `run_interrupted`。这不是测试超时不足或 full-suite 资源竞争；有效单文件同样 1/1 失败。
+- Dynamic terminal finding 已红绿闭环：adapter 适配时先验证 raw terminal 字段，DTO 的 getter 在消费后重新读取、校验并映射 interrupt；raw handle 不泄漏到 consumer。直接动态合同 1/1、production 双中断/两次 resume 1/1、扩展 focused 9 files / 76 tests、typecheck 与 strict unused 通过。
+- Dynamic terminal 增量 Standards / Spec review 均为 `No findings`，Local Risk 为 `No issues found`。当前 LangGraph 1.4.7 在 mux finalize 前同步更新并固定 terminal state，三个投影 stream 关闭后读取稳定；`run.output` 无论 pending/rejected 都已由早期 settlement 观察。
+- 最终 broad gate 通过：`check:ipc`、最终 build、322 files / 1804 full tests、agent performance smoke 1/1、typecheck、strict unused 与 diff check。Residual 仅为 final-output helper 对稳定 DTO getter 的两次读取未固定单次快照语义；当前包下不构成行为缺陷。

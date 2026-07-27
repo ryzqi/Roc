@@ -20,15 +20,15 @@
 
 ## Current Phase
 
-**Stage 7 Part 2 - Deep Agents 1.10.8 Patch Upgrade**
+**Stage 7 Part 3 - Versioned Stream Adapter**
 
-**Status:** complete (`reviewed, broad verified, and staged as an independent commit`)
+**Status:** in_progress (`reviews and broad gates complete; staged-boundary audit pending`)
 
-- Review baseline：`4f37f17 fix(agent): align middleware ownership`。
-- 当前范围：审计 Deep Agents 1.10.7 -> 1.10.8 core package diff，只升级精确 pin，并为 `FilesystemBackend` / `LocalShellBackend` glob 的 Windows junction/symlink loop 与 root containment 增加回归证据。
-- 保留 Roc 特有责任：runtime workspace、Windows path policy、capability manifest、shell authorization 与 `/workspace/` 到真实 cwd 的边界。
-- 不在本 part 引入：ACP/Deno 无关改动、LangChain/LangGraph 联动升级、兼容层、无证据 cleanup、Stage 7.3 stream adapter 或性能调优。
-- Required-gate maintenance：只允许为 Electron smoke 的两个合成 provider 声明显式 context window，使 prescribed gate 继续验证当前工具/schema；不修改 production budget 默认或校验。
+- Review baseline：`475b4d2 fix(agent): upgrade Deep Agents filesystem glob`。
+- 当前范围：把 Deep Agents 1.10.x / stream v3 的 reflection 读取集中到单一 adapter，以当前安装包真实 stream shape fixture 固定输入合同，并让 consumers/projection 只消费 adapter 输出。
+- 保留现有产品语义：message delta、reasoning、usage、tool call、subagent、final output 与错误传播结果不变。
+- 不在本 part 引入：Deep Agents/LangChain/LangGraph 升级、兼容别名、多版本迁移框架、Stage 7.4 性能调优或无证据 cleanup。
+- `plan.md` 继续作为未跟踪规格源，不进入提交。
 
 ## Phase Status
 
@@ -41,26 +41,61 @@
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
 | Stage 6 - Observability, Integration Tests, Evals | complete | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 `dd5af40`。 |
-| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 `4f37f17`；Part 2 三轴 review、broad gate 与独立 staged boundary 已完成。 |
+| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 `4f37f17`；Part 2 `475b4d2`；Part 3 stream adapter 已启动。 |
 
 ## Current Acceptance
 
-- [x] 1.10.7 / 1.10.8 core package diff 已审计，ACP/Deno 无关 commit 与非目标依赖变化被明确排除。
-- [x] Windows junction/symlink loop 与 root containment 有稳定回归，覆盖 `FilesystemBackend` 和 `LocalShellBackend` 实际 glob 边界。
-- [x] `deepagents` 精确升级到 1.10.8，lockfile 只包含该 patch 所需解析变化；过期 1.10.2 注释/README 仅按事实更新。
-- [x] Deep Agents official contract、path verification、typecheck、package directory 与 Electron smoke 通过。
-- [x] Standards、Spec 与 Risk review 无未处理 finding，Part 2 已形成独立 staged commit boundary。
+- [x] fixture 直接来自当前安装的 Deep Agents 1.10.8 stream v3 shape，并以具体字段/异步边界断言冻结合同。
+- [x] 单一 versioned adapter 拥有安装包 shape 的读取、校验和 DTO 转换；consumer/projection 不再分散猜测上游字段。
+- [x] message、tool call、subagent、usage 与 final output 的现有可观察结果保持不变，合同破坏显式失败。
+- [x] focused tests、typecheck、strict unused、IPC check、build、full Vitest 与 diff check 通过。
+- [ ] Standards、Spec 与 Risk review 无未处理 finding，Part 3 形成独立提交且不包含 `plan.md`。
 
 ## Current Step
 
-**Final review for the exact 1.10.8 patch**
+**Migrate consumers and projections to the adapter DTO**
 
-**Status:** complete (`reviewed, broad verified, and ready to commit`)
+**Status:** in_progress (`reviews and broad gates complete; staged-boundary audit pending`)
 
-- Observable contract：升级后 native glob 不跟随目录 symlink/junction，不循环、不越出 backend root；Roc path/capability/shell 合同不变。
-- Reproduction：先用当前 1.10.7 安装包和 Windows fixture 固定失败，再升级 1.10.8 使同一证据转绿；若现有 Roc backend 已屏蔽目标路径，则记录真实 owner，不伪造红灯。
-- Implementation boundary：只改精确依赖、lockfile、直接回归与过期版本事实；不复制 upstream 修复到 Roc production。
-- Verification：1.10.7 red 为 1 file / 3 failed；review-fix 后 1.10.8 direct 为 1 file / 3 tests、focused 为 4 files / 41 tests；official+junction 2 files / 12 tests、paths、typecheck、build、321 files / 1776 full tests、package directory 与 Electron smoke 已通过。最终 Standards / Spec / Risk 分别为 `No findings` / `No findings` / `No issues found`。
+- Observable contract：同一 Deep Agents run stream 输入产生与基线相同的 message/tool/subagent projection、usage accumulation 和 final output。
+- Characterization：用可控 model/tool/subagent 驱动当前安装包生成 fixture；先证明现有 projection 对上游 shape 的分散依赖，再建立 adapter contract。
+- Implementation boundary：只新增 1.10.x/v3 adapter 和直接测试，并把 shape 读取迁入该 owner；不构建未要求的多版本兼容框架。
+- Verification：真实 package conformance 为 1 file / 2 tests，typecheck 与 diff check 通过；characterization 自查无待处理 finding。
+- Red contract：直接把真实 run 交给 adapter，固定 message/usage/tool/named-subagent/cause/terminal/output DTO；破坏必填字段、Promise 或 AsyncIterable 合同时显式失败。
+- Red verification：1 file / 8 tests 为原始 shape 2 passed、adapter 6 expected failures；typecheck 与 diff check 通过；测试自查补齐递归和全部 tool Promise 边界后无剩余 finding。
+- Adapter verification：package-declared undefined cause finding 已红绿闭环；最终 1 file / 9 tests、typecheck 与 diff check 通过，adapter 小段 review 无剩余 finding。
+- Consumer migration verification：上一会话 8 files / 57 tests 为 56 passed、1 failed；唯一失败是 bounded queue overflow fixture 不再制造稳定 burst。`pnpm typecheck` 仅剩 `deep-agent-executor.ts:576` 的 `recordTaskEvent` 不属于新 `StreamConsumerCallbacks`。
+- Direct closure verification：overflow fixture 以真实 1000-event queue 连续 5 次通过；两个直接 owner files / 13 tests、`pnpm typecheck` 与 `git diff --check` 全部通过。当前剩余工作是恢复完整 focused gate、残余扫描和 consumer migration review。
+- Full focused verification：adapter、consumers、usage、subagent 与 executor/final-output 8 files / 57 tests 全部通过；进入当前未提交 diff 的 Standards / Spec 分段 review。
+- High review-fix red verification：root text/output 同时失败时稳定捕获 1 个 `unhandledRejection`；1 file / 10 tests 为 9 passed、1 expected failure。
+- High review-fix implementation：把 `message.trailingReasoning` 加入 root message 初始 `Promise.all`，确保所有派生 Promise 同步安装 rejection handler；最窄 owner gate 1 file / 10 tests passed。
+- Direct review-fix verification：adapter conformance、root consumer 与 subagent projection 3 files / 28 tests、`pnpm typecheck`、`git diff --check` 全部通过；三条 review finding 均有直接绿灯。
+- Restored focused verification：adapter、consumers、usage、subagent 与 executor/final-output 8 files / 63 tests passed；consumer/projection raw-reflection、旧 callback/helper/cast 残余扫描均为 0。
+- Local Risk High：`run.output` 与 `subagent.output` 均由 adapter 立即派生，但 consumer 在对应 streams 全部完成后才 await；2 files / 15 tests 为 13 passed、2 expected failures，分别捕获对应 output rejection。
+- Adapter validation red：adapter 在派生 `run.output` 后才同步校验 terminal fields；invalid `interrupted` + rejected output 稳定捕获第三个 `unhandledRejection`，owner file 12 tests 为 11 passed、1 expected failure。
+- Output observation green：root/subagent 用早期 settlement 保留 stream-first 错误优先级，adapter 先完成同步 validation 再派生 output；3 files / 27 tests passed。
+- Terminal contract branch coverage：missing error、non-terminal status、unexpected error 三案例直接通过；adapter owner 1 file / 15 tests passed。
+- Spec rereview finding：tool output/status/error 依次派生；rejected output + non-Promise status 稳定产生 adapter 派生 `unhandledRejection`，adapter gate 16 tests 为 15 passed、1 expected failure。
+- Tool ordering green：adapter 在派生前同步验证全部三项 Promise-like 边界；同一 owner gate 16/16 passed。
+- Combined review-fix gate：adapter、root message、subagent、executor streaming 4 files / 41 tests、`pnpm typecheck` 与 `git diff --check` 全部通过。
+- Final Spec / Local Risk High：root/subagent tool consumers 在 start/todo callbacks 后才 await `call.outcome`；同步 projection failure 与 rejected outcome 并发时，reviewer probe 已捕获 `unhandledRejection`，需两路 owner red tests。
+- Tool outcome red：root/subagent owner 2 files / 20 tests 为 18 passed、2 expected failures，分别捕获 rejected outcome。
+- Tool outcome green：两路 consumer 在任何 callback 前建立 settlement、原 await 点读取；同一 2 files / 20 tests 全部通过。
+- Standards adapter owner finding：run/message/tool/subagent raw Promise 一旦被 adapter 读取就应立即 observation；四类“rejected Promise + later sync drift”均有只读复现，现有 test 预 catch 掩盖 run/tool 原始 owner 缺口。
+- Adapter four-owner red：run/tool tests 删除预 catch，并新增 message/subagent sibling drift；owner gate 18 tests 为 14 passed、4 expected failures，四条均捕获对应 raw rejection。
+- Adapter four-owner green：Promise-like 字段 capture 时立即 observation，原校验位置仍决定 contract code，投影 Promise/outcome 同样立即 observation；owner gate 18/18 passed。
+- Final combined review-fix gate：adapter、root consumer、subagent projection、executor streaming 4 files / 45 tests、`pnpm typecheck` 与 `git diff --check` 全部通过。
+- Restored full focused gate：adapter、consumers、usage、subagent、executor/final-output 8 files / 74 tests passed。
+- Final Spec rereview：`No findings`；真实 package fixture、单一 adapter、typed projection 边界与 scope 均符合 `plan.md:666-668`。
+- Rejection stability：4-file / 45-test review-fix gate 连续三轮全部通过，未出现 Vitest unhandled rejection 报告。
+- Strict unused：`tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters` exit 0。
+- Final review：Standards / Spec / Local Risk 均为 `No findings`；进入 broad verification。
+- Broad gate partial：`pnpm check:ipc` 与 `pnpm build` 通过；首次 full Vitest 为 321 files / 1802 tests passed、`runtime-production-multiple-interrupts.integration.test.ts` 1 failed，未计为通过。
+- HITL regression root cause：LangGraph 1.4.7 的 `run.interrupted` / `run.interrupts` 是 stream pump 完成后更新的动态 getter；adapter 在消费前快照为 `false` / `[]`，executor 因而误等 interrupt run 的 pending output。
+- Dynamic terminal red-green：adapter owner 目标 case 先以消费后仍为 `false` 稳定失败；改为 adapter-owned validated getters 后目标 case 1/1、真实 production multiple-interrupts 1/1 通过。
+- Expanded review-fix gate：原 8-file focused gate加 production multiple-interrupts 共 9 files / 76 tests，`pnpm typecheck` 与 strict unused 全部通过；增量 Standards / Spec / Risk review 进行中。
+- Dynamic terminal incremental review：Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`；当前固定包在 mux finalize 后终态稳定，`run.output` rejection 已由早期 settlement 观察。
+- Final broad gate：`pnpm check:ipc`、最终 `pnpm build`、full Vitest 322 files / 1804 tests、独占 agent performance smoke 1/1、typecheck、strict unused 与 `git diff --check 475b4d2` 全部通过。full Vitest 后 4 条既有 `node-pty AttachConsole failed` helper stderr 不改变 exit 0。
 
 ## Next Steps
 
@@ -96,6 +131,11 @@
 30. [complete] 用当前 1.10.7 增加 Windows junction/symlink loop 与 root containment 稳定回归。
 31. [complete] 精确升级 Deep Agents 1.10.8，更新必要事实并完成 focused verification。
 32. [complete] 完成 Standards / Spec / Risk review、修复、package/Electron broad gate 与 Stage 7 Part 2 独立 staged commit boundary。
+33. [complete] 重新读取安装包 stream v3 类型/运行 shape、生产调用链和 owner tests，冻结 Stage 7.3 adapter 输入/输出合同。
+34. [complete] 增加真实安装包 fixture并完成稳定 characterization；真实 package gate、typecheck 与 diff check 通过。
+35. [complete] 增加 adapter 红合同，实现单一 Deep Agents 1.10.x/v3 adapter，并迁移 consumer/projection 的 shape 读取。
+36. [complete] 分段 review、修复并完成 focused/static/broad verification。
+37. [in_progress] 完成 Standards / Spec / Risk 最终 review、staged-boundary 审计与 Stage 7 Part 3 独立提交。
 
 ## Decisions
 
@@ -110,6 +150,7 @@
 | LangSmith 配置与密钥归 Agent plugin config/secrets | 保持单一 owner；不升级全局 AppSettings，不复用 provider secret 语义。 |
 | Cleanup 只做 evidence-first deletion | 无调用、测试、unused scan 或重复证据时不删除。 |
 | Stage 7.1 与 1.10.8 升级分开提交 | 避免把 native overlap 行为变化与 framework patch 混成一个事实源。 |
+| Stage 7.3 adapter 只支持当前 1.10.x / stream v3 合同 | 规格要求集中 shape owner，不要求提前建立多版本兼容或迁移机制。 |
 
 ## Review Closure Checks
 
@@ -153,6 +194,10 @@
 | Low | `package.json` 升级 diff 额外删除基线 EOF 空行。 | 已恢复基线 EOF；cached diff 只保留 `deepagents` 精确版本行变化，Standards 增量复审为 `No findings`。 |
 | Medium | Prescribed Electron smoke 的两个合成 provider 未声明 context window，完整 system/tool/schema 下分别在 task 与 chat 边界失败。 | 只在 smoke fixtures 显式设置并回读 128000；同一 `pnpm smoke:electron` 已转绿，production budget/default 未改变，增量三轴 review 无 finding。 |
 | Low | Stage 7.2 required-gate 边界只写 `smoke-provider`，与实际同时修复 `smoke-ui-openai` 的两处 fixture 不一致。 | 已同步为“两个合成 provider”，Standards closure 复审为 `No findings`。 |
+
+| Medium | Tool consumers 等待但忽略 terminal status/error，合法 error 可能误投影 end 或被悬挂 output 阻塞。 | 已红绿改为 adapter-owned outcome；3 files / 25 tests、typecheck、残余扫描与 diff check 通过，待最终复审。 |
+| Medium | Adapter 仍把 message output/final messages 暴露为 unknown，consumer/final-output 继续解析 reasoning 与 role/type/content。 | 已红绿改为 adapter-owned `trailingReasoning` / `finalAssistantText`；3 files / 27 tests、typecheck、shape 残余扫描与 diff check 通过，待最终复审。 |
+| High | Adapter 立即派生 `trailingReasoning`，root consumer 却在 text/reasoning/usage 完成后才 await；并发双失败可留下 unhandled rejection。 | Standards reviewer 定位并实测；当前为 **Located**，待并发观察红测与最小 Promise.all 修复。 |
 
 ## Errors Encountered
 
@@ -231,3 +276,24 @@
 | Electron smoke 第二轮在 settings 新建的 `smoke-ui-openai` chat 等待超时 | 1 | 默认模型已切到该 provider、提交后没有新 provider request；其 UI draft 同样未声明 context window。完成 settings UI 验收后经现有 IPC 写入并回读 128000，待同命令复验。 |
 | smoke schema/renderer 调研把预期可无匹配的 `rg` 放入 fail-fast `Promise.all`，导致同组成功输出未保留 | 2 | 调用均只读且未修改文件；均立即改用 `Promise.allSettled` 获取证据，后续 optional 搜索继续逐项捕获 exit 1。 |
 | Smoke-fixture Risk reviewer 已发回完整 `No issues found` 分析，但 final 状态被上游 `400 Bad Request` 标记失败 | 1 | 不把失败任务计为通过；复用同一 reviewer 极简重试，最终有效返回 `No issues found`。 |
+| Stage 7.3 调研把 `node_modules/.pnpm/@langchain+langgraph*` 作为 Windows 路径 glob，触发路径语法错误 | 1 | 调用只读且其他 `allSettled` 输出已保留；后续先解析精确 package 路径，目录搜索只用 `-g`。 |
+| 安装包类型核对假设存在顶层 `node_modules/@langchain/protocol`，读取路径失败并让版本输出出现空 package 行 | 1 | 调用只读且其余结果已保留；不再猜 hoisted 路径，后续从 pnpm 目录或 package exports 解析精确位置。 |
+| Stage 7.3 真实 shape fixture 首轮把 message namespace/node 与 output content 假设为 root/string | 1 | 2 tests 稳定失败并给出真实 `model_request:<UUID>`、`model_request` 和 content-block shape；按实际运行规范化动态 UUID，并继续采样 message `.toolCalls`。 |
+| Characterization behavior 2/2 通过后，typecheck 发现 LangGraph 根入口不导出 `ChatModelStreamHandle`，且测试把 subagent output 错收窄为 record | 1 | 改从 Deep Agents 公开 `DeepAgentRunStream['messages']` 推导 handle，并让 subagent output 保持 `unknown`；production 未受影响。 |
+| 定位 `LifecycleCause` 时对 `.pnpm` 的限定 `rg` 无匹配并返回 exit 1 | 1 | 调用只读且其余 `allSettled` 结果保留；真实 runtime fixture 已固定当前唯一所需的 tool-call cause，不再扩大搜索范围。 |
+| Adapter 设计阶段再次把可无匹配的安装包 `rg` 放入 fail-fast `Promise.all` | 1 | 两条调用均只读且未修改文件；改用已解析 junction 目标，并逐项吸收 exit 1 后继续。 |
+| Adapter 红合同首次 typecheck 报递归 observation helper 隐式 `any` | 1 | 红灯行为已稳定；为测试观察 DTO 增加显式递归返回类型，不修改 production contract。 |
+| Typed consumer migration 首轮 green 后 bounded queue overflow owner test 未再触发 `chat_run_event_queue_overflow`，而是完整返回约 4860 个事件 | 1 | 新 tool consumer 等待 output/status/error 后降低 producer burst；产品 queue 合同未改。保留原业务断言，重新构造确定性填满队列的 fixture。 |
+| Typed consumer migration 后 `pnpm typecheck` 报 `deep-agent-executor.ts:576` 的 `recordTaskEvent` 不存在于 `StreamConsumerCallbacks` | 1 | 旧 guardrail stream 分支已删除；先用调用关系证明该 callback 是否仅服务旧路径，再做本次迁移导致的最小 unused cleanup。 |
+| 重写 overflow fixture 时把 `startExecutorExecution(...)` 调用结尾误写成 `})();` | 1 | 在运行任何测试或 typecheck 前从刚写入的 patch 发现并改为 `});`；错误版本未进入验证或暂存。 |
+| Review 基线校验使用未加引号的 `475b4d2^{commit}`，PowerShell/RTK 返回 `fatal: Needed a single revision`，并使 fail-fast 只读组未保留其他输出 | 1 | 改用 `git rev-parse --verify 475b4d2` 得到完整 SHA，并用 `Promise.allSettled` 重新取得 diff、commit list 与 spec；失败调用只读且未修改工作树。 |
+| LangGraph `ToolCallStream.output` 的 reject/hang 语义取决于 runner，但 root/subagent consumers 用 `Promise.all([output,status,error])` 后只读取 output | 1 | 红灯 13/15 后已把三 Promise 配对集中为 adapter-owned outcome；3 files / 25 tests、typecheck、残余扫描和 diff check 通过。 |
+| Spec review-fix 检索把 `tests/main/plugins/agent/deep-agent-*` 作为 Windows 路径 glob，`rg` 返回有效前半结果后以路径语法错误退出 | 1 | 调用只读且未修改文件；后续只传真实目录并用 `-g 'deep-agent-*'` 限定文件。 |
+| Nested DTO 测试同步 patch 假设 `stream-consumers.test.ts` helper 使用 `empty()`，实际为 `empty<string>()`，导致 apply_patch context 校验失败 | 1 | 原子 patch 未修改任何文件；读取三个 helper 精确段后拆分并成功应用。 |
+| Output observation 首轮 green 的 adapter test 仍捕获 fixture 自己创建的 raw rejected Promise | 1 | production 已不派生该 Promise；fixture 先观察 raw rejection，只检测旧实现额外派生的泄漏，随后 3 files / 27 tests 通过。 |
+| Standards 最终增量复审被服务端 `429 Too Many Requests` 终止 | 1 | 不把失败任务视为通过；待当前 review-fix 最终树稳定后复用同一 reviewer 重试。 |
+| Typed tool outcome 修复首次 patch 的函数签名上下文多了一个字符 | 1 | `apply_patch` 原子拒绝且未修改文件；读取两段当前源码后用更窄上下文成功应用。 |
+| Adapter observe-on-capture 首轮 combined typecheck 报 thenable flattening 与 test mock 返回类型 2 errors | 1 | helper 接受 `T | PromiseLike<T>`，mock 保留 `Array.push` 返回值；同一 45 tests、typecheck、diff check 随后通过。 |
+| 本轮恢复首个规划文件/memory 并行读取使用 fail-fast `Promise.all`，预期无匹配的 memory 搜索使成功结果未保留 | 1 | 调用只读且未修改文件；拆为规模探测并改用 `Promise.allSettled`，完成 session catch-up 与账本恢复。 |
+| Stage 7.3 首次 broad full Vitest 的 production multiple-interrupts 在 20 秒内未产生两个 interrupt event | 1 | 单文件有效复现后定位为 adapter 快照 LangGraph 动态 terminal getter；直接合同红绿、真实 production 1/1 与扩展 focused 9 files / 76 tests 已通过，待 full Vitest 重跑。 |
+| 诊断时使用 `pnpm test -- <file>` 被当前 pnpm/Vitest 组合转成字面 `vitest run "--" <file>`，实际再次运行全套 | 1 | 该次结果未当作单文件证据；改用 `pnpm exec vitest run <file>`，输出确认 `Test Files 1` 后完成稳定复现与验证。 |

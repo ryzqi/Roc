@@ -8,7 +8,10 @@ import type { BackgroundTaskPreview } from '../../../../src/shared/types';
 import {
   buildExecutorOnce,
   collectExecutorEvents,
+  createAsyncIterable,
   createCapabilities,
+  createDeepAgents110V3MessageHandle,
+  createDeepAgents110V3SubagentHandle,
   createMcpTool,
   findTool,
   invokeTool,
@@ -276,18 +279,17 @@ describe('createAgentDeepAgentExecutor', () => {
     await collectExecutorEvents({
       capabilities: createCapabilities([]),
       metricsService: { recordPromptCacheMetrics },
-      messages: (async function* () {
-        yield {
-          id: 'main-call',
-          usage_metadata: {
+      messages: createAsyncIterable([
+        createDeepAgents110V3MessageHandle({
+          usage: createAsyncIterable([{
             input_tokens: 600,
             input_token_details: {
               cache_creation: 300,
               cache_read: 900
             }
-          }
-        };
-      })(),
+          }])
+        })
+      ]),
       output: {
         messages: [
           {
@@ -319,31 +321,28 @@ describe('createAgentDeepAgentExecutor', () => {
     await collectExecutorEvents({
       capabilities: createCapabilities([]),
       metricsService: { recordPromptCacheMetrics },
-      messages: (async function* () {
-        yield {
-          id: 'main-call',
-          usage_metadata: {
+      messages: createAsyncIterable([
+        createDeepAgents110V3MessageHandle({
+          usage: createAsyncIterable([{
             input_tokens: 100,
             input_token_details: { cache_read: 40 }
-          }
-        };
-      })(),
-      subagents: (async function* () {
-        yield {
+          }])
+        })
+      ]),
+      subagents: createAsyncIterable([
+        createDeepAgents110V3SubagentHandle({
           name: 'researcher',
-          taskInput: 'research',
-          messages: (async function* () {
-            yield {
-              id: 'subagent-call',
-              usage_metadata: {
+          messages: createAsyncIterable([
+            createDeepAgents110V3MessageHandle({
+              namespace: ['tools:fixture', 'model_request:fixture'],
+              usage: createAsyncIterable([{
                 input_tokens: 60,
                 input_token_details: { cache_creation: 20 }
-              }
-            };
-          })(),
-          output: 'done'
-        };
-      })(),
+              }])
+            })
+          ])
+        })
+      ]),
       output: { messages: [] }
     });
 

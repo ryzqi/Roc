@@ -1,14 +1,20 @@
 import type { ChatAssistantBlock, ChatRunEvent, SubagentEventPayload, SubagentIdentity } from '../../../shared/types';
-import * as recordUtils from './record-utils';
+import {
+  DeepAgents110V3ContractError,
+  type DeepAgents110V3Message,
+  type DeepAgents110V3Subagent,
+  type DeepAgents110V3ToolCall,
+  type DeepAgents110V3Usage
+} from './deep-agents-1-10-stream-adapter';
 import { redact } from './redact';
-import { readToolCallId, redactUnknown } from './stream-tool-utils';
+import { redactUnknown } from './stream-tool-utils';
 import type { ToolOutputProjector } from './tool-output-projection';
 
 export type SubagentProjectionCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
   emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
-  observeMessageUsage?: (message: unknown) => void;
+  observeMessageUsage?: (usageKey: string, usage: DeepAgents110V3Usage) => void;
   projectToolOutput: ToolOutputProjector;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
 };
@@ -22,7 +28,7 @@ type ProjectionContext = {
 };
 
 export async function projectSubagentStream(input: {
-  subagents: AsyncIterable<unknown>;
+  subagents: AsyncIterable<DeepAgents110V3Subagent>;
   runId: string;
   callbacks: SubagentProjectionCallbacks;
 }): Promise<void> {
@@ -44,7 +50,7 @@ export async function projectSubagentStream(input: {
 }
 
 async function consumeSubagents(
-  subagents: AsyncIterable<unknown>,
+  subagents: AsyncIterable<DeepAgents110V3Subagent>,
   context: ProjectionContext,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
@@ -56,151 +62,156 @@ async function consumeSubagents(
 }
 
 async function consumeOneSubagent(
-  subagent: unknown,
+  subagent: DeepAgents110V3Subagent,
   ordinal: number,
   context: ProjectionContext,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
-  const name = requireNonEmptyString(recordUtils.readRecordValue(subagent, 'name'), 'subagent_name_missing');
-  const rawTaskInput = await Promise.resolve(recordUtils.readRecordValue(subagent, 'taskInput'));
-  const taskInput = recordUtils.readNonEmptyString(rawTaskInput);
+  const outputSettlement = Promise.allSettled([subagent.output] as const);
   const idSegments = [...context.idSegments, ordinal];
   const subagentId = `subagent-${context.runId}-${idSegments.join('-')}`;
-  const path = [...context.path, `${name}#${ordinal}`];
-  const asyncTaskId =
-    recordUtils.readNonEmptyString(recordUtils.readRecordValue(subagent, 'asyncTaskId')) ??
-    recordUtils.readNonEmptyString(recordUtils.readRecordValue(subagent, 'taskId')) ??
-    undefined;
+  const path = [...context.path, `${subagent.name}#${ordinal}`];
   const identity: SubagentIdentity = {
     subagentId,
     parentSubagentId: context.parent === null ? null : context.parent.subagentId,
-    name,
+    name: subagent.name,
     depth: context.path.length,
     path,
-    execution: asyncTaskId === undefined ? 'sync' : 'async',
-    taskInput,
-    ...(asyncTaskId === undefined ? {} : { asyncTaskId })
+    execution: 'sync',
+    taskInput: null
   };
 
   emit(callbacks, context.runId, context.nextSequence(), identity, { kind: 'started' });
 
-  const messages = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'messages'));
-  const toolCalls = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'toolCalls'));
-  const nested = recordUtils.readAsyncIterable(recordUtils.readRecordValue(subagent, 'subagents'));
-  const projectionTasks: Array<Promise<void>> = [];
-  if (messages !== null) {
-    projectionTasks.push(consumeMessages(messages, context.runId, identity, context.nextSequence, callbacks));
-  }
-  if (toolCalls !== null) {
-    projectionTasks.push(consumeToolCalls(toolCalls, context.runId, identity, context.nextSequence, callbacks));
-  }
-  if (nested !== null) {
-    projectionTasks.push(
-      consumeSubagents(
-        nested,
-        {
-          idSegments,
-          nextSequence: context.nextSequence,
-          parent: identity,
-          path,
-          runId: context.runId
-        },
-        callbacks
-      )
-    );
-  }
-  await Promise.all(projectionTasks);
+  await Promise.all([
+    consumeMessages(subagent.messages, context.runId, identity, context.nextSequence, callbacks),
+    consumeToolCalls(subagent.toolCalls, context.runId, identity, context.nextSequence, callbacks),
+    consumeSubagents(
+      subagent.subagents,
+      {
+        idSegments,
+        nextSequence: context.nextSequence,
+        parent: identity,
+        path,
+        runId: context.runId
+      },
+      callbacks
+    )
+  ]);
 
-  try {
-    const output = await Promise.resolve(recordUtils.readRecordValue(subagent, 'output'));
-    emit(callbacks, context.runId, context.nextSequence(), identity, {
-      kind: 'completed',
-      summary: recordUtils.readNonEmptyString(output) ?? taskInput
-    });
-  } catch (error) {
+  const [settledOutput] = await outputSettlement;
+  if (settledOutput.status === 'rejected') {
+    const error = settledOutput.reason;
+    if (error instanceof DeepAgents110V3ContractError) {
+      throw error;
+    }
     emit(callbacks, context.runId, context.nextSequence(), identity, {
       kind: 'failed',
       error: redact(error instanceof Error ? error.message : String(error))
     });
+    return;
   }
+  emit(callbacks, context.runId, context.nextSequence(), identity, {
+    kind: 'completed',
+    summary: null
+  });
 }
 
 async function consumeMessages(
-  messages: AsyncIterable<unknown>,
+  messages: AsyncIterable<DeepAgents110V3Message>,
   runId: string,
   identity: SubagentIdentity,
   nextSequence: () => number,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
   for await (const message of messages) {
-    callbacks.observeMessageUsage?.(message);
-    const textSource = recordUtils.readRecordValue(message, 'text');
-    const textStream = recordUtils.readAsyncIterable(textSource);
-    if (textStream !== null) {
-      for await (const value of textStream) {
-        emitTextBlock(value, runId, identity, nextSequence, callbacks);
-      }
-      continue;
-    }
-    emitTextBlock(textSource, runId, identity, nextSequence, callbacks);
+    await Promise.all([
+      consumeMessageText(message, runId, identity, nextSequence, callbacks),
+      consumeMessageUsage(message, callbacks),
+      drainStrings(message.reasoning),
+      message.trailingReasoning.then(() => undefined)
+    ]);
   }
 }
 
-function emitTextBlock(
-  value: unknown,
+async function consumeMessageText(
+  message: DeepAgents110V3Message,
   runId: string,
   identity: SubagentIdentity,
   nextSequence: () => number,
   callbacks: SubagentProjectionCallbacks
-): void {
-  const text = recordUtils.readNonEmptyString(value);
-  if (text === null) {
-    return;
-  }
-  emit(callbacks, runId, nextSequence(), identity, {
-    kind: 'assistant_block',
-    block: {
-      kind: 'text',
-      blockId: `${identity.subagentId}-text`,
-      phase: 'delta',
-      text
+): Promise<void> {
+  for await (const text of message.text) {
+    if (text.length === 0) {
+      continue;
     }
-  });
+    emit(callbacks, runId, nextSequence(), identity, {
+      kind: 'assistant_block',
+      block: {
+        kind: 'text',
+        blockId: `${identity.subagentId}-text`,
+        phase: 'delta',
+        text
+      }
+    });
+  }
+}
+
+async function consumeMessageUsage(
+  message: DeepAgents110V3Message,
+  callbacks: SubagentProjectionCallbacks
+): Promise<void> {
+  for await (const usage of message.usage) {
+    callbacks.observeMessageUsage?.(message.usageKey, usage);
+  }
+}
+
+async function drainStrings(values: AsyncIterable<string>): Promise<void> {
+  for await (const _value of values) {
+    void _value;
+  }
 }
 
 async function consumeToolCalls(
-  calls: AsyncIterable<unknown>,
+  calls: AsyncIterable<DeepAgents110V3ToolCall>,
   runId: string,
   identity: SubagentIdentity,
   nextSequence: () => number,
   callbacks: SubagentProjectionCallbacks
 ): Promise<void> {
   for await (const call of calls) {
-    const name = recordUtils.readNonEmptyString(recordUtils.readRecordValue(call, 'name')) ?? 'unknown_tool';
-    const callId = readToolCallId(call);
-    if (callId === null) {
-      continue;
-    }
-    const input = redactUnknown(await Promise.resolve(recordUtils.readRecordValue(call, 'input')));
+    const outcomeSettlement = Promise.allSettled([call.outcome] as const);
+    const input = redactUnknown(call.input);
     const startBlock: Extract<ChatAssistantBlock, { kind: 'tool_call' }> = {
       kind: 'tool_call',
-      blockId: `${identity.subagentId}-tool-${callId}`,
-      callId,
-      name,
+      blockId: `${identity.subagentId}-tool-${call.callId}`,
+      callId: call.callId,
+      name: call.name,
       phase: 'start',
       input
     };
     emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: startBlock });
     callbacks.emitTodoEvent(input);
 
-    let rawOutput: unknown;
-    try {
-      rawOutput = await Promise.resolve(recordUtils.readRecordValue(call, 'output'));
-    } catch (error) {
+    let outcome: Awaited<DeepAgents110V3ToolCall['outcome']>;
+    const [settledOutcome] = await outcomeSettlement;
+    if (settledOutcome.status === 'rejected') {
+      const error = settledOutcome.reason;
+      if (error instanceof DeepAgents110V3ContractError) {
+        throw error;
+      }
+      outcome = {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      };
+    } else {
+      outcome = settledOutcome.value;
+    }
+    if (outcome.status === 'error') {
       const message = callbacks.projectToolOutput({
-        callId,
-        name,
-        output: redact(error instanceof Error ? error.message : String(error))
+        callId: call.callId,
+        name: call.name,
+        output: redact(outcome.error)
       });
       emit(callbacks, runId, nextSequence(), identity, {
         kind: 'tool_call',
@@ -210,13 +221,13 @@ async function consumeToolCalls(
           error: message
         }
       });
-      callbacks.recordSessionToolCall?.(name, input, { error: message });
+      callbacks.recordSessionToolCall?.(call.name, input, { error: message });
       continue;
     }
     const output = callbacks.projectToolOutput({
-      callId,
-      name,
-      output: rawOutput
+      callId: call.callId,
+      name: call.name,
+      output: outcome.output
     });
     emit(callbacks, runId, nextSequence(), identity, {
       kind: 'tool_call',
@@ -226,7 +237,7 @@ async function consumeToolCalls(
         output
       }
     });
-    callbacks.recordSessionToolCall?.(name, input, output);
+    callbacks.recordSessionToolCall?.(call.name, input, output);
   }
 }
 
@@ -245,12 +256,4 @@ function emit(
     identity,
     event
   });
-}
-
-function requireNonEmptyString(value: unknown, code: string): string {
-  const text = recordUtils.readNonEmptyString(value);
-  if (text === null) {
-    throw new Error(code);
-  }
-  return text;
 }

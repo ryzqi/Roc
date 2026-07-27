@@ -6,32 +6,26 @@ describe('ProviderUsageAccumulator', () => {
   it('accumulates usage from every model call while replacing repeated snapshots for the same call', () => {
     const accumulator = createUsageAccumulator();
 
-    updateUsageAccumulator(accumulator, {
-      id: 'main-call',
-      usage_metadata: {
-        input_tokens: 100,
-        output_tokens: 20,
-        total_tokens: 120,
-        input_token_details: { cache_read: 50 }
-      }
+    updateUsageAccumulator(accumulator, 'main-call', {
+      inputTokens: 100,
+      outputTokens: 20,
+      totalTokens: 120,
+      cacheReadTokens: 50,
+      cacheCreationTokens: null
     });
-    updateUsageAccumulator(accumulator, {
-      id: 'summary-call',
-      usage_metadata: {
-        input_tokens: 40,
-        output_tokens: 10,
-        total_tokens: 50,
-        input_token_details: { cache_creation: 25 }
-      }
+    updateUsageAccumulator(accumulator, 'summary-call', {
+      inputTokens: 40,
+      outputTokens: 10,
+      totalTokens: 50,
+      cacheReadTokens: null,
+      cacheCreationTokens: 25
     });
-    updateUsageAccumulator(accumulator, {
-      id: 'main-call',
-      usage_metadata: {
-        input_tokens: 100,
-        output_tokens: 24,
-        total_tokens: 124,
-        input_token_details: { cache_read: 50 }
-      }
+    updateUsageAccumulator(accumulator, 'main-call', {
+      inputTokens: 100,
+      outputTokens: 24,
+      totalTokens: 124,
+      cacheReadTokens: 50,
+      cacheCreationTokens: null
     });
 
     expect(accumulator).toMatchObject({
@@ -46,19 +40,19 @@ describe('ProviderUsageAccumulator', () => {
   it('merges partial stream metadata for one model call without erasing earlier fields', () => {
     const accumulator = createUsageAccumulator();
 
-    updateUsageAccumulator(accumulator, {
-      id: 'retry-call',
-      usage_metadata: {
-        input_tokens: 80,
-        input_token_details: { cache_read: 30 }
-      }
+    updateUsageAccumulator(accumulator, 'retry-call', {
+      inputTokens: 80,
+      outputTokens: null,
+      totalTokens: null,
+      cacheReadTokens: 30,
+      cacheCreationTokens: null
     });
-    updateUsageAccumulator(accumulator, {
-      id: 'retry-call',
-      usage_metadata: {
-        output_tokens: 15,
-        total_tokens: 95
-      }
+    updateUsageAccumulator(accumulator, 'retry-call', {
+      inputTokens: null,
+      outputTokens: 15,
+      totalTokens: 95,
+      cacheReadTokens: null,
+      cacheCreationTokens: null
     });
 
     expect(accumulator).toMatchObject({
@@ -70,21 +64,15 @@ describe('ProviderUsageAccumulator', () => {
     });
   });
 
-  it('does not count metadata without a stable model-call identifier', () => {
+  it('rejects usage without an adapter-provided model-call key', () => {
     const accumulator = createUsageAccumulator();
 
-    updateUsageAccumulator(accumulator, {
-      usage_metadata: {
-        input_tokens: 80,
-        output_tokens: 15,
-        total_tokens: 95
-      }
-    });
-
-    expect(accumulator).toMatchObject({
-      promptTokens: null,
-      completionTokens: null,
-      totalTokens: null
-    });
+    expect(() => updateUsageAccumulator(accumulator, '', {
+      inputTokens: 80,
+      outputTokens: 15,
+      totalTokens: 95,
+      cacheReadTokens: null,
+      cacheCreationTokens: null
+    })).toThrow('provider_usage_key_missing');
   });
 });

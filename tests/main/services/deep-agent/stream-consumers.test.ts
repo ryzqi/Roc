@@ -1,7 +1,10 @@
-import { HumanMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
 
-import { markForgeNudgeInternal, tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
+import {
+  DeepAgents110V3ContractError,
+  type DeepAgents110V3Message,
+  type DeepAgents110V3ToolCall
+} from '../../../../src/main/services/deep-agent/deep-agents-1-10-stream-adapter';
 import {
   consumeMessageStream,
   consumeToolCallStream,
@@ -15,10 +18,10 @@ describe('consumeMessageStream', () => {
     const text = createControlledAsyncStream<string>();
 
     const consume = consumeMessageStream({
-      messages: createSingleMessageStream({
+      messages: single(createMessage({
         reasoning: reasoning.iterable,
         text: text.iterable
-      }),
+      })),
       context: {
         runId: 'run-concurrent-text',
         taskRun: null
@@ -51,10 +54,9 @@ describe('consumeMessageStream', () => {
     const outputOrder: string[] = [];
 
     await consumeMessageStream({
-      messages: createSingleMessageStream({
-        reasoning: createDelayedStringStream([{ delayMs: 0, value: '只有推理内容' }]),
-        text: null
-      }),
+      messages: single(createMessage({
+        reasoning: delayedStrings([{ delayMs: 0, value: '只有推理内容' }])
+      })),
       context: {
         runId: 'run-reasoning-only',
         taskRun: null
@@ -72,9 +74,9 @@ describe('consumeMessageStream', () => {
     const outputOrder: string[] = [];
 
     await consumeMessageStream({
-      messages: createSingleMessageStream({
-        text: createDelayedStringStream([{ delayMs: 0, value: '只有答案内容' }])
-      }),
+      messages: single(createMessage({
+        text: delayedStrings([{ delayMs: 0, value: '只有答案内容' }])
+      })),
       context: {
         runId: 'run-answer-only',
         taskRun: null
@@ -88,36 +90,93 @@ describe('consumeMessageStream', () => {
     expect(outputOrder).toEqual(['message:只有答案内容']);
   });
 
-  it('suppresses internal retry nudges from user-visible task output', async () => {
+  it('uses adapter-projected trailing reasoning when the stream is empty', async () => {
     const outputOrder: string[] = [];
-    const callbacks = createCallbacks(outputOrder);
-    const nudge = markForgeNudgeInternal(
-      tagForgeMessage(
-        new HumanMessage({
-          content: '你上一条回复没有可见文本，也没有工具调用。'
-        }),
-        'forge:retry_nudge'
-      )
-    );
+    const message = {
+      ...createMessage(),
+      trailingReasoning: Promise.resolve('末尾推理')
+    };
 
     await consumeMessageStream({
-      messages: createSingleMessageStream(nudge),
+      messages: single(message),
       context: {
-        runId: 'run-internal-nudge',
+        runId: 'run-trailing-reasoning',
         taskRun: null
       },
       assistantChunks: [],
       reasoningChunks: [],
       usageAccumulator: createUsageAccumulator(),
-      callbacks
+      callbacks: createCallbacks(outputOrder)
     });
 
-    expect(outputOrder).toEqual([]);
-    expect(callbacks.recordTaskEvent).not.toHaveBeenCalled();
+    expect(outputOrder).toEqual(['reasoning:末尾推理']);
+  });
+
+  it('observes trailing reasoning failure when the text stream also fails', async () => {
+    const unhandledReasons: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledReasons.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      const message = createMessage({
+        text: (async function* () {
+          throw new Error('text stream failed');
+        })(),
+        trailingReasoning: Promise.reject(new Error('message output failed'))
+      });
+
+      await expect(consumeMessageStream({
+        messages: single(message),
+        context: {
+          runId: 'run-concurrent-message-failure',
+          taskRun: null
+        },
+        assistantChunks: [],
+        reasoningChunks: [],
+        usageAccumulator: createUsageAccumulator(),
+        callbacks: createCallbacks([])
+      })).rejects.toThrow();
+      await wait(0);
+
+      expect(unhandledReasons).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
   });
 });
 
 describe('consumeToolCallStream', () => {
+  it('observes tool outcome failure when start projection also fails', async () => {
+    const unhandledReasons: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledReasons.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      const callbacks = createCallbacks([]);
+      callbacks.emitRuntimeEvent.mockImplementation(() => {
+        throw new Error('tool start projection failed');
+      });
+
+      await expect(consumeToolCallStream({
+        calls: single(createToolCall({
+          outcome: Promise.reject(new Error('tool outcome failed'))
+        })),
+        context: {
+          runId: 'run-concurrent-tool-failure',
+          taskRun: null
+        },
+        callbacks
+      })).rejects.toThrow('tool start projection failed');
+      await wait(0);
+
+      expect(unhandledReasons).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
+  });
+
   it('propagates output-projection failure instead of reporting a completed tool as failed', async () => {
     const callbacks = createCallbacks([]);
     callbacks.projectToolOutput
@@ -128,12 +187,12 @@ describe('consumeToolCallStream', () => {
 
     await expect(
       consumeToolCallStream({
-        calls: createSingleMessageStream({
-          id: 'call-projection-failure',
+        calls: single(createToolCall({
+          callId: 'call-projection-failure',
           name: 'write_file',
           input: { path: '/workspace/result.txt' },
-          output: 'write completed'
-        }),
+          outcome: Promise.resolve({ status: 'finished', output: 'write completed' })
+        })),
         context: {
           runId: 'run-projection-failure',
           taskRun: null
@@ -159,12 +218,15 @@ describe('consumeToolCallStream', () => {
     callbacks.projectToolOutput.mockReturnValue(projectedOutput);
 
     await consumeToolCallStream({
-      calls: createSingleMessageStream({
-        id: 'call-project-output',
+      calls: single(createToolCall({
+        callId: 'call-project-output',
         name: 'read_file',
         input: { path: '/workspace/secret.txt' },
-        output: 'Bearer should-not-reach-the-timeline'
-      }),
+        outcome: Promise.resolve({
+          status: 'finished',
+          output: 'Bearer should-not-reach-the-timeline'
+        })
+      })),
       context: {
         runId: 'run-project-output',
         taskRun: null
@@ -190,31 +252,128 @@ describe('consumeToolCallStream', () => {
         output: projectedOutput
       }
     });
-    expect(callbacks.recordSessionToolCall).toHaveBeenCalledWith('read_file', { path: '/workspace/secret.txt' }, projectedOutput);
+    expect(callbacks.recordSessionToolCall).toHaveBeenCalledWith(
+      'read_file',
+      { path: '/workspace/secret.txt' },
+      projectedOutput
+    );
   });
 
-  it('does not emit a synthetic tool block when DeepAgents omits callId', async () => {
+  it('emits a redacted error block when the tool output rejects', async () => {
     const callbacks = createCallbacks([]);
 
     await consumeToolCallStream({
-      calls: createSingleMessageStream({
-        name: 'write_file',
-        input: {
-          file_path: '/workspace/hello.txt'
-        },
-        output: 'Successfully wrote to /workspace/hello.txt'
-      }),
+      calls: single(createToolCall({
+        callId: 'call-rejected-output',
+        outcome: Promise.reject(new Error('Bearer secret-token'))
+      })),
       context: {
-        runId: 'run-missing-call-id',
+        runId: 'run-rejected-output',
         taskRun: null
       },
       callbacks
     });
 
-    expect(callbacks.emitRuntimeEvent).not.toHaveBeenCalled();
-    expect(callbacks.emitTodoEvent).not.toHaveBeenCalled();
+    expect(callbacks.emitRuntimeEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        block: expect.objectContaining({
+          callId: 'call-rejected-output',
+          phase: 'error',
+          error: '[REDACTED]'
+        })
+      })
+    );
+  });
+
+  it('uses terminal tool error without waiting for output', async () => {
+    const callbacks = createCallbacks([]);
+    const consumption = consumeToolCallStream({
+      calls: single(createToolCall({
+        callId: 'call-terminal-error',
+        outcome: Promise.resolve({ status: 'error', error: 'Bearer secret-token' })
+      })),
+      context: {
+        runId: 'run-terminal-error',
+        taskRun: null
+      },
+      callbacks
+    });
+
+    await waitForCondition(
+      () => callbacks.projectToolOutput.mock.calls.length === 1,
+      'terminal_tool_error_not_projected'
+    );
+    await consumption;
+
+    expect(callbacks.projectToolOutput).toHaveBeenCalledWith({
+      callId: 'call-terminal-error',
+      name: 'read_file',
+      output: '[REDACTED]'
+    });
+    expect(callbacks.emitRuntimeEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        block: expect.objectContaining({
+          callId: 'call-terminal-error',
+          phase: 'error',
+          error: '[REDACTED]'
+        })
+      })
+    );
+    expect(callbacks.recordSessionToolCall).toHaveBeenCalledWith(
+      'read_file',
+      { path: '/workspace/fixture.txt' },
+      { error: '[REDACTED]' }
+    );
+  });
+
+  it('propagates adapter contract errors instead of projecting them as tool failures', async () => {
+    const callbacks = createCallbacks([]);
+    const outcome = Promise.reject(
+      new DeepAgents110V3ContractError('deep_agents_1_10_v3_tool_call_status_invalid')
+    );
+    void outcome.catch(() => undefined);
+
+    await expect(
+      consumeToolCallStream({
+        calls: single(createToolCall({ outcome })),
+        context: {
+          runId: 'run-contract-failure',
+          taskRun: null
+        },
+        callbacks
+      })
+    ).rejects.toThrow('deep_agents_1_10_v3_tool_call_status_invalid');
+
+    expect(callbacks.emitRuntimeEvent).not.toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        block: expect.objectContaining({ phase: 'error' })
+      })
+    );
   });
 });
+
+function createMessage(overrides: Partial<DeepAgents110V3Message> = {}): DeepAgents110V3Message {
+  return {
+    usageKey: 'run/messages/0',
+    namespace: ['model_request:fixture'],
+    node: 'model_request',
+    text: empty<string>(),
+    reasoning: empty<string>(),
+    trailingReasoning: Promise.resolve(null),
+    usage: empty(),
+    ...overrides
+  };
+}
+
+function createToolCall(overrides: Partial<DeepAgents110V3ToolCall> = {}): DeepAgents110V3ToolCall {
+  return {
+    name: 'read_file',
+    callId: 'call-fixture',
+    input: { path: '/workspace/fixture.txt' },
+    outcome: Promise.resolve({ status: 'finished', output: 'fixture output' }),
+    ...overrides
+  };
+}
 
 function createCallbacks(outputOrder: string[]) {
   return {
@@ -231,16 +390,17 @@ function createCallbacks(outputOrder: string[]) {
     }),
     emitTodoEvent: vi.fn(),
     projectToolOutput: vi.fn(({ output }: { output: unknown }) => output),
-    recordSessionToolCall: vi.fn(),
-    recordTaskEvent: vi.fn()
+    recordSessionToolCall: vi.fn()
   };
 }
 
-async function* createSingleMessageStream(message: unknown): AsyncGenerator<unknown> {
-  yield message;
+async function* single<T>(value: T): AsyncGenerator<T> {
+  yield value;
 }
 
-async function* createDelayedStringStream(
+async function* empty<T>(): AsyncGenerator<T> {}
+
+async function* delayedStrings(
   chunks: ReadonlyArray<{ delayMs: number; value: string }>
 ): AsyncGenerator<string> {
   for (const chunk of chunks) {

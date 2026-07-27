@@ -4,6 +4,8 @@ import {
   createAsyncIterable,
   createCapabilities,
   createControlledAsyncStream,
+  createDeepAgents110V3MessageHandle,
+  createDeepAgents110V3ToolCallHandle,
   createDeferred,
   drainIterator,
   isChatRunEventBuffer,
@@ -17,9 +19,9 @@ describe('createAgentDeepAgentExecutor', () => {
     const events = await collectExecutorEvents({
       capabilities: createCapabilities([]),
       messages: createAsyncIterable([
-        {
+        createDeepAgents110V3MessageHandle({
           text: createAsyncIterable(['实时回答'])
-        }
+        })
       ]),
       output: {
         messages: []
@@ -46,10 +48,10 @@ describe('createAgentDeepAgentExecutor', () => {
     const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       messages: createAsyncIterable([
-        {
+        createDeepAgents110V3MessageHandle({
           reasoning: reasoning.iterable,
           text: text.iterable
-        }
+        })
       ]),
       output: output.promise
     });
@@ -81,6 +83,40 @@ describe('createAgentDeepAgentExecutor', () => {
     }
   });
 
+  it('observes final output failure when a message stream also fails', async () => {
+    const unhandledReasons: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledReasons.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      const failureGate = createDeferred<void>();
+      const output = failureGate.promise.then(() => {
+        throw new Error('run output failed');
+      });
+
+      await expect(collectExecutorEvents({
+        capabilities: createCapabilities([]),
+        messages: createAsyncIterable([
+          createDeepAgents110V3MessageHandle({
+            text: (async function* () {
+              failureGate.resolve(undefined);
+              throw new Error('message stream failed');
+            })()
+          })
+        ]),
+        output
+      })).rejects.toThrow('message stream failed');
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+
+      expect(unhandledReasons).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
+  });
+
 
   it('drains buffered assistant events without array shift reindexing while preserving the transcript', async () => {
     const chunks = Array.from({ length: 128 }, (_, index) => `实时片段${index}`);
@@ -99,9 +135,9 @@ describe('createAgentDeepAgentExecutor', () => {
       const events = await collectExecutorEvents({
         capabilities: createCapabilities([]),
         messages: createAsyncIterable([
-          {
+          createDeepAgents110V3MessageHandle({
             text: createAsyncIterable(chunks)
-          }
+          })
         ]),
         output: {
           messages: []
@@ -124,44 +160,42 @@ describe('createAgentDeepAgentExecutor', () => {
   it('stops the tool-event producer when bounded queue overflow aborts the stream', async () => {
     let yieldedCalls = 0;
     let finalized = false;
-    let messageProducerFinalized = false;
+    const producerFinalized = createDeferred<void>();
     const toolCalls = (async function* () {
       try {
         for (let index = 0; index < 2_000; index += 1) {
           yieldedCalls += 1;
-          yield {
-            id: `call-${index}`,
+          yield createDeepAgents110V3ToolCallHandle({
+            callId: `call-${index}`,
             name: 'read_file',
             input: { path: `/workspace/${index}.txt` },
-            output: { content: String(index) }
-          };
+            output: Promise.resolve({ content: String(index) })
+          });
         }
       } finally {
         finalized = true;
+        producerFinalized.resolve(undefined);
       }
     })();
-    const messages = (async function* () {
-      try {
-        for (let index = 0; index < 2_000; index += 1) {
-          yield {
-            text: createAsyncIterable([`message-${index}`])
-          };
-        }
-      } finally {
-        messageProducerFinalized = true;
-      }
-    })();
+    const execution = await startExecutorExecution({
+      capabilities: createCapabilities([]),
+      toolCalls
+    });
+    const iterator = execution[Symbol.asyncIterator]();
+    const firstEvent = await readIteratorValue(iterator.next(), 'tool_queue_first_event');
 
-    await expect(
-      collectExecutorEvents({
-        capabilities: createCapabilities([]),
-        messages,
-        toolCalls
-      })
-    ).rejects.toThrow('chat_run_event_queue_overflow');
+    expect(firstEvent).toMatchObject({
+      type: 'assistant_block',
+      block: {
+        kind: 'tool_call',
+        callId: 'call-0',
+        phase: 'start'
+      }
+    });
+    await producerFinalized.promise;
+    await expect(drainIterator(iterator)).rejects.toThrow('chat_run_event_queue_overflow');
 
     expect(finalized).toBe(true);
-    expect(messageProducerFinalized).toBe(true);
     expect(yieldedCalls).toBeLessThan(1_000);
   });
 

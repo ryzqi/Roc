@@ -117,11 +117,17 @@ export async function startExecutorExecution(input: ExecutorEventsInput): Promis
         }
         buildInput.contextCompaction.emitEvent(input.contextMaintenanceEvent);
       }
+      const output = input.output === undefined ? { messages: [] } : input.output;
+      const toolCalls = input.toolCalls === undefined ? emptyAsyncIterable() : input.toolCalls;
+      const messages = input.messages === undefined ? emptyAsyncIterable() : input.messages;
+      const subagents = input.subagents === undefined ? emptyAsyncIterable() : input.subagents;
       return {
-        toolCalls: input.toolCalls ?? emptyAsyncIterable(),
-        messages: input.messages ?? emptyAsyncIterable(),
-        subagents: input.subagents ?? emptyAsyncIterable(),
-        output: input.output ?? { messages: [] }
+        toolCalls,
+        messages,
+        subagents,
+        output: isPromiseLike(output) ? output : Promise.resolve(output),
+        interrupted: false,
+        interrupts: []
       };
     })
   });
@@ -518,12 +524,62 @@ export function readJson(value: unknown): unknown {
   return JSON.parse(value) as unknown;
 }
 
-async function* emptyAsyncIterable(): AsyncIterable<unknown> {}
+async function* emptyAsyncIterable<T>(): AsyncIterable<T> {}
 
-export async function* createAsyncIterable(values: unknown[]): AsyncIterable<unknown> {
+export async function* createAsyncIterable<T>(values: readonly T[]): AsyncIterable<T> {
   for (const value of values) {
     yield value;
   }
+}
+
+export function createDeepAgents110V3MessageHandle(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    namespace: ['model_request:fixture'],
+    node: 'model_request',
+    text: emptyAsyncIterable(),
+    toolCalls: emptyAsyncIterable(),
+    reasoning: emptyAsyncIterable(),
+    usage: emptyAsyncIterable(),
+    output: Promise.resolve({ content: [], type: 'ai' }),
+    ...overrides
+  };
+}
+
+export function createDeepAgents110V3ToolCallHandle(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    name: 'read_file',
+    callId: 'call-fixture',
+    input: { path: '/workspace/fixture.txt' },
+    output: Promise.resolve('fixture output'),
+    status: Promise.resolve('finished'),
+    error: Promise.resolve(undefined),
+    ...overrides
+  };
+}
+
+export function createDeepAgents110V3SubagentHandle(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    name: 'researcher',
+    cause: { type: 'toolCall', tool_call_id: 'call-subagent' },
+    output: Promise.resolve({ messages: [] }),
+    messages: emptyAsyncIterable(),
+    toolCalls: emptyAsyncIterable(),
+    subagents: emptyAsyncIterable(),
+    ...overrides
+  };
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if ((typeof value !== 'object' || value === null) && typeof value !== 'function') {
+    return false;
+  }
+  return typeof Reflect.get(value, 'then') === 'function';
 }
 
 type ControlledAsyncStream<T> = {

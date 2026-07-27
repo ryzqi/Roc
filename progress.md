@@ -5,10 +5,10 @@
 ## Current State
 
 - Branch：`main`。
-- Stage 7.2 review baseline：`4f37f17 fix(agent): align middleware ownership`。
+- Stage 7.3 review baseline：`475b4d2 fix(agent): upgrade Deep Agents filesystem glob`。
 - Stage 0-6：完成并提交。
-- Stage 7：Part 1 middleware overlap 已提交为 `4f37f17`；Part 2 Deep Agents 1.10.8 patch 已完成三轴 review、broad gate 与独立 staged boundary，提交待落下。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Stage 7.2 提交继续明确排除该文件。
+- Stage 7：Part 1 middleware overlap 已提交为 `4f37f17`；Part 2 Deep Agents 1.10.8 patch 已提交为 `475b4d2`；Part 3 versioned stream adapter 已启动。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Stage 7.3 提交继续明确排除该文件。
 
 ## Completed Milestones
 
@@ -483,3 +483,89 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - Smoke-fixture 增量 Spec review 为 `No findings`；Standards 提出 1 个 Low 文档一致性 finding，required-gate 边界已从单数 provider 同步为两个合成 provider，待 Standards 复审。
 - Standards closure 复审为 `No findings`；Risk 首轮完整分析为 `No issues found` 但 final 被上游 400 标记失败，极简重试后有效返回 `No issues found`。
 - 当前状态：**Verified passing; Stage 7.2 independent commit pending**。
+
+## 2026-07-27 - Stage 7 Part 3 Versioned Stream Adapter Start
+
+- Stage 7.2 已形成独立提交 `475b4d2 fix(agent): upgrade Deep Agents filesystem glob`；提交后工作树仅有必须保持未跟踪的 `plan.md`。
+- Session catchup 检出 23 条未同步消息；与 HEAD、工作树、`plan.md:666-668` 和三份账本核对后，确认 Stage 7.3 尚未修改 production 或 tests。
+- Part 3 范围固定为 Deep Agents 1.10.x / stream v3 单一 adapter、当前安装包真实 shape fixture，以及 consumers/projection 的 shape owner 收敛；不做依赖升级、多版本兼容、性能调优或无证据 cleanup。
+- 当前状态：**Located; production unchanged, contract characterization in progress**。
+- 首轮 CodeGraph 宽查询因同名符号扩散未给出目标 consumer 源码；未据此作实现决定，已改为精确符号定位。
+- 精确符号查询确认三个 consumer 入口均接收 `AsyncIterable<unknown>`，message/tool projection 内存在直接 reflection，subagent unknown shape 被继续下传；adapter 边界初步定位在 executor 与 consumers 之间。
+- subagent projection 的 reflection 字段与递归异步边界已定位；下一步核对安装包公开类型和实际 runtime shape，区分需要迁移的解析与必须保留的 Roc projection 语义。
+- executor 的三个强转、run final/interrupted 读取及 usage/message shape 偏差已定位；真实 fixture 必须同时覆盖 run、message、tool、subagent、usage 五类边界。
+- 已确认当前安装包精确为 Deep Agents 1.10.8，v3 stream 在包声明中仍是 experimental；versioned adapter 的必要性由上游合同直接支持。
+- 安装包类型审计已固定 run/tool/subagent 声明；确认现有 subagent projection 猜测三个非合同字段，下一步采样真实 `cause` 与 message usage/output shape。
+- Core message handle 与 final-output reflection 已核对；usage 现有读取不符合公开 handle contract，进入真实运行 fixture 采样阶段。
+- 已定位可复用的真实 tool/subagent agent harness 与手写旧 shape tests；下一步读取最小实现段，构造单一 runtime contract fixture。
+- 真实 fixture 的最小生成路径已确定：Scripted model 覆盖 message/tool/usage，单个 built-in `task` 覆盖 subagent/cause；准备新增 characterization test。
+- 新增真实安装包 conformance test；首轮 2/2 按预期因 fixture 假设不准失败，已采样到 `model_request:<UUID>` namespace 和 normalized content blocks，production 未修改。
+- 第二轮真实 fixture 为 1 passed / 1 shape refinement；subagent/cause/usage 已通过，message-level toolCalls 在该 provider 路径为空，已按实际包行为固定。
+- 收紧 namespace 后 behavior 2/2 与 diff check 通过；typecheck 仅报测试使用未公开类型入口和 output 过度收窄，已按 Deep Agents 公开类型修正，待复验。
+- Characterization 最终 gate：真实安装包 shape 1 file / 2 tests、`pnpm typecheck`、tracked diff check 全部通过；自查未发现待处理 finding。当前进入 adapter red contract，production 仍未修改。
+- 已完成 production reflection inventory；确认 adapter 要覆盖 run/message/tool/subagent/usage/terminal fields，同时保留 record-utils 的独立 provider-content 职责。
+- 已审计 owner tests 和 executor fake run；测试边界将同步为真实 upstream contract -> adapter DTO -> projection，不再让 raw legacy objects 直接进入 consumers。
+- legacy guardrail/content-block reflection 已用 v3 type/runtime contract 判定为错误 owner；本次不新增 raw-event 行为，准备以严格 adapter DTO 替换。
+- async subagent 与 named subagent owner 已分离；adapter DTO 只承诺当前 named-run stream，不携带 legacy async task fields。
+- 本轮 catchup 检出 20 条未同步工具消息；与交接摘要、当前 diff、三份账本和真实 conformance test 核对后，没有额外 production 修改或验证结果。
+- 当前状态：**Changed tests only; real package characterization verified; adapter red contract in progress**。下一步先定义 typed DTO 与显式 contract failure 测试，不先迁移 consumers。
+- Adapter 红合同新鲜结果：1 file / 7 tests 为原始 characterization 2 passed、adapter 5 expected failures；五条均只落在 `deep_agents_1_10_v3_adapter_not_implemented`，`pnpm typecheck` 通过。
+- 当前状态：**Changed, stable adapter red; test-diff review pending**。production 只有显式 stub，尚未实现或迁移 consumer。
+- 红合同自查发现递归标题缺两层直接证据、tool Promise 只覆盖 `output`；已补 nested usage path、`status/error` Promise 及 run/message terminal drift 断言，待重跑稳定红与 typecheck。
+- 自查修复后稳定红：1 file / 8 tests 为 2 passed、6 expected failures；`pnpm typecheck` 与 `git diff --check` 通过。当前进入 adapter 最小实现，consumer 尚未迁移。
+- Adapter 初版 1 file / 8 tests、typecheck 与 diff check 转绿；声明级 review 随后发现 subagent `cause: undefined` 是包内合法分支，已新增 normalization 红测，待最小修复。
+- Undefined-cause red-green 已闭环；adapter 最终 focused 为 1 file / 9 tests，typecheck 与 diff check 通过。当前状态：**Changed, adapter reviewed and verified; typed consumer migration in progress**。
+- Typed migration red：8 files / 57 tests 为 50 passed、7 expected failures；typecheck 仅有 accumulator 旧签名 6 errors，diff check 通过。当前开始修改 accumulator、consumers、subagent/final-output 与 executor。
+- Typed consumer production migration 已完成首轮实现；上一会话新鲜 focused gate 为 8 files / 57 tests：56 passed、1 failed。usage、consumer、subagent、final-output 与 executor usage 均已转绿。
+- 唯一行为失败是 bounded queue overflow owner test：新 tool 路径等待 output/status/error 后，原 fixture 不再稳定制造 queue burst，运行完整返回约 4860 个事件；必须重构 fixture 保留 `chat_run_event_queue_overflow` 合同，不放宽断言或产品容量。
+- `pnpm typecheck` 当前仅剩 `deep-agent-executor.ts:576` 的 TS2353：`recordTaskEvent` 已不属于 `StreamConsumerCallbacks`。下一步先证明旧 guardrail callback 无其他调用，再做最小清理并复验。
+- 当前状态：**Changed, unverified migration closure; 56/57 focused tests pass, one overflow regression and one type error remain**。
+- CodeGraph 与精确全仓扫描确认 `recordTaskEvent` 只剩 executor 空实现和一个多余 test mock；两处已删除，未移除任何现存 side effect。
+- Overflow fixture 已改为读取首个 tool event 后暂停外层 iterator，令内部 producer 在真实 1000-event queue 上形成确定性 backpressure；producer `finally` 后 drain 同一 iterator 并断言 `chat_run_event_queue_overflow`。
+- Direct closure gate 已通过：streaming + consumer 2 files / 13 tests；overflow 单 case 连续 5 轮通过；`pnpm typecheck` 与 `git diff --check` exit 0。
+- 当前状态：**Changed, direct closure verified; full 8-file focused gate and consumer migration review pending**。
+- 完整 focused gate 已从实际 owner tests 恢复为：adapter conformance、stream consumers、run usage、subagent projection、executor streaming、executor final output、final-output owner 与 executor owner共 8 files；下一步以命令实际 test count 校验上一会话的 57-test 记录。
+- 完整 focused gate 新鲜通过：8 files / 57 tests，exit 0；与上一会话计数一致。当前状态：**Changed, focused verified; consumer migration Standards / Spec review pending**。
+- Review fixed point 已解析为 `475b4d2379c374851e2f4e76b43c116aea5f62d5`；HEAD 与基线之间无提交，本次对象为当前 WIP。普通 diff 包含 15 个 tracked 文件，review prompt 还必须显式读取未跟踪的 adapter 与真实 shape conformance test；`plan.md:666-668` 仅作为 spec，不进入改动集。
+- Local Risk review 定位 1 个 Medium finding：root/subagent tool consumers 等待但忽略合法 `status/error`，与 LangGraph 1.4.7 对 runner-dependent output reject/hang 的声明冲突。当前状态：**Located; red tests pending, not fixed**。
+- Review-fix 红合同已设计：root tool 以 pending output + terminal error status 证明不会挂起；subagent tool 以 resolved output + terminal error status 证明不会误投影 end。两路都必须产生具体脱敏 error block，旧实现预期稳定失败。
+- Tool terminal review-fix 红灯新鲜稳定：2 files / 15 tests 为 13 passed、2 expected failures；root 报 `terminal_tool_error_not_projected`，subagent 收到禁止投影的 success output。当前状态：**Stable red; adapter-owned terminal outcome implementation in progress**。
+- Tool terminal review-fix 已转绿：adapter conformance + root consumer + subagent projection 3 files / 25 tests；`pnpm typecheck`、production 三字段残余扫描与 `git diff --check` 通过。该 Medium finding 状态：**Verified passing, final rereview pending**。
+- Spec reviewer 返回 1 个 Medium finding：message output 与 final messages 仍为 unknown，reasoning/final text shape 解析泄漏到 consumer/projection。当前状态：**Located; adapter DTO red tests pending, not fixed**。
+- Spec review-fix 红合同固定为 adapter 直接输出 `trailingReasoning` 与 `finalAssistantText`；真实 installed fixture 应断言 null/具体 final text，手写 raw fixture补 reasoning fallback 与畸形 nested message 的显式失败。
+- Nested message DTO 红灯新鲜稳定：2 files / 20 tests 为 15 passed、5 expected failures；命中 installed message 缺 trailing field、raw output 字段仍泄漏、畸形 final message 被接受，以及 consumer 忽略 stable fallback。当前状态：**Stable red; adapter DTO implementation in progress**。
+- Nested message DTO 已转绿：adapter conformance + root consumer + subagent projection 3 files / 27 tests；`pnpm typecheck`、shape ownership 残余扫描与 `git diff --check` 通过。两个 Medium review findings 均已直接闭环，当前状态：**Changed, direct review fixes verified; full focused gate and rereview pending**。
+- Standards reviewer 返回 1 个 High hard finding：root message stream 先失败时 adapter 派生的 trailing Promise 可能无人观察并触发 `unhandledRejection`。当前状态：**Located; concurrency red test pending, not fixed**。
+- High finding 红灯已稳定：1 file / 10 tests 为 9 passed、1 expected failure；监听器具体捕获 `Error: message output failed`，证明 root consumer 未及时观察 adapter 派生 Promise。
+- 最小修复已把 `message.trailingReasoning` 加入现有三路消费的初始 `Promise.all` 并复用解析值；最窄 owner gate 1 file / 10 tests passed，无 `unhandledRejection` 报告。当前状态：**Verified passing; direct three-owner gate pending**。
+- Direct review-fix gate 新鲜通过：adapter conformance、root consumer、subagent projection 3 files / 28 tests；`pnpm typecheck` 与 `git diff --check` exit 0。当前状态：**Verified passing; full focused gate and incremental rereview pending**。
+- 完整 focused gate 新鲜通过：8 files / 63 tests，exit 0；consumer/projection raw-shape、旧 helper/callback/cast 残余扫描均为 0。当前状态：**Focused/static verified; incremental Standards / Spec rereview pending**。
+- Local Risk 同类时序红灯稳定：root/subagent 两个 owner files / 15 tests 为 13 passed、2 expected failures，监听器分别收到 `run output failed` 与 `subagent output failed`。当前状态：**Confirmed High; stable red, not fixed**。
+- Adapter 同步 validation 红灯稳定：1 file / 12 tests 为 11 passed、1 expected failure，监听器收到 `run output failed during contract drift`。当前状态：**Three output-observation paths confirmed; production fix in progress**。
+- Output observation 修复首轮为 26/27；唯一失败来自 red fixture 自己的 raw rejected Promise。fixture 先观察 raw rejection、只隔离 adapter 派生泄漏后，3 files / 27 tests 全部通过。
+- Standards 最终增量复审首轮被服务端 429 终止，未计为通过；同一 reviewer 将在最终树稳定后重试。当前状态：**Output High verified; remaining review candidate is terminal contract branch coverage**。
+- Tool terminal 三条未覆盖 contract 分支已形成参数化 owner test，adapter 1 file / 15 tests 直接通过。当前状态：**All located review fixes directly verified; combined review-fix gate pending**。
+- Tool multi-Promise ordering 红灯稳定：adapter 1 file / 16 tests 为 15 passed、1 expected failure，监听器收到 `tool output failed during contract drift`。当前状态：**Confirmed; validate-all-before-derive fix in progress**。
+- Tool multi-Promise ordering 修复后 adapter 1 file / 16 tests 全部通过。当前状态：**All review fixes directly verified; combined owner gate pending**。
+- Combined review-fix gate 新鲜通过：adapter、root message、subagent、executor streaming 4 files / 41 tests；`pnpm typecheck` 与 `git diff --check` exit 0。当前状态：**Final Standards / Spec rereview pending**。
+- Final Spec reviewer 与 Local Risk 同时确认 root/subagent tool outcome 迟观察 High；reviewer 只读 probe 已捕获 `tool output failed`。当前状态：**Confirmed; two owner red regressions pending**。
+- Tool outcome owner 红灯稳定：root/subagent 2 files / 20 tests 为 18 passed、2 expected failures。Standards 另确认 adapter run/message/tool/subagent 四类 raw Promise owner 缺口；当前先修 typed consumers，再补四类 adapter 无预 catch 合同。
+- Typed tool consumers 已在 callback 前建立 outcome settlement；同一 2 files / 20 tests 全部通过。当前状态：**Typed owner verified; adapter four-owner raw Promise red contract pending**。
+- Adapter run/message/tool/subagent 四类无预 catch 红合同稳定为 14/18；当前状态：**Stable red; observe-on-capture adapter fix in progress**。
+- Adapter observe-on-capture 修复后四类无预 catch owner gate 18/18 passed。当前状态：**Direct adapter verified; combined review-fix gate pending**。
+- Combined gate 首轮行为 45/45、diff check 通过，typecheck 发现 thenable flattening 与 test mock 返回类型 2 errors；修正类型合同后同一 45/45、typecheck、diff check 全部通过。当前状态：**Final Standards / Spec rereview pending**。
+- 完整 focused gate 新鲜通过：8 files / 74 tests。Final Spec 增量复审返回 `No findings`。当前状态：**Standards final rereview and local Risk closure pending**。
+- Rejection review-fix gate 4 files / 45 tests 连续三轮全部通过。当前状态：**Timing stable; strict unused and Standards pending**。
+- Strict unused scan exit 0。当前状态：**Focused/static verified; Standards final rereview pending before broad gate**。
+- Final Standards / Spec rereview 均为 `No findings`；Local Risk closure 也无剩余 finding。当前状态：**Reviewed; broad gate pending**。
+- Broad gate 开始：`pnpm check:ipc` 与 `pnpm build` 均 exit 0；build 内 typecheck、main/preload/renderer 构建全部通过。
+- 首次 full Vitest 未通过：322 files / 1803 tests 中 321 files / 1802 tests passed，唯一失败为未修改的 `runtime-production-multiple-interrupts.integration.test.ts` 首次等待两个 interrupt event 超过 20 秒；主命令 exit 1，未计为 broad passing。
+- 第一次尝试单文件时，`pnpm test -- <file>` 实际传入字面 `--` 并再次运行 322-file full suite；该结果未作为单文件证据。改用 `pnpm exec vitest run <file>` 后确认 1 file / 1 test 同样稳定失败。
+- CodeGraph、固定依赖声明与 runtime 实现确认根因：LangGraph 1.4.7 terminal fields 是消费期间更新的 `StreamMux` getter；adapter 在消费前快照导致 interrupt run 被误判为普通 run并等待 pending output。
+- 新增 adapter 直接动态 terminal 回归；旧实现目标 case 1 failed / 18 skipped，具体为消费后 expected true、received false。当前状态：**Stable red; production fix pending**。
+- Adapter 改为适配时验证、读取时重新验证/映射 terminal getter；直接目标 case 1/1 通过，真实 production multiple-interrupts 1 file / 1 test 通过并完成两次重建 resume。当前状态：**Review-fix direct verified**。
+- 扩展 focused gate 为原 8 个 adapter/consumer/executor owners 加 production multiple-interrupts：9 files / 76 tests passed；`pnpm typecheck` 与 strict unused exit 0。增量 Standards / Spec / Risk review 已启动，full Vitest retry 尚未运行。
+- 修复后的最终 `pnpm build` exit 0；main/preload/renderer 均构建成功，build 内 typecheck 通过。
+- Full Vitest retry exit 0：322 files / 1804 tests passed，production multiple-interrupts 已包含在全套中。汇总后 4 条既有 `node-pty AttachConsole failed` helper stderr 不改变主命令结果。
+- 独占 `pnpm smoke:agent-performance` 为 1 file / 1 test passed；最终 `pnpm check:ipc` 与 `git diff --check 475b4d2` 通过。
+- Dynamic terminal 增量 review 完成：Standards / Spec 均为 `No findings`，Local Risk 为 `No issues found`。当前状态：**Verified passing; staged-boundary audit and independent commit pending**。

@@ -24,6 +24,7 @@ import type {
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
+import { adaptDeepAgents110V3Run } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
 import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
 import { createRunSubagents } from '../../services/deep-agent/tools';
 import { defaultErrorTracker, PreviewStore } from '../../services/forge-guardrails';
@@ -336,7 +337,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           : new Command({
               resume: input.resumePayload
             });
-      const run = await runWithLangSmithTracing(langSmithTracing, async () =>
+      const rawRun = await runWithLangSmithTracing(langSmithTracing, async () =>
         await agent.streamEvents(runInput as never, {
           version: 'v3',
           ...(langSmithTracing === null ? {} : langSmithTracing.runnableConfig),
@@ -347,6 +348,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           signal: executionAbortController.signal
         })
       );
+      const run = adaptDeepAgents110V3Run(rawRun);
+      const runOutputSettlement = Promise.allSettled([run.output] as const);
       const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
         emitRuntimeEvent,
@@ -361,7 +364,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         try {
           await Promise.all([
             consumeToolCallStream({
-              calls: run.toolCalls as AsyncIterable<unknown>,
+              calls: run.toolCalls,
               context: {
                 runId: input.run.id,
                 taskRun
@@ -369,7 +372,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               callbacks
             }),
             consumeMessageStream({
-              messages: run.messages as AsyncIterable<unknown>,
+              messages: run.messages,
               context: {
                 runId: input.run.id,
                 taskRun
@@ -380,7 +383,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               callbacks
             }),
             consumeSubagentStream({
-              subagents: run.subagents as AsyncIterable<unknown>,
+              subagents: run.subagents,
               context: {
                 runId: input.run.id,
                 taskRun
@@ -402,8 +405,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               emitRuntimeEvent(event);
             }
           } else {
-            const output = await Promise.resolve(run.output);
-            const finalAssistantText = readFinalAssistantText(output);
+            const [settledOutput] = await runOutputSettlement;
+            if (settledOutput.status === 'rejected') {
+              throw settledOutput.reason;
+            }
+            const finalAssistantText = readFinalAssistantText(settledOutput.value);
             if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
               assistantChunks.push(finalAssistantText);
               emitRuntimeEvent({
@@ -570,8 +576,7 @@ function createExecutorCallbacks(input: {
       input.emitRuntimeEvent(event);
     },
     emitTodoEvent: () => {},
-    projectToolOutput: input.projectToolOutput,
-    recordTaskEvent: () => {}
+    projectToolOutput: input.projectToolOutput
   };
 }
 

@@ -1,4 +1,4 @@
-import * as recordUtils from './record-utils';
+import type { DeepAgents110V3Usage } from './deep-agents-1-10-stream-adapter';
 
 export type ProviderUsageAccumulator = {
   promptTokens: number | null;
@@ -9,13 +9,7 @@ export type ProviderUsageAccumulator = {
   callUsage: Map<string, ProviderUsageSnapshot>;
 };
 
-type ProviderUsageSnapshot = {
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
-};
+type ProviderUsageSnapshot = DeepAgents110V3Usage;
 
 export function createUsageAccumulator(): ProviderUsageAccumulator {
   return {
@@ -28,33 +22,22 @@ export function createUsageAccumulator(): ProviderUsageAccumulator {
   };
 }
 
-export function updateUsageAccumulator(target: ProviderUsageAccumulator, message: unknown): void {
-  const usageMetadata = recordUtils.readRecordValue(message, 'usage_metadata');
-  const inputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'input_tokens'));
-  const outputTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'output_tokens'));
-  const totalTokens = readNonNegativeInteger(recordUtils.readRecordValue(usageMetadata, 'total_tokens'));
-  const inputTokenDetails = recordUtils.readRecordValue(usageMetadata, 'input_token_details');
-  const cacheReadTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_read'));
-  const cacheCreationTokens = readNonNegativeInteger(recordUtils.readRecordValue(inputTokenDetails, 'cache_creation'));
-  const usage: ProviderUsageSnapshot = {
-    promptTokens: inputTokens,
-    completionTokens: outputTokens,
-    totalTokens,
-    cacheReadTokens,
-    cacheCreationTokens
-  };
+export function updateUsageAccumulator(
+  target: ProviderUsageAccumulator,
+  usageKey: string,
+  usage: DeepAgents110V3Usage
+): void {
+  if (usageKey.length === 0) {
+    throw new Error('provider_usage_key_missing');
+  }
   if (!hasUsage(usage)) {
     return;
   }
-  const messageId = readMessageId(message);
-  if (messageId === null) {
-    return;
-  }
-  const previous = target.callUsage.get(messageId);
-  target.callUsage.set(messageId, mergeUsage(previous, usage));
+  const previous = target.callUsage.get(usageKey);
+  target.callUsage.set(usageKey, mergeUsage(previous, usage));
   const aggregate = aggregateUsage(target.callUsage.values());
-  target.promptTokens = aggregate.promptTokens;
-  target.completionTokens = aggregate.completionTokens;
+  target.promptTokens = aggregate.inputTokens;
+  target.completionTokens = aggregate.outputTokens;
   target.totalTokens = aggregate.totalTokens;
   target.cacheReadTokens = aggregate.cacheReadTokens;
   target.cacheCreationTokens = aggregate.cacheCreationTokens;
@@ -64,15 +47,10 @@ function hasUsage(usage: ProviderUsageSnapshot): boolean {
   return Object.values(usage).some((value) => value !== null);
 }
 
-function readMessageId(message: unknown): string | null {
-  const id = recordUtils.readRecordValue(message, 'id');
-  return typeof id === 'string' && id.length > 0 ? id : null;
-}
-
 function mergeUsage(previous: ProviderUsageSnapshot | undefined, next: ProviderUsageSnapshot): ProviderUsageSnapshot {
   return {
-    promptTokens: retainPreviousUsage(previous, next.promptTokens, 'promptTokens'),
-    completionTokens: retainPreviousUsage(previous, next.completionTokens, 'completionTokens'),
+    inputTokens: retainPreviousUsage(previous, next.inputTokens, 'inputTokens'),
+    outputTokens: retainPreviousUsage(previous, next.outputTokens, 'outputTokens'),
     totalTokens: retainPreviousUsage(previous, next.totalTokens, 'totalTokens'),
     cacheReadTokens: retainPreviousUsage(previous, next.cacheReadTokens, 'cacheReadTokens'),
     cacheCreationTokens: retainPreviousUsage(previous, next.cacheCreationTokens, 'cacheCreationTokens')
@@ -93,8 +71,8 @@ function retainPreviousUsage(
 function aggregateUsage(usages: Iterable<ProviderUsageSnapshot>): ProviderUsageSnapshot {
   const values = [...usages];
   return {
-    promptTokens: sumUsage(values, 'promptTokens'),
-    completionTokens: sumUsage(values, 'completionTokens'),
+    inputTokens: sumUsage(values, 'inputTokens'),
+    outputTokens: sumUsage(values, 'outputTokens'),
     totalTokens: sumUsage(values, 'totalTokens'),
     cacheReadTokens: sumUsage(values, 'cacheReadTokens'),
     cacheCreationTokens: sumUsage(values, 'cacheCreationTokens')
@@ -112,8 +90,4 @@ function sumUsage(usages: readonly ProviderUsageSnapshot[], field: keyof Provide
     }
   }
   return observed ? total : null;
-}
-
-function readNonNegativeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
