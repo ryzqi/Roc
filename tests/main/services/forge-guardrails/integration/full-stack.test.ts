@@ -189,6 +189,7 @@ describe('forge guardrails full stack', () => {
       'RTKMiddleware',
       'toolRetryMiddleware',
       'RocToolProtocolMiddleware',
+      'RocSubagentStateIsolationMiddleware',
       'ModelCallLimitMiddleware',
       'ToolCallLimitMiddleware',
       'ForgeErrorBudgetMiddleware',

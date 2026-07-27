@@ -5,11 +5,11 @@
 ## Current State
 
 - Branch：`main`。
-- Part 6 review baseline：`332048d test(agent): stabilize multiple interrupt integration`。
+- Part 7 review baseline：`2ea75fe test(agent): add manual live quality eval`。
 - Stage 0-5：完成并提交。
-- Stage 6：Part 1-5 已完成并分别提交；Part 6 manual live quality eval 的本地 review 与 broad gate 已闭环并 included in current commit；真实 provider 为 `Blocked, not run`。
+- Stage 6：Part 1-6 已完成并分别提交；Part 7 agent performance gate 正在定位实现与测量边界。Part 6 真实 provider 验证仍为 `Blocked, not run`。
 - Stage 7：pending。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 6 提交继续明确排除该文件。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Part 7 提交继续明确排除该文件。
 
 ## Completed Milestones
 
@@ -34,7 +34,7 @@
 | Stage 6.3 | 默认关闭的 LangSmith native tracing、durable lifecycle 与独立可观测性 settings UI。 | `012c870`、`82164ab` |
 | Stage 6.4 | 独立 agent integration mode、真实 Deep Agents/Roc SQLite offline trajectory 与可选 Anthropic live boundary。 | `da0eb8d` |
 | Stage 6.5 | Deterministic trajectory eval runner、strict versioned dataset 与真实 harness scenarios。 | `298b2da` |
-| Stage 6.6 | Manual live quality eval、strict versioned dataset、真实 Anthropic harness 与独立 structured-output judge。 | current commit |
+| Stage 6.6 | Manual live quality eval、strict versioned dataset、真实 Anthropic harness 与独立 structured-output judge。 | `2ea75fe` |
 
 ## Verification Ledger
 
@@ -286,3 +286,103 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - 当前状态：**Verified passing locally; reviews and broad gate closed; included in the current Part 6 commit; real provider Blocked, not run**。
 - 续接后的最终双轴复审：Standards 与 Spec 均无 finding；本地 Risk 复核未发现新增问题，10 文件范围与 `plan.md` 排除边界准确。
 - 续接后的新鲜 focused gate：config/CLI 2 files / 10 tests、deterministic 5/5、live contract 8 passed / 1 live skipped、integration 1 passed / 1 skipped、missing-key expected failure、typecheck、strict unused 与 `git diff --check 332048d --` 全部通过。
+
+## 2026-07-27 - Stage 6 Part 7 Agent Performance Gate
+
+- Part 6 已独立提交为 `2ea75fe test(agent): add manual live quality eval`；提交后工作树仅剩未跟踪只读 `plan.md`。
+- Part 7 范围固定为独立 deterministic agent performance smoke 与 versioned artifact；覆盖 build、first token/tool、roundtrip、completion、restart、10/100 iterations、subagent fan-out、event queue/outbox lag。
+- 阈值必须由 raw baseline samples 支撑，并保存运行环境、回归比例与绝对上限；不使用真实 provider/network，不修改 UI performance 或生产 runtime。
+- 当前状态：**Located from plan.md**。下一步用 CodeGraph 定位现有 smoke/artifact、agent harness、checkpoint/restart、subagent 与 queue/outbox owner。
+- CodeGraph 确认现有 smoke 是 Electron/UI/transcript 路径，写 `performance-smoke.json` 并使用脚本内绝对预算；Agent smoke 必须保持独立 artifact/command。
+- CodeGraph 确认 `buildDeepAgent()` 同时组装真实 middleware、tools、subagents 与 checkpointer，可作为 deterministic build/loop/fan-out 测量入口；restart、iteration 与 queue/outbox owner 继续定向定位。
+- 定向源码确认 v3 agent stream 的 `messages/toolCalls/output` 可直接测 first model/tool、roundtrip 与 completion；Fake model 可稳定驱动固定轮数。
+- Queue 使用 production `highWaterMark`；outbox 使用真实 history reader + task repository cursor projection；artifact 固定写 `.artifacts/wave1/agent-performance-smoke.json`，与 UI smoke 文件隔离。
+- Subagent fan-out 可复用真实 `task` tool + compiled declarative subagent，每个 model 使用独立 deterministic sequence，避免并发共享 index。
+- Config red：`agent-performance-mode.test.ts` 3/3 按预期失败，分别命中缺 package script、default exclude 与 dedicated config；尚未执行 benchmark 实现。
+- 当前状态：**Changed, config red tests verified**。下一步增加 strict baseline/artifact parser 与 threshold breach red contract。
+- Contract red 在 0 tests 前精确失败为缺少 `agent-performance-contract`；随后新增 strict parser 与 threshold evaluator。
+- Config/contract green：2 files / 8 tests passed；完整 metric ID 集、baseline completeness、unknown field rejection、relative/absolute breach 与 dedicated collection boundary 均已验证。
+- 续接恢复：`session-catchup.py` 报告 15 条未同步消息；与交接摘要、当前工作树和三份账本核对后，未发现 config/contract green 之后的额外实现或验证。
+- 当前状态：**Changed, contract focused verified; smoke harness pending**。下一步运行缺 baseline 的稳定红灯，再实现 deterministic agent performance scenarios。
+- Missing-baseline red：`pnpm smoke:agent-performance` 在 0 tests 前精确以 `ENOENT` 失败于 `tests/performance/datasets/agent-performance-baseline.v1.json`；未进入 agent、provider 或 network 执行。
+- 当前状态：**Changed, red boundary verified**。下一步实现完整 deterministic harness，再用本机 raw samples 校准 versioned baseline。
+- 本轮续接通过 session catchup、工作树与三份账本交叉核对；未发现 missing-baseline red 之后的额外实现或验证，继续从完整 deterministic harness 开始。
+- 续接后的 contract focused gate 新鲜通过：`agent-performance-mode.test.ts` 与 `agent-performance-contract.test.ts` 共 2 files / 8 tests passed；fixture identity 与扩展 evidence shape 状态为 **Verified passing**。
+- 本段 review 发现成功 artifact 仍可接受全 `null` evidence，strict parser 尚不能证明 iteration/restart/fan-out/queue/outbox 的业务结果；进入 harness 实现前先补按 metric 的 evidence 语义红测与校验。
+- Evidence 语义 red-green：新增 case 先以 1 failed / 5 passed 精确证明 `iterations_10` 全空 evidence 被错误接受；builder/parser 现共享按 metric 校验，focused gate 为 2 files / 9 tests passed，待 parser 入口增量用例复验。
+- 完整 deterministic harness 已写入，状态 **Changed, unverified**；首轮 typecheck 精确发现 manifest readonly tuple 与 `tool()` contextual input 两处测试类型错误，`git diff --check` 已通过。只收紧显式类型后重跑，不改变场景行为。
+- 类型修复后 `pnpm typecheck` 与 contract 2 files / 9 tests 通过；首次真实 smoke 在 625ms 后失败于 restart 第二轮 terminal state 断言，failure artifact 已按合同写出。下一步读取确定性 message 尾部诊断持久恢复语义。
+- 本轮 session catchup 报告 7 条未同步消息；与工作树、交接摘要及账本核对后，确认完整 harness 已存在，当前唯一已知执行阻断仍是 restart 第二轮 `agent_performance_terminal_output_invalid`。`task_plan.md` 已同步为 restart 诊断与 baseline 校准阶段。
+- 增强诊断后的新鲜 smoke 仍稳定失败；最终 message 尾部精确为首轮 Human、terminal AI、新一轮 Human。当前假设是两次 model 实例复用相同 AI message ID，导致 reducer 原位替换；下一步核对 fake model ID 与第二轮 invocation evidence，不能直接放宽断言。
+- 源码核对确认两个重建模型均从 invocation 1 生成同一 AI message ID，而 LangGraph reducer 明确对同 ID message 原位替换。已做最小 fixture 修复：删除人工 AI message ID，让 reducer 生成唯一 ID；状态为 **Changed, unverified**，下一步重跑完整 smoke。
+- 修复后 smoke 从 585ms 推进至 1164ms，restart 原断言未再失败；新失败为 `iterations_10` 在 recursion limit 60 触发 `GraphRecursionError`。当前状态仍为 **Changed, unverified**，下一步复用生产预算推导或测得实际 graph step 后调整 fixture recursion limit。
+- CodeGraph 与源码确认生产 executor 未设置 recursion limit，只有 model/tool budget owner；smoke 当前倍率无生产依据。下一步在失败信息中加入 invocation/tool/checkpoint step 证据，用实测值确定测试专用 graph headroom。
+- 增量诊断稳定得到 `models=6:tools=6:checkpoints=62`；据此把 iteration recursion budget 从 `4N + 20` 改为每个预期 model invocation 12 steps 加固定 20 steps，并保留失败时 counts/checkpoint 证据。状态为 **Changed, unverified**。
+- 新鲜 smoke 运行 12.56s 后越过 restart 与 10/100 iterations，在三路 subagent fan-out 失败：`threadModelCallCount` 同 step 收到 `[2,2,2]`，`LastValue` 抛 `INVALID_CONCURRENT_GRAPH_UPDATE`，并伴随一个 subagent rejection。下一步定位 execution-safety middleware state owner 与既有并发 regression；不串行化 fixture。
+- CodeGraph 与安装包确认冲突路径：Roc 为每个 compiled subagent 注入 native model-call limiter；包内 thread counter 是无 reducer 的 Zod number，并在 `afterModel` 写 `+1`。仓库没有既有三路并发 subagent regression，下一步先恢复预算规格再选最小生产修复。
+- `agent-development` 参考确认并行分支必须有明确 reducer，subagent fan-out 是 release gate；`plan.md` 与 Stage 4 tests 仅固定 main/subagent 均安装 native limits，未定义跨分支 aggregate counter。下一步审计 `031baea` 的原设计与 `run-budget` 行为测试。
+- `031baea` 审计确认 native persisted counter 是有意设计，run/thread limit 与结构化终止均已冻结，但所谓 `run-budget.test.ts` 从未落地，只有 wiring/snapshot/runtime error mapping 回归。下一步检查 Deep Agents task transformer 的 subagent state 合流边界。
+- LangChain v3 stream transformer 已排除：它只投影 subagent lifecycle，不写 state；unhandled rejection 是根 graph failure 的次生输出。继续定位 Deep Agents `task` tool 的 Command/update 合流。
+- Deep Agents bundle 已确认根因：task tool 将非固定排除 key 全量传入/带回 subagent，budget counters 不在排除表；三条 `Command.update` 并发写回 parent。下一步调查 state reducer 能否在不丢失准确计数的前提下解决。
+- reducer 路径被否决：native limiter 的绝对 count/reset 无法用无额外状态的 reducer准确合并。拟在 main `task` 返回边界过滤四个 native counter，保持每个 subagent 内原生 run/thread limit；先验证 `Command` 拦截 API 并写稳定红测。
+- `Command` API 与 middleware chain 已确认支持无损拦截。下一步以仓库现有 real subagent fixture 新增默认 Vitest 三路 fan-out 红测，再实现 `RocSubagentStateIsolationMiddleware`。
+- 本轮续接通过 session catchup、工作树与账本复核，未发现交接摘要之外的新改动；CodeGraph 再次确认 main 与每个 compiled subagent 都安装 native model/tool limit middleware，冲突修复应放在 main `task` 返回边界而不是删除 subagent limit。
+- 默认 Vitest 三路 fan-out 红灯已稳定复现：三个分支同 step 合流时 `threadModelCallCount` 收到 `[2,2,2]`，抛 `INVALID_CONCURRENT_GRAPH_UPDATE`；同组 scope test 仅因预期的 `RocSubagentStateIsolationMiddleware` 尚不存在而失败，其余 2 tests passed。
+- 红测同时把 `ModelCallLimitMiddleware` 与 `ToolCallLimitMiddleware` 纳入 main/subagent 共享 safety 期望，防止修复通过移除 native limits 规避冲突。
+- 最小生产修复新增 main-only `RocSubagentStateIsolationMiddleware`：只对 `task` 返回的对象型 `Command.update` 删除四个 native counter，保留其他 state 与 `graph/goto/resume`；不修改 subagent stack 或安装包。
+- 修复后 focused gate：state isolation + execution safety scopes 共 2 files / 5 tests passed；三路分支均执行，静态 wiring 证明 main/subagent native model/tool limiter 仍存在且隔离层不进入 subagent；`pnpm typecheck` passed。
+- 完整 `pnpm smoke:agent-performance` 已通过；随后又串行通过 4 次，共取得 5 轮、每项 15 个同机 raw samples。下一步用这些实测值替换 `[1,1,1]` 与 `1000000` 临时门，并增加默认 baseline 非占位合同。
+- Baseline 已冻结为 15 samples/metric 与有限 relative/absolute gate；校准后 smoke 1/1 passed，所有 11 metrics passed，最大 observed ratio 为 event queue 1.13。
+- Risk review red：篡改 artifact 的 `currentP95Ms` 仍通过 parser；同时真实低 model budget fixture 证明 subagent 内 native limiter 仍在第二次 model call 前生效。进入 artifact consistency 最小修复。
+- Artifact consistency 修复后 config/contract 2 files / 11 tests、subagent/scope 2 files / 6 tests、typecheck 与 diff check passed。
+- 随后的有限门 smoke 按合同非零失败并写 failure artifact：仅 `subagent_fan_out` 触发 relative gate，current P95 128.25ms / baseline 62.04ms = 2.07x，低于 180ms absolute max；同轮 100 iterations 1.58x、outbox 2.00x，显示整轮系统负载上升，暂不直接放宽阈值。
+- 本轮恢复由 `session-catchup.py` 检出 11 条未同步消息；交接摘要、当前工作树与三份账本一致，未发现摘要之外的新实现或验证。
+- Standards review 返回 3 项：预算 counter 是否应跨并发 subagent 聚合、baseline/current 环境未比较、`task_plan.md` 状态漂移。账本漂移已同步；前两项进入执行路径与规格核对，尚未关闭。
+- 当前状态：**Changed, review in progress**。下一步完成 Spec / Risk review，判定并修复有效 finding，然后独占重跑 agent performance smoke。
+- Part 7 Spec review 返回 5 项：当前 smoke breach、environment/fixture identity、queue/outbox lag、临时 workspace，以及对 native budget 的全局聚合解释。
+- 原生 middleware 源码与 Stage 4 per-scope 文字核对后，global run aggregation 解释不成立；但发现当前 isolation 只过滤返回方向，parent counter 会泄漏进 subagent。下一步改为 task request/result 双向隔离，并将低预算回归修正为 subagent 独立两次调用后第三次失败。
+- Budget isolation review-fix 红灯：目标文件 3 tests 中 1 passed / 2 expected failures；handler 实际收到全部 parent counters，`modelCallLimit=2` 的 subagent 只执行 1 次即失败，精确证明单向过滤与测试假阳性。
+- 首次双向 wrapper 修复后单元过滤转绿，但真实 subagent 仍只执行 1 次；安装包定位确认 `task` 通过 `getCurrentTaskInput()` 读取 state，不使用替换后的 wrapper request。该尝试未解决真实路径，改为 subagent `beforeAgent` 初始化独立 counter，并让所有 scope 过滤 nested `task` 返回。
+- Subagent initialization 首轮 green 仅剩测试边界错误：同步 `beforeAgent` 返回值误用了 `.resolves`；真实两次 subagent model call 与第三次 budget failure 已通过。断言改为同步等值后重跑。
+- Budget isolation review-fix focused gate 已转绿：2 files / 7 tests passed；三路并发、每个 subagent 独立 native counter、第三次 model call budget failure 与 main/subagent wiring 均有直接证据。
+- Baseline identity 红灯：contract 9 tests 中 4 passed / 5 expected failures，strict parser 精确拒绝新增 `cpuModel`、fixture、Git/dirty provenance；环境兼容检查尚不存在。
+- Baseline schema 实现后 contract 为 8 passed / 1 test-fixture failure；遗漏 `worktreeDirty` 使该 artifact 在 evidence 检查前被 strict schema 拒绝，补齐 fixture 后重跑。
+- Baseline identity contract 已转绿：1 file / 9 tests passed；strict v1 baseline/artifact 现保存 CPU model、fixture、Git revision 与 dirty provenance，并逐字段拒绝不兼容运行环境。
+- Queue/outbox 已改为事件入队/row 创建到消费或 cursor 投影完成的 end-to-end lag；performance harness 改用计时前创建、`finally` 清理的临时 workspace。当前状态：**Changed, unverified**。
+- 首轮 review-fix focused 为 4 files / 19 tests passed、diff check passed；typecheck 唯一失败是 initialization middleware 未声明其 custom state schema。修复采用与原生 limiter 同构的 Zod v3 counter schema，不用类型断言绕过。
+- Schema 修复后 focused gate 为 4 files / 19 tests、typecheck 与 diff check passed。
+- 首轮独占 agent smoke 正确非零失败：`subagent_fan_out` 1.93x、`outbox_projection` 2.36x；均低于既有 absolute max。artifact provenance 完整，临时 workspace 0 残留。因两个被测路径语义已改变，进入五轮同机重采，不单项放宽 threshold。
+- Review-fix 后五轮同机重采完成：每轮 11 metrics × 3 samples，旧 baseline 下均只命中 fan-out/outbox；新 fan-out 最大 131.98ms、outbox lag 最大 18.57ms，未修改原 relative/absolute threshold。
+- 新 baseline strict contract 1 file / 9 tests passed；11 项均为 15 samples，fixture/environment provenance 完整。
+- 校准后独占 `pnpm smoke:agent-performance` 1 file / 1 test passed；artifact 11 metrics 全过，最高 ratio 0.987，workspace 0 残留。
+- 当前状态：**Changed, focused and agent smoke verified; final reviews and broad gate pending**。
+- Local Risk review 发现 workspace 创建后、进入 cleanup `try` 前仍执行 tracing/fetch stub；setup 异常会遗留临时目录。已把 setup 移入受嵌套 `finally` 保护的范围，待 focused/smoke 复验。
+- Risk 静态扫描两个只读命令因已知 Windows glob / PowerShell pipeline 规则失败，未修改文件；已切换到目录 `-g` 与 `$rows` 赋值形式。
+
+## 2026-07-27 - Stage 6 Part 7 Artifact Orchestration Resume
+
+- Budget isolation 最终采用 native per-scope 语义：subagent counter 初始化为 0，nested `task` 结果过滤四个原生 counter；3 files / 12 tests 通过，最终 Standards 与 Spec 复审均为 `No findings`。
+- Artifact threshold summary 红测先得到 1 failed / 9 passed；strict parser 修复后 1 file / 10 tests passed，错误摘要必须与实际失败 metric IDs 精确同序一致。
+- Artifact builder 红测先稳定失败为 `buildAgentPerformanceArtifact is not a function`；实现 unexpected-fetch 优先、threshold summary 次之、全过才成功后，1 file / 11 tests passed。
+- 最新 smoke orchestration 已删除模块级 baseline load，运行开始先删除旧 artifact，并把 cleanup failure 与最终 artifact/退出状态统一到 strict contract；该 patch 尚未运行测试或 typecheck。
+- 当前状态：**Changed, unverified since latest smoke orchestration edit**。下一步先跑 contract focused、typecheck 与 diff check，再独占执行 `pnpm smoke:agent-performance`。
+- 最新 orchestration focused gate：artifact contract 1 file / 11 tests passed；`pnpm typecheck` 与 tracked `git diff --check` 均退出码 0。
+- 当前状态：**Changed, focused verified; agent smoke pending**。下一步独占运行 performance smoke，并核对 artifact、退出码与临时 workspace 残留。
+- 最新 `pnpm smoke:agent-performance` 独占通过：1 file / 1 test，Vitest 总时长 8.94s。
+- 落盘 artifact 严格核对为 schema v1、`passed:true`、`error:null`、11 metrics / 0 failed；Git revision 为 `2ea75fe7...`、worktree dirty 为 true，环境与 deterministic-local fixture provenance 完整。
+- 临时 workspace 在运行前后均为 0；当前状态：**Changed, agent smoke verified; final Standards/Spec/Risk and broad gate pending**。
+- Local Risk review 定位两项：restart 首个 file-backed DB 构造不在 temp-dir `finally` 内；threshold failure parser 仍接受 partial metric set。当前均为 **Located**，尚未修改；第二项等待 Spec reviewer 对照完整 artifact 验收确认。
+- 最终 Spec review：2 个 Medium，分别确认 threshold failure exact-set 缺口与 restart temp cleanup 缺口；其余范围无 finding，per-scope subagent counter 符合 Stage 4。
+- 最终 Standards review：2 个 hard finding（两个 unused import、builder 缺 clean-pass/threshold tests）与 1 个 duplicated failure-artifact judgement call。当前状态：**Changed, review findings open**。
+- Review-fix red：artifact contract 13 tests 中 12 passed / 1 failed；唯一失败是单指标 threshold artifact 未抛 `agent_performance_artifact_metric_set_invalid`。新增 builder clean-pass 与双指标 threshold summary 测试已在旧实现下通过。
+- 首次 green 仍为 12 passed / 1 failed：parser 已正确先拒绝 partial threshold，但旧 summary-mismatch case 复用了 partial fixture，预期错误码顺序过期；测试已拆成完整集合的 summary mismatch 与 partial 集合的 metric-set 两条边界，待重跑。
+- Review-fix green：artifact contract 1 file / 13 tests passed；`pnpm typecheck` 与 strict unused 均退出码 0。当前状态：**Changed, review fixes focused verified; agent smoke and re-review pending**。
+- Review-fix 后独占 `pnpm smoke:agent-performance` 通过：1 file / 1 test，artifact 11/11 metrics passed、`error:null`；outer workspace 与 restart temp dir 前后均为 0，tracked diff check passed。
+- 当前状态：**Changed, review fixes and agent smoke verified; final Standards/Spec/Risk re-review pending**。
+- 增量 Standards 与 Spec 复审均为 `No findings`；原 2 hard、2 Medium 与 duplicated-code judgement call 全部闭环。本地 Risk closure 无新增 finding。
+- Part 7 合并 focused gate：5 files / 28 tests passed。当前状态：**Changed, final reviews closed; broad gate and independent commit pending**。
+- Broad gate 已通过：`pnpm check:ipc`、`pnpm build`（含 typecheck）、默认 Vitest 319 files / 1752 tests、responsive layout smoke。
+- 首轮 `pnpm smoke:performance` 失败并写 `passed:false` artifact：`profile_1k_interactive_exceeded:2474.7138000000004`，既有门槛为 750ms。当前状态：**Broad gate blocked by failing UI performance verification; diagnosis in progress**。
+- 不修改代码或阈值后，UI performance smoke 两次独占复验连续通过：profile-1k 406.61ms / 384.84ms，profile-10k 361.59ms / 365.10ms；两次 artifact 均 `passed:true`，Node ABI restore 后 `better-sqlite3` 加载验证通过。
+- Part 7 broad gate 最终证据：focused 5 files / 28 tests、contract 13/13、agent smoke 1/1、typecheck、strict unused、IPC check、build、默认 Vitest 319 files / 1752 tests、responsive smoke、UI performance smoke 与 tracked diff check 全部通过。
+- 当前状态：**Verified passing; staged-boundary audit and independent Part 7 commit pending**。

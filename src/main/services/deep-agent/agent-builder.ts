@@ -54,6 +54,10 @@ import {
 import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
 import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
+import {
+  createRocSubagentBudgetStateInitializationMiddleware,
+  createRocSubagentStateIsolationMiddleware
+} from './subagent-state-isolation';
 import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import { createToolProtocolMiddleware } from './tool-protocol';
@@ -404,6 +408,10 @@ function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionSc
       capabilityManifest: input.capabilityManifest,
       executionScope
     }),
+    ...(executionScope === 'subagent'
+      ? [createRocSubagentBudgetStateInitializationMiddleware()]
+      : []),
+    createRocSubagentStateIsolationMiddleware(),
     ...budgetMiddleware,
     ...createToolEffectMiddleware(input),
     createErrorBudgetMiddleware(),

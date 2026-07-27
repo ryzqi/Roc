@@ -20,14 +20,14 @@
 
 ## Current Phase
 
-**Stage 6 Part 6 - Manual Live Quality Eval**
+**Stage 6 Part 7 - Agent Performance Gate**
 
-**Status:** complete (`Verified passing locally; included in the current Part 6 commit; real provider Blocked, not run`)
+**Status:** in_progress (`verified passing; independent Part 7 commit pending`)
 
-- Review baseline：`332048d test(agent): stabilize multiple interrupt integration`。
-- 当前范围：让现有 `eval:agent` 显式支持 manual/nightly `--mode live`；用 strict versioned dataset、真实 Anthropic agent turn 与独立 structured-output judge 分开验证结构/轨迹和质量。
-- 不在本 part 引入：多 provider/model matrix、在线 LangSmith dataset、默认/PR live 网络调用、agent performance gate、生产 runtime 改动或 Stage 7 cleanup。
-- 已知事实：Part 4 已有真实 Anthropic builder/checkpointer 路径；Part 5 baseline runner 只接受 deterministic；当前进程没有 `ANTHROPIC_API_KEY`，真实 live turn 本地不可运行。
+- Review baseline：`2ea75fe test(agent): add manual live quality eval`。
+- 当前范围：新增独立 deterministic agent performance smoke，覆盖 agent build、first model token/tool call、tool roundtrip、simple completion、restart resume、10/100 model-tool iterations、subagent fan-out 与 event queue/outbox lag，并生成含阈值和原始 samples 的 versioned artifact。
+- 不在本 part 引入：真实 provider/network benchmark、UI/transcript performance 语义变更、生产 runtime 重构、未经测量的“漂亮阈值”、跨机器绝对性能承诺或 Stage 7 cleanup。
+- 已知事实：`plan.md` 要求 agent loop smoke 与现有 UI performance smoke 分离；阈值必须先采 baseline，artifact 同时保存 raw samples、运行环境和 threshold 结果。
 
 ## Phase Status
 
@@ -39,29 +39,28 @@
 | Stage 3 - Durable Background Occurrences | complete | `dfbbf00` |
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
-| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；独立稳定性修复 `332048d`；Part 6 included in current commit。 |
+| Stage 6 - Observability, Integration Tests, Evals | in_progress | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 为当前工作树。 |
 | Stage 7 - Native Convergence, Patch Upgrade, Cleanup | pending | Stage 6 完成后开始。 |
 
 ## Current Acceptance
 
-- [x] `pnpm eval:agent -- --mode live` 只启动 live eval config；deterministic mode 与默认 suite 收集边界保持不变。
-- [x] live mode 缺少 `ANTHROPIC_API_KEY` 时在 Vitest/网络前以稳定错误明确失败；不会静默 skip 或读取 Roc 用户配置。
-- [x] live dataset 是 strict、versioned JSON，case id 唯一，并显式固定 agent model、judge model、rubric 与最低质量分。
-- [x] live case 使用真实 `buildDeepAgent()`、`RocSqliteCheckpointer` 与 Anthropic model；ambient LangSmith tracing/key 关闭，网络仅允许 Anthropic HTTPS default port 且拒绝自动 redirect。
-- [x] terminal outcome、critical trajectory、state/checkpoint 与 judge quality score 分开断言；judge 只评质量，不替代结构/副作用检查。
-- [x] Standards、Spec 与 Risk review 无未处理 finding；config/CLI、live contract、deterministic/integration regression、typecheck、strict unused、build、default/full test 与 diff check 通过。
-- [x] 当前无 `ANTHROPIC_API_KEY`，真实 Anthropic agent turn、structured judge 与最低分验证记录为 `Blocked, not run`，未伪称通过。
-- [x] Part 6 形成独立提交。
+- [x] `pnpm smoke:agent-performance` 与现有 `smoke:performance` 独立，使用确定性本地 fixture 执行真实 Roc agent loop，不读取 provider key 或访问网络。
+- [x] versioned artifact 保存运行环境、scenario、每次 raw sample、聚合值、阈值、判定和失败原因；输出可被 strict parser 验证。
+- [x] 至少直接测量 agent build、first model token、first tool call、tool roundtrip、simple completion、restart resume、10/100 model-tool iterations、subagent fan-out 与 event queue/outbox lag。
+- [x] 各阈值来自同机 baseline samples，并同时使用回归比例与绝对上限；命令在 breach 或 artifact contract 损坏时明确非零失败。
+- [x] smoke 使用临时 SQLite/workspace 并清理资源；默认 Vitest、integration/eval 与 UI performance 收集边界不漂移。
+- [x] Standards、Spec 与 Risk review 无未处理 finding；contract/focused、typecheck、strict unused、build、default/full test、agent smoke 与 diff check 通过。
+- [ ] Part 7 形成独立提交。
 
 ## Current Step
 
-**Part 6 closure**
+**Verify artifact/smoke orchestration, complete final reviews, then execute the broad gate**
 
-**Status:** complete (`Verified passing locally; included in the current Part 6 commit; real provider unavailable`)
+**Status:** in_progress (`verified passing; staged-boundary audit and commit pending`)
 
-- Observable contract：live case 的结构结果、critical trajectory、持久 state 与 1-4 quality score 独立；只对 quality 使用 LLM judge。
-- Isolation contract：只有显式 `--mode live` 可进入真实网络路径；缺 key 在 runner 边界失败，ambient LangSmith 关闭，provider fetch 仅允许 Anthropic HTTPS default port 且拒绝自动 redirect。
-- Verification：先固定 runner/config/missing-key 与 dataset/judge contract 红灯，再实现一个 bounded live case；随后 review、focused 与 broad gate。
+- Observable contract：artifact 中每项 metric 都有单位、raw samples、P95、relative/absolute threshold 与 pass/fail；命令退出码与 artifact 总结一致。
+- Isolation contract：deterministic local model 驱动真实 `buildDeepAgent()` / checkpoint/runtime 边界；临时资源隔离，禁止 provider/LangSmith 网络。
+- Verification：先跑 artifact contract、typecheck 与 diff check，随后独占复跑 agent smoke；双轴与 Risk review 闭环后再执行 Part 7 focused、UI performance、strict unused、IPC、build、full test 与最终 diff check。
 
 ## Next Steps
 
@@ -85,6 +84,10 @@
 18. [complete] 增加 live CLI/config、dataset/judge 与真实 harness case 红测。
 19. [complete] 实现最小 live eval mode，并完成 focused verification。
 20. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与 Part 6 独立提交。
+21. [complete] 定位现有 performance smoke/artifact、真实 agent loop、checkpoint/restart、subagent 与 event/outbox measurement owner，冻结 Part 7 contract。
+22. [complete] 增加独立命令、strict artifact schema、deterministic scenarios 与 threshold failure 红测。
+23. [complete] 实现最小 agent performance runner；为三路 subagent fan-out 增加 budget state isolation 红测与最小修复，完成 focused verification、五轮同机采样和有限 baseline 校准。
+24. [in_progress] 完成 Standards / Spec / Risk review、修复、独占 agent smoke、broad gate 与 Part 7 独立提交。
 
 ## Decisions
 
@@ -121,17 +124,27 @@
 | Low | Part 4 账本仍写 discovery，并把 live 缺 key 分支误写为 skipped。 | 已同步为 verified passing，并明确区分默认未 opt-in skipped 与 opt-in 缺 key failure；最终 Standards 复审无 residual finding。 |
 | Medium | Part 6 live egress guard 仅校验 hostname，会接受非默认端口，且 provider fetch 可能自动跨域 redirect。 | 两条稳定红测后收紧为 Anthropic HTTPS default port，并强制 `redirect: 'error'`；live contract 8 passed / 1 skipped。 |
 | Medium | Part 6 broad suite 中既有 multiple-interrupt integration 再次越过 10s 内部 deadline。 | 单文件复现后仅调整测试等待预算，双轴 review 无 finding；独立提交为 `332048d`，随后 full Vitest 316 files / 1731 tests 通过。 |
+| Medium | Threshold failure artifact 可缺失其余 required metrics；execution error 的 partial 语义与 threshold completion 未区分。 | 红绿修复；contract 13/13 passed，最终 Standards/Spec/Risk 复审无 finding。 |
+| Medium | Restart fixture 在临时目录 cleanup `try/finally` 外构造首个 file-backed SQLite connection。 | nested cleanup、agent smoke 与两类临时目录 0 残留已验证；最终复审无 finding。 |
+| Hard | Performance smoke 有 `expect` 与 `agentPerformanceMetricIds` 两个 unused import。 | 已删除；typecheck、strict unused 与最终 Standards 复审通过。 |
+| Hard | Artifact builder 缺 clean-pass 与 threshold-breach 两个确定性分支测试。 | 三分支测试已补，contract 13/13 passed；最终 Standards/Spec 复审无 finding。 |
 
 ## Errors Encountered
 
 | Error | Attempt | Resolution |
 |---|---:|---|
+| 本轮首次并行恢复读取包含预期可能返回退出码 1 的 memory 搜索，编排器提前失败且未保留同组输出 | 1 | 失败组只读且未修改文件；改用 `Promise.allSettled` 并在 shell 内把 expected non-match 转为成功状态。 |
+| 启动 Standards 子审查时两次传入空 `reasoning_effort`，工具参数校验拒绝调用 | 2 | 未创建 agent、未修改文件；改用有效 model/reasoning 参数后成功启动。 |
+| Risk 扫描再次把 Windows shell glob 当作 `rg` 路径，并把 `foreach` 输出直接接管道，分别触发路径错误和 `An empty pipe element is not allowed` | 1 | 两个命令均只读且未修改文件；后续改用目录 + `-g`，并先赋值 `$rows` 再输出。 |
+| Part 7 review inventory 的 untracked 文件统计把 `foreach` 输出直接接到管道，再次触发 `An empty pipe element is not allowed` | 1 | 命令只读且未修改文件；改为先赋值 `$rows` 再输出，并将该已知 PowerShell 规则用于后续清单。 |
+| 本轮安装包定向检索再次把可能无匹配的 `rg` 放入 fail-fast 并行组，单条退出码 1 丢弃其余只读输出 | 1 | 失败组未修改文件；后续安装包检索逐项捕获退出结果，禁止把 expected non-match 放入 `Promise.all`。 |
+| 本轮向 `findings.md` 追加结论时误用了 `progress.md` 的尾行作为 patch context | 1 | 补丁校验失败且未修改文件；读取真实尾部后按已存在的 LangChain `wrapToolCall` 结论追加。 |
 | 两个只读 PowerShell 统计命令把 `foreach` 输出直接接入管道，触发 `An empty pipe element is not allowed` | 2 | 先赋值给 `$rows` 再输出；失败命令未修改文件。 |
 | 并行恢复检查中的 `git check-ignore plan.md` 以退出码 1 表示文件未忽略，导致 `Promise.all` 提前失败 | 1 | 将 expected non-match 显式转换为成功输出；确认 `plan.md` 未跟踪且未忽略。 |
 | Windows `rg` 参数使用 shell glob 路径，并包含可能无匹配的查询；产生路径错误/退出码 1 | 2 | 后续禁止把 glob 放在路径参数；只使用目录参数配合 `-g`，并把无匹配与命令错误分开处理；失败命令未修改文件。 |
 | `pnpm test -- tests/main/infrastructure/database-migrations.test.ts` 将 `--` 传给 Vitest并运行全部 310 个文件，而非只跑目标文件 | 1 | 红灯仍精确落在新增 V1 test；后续 focused 验证改用 `pnpm exec vitest run <path>`。 |
 | 首次生产修复把 telemetry `snapshotVersion` 写成数据库原始版本，V1 row 被 strict telemetry schema 判为 corrupt | 1 | 查明 telemetry contract 固定为 normalized V2；恢复常量 2，仅扩大 migration 的 V1/V2 row 选择。 |
-| 并行读取 skill 与 memory 时，预期的 memory 无匹配退出码 1 使整组 `Promise.all` 提前失败 | 1 | 改用 `Promise.allSettled` 并将预期无匹配显式转换为成功；确认无相关 memory 证据。 |
+| 并行读取 skill 与 memory 时，预期的 memory 无匹配退出码 1 使整组 `Promise.all` 提前失败 | 2 | 本次续接再次触发后，所有可预期 non-match 均在 shell 内转换为成功输出，不再放入 fail-fast 并行组；确认无相关 memory 证据。 |
 | Windows `rg` 把 `electron.vite.config.*` 当字面路径，返回路径语法错误并使并行读取提前失败 | 1 | 改为目录参数配合 `-g 'electron.vite.config.*'`，并使用 `Promise.allSettled` 保留其他读取结果。 |
 | 首次补写 LangSmith discovery 时把 `task_plan.md` error ledger 的定位行误放进 `findings.md` patch context | 1 | 拆分文件职责并使用各自真实上下文；失败 patch 未修改文件。 |
 | 搜索 renderer settings 时假设了不存在的 `src/renderer/settings-view.tsx`，使并行读取提前失败 | 1 | 从 `rg` 实际结果确认入口为 `src/renderer/settings/index.tsx`，后续只使用已定位路径并用 `allSettled`。 |
@@ -163,3 +176,18 @@
 | 稳定性提交的 staged-boundary 断言把单行 `git diff --cached --name-only` 当作字符串，`$staged[0]` 读取首字符而误报 | 1 | 用 `@(...)` 强制数组后复核；cached name-status 已显示仅目标测试文件，错误命令未修改文件或 index。 |
 | 稳定性提交后的并行只读审计在调用 shell 前引用未定义 JavaScript `result`，四项均返回 `ReferenceError` | 1 | 改回逐项 `await tools[name](args)` 并捕获结果；失败脚本未执行任何命令或修改状态。 |
 | Part 6 最终 missing-key 边界包装器虽验证到预期 exit 1 与错误码，但未重置 PowerShell native exit code，导致后续串行检查未启动 | 1 | 在验证分支末尾显式 `exit 0` 后单独重跑；首次调用未修改代码，typecheck/unused/diff check 尚未执行。 |
+| Part 7 检索 LangGraph stream 类型时再次把 `.pnpm/@langchain+langgraph*` wildcard 放入 Windows 路径参数，`rg` 在返回有效匹配后以路径错误退出 | 1 | 使用已解析的 `node_modules/@langchain/langgraph/dist/stream/types.d.ts` 精确路径继续；失败调用只读且未修改代码。 |
+| Part 7 搜索测试内 `BaseChatModel` 子类时，正常无匹配的 `rg` exit 1 未转换为成功 | 1 | 确认仓库无可复用子类；后续无匹配查询统一显式处理 exit 1，失败调用只读且未修改代码。 |
+| Part 7 并行读取 LangChain transformer 类型时假设存在 `message.d.ts`，使已启动的成功读取输出未保留 | 1 | 先用 `rg --files` 固定真实文件集合，再读取 `types.d.ts`、`tool-call.d.ts` 与 `subagent.d.ts`；失败调用只读且未修改代码。 |
+| Part 7 首次合并 restart 修复与账本更新的 patch 误把 `@@` 当作 hunk 结束符，`apply_patch` 拒绝解析 | 1 | 删除多余 hunk 标记后用精确上下文重试；失败 patch 未修改任何文件。 |
+| Part 7 对 pnpm package junction 使用 `rg -L` 仍未得到 middleware 匹配，随后把字符串型 `Target` 当数组取 `[0]`，错误解析为盘符 `F` | 2 | 直接读取 junction 的完整字符串 `Target` 后对真实 `dist` 路径检索；两次失败均只读且未修改文件。 |
+| Part 7 按 Deep Agents 声明 bundle hash `agent-DgVtHOV7.js` 查实现，但该 hash 仅存在 `.d.ts`，运行实现位于 `langsmith-DjCMSywL.js` | 1 | 先列出实际 `dist` 文件，再从导出与 symbol 匹配定位实现 bundle；失败检索只读且未修改文件。 |
+| 本轮恢复时统计 agent-development references 的 JavaScript 模板字符串嵌入 PowerShell 制表符表达式，编排层报 `SyntaxError: Unexpected identifier 't$c'` | 1 | 命令未进入 shell、未修改文件；改用 PowerShell 字符串拼接后成功，并完成所有必需参考全文读取。 |
+| 本轮首次写上述错误账本时把 unified diff 直接传给 JavaScript 编排层，报 `SyntaxError: Unexpected token '**'` | 1 | 失败发生在解析阶段、未修改文件；改用 `apply_patch` 工具写入。 |
+| 本轮恢复首批技能/memory 并行读取再次把预期无匹配的 memory `rg` 放入 fail-fast `Promise.all`，导致其余成功结果未保留 | 1 | 调用只读且未修改文件；立即改用 `Promise.allSettled`，后续无匹配搜索继续显式按非错误处理。 |
+| Threshold exact-set 首次 green 后，旧 summary-mismatch case 仍使用 partial fixture，因新校验顺序先抛 metric-set error | 1 | 生产行为符合新合同；把 summary mismatch 改为完整 11 metrics，partial fixture 专门断言 metric-set。 |
+| 记录上述 test refinement 的合并 patch 漏写文件切换标记，错误把 `task_plan.md` 表格上下文应用到 contract test | 1 | `apply_patch` 原子拒绝且未修改文件；拆成目标文件明确的两个 patch。 |
+| Review closure 账本 patch 使用了恢复前的 Current Step status 文本，`apply_patch` 无法匹配 | 1 | 整体 patch 原子拒绝；先用 `rg` 读取当前状态，再按实际文本更新。 |
+| Broad gate 首轮 `pnpm smoke:performance` 超过既有 profile-1k 750ms 门，实际 `2474.7138ms` | 1 | seed/native rebuild 成功，artifact 明确失败；先核对测量路径与系统负载，再独占复验，不修改既有 UI 门槛。 |
+| Windows 本地化环境找不到 `\Processor(_Total)\% Processor Time` 性能计数器 | 1 | 只读探针未修改状态；改用 `Win32_Processor.LoadPercentage` 与可用内存判断复验环境。 |
+| `Win32_PerfFormattedData_PerfOS_Processor` 在本机同样返回 `Invalid class` | 1 | 只读探针未修改状态；停止继续依赖 unavailable perf counters，使用无遗留 Electron、可用内存与连续独占 smoke 作为环境证据。 |

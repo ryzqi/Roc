@@ -120,6 +120,84 @@
 - Part 6 broad gate 的 `pnpm check:ipc`、`pnpm build`、默认 `pnpm test` 316 files / 1731 tests 与 `git diff --check` 均通过；既有 multiple-interrupt timeout 已在独立 `332048d` 中稳定化并完成双轴 review。
 - 当前环境无 `ANTHROPIC_API_KEY`；真实 Anthropic agent turn、structured-output judge 与最低质量分仍为 `Blocked, not run`。本地合同为 **Verified passing**，Part 6 included in current commit。
 
+### Agent Performance Gate Discovery
+
+- Part 7 baseline 为 `2ea75fe`；`plan.md` 要求独立 `smoke:agent-performance`，不得用现有 UI/transcript smoke 代替真实 agent loop 证据。
+- 初始测量面固定为 build、first model token/tool、tool roundtrip、simple completion、restart resume、10/100 iterations、subagent fan-out 与 event queue/outbox lag；实现 owner 与最低重复次数待从当前代码/脚本定位。
+- artifact 必须同时记录运行环境、raw samples、阈值与判定；阈值先采本机 baseline，再冻结回归比例与绝对上限，不凭空填写。
+- 本 Part 使用 deterministic local fixture，不引入 provider key、网络成本、UI performance 语义变更或生产 runtime 重构。
+- 现有 `tests/smoke/performance-smoke.mjs` 启动 Electron，测 renderer readiness、transcript 1k/10k interaction、DOM rows、prepend P95 与进程内存，写 `performance-smoke.json`；它是 UI/transcript 证据，不能承载 agent loop 指标。
+- 现有 UI smoke 直接在脚本内断言绝对预算，artifact 无本 Part 所需的 versioned metric/threshold/raw-sample schema；Agent smoke 应使用独立文件与 contract test，避免改变既有 artifact consumer。
+- `buildDeepAgent()` 是真实 Roc harness 的同步组装入口，内部配置 middleware、tools、compiled subagents 与 checkpointer；可直接测 build，并用 deterministic model 驱动后续 loop，不需要生产 instrumentation。
+- Roc declarative subagents 在同一 builder 内经 `createSubAgent()` 编译为 runnable；fan-out fixture 可复用该真实路径，具体 invocation trajectory 仍需从现有 tests 定位。
+- 现有 artifact helper 只创建 `.artifacts/wave1`，不会清空目录；Agent smoke 可写独立 `agent-performance-smoke.json`，不覆盖 `performance-smoke.json` 或 Electron artifact。
+- `FakeToolCallingModel` 的 tool-call index 在 `bindTools()` 实例间共享，并按提供序列推进；给定 N 组 tool calls 加一个 terminal 空组即可确定性驱动 N 轮，配合显式 model/tool call limits 与 recursion limit 覆盖 10/100 iterations。
+- LangChain agent v3 `streamEvents()` 返回独立 `messages`、`toolCalls` 与 `output` stream；Roc executor 已并发消费这些 owner。性能 smoke 可在同一路径记录首个 model message chunk、首个 tool call、其 output promise 与最终 output，无需加入生产计时 hook。
+- `createChatRunEventQueue()` 暴露 `stats().highWaterMark`；可用真实 queue 测 production event enqueue/drain。Outbox 可用 in-memory Agent/Task schema、`AgentTaskHistoryReader.listOutboxEventsAfter()` 与 `TaskRepository.projectAgentOutboxEvents()` 测真实 cursor projection。
+- 现有 `native-summarization-route.integration.test.ts` 证明 `task` tool 经真实 compiled declarative subagent runnable 完成并写 checkpoint；fan-out smoke 可为 main/subagents使用独立 deterministic model，避免共享序列并发漂移。
+- 固定 `FakeToolCallingModel` 会把完整历史 content 拼入下一响应；100 轮时会扩大 payload 与 fake 自身成本。性能 fixture 改用最小 `RocPerformanceFakeModel`：绑定 tools 时共享严格递增 sequence，intermediate content 为空，terminal content 固定，并显式发出 token callback。
+- 10/100 iteration 使用 manifest 允许的本地 `performance_step` tool，并以 tool 实际执行计数断言轮数；不依赖最终 message history 保留全部旧 ToolMessage，也不通过样例特判绕过真实 middleware/tool node。
+- v3 `run.messages`、`run.toolCalls`、`run.subagents` 与 `run.output` 可并发消费；first token、first tool、tool output 和 total completion 由各自 native projection 计时，避免加入生产 instrumentation。
+- Restart fixture 使用 file-backed Agent DB：首轮完成后关闭连接，重新打开同一路径、重建 `RocSqliteCheckpointer` 和 agent，并以同一 `thread_id` 验证第二个 model invocation 看到首轮 marker。
+- Queue fixture 使用非 coalescible `run_started` events，断言 drain count 与 `highWaterMark`；outbox fixture 使用真实 Agent/Task schema、连续 `run_deleted` rows、history reader 和 repository cursor，断言 event count/applied count/last sequence 一致。
+- `createChatRunEventQueue()` 对非 coalescible event 同步入队并按当前队列长度更新 `highWaterMark`；先完整 push、再 close/drain 可稳定断言 high-water 等于 event count，drain 后 `queuedEventCount` 为 0。
+- `TaskRepository.projectAgentOutboxEvents()` 对无 background task 的 `run_deleted` 仍按连续 sequence 推进 cursor；因此 outbox smoke 无需伪造额外 task 状态，只需真实双 DB schema、连续 rows、reader、projector 与 cursor 一致性断言。
+- 当前 artifact contract 的 evidence 只有 iteration/outbox/queue/subagent 四项，且 fixture model 仍锁为 `FakeToolCallingModel`；完整 harness 前必须补 checkpoint/recovered/model/tool 等可审计 evidence，并改为实际使用的 `RocPerformanceFakeModel` literal。
+- Contract 增量 review：仅要求 evidence 字段存在仍允许成功 metric 全部填 `null`；strict artifact 需要按 metric 校验可审计语义，iteration 固定精确 model/tool 次数，restart 必须证明 checkpoint 与 prior turn recovery，fan-out/queue/outbox 必须证明各自业务结果。
+- Restart 根因已确认：两个重建的 fake model 都生成 `roc-performance-message-1`；LangGraph `messagesStateReducer` 对重复 ID 原位替换，导致第二轮 AI 留在首轮 AI 的数组位置、新 Human 反而位于末尾。fixture 不再伪造 provider message ID，由正式 reducer 为无 ID message 生成唯一 ID，严格 terminal 断言保持不变。
+- Restart 修复后 smoke 已推进到 `iterations_10`；该场景按 `iterationCount * 4 + 20` 得到 recursion limit 60，但真实 Roc middleware graph 在 10 次 model-tool 循环终止前耗尽该预算。需先定位生产 recursion-limit owner 或测量 checkpoint step，再冻结有依据的测试预算。
+- 生产 `deep-agent-executor` 调用 `streamEvents()` 时不传 `recursionLimit`；业务终止 owner 是 snapshot 中的 model/tool run/thread limits。performance smoke 的 `4N + 20` 因而只是测试私有假设，不能声称复用了生产公式；应由实际 graph step 测量加明确余量支撑。
+- `iterations_10` 在 limit 60 时已完成 6 次 model、6 次 tool 并写入 62 个 checkpoint，实测约每轮 10 graph steps。smoke 改用每个预期 model invocation 12 steps 加固定 20 steps headroom；model/tool middleware limits 与精确计数仍是 runaway 和正确性 owner。
+- 调整 iteration graph budget 后 smoke 已越过 10/100 iterations，并在三路 subagent fan-out 暴露 `InvalidUpdateError`：三个 subagent 同一 step 同时写 `threadModelCallCount` 的 `LastValue` channel。该问题可能属于生产 safety middleware 与并发 subagent 的真实合同冲突，不能把性能 fixture 串行化绕过。
+- 安装的 LangChain 1.5.3 `modelCallLimitMiddleware` 用普通 Zod number 声明 `threadModelCallCount`，`afterModel` 返回当前值加一，没有并发 reducer；Roc 又把该 middleware 注入每个 compiled subagent，因此三个分支合流时产生三个 `LastValue` 写入。正确修复仍需对照现有跨 subagent budget 合同。
+- `plan.md` Stage 4 要求 native model/tool limits 覆盖 main 与 subagent、G4 禁止只靠 recursionLimit；现有 wiring/scope tests 仅断言 middleware 名称出现在两类 stack，没有并发 fan-out 或 aggregate count 行为。规格未要求把多个 subagent 的 thread count 合并回 parent，只要求每个 execution scope 有可查询的同类 budget 规则。
+- Stage 4 `031baea` 的原意是直接复用 native persisted counters：每个 stack 同时装 run/thread limits，错误映射为不可恢复 `run_budget_exhausted`；当时只做 wiring、snapshot 与 terminal mapping regression，没有并发 subagent 行为测试或 Roc 聚合 counter。
+- LangChain `createSubagentTransformer` 只按 namespace 投影 nested stream 并在 lifecycle failure 时 reject `output`；它不合并 graph state，因此 smoke 的 unhandled `Subagent ... failed` 是根 `InvalidUpdateError` 的次生投影，不是 counter 冲突 owner。
+- Deep Agents 1.10.7 `task` tool 对 parent input 与 subagent result 都调用同一个 `filterStateForSubagent()`，仅排除 messages/todos/structuredResponse/skills/memory；四个 native budget counter 会被传入分支并由 `Command.update` 原样合回 parent。并发分支返回绝对 counter，最终触发同 channel 多写。
+- LangChain agent state schema 采用 first-key-wins，可用更早 middleware 改 counter channel reducer；但 native limiter 写绝对 count 并用绝对 0 reset，普通 sum/max reducer无法同时保持顺序、并行与 reset 语义。正确的较小边界是拦截 parent `task` tool 返回的 `Command.update`，只移除 subagent 私有的四个 native budget counters，保留子图内 native enforcement。
+- LangChain `wrapToolCall` 合同允许 `ToolMessage | Command`，handler chain 外层可检查结果；`Command` 暴露 graph/update/resume/goto 并可重建。因此 Roc 可在 main-scope task boundary 无损过滤 counter keys，不改 Deep Agents、LangGraph reducer 或 subagent execution。
+- 现有 `native-summarization-route.integration.test.ts` 已通过真实 `buildDeepAgent()`、compiled declarative subagent、`task` tool 与 Roc SQLite checkpointer 覆盖单分支路径；最小并发回归可复用该 fixture 扩成三个独立 subagent model，并断言三条分支均实际执行。
+- 隔离 middleware 必须只加入 main agent guardrail，用来过滤 `task` 返回 parent 的 state；若把它加入 subagent safety stack，会在 subagent 内部工具边界剥掉 counter，削弱 native model/tool limit 的持久计数语义。
+- performance smoke 的 fan-out fixture 已稳定形成一个 main model 同轮发出三个 `task` call、三个独立 subagent model 各执行一次的真实复现；默认 Vitest 应复用同一行为合同，但不依赖 performance 专用 config 或阈值 artifact。
+- 当前 pnpm package target 的默认 `rg --files` 只枚举顶层 metadata，安装包实现需从各自 `package.json` exports 解析精确 `dist` 路径读取，不能把默认无匹配误判为 API 不存在。
+- Deep Agents 1.10.7 的 `returnCommandWithStateUpdate()` 先把过滤后的 subagent result 全量展开进对象型 `Command.update`，再仅覆盖 `messages` 为 parent `task` 的 `ToolMessage`；因此 main `wrapToolCall` 能在不碰 subagent invocation 的位置精确删除四个 budget key。
+- 当前 `@langchain/langgraph` 公共 `Command` 暴露 `graph`、`update`、`resume`、`goto`，公共入口同时导出 `isCommand`；重建过滤后的 command 不依赖私有字段或 bundle 路径。
+- native model limiter 的 `afterAgent` 把 `runModelCallCount` 重置为 0、保留 thread count；tool limiter 同样把 run map 重置为空、保留 thread map。该绝对值/reset 合同进一步排除 sum/max reducer，边界过滤是唯一不改变 limiter 语义的最小路径。
+- 现有 `execution-safety-scopes.test.ts` 验证 main/subagent 大部分 safety middleware，却没有把两个 native limiter 名称纳入共享期望；本次回归应补上这两个名称，并单独断言 state isolation 只在 main stack。
+- 新增默认 Vitest 在 168ms 内稳定复现三路真实 `task` fan-out 的 `threadModelCallCount=[2,2,2]` 与 `INVALID_CONCURRENT_GRAPH_UPDATE`；fixture 本身没有先行类型、checkpointer 或 recursion-limit 故障，红灯边界与生产根因一致。
+- main-only state isolation 修复后同一真实三路 fixture 在 166ms 内通过，三个 subagent model 均执行一次、三条 parent `ToolMessage` 均返回；单元合同同时证明四个 counter 被删除而 messages、自定义 evidence 与 `graph/goto/resume` 保留。
+- 完整 performance smoke 修复后 1 file / 1 test passed，首次总耗时 8.92s；restart、10/100 iterations、fan-out、queue 与 outbox 场景全部产生有效 evidence。
+- 同机 Windows x64 / Node v25.7.0 / 20 CPU 连续采样 5 轮，每项共 15 个 raw samples；观测最大值约为 build 17.78ms、first token 43.78ms、first tool 22.63ms、roundtrip 0.159ms、completion 66.09ms、restart 115.72ms、10 iterations 157.72ms、100 iterations 2198.92ms、fan-out 62.04ms、queue 0.342ms、outbox 7.13ms。
+- 冻结门槛将按 baseline 最大/P95 使用 1.75-2 倍 agent-loop 回归比例；亚毫秒 roundtrip/queue 使用 5 倍避免计时器噪声误报。每项另设更宽但有限的整数 absolute max，防止未来因 baseline 重采而无限放宽。
+- 本地 Risk review 发现 strict artifact parser 只校验字段形状，未重算 P95、relative max、ratio、failed limits 与 metric pass；篡改派生字段仍被接受。稳定红测后，parser 改为从 raw samples 重建期望结果逐项核对，并要求所有 failure artifact 都有非空 error。
+- Review-fix 后一次完整 smoke 正确产出 failure artifact：fan-out 为 2.07x relative breach，但仍低于 180ms absolute max；同轮 iteration-100 为 1.58x、outbox 为 2.00x，说明负载影响不是单一 fan-out 代码路径。需在 review 结论后决定是否用更多 stressed samples/统一 headroom 调整，不能只为本次结果放宽单项。
+- Standards review 提出 parent 不再累计 subagent 四个 native counter 可能允许多个分支分别使用完整预算；该结论与当前 Stage 4 记录的 per-scope native limit 合同存在解释冲突，需以 `plan.md`、原始 budget 提交和真实 task state flow 判定，不能直接把绝对 counter 合回 parent。
+- Standards review 确认 baseline/current artifact 虽各自记录 environment，parser 尚未比较 OS、arch、Node 与 CPU；跨环境仍会套用本机相对门，可能产生无意义的 pass/fail。最小修复应在执行前 fail closed，或证明环境字段中哪些构成兼容 identity。
+- Part 7 账本曾滞后于已完成的 fan-out 修复、完整 smoke 与五轮校准；本轮已把 `task_plan.md` 当前步骤切换为 review-fix 与 broad gate。
+- 安装包 `modelCallLimitMiddleware` 明确定义 `runLimit` 为单次 agent invocation，并在 `afterAgent` 把 run counter 重置为 0；Stage 4 同时要求 main/subagent 各自安装 native limit，并写明 Roc 另补 per-scope policy。由此不能把多个 subagent 的绝对 run counter 当作一个 Roc 全局 run counter 聚合。
+- 当前 state isolation 只过滤 subagent 返回 parent 的 counter，却仍把 parent counter 随 `task` request state 传入 subagent；低预算测试的第一次 subagent 调用其实从 parent count 1 起步，因此不能证明 subagent 自身 limit。最小一致修复是 task 边界双向过滤四个 native counter，再让 subagent 从 0 独立计数，并证明第三次 model call 被 limit 阻止。
+- Spec review 另指出当前 `event_queue` / `outbox_projection` 记录的是批处理执行耗时，未把“事件进入队列/创建 outbox row 到消费/投影完成”作为显式 lag 起点；需改为 end-to-end lag measurement 并重采相关 baseline。
+- Spec review 确认 performance harness 仍传 `workspacePath: null`；按当前验收应创建临时 workspace、传入真实路径并在 `finally` 清理，计时区间不应包含临时目录创建。
+- Review-fix 后首轮独占 smoke 仅 `subagent_fan_out` 与 `outbox_projection` breach：fan-out P95 119.80ms / 1.93x，outbox P95 16.82ms / 2.36x；两者仍分别低于既有 180ms / 30ms absolute max。前者路径新增 subagent budget initialization graph node，后者已改为包含 row 创建的端到端 lag，因此旧 baseline 不再代表当前被测行为，应重采 samples 而不是放宽门。
+- 同轮 artifact 记录完整 CPU model、fixture、Git revision 与 `worktreeDirty: true`；临时 workspace 残留数为 0，证明 cleanup `finally` 生效。
+- 变更后重新串行采样五轮，每项 15 个 raw samples；fan-out 最大 131.98ms、outbox end-to-end lag 最大 18.57ms，均保留原 180ms / 30ms absolute max 和原 regression ratio。
+- 校准后的独占 smoke 11 项全部通过；最高 observed ratio 为 first tool call 0.987，fan-out 为 0.952，100 iterations 为 0.936；artifact `error: null`、`worktreeDirty: true`，临时 workspace 仍为 0 残留。
+- Native budget 的权威语义已按 execution scope 关闭：subagent 启动时四个原生 model/tool run/thread counter 归零，nested `task` 返回时过滤同四项，parent 与 sibling 不聚合绝对 counter；三路 fan-out、每个 subagent 独立 model/tool limit、Command routing/state 保真及 main/subagent wiring 均有直接测试，最终 Standards 与 Spec 复审无 finding。
+- Strict artifact parser 现要求 threshold failure 的 `agent_performance_threshold_breached:<ids>` 与实际 `passed:false` metric ID 精确同序一致；execution failure 仍允许 partial metrics，避免把 setup/runtime error 误报成 threshold breach。
+- `buildAgentPerformanceArtifact()` 已成为成功、network fetch failure 与 threshold failure 的单一总结入口：unexpected fetch 优先，其次按失败 metrics 生成唯一 threshold summary，只有无 fetch 且所有 metrics 通过时才返回 `passed:true`。
+- 最新 smoke orchestration 已改为运行开始先删除旧 artifact、在 test 内加载 baseline、cleanup 单独失败时写 failure artifact，并在最终 artifact 写盘后只按该 artifact 的 `error` 失败。该 orchestration 尚未运行新鲜验证，不能沿用上一次校准 smoke 的通过结论。
+- 最新 orchestration 的独占 smoke 已新鲜通过：artifact 为 `passed:true` / `error:null`，11 项 metrics 全过，fixture/network/provenance 与 baseline 一致；运行前后 `roc-agent-performance-workspace-*` 临时目录均为 0。
+- Local Risk review 已定位 restart cleanup 边界：`measureRestartResume()` 在 `mkdtemp()` 后、进入 `try/finally` 前构造首个 file-backed SQLite connection；若该构造失败，临时目录不在 cleanup 保护内。应把首个 connection 初始化移入已有 `try`，不新增抽象。
+- Local Risk review 另确认 threshold failure parser 只要求 summary IDs 与当前 `passed:false` metrics 一致，却不要求完整 11 项 metric set；现有测试明确接受单项 threshold artifact。普通 execution error 需要 partial metrics，但 threshold breach 表示测量已完成，是否必须 exact set 待最终 Spec review 判定。
+- 最终 Spec review 确认上述两项均为 Medium：threshold breach 必须携带完整有序 11 metrics，restart 临时 SQLite constructor 必须进入 cleanup 边界；其余 performance 专项与 per-scope subagent budget 语义无偏差。
+- 最终 Standards review 发现两个 hard evidence/cleanliness gap：smoke 的 `expect` 与 `agentPerformanceMetricIds` 未使用，strict unused 会失败；artifact builder 未直接覆盖 clean-pass 与 threshold-breach 分支。另建议把两处相同的 execution-failure artifact 组装收为 test 内局部 helper，避免 schema 演进漂移。
+- Review fix 后 threshold parser 仅在 threshold prefix 分支要求完整有序 metric set，普通 execution failure 仍可 partial；builder 的 clean-pass、ordered multi-metric threshold 与 unexpected-fetch 三分支均有直接断言。
+- Restart 首个 DB open 和 close 已进入 nested cleanup；修复后独占 smoke 11/11 metrics 通过，outer workspace 与 restart temp dir 运行前后均为 0。最高 observed ratio 1.704，仍低于冻结阈值。
+- Review-fix 最终 Standards 与 Spec 复审均为 `No findings`；本地 Risk closure 无新增 finding。合并 Part 7 focused gate 为 5 files / 28 tests passed。
+- Broad gate 首轮 UI/transcript performance smoke 在未改动的 profile-1k interaction 门失败：2474.7138ms > 750ms；seed、native rebuild 均成功。Part 7 diff 不修改 renderer/history smoke 路径，需在独占空闲环境复验后再判断是否为回归。
+- 同一代码与门槛下随后两次独占 UI performance smoke 连续通过：profile-1k 分别 406.61ms、384.84ms，profile-10k 分别 361.59ms、365.10ms；Node ABI restore 后 `better-sqlite3` 均可加载。首轮记录为 broad suite 后环境抖动，不修改 UI performance 阈值。
+- Part 7 broad gate 最终通过：focused 5 files / 28 tests、agent smoke 1/1、contract 13/13、typecheck、strict unused、IPC check、build、default Vitest 319 files / 1752 tests、responsive smoke、连续两次 UI performance smoke 与 diff check。
+
 ### Telemetry Contract
 
 - 每个 run 持久化一个 versioned、redacted summary，覆盖 correlation、model usage、tool、subagent、context、runtime 和 terminal 状态。
@@ -166,6 +244,8 @@
 | Medium | Tracing terminal lifecycle 与 hook notification 耦合，cancel/shutdown 无明确等待和释放语义。 | 已拆分 owner，覆盖 cancel、session read failure、batch drain、dispose 与 shutdown。 |
 | Medium | terminal transaction 后进程崩溃会留下已终态 run 对应的 durable trace session，现有 startup reconciliation 不扫描该状态组合。 | 已以持久数据库 fixture 红绿修复；最终 Standards/Spec/Risk 无 residual finding，15 files / 124 tests 通过。 |
 | Low | 多个异常残留 terminal sessions 在 critical plugin initialize 中逐条等待 exporter drain。 | 非阻断 residual risk；每条最终删除且异常继续下一条，本轮保留确定性顺序。 |
+| Medium | Restart performance fixture 的首个 SQLite constructor 位于临时目录 cleanup `try/finally` 之外。 | 已闭环：open/close/delete 使用 nested cleanup，smoke 与 0 残留通过。 |
+| Medium | Threshold failure artifact 可只包含部分 metric set。 | 已闭环：threshold exact ordered set；execution/network failure 保留 partial。 |
 
 ## Durable Project Facts
 
