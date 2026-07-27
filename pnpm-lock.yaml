@@ -33,8 +33,8 @@ importers:
         specifier: 12.11.1
         version: 12.11.1
       deepagents:
-        specifier: 1.10.7
-        version: 1.10.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(@langchain/langgraph-checkpoint@1.1.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3))))(@langchain/langgraph-sdk@1.9.25(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@langchain/langgraph@1.4.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3))(langchain@1.5.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(openai@6.45.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(langsmith@0.8.1(openai@6.45.0(zod@4.4.3)))
+        specifier: 1.10.8
+        version: 1.10.8(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(@langchain/langgraph-checkpoint@1.1.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3))))(@langchain/langgraph-sdk@1.9.25(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@langchain/langgraph@1.4.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3))(langchain@1.5.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(openai@6.45.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(langsmith@0.8.1(openai@6.45.0(zod@4.4.3)))
       highlight.js:
         specifier: 11.11.1
         version: 11.11.1
@@ -1890,8 +1890,8 @@ packages:
     resolution: {integrity: sha512-LOHxIOaPYdHlJRtCQfDIVZtfw/ufM8+rVj649RIHzcm/vGwQRXFt6OPqIFWsm2XEMrNIEtWR64sY1LEKD2vAOA==}
     engines: {node: '>=4.0.0'}
 
-  deepagents@1.10.7:
-    resolution: {integrity: sha512-jV67Qvky0k20psYOBy1Qi4SmNvkTP9CC9ARBw6BhJgseCqImvHFDsMF3z7v+MEpdDfrjULH4r5gYhAW2WVH9Eg==}
+  deepagents@1.10.8:
+    resolution: {integrity: sha512-nkZdEHtMqS6GfyuP6m112s9qHA/zRPamO4BR9uH2sFKb9Hvhh2hR/ONaWYnfyavNJNOtZo2Km/FZMGt9DziBDw==}
     peerDependencies:
       '@langchain/core': ^1.2.0
       '@langchain/langgraph': ^1.4.4
@@ -5717,7 +5717,7 @@ snapshots:
 
   deep-extend@0.6.0: {}
 
-  deepagents@1.10.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(@langchain/langgraph-checkpoint@1.1.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3))))(@langchain/langgraph-sdk@1.9.25(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@langchain/langgraph@1.4.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3))(langchain@1.5.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(openai@6.45.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(langsmith@0.8.1(openai@6.45.0(zod@4.4.3))):
+  deepagents@1.10.8(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(@langchain/langgraph-checkpoint@1.1.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3))))(@langchain/langgraph-sdk@1.9.25(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@langchain/langgraph@1.4.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3))(langchain@1.5.3(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(openai@6.45.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(langsmith@0.8.1(openai@6.45.0(zod@4.4.3))):
     dependencies:
       '@langchain/core': 1.2.2(openai@6.45.0(zod@4.4.3))
       '@langchain/langgraph': 1.4.7(@langchain/core@1.2.2(openai@6.45.0(zod@4.4.3)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)

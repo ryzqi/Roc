@@ -20,14 +20,15 @@
 
 ## Current Phase
 
-**Stage 7 Part 1 - Middleware Overlap Matrix**
+**Stage 7 Part 2 - Deep Agents 1.10.8 Patch Upgrade**
 
-**Status:** complete (`verified, reviewed, and isolated in this commit`)
+**Status:** complete (`reviewed, broad verified, and staged as an independent commit`)
 
-- Review baseline：`dd5af40 test(agent): add deterministic performance gate`。
-- 当前范围：记录 Deep Agents `PatchToolCallsMiddleware`、Roc tool protocol、rescue parsing、tool resolution、runtime error mapping、tool retry 与 effect idempotency 的 input/output/error/retry/effect/event 责任，并用真实安装包 event fixture 与 deterministic trajectory 证明等价后再删除 native 已覆盖的逻辑。
-- 保留 Roc 特有责任：Windows path、capability manifest、effect recovery、product error/audit。
-- 不在本 part 引入：Deep Agents 1.10.8 升级、无直接证据的 cleanup、兼容别名或与 middleware overlap 无关的重构。
+- Review baseline：`4f37f17 fix(agent): align middleware ownership`。
+- 当前范围：审计 Deep Agents 1.10.7 -> 1.10.8 core package diff，只升级精确 pin，并为 `FilesystemBackend` / `LocalShellBackend` glob 的 Windows junction/symlink loop 与 root containment 增加回归证据。
+- 保留 Roc 特有责任：runtime workspace、Windows path policy、capability manifest、shell authorization 与 `/workspace/` 到真实 cwd 的边界。
+- 不在本 part 引入：ACP/Deno 无关改动、LangChain/LangGraph 联动升级、兼容层、无证据 cleanup、Stage 7.3 stream adapter 或性能调优。
+- Required-gate maintenance：只允许为 Electron smoke 的两个合成 provider 声明显式 context window，使 prescribed gate 继续验证当前工具/schema；不修改 production budget 默认或校验。
 
 ## Phase Status
 
@@ -40,28 +41,26 @@
 | Stage 4 - Execution Safety, Budgets, Cancellation | complete | `4ced164`, `031baea`, `20c235d`, `e75a754`, `7e1ed9f` |
 | Stage 5 - Context, Checkpoint, HITL Conformance | complete | `b223636`, `639c019`, `873df23`, `fcc9c8c`, `9942594` |
 | Stage 6 - Observability, Integration Tests, Evals | complete | Part 1 `e538ba9`；Part 2 `abc3220`；Part 3 backend `012c870`；Part 3 UI `82164ab`；Part 4 `da0eb8d`；Part 5 `298b2da`；稳定性 `332048d`；Part 6 `2ea75fe`；Part 7 `dd5af40`。 |
-| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 middleware overlap 已完成 review、broad gate 与独立提交边界；Part 2 patch upgrade 待开始。 |
+| Stage 7 - Native Convergence, Patch Upgrade, Cleanup | in_progress | Part 1 `4f37f17`；Part 2 三轴 review、broad gate 与独立 staged boundary 已完成。 |
 
 ## Current Acceptance
 
-- [x] 责任矩阵逐层记录 input、output、error、retry、effect 与 event owner，并引用当前生产调用路径和 owner tests。
-- [x] fixture 使用当前安装的 Deep Agents 1.10.7 真实 event shape，不以手写近似 DTO 代替 native 行为。
-- [x] deterministic trajectory 覆盖成功、malformed tool call、unknown tool、runtime failure、retry 与 effect recovery 的可观察合同。
-- [x] 每个删除候选先有稳定红测或 fixture 证明 native 等价，删除后同一证据转绿；无充分证据则保留并记录 owner。
-- [x] Windows path、capability manifest、effect recovery、product error/audit 责任保持不变。
-- [x] Standards、Spec 与 Risk review 无未处理 finding；focused、deterministic eval、strict unused、typecheck、IPC、build、full test 与 diff check 通过。
-- [x] Part 1 形成独立提交，且不包含 Deep Agents 1.10.8 升级。
+- [x] 1.10.7 / 1.10.8 core package diff 已审计，ACP/Deno 无关 commit 与非目标依赖变化被明确排除。
+- [x] Windows junction/symlink loop 与 root containment 有稳定回归，覆盖 `FilesystemBackend` 和 `LocalShellBackend` 实际 glob 边界。
+- [x] `deepagents` 精确升级到 1.10.8，lockfile 只包含该 patch 所需解析变化；过期 1.10.2 注释/README 仅按事实更新。
+- [x] Deep Agents official contract、path verification、typecheck、package directory 与 Electron smoke 通过。
+- [x] Standards、Spec 与 Risk review 无未处理 finding，Part 2 已形成独立 staged commit boundary。
 
 ## Current Step
 
-**Stage 7 Part 1 closure**
+**Final review for the exact 1.10.8 patch**
 
-**Status:** complete (`reviews, broad verification, and staged boundary passed`)
+**Status:** complete (`reviewed, broad verified, and ready to commit`)
 
-- Observable contract：真实 Deep Agents 1.10.7 fixture 已冻结；`PatchToolCallsMiddleware` 只拥有消息 parity，不拥有解析、resolution、retry、effect 或产品错误映射。
-- Reproduction：首轮 overlap 为 7 tests / 4 passed / 3 failed；review-fix 稳定红灯进一步证明 effectful pre-execution resolution 被误记为 `unknown`。
-- Implementation boundary：从真实 `runtime.configurable` 提取 identity，调整既有 wrapper 顺序，并把 `RocToolResolutionError` 记为确定性 `failed_final`；不增加旧字段兼容路径，不删除无等价证据的 Roc owner。
-- Verification：最终 Standards / Spec / Risk 均无 finding；9 files / 63 focused tests、strict unused、typecheck、IPC check、build、320 files / 1773 full tests、deterministic eval 1 file / 5 tests、独占 agent performance smoke 1 file / 1 test 与 diff check 均通过。
+- Observable contract：升级后 native glob 不跟随目录 symlink/junction，不循环、不越出 backend root；Roc path/capability/shell 合同不变。
+- Reproduction：先用当前 1.10.7 安装包和 Windows fixture 固定失败，再升级 1.10.8 使同一证据转绿；若现有 Roc backend 已屏蔽目标路径，则记录真实 owner，不伪造红灯。
+- Implementation boundary：只改精确依赖、lockfile、直接回归与过期版本事实；不复制 upstream 修复到 Roc production。
+- Verification：1.10.7 red 为 1 file / 3 failed；review-fix 后 1.10.8 direct 为 1 file / 3 tests、focused 为 4 files / 41 tests；official+junction 2 files / 12 tests、paths、typecheck、build、321 files / 1776 full tests、package directory 与 Electron smoke 已通过。最终 Standards / Spec / Risk 分别为 `No findings` / `No findings` / `No issues found`。
 
 ## Next Steps
 
@@ -93,7 +92,10 @@
 26. [complete] 读取安装包 1.10.7 `PatchToolCallsMiddleware`，冻结 overlap matrix、真实 event fixture 与 deterministic trajectory contract。
 27. [complete] 修复真实 execution identity、wrapper 顺序与 pre-effect resolution 状态；补齐真实 unknown-tool/subagent trajectory 和六维矩阵，8 files / 56 tests focused verified；无等价删除候选。
 28. [complete] 完成 Standards / Spec / Risk review、修复、broad gate 与 Stage 7 Part 1 独立提交。
-29. [pending] 定位并独立实施 Deep Agents 1.10.8 patch upgrade，完成 review、验证与提交。
+29. [complete] 审计 1.10.7 / 1.10.8 core package diff，定位 Windows glob、root containment、现有 tests 与过期版本事实。
+30. [complete] 用当前 1.10.7 增加 Windows junction/symlink loop 与 root containment 稳定回归。
+31. [complete] 精确升级 Deep Agents 1.10.8，更新必要事实并完成 focused verification。
+32. [complete] 完成 Standards / Spec / Risk review、修复、package/Electron broad gate 与 Stage 7 Part 2 独立 staged commit boundary。
 
 ## Decisions
 
@@ -146,6 +148,11 @@
 | Medium | 两处 middleware 顺序测试未先证明参与节点存在，`indexOf() === -1` 可能让安全顺序断言假通过。 | 已显式拒绝缺失 middleware 配置，并对全部参与节点做 concrete membership assertion 后再比较顺序；3 files / 31 tests、完整 9 files / 63 tests、typecheck 与 Standards 增量复审通过。 |
 | Low | `progress.md` 顶部 Current State 仍写首轮 findings 正在闭环。 | 已同步为 broad gate 通过、最终 review-fix 闭环与独立提交待完成；Standards 增量复审无 finding。 |
 | Low | overlap conformance 新增英文代码注释不符合仓库默认简体中文约定。 | 已改为简体中文；3-file direct gate、9-file focused gate 与 Standards 增量复审通过。 |
+| Medium | Stage 7.2 grep fallback 回归只断言空结果，未证明 fallback 确实执行或 root 内合法匹配仍可返回。 | 已断言 `ripgrepSearch()` spy 调用，并用同一 marker 具体断言只返回 root 内文件；direct 1 file / 3 tests 与 focused 4 files / 41 tests 通过。 |
+| Low | Stage 7.2 活动账本仍写 package discovery，与 focused/static 已通过的事实冲突。 | Current Phase 与 Stage 7 状态已同步到 review-fix/broad gate 边界。 |
+| Low | `package.json` 升级 diff 额外删除基线 EOF 空行。 | 已恢复基线 EOF；cached diff 只保留 `deepagents` 精确版本行变化，Standards 增量复审为 `No findings`。 |
+| Medium | Prescribed Electron smoke 的两个合成 provider 未声明 context window，完整 system/tool/schema 下分别在 task 与 chat 边界失败。 | 只在 smoke fixtures 显式设置并回读 128000；同一 `pnpm smoke:electron` 已转绿，production budget/default 未改变，增量三轴 review 无 finding。 |
+| Low | Stage 7.2 required-gate 边界只写 `smoke-provider`，与实际同时修复 `smoke-ui-openai` 的两处 fixture 不一致。 | 已同步为“两个合成 provider”，Standards closure 复审为 `No findings`。 |
 
 ## Errors Encountered
 
@@ -218,3 +225,9 @@
 | Subagent namespace 收紧断言首次错误假设包含 declarative name `effect-worker` | 1 | 真实 fixture 显示 Deep Agents 以父 `task` 的 `tools:<uuid>` 作为 subagent namespace；测试改为直接断言该真实 shape，生产 identity 与 DB 交叉验证不变。 |
 | 自定义 retry exhaustion handler 首轮 green 的测试误期望 raw `fetch failed` | 1 | 既有 `toRunFailure` 正确分类为 network 并返回脱敏产品文案；断言同步为 `Provider 网络请求失败：fetch failed`，生产逻辑不变。 |
 | 最终本地补充扫描再次把允许无匹配的 `rg` 放入 fail-fast `Promise.all` | 1 | 三条调用均只读且未修改文件；改用显式吸收 exit 1 的 `Promise.allSettled` 后完成扫描。 |
+| GitHub commit search 请求了 `gh search commits --json` 不支持的 `message` 字段 | 1 | 调用只读且未修改文件；改用已知 tag compare、release 与 PR files API 获取准确 commit/file diff。 |
+| 恢复 `package.json` EOF 空行的宽上下文 patch 误匹配嵌套 `onlyBuiltDependencies` 数组结尾，短暂破坏 JSON 尾部结构 | 1 | 修改未测试、未暂存；立即按 HEAD 尾部精确恢复，`ConvertFrom-Json` 确认结构正确；Standards review 后再按基线恢复双 LF，并以 cached diff 审计。 |
+| Stage 7.2 broad gate 首轮 Electron smoke 创建任务时返回 `context_budget_profile_invalid` | 1 | 打包/native 已通过；定位到 5 月沿用至今的合成 provider 未声明 context window，落到 8192 默认后无法容纳当前完整 system/tool/schema。seed fixture 显式声明 128000 后同一路径越过该错误。 |
+| Electron smoke 第二轮在 settings 新建的 `smoke-ui-openai` chat 等待超时 | 1 | 默认模型已切到该 provider、提交后没有新 provider request；其 UI draft 同样未声明 context window。完成 settings UI 验收后经现有 IPC 写入并回读 128000，待同命令复验。 |
+| smoke schema/renderer 调研把预期可无匹配的 `rg` 放入 fail-fast `Promise.all`，导致同组成功输出未保留 | 2 | 调用均只读且未修改文件；均立即改用 `Promise.allSettled` 获取证据，后续 optional 搜索继续逐项捕获 exit 1。 |
+| Smoke-fixture Risk reviewer 已发回完整 `No issues found` 分析，但 final 状态被上游 `400 Bad Request` 标记失败 | 1 | 不把失败任务计为通过；复用同一 reviewer 极简重试，最终有效返回 `No issues found`。 |

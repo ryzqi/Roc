@@ -328,3 +328,34 @@
 - Full Vitest 退出码为 0，测试全部通过；测试汇总后另有 4 条 `node-pty` helper 的 `AttachConsole failed` stderr，不改变本次测试断言或退出状态。
 - Stage 7.1 未修改 `package.json` 或 `pnpm-lock.yaml`，Deep Agents 仍为 1.10.7；没有原生等价证据支持删除任何现有 Roc middleware owner。
 - Risk residual 仅为 deterministic local trajectory 未覆盖真实 provider 的异常差异；该边界不改变 Stage 7.1 的 middleware overlap 合同。
+
+## Stage 7 Part 2 - Deep Agents 1.10.8 Discovery
+
+- 权威目标来自 `plan.md:647-664`：只审计并升级 1.10.8 core patch，为 `FilesystemBackend` / `LocalShellBackend` glob 增加 Windows junction/symlink loop 与 root containment 回归，并跑 official contract、paths、package 与 Electron smoke。
+- Deep Agents 是当前 harness 层，生产依赖应精确 pin 到已验证版本；本 part 不联动升级 LangChain/LangGraph，不用 prompt 或 filesystem permission 代替 Roc runtime workspace、shell authorization 与 root containment。
+- Observable contract 固定为 result + side effect + failure boundary：glob 不跟随目录 symlink/junction、不循环、不返回 root 外路径，合法 root 内普通文件仍可匹配；升级不改变已有 capability、checkpoint、retry/effect 或 event 合同。
+- 官方 tag compare `deepagents@1.10.7...deepagents@1.10.8` 含 4 commits：ACP permission gate、Deno sandbox injection、目标 PR #668 与 version commit；本 part 只接受 `libs/deepagents` 的 #668/版本变化，明确排除 ACP/Deno。来源：https://github.com/langchain-ai/deepagentsjs/compare/deepagents%401.10.7...deepagents%401.10.8
+- 官方 1.10.8 release 只有 #668：在 FilesystemBackend grep/glob 与 LocalShellBackend glob 的全部 `fast-glob` 调用关闭 directory symlink following，并保留 symlink-to-file 分类。来源：https://github.com/langchain-ai/deepagentsjs/pull/668
+- npm metadata 表明 1.10.7 与 1.10.8 direct/peer dependency ranges 完全相同；升级不应联动改变 LangChain、LangGraph、fast-glob 或其他解析版本，lockfile 预期只替换 deepagents package key/integrity。
+- 本机 1.10.7 Windows junction 复现：FilesystemBackend 118ms、LocalShellBackend 125ms，均返回 root 外 `outside-link/secret.txt`，并沿 `sub/loop` 生成约 80 层重复后代；这是稳定的 result/root-containment 红灯，不依赖等待 `ELOOP`。
+- 专用 1.10.7 red gate 为 1 file / 3 failed：FilesystemBackend 与 LocalShellBackend 各返回 64 份 `inner.txt`，FilesystemBackend grep fallback 返回 `/outside-link/secret.txt`；三条失败均落在目标 native patch，不是 fixture/权限/cleanup 错误。
+- 精确升级 1.10.8 后同一文件 3/3 passed（39ms）；升级 focused gate 为 4 files / 41 tests，覆盖 junction conformance、Roc backend route、official contracts 与 Stage 7.1 middleware fixture。
+- lockfile 只有 importer specifier/snapshot、deepagents package key 与官方 integrity 从 1.10.7 替换到 1.10.8；LangChain/LangGraph/langsmith/fast-glob resolution 均未变化。安装包 ESM/CJS dist 共 6 处显式 `followSymbolicLinks: false`。
+- pnpm 仍报告 deepagents peer `langsmith@^0.7.1` 与 Roc 现有 0.8.1 不匹配；1.10.7/1.10.8 peer ranges 完全相同，该 warning 不是本次 patch 引入，需由 official contract/typecheck/package/smoke 继续证明实际组合。
+- 首轮最终 review：Spec 与 Risk 无 finding；Standards 发现 grep fallback 断言可假绿、活动账本状态滞后、`package.json` EOF 格式 churn。三项均接受为有效 finding，并限制在测试、账本与精确格式恢复内修复。
+- Review-fix 后 junction direct gate 1 file / 3 tests、完整 focused gate 4 files / 41 tests 通过；fallback 现在同时证明 spy 被调用、root 内同 marker 被返回、root 外 junction marker 被排除。
+- Standards 增量复审为 `No findings`；Spec 与 Risk 首轮均无 finding。cached package diff 已恢复为只改 `deepagents` 精确版本一行，Part 2 进入 broad verification。
+- Broad gate 的 official+junction 2 files / 12 tests、paths、typecheck、build、321 files / 1776 full tests 与 `package:dir` 已通过；full Vitest 汇总后仍有 4 条既有 node-pty helper stderr，但退出码为 0。
+- Electron smoke 首轮稳定失败于 `context_budget_profile_invalid`：合成 openai-compatible `smoke-provider` 自 5 月起未声明 context window，LangChain factory 因而使用 production 默认 8192；当前完整 system/tool/schema overhead 已使 model input 非正数。Stage 7.2 staged diff 未修改 budget/runtime/smoke 路径，Deep Agents 1.10.8 目标 patch 也只改变 directory symlink following。
+- 最小修复仅让 smoke fixture 显式声明测试中已有的 128000-token context window；production 默认与 fail-closed budget validation 保持不变，同一 Electron smoke 必须转绿后才接受。
+- 第二轮 smoke 已越过首轮 task/context failure，证明 seed provider 修复生效；随后 settings UI 新建的 `smoke-ui-openai` 成为默认模型，chat 提交后无新 provider request并在 transcript 等待超时。该 provider 的 UI draft 同样不包含 context window，因此仍落到 8192 默认。
+- 修复扩展到在 settings UI 行为验收完成后，用现有 settings IPC 为 `smoke-ui-openai` 写入同一 128000，并立即回读具体值；不提高 timeout、不放宽断言、不修改 production provider/default/budget 行为。
+- 第三轮 `pnpm smoke:electron` 以 exit 0 通过；两处 context fixture 修复让 prescribed packaged Electron workflow 恢复可执行，同时保留原有 chat、task、capability、settings、native 与 renderer 断言。
+- Smoke-fixture 增量 Standards review 仅发现 required-gate 边界误用单数 provider；已同步为两个合成 provider，implementation 不变。Spec 增量 review 为 `No findings`。
+
+## Stage 7.2 Closure Evidence
+
+- 最终 Standards / Spec / Risk 分别为 `No findings` / `No findings` / `No issues found`；grep fallback、账本/EOF 与两个 smoke fixture finding 均已闭环。
+- 最终行为证据：1.10.8 direct 1 file / 3 tests、focused 4 files / 41 tests、official+junction 2 files / 12 tests、321 files / 1776 full tests、build、package directory 与 Electron smoke 全部通过。
+- 最终静态证据：`verify:paths`、typecheck、strict unused、两份 smoke MJS `node --check` 与 cached diff check 通过；测试后无 `roc-smoke-*`、`roc-deepagents-junction-*` 或 Roc/Electron process 残留。
+- 依赖边界仅为 `deepagents` 1.10.7 -> 1.10.8 package key/specifier/integrity/snapshot；LangChain/LangGraph/langsmith/fast-glob resolution 未改变。既有 langsmith peer warning 与 Windows-only junction coverage 作为 residual 保留。

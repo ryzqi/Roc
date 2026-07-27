@@ -561,6 +561,39 @@ export async function runSmokeSettingsChecks(ctx) {
     hostIntegrationAfterSaveAll.hostIntegration?.startup?.configuredOpenAtLogin === hostIntegrationAfterSaveAll.openAtLogin &&
     typeof hostIntegrationAfterSaveAll.hostIntegration?.startup?.effectiveOpenAtLogin === 'boolean' &&
     typeof hostIntegrationAfterSaveAll.hostIntegration?.globalHotkey?.registered === 'boolean';
+  await page.evaluate(async ({ providerId, contextBudgetTokens }) => {
+    const current = await window.roc.settings.get();
+    if (!current.ok) {
+      throw new Error(current.error.message);
+    }
+    const saved = await window.roc.settings.save({
+      settings: current.data.settings,
+      permissions: current.data.permissions,
+      providers: current.data.providers.map((provider) =>
+        provider.id === providerId
+          ? {
+              ...provider,
+              options: {
+                ...provider.options,
+                contextBudgetTokens
+              }
+            }
+          : provider
+      ),
+      defaultModelId: current.data.defaultModelId
+    });
+    if (!saved.ok) {
+      throw new Error(saved.error.message);
+    }
+    const refreshed = await window.roc.settings.get();
+    if (!refreshed.ok) {
+      throw new Error(refreshed.error.message);
+    }
+    const persisted = refreshed.data.providers.find((provider) => provider.id === providerId);
+    if (persisted?.options?.contextBudgetTokens !== contextBudgetTokens) {
+      throw new Error('smoke_provider_context_budget_not_persisted');
+    }
+  }, { providerId: openaiProviderId, contextBudgetTokens: 128_000 });
   const appBasicsText = await page.textContent('[data-testid="settings-panel-app-basics"]');
   providerSettingsEvidence.hostIntegrationStatusVisible =
     appBasicsText !== null && appBasicsText.includes('系统实际状态');

@@ -99,7 +99,7 @@ class ScriptedToolModel extends BaseChatModel {
   }
 }
 
-describe('Deep Agents 1.10.7 middleware overlap conformance', () => {
+describe('Deep Agents 1.10.8 middleware overlap conformance', () => {
   it('uses the installed PatchToolCallsMiddleware only for message parity repair', async () => {
     const history = [
       new HumanMessage({ id: 'human-parity', content: 'continue' }),

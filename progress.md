@@ -5,10 +5,10 @@
 ## Current State
 
 - Branch：`main`。
-- Stage 7.1 review baseline：`dd5af40 test(agent): add deterministic performance gate`。
+- Stage 7.2 review baseline：`4f37f17 fix(agent): align middleware ownership`。
 - Stage 0-6：完成并提交。
-- Stage 7：Part 1 middleware overlap 已完成最终 review、review-fix、broad gate 与独立提交边界；Part 2 patch upgrade 待开始。
-- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Stage 7.1 提交继续明确排除该文件。
+- Stage 7：Part 1 middleware overlap 已提交为 `4f37f17`；Part 2 Deep Agents 1.10.8 patch 已完成三轴 review、broad gate 与独立 staged boundary，提交待落下。
+- `plan.md` 当前未跟踪，作为 Stage 0-7 长期规格源；Stage 7.2 提交继续明确排除该文件。
 
 ## Completed Milestones
 
@@ -453,3 +453,33 @@ Windows full Vitest 偶发输出 node-pty `AttachConsole failed`；上述运行�
 - Standards 增量复审为 `No findings`；Spec 为 `No findings`；Risk 为 `No issues found`，只保留真实 provider 异常差异未被 deterministic local trajectory 覆盖的范围外 residual。
 - 最终 staged audit：16 个 Stage 7.1 文件、0 个未暂存 tracked 文件；`plan.md`、`package.json`、`pnpm-lock.yaml` 均不在 index，cached diff check 通过。
 - 当前状态：**Verified passing; Stage 7.1 isolated in this independent commit**。
+
+## 2026-07-27 - Stage 7 Part 2 Deep Agents 1.10.8 Start
+
+- Stage 7.1 已形成独立提交 `4f37f17 fix(agent): align middleware ownership`；提交后工作树仅剩未跟踪规格源 `plan.md`。
+- Part 2 范围固定为 Deep Agents 1.10.7 -> 1.10.8 core patch、Windows junction/symlink glob/root containment 回归、过期版本事实和 package/Electron 验证；不混入 LangChain/LangGraph 升级、Stage 7.3 adapter 或 cleanup。
+- 当前状态：**Located at package-diff discovery boundary; production unchanged**。
+- Agent Reach doctor 新鲜确认 GitHub 渠道可用；官方 release/PR/compare 已把目标 #668 与 ACP/Deno commit 分离，1.10.7/1.10.8 dependency ranges一致。
+- 当前 1.10.7 junction probe 稳定复现两类 backend 跟随 cycle 与 root 外目录 link；新增专用 conformance test 锁定 FilesystemBackend、LocalShellBackend glob 和 FilesystemBackend grep fallback。
+- 当前状态：**Changed tests only; stable red verification pending**。
+- 1.10.7 red gate 已稳定为 1 file / 3 failed：两个 glob cycle 均得到 64 份 `inner.txt`，grep fallback 泄露 root 外 marker；目标回归边界已冻结。
+- 当前状态：**Stable red; exact 1.10.8 dependency upgrade in progress**。
+- `pnpm add deepagents@1.10.8 --save-exact` 已更新 package/lock；同一 junction gate 转为 1 file / 3 passed，升级 focused gate 为 4 files / 41 tests passed。
+- package/lock 审计确认没有 LangChain/LangGraph 或其他解析升级；安装包 dist 的 FilesystemBackend/LocalShellBackend 路径均包含 native no-follow 配置。
+- 已把类型注释与真实 middleware fixture 标题从 1.10.2/1.10.7 同步为 1.10.8；没有修改 Roc production behavior。
+- 当前状态：**Changed, focused behavior verified; static gates pending**。
+- Static gate 已通过：`pnpm verify:paths`、`pnpm typecheck`、strict unused 与 tracked diff check 均为 exit 0。
+- 当前状态：**Changed, focused and static verified; final Standards / Spec / Risk review pending**。
+- 首轮最终 review 已完成：Spec 为 `No findings`，Risk 为 `No issues found`；Standards 提出 1 个 Medium 与 2 个 Low，分别为 grep fallback 假绿窗口、活动账本滞后和 `package.json` EOF churn。
+- Review-fix 已强化 fallback spy 与 root 内同 marker 具体结果断言，同步账本状态，并恢复 package 基线 EOF；当前状态：**Changed, unverified review fixes**。
+- Review-fix direct gate 为 1 file / 3 tests passed，完整 focused gate 为 4 files / 41 tests passed；当前状态：**Changed, review fixes focused verified; Standards rereview pending**。
+- Standards 增量复审为 `No findings`；三项 finding 全部闭环，typecheck、strict unused 与 cached diff check 新鲜通过。当前状态：**Changed, reviewed and focused/static verified; broad gate in progress**。
+- Broad gate 已通过 official+junction 2 files / 12 tests、`verify:paths`、typecheck、build、全量 Vitest 321 files / 1776 tests 与 `package:dir`；full Vitest 后 4 条既有 node-pty helper stderr 不改变 exit 0。
+- `smoke:electron` 首轮失败：任务创建后以 `context_budget_profile_invalid` 暂停。根因定位为合成 `smoke-provider` 未声明 context window 并落到 8192 默认，无法容纳当前完整 system/tool/schema；production budget 路径与 Stage 7.2 staged code 均未改变。
+- 已只为 smoke fixture 显式声明 128000-token context window；当前状态：**Changed, unverified smoke-fixture review fix**。
+- Electron smoke 第二轮已越过首轮 budget failure，但 settings UI 新建的默认 `smoke-ui-openai` 在 chat 提交后没有发起新 provider request，transcript 15s 等待超时；该 provider 也未声明 context window。
+- 已在 settings UI 验收完成后经现有 IPC 为 `smoke-ui-openai` 写入 128000 并回读断言；当前状态：**Changed, unverified two-provider smoke context fix**。
+- 第三轮 `pnpm smoke:electron` 以 exit 0 通过；broad gate 至此完整通过。当前状态：**Changed, broad verified; smoke-fixture incremental Standards / Spec / Risk review pending**。
+- Smoke-fixture 增量 Spec review 为 `No findings`；Standards 提出 1 个 Low 文档一致性 finding，required-gate 边界已从单数 provider 同步为两个合成 provider，待 Standards 复审。
+- Standards closure 复审为 `No findings`；Risk 首轮完整分析为 `No issues found` 但 final 被上游 400 标记失败，极简重试后有效返回 `No issues found`。
+- 当前状态：**Verified passing; Stage 7.2 independent commit pending**。
