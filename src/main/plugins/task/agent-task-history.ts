@@ -8,23 +8,16 @@ import type {
   EnabledCapabilities,
   PersistedTaskEvent,
   TaskEvent,
+  TaskKind,
   TaskMessageHistoryPage,
   TaskMessageHistoryRequest,
   TaskRun,
   TaskSnapshot,
+  TaskStatus,
   TaskThread
 } from '../../../shared/types';
 import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
-import {
-  mapTaskEvent,
-  mapTaskRun,
-  mapTaskThread,
-  type TaskEventRow,
-  type TaskRunRow,
-  type TaskThreadRow
-} from './task-repository-mappers';
-
 const recentEventLimit = 50;
 
 export class AgentTaskHistoryReader {
@@ -530,5 +523,74 @@ function emptyCapabilities(): EnabledCapabilities {
   return {
     mcpServers: [],
     skills: []
+  };
+}
+
+type TaskEventRow = {
+  id: string;
+  thread_id: string;
+  run_id: string;
+  type: TaskEvent['type'];
+  payload_json: string;
+  created_at: string;
+};
+
+type TaskRunRow = {
+  id: string;
+  thread_id: string;
+  run_number: number;
+  user_input: string;
+  status: TaskRun['status'];
+  started_at: string;
+  ended_at: string | null;
+  model_id: string | null;
+  enabled_capabilities_json: string;
+};
+
+type TaskThreadRow = {
+  id: string;
+  kind: TaskKind;
+  title: string;
+  goal: string;
+  status: TaskStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapTaskEvent(row: TaskEventRow & { rowid?: number }): TaskEvent {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    runId: row.run_id,
+    type: row.type,
+    payload: JSON.parse(row.payload_json) as unknown,
+    createdAt: row.created_at,
+    sequence: row.rowid
+  };
+}
+
+function mapTaskRun(row: TaskRunRow): TaskRun {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    runNumber: row.run_number,
+    userInput: row.user_input,
+    status: row.status,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    modelId: row.model_id,
+    enabledCapabilities: JSON.parse(row.enabled_capabilities_json) as EnabledCapabilities
+  };
+}
+
+function mapTaskThread(row: TaskThreadRow): TaskThread {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    goal: row.goal,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }

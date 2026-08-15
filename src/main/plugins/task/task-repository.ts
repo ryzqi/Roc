@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
@@ -8,6 +10,7 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   BackgroundTaskSummary,
+  BackgroundTaskTrigger,
   ChatStartRunRequest,
   EnabledCapabilities,
   ScheduledTaskRun,
@@ -27,29 +30,6 @@ import { deleteTaskProjectionForThread } from '../../infrastructure/agent-histor
 import { RocDomainError } from '../../services/errors';
 import { AgentTaskHistoryReader } from './agent-task-history';
 import { computeNextRunAt } from './next-run-calculator';
-import {
-  inferBackgroundRisk,
-  mergeTaskEvents,
-  normalizeTrigger,
-  requireText
-} from './task-repository-mappers';
-import {
-  createBackgroundTaskRecord,
-  createPreviewRequestFromTask,
-  recordScheduledTaskRun as insertScheduledTaskRun,
-  pauseBackgroundTaskAfterRunFailure,
-  transitionBackgroundTask,
-  updateBackgroundTaskLastRunStatus,
-  updateBackgroundTaskRecord
-} from './task-repository-mutations';
-import {
-  getActiveTasks as readActiveTasks,
-  findBackgroundTask as readBackgroundTask,
-  findBackgroundTaskByRunId as readBackgroundTaskByRunId,
-  listBackgroundTasks as readBackgroundTasks,
-  listSchedulableBackgroundTasks as readSchedulableBackgroundTasks,
-  listScheduledRuns as readScheduledRuns,
-} from './task-repository-queries';
 import { ThreadDeletionJournal, type ThreadDeletionRecord } from './thread-deletion-journal';
 
 const taskDetailRunHistoryLimit = 20;
@@ -1185,4 +1165,528 @@ function resolveDispatchedOccurrence(status: TaskStatus | null): {
     return { status: 'unknown', reason: 'agent_run_interrupted' };
   }
   return null;
+}
+
+type BackgroundTaskRecord = {
+  id: string;
+  thread_id: string;
+  run_id: string;
+  goal: string;
+  status: TaskStatus;
+  scheduled: 0 | 1;
+  trigger_type: BackgroundTaskTrigger['type'];
+  trigger_description: string;
+  next_run_at: string | null;
+  cron_expression: string | null;
+  workspace_path: string;
+  allowed_actions_json: string;
+  forbidden_actions_json: string;
+  failure_policy: BackgroundTask['failurePolicy'];
+  notification_policy: BackgroundTask['notificationPolicy'];
+  risk_level: BackgroundTask['riskLevel'];
+  requires_confirmation: 0 | 1;
+  last_run_at: string | null;
+  last_run_status: BackgroundTask['lastRunStatus'];
+  run_count: number;
+  created_at: string;
+  updated_at: string;
+  enabled_capabilities_json: string | null;
+};
+
+type ScheduledTaskRunRow = {
+  id: string;
+  background_task_id: string;
+  task_run_id: string | null;
+  scheduled_at: string;
+  triggered_at: string | null;
+  status: ScheduledTaskRun['status'];
+  skip_reason: string | null;
+};
+
+function mapBackgroundTask(row: BackgroundTaskRecord): BackgroundTask {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    runId: row.run_id,
+    goal: row.goal,
+    status: row.status,
+    scheduled: row.scheduled === 1,
+    triggerType: row.trigger_type,
+    triggerDescription: row.trigger_description,
+    nextRunAt: row.next_run_at,
+    cronExpression: row.cron_expression,
+    workspacePath: row.workspace_path,
+    allowedActions: JSON.parse(row.allowed_actions_json) as string[],
+    forbiddenActions: JSON.parse(row.forbidden_actions_json) as string[],
+    failurePolicy: row.failure_policy,
+    notificationPolicy: row.notification_policy,
+    riskLevel: row.risk_level,
+    requiresConfirmation: row.requires_confirmation === 1,
+    lastRunAt: row.last_run_at,
+    lastRunStatus: row.last_run_status,
+    runCount: row.run_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    enabledCapabilities: parseEnabledCapabilities(row.enabled_capabilities_json)
+  };
+}
+
+function mapScheduledTaskRun(row: ScheduledTaskRunRow): ScheduledTaskRun {
+  return {
+    id: row.id,
+    backgroundTaskId: row.background_task_id,
+    taskRunId: row.task_run_id,
+    scheduledAt: row.scheduled_at,
+    triggeredAt: row.triggered_at,
+    status: row.status,
+    skipReason: row.skip_reason
+  };
+}
+
+function mergeTaskEvents(eventGroups: readonly TaskEvent[][]): TaskEvent[] {
+  const eventsById = new Map<string, TaskEvent>();
+  for (const events of eventGroups) {
+    for (const event of events) {
+      if (!eventsById.has(event.id)) {
+        eventsById.set(event.id, event);
+      }
+    }
+  }
+  return [...eventsById.values()].sort(compareTaskEventsDescending);
+}
+
+function compareTaskEventsDescending(left: TaskEvent, right: TaskEvent): number {
+  const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder;
+  }
+  return (right.sequence === undefined ? 0 : right.sequence) - (left.sequence === undefined ? 0 : left.sequence);
+}
+
+function parseEnabledCapabilities(value: string | null): EnabledCapabilities | null {
+  if (value === null) {
+    return null;
+  }
+  return JSON.parse(value) as EnabledCapabilities;
+}
+
+function normalizeTrigger(trigger: BackgroundTaskTrigger, description: string): BackgroundTaskTrigger {
+  if (trigger.type === 'manual') {
+    return { type: 'manual', description };
+  }
+  if (trigger.type === 'once') {
+    return { type: 'once', description, nextRunAt: trigger.nextRunAt };
+  }
+  return {
+    type: 'cron',
+    description,
+    cronExpression: trigger.cronExpression,
+    nextRunAt: trigger.nextRunAt
+  };
+}
+
+function taskTrigger(task: BackgroundTask): BackgroundTaskTrigger {
+  if (task.triggerType === 'manual') {
+    return {
+      type: 'manual',
+      description: task.triggerDescription
+    };
+  }
+  if (task.triggerType === 'once') {
+    if (task.nextRunAt === null) {
+      throw new Error('background_task_next_run_missing');
+    }
+    return {
+      type: 'once',
+      description: task.triggerDescription,
+      nextRunAt: task.nextRunAt
+    };
+  }
+  if (task.nextRunAt === null || task.cronExpression === null) {
+    throw new Error('background_task_cron_missing');
+  }
+  return {
+    type: 'cron',
+    description: task.triggerDescription,
+    cronExpression: task.cronExpression,
+    nextRunAt: task.nextRunAt
+  };
+}
+
+function requireText(value: string, code: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new Error(code);
+  }
+  return trimmed;
+}
+
+function inferBackgroundRisk(allowedActions: string[], forbiddenActions: string[]): BackgroundTaskPreview['riskLevel'] {
+  const commands = [...allowedActions, ...forbiddenActions].map((item) => item.toLowerCase());
+  if (commands.some((command) => command.includes('git push') || command.includes('rm ') || command.includes('remove-item'))) {
+    return 'medium';
+  }
+  if (commands.length === 0) {
+    return 'low';
+  }
+  return 'medium';
+}
+
+
+function listActiveBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
+  const rows = db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+              trigger_type, cron_expression,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE status != 'archived'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )
+       ORDER BY updated_at DESC`
+    )
+    .all() as BackgroundTaskRecord[];
+  return rows.map(mapBackgroundTask);
+}
+
+function readBackgroundTask(db: DatabaseConnection, id: string): BackgroundTask | null {
+  const row = db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+              trigger_type, cron_expression,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )`
+    )
+    .get(id) as BackgroundTaskRecord | undefined;
+  if (row === undefined) {
+    return null;
+  }
+  return mapBackgroundTask(row);
+}
+
+function readBackgroundTaskByRunId(db: DatabaseConnection, runId: string): BackgroundTask | null {
+  const row = db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+              trigger_type, cron_expression,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE run_id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )`
+    )
+    .get(runId) as BackgroundTaskRecord | undefined;
+  if (row === undefined) {
+    return null;
+  }
+  return mapBackgroundTask(row);
+}
+
+function readBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
+  const rows = db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+              trigger_type, cron_expression,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM thread_deletion_journal deletion
+         WHERE deletion.thread_id = background_tasks.thread_id
+       )
+       ORDER BY updated_at DESC`
+    )
+    .all() as BackgroundTaskRecord[];
+  return rows.map(mapBackgroundTask);
+}
+
+function readSchedulableBackgroundTasks(db: DatabaseConnection): BackgroundTask[] {
+  const rows = db
+    .prepare(
+      `SELECT id, thread_id, run_id, goal, status, scheduled, trigger_description, next_run_at, workspace_path,
+              trigger_type, cron_expression,
+              allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+              requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at,
+              enabled_capabilities_json
+       FROM background_tasks
+       WHERE scheduled = 1
+         AND status IN ('running', 'pending_confirmation', 'paused')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM thread_deletion_journal deletion
+           WHERE deletion.thread_id = background_tasks.thread_id
+         )
+       ORDER BY next_run_at ASC, updated_at DESC`
+    )
+    .all() as BackgroundTaskRecord[];
+  return rows.map(mapBackgroundTask);
+}
+
+function readActiveTasks(db: DatabaseConnection): ActiveTaskItem[] {
+  return listActiveBackgroundTasks(db).map((task) => ({
+    kind: 'background',
+    threadId: task.threadId,
+    taskId: task.id,
+    title: task.goal.slice(0, 60),
+    goal: task.goal,
+    status: task.status,
+    trigger: taskTrigger(task),
+    nextRunAt: task.nextRunAt,
+    lastRunAt: task.lastRunAt,
+    riskLevel: task.riskLevel,
+    workspacePath: task.workspacePath,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
+  }));
+}
+
+function readScheduledRuns(
+  db: DatabaseConnection,
+  task: BackgroundTask,
+  limit: number
+): ScheduledTaskRun[] {
+  const rows = db
+    .prepare(
+      `SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason
+       FROM (
+         SELECT id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason, rowid AS sort_rowid
+         FROM scheduled_task_runs
+         WHERE background_task_id = ?
+         UNION ALL
+         SELECT occurrence_key AS id, background_task_id, run_id AS task_run_id, scheduled_at,
+                COALESCE(dispatched_at, claimed_at, created_at) AS triggered_at,
+                status, reason AS skip_reason, rowid AS sort_rowid
+         FROM scheduled_occurrences
+         WHERE background_task_id = ?
+       )
+       ORDER BY scheduled_at DESC, sort_rowid DESC
+       LIMIT ?`
+    )
+    .all(task.id, task.id, limit) as ScheduledTaskRunRow[];
+  return rows.map(mapScheduledTaskRun);
+}
+
+
+function createBackgroundTaskRecord(db: DatabaseConnection, preview: BackgroundTaskPreview): BackgroundTask {
+  const now = new Date().toISOString();
+  const taskId = `background_${randomUUID()}`;
+  const threadId = `thread_${randomUUID()}`;
+  const runId = `run_${randomUUID()}`;
+  const status: TaskStatus = preview.requiresConfirmation ? 'pending_confirmation' : 'running';
+  db.transaction(() => {
+    insertBackgroundTask(db, {
+      preview,
+      taskId,
+      threadId,
+      runId,
+      status,
+      now
+    });
+  })();
+  const task = readBackgroundTask(db, taskId);
+  if (task === null) {
+    throw new Error('background_task_create_failed');
+  }
+  return task;
+}
+
+function updateBackgroundTaskRecord(input: {
+  db: DatabaseConnection;
+  task: BackgroundTask;
+  preview: BackgroundTaskPreview;
+  reason: string;
+}): BackgroundTask {
+  const now = new Date().toISOString();
+  input.db.transaction(() => {
+    const revisionRow = input.db
+      .prepare('SELECT task_revision FROM background_tasks WHERE id = ?')
+      .get(input.task.id) as { task_revision: number } | undefined;
+    if (revisionRow === undefined || !Number.isInteger(revisionRow.task_revision) || revisionRow.task_revision <= 0) {
+      throw new Error('background_task_revision_invalid');
+    }
+    input.db
+      .prepare(
+        `UPDATE scheduled_occurrences
+         SET status = ?, terminal_at = ?, reason = ?
+         WHERE background_task_id = ? AND task_revision = ? AND status = 'pending'`
+      )
+      .run('skipped', now, 'superseded_by_task_revision', input.task.id, revisionRow.task_revision);
+    input.db.prepare(
+      `UPDATE background_tasks
+       SET goal = ?, scheduled = ?, trigger_type = ?, trigger_description = ?, next_run_at = ?, cron_expression = ?,
+           workspace_path = ?, allowed_actions_json = ?, forbidden_actions_json = ?, failure_policy = ?,
+           notification_policy = ?, risk_level = ?, requires_confirmation = ?, updated_at = ?, enabled_capabilities_json = ?,
+           task_revision = task_revision + 1
+       WHERE id = ?`
+    ).run(
+      input.preview.goal,
+      input.preview.scheduled ? 1 : 0,
+      input.preview.trigger.type,
+      input.preview.trigger.description,
+      input.preview.nextRunAt,
+      input.preview.cronExpression,
+      input.preview.workspacePath,
+      JSON.stringify(input.preview.allowedActions),
+      JSON.stringify(input.preview.forbiddenActions),
+      input.preview.failurePolicy,
+      input.preview.notificationPolicy,
+      input.preview.riskLevel,
+      input.preview.requiresConfirmation ? 1 : 0,
+      now,
+      input.preview.enabledCapabilities === null ? null : JSON.stringify(input.preview.enabledCapabilities),
+      input.task.id
+    );
+  })();
+  return requireBackgroundTaskRecord(input.db, input.task.id);
+}
+
+function createPreviewRequestFromTask(
+  task: BackgroundTask,
+  patch: UpdateBackgroundTaskRequest['patch']
+): BackgroundTaskPreviewRequest {
+  return {
+    goal: patch.goal === undefined ? task.goal : patch.goal,
+    trigger: patch.trigger === undefined ? taskTrigger(task) : patch.trigger,
+    workspacePath: patch.workspacePath === undefined ? task.workspacePath : patch.workspacePath,
+    allowedActions: patch.allowedActions === undefined ? task.allowedActions : patch.allowedActions,
+    forbiddenActions: patch.forbiddenActions === undefined ? task.forbiddenActions : patch.forbiddenActions,
+    failurePolicy: patch.failurePolicy === undefined ? task.failurePolicy : patch.failurePolicy,
+    notificationPolicy: patch.notificationPolicy === undefined ? task.notificationPolicy : patch.notificationPolicy,
+    enabledCapabilities: patch.enabledCapabilities === undefined ? task.enabledCapabilities : patch.enabledCapabilities
+  };
+}
+
+function insertScheduledTaskRun(
+  db: DatabaseConnection,
+  input: {
+    backgroundTaskId: string;
+    scheduledAt: string;
+    status: ScheduledTaskRun['status'];
+    taskRunId?: string | null;
+    triggeredAt?: string | null;
+    skipReason?: string | null;
+  }
+): ScheduledTaskRun {
+  const now = new Date().toISOString();
+  const taskRunId = input.taskRunId === undefined ? null : input.taskRunId;
+  const triggeredAt = input.triggeredAt === undefined ? now : input.triggeredAt;
+  const skipReason = input.skipReason === undefined ? null : input.skipReason;
+  const scheduledRun: ScheduledTaskRun = {
+    id: `scheduled_${randomUUID()}`,
+    backgroundTaskId: input.backgroundTaskId,
+    taskRunId,
+    scheduledAt: input.scheduledAt,
+    triggeredAt,
+    status: input.status,
+    skipReason
+  };
+  db.prepare(
+    `INSERT INTO scheduled_task_runs
+     (id, background_task_id, task_run_id, scheduled_at, triggered_at, status, skip_reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    scheduledRun.id,
+    scheduledRun.backgroundTaskId,
+    scheduledRun.taskRunId,
+    scheduledRun.scheduledAt,
+    scheduledRun.triggeredAt,
+    scheduledRun.status,
+    scheduledRun.skipReason
+  );
+  return scheduledRun;
+}
+
+function transitionBackgroundTask(db: DatabaseConnection, task: BackgroundTask, status: TaskStatus): BackgroundTask {
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare('UPDATE background_tasks SET status = ?, updated_at = ? WHERE id = ?').run(status, now, task.id);
+  })();
+  return requireBackgroundTaskRecord(db, task.id);
+}
+
+function updateBackgroundTaskLastRunStatus(
+  db: DatabaseConnection,
+  taskId: string,
+  status: Exclude<BackgroundTask['lastRunStatus'], null>
+): void {
+  db.prepare('UPDATE background_tasks SET last_run_status = ?, updated_at = ? WHERE id = ?').run(status, new Date().toISOString(), taskId);
+}
+
+function pauseBackgroundTaskAfterRunFailure(db: DatabaseConnection, taskId: string, now: string): void {
+  const task = requireBackgroundTaskRecord(db, taskId);
+  db.transaction(() => {
+    db.prepare('UPDATE background_tasks SET status = ?, last_run_status = ?, updated_at = ? WHERE id = ?').run('paused', 'failed', now, task.id);
+  })();
+}
+
+function insertBackgroundTask(
+  db: DatabaseConnection,
+  input: {
+    preview: BackgroundTaskPreview;
+    taskId: string;
+    threadId: string;
+    runId: string;
+    status: TaskStatus;
+    now: string;
+  }
+): void {
+  db.prepare(
+    `INSERT INTO background_tasks
+     (id, thread_id, run_id, goal, status, scheduled, trigger_type, trigger_description, next_run_at, cron_expression, workspace_path,
+      allowed_actions_json, forbidden_actions_json, failure_policy, notification_policy, risk_level,
+      requires_confirmation, last_run_at, last_run_status, run_count, created_at, updated_at, enabled_capabilities_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    input.taskId,
+    input.threadId,
+    input.runId,
+    input.preview.goal,
+    input.status,
+    input.preview.scheduled ? 1 : 0,
+    input.preview.trigger.type,
+    input.preview.trigger.description,
+    input.preview.nextRunAt,
+    input.preview.cronExpression,
+    input.preview.workspacePath,
+    JSON.stringify(input.preview.allowedActions),
+    JSON.stringify(input.preview.forbiddenActions),
+    input.preview.failurePolicy,
+    input.preview.notificationPolicy,
+    input.preview.riskLevel,
+    input.preview.requiresConfirmation ? 1 : 0,
+    null,
+    null,
+    0,
+    input.now,
+    input.now,
+    input.preview.enabledCapabilities === null ? null : JSON.stringify(input.preview.enabledCapabilities)
+  );
+}
+
+function requireBackgroundTaskRecord(db: DatabaseConnection, id: string): BackgroundTask {
+  const task = readBackgroundTask(db, id);
+  if (task === null) {
+    throw new Error('background_task_not_found');
+  }
+  return task;
 }
