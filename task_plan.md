@@ -5,10 +5,10 @@
 ## Current State
 
 - Branch：`main`
-- HEAD：`d5150a6 docs(agent): record performance tuning evidence`
+- HEAD：`19e262b docs(agent): consolidate tracking docs`
 - Stage 0-7：全部完成并提交
 - Stage 7：Part 1 `4f37f17`；Part 2 `475b4d2`；Part 3 `e94a7fc`；Part 4 docs-only `d5150a6`
-- 当前无进行中任务。工作树中的三份跟踪文档正在整理，`plan.md` 保持未跟踪的长期规格源。
+- 当前无进行中任务；工作树干净，仅 `plan.md` 保持未跟踪。
 
 ## Phase Status
 

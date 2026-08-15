@@ -5,10 +5,10 @@
 ## Current State
 
 - Branch：`main`
-- HEAD：`d5150a6 docs(agent): record performance tuning evidence`
+- HEAD：`19e262b docs(agent): consolidate tracking docs`
 - Stage 0-7：全部完成并提交
 - Stage 7：Part 1 `4f37f17`；Part 2 `475b4d2`；Part 3 `e94a7fc`；Part 4 docs-only `d5150a6`，五项 performance candidate 均为 evidence-backed no-change
-- 当前工作树仅有三份跟踪文档的整理 diff；`plan.md` 保持未跟踪，不进入提交
+- 当前工作树干净；`plan.md` 保持未跟踪，不进入提交
 
 ## Completed Milestones
 
