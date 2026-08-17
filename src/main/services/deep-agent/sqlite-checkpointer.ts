@@ -26,6 +26,28 @@ type WriteRow = {
   value_blob: Buffer;
 };
 
+type StoredCheckpointRow = CheckpointRow & {
+  created_at: string;
+};
+
+type StoredWriteRow = WriteRow & {
+  thread_id: string;
+  checkpoint_ns: string;
+  checkpoint_id: string;
+  idx: number;
+  created_at: string;
+};
+
+type CheckpointDeleteResult = {
+  checkpoints: number;
+  checkpointWrites: number;
+};
+
+export type RocCheckpointInterrupt = {
+  interruptId: string;
+  payload: unknown;
+};
+
 type CheckpointKey = {
   threadId: string;
   checkpointNs: string;
@@ -211,11 +233,193 @@ export class RocSqliteCheckpointer extends BaseCheckpointSaver {
   }
 
   override async deleteThread(threadId: string): Promise<void> {
+    this.deleteThreadCheckpoints(threadId);
+  }
+
+  deleteThreadCheckpoints(threadId: string): CheckpointDeleteResult {
     requireStorageKey(threadId, 'agent_checkpoint_thread_id_missing');
-    this.db.transaction(() => {
-      this.db.prepare('DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?').run(threadId);
-      this.db.prepare('DELETE FROM langgraph_checkpoints WHERE thread_id = ?').run(threadId);
+    return this.db.transaction(() => {
+      const checkpointWrites = this.db.prepare('DELETE FROM langgraph_checkpoint_writes WHERE thread_id = ?').run(threadId)
+        .changes;
+      const checkpoints = this.db.prepare('DELETE FROM langgraph_checkpoints WHERE thread_id = ?').run(threadId).changes;
+      return { checkpoints, checkpointWrites };
     })();
+  }
+
+  deleteExcessCheckpoints(input: {
+    protectedThreadIds: readonly string[];
+    maxCheckpointsPerThread: number;
+  }): CheckpointDeleteResult {
+    if (input.maxCheckpointsPerThread < 1) {
+      throw new Error('agent_checkpoint_retention_limit_invalid');
+    }
+    return this.db.transaction(() => {
+      this.db.exec(`
+        DROP TABLE IF EXISTS temp.checkpoint_retention_protected_threads;
+        CREATE TEMP TABLE checkpoint_retention_protected_threads (
+          thread_id TEXT PRIMARY KEY
+        );
+      `);
+      try {
+        const insertProtectedThread = this.db.prepare(
+          'INSERT INTO checkpoint_retention_protected_threads (thread_id) VALUES (?)'
+        );
+        for (const threadId of input.protectedThreadIds) {
+          insertProtectedThread.run(threadId);
+        }
+        const rows = this.db
+          .prepare(
+            `SELECT thread_id, checkpoint_ns, checkpoint_id
+             FROM (
+               SELECT thread_id,
+                      checkpoint_ns,
+                      checkpoint_id,
+                      ROW_NUMBER() OVER (
+                        PARTITION BY thread_id
+                        ORDER BY created_at DESC, checkpoint_id DESC
+                      ) AS checkpoint_rank
+               FROM langgraph_checkpoints
+               WHERE thread_id NOT IN (SELECT thread_id FROM checkpoint_retention_protected_threads)
+             )
+             WHERE checkpoint_rank > ?`
+          )
+          .all(input.maxCheckpointsPerThread) as Array<
+          Pick<StoredCheckpointRow, 'thread_id' | 'checkpoint_ns' | 'checkpoint_id'>
+        >;
+        const deleteWrites = this.db.prepare(
+          `DELETE FROM langgraph_checkpoint_writes
+           WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?`
+        );
+        const deleteCheckpoint = this.db.prepare(
+          `DELETE FROM langgraph_checkpoints
+           WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?`
+        );
+        let checkpoints = 0;
+        let checkpointWrites = 0;
+        for (const row of rows) {
+          checkpointWrites += deleteWrites.run(row.thread_id, row.checkpoint_ns, row.checkpoint_id).changes;
+          checkpoints += deleteCheckpoint.run(row.thread_id, row.checkpoint_ns, row.checkpoint_id).changes;
+        }
+        return { checkpoints, checkpointWrites };
+      } finally {
+        this.db.exec('DROP TABLE IF EXISTS temp.checkpoint_retention_protected_threads;');
+      }
+    })();
+  }
+
+  restoreFrom(source: DatabaseConnection | null): void {
+    if (source === null) {
+      return;
+    }
+    const checkpoints = readSourceRows<StoredCheckpointRow>(
+      source,
+      `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
+         checkpoint_blob, metadata_type, metadata_blob, created_at
+       FROM langgraph_checkpoints`
+    );
+    const writes = readSourceRows<StoredWriteRow>(
+      source,
+      `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
+       FROM langgraph_checkpoint_writes`
+    );
+    const insertCheckpoint = this.db.prepare(
+      `INSERT INTO langgraph_checkpoints (
+        thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
+        checkpoint_blob, metadata_type, metadata_blob, created_at
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const insertWrite = this.db.prepare(
+      `INSERT INTO langgraph_checkpoint_writes (
+        thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of checkpoints) {
+      try {
+        insertCheckpoint.run(
+          row.thread_id,
+          row.checkpoint_ns,
+          row.checkpoint_id,
+          row.parent_checkpoint_id,
+          row.checkpoint_type,
+          row.checkpoint_blob,
+          row.metadata_type,
+          row.metadata_blob,
+          row.created_at
+        );
+      } catch {
+        continue;
+      }
+    }
+    for (const row of writes) {
+      try {
+        insertWrite.run(
+          row.thread_id,
+          row.checkpoint_ns,
+          row.checkpoint_id,
+          row.task_id,
+          row.idx,
+          row.channel,
+          row.value_type,
+          row.value_blob,
+          row.created_at
+        );
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  readPendingInterrupts(threadId: string): RocCheckpointInterrupt[] | null {
+    const rows = this.db
+      .prepare(
+        `SELECT value_type, value_blob
+         FROM langgraph_checkpoint_writes
+         WHERE thread_id = ?
+           AND checkpoint_ns = ''
+           AND checkpoint_id = (
+             SELECT checkpoint_id
+             FROM langgraph_checkpoints
+             WHERE thread_id = ? AND checkpoint_ns = ''
+             ORDER BY checkpoint_id DESC
+             LIMIT 1
+           )
+           AND channel = '__interrupt__'
+         ORDER BY rowid ASC`
+      )
+      .all(threadId, threadId) as Array<Pick<WriteRow, 'value_type' | 'value_blob'>>;
+    if (rows.length === 0 || rows.some((row) => row.value_type !== 'json')) {
+      return null;
+    }
+    try {
+      const values = rows.flatMap((row) => {
+        const value = JSON.parse(row.value_blob.toString('utf8')) as unknown;
+        return Array.isArray(value) ? value : [value];
+      });
+      return values.map((value) => {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          throw new Error('agent_checkpoint_interrupt_invalid');
+        }
+        const interruptId = Reflect.get(value, 'id');
+        if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
+          throw new Error('agent_checkpoint_interrupt_id_invalid');
+        }
+        return {
+          interruptId,
+          payload: Reflect.get(value, 'value')
+        };
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  hasCheckpoint(threadId: string): boolean {
+    const row = this.db
+      .prepare('SELECT 1 FROM langgraph_checkpoints WHERE thread_id = ? LIMIT 1')
+      .get(threadId) as { 1: number } | undefined;
+    return row !== undefined;
   }
 
   private readLatestCheckpointId(threadId: string, checkpointNs: string): string | null {
@@ -519,4 +723,12 @@ function requireStorageKey(value: unknown, code: string): string {
     throw new Error('agent_checkpoint_storage_key_reserved');
   }
   return value;
+}
+
+function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
+  try {
+    return source.prepare(sql).all() as TRow[];
+  } catch {
+    return [];
+  }
 }

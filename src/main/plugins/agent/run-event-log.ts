@@ -14,8 +14,7 @@ type EventRow = {
 export class AgentRunEventLog {
   constructor(private readonly db: DatabaseConnection) {}
 
-  recordRunEvent(event: ChatRunEvent): SequencedChatRunEvent {
-    const createdAt = new Date().toISOString();
+  recordRunEvent(event: ChatRunEvent, createdAt = new Date().toISOString()): SequencedChatRunEvent {
     return this.db.transaction(() => {
       const sequence = this.nextSequence(event.runId);
       this.db
@@ -24,6 +23,7 @@ export class AgentRunEventLog {
            VALUES (?, ?, ?, ?)`
         )
         .run(event.runId, sequence, JSON.stringify(event), createdAt);
+      this.trimToCapacity(event.runId);
       return {
         runId: event.runId,
         sequence,
@@ -45,6 +45,69 @@ export class AgentRunEventLog {
     return rows.map(rowToSequencedEvent);
   }
 
+  restoreRunEvent(input: { runId: string; sequence: number; eventJson: string; createdAt: string }): void {
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
+           VALUES (?, ?, ?, ?)`
+        )
+        .run(input.runId, input.sequence, input.eventJson, input.createdAt);
+      this.db
+        .prepare(
+          `INSERT INTO agent_run_event_cursors (run_id, next_sequence)
+           VALUES (?, ?)
+           ON CONFLICT(run_id) DO UPDATE SET
+             next_sequence = MAX(agent_run_event_cursors.next_sequence, excluded.next_sequence)`
+        )
+        .run(input.runId, input.sequence + 1);
+      this.trimToCapacity(input.runId);
+    })();
+  }
+
+  restoreFrom(source: DatabaseConnection | null): void {
+    if (source === null) {
+      return;
+    }
+    let rows: EventRow[];
+    try {
+      rows = source
+        .prepare(
+          `SELECT run_id, sequence, event_json, created_at
+           FROM agent_run_events
+           ORDER BY run_id ASC, sequence ASC`
+        )
+        .all() as EventRow[];
+    } catch {
+      return;
+    }
+    for (const row of rows) {
+      try {
+        this.restoreRunEvent({
+          runId: row.run_id,
+          sequence: row.sequence,
+          eventJson: row.event_json,
+          createdAt: row.created_at
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  deleteForRunIds(runIds: readonly string[]): number {
+    const deleteEvents = this.db.prepare('DELETE FROM agent_run_events WHERE run_id = ?');
+    const deleteCursor = this.db.prepare('DELETE FROM agent_run_event_cursors WHERE run_id = ?');
+    return this.db.transaction(() => {
+      let deleted = 0;
+      for (const runId of runIds) {
+        deleteCursor.run(runId);
+        deleted += deleteEvents.run(runId).changes;
+      }
+      return deleted;
+    })();
+  }
+
   private nextSequence(runId: string): number {
     const row = this.db
       .prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?')
@@ -58,11 +121,26 @@ export class AgentRunEventLog {
         .run(runId, 2);
       return 1;
     }
-    if (row.next_sequence >= agentRunEventLogMaxEvents) {
-      throw new Error('agent_run_event_log_capacity_exceeded');
-    }
     this.db.prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?').run(row.next_sequence + 1, runId);
     return row.next_sequence;
+  }
+
+  private trimToCapacity(runId: string): void {
+    const cutoff = this.db
+      .prepare(
+        `SELECT sequence
+         FROM agent_run_events
+         WHERE run_id = ?
+         ORDER BY sequence DESC
+         LIMIT 1 OFFSET ?`
+      )
+      .get(runId, agentRunEventLogMaxEvents) as { sequence: number } | undefined;
+    if (cutoff === undefined) {
+      return;
+    }
+    this.db
+      .prepare('DELETE FROM agent_run_events WHERE run_id = ? AND sequence <= ?')
+      .run(runId, cutoff.sequence);
   }
 }
 

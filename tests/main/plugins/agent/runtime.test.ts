@@ -451,7 +451,7 @@ describe('AgentPluginRuntime', () => {
     expect(completedPayload?.summary).toBe(assistantMessage);
   });
 
-  it('keeps execution successful when streamed replay reaches its reserved capacity', async () => {
+  it('keeps execution successful when streamed replay trims at capacity', async () => {
     const repository = new AgentSessionRepository(db);
     const releaseExecution = createDeferred<void>();
     const runtime = new AgentPluginRuntime({
@@ -489,11 +489,11 @@ describe('AgentPluginRuntime', () => {
 
     expect(
       db.prepare('SELECT failure_count FROM agent_notification_metrics WHERE code = ?').get('agent_run_event_replay_persist_failed')
-    ).toEqual({ failure_count: 1 });
+    ).toBeUndefined();
     expect(
       db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(result.runId)
     ).toEqual({
-      sequence: agentRunEventLogMaxEvents,
+      sequence: agentRunEventLogMaxEvents + 1,
       event_json: expect.stringContaining('run_completed')
     });
   });

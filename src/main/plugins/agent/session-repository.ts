@@ -19,8 +19,10 @@ import type {
   TaskStatus
 } from '../../../shared/types';
 import type { RunFailure } from '../../services/deep-agent/types';
+import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import { RocDomainError } from '../../services/errors';
-import { agentRunEventLogMaxEvents } from './run-event-log';
+import { AgentRunEventLog } from './run-event-log';
 import type { PendingInterrupt } from './interrupt-projection';
 import { AgentInterruptProjection, assertPendingInterrupts } from './interrupt-projection';
 import {
@@ -151,11 +153,26 @@ const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>>
 
 export class AgentSessionRepository {
   private readonly runTelemetryRepository: AgentRunTelemetryRepository;
+  private readonly checkpointer: Pick<RocSqliteCheckpointer, 'hasCheckpoint' | 'readPendingInterrupts'>;
+  private readonly runEventLog: Pick<AgentRunEventLog, 'recordRunEvent'>;
+  private readonly toolEffectStore: Pick<AgentToolEffectStore, 'hasUnknown' | 'markRestartedUnknown'>;
   readonly interruptProjection: AgentInterruptProjection;
 
-  constructor(private readonly db: DatabaseConnection) {
+  constructor(
+    private readonly db: DatabaseConnection,
+    dependencies: {
+      checkpointer?: Pick<RocSqliteCheckpointer, 'hasCheckpoint' | 'readPendingInterrupts'>;
+      interruptProjection?: AgentInterruptProjection;
+      runEventLog?: Pick<AgentRunEventLog, 'recordRunEvent'>;
+      toolEffectStore?: Pick<AgentToolEffectStore, 'hasUnknown' | 'markRestartedUnknown'>;
+    } = {}
+  ) {
+    this.checkpointer = dependencies.checkpointer ?? new RocSqliteCheckpointer(db);
+    this.runEventLog = dependencies.runEventLog ?? new AgentRunEventLog(db);
     this.runTelemetryRepository = new AgentRunTelemetryRepository(db);
-    this.interruptProjection = new AgentInterruptProjection(db);
+    this.toolEffectStore = dependencies.toolEffectStore ?? new AgentToolEffectStore(db);
+    this.interruptProjection =
+      dependencies.interruptProjection ?? new AgentInterruptProjection(db, this.checkpointer);
   }
 
   createTaskRun(input: {
@@ -315,18 +332,7 @@ export class AgentSessionRepository {
           modelId: snapshot.model.modelId,
           createdAt: now
         };
-        this.db
-          .prepare(
-            `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-             VALUES (?, ?, ?, ?)`
-          )
-          .run(runId, 1, JSON.stringify(runStartedEvent), now);
-        this.db
-          .prepare(
-            `INSERT INTO agent_run_event_cursors (run_id, next_sequence)
-             VALUES (?, ?)`
-          )
-          .run(runId, 2);
+        this.runEventLog.recordRunEvent(runStartedEvent, now);
         })();
     } catch (error) {
       if (isThreadLeaseConflict(error)) {
@@ -541,13 +547,7 @@ export class AgentSessionRepository {
         summary: input.summary,
         assistantMessage: input.assistantMessage
       };
-      const sequence = this.nextRunEventSequence(transition.run.id);
-      this.db
-        .prepare(
-          `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-           VALUES (?, ?, ?, ?)`
-        )
-        .run(transition.run.id, sequence, JSON.stringify(runCompletedEvent), input.endedAt);
+      this.runEventLog.recordRunEvent(runCompletedEvent, input.endedAt);
 
       this.db
         .prepare(
@@ -607,7 +607,7 @@ export class AgentSessionRepository {
     const reconciled: TaskRun[] = [];
 
     for (const candidate of candidates) {
-      this.markRestartedToolEffectsUnknown(candidate.id);
+      this.toolEffectStore.markRestartedUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
       const canRecoverCheckpointInterrupts =
         evidence.hasCheckpoint &&
@@ -904,13 +904,7 @@ export class AgentSessionRepository {
         threadId: transition.run.threadId,
         reason: 'user_cancelled'
       };
-      const sequence = this.nextRunEventSequence(transition.run.id);
-      this.db
-        .prepare(
-          `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-           VALUES (?, ?, ?, ?)`
-        )
-        .run(transition.run.id, sequence, JSON.stringify(runCancelledEvent), input.endedAt);
+      this.runEventLog.recordRunEvent(runCancelledEvent, input.endedAt);
       this.db
         .prepare(
           `INSERT INTO agent_outbox (id, event_type, run_id, thread_id, payload_json, created_at)
@@ -1136,26 +1130,6 @@ export class AgentSessionRepository {
     return row.next_sequence;
   }
 
-  private nextRunEventSequence(runId: string): number {
-    const row = this.db
-      .prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?')
-      .get(runId) as { next_sequence: number } | undefined;
-    if (row === undefined) {
-      throw new Error('agent_run_event_cursor_missing');
-    }
-    if (row.next_sequence === agentRunEventLogMaxEvents + 1) {
-      this.db.prepare('DELETE FROM agent_run_events WHERE run_id = ? AND sequence = ?').run(runId, agentRunEventLogMaxEvents);
-      return agentRunEventLogMaxEvents;
-    }
-    if (row.next_sequence > agentRunEventLogMaxEvents) {
-      throw new Error('agent_run_event_terminal_capacity_exceeded');
-    }
-    this.db
-      .prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?')
-      .run(row.next_sequence + 1, runId);
-    return row.next_sequence;
-  }
-
   private transitionRunInTransaction(input: {
     endedAt: string | null;
     expectedStateVersion: number;
@@ -1250,13 +1224,7 @@ export class AgentSessionRepository {
       ...(input.diagnostic === undefined ? {} : { diagnostic: input.diagnostic }),
       ...(input.suggestion === undefined ? {} : { suggestion: input.suggestion })
     };
-    const sequence = this.nextRunEventSequence(transition.run.id);
-    this.db
-      .prepare(
-        `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-         VALUES (?, ?, ?, ?)`
-      )
-      .run(transition.run.id, sequence, JSON.stringify(runFailedEvent), input.endedAt);
+    this.runEventLog.recordRunEvent(runFailedEvent, input.endedAt);
 
     this.db
       .prepare(
@@ -1389,26 +1357,10 @@ export class AgentSessionRepository {
   }
 
   private readRestartEvidence(candidate: StartupRunRow): RestartEvidence {
-    const checkpoint = this.db
-      .prepare('SELECT 1 FROM langgraph_checkpoints WHERE thread_id = ? LIMIT 1')
-      .get(candidate.thread_id) as { 1: number } | undefined;
-    const effect = this.db
-      .prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status = 'unknown' LIMIT 1")
-      .get(candidate.id) as { 1: number } | undefined;
     return {
-      hasCheckpoint: checkpoint !== undefined,
-      hasInFlightEffect: effect !== undefined
+      hasCheckpoint: this.checkpointer.hasCheckpoint(candidate.thread_id),
+      hasInFlightEffect: this.toolEffectStore.hasUnknown(candidate.id)
     };
-  }
-
-  private markRestartedToolEffectsUnknown(runId: string): void {
-    this.db
-      .prepare(
-        `UPDATE agent_tool_effects
-         SET status = 'unknown', updated_at = ?
-         WHERE run_id = ? AND status = 'in_progress'`
-      )
-      .run(new Date().toISOString(), runId);
   }
 
   private verifyWaitingUserSnapshot(runId: string): void {

@@ -9,6 +9,7 @@ import type {
   DeepAgents110V3Interrupt,
   DeepAgents110V3Run
 } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
+import { RocSqliteCheckpointer, type RocCheckpointInterrupt } from '../../services/deep-agent/sqlite-checkpointer';
 import * as recordUtils from '../../services/deep-agent/record-utils';
 
 export type PendingInterrupt = {
@@ -30,13 +31,13 @@ type PendingInterruptRow = {
   payload_json: string;
 };
 
-type CheckpointInterruptWriteRow = {
-  value_type: string;
-  value_blob: Buffer;
-};
+type InterruptCheckpointReader = Pick<RocSqliteCheckpointer, 'readPendingInterrupts'>;
 
 export class AgentInterruptProjection {
-  constructor(private readonly db: DatabaseConnection) {}
+  constructor(
+    private readonly db: DatabaseConnection,
+    private readonly checkpointReader: InterruptCheckpointReader = new RocSqliteCheckpointer(db)
+  ) {}
 
   record(input: {
     runId: string;
@@ -106,43 +107,16 @@ export class AgentInterruptProjection {
       return null;
     }
     const answeredInterruptIds = input.answeredInterruptIds;
-    const rows = this.db
-      .prepare(
-        `SELECT value_type, value_blob
-         FROM langgraph_checkpoint_writes
-         WHERE thread_id = ?
-           AND checkpoint_ns = ''
-           AND checkpoint_id = (
-             SELECT checkpoint_id
-             FROM langgraph_checkpoints
-             WHERE thread_id = ? AND checkpoint_ns = ''
-             ORDER BY checkpoint_id DESC
-             LIMIT 1
-           )
-           AND channel = '__interrupt__'
-         ORDER BY rowid ASC`
-      )
-      .all(input.threadId, input.threadId) as CheckpointInterruptWriteRow[];
-    if (rows.length === 0 || rows.some((row) => row.value_type !== 'json')) {
+    const checkpointInterrupts = this.checkpointReader.readPendingInterrupts(input.threadId);
+    if (checkpointInterrupts === null) {
       return null;
     }
     let pendingInterrupts: PendingInterrupt[];
     try {
-      const values = rows.flatMap((row) => {
-        const value = JSON.parse(row.value_blob.toString('utf8')) as unknown;
-        return Array.isArray(value) ? value : [value];
-      });
-      const interrupts = values.map((value): PendingInterrupt => {
-        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-          throw new Error('agent_checkpoint_interrupt_invalid');
-        }
-        const interruptId = Reflect.get(value, 'id');
-        if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
-          throw new Error('agent_checkpoint_interrupt_id_invalid');
-        }
+      const interrupts = checkpointInterrupts.map((interrupt: RocCheckpointInterrupt): PendingInterrupt => {
         return {
-          interruptId,
-          payload: normalizeChatInterruptPayload(Reflect.get(value, 'value'))
+          interruptId: interrupt.interruptId,
+          payload: normalizeChatInterruptPayload(interrupt.payload)
         };
       });
       validatePendingInterrupts(interrupts);

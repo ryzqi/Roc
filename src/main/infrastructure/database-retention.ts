@@ -1,5 +1,9 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
+import { AgentRunEventLog } from '../plugins/agent/run-event-log';
+import { RocSqliteCheckpointer } from '../services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../services/deep-agent/tool-effect-store';
+
 export type RocDatabaseRetentionPolicy = {
   terminalRunRetentionDays: number;
   maxCheckpointsPerThread: number;
@@ -49,11 +53,11 @@ function runAgentRetention(
     try {
       createProtectedThreadTempTable(agentDb, terminalCutoff);
       createOldRunTempTable(agentDb, terminalCutoff);
-      createOldCheckpointTempTable(agentDb, policy.maxCheckpointsPerThread);
+      const oldRunIds = agentDb.prepare('SELECT run_id FROM retention_old_runs').pluck().all() as string[];
+      const protectedThreadIds = agentDb.prepare('SELECT thread_id FROM retention_protected_threads').pluck().all() as string[];
       const agentEvents = agentDb.prepare('DELETE FROM agent_events WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
         .changes;
-      const agentRunEvents = agentDb.prepare('DELETE FROM agent_run_events WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
-        .changes;
+      const agentRunEvents = new AgentRunEventLog(agentDb).deleteForRunIds(oldRunIds);
       const agentOutbox = agentDb.prepare('DELETE FROM agent_outbox WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run().changes;
       const runTelemetry = agentDb
         .prepare('DELETE FROM agent_run_telemetry WHERE run_id IN (SELECT run_id FROM retention_old_runs)')
@@ -61,35 +65,14 @@ function runAgentRetention(
       const langSmithTraceSessions = agentDb
         .prepare('DELETE FROM agent_langsmith_trace_sessions WHERE run_id IN (SELECT run_id FROM retention_old_runs)')
         .run().changes;
-      const toolEffects = agentDb.prepare('DELETE FROM agent_tool_effects WHERE run_id IN (SELECT run_id FROM retention_old_runs)').run()
-        .changes;
+      const toolEffects = new AgentToolEffectStore(agentDb).deleteForRunIds(oldRunIds);
       const contextArtifacts = agentDb
         .prepare('DELETE FROM context_artifacts WHERE run_id IN (SELECT run_id FROM retention_old_runs)')
         .run().changes;
-      const checkpointWrites = agentDb
-        .prepare(
-          `DELETE FROM langgraph_checkpoint_writes
-           WHERE EXISTS (
-             SELECT 1
-             FROM retention_old_checkpoints old
-             WHERE old.thread_id = langgraph_checkpoint_writes.thread_id
-               AND old.checkpoint_ns = langgraph_checkpoint_writes.checkpoint_ns
-               AND old.checkpoint_id = langgraph_checkpoint_writes.checkpoint_id
-           )`
-        )
-        .run().changes;
-      const checkpoints = agentDb
-        .prepare(
-          `DELETE FROM langgraph_checkpoints
-           WHERE EXISTS (
-             SELECT 1
-             FROM retention_old_checkpoints old
-             WHERE old.thread_id = langgraph_checkpoints.thread_id
-               AND old.checkpoint_ns = langgraph_checkpoints.checkpoint_ns
-               AND old.checkpoint_id = langgraph_checkpoints.checkpoint_id
-           )`
-        )
-        .run().changes;
+      const { checkpointWrites, checkpoints } = new RocSqliteCheckpointer(agentDb).deleteExcessCheckpoints({
+        protectedThreadIds,
+        maxCheckpointsPerThread: policy.maxCheckpointsPerThread
+      });
       return {
         agentEvents,
         agentRunEvents,
@@ -147,38 +130,6 @@ function createProtectedThreadTempTable(agentDb: DatabaseConnection, terminalCut
     .run(terminalCutoff);
 }
 
-function createOldCheckpointTempTable(agentDb: DatabaseConnection, maxCheckpointsPerThread: number): void {
-  agentDb.exec(`
-    DROP TABLE IF EXISTS temp.retention_old_checkpoints;
-    CREATE TEMP TABLE retention_old_checkpoints (
-      thread_id TEXT NOT NULL,
-      checkpoint_ns TEXT NOT NULL,
-      checkpoint_id TEXT NOT NULL,
-      PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-    );
-  `);
-  agentDb
-    .prepare(
-      `INSERT INTO retention_old_checkpoints (thread_id, checkpoint_ns, checkpoint_id)
-       SELECT thread_id, checkpoint_ns, checkpoint_id
-       FROM (
-         SELECT thread_id,
-                checkpoint_ns,
-                checkpoint_id,
-                ROW_NUMBER() OVER (
-                  PARTITION BY thread_id
-                  ORDER BY created_at DESC, checkpoint_id DESC
-                ) AS checkpoint_rank
-         FROM langgraph_checkpoints
-         WHERE thread_id NOT IN (
-           SELECT thread_id FROM retention_protected_threads
-         )
-       )
-       WHERE checkpoint_rank > ?`
-    )
-    .run(maxCheckpointsPerThread);
-}
-
 function runMemoryRetention(memoryDb: DatabaseConnection, memoryAuditCutoff: string): number {
   return memoryDb
     .prepare('DELETE FROM memory_auto_audit WHERE created_at < ?')
@@ -188,7 +139,6 @@ function runMemoryRetention(memoryDb: DatabaseConnection, memoryAuditCutoff: str
 function dropTempTables(agentDb: DatabaseConnection): void {
   agentDb.exec(`
     DROP TABLE IF EXISTS temp.retention_old_runs;
-    DROP TABLE IF EXISTS temp.retention_old_checkpoints;
     DROP TABLE IF EXISTS temp.retention_protected_threads;
   `);
 }

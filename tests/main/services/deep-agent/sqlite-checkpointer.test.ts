@@ -65,6 +65,55 @@ describe('RocSqliteCheckpointer', () => {
     expect(loaded?.parentConfig?.configurable?.checkpoint_id).toBe('parent_checkpoint_1');
   });
 
+  it('owns checkpoint restart evidence and checkpoint interrupt decoding', async () => {
+    const checkpointer = new RocSqliteCheckpointer(db);
+
+    expect(checkpointer.hasCheckpoint('thread_restart_evidence')).toBe(false);
+    const config = await checkpointer.put(
+      {
+        configurable: {
+          thread_id: 'thread_restart_evidence',
+          checkpoint_ns: ''
+        }
+      },
+      {
+        v: 4,
+        id: 'checkpoint_restart_evidence',
+        ts: '2026-07-03T00:00:00.000Z',
+        channel_values: {},
+        channel_versions: {},
+        versions_seen: {}
+      },
+      { source: 'input', step: 1, parents: {} },
+      {}
+    );
+    await checkpointer.putWrites(
+      config,
+      [
+        [
+          '__interrupt__',
+          [
+            { id: 'interrupt_restart_evidence_1', value: { question: 'Continue?' } },
+            { id: 'interrupt_restart_evidence_2', value: { question: 'Which workspace?' } }
+          ]
+        ]
+      ],
+      'task-restart-evidence'
+    );
+
+    expect(checkpointer.hasCheckpoint('thread_restart_evidence')).toBe(true);
+    expect(checkpointer.readPendingInterrupts('thread_restart_evidence')).toEqual([
+      {
+        interruptId: 'interrupt_restart_evidence_1',
+        payload: { question: 'Continue?' }
+      },
+      {
+        interruptId: 'interrupt_restart_evidence_2',
+        payload: { question: 'Which workspace?' }
+      }
+    ]);
+  });
+
   it('deletes only LangGraph checkpoints and keeps Roc application history', async () => {
     const checkpointer = new RocSqliteCheckpointer(db);
     const now = '2026-07-06T00:00:00.000Z';
@@ -99,6 +148,37 @@ describe('RocSqliteCheckpointer', () => {
     expect(countRows('langgraph_checkpoint_writes')).toBe(0);
     expect(countRows('agent_tool_effects')).toBe(1);
     expect(countRows('context_artifacts')).toBe(1);
+  });
+
+  it('deletes excess checkpoints while preserving protected threads', async () => {
+    const checkpointer = new RocSqliteCheckpointer(db);
+    for (const threadId of ['retained_thread', 'protected_thread']) {
+      for (let index = 1; index <= 3; index += 1) {
+        const config = await checkpointer.put(
+          { configurable: { thread_id: threadId, checkpoint_ns: '' } },
+          {
+            v: 4,
+            id: `checkpoint_${threadId}_${index}`,
+            ts: `2026-07-0${index}T00:00:00.000Z`,
+            channel_values: {},
+            channel_versions: {},
+            versions_seen: {}
+          },
+          { source: 'input', step: index, parents: {} },
+          {}
+        );
+        await checkpointer.putWrites(config, [['messages', `message-${index}`]], `task-${index}`);
+      }
+    }
+
+    expect(
+      checkpointer.deleteExcessCheckpoints({
+        protectedThreadIds: ['protected_thread'],
+        maxCheckpointsPerThread: 2
+      })
+    ).toEqual({ checkpoints: 1, checkpointWrites: 1 });
+    expect(db.prepare("SELECT COUNT(*) FROM langgraph_checkpoints WHERE thread_id = 'retained_thread'").pluck().get()).toBe(2);
+    expect(db.prepare("SELECT COUNT(*) FROM langgraph_checkpoints WHERE thread_id = 'protected_thread'").pluck().get()).toBe(3);
   });
 
   it('overwrites repeated special pending writes while preserving regular writes', async () => {

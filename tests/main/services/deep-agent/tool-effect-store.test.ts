@@ -105,6 +105,49 @@ describe('AgentToolEffectStore', () => {
       'agent_tool_effect_unknown_manual_confirmation'
     );
   });
+
+  it('marks only in-progress effects as unknown during restart reconciliation', () => {
+    const store = new AgentToolEffectStore(db);
+    const inProgress = effectIdentity('main', 'checkpoint_in_progress');
+    const completed = effectIdentity('main', 'checkpoint_completed');
+
+    store.start({ ...inProgress, toolName: 'delete_file', effectClass: 'workspace_mutation', reconcileStrategy: 'manual_confirmation' });
+    store.start({ ...completed, toolName: 'run_shell_command', effectClass: 'host_execution', reconcileStrategy: 'manual_confirmation' });
+    store.finishSuccess({ ...completed, result: { ok: true } });
+
+    expect(store.hasUnknown('run_1')).toBe(false);
+    store.markRestartedUnknown('run_1');
+
+    expect(store.hasUnknown('run_1')).toBe(true);
+    expect(store.readState(inProgress)).toEqual({ status: 'unknown' });
+    expect(store.readState(completed)).toEqual({ status: 'succeeded' });
+  });
+
+  it('deletes effects by thread and run through the owner API', () => {
+    const store = new AgentToolEffectStore(db);
+    const byThread = effectIdentity('main', 'checkpoint_thread');
+    const byRun = {
+      ...effectIdentity('subagent/research#0', 'checkpoint_run'),
+      threadId: 'thread_orphan'
+    };
+    store.start({
+      ...byThread,
+      toolName: 'delete_file',
+      effectClass: 'workspace_mutation',
+      reconcileStrategy: 'manual_confirmation'
+    });
+    store.start({
+      ...byRun,
+      toolName: 'run_shell_command',
+      effectClass: 'host_execution',
+      reconcileStrategy: 'manual_confirmation'
+    });
+
+    expect(store.deleteForThread('thread_1')).toBe(1);
+    expect(store.deleteForRunIds(['run_1'])).toBe(1);
+    expect(store.readState(byThread)).toEqual({ status: 'not_started' });
+    expect(store.readState(byRun)).toEqual({ status: 'not_started' });
+  });
 });
 
 function effectIdentity(executionPath: string, checkpointId: string) {

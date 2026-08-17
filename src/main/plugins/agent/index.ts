@@ -344,7 +344,8 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         langSmithTraceSessions
       );
       const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
-      const repository = new AgentSessionRepository(db);
+      const runEventLog = new AgentRunEventLog(db);
+      const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
       if (langSmithTracingManager !== null) {
         for (const terminal of langSmithTraceSessions.listTerminalRuns()) {
@@ -381,7 +382,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
         modelFactory,
         pluginId,
         repository,
-        runEventLog: new AgentRunEventLog(db),
+        runEventLog,
         ...(langSmithTracingManager === null ? {} : { tracingLifecycle: langSmithTracingManager }),
         status: options.status,
         statusProvider: options.statusProvider,

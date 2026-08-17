@@ -1,6 +1,6 @@
 # 阶段 2：session-repository 跨 seam 裸 SQL 收口
 
-强度：Strong。依赖：建议紧随阶段 1（interrupt 恢复路径与本阶段的 checkpointer 接口相邻）。
+强度：Strong。依赖：建议紧随阶段 1（interrupt 恢复路径与本阶段的 checkpointer 接口相邻）。状态：✅ 2026-08-17。
 
 ## 问题
 
@@ -37,3 +37,12 @@
 - `agent_run_events` 只有一条写路径；容量语义有直测。
 - repository 可注入三个 fake 完成单测；`session-repository.test.ts` 行数下降。
 - `pnpm typecheck` + `pnpm test` 全绿。
+
+## 完成证据
+
+- 容量语义定为 trim：每个 run 保留最近 10,000 条事件，sequence/cursor 单调递增且不复用。
+- `RocSqliteCheckpointer`、`AgentToolEffectStore`、`AgentRunEventLog` 分别拥有 checkpoint、tool effect、run event 的运行、恢复、保留和删除 SQL；基础设施只调用窄维护 API。
+- `storage-ownership.test.ts` 静态扫描生产源码，阻止 owner 外重新出现 operational SQL。
+- `session-repository.test.ts` 相对 fixed point 净减少 44 行；repository fake 注入覆盖三个 owner。
+- 聚焦测试 7 文件/29 项通过；`pnpm typecheck`、strict unused、全量 324 文件/1818 项、`git diff --check` 通过。
+- Standards 与 Spec 修复后复审均 PASS。

@@ -80,6 +80,42 @@ describe('AgentRunEventLog', () => {
     ).toEqual({ next_sequence: 3 });
     expect(log.listRunEvents({ runId: 'run_1', afterSequence: 1 })).toEqual([second]);
   });
+
+  it('restores persisted sequences and advances the append cursor', () => {
+    const log = new AgentRunEventLog(db);
+    log.restoreRunEvent({
+      runId: 'run_1',
+      sequence: 7,
+      eventJson: JSON.stringify({
+        type: 'assistant_block',
+        runId: 'run_1',
+        block: { kind: 'text', blockId: 'restored', phase: 'delta', text: 'restored' }
+      }),
+      createdAt: '2026-07-03T00:00:07.000Z'
+    });
+
+    const appended = log.recordRunEvent({
+      type: 'assistant_block',
+      runId: 'run_1',
+      block: { kind: 'text', blockId: 'appended', phase: 'delta', text: 'appended' }
+    });
+
+    expect(appended.sequence).toBe(8);
+    expect(log.listRunEvents({ runId: 'run_1', afterSequence: 0 }).map((event) => event.sequence)).toEqual([7, 8]);
+  });
+
+  it('deletes run events and their cursors through the owner API', () => {
+    const log = new AgentRunEventLog(db);
+    log.recordRunEvent({
+      type: 'assistant_block',
+      runId: 'run_1',
+      block: { kind: 'text', blockId: 'deleted', phase: 'delta', text: 'deleted' }
+    });
+
+    expect(log.deleteForRunIds(['run_1'])).toBe(1);
+    expect(log.listRunEvents({ runId: 'run_1', afterSequence: 0 })).toEqual([]);
+    expect(db.prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?').get('run_1')).toBeUndefined();
+  });
 });
 
 function tableExists(connection: Database.Database, tableName: string): boolean {

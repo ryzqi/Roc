@@ -1,11 +1,13 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
+import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, ChatRunEvent, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
+import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import { createTerminalRunTelemetry, requireRunTelemetry } from './run-telemetry-test-helpers';
 
 let db: Database.Database;
@@ -64,6 +66,56 @@ describe('AgentSessionRepository', () => {
         toolThreadCallLimit: 200
       }
     });
+  });
+
+  it('composes replaceable checkpoint, tool-effect, and run-event owners', () => {
+    applyAgentPluginSchema(db);
+    const checkpointThreads: string[] = [];
+    const restartedEffectRuns: string[] = [];
+    const recordedEvents: ChatRunEvent[] = [];
+    const repository = new AgentSessionRepository(db, {
+      checkpointer: {
+        hasCheckpoint(threadId) {
+          checkpointThreads.push(threadId);
+          return false;
+        },
+        readPendingInterrupts() {
+          return null;
+        }
+      },
+      toolEffectStore: {
+        hasUnknown() {
+          return false;
+        },
+        markRestartedUnknown(runId) {
+          restartedEffectRuns.push(runId);
+        }
+      },
+      runEventLog: {
+        recordRunEvent(event, createdAt = '2026-07-17T00:00:00.000Z') {
+          recordedEvents.push(event);
+          return {
+            runId: event.runId,
+            sequence: recordedEvents.length,
+            event,
+            createdAt
+          };
+        }
+      }
+    });
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Use owner interfaces during restart reconciliation'
+    });
+
+    expect(repository.reconcileStartupRuns()).toEqual([
+      expect.objectContaining({ id: run.id, status: 'interrupted' })
+    ]);
+    expect(checkpointThreads).toEqual([run.threadId]);
+    expect(restartedEffectRuns).toEqual([run.id]);
+    expect(recordedEvents.map((event) => event.type)).toEqual(['run_started', 'run_failed']);
   });
 
   it('reads and writes agent threads, agent runs, agent events, and session messages', () => {
@@ -363,7 +415,7 @@ describe('AgentSessionRepository', () => {
     expect(readPendingInterrupts(repository, run).interrupts).toEqual([]);
   });
 
-  it('rebuilds a missing projection from the current checkpoint after a partial resume crash', () => {
+  it('rebuilds a missing projection from the current checkpoint after a partial resume crash', async () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -418,7 +470,7 @@ describe('AgentSessionRepository', () => {
       interruptId: 'interrupt_partial_first',
       runId: run.id
     });
-    seedCheckpoint(run.threadId, [
+    await seedCheckpoint(run.threadId, [
       {
         id: 'interrupt_partial_first',
         payload: { kind: 'question', question: 'First answer?' }
@@ -447,7 +499,7 @@ describe('AgentSessionRepository', () => {
     ]);
   });
 
-  it('rebuilds an incomplete projection when no durable resume audit answers the missing interrupt', () => {
+  it('rebuilds an incomplete projection when no durable resume audit answers the missing interrupt', async () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -468,7 +520,7 @@ describe('AgentSessionRepository', () => {
       threadId: run.threadId,
       interrupts
     });
-    seedCheckpoint(run.threadId, interrupts.map((interrupt) => ({ id: interrupt.interruptId, payload: interrupt.payload })));
+    await seedCheckpoint(run.threadId, interrupts.map((interrupt) => ({ id: interrupt.interruptId, payload: interrupt.payload })));
     db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
       .run(run.id, 'interrupt-incomplete-second');
 
@@ -477,7 +529,7 @@ describe('AgentSessionRepository', () => {
     expect(readPendingInterrupts(repository, run).interrupts).toEqual(interrupts);
   });
 
-  it('rejects a corrupt persisted interrupt payload explicitly', () => {
+  it('rejects a corrupt persisted interrupt payload explicitly', async () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -498,7 +550,7 @@ describe('AgentSessionRepository', () => {
       .run('{"kind":"approval"}', run.id);
 
     expect(() => readPendingInterrupts(repository, run)).toThrow('agent_pending_interrupt_payload_invalid');
-    seedCheckpoint(run.threadId, [
+    await seedCheckpoint(run.threadId, [
       {
         id: 'interrupt-corrupt',
         payload: { kind: 'question', question: 'Continue?' }
@@ -595,7 +647,7 @@ describe('AgentSessionRepository', () => {
     ).toBe(false);
   });
 
-  it('does not restore a stale waiting projection when the latest checkpoint has no interrupt', () => {
+  it('does not restore a stale waiting projection when the latest checkpoint has no interrupt', async () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -620,22 +672,8 @@ describe('AgentSessionRepository', () => {
         }
       ]
     });
-    seedCheckpoint(run.threadId);
-    db.prepare(
-      `INSERT INTO langgraph_checkpoints
-       (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      run.threadId,
-      '',
-      'checkpoint_restart_reconcile_z',
-      'checkpoint_restart_reconcile',
-      'json',
-      Buffer.from('{}'),
-      'json',
-      Buffer.from('{}'),
-      '2026-07-17T01:00:01.000Z'
-    );
+    await seedCheckpoint(run.threadId);
+    await seedCheckpoint(run.threadId, [], 'checkpoint_restart_reconcile_z');
 
     repository.reconcileStartupRuns();
 
@@ -945,7 +983,7 @@ describe('AgentSessionRepository', () => {
     ).toBe('{not-json');
   });
 
-  it('reserves the final timeline slot before accepting more streamed events', () => {
+  it('trims the oldest timeline event before accepting more streamed events', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
@@ -968,18 +1006,16 @@ describe('AgentSessionRepository', () => {
       });
     }
 
-    expect(() =>
-      log.recordRunEvent({
-        type: 'assistant_block',
-        runId: run.id,
-        block: {
-          kind: 'text',
-          blockId: 'text-overflow',
-          phase: 'delta',
-          text: 'overflow'
-        }
-      })
-    ).toThrow('agent_run_event_log_capacity_exceeded');
+    log.recordRunEvent({
+      type: 'assistant_block',
+      runId: run.id,
+      block: {
+        kind: 'text',
+        blockId: 'text-overflow',
+        phase: 'delta',
+        text: 'overflow'
+      }
+    });
 
     repository.completeRunAtomically({
       assistantMessage: 'Terminal answer',
@@ -1012,7 +1048,7 @@ describe('AgentSessionRepository', () => {
     expect(
       db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(run.id)
     ).toEqual({
-      sequence: agentRunEventLogMaxEvents,
+      sequence: agentRunEventLogMaxEvents + 1,
       event_json: expect.stringContaining('run_completed')
     });
   });
@@ -1096,65 +1132,6 @@ describe('AgentSessionRepository', () => {
     expect(db.prepare('SELECT * FROM agent_run_leases WHERE run_id = ?').get(run.id)).toBeUndefined();
   });
 
-  it('reconciles a legacy full non-terminal timeline by reserving the terminal replay slot', () => {
-    applyAgentPluginSchema(db);
-    const repository = new AgentSessionRepository(db);
-    const run = createRun(repository, {
-      enabledCapabilities,
-      modelId: 'openai:gpt-4.1',
-      threadKind: 'chat',
-      userInput: 'Reconcile a legacy full timeline'
-    });
-    transitionRun(repository, run.id, 'running');
-    const log = new AgentRunEventLog(db);
-    for (let index = 0; index < agentRunEventLogMaxEvents - 2; index += 1) {
-      log.recordRunEvent({
-        type: 'assistant_block',
-        runId: run.id,
-        block: {
-          kind: 'text',
-          blockId: `legacy-${index}`,
-          phase: 'delta',
-          text: String(index)
-        }
-      });
-    }
-    db.prepare(
-      `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-       VALUES (?, ?, ?, ?)`
-    ).run(
-      run.id,
-      agentRunEventLogMaxEvents,
-      JSON.stringify({
-        type: 'assistant_block',
-        runId: run.id,
-        block: {
-          kind: 'text',
-          blockId: 'legacy-overflow',
-          phase: 'delta',
-          text: 'must be replaced by the terminal replay event'
-        }
-      }),
-      '2026-07-17T01:00:00.000Z'
-    );
-    db.prepare('UPDATE agent_run_event_cursors SET next_sequence = ? WHERE run_id = ?').run(
-      agentRunEventLogMaxEvents + 1,
-      run.id
-    );
-
-    expect(() => repository.reconcileStartupRuns()).not.toThrow();
-    expect(repository.getRun(run.id).status).toBe('interrupted');
-    expect(
-      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence ASC').all(run.id)
-    ).toHaveLength(agentRunEventLogMaxEvents);
-    expect(
-      db.prepare('SELECT sequence, event_json FROM agent_run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(run.id)
-    ).toEqual({
-      sequence: agentRunEventLogMaxEvents,
-      event_json: expect.stringContaining('agent_run_interrupted_on_restart')
-    });
-  });
-
   it('rejects a second active run for one thread', () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
@@ -1176,7 +1153,7 @@ describe('AgentSessionRepository', () => {
     ).toThrowError(expect.objectContaining({ code: 'thread_run_conflict' }));
   });
 
-  it('reconciles interrupted startup runs into durable terminal records without replaying them', () => {
+  it('reconciles interrupted startup runs into durable terminal records without replaying them', async () => {
     applyAgentPluginSchema(db);
     const repository = new AgentSessionRepository(db);
     const waitingNextTurn = createRun(repository, {
@@ -1264,42 +1241,32 @@ describe('AgentSessionRepository', () => {
       runId: resumeDispatchPending.id
     });
     for (const run of [waitingNextTurn, dispatchPending, running, recovering]) {
-      seedCheckpoint(run.threadId);
+      await seedCheckpoint(run.threadId);
     }
-    seedCheckpoint(waitingUser.threadId, [
+    await seedCheckpoint(waitingUser.threadId, [
       {
         id: 'interrupt_restart_reconcile',
         payload: { kind: 'question', question: 'Resume after restart?' }
       }
     ]);
-    seedCheckpoint(resumeDispatchPending.threadId, [
+    await seedCheckpoint(resumeDispatchPending.threadId, [
       {
         id: 'interrupt_resume_dispatch_restart',
         payload: { kind: 'question', question: 'Resume after restart?' }
       }
     ]);
 
-    db.prepare(
-      `INSERT INTO agent_tool_effects
-       (run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      running.id,
-      running.threadId,
-      'main',
-      'checkpoint_restart',
-      'call_inflight_restart',
-      'run_shell_command',
-      'input_hash_restart',
-      'host_execution',
-      'manual_confirmation',
-      'in_progress',
-      null,
-      null,
-      '2026-07-17T01:00:00.000Z',
-      '2026-07-17T01:00:00.000Z'
-    );
+    new AgentToolEffectStore(db).start({
+      runId: running.id,
+      threadId: running.threadId,
+      executionPath: 'main',
+      checkpointId: 'checkpoint_restart',
+      toolCallId: 'call_inflight_restart',
+      toolName: 'run_shell_command',
+      inputHash: 'input_hash_restart',
+      effectClass: 'host_execution',
+      reconcileStrategy: 'manual_confirmation'
+    });
 
     repository.reconcileStartupRuns();
 
@@ -1603,41 +1570,30 @@ function transitionRun(repository: AgentSessionRepository, runId: string, status
   });
 }
 
-function seedCheckpoint(
+async function seedCheckpoint(
   threadId: string,
-  interrupts: ReadonlyArray<{ id: string; payload: unknown }> = []
-): void {
-  db.prepare(
-    `INSERT INTO langgraph_checkpoints
-     (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type, checkpoint_blob, metadata_type, metadata_blob, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    threadId,
-    '',
-    'checkpoint_restart_reconcile',
-    null,
-    'json',
-    Buffer.from('{}'),
-    'json',
-    Buffer.from('{}'),
-    '2026-07-17T01:00:00.000Z'
+  interrupts: ReadonlyArray<{ id: string; payload: unknown }> = [],
+  checkpointId = 'checkpoint_restart_reconcile'
+): Promise<void> {
+  const checkpointer = new RocSqliteCheckpointer(db);
+  const config = await checkpointer.put(
+    { configurable: { thread_id: threadId, checkpoint_ns: '' } },
+    {
+      v: 4,
+      id: checkpointId,
+      ts: '2026-07-17T01:00:00.000Z',
+      channel_values: {},
+      channel_versions: {},
+      versions_seen: {}
+    },
+    { source: 'input', step: 1, parents: {} },
+    {}
   );
-  const insertInterrupt = db.prepare(
-    `INSERT INTO langgraph_checkpoint_writes
-     (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const [index, interrupt] of interrupts.entries()) {
-    insertInterrupt.run(
-      threadId,
-      '',
-      'checkpoint_restart_reconcile',
-      `task_restart_reconcile_${index}`,
-      -3,
-      '__interrupt__',
-      'json',
-      Buffer.from(JSON.stringify({ id: interrupt.id, value: interrupt.payload })),
-      '2026-07-17T01:00:00.000Z'
+  if (interrupts.length > 0) {
+    await checkpointer.putWrites(
+      config,
+      [['__interrupt__', interrupts.map((interrupt) => ({ id: interrupt.id, value: interrupt.payload }))]],
+      `task_${checkpointId}`
     );
   }
 }

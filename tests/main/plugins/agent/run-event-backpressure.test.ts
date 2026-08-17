@@ -51,7 +51,7 @@ describe('agent run event backpressure', () => {
       applyAgentPluginSchema(db);
       seedRun(db);
       const log = new AgentRunEventLog(db);
-      const maxStreamedEvents = agentRunEventLogMaxEvents - 1;
+      const maxStreamedEvents = agentRunEventLogMaxEvents;
       for (let index = 0; index < maxStreamedEvents; index += 1) {
         log.recordRunEvent(textEvent(`event-${index}`, `text-${index}`));
       }
@@ -67,9 +67,9 @@ describe('agent run event backpressure', () => {
 
       expect(replayedCount).toBe(maxStreamedEvents);
       expect(percentile95(replayDurations)).toBeLessThan(1_000);
-      expect(() => log.recordRunEvent(textEvent('overflow', 'text-overflow'))).toThrow('agent_run_event_log_capacity_exceeded');
+      log.recordRunEvent(textEvent('overflow', 'text-overflow'));
       expect(log.listRunEvents({ runId: 'run_1', afterSequence: 0 }).map((event) => event.sequence)).toEqual(
-        Array.from({ length: maxStreamedEvents }, (_, index) => index + 1)
+        Array.from({ length: agentRunEventLogMaxEvents }, (_, index) => index + 2)
       );
     } finally {
       db.close();

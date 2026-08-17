@@ -35,6 +35,15 @@
 - 修复后全量 `pnpm test`：323 文件/1811 项通过，退出码 0；Node 25/node-pty `AttachConsole failed` 仍为非失败环境噪声。
 - Standards/Spec 子代理复审均为 PASS，未发现剩余问题。
 - 阶段 1 状态：Verified passing；准备提交并进入阶段 2。
+- 阶段 1 提交：`79d8aa0 refactor(agent): centralize interrupt lifecycle`。
+- 阶段 2 fixed point：`79d8aa0`；容量语义定为 trim，符合 `agent_run_events` 的有界投影缓存用途。
+- 阶段 2 初始实现将 checkpoint 读取、tool-effect restart 转移和 run-event 写入收回三个 owner；database rebuild 恢复 sequence 时同步 cursor。
+- 首轮 Standards 审查发现 `run-event-log.ts` 链式调用缩进错误；首轮 Spec 审查发现 history deletion、retention、database rebuild 仍有 owner 外 operational SQL。
+- 修复 Standards 缩进；为 `AgentRunEventLog`、`AgentToolEffectStore`、`RocSqliteCheckpointer` 增加删除、保留和旧库恢复维护 API，并将三个基础设施调用方改为只编排窄接口。
+- 新增 production SQL ownership 静态测试；新增 owner 删除/保留直测。聚焦 7 文件/29 项通过。
+- `pnpm typecheck`、strict unused tsc、`git diff --check` 通过。
+- 全量测试首次仅 `terminal-session-service` 受 Node 25/ConPTY 环境波动失败；该文件复跑 4/4 通过，随后全量复跑 324 文件/1818 项通过。
+- 修复后 Standards/Spec 子代理复审均 PASS；阶段 2 状态：Verified passing，准备独立提交。
 
 ## 阶段证据模板
 

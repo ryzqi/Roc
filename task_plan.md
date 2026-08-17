@@ -39,7 +39,7 @@
 | 阶段 | 主题 | 状态 | 阶段门槛 |
 | --- | --- | --- | --- |
 | 1 | Interrupt 生命周期收敛 | complete | 实现 -> 验证 -> Standards/Spec 子代理审查 -> 修复 -> 提交 |
-| 2 | session-repository 跨 seam 裸 SQL 收口 | in_progress | 同上 |
+| 2 | session-repository 跨 seam 裸 SQL 收口 | complete | 同上 |
 | 3 | executor 返回结构化 RunOutcome | pending | 同上 |
 | 4 | IPC 契约单源化 | pending | 同上 + `pnpm generate:ipc` / `pnpm check:ipc` |
 | 5 | Stream adapter 领域事件与投影合并 | pending | 同上 |
@@ -50,7 +50,7 @@
 
 ## 当前步骤
 
-读取阶段 2 计划，使用 CodeGraph 验证 repository 对 checkpointer、tool effect store、run event log 的跨 seam SQL 与容量语义。
+提交阶段 2；提交完成后读取阶段 3 计划并以新 HEAD 作为 fixed point。
 
 ## Errors Encountered
 
@@ -71,3 +71,4 @@
 | 2026-08-17 | Standards 审查发现迁移后两个未使用类型导入 | 1 | 清理 `interrupt-projection.ts` 与 `runtime-types.ts` 导入；strict unused tsc 通过 |
 | 2026-08-17 | 双轴子代理 `wait_agent` 多次超时，但 agent 已完成 | 2 | 使用 `close_agent` 读取完成报告；修复后复审同样取得 PASS 报告 |
 | 2026-08-17 | projection 直测首次因 FK 夹具缺失失败，提前停止测试因 mock 不响应 abort 超时 | 1 | 补真实 thread/run 夹具；让受控 provider 显式 reject/close 后验证 outcome settle |
+| 2026-08-17 | 阶段 2 首次全量测试的 `terminal-session-service` 因 Node 25/ConPTY 关闭事件未到达并触发临时目录 EPERM | 1 | 单测复跑 4/4 通过；全量复跑 324 文件/1818 项通过，确认环境波动而非阶段回归 |

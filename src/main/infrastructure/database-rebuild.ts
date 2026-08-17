@@ -4,6 +4,9 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
+import { AgentRunEventLog } from '../plugins/agent/run-event-log';
+import { RocSqliteCheckpointer } from '../services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../services/deep-agent/tool-effect-store';
 import { DatabasePool } from './database-pool';
 import {
   applyAgentDatabaseSchema,
@@ -191,12 +194,15 @@ function importAgentRows(input: ImportInput, now: () => string): void {
   importAgentEvents(input.sources.agent, input.targets.agent);
   importSessionMessages(input.sources.agent, input.targets.agent);
   importPendingInterrupts(input.sources.agent, input.targets.agent);
-  importAgentRunEvents(input.sources.core, input.targets.agent);
-  importAgentRunEvents(input.sources.agent, input.targets.agent);
-  importLangGraphCheckpoints(input.sources.core, input.targets.agent);
-  importLangGraphCheckpointWrites(input.sources.core, input.targets.agent);
-  importAgentToolEffects(input.sources.agent, input.targets.agent);
-  importAgentToolEffects(input.sources.core, input.targets.agent);
+  const runEventLog = new AgentRunEventLog(input.targets.agent);
+  runEventLog.restoreFrom(input.sources.core);
+  runEventLog.restoreFrom(input.sources.agent);
+  const checkpointer = new RocSqliteCheckpointer(input.targets.agent);
+  checkpointer.restoreFrom(input.sources.core);
+  checkpointer.restoreFrom(input.sources.agent);
+  const toolEffectStore = new AgentToolEffectStore(input.targets.agent);
+  toolEffectStore.restoreFrom(input.sources.agent);
+  toolEffectStore.restoreFrom(input.sources.core);
   importContextArtifacts(input.sources.agent, input.targets.agent);
 }
 
@@ -515,205 +521,6 @@ function importPendingInterrupts(source: DatabaseConnection | null, target: Data
     row.created_at,
     row.updated_at
   ]);
-}
-
-function importAgentRunEvents(source: DatabaseConnection | null, target: DatabaseConnection): void {
-  type Row = {
-    run_id: string;
-    sequence: number;
-    event_json: string;
-    created_at: string;
-  };
-  const rows = readRows<Row>(
-    source,
-    `SELECT run_id, sequence, event_json, created_at
-     FROM agent_run_events
-     ORDER BY run_id ASC, sequence ASC`
-  );
-  const statement = target.prepare(
-    `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
-     VALUES (?, ?, ?, ?)`
-  );
-  importRows(rows, statement, (row) => [row.run_id, row.sequence, row.event_json, row.created_at]);
-}
-
-function importLangGraphCheckpoints(source: DatabaseConnection | null, target: DatabaseConnection): void {
-  type Row = {
-    thread_id: string;
-    checkpoint_ns: string;
-    checkpoint_id: string;
-    parent_checkpoint_id: string | null;
-    checkpoint_type: string;
-    checkpoint_blob: Buffer;
-    metadata_type: string;
-    metadata_blob: Buffer;
-    created_at: string;
-  };
-  const rows = readRows<Row>(
-    source,
-    `SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
-       checkpoint_blob, metadata_type, metadata_blob, created_at
-     FROM langgraph_checkpoints`
-  );
-  const statement = target.prepare(
-    `INSERT INTO langgraph_checkpoints (
-      thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint_type,
-      checkpoint_blob, metadata_type, metadata_blob, created_at
-    )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  importRows(rows, statement, (row) => [
-    row.thread_id,
-    row.checkpoint_ns,
-    row.checkpoint_id,
-    row.parent_checkpoint_id,
-    row.checkpoint_type,
-    row.checkpoint_blob,
-    row.metadata_type,
-    row.metadata_blob,
-    row.created_at
-  ]);
-}
-
-function importLangGraphCheckpointWrites(source: DatabaseConnection | null, target: DatabaseConnection): void {
-  type Row = {
-    thread_id: string;
-    checkpoint_ns: string;
-    checkpoint_id: string;
-    task_id: string;
-    idx: number;
-    channel: string;
-    value_type: string;
-    value_blob: Buffer;
-    created_at: string;
-  };
-  const rows = readRows<Row>(
-    source,
-    `SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
-     FROM langgraph_checkpoint_writes`
-  );
-  const statement = target.prepare(
-    `INSERT INTO langgraph_checkpoint_writes (
-      thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value_type, value_blob, created_at
-    )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  importRows(rows, statement, (row) => [
-    row.thread_id,
-    row.checkpoint_ns,
-    row.checkpoint_id,
-    row.task_id,
-    row.idx,
-    row.channel,
-    row.value_type,
-    row.value_blob,
-    row.created_at
-  ]);
-}
-
-function importAgentToolEffects(source: DatabaseConnection | null, target: DatabaseConnection): void {
-  const columns = readRows<{ name: string }>(source, 'PRAGMA table_info(agent_tool_effects)');
-  if (!columns.some((column) => column.name === 'execution_path')) {
-    importLegacyAgentToolEffects(source, target);
-    return;
-  }
-  type Row = {
-    run_id: string;
-    thread_id: string;
-    execution_path: string;
-    checkpoint_id: string;
-    tool_call_id: string;
-    tool_name: string;
-    input_hash: string;
-    effect_class: string;
-    reconcile_strategy: string;
-    status: string;
-    result_json: string | null;
-    error_json: string | null;
-    created_at: string;
-    updated_at: string;
-  };
-  const rows = readRows<Row>(
-    source,
-    `SELECT run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-       effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-     FROM agent_tool_effects`
-  );
-  const statement = target.prepare(
-    `INSERT OR IGNORE INTO agent_tool_effects (
-      run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-      effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-    )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  importRows(rows, statement, (row) => [
-    row.run_id,
-    row.thread_id,
-    row.execution_path,
-    row.checkpoint_id,
-    row.tool_call_id,
-    row.tool_name,
-    row.input_hash,
-    row.effect_class,
-    row.reconcile_strategy,
-    row.status,
-    row.result_json,
-    row.error_json,
-    row.created_at,
-    row.updated_at
-  ]);
-}
-
-function importLegacyAgentToolEffects(source: DatabaseConnection | null, target: DatabaseConnection): void {
-  type Row = {
-    run_id: string;
-    thread_id: string;
-    tool_call_id: string;
-    tool_name: string;
-    input_hash: string;
-    status: string;
-    result_json: string | null;
-    error_json: string | null;
-    created_at: string;
-    updated_at: string;
-  };
-  const rows = readRows<Row>(
-    source,
-    `SELECT run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at
-     FROM agent_tool_effects`
-  );
-  const statement = target.prepare(
-    `INSERT OR IGNORE INTO agent_tool_effects (
-      run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-      effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
-    )
-     VALUES (?, ?, 'legacy-main', 'legacy-checkpoint', ?, ?, ?, 'external_call', 'manual_confirmation', ?, ?, ?, ?, ?)`
-  );
-  importRows(rows, statement, (row) => [
-    row.run_id,
-    row.thread_id,
-    row.tool_call_id,
-    row.tool_name,
-    row.input_hash,
-    mapLegacyToolEffectStatus(row.status),
-    row.result_json,
-    row.error_json,
-    row.created_at,
-    row.updated_at
-  ]);
-}
-
-function mapLegacyToolEffectStatus(status: string): string {
-  if (status === 'success') {
-    return 'succeeded';
-  }
-  if (status === 'error') {
-    return 'failed_final';
-  }
-  if (status === 'in_progress') {
-    return 'unknown';
-  }
-  return status;
 }
 
 function importContextArtifacts(source: DatabaseConnection | null, target: DatabaseConnection): void {

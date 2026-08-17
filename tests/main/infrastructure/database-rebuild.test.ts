@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
 import { rebuildRocDatabases } from '../../../src/main/infrastructure/database-rebuild';
+import { AgentRunEventLog } from '../../../src/main/plugins/agent/run-event-log';
 
 let root: string;
 let pool: DatabasePool;
@@ -40,7 +41,7 @@ describe('rebuildRocDatabases', () => {
       rebuilt: true
     });
 
-    const agentDb = new Database(pool.getDatabasePath('agent'), { readonly: true });
+    const agentDb = new Database(pool.getDatabasePath('agent'));
     const memoryDb = new Database(pool.getDatabasePath('memory'), { readonly: true });
     const taskDb = new Database(pool.getDatabasePath('task'), { readonly: true });
     const workspaceDb = new Database(pool.getDatabasePath('plugin:@roc/plugin-workspace'), { readonly: true });
@@ -60,6 +61,16 @@ describe('rebuildRocDatabases', () => {
       expect(agentDb.prepare('SELECT status FROM agent_threads WHERE id = ?').pluck().get('thread-1')).toBe('interrupted');
       expect(agentDb.prepare('SELECT COUNT(*) FROM agent_events').pluck().get()).toBe(1);
       expect(agentDb.prepare('SELECT COUNT(*) FROM session_messages').pluck().get()).toBe(1);
+      expect(agentDb.prepare('SELECT next_sequence FROM agent_run_event_cursors WHERE run_id = ?').get('run-1')).toEqual({
+        next_sequence: 8
+      });
+      expect(
+        new AgentRunEventLog(agentDb).recordRunEvent({
+          type: 'assistant_block',
+          runId: 'run-1',
+          block: { kind: 'text', blockId: 'after-rebuild', phase: 'delta', text: 'after rebuild' }
+        }).sequence
+      ).toBe(8);
       expect(
         agentDb
           .prepare('SELECT interrupt_id, position FROM agent_pending_interrupts ORDER BY position ASC')
@@ -179,6 +190,13 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
         workspace_hash TEXT,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE agent_run_events (
+        run_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        event_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (run_id, sequence)
+      );
       `);
     if (effectSchema === 'v8') {
       db.exec(`
@@ -268,6 +286,10 @@ function writeOldAgentDatabase(path: string, effectSchema: 'v8' | 'v9' = 'v9'): 
     db.prepare(
       `INSERT INTO session_messages (id, thread_id, role, content, token_count, phase, workspace_hash, created_at)
        VALUES ('message-1', 'thread-1', 'user', 'hello', 1, 'visible', 'workspace-a', '2026-07-06T00:00:00.000Z')`
+    ).run();
+    db.prepare(
+      `INSERT INTO agent_run_events (run_id, sequence, event_json, created_at)
+       VALUES ('run-1', 7, '{"type":"assistant_block","runId":"run-1","block":{"kind":"text","blockId":"restored","phase":"delta","text":"restored"}}', '2026-07-06T00:00:07.000Z')`
     ).run();
     if (effectSchema === 'v8') {
       db.prepare(

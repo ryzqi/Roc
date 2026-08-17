@@ -7,7 +7,7 @@
 | 阶段 | 文件 | 主题 | 强度 | 依赖 | 状态 |
 |------|------|------|------|------|------|
 | 1 | [phase-1-interrupt-lifecycle.md](phase-1-interrupt-lifecycle.md) | Interrupt 生命周期收敛（主进程 + 渲染层） | Strong | 无 | ✅ 2026-08-17 |
-| 2 | [phase-2-session-repository-seams.md](phase-2-session-repository-seams.md) | session-repository 跨 seam 裸 SQL 收口 | Strong | 与阶段 1 相邻，建议紧随 | 进行中 |
+| 2 | [phase-2-session-repository-seams.md](phase-2-session-repository-seams.md) | session-repository 跨 seam 裸 SQL 收口 | Strong | 与阶段 1 相邻，建议紧随 | ✅ 2026-08-17 |
 | 3 | [phase-3-run-outcome.md](phase-3-run-outcome.md) | 执行结果 seam：executor 返回 RunOutcome | Worth exploring | 阶段 1（interrupt 已收敛） | 待开始 |
 | 4 | [phase-4-ipc-contract.md](phase-4-ipc-contract.md) | IPC 契约单源化 | Strong | 无（独立） | 待开始 |
 | 5 | [phase-5-stream-adapter-domain-events.md](phase-5-stream-adapter-domain-events.md) | Stream adapter 领域事件 + 合并克隆投影 | Worth exploring | 阶段 3（事件流已只承载 UI） | 待开始 |

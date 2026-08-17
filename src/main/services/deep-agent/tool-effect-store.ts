@@ -24,6 +24,25 @@ type ToolEffectRow = {
   reconcile_strategy: Exclude<RunCapabilityReconcileStrategyV1, 'none'>;
 };
 
+type StoredToolEffectRow = {
+  run_id: string;
+  thread_id: string;
+  execution_path: string;
+  checkpoint_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  input_hash: string;
+  effect_class: string;
+  reconcile_strategy: string;
+  status: string;
+  result_json: string | null;
+  error_json: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LegacyToolEffectRow = Omit<StoredToolEffectRow, 'execution_path' | 'checkpoint_id' | 'effect_class' | 'reconcile_strategy'>;
+
 export type ReusableToolEffect = { status: 'succeeded'; result: unknown };
 
 export class AgentToolEffectStore {
@@ -112,6 +131,89 @@ export class AgentToolEffectStore {
     return { status: row === undefined ? 'not_started' : row.status };
   }
 
+  markRestartedUnknown(runId: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE agent_tool_effects
+         SET status = 'unknown', updated_at = ?
+         WHERE run_id = ? AND status = 'in_progress'`
+      )
+      .run(now, runId);
+  }
+
+  hasUnknown(runId: string): boolean {
+    const row = this.db
+      .prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status = 'unknown' LIMIT 1")
+      .get(runId) as { 1: number } | undefined;
+    return row !== undefined;
+  }
+
+  restoreFrom(source: DatabaseConnection | null): void {
+    if (source === null) {
+      return;
+    }
+    const columns = readSourceRows<{ name: string }>(source, 'PRAGMA table_info(agent_tool_effects)');
+    if (columns.length === 0) {
+      return;
+    }
+    if (!columns.some((column) => column.name === 'execution_path')) {
+      this.restoreLegacyRows(source);
+      return;
+    }
+    const rows = readSourceRows<StoredToolEffectRow>(
+      source,
+      `SELECT run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+         effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
+       FROM agent_tool_effects`
+    );
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO agent_tool_effects (
+        run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      try {
+        insert.run(
+          row.run_id,
+          row.thread_id,
+          row.execution_path,
+          row.checkpoint_id,
+          row.tool_call_id,
+          row.tool_name,
+          row.input_hash,
+          row.effect_class,
+          row.reconcile_strategy,
+          row.status,
+          row.result_json,
+          row.error_json,
+          row.created_at,
+          row.updated_at
+        );
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  deleteForRunIds(runIds: readonly string[]): number {
+    const statement = this.db.prepare('DELETE FROM agent_tool_effects WHERE run_id = ?');
+    return this.db.transaction(() => {
+      let deleted = 0;
+      for (const runId of runIds) {
+        deleted += statement.run(runId).changes;
+      }
+      return deleted;
+    })();
+  }
+
+  deleteForThread(threadId: string): number {
+    requireToolEffectKey(threadId, 'agent_tool_effect_thread_id_missing');
+    return this.db.prepare('DELETE FROM agent_tool_effects WHERE thread_id = ?').run(threadId).changes;
+  }
+
   finishSuccess(input: ToolEffectKey & { result: unknown }): void {
     this.finish({
       ...input,
@@ -183,6 +285,39 @@ export class AgentToolEffectStore {
       throw new Error('agent_tool_effect_missing');
     }
     return row;
+  }
+
+  private restoreLegacyRows(source: DatabaseConnection): void {
+    const rows = readSourceRows<LegacyToolEffectRow>(
+      source,
+      `SELECT run_id, thread_id, tool_call_id, tool_name, input_hash, status, result_json, error_json, created_at, updated_at
+       FROM agent_tool_effects`
+    );
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO agent_tool_effects (
+        run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
+        effect_class, reconcile_strategy, status, result_json, error_json, created_at, updated_at
+      )
+       VALUES (?, ?, 'legacy-main', 'legacy-checkpoint', ?, ?, ?, 'external_call', 'manual_confirmation', ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      try {
+        insert.run(
+          row.run_id,
+          row.thread_id,
+          row.tool_call_id,
+          row.tool_name,
+          row.input_hash,
+          mapLegacyToolEffectStatus(row.status),
+          row.result_json,
+          row.error_json,
+          row.created_at,
+          row.updated_at
+        );
+      } catch {
+        continue;
+      }
+    }
   }
 }
 
@@ -256,6 +391,27 @@ function serializeError(error: unknown): unknown {
     };
   }
   return error;
+}
+
+function readSourceRows<TRow>(source: DatabaseConnection, sql: string): TRow[] {
+  try {
+    return source.prepare(sql).all() as TRow[];
+  } catch {
+    return [];
+  }
+}
+
+function mapLegacyToolEffectStatus(status: string): string {
+  if (status === 'success') {
+    return 'succeeded';
+  }
+  if (status === 'error') {
+    return 'failed_final';
+  }
+  if (status === 'in_progress') {
+    return 'unknown';
+  }
+  return status;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

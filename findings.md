@@ -63,3 +63,22 @@
 - checkpoint 恢复不能把损坏的 pending projection 当作空集合静默覆盖；损坏状态应 fail-explicit，缺失 projection 才允许重建。
 - `PendingInterrupt` 的唯一类型入口为 `interrupt-projection.ts`；`runtime-types.ts` 不保留转导兼容路径。
 - 阶段 1 最终验证：目标 72/72、全量 1811/1811、typecheck、strict unused、diff check 均通过；双轴复审 PASS。
+
+## 阶段 2：Repository 跨 seam SQL
+
+### 设计决策
+
+- `agent_run_events` 容量语义统一为 trim：保留最近 `agentRunEventLogMaxEvents` 条事件，避免缓存容量成为业务运行故障。
+- checkpoint 读取方法放在我方 `RocSqliteCheckpointer`，不扩展 LangChain 基类契约。
+- tool-effect restart 转移由 `AgentToolEffectStore` 拥有；repository 不直接更新其表。
+
+### 已验证
+
+- `RocSqliteCheckpointer.readPendingInterrupts()` 保留 `value_type` 分支，并把单条 JSON 数组展开为多个 interrupt。
+- `AgentRunEventLog.restoreRunEvent()` 恢复持久化 sequence 时同步 cursor；恢复 sequence 7 后下一条 append 为 8。
+- `AgentSessionRepository` 通过可注入的 checkpointer、tool-effect store、run-event log 和 interrupt projection 组合行为，不再持有三张 owner 表的裸 SQL。
+- production plugin 初始化让 repository 与 runtime 共享同一个 `AgentRunEventLog`。
+- 首次 Spec 审查指出 history deletion、retention、database rebuild 仍旁路 owner；修复后三个 owner 暴露最小维护 API，基础设施仅选择集合与编排事务。
+- `storage-ownership.test.ts` 对生产源码执行 SQL ownership 静态扫描；schema DDL 与数据库 fast probe 不被误判为 operational SQL。
+- `session-repository.test.ts` 相对 `79d8aa0` 为 111 行新增、155 行删除，净减少 44 行。
+- 最终验证：聚焦 7 文件/29 项、全量 324 文件/1818 项、typecheck、strict unused、diff check 均通过；Standards/Spec 复审 PASS。
