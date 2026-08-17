@@ -55,7 +55,7 @@ describe('createAgentDeepAgentExecutor', () => {
       ]),
       output: output.promise
     });
-    const iterator = execution[Symbol.asyncIterator]();
+    const iterator = execution.events[Symbol.asyncIterator]();
     const firstRead = iterator.next();
 
     try {
@@ -81,6 +81,31 @@ describe('createAgentDeepAgentExecutor', () => {
       await firstRead.catch(() => undefined);
       await waitForPromise(drainIterator(iterator), 'executor_drain');
     }
+  });
+
+  it('settles the outcome when the event consumer stops early', async () => {
+    const text = createControlledAsyncStream<string>();
+    const output = createDeferred<unknown>();
+    const execution = await startExecutorExecution({
+      capabilities: createCapabilities([]),
+      messages: createAsyncIterable([
+        createDeepAgents110V3MessageHandle({
+          text: text.iterable
+        })
+      ]),
+      output: output.promise
+    });
+    const iterator = execution.events[Symbol.asyncIterator]();
+    const firstRead = iterator.next();
+
+    await text.waitForRead();
+    text.push('partial');
+    await readIteratorValue(firstRead, 'consumer_stopped_first_event');
+    output.reject(new Error('provider stopped after consumer exit'));
+    text.close();
+    await iterator.return?.();
+
+    await expect(execution.outcome).rejects.toThrow('provider stopped after consumer exit');
   });
 
   it('observes final output failure when a message stream also fails', async () => {
@@ -181,7 +206,7 @@ describe('createAgentDeepAgentExecutor', () => {
       capabilities: createCapabilities([]),
       toolCalls
     });
-    const iterator = execution[Symbol.asyncIterator]();
+    const iterator = execution.events[Symbol.asyncIterator]();
     const firstEvent = await readIteratorValue(iterator.next(), 'tool_queue_first_event');
 
     expect(firstEvent).toMatchObject({

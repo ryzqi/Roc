@@ -1,3 +1,4 @@
+import { createTestAgentExecution, readPendingInterrupts } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -46,7 +47,8 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const resumePayloads: unknown[] = [];
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           if (input.resumePayload === undefined) {
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
@@ -64,7 +66,8 @@ describe('AgentPluginRuntime multiple interrupts', () => {
             return;
           }
           yield textBlock(input.run.id, 'Both responses accepted.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -79,7 +82,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const threadId = requireThreadId(started.threadId);
     await waitFor(() => runEvents('run_interrupted').length === 2);
 
-    expect(repository.getPendingInterrupts(started.runId).interrupts.map((interrupt) => interrupt.interruptId)).toEqual([
+    expect(readPendingInterrupts(repository, started.runId).interrupts.map((interrupt) => interrupt.interruptId)).toEqual([
       'interrupt-approval',
       'interrupt-question'
     ]);
@@ -94,7 +97,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     await waitFor(() => runEvents('run_interrupted').length === 3);
 
     expect(repository.getRun(started.runId).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupts(started.runId).interrupts.map((interrupt) => interrupt.interruptId)).toEqual([
+    expect(readPendingInterrupts(repository, started.runId).interrupts.map((interrupt) => interrupt.interruptId)).toEqual([
       'interrupt-question'
     ]);
 
@@ -123,16 +126,18 @@ describe('AgentPluginRuntime multiple interrupts', () => {
       }
     ]);
     expect(repository.getRun(started.runId).status).toBe('completed');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([]);
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toEqual([]);
   });
 
   it('keeps waiting projection when resume executor dispatch rejects', async () => {
     const repository = new AgentSessionRepository(db);
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-dispatch', approvalPayload());
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -167,7 +172,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
       })
     ).rejects.toThrow('resume_dispatch_failed');
     expect(repository.getRun(started.runId).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toMatchObject([
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toMatchObject([
       { interruptId: 'interrupt-dispatch' }
     ]);
   });
@@ -176,9 +181,11 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const repository = new AgentSessionRepository(db);
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-stream-dispatch', approvalPayload());
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -194,9 +201,11 @@ describe('AgentPluginRuntime multiple interrupts', () => {
 
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           throw new Error('resume_stream_dispatch_failed');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -214,19 +223,21 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     ).resolves.toMatchObject({ runId: started.runId });
     await waitFor(() => runEvents('run_failed').length === 1);
     expect(repository.getRun(started.runId).status).toBe('failed');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([]);
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toEqual([]);
   });
 
   it('rolls back waiting projection when resume audit commit fails before stream consumption', async () => {
     const repository = new AgentSessionRepository(db);
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-audit-commit', {
             kind: 'question',
             question: 'Which workspace should be recorded?'
           });
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -248,9 +259,11 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     `);
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id, 'Resume dispatched.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -267,7 +280,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
       })
     ).rejects.toThrow('runtime_resume_audit_commit_failed');
     expect(repository.getRun(started.runId).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toMatchObject([
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toMatchObject([
       { interruptId: 'interrupt-audit-commit' }
     ]);
     expect(runEvents('run_resumed')).toHaveLength(0);
@@ -278,7 +291,8 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const firstResumeGate: { release: (() => void) | null } = { release: null };
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           if (input.resumePayload === undefined) {
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
@@ -291,7 +305,8 @@ describe('AgentPluginRuntime multiple interrupts', () => {
             firstResumeGate.release = resolve;
           });
           yield textBlock(input.run.id, 'First resume completed.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -323,7 +338,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
         answer: 'F:\\Code\\Roc'
       })
     ).rejects.toThrow('chat_resume_run_not_waiting_user');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toEqual([
       expect.objectContaining({ interruptId: 'interrupt-question' })
     ]);
 

@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from '../agent/test-execution';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -465,7 +466,8 @@ function createSchedulerAgentRuntime(repository: AgentSessionRepository): AgentP
 
 function createTextDeepAgentExecutor(): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield {
         type: 'assistant_block',
         runId: input.run.id,
@@ -476,7 +478,8 @@ function createTextDeepAgentExecutor(): NonNullable<ConstructorParameters<typeof
           text: 'Scheduled run completed.'
         }
       } satisfies ChatRunEvent;
-    }
+    })());
+}
   };
 }
 

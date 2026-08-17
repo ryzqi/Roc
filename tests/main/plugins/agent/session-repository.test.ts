@@ -233,7 +233,7 @@ describe('AgentSessionRepository', () => {
       'human_question_requested'
     ]);
     expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 2, status: 'waiting_user' });
-    expect(repository.getPendingInterrupts(run.id)).toEqual({
+    expect(readPendingInterrupts(repository, run)).toEqual({
       runId: run.id,
       threadId: run.threadId,
       interrupts: [
@@ -277,7 +277,7 @@ describe('AgentSessionRepository', () => {
     });
 
     expect(firstDispatch.run).toMatchObject({ status: 'dispatch_pending' });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toHaveLength(2);
+    expect(readPendingInterrupts(repository, run).interrupts).toHaveLength(2);
 
     const rolledBack = repository.rollbackResumeDispatch({
       expectedStateVersion: firstDispatch.stateVersion,
@@ -286,7 +286,7 @@ describe('AgentSessionRepository', () => {
     });
 
     expect(rolledBack.run).toMatchObject({ status: 'waiting_user' });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toHaveLength(2);
+    expect(readPendingInterrupts(repository, run).interrupts).toHaveLength(2);
 
     const secondDispatch = repository.beginResumeDispatch({
       expectedStateVersion: rolledBack.stateVersion,
@@ -310,7 +310,7 @@ describe('AgentSessionRepository', () => {
 
     expect(resumed.run).toMatchObject({ status: 'running' });
     expect(repository.getRunTransitionState(run.id)).toEqual({ stateVersion: 6, status: 'running' });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+    expect(readPendingInterrupts(repository, run).interrupts).toEqual([
       {
         interruptId: 'interrupt_repository_2',
         payload: {
@@ -360,7 +360,7 @@ describe('AgentSessionRepository', () => {
       stateVersion: 1,
       status: 'waiting_next_turn'
     });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([]);
+    expect(readPendingInterrupts(repository, run).interrupts).toEqual([]);
   });
 
   it('rebuilds a missing projection from the current checkpoint after a partial resume crash', () => {
@@ -436,7 +436,7 @@ describe('AgentSessionRepository', () => {
       stateVersion: 5,
       status: 'waiting_user'
     });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+    expect(readPendingInterrupts(repository, run).interrupts).toEqual([
       {
         interruptId: 'interrupt_partial_remaining',
         payload: {
@@ -474,7 +474,7 @@ describe('AgentSessionRepository', () => {
 
     repository.reconcileStartupRuns();
 
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual(interrupts);
+    expect(readPendingInterrupts(repository, run).interrupts).toEqual(interrupts);
   });
 
   it('rejects a corrupt persisted interrupt payload explicitly', () => {
@@ -497,7 +497,7 @@ describe('AgentSessionRepository', () => {
     db.prepare('UPDATE agent_pending_interrupts SET payload_json = ? WHERE run_id = ?')
       .run('{"kind":"approval"}', run.id);
 
-    expect(() => repository.getPendingInterrupts(run.id)).toThrow('agent_pending_interrupt_payload_invalid');
+    expect(() => readPendingInterrupts(repository, run)).toThrow('agent_pending_interrupt_payload_invalid');
     seedCheckpoint(run.threadId, [
       {
         id: 'interrupt-corrupt',
@@ -505,14 +505,8 @@ describe('AgentSessionRepository', () => {
       }
     ]);
 
-    repository.reconcileStartupRuns();
-
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
-      {
-        interruptId: 'interrupt-corrupt',
-        payload: { kind: 'question', question: 'Continue?' }
-      }
-    ]);
+    expect(() => repository.reconcileStartupRuns()).toThrow('agent_pending_interrupt_payload_invalid');
+    expect(() => readPendingInterrupts(repository, run)).toThrow('agent_pending_interrupt_payload_invalid');
   });
 
   it('rolls back question audit and session message writes as one resume transaction', () => {
@@ -578,7 +572,7 @@ describe('AgentSessionRepository', () => {
       stateVersion: dispatch.stateVersion,
       status: 'dispatch_pending'
     });
-    expect(repository.getPendingInterrupts(run.id).interrupts).toEqual([
+    expect(readPendingInterrupts(repository, run).interrupts).toEqual([
       {
         interruptId: 'interrupt_question_transaction',
         payload: {
@@ -1342,14 +1336,14 @@ describe('AgentSessionRepository', () => {
     expect(repository.getRunTransitionState(recovering.id).stateVersion).toBe(3);
     expect(db.prepare("SELECT COUNT(*) AS count FROM agent_outbox WHERE event_type = 'run_failed'").get()).toEqual({ count: 4 });
     expect(repository.getRun(waitingUser.id).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupts(waitingUser.id)).toMatchObject({
+    expect(readPendingInterrupts(repository, waitingUser)).toMatchObject({
       interrupts: [{ interruptId: 'interrupt_restart_reconcile' }]
     });
     expect(repository.getRunTransitionState(resumeDispatchPending.id)).toEqual({
       stateVersion: 4,
       status: 'waiting_user'
     });
-    expect(repository.getPendingInterrupts(resumeDispatchPending.id)).toMatchObject({
+    expect(readPendingInterrupts(repository, resumeDispatchPending)).toMatchObject({
       interrupts: [{ interruptId: 'interrupt_resume_dispatch_restart' }]
     });
 
@@ -1688,6 +1682,13 @@ function createRun(
     threadKind: input.threadKind,
     userInput: input.userInput
   });
+}
+
+function readPendingInterrupts(
+  repository: AgentSessionRepository,
+  run: { id: string; threadId: string }
+) {
+  return repository.interruptProjection.readPending({ runId: run.id, threadId: run.threadId });
 }
 
 function createCapabilityPreview(requestedCapabilities: EnabledCapabilities): AgentCapabilityPreview {

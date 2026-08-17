@@ -32,6 +32,8 @@ import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
+import type { AgentDeepAgentExecution } from './agent-execution';
+import { createRunInterruptedEvents, type PendingInterrupt } from './interrupt-projection';
 import type { AgentRunEventLog } from './run-event-log';
 import { compileRunCapabilityManifest } from './run-capability-manifest';
 import { createChatStartRunRequestFromSnapshot, createRunBudget, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
@@ -47,8 +49,7 @@ import { toRecoveryDecision } from './recovery-policy';
 import type {
   AgentLifecycleHookEmitter,
   AgentRunTracingLifecycle,
-  DeepAgentExecutionResult,
-  PendingInterrupt
+  DeepAgentExecutionResult
 } from './runtime-types';
 import {
   createBlockedAgentRuntimeStatus,
@@ -80,11 +81,11 @@ export type AgentDeepAgentExecutor = {
     abortSignal: AbortSignal;
     observeModelUsage: (usage: AgentModelUsageTelemetry) => void;
     validatedAttachments?: ChatValidatedImageAttachment[];
-  }): AsyncIterable<ChatRunEvent> | Promise<AsyncIterable<ChatRunEvent>>;
+  }): AgentDeepAgentExecution | Promise<AgentDeepAgentExecution>;
 };
 
 type ExecuteRunInput = {
-  executionStream?: AsyncIterable<ChatRunEvent>;
+  executionStream?: AgentDeepAgentExecution;
   runId: string;
   providerId: string;
   modelId: string;
@@ -443,9 +444,9 @@ export class AgentPluginRuntime {
       runId: run.id
     });
     const abortController = new AbortController();
-    let executionStream: AsyncIterable<ChatRunEvent>;
+    let executionStream: AgentDeepAgentExecution;
     try {
-      executionStream = requireExecutionStream(
+      executionStream = requireAgentExecution(
         await deepAgentExecutor.execute({
           abortSignal: abortController.signal,
           modelHandle,
@@ -1007,7 +1008,7 @@ export class AgentPluginRuntime {
   private async executeDeepAgentRun(input: {
     snapshot: RunExecutionSnapshotV2;
     resumePayload?: AgentResumePayload;
-    executionStream?: AsyncIterable<ChatRunEvent>;
+    executionStream?: AgentDeepAgentExecution;
     run: TaskRun;
     runStartedAtMs: number;
     modelHandle: AgentModelHandle;
@@ -1019,11 +1020,9 @@ export class AgentPluginRuntime {
     const hookDisplayTexts: string[] = [];
     const successfulToolBlockIds = new Set<string>();
     const successfulToolNamesByBlockId = new Map<string, string>();
-    const pendingInterrupts: PendingInterrupt[] = [];
-    const pendingInterruptEvents: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>> = [];
-    const executionStream =
+    const execution =
       input.executionStream === undefined
-        ? requireExecutionStream(
+        ? requireAgentExecution(
             await this.options.deepAgentExecutor!.execute({
               abortSignal: input.abortSignal,
               modelHandle: input.modelHandle,
@@ -1037,68 +1036,70 @@ export class AgentPluginRuntime {
             })
           )
         : input.executionStream;
-    for await (const event of executionStream) {
-      if (!this.activeRuns.has(input.run.id)) {
-        return {
-          status: 'completed',
-          assistantMessage: '',
-          successfulToolNames: []
-        };
-      }
-      input.telemetry.observeEvent(event, Date.now() - input.runStartedAtMs);
-      if (event.type === 'run_interrupted') {
-        pendingInterrupts.push({
-          interruptId: event.interruptId,
-          payload: event.payload
-        });
-        pendingInterruptEvents.push(event);
-        continue;
-      }
-      await this.publishChatRunEvent(event);
-      if (event.type === 'hook_started' || event.type === 'hook_completed') {
-        collectHookDisplayText(hookDisplayTexts, event.hook.additionalContext);
-        collectHookDisplayText(hookDisplayTexts, event.hook.requestContinue);
-        await this.recordRunTaskEvent({
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          type: event.type,
-          payload: event.hook
-        });
-        continue;
-      }
-      if (event.type === 'assistant_block') {
-        if (event.block.kind === 'text' && typeof event.block.text === 'string') {
-          assistantChunks.push(event.block.text);
+    try {
+      for await (const event of execution.events) {
+        if (!this.activeRuns.has(input.run.id)) {
+          void execution.outcome.catch(() => undefined);
+          return {
+            status: 'completed',
+            assistantMessage: '',
+            successfulToolNames: []
+          };
         }
-        updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
-        updateSuccessfulToolNames(successfulToolNamesByBlockId, event.block);
-        const taskEvent = createTaskEventFromAssistantBlock(event.block);
-        await this.recordRunTaskEvent({
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          type: taskEvent.type,
-          payload: taskEvent.payload
-        });
-        continue;
-      }
-      if (event.type === 'subagent_event') {
-        await this.recordRunTaskEvent({
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          type: 'subagent_event',
-          payload: {
-            sequence: event.sequence,
-            identity: event.identity,
-            event: event.event
+        input.telemetry.observeEvent(event, Date.now() - input.runStartedAtMs);
+        if (event.type === 'run_interrupted') {
+          continue;
+        }
+        await this.publishChatRunEvent(event);
+        if (event.type === 'hook_started' || event.type === 'hook_completed') {
+          collectHookDisplayText(hookDisplayTexts, event.hook.additionalContext);
+          collectHookDisplayText(hookDisplayTexts, event.hook.requestContinue);
+          await this.recordRunTaskEvent({
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            type: event.type,
+            payload: event.hook
+          });
+          continue;
+        }
+        if (event.type === 'assistant_block') {
+          if (event.block.kind === 'text' && typeof event.block.text === 'string') {
+            assistantChunks.push(event.block.text);
           }
-        });
+          updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
+          updateSuccessfulToolNames(successfulToolNamesByBlockId, event.block);
+          const taskEvent = createTaskEventFromAssistantBlock(event.block);
+          await this.recordRunTaskEvent({
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            type: taskEvent.type,
+            payload: taskEvent.payload
+          });
+          continue;
+        }
+        if (event.type === 'subagent_event') {
+          await this.recordRunTaskEvent({
+            runId: input.run.id,
+            threadId: input.run.threadId,
+            type: 'subagent_event',
+            payload: {
+              sequence: event.sequence,
+              identity: event.identity,
+              event: event.event
+            }
+          });
+        }
       }
+    } catch (error) {
+      void execution.outcome.catch(() => undefined);
+      throw error;
     }
-    if (pendingInterrupts.length > 0) {
+    const outcome = await execution.outcome;
+    if (outcome.status === 'interrupted') {
       return {
         status: 'interrupted',
-        interrupts: pendingInterrupts,
-        events: pendingInterruptEvents
+        interrupts: outcome.interrupts,
+        events: createRunInterruptedEvents(input.run.id, input.run.threadId, outcome.interrupts)
       };
     }
     const assistantMessage = stripHookDisplayText(assistantChunks.join('').trim(), hookDisplayTexts);
@@ -1208,7 +1209,11 @@ export class AgentPluginRuntime {
     if (pendingInterrupts !== undefined) {
       return pendingInterrupts;
     }
-    const persistedInterrupts = this.options.repository.getPendingInterrupts(runId).interrupts;
+    const run = this.options.repository.getRun(runId);
+    const persistedInterrupts = this.options.repository.interruptProjection.readPending({
+      runId,
+      threadId: run.threadId
+    }).interrupts;
     if (persistedInterrupts.length > 0) {
       this.pendingInterrupts.set(runId, persistedInterrupts);
     }
@@ -1237,14 +1242,19 @@ export class AgentPluginRuntime {
   }
 }
 
-function requireExecutionStream(value: unknown): AsyncIterable<ChatRunEvent> {
+function requireAgentExecution(value: unknown): AgentDeepAgentExecution {
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
-    throw new Error('agent_deep_agent_execution_stream_invalid');
+    throw new Error('agent_deep_agent_execution_invalid');
   }
-  if (typeof Reflect.get(value, Symbol.asyncIterator) !== 'function') {
-    throw new Error('agent_deep_agent_execution_stream_invalid');
+  const events = Reflect.get(value, 'events');
+  const outcome = Reflect.get(value, 'outcome');
+  if ((typeof events !== 'object' && typeof events !== 'function') || events === null || typeof Reflect.get(events, Symbol.asyncIterator) !== 'function') {
+    throw new Error('agent_deep_agent_execution_invalid');
   }
-  return value as AsyncIterable<ChatRunEvent>;
+  if (!(outcome instanceof Promise)) {
+    throw new Error('agent_deep_agent_execution_invalid');
+  }
+  return value as AgentDeepAgentExecution;
 }
 
 function createRunExecutionSnapshotSeed(input: {

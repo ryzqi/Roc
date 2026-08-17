@@ -1,9 +1,5 @@
-import type {
-  ChatInterruptPayload,
-  ChatRunEvent,
-  ChatStartRunRequest,
-  RocHookSessionEndStatus
-} from '../../../shared/types';
+import type { ChatRunEvent, ChatStartRunRequest, RocHookSessionEndStatus } from '../../../shared/types';
+import type { PendingInterrupt } from './interrupt-projection';
 
 export type DeepAgentExecutionResult =
   | {
@@ -16,17 +12,6 @@ export type DeepAgentExecutionResult =
       interrupts: PendingInterrupt[];
       events: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>>;
     };
-
-export type PendingInterrupt = {
-  interruptId: string;
-  payload: ChatInterruptPayload;
-};
-
-export type PendingInterruptProjection = {
-  runId: string;
-  threadId: string;
-  interrupts: PendingInterrupt[];
-};
 
 export type AgentLifecycleHookEmitter = {
   emitSessionEnd(input: {

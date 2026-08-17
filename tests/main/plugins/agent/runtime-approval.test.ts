@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -60,7 +61,8 @@ describe('AgentPluginRuntime', () => {
     let resumedWorkflowHint: unknown = null;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           if (input.resumePayload === undefined) {
             yield {
               type: 'run_interrupted',
@@ -75,7 +77,8 @@ describe('AgentPluginRuntime', () => {
           resumedTaskSource = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).taskSource;
           resumedWorkflowHint = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).workflowHint;
           yield createTextBlock(input.run.id, 'Approved command finished.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -155,7 +158,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'run_interrupted',
             runId: input.run.id,
@@ -163,7 +167,8 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_rebuilt_runtime',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
@@ -191,11 +196,13 @@ describe('AgentPluginRuntime', () => {
     const resumePayloads: unknown[] = [];
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           resumedRequests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           yield createTextBlock(input.run.id, 'Rebuilt runtime approved.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -239,7 +246,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'run_interrupted',
             runId: input.run.id,
@@ -247,7 +255,8 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_stale_runtime',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -275,10 +284,12 @@ describe('AgentPluginRuntime', () => {
     let resumed = false;
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           resumed = true;
           yield createTextBlock(started.runId, 'Should not resume.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -302,7 +313,8 @@ describe('AgentPluginRuntime', () => {
     const executedModes: Array<ChatStartRunRequest['mode']> = [];
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           executedModes.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run).mode);
           if (input.resumePayload === undefined) {
             yield {
@@ -315,7 +327,8 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           yield createTextBlock(input.run.id, 'done');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -434,9 +447,11 @@ describe('AgentPluginRuntime', () => {
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    }
+    })());
+}
   };
 }
 

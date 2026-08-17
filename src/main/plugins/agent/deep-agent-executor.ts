@@ -60,14 +60,15 @@ import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
+import { createAgentDeepAgentExecution, type AgentDeepAgentExecutionOutcome } from './agent-execution';
 import type { AgentLangSmithTracingProvider } from '../../services/deep-agent/langsmith-tracing';
 import { runWithLangSmithTracing } from '../../services/deep-agent/langsmith-tracing';
 import { createChatRunEventQueue } from './chat-run-event-queue';
 import {
   readFinalAssistantText,
-  readInterrupted,
-  readRunInterruptedEvents
+  readInterrupted
 } from './deep-agent-final-output';
+import { createRunInterruptedEvents, projectDeepAgentInterrupts } from './interrupt-projection';
 
 export type AgentDeepAgentExecutorOptions = {
   capabilities: RocCapabilityRegistry;
@@ -84,7 +85,15 @@ export type AgentDeepAgentExecutorOptions = {
 
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
   return {
-    execute: async function* (input) {
+    execute(input) {
+      let resolveOutcome: (outcome: AgentDeepAgentExecutionOutcome) => void = () => {};
+      let rejectOutcome: (error: unknown) => void = () => {};
+      const outcome = new Promise<AgentDeepAgentExecutionOutcome>((resolve, reject) => {
+        resolveOutcome = resolve;
+        rejectOutcome = reject;
+      });
+      const events = (async function* () {
+        try {
       const handle = input.modelHandle.langChainHandle;
       if (handle === undefined) {
         throw new Error('agent_deep_agent_model_handle_missing');
@@ -401,9 +410,11 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             usageAccumulator
           });
           if (readInterrupted(run)) {
-            for (const event of readRunInterruptedEvents(run, input.run.id, input.run.threadId)) {
+            const interrupts = projectDeepAgentInterrupts(run);
+            for (const event of createRunInterruptedEvents(input.run.id, input.run.threadId, interrupts)) {
               emitRuntimeEvent(event);
             }
+            resolveOutcome({ status: 'interrupted', interrupts });
           } else {
             const [settledOutput] = await runOutputSettlement;
             if (settledOutput.status === 'rejected') {
@@ -423,6 +434,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
                 }
               });
             }
+            resolveOutcome({ status: 'completed' });
           }
           eventQueue.close();
         } catch (error) {
@@ -446,9 +458,17 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         await consumeRun;
       } finally {
         executionAbortController.abort(new Error('chat_run_event_consumer_stopped'));
-        await consumeRun.catch(() => undefined);
+        await consumeRun.catch((error: unknown) => {
+          rejectOutcome(error);
+        });
         input.abortSignal.removeEventListener('abort', abortFromParent);
       }
+        } catch (error) {
+          rejectOutcome(error);
+          throw error;
+        }
+      })();
+      return createAgentDeepAgentExecution({ events, outcome });
     }
   };
 }

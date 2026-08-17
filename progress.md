@@ -1,0 +1,50 @@
+# Roc 架构优化进度
+
+## 2026-08-16
+
+- 读取用户规则、项目 `AGENTS.md`、RTK 规则、`package.json`、README 和计划总览。
+- 运行 planning-with-files session catchup；无未同步报告。
+- 确认 `.codegraph/` 可用。
+- 确认分支 `main`，HEAD `45168f1`，相对远端 ahead 38；仅 `plan/` 未跟踪。
+- 建立 `task_plan.md`、`findings.md`、`progress.md`。
+- 当前阶段：1 Interrupt 生命周期收敛，状态 `in_progress`。
+- 读取阶段 1 计划；采用建议决策：checkpoint 裸 SQL 本阶段先封装在 interrupt projection，resume dispatch 暂留 runtime。
+- 使用 CodeGraph 定位 executor/runtime/final-output 调用关系；确认当前 executor interface 仅传递事件流。
+- 使用 CodeGraph 定位 repository resume 事务与 `AppShell` task 刷新；确认两者是阶段 1 的不可破坏语义。
+- 扫描所有 pending interrupt SQL 与 renderer interrupt 分支；确认主进程需共享 DB adapter，renderer 可共享纯投影函数。
+- 一次嵌套 PowerShell 读取因变量提前展开失败；已更换命令引用方式。
+- 确定阶段 1 executor seam：事件流与结构化 outcome 分离；runtime 后续只从 outcome 读取 interrupts。
+- 读取 runtime 执行循环、production executor、renderer live/persisted interrupt 分支；固定主进程与 renderer 的最小改动边界。
+- 盘点 executor fake 与 interrupt 测试；确定先新增 runtime outcome 来源测试和 renderer 共享投影测试。
+- 确认 checkpoint 测试夹具与恢复格式，准备新增 projection 直测。
+- `pnpm typecheck` 首次迁移后通过；目标回归测试 7 文件/72 项通过。
+- 删除 `deep-agent-final-output.ts` 中已迁移的 interrupt 归一化/事件包装及其等价测试；新增 runtime 回归：事件流含 `run_interrupted` 但 outcome 为 `completed` 时仍完成。
+- 全量 Vitest 首次重跑 321/322 文件通过；发现 executor outcome 未处理 rejection 与 node-pty `AttachConsole failed` 环境噪声。补充 execution 工厂/helper rejection handler，并在 runtime 事件异常/取消边界消费 outcome；streaming/hooks 聚焦测试分别 7/7、3/3 通过。
+- 全量 Vitest 修复后 322 文件/1807 项通过（退出码 0）；仍打印 Node 25/node-pty `AttachConsole failed`，未形成 Vitest failure。
+- 将 checkpoint 解析与 projection 回写的异常边界分离，避免静默吞 SQLite 写入错误；session-repository + production multiple-interrupts 30 项、strict unused tsc、git diff check 均通过。
+- Standards 子代理发现并已修复两个 unused type imports；Spec 子代理审查待回传。
+- 新增 main/renderer projection red tests。首次运行预期失败：主进程 property 缺失、renderer module 缺失。
+- 目标命令误跑全量 323 文件：321 文件通过，2 个新增 red 失败；后续改用 `pnpm exec vitest run`。
+- renderer projection、chat run state、transcript 目标测试 28 项通过；main projection 因 import 路径错误未运行，已定位修正。
+- 主进程 projection 接入 repository；旧 getter 测试全部迁到窄 interface。`session-repository.test.ts` 29/29 通过。
+- renderer 共享 projection 接入 live state 与 persisted transcript；相关 3 文件 28/28 通过。
+- 生产代码 typecheck 错误清零后，使用一次性括号扫描脚本机械迁移 13 个测试文件、48 个 async-generator fake 到测试 execution helper；临时脚本已删除。
+- 阶段 1 Standards 审查发现：消费者提前停止可能令 outcome 永久 pending、question payload 校验不完整、损坏 projection 被静默覆盖；全部修复。
+- 阶段 1 Spec 审查发现：`runtime-types.ts` 保留旧类型转导、restart recovery 未经 projection 窄 interface 直测；全部修复。
+- 修复后目标回归 7 文件/72 项通过；`pnpm typecheck`、strict unused tsc、`git diff --check` 通过。
+- 修复后全量 `pnpm test`：323 文件/1811 项通过，退出码 0；Node 25/node-pty `AttachConsole failed` 仍为非失败环境噪声。
+- Standards/Spec 子代理复审均为 PASS，未发现剩余问题。
+- 阶段 1 状态：Verified passing；准备提交并进入阶段 2。
+
+## 阶段证据模板
+
+每阶段记录：
+
+1. fixed point 与变更文件。
+2. 复现/目标行为。
+3. 目标测试与结果。
+4. `pnpm typecheck`、`pnpm test` 及专项门禁结果。
+5. Standards 子代理审查结果。
+6. Spec 子代理审查结果。
+7. 修复与复验结果。
+8. commit SHA 与标题。

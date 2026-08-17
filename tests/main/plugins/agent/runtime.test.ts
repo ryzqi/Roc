@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -455,10 +456,12 @@ describe('AgentPluginRuntime', () => {
     const releaseExecution = createDeferred<void>();
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           await releaseExecution.promise;
           yield createTextBlock(input.run.id, 'Live event after replay capacity.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -501,7 +504,8 @@ describe('AgentPluginRuntime', () => {
     const usageReported = createDeferred<void>();
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           try {
             await new Promise<void>((resolve) => {
               input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
@@ -517,7 +521,8 @@ describe('AgentPluginRuntime', () => {
             });
             usageReported.resolve(undefined);
           }
-        }
+        })());
+}
       },
       eventBus,
       modelFactory: {
@@ -585,11 +590,13 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           await new Promise<void>((resolve) => {
             input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
           });
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -621,9 +628,11 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           throw new Error('provider_unavailable');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory: {
@@ -669,10 +678,12 @@ describe('AgentPluginRuntime', () => {
     let calls = 0;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           calls += 1;
           throw new Error('Model call limits exceeded: run level call limit reached with 20 model calls');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -710,11 +721,13 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           throw new Error(
             "Error invoking tool 'propose_background_task': Received tool input did not match expected schema kwargs {'goal':'daily review','forbiddenActions':[]} with error: Invalid input"
           );
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -746,14 +759,16 @@ describe('AgentPluginRuntime', () => {
     let calls = 0;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           calls += 1;
           if (calls === 1) {
             yield createTextBlock(input.run.id, 'partial ');
             throw new Error('Connection error.');
           }
           yield createTextBlock(input.run.id, 'done');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -784,7 +799,8 @@ describe('AgentPluginRuntime', () => {
     let calls = 0;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           calls += 1;
           if (calls === 1) {
             throw new Error('Connection error.');
@@ -799,7 +815,8 @@ describe('AgentPluginRuntime', () => {
               question: 'Continue after recovery?'
             }
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -823,9 +840,11 @@ describe('AgentPluginRuntime', () => {
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    }
+    })());
+}
   };
 }
 

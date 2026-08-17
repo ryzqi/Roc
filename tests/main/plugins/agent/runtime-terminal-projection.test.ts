@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -65,9 +66,11 @@ describe('AgentPluginRuntime terminal projection characterization', () => {
     };
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id);
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -104,9 +107,11 @@ describe('AgentPluginRuntime terminal projection characterization', () => {
     };
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id);
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,

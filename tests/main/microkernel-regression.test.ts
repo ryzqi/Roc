@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './plugins/agent/test-execution';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -277,7 +278,8 @@ function safeStorage(): SafeStorageBackend {
 
 function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield {
         type: 'assistant_block',
         runId: input.run.id,
@@ -288,6 +290,7 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           text: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
         }
       } satisfies ChatRunEvent;
-    }
+    })());
+}
   };
 }

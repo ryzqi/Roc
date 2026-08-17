@@ -4,7 +4,6 @@ import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import type {
   AgentCapabilityPreview,
-  ChatInterruptPayload,
   ChatPersistedAttachment,
   ChatResumeDecision,
   ChatRunEvent,
@@ -22,8 +21,8 @@ import type {
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocDomainError } from '../../services/errors';
 import { agentRunEventLogMaxEvents } from './run-event-log';
-import type { PendingInterrupt, PendingInterruptProjection } from './runtime-types';
-import { normalizeChatInterruptPayload } from './deep-agent-final-output';
+import type { PendingInterrupt } from './interrupt-projection';
+import { AgentInterruptProjection, assertPendingInterrupts } from './interrupt-projection';
 import {
   createRunExecutionSnapshot,
   parseRunExecutionSnapshot,
@@ -74,14 +73,6 @@ type SessionMessageSearchRow = SessionMessageRow & {
   snippet: string;
 };
 
-type PendingInterruptRow = {
-  run_id: string;
-  thread_id: string;
-  interrupt_id: string;
-  position: number;
-  payload_json: string;
-};
-
 type RunStateRow = {
   id: string;
   status: TaskStatus;
@@ -97,11 +88,6 @@ type StartupRunRow = RunStateRow & {
 type RestartEvidence = {
   hasCheckpoint: boolean;
   hasInFlightEffect: boolean;
-};
-
-type CheckpointInterruptWriteRow = {
-  value_type: string;
-  value_blob: Buffer;
 };
 
 type TerminalFailureInput = {
@@ -165,9 +151,11 @@ const allowedRunTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>>
 
 export class AgentSessionRepository {
   private readonly runTelemetryRepository: AgentRunTelemetryRepository;
+  readonly interruptProjection: AgentInterruptProjection;
 
   constructor(private readonly db: DatabaseConnection) {
     this.runTelemetryRepository = new AgentRunTelemetryRepository(db);
+    this.interruptProjection = new AgentInterruptProjection(db);
   }
 
   createTaskRun(input: {
@@ -479,7 +467,11 @@ export class AgentSessionRepository {
         status: 'completed',
         updatedAt: input.endedAt
       });
-      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+      this.interruptProjection.record({
+        runId: input.runId,
+        threadId: transition.run.threadId,
+        interrupts: []
+      });
       this.saveTelemetryForRunState(input.telemetry, transition.run, input.endedAt);
 
       const message: SessionMessageEntry = {
@@ -617,14 +609,21 @@ export class AgentSessionRepository {
     for (const candidate of candidates) {
       this.markRestartedToolEffectsUnknown(candidate.id);
       const evidence = this.readRestartEvidence(candidate);
-      const checkpointInterrupts = this.readRecoverableCheckpointInterrupts(candidate.id, candidate.thread_id);
+      const canRecoverCheckpointInterrupts =
+        evidence.hasCheckpoint &&
+        !evidence.hasInFlightEffect &&
+        (candidate.status === 'dispatch_pending' ||
+          candidate.status === 'waiting_user' ||
+          candidate.status === 'running');
+      const checkpointInterrupts = canRecoverCheckpointInterrupts
+        ? this.readRecoverableCheckpointInterrupts(candidate.id, candidate.thread_id)
+        : null;
       if (
         candidate.status === 'dispatch_pending' &&
         evidence.hasCheckpoint &&
         !evidence.hasInFlightEffect &&
         checkpointInterrupts !== null
       ) {
-        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.rollbackResumeDispatch({
           expectedStateVersion: candidate.state_version,
           expectedStatus: candidate.status,
@@ -638,7 +637,6 @@ export class AgentSessionRepository {
         !evidence.hasInFlightEffect &&
         checkpointInterrupts !== null
       ) {
-        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.verifyWaitingUserSnapshot(candidate.id);
         continue;
       }
@@ -648,7 +646,6 @@ export class AgentSessionRepository {
         !evidence.hasInFlightEffect &&
         checkpointInterrupts !== null
       ) {
-        this.restorePendingInterruptProjection(candidate.id, candidate.thread_id, checkpointInterrupts);
         this.transitionRun({
           endedAt: null,
           expectedStateVersion: candidate.state_version,
@@ -706,7 +703,7 @@ export class AgentSessionRepository {
     telemetry: AgentRunTelemetryV1;
     threadId: string;
   }): { events: TaskEvent[]; run: TaskRun } {
-    validatePendingInterrupts(input.interrupts);
+    assertPendingInterrupts(input.interrupts);
     const now = new Date().toISOString();
     return this.db.transaction(() => {
       const transition = this.transitionRunInTransaction({
@@ -721,23 +718,11 @@ export class AgentSessionRepository {
         throw new Error('agent_pending_interrupt_thread_mismatch');
       }
       this.saveTelemetryForRunState(input.telemetry, transition.run, now);
-      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
-      const insert = this.db.prepare(
-        `INSERT INTO agent_pending_interrupts
-         (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const [position, interrupt] of input.interrupts.entries()) {
-        insert.run(
-          input.runId,
-          input.threadId,
-          interrupt.interruptId,
-          position,
-          JSON.stringify(interrupt.payload),
-          now,
-          now
-        );
-      }
+      this.interruptProjection.record({
+        runId: input.runId,
+        threadId: input.threadId,
+        interrupts: input.interrupts
+      });
       const events = input.interrupts.map((interrupt): TaskEvent => ({
         id: `event_${randomUUID()}`,
         threadId: input.threadId,
@@ -783,7 +768,13 @@ export class AgentSessionRepository {
         status: 'dispatch_pending',
         updatedAt: new Date().toISOString()
       });
-      this.requirePendingInterrupt(input.runId, input.interruptId);
+      const pendingInterrupts = this.interruptProjection.readPending({
+        runId: input.runId,
+        threadId: transition.run.threadId
+      }).interrupts;
+      if (!pendingInterrupts.some((interrupt) => interrupt.interruptId === input.interruptId)) {
+        throw new Error('agent_pending_interrupt_missing');
+      }
       return transition;
     })();
   }
@@ -805,12 +796,7 @@ export class AgentSessionRepository {
         status: 'running',
         updatedAt: createdAt
       });
-      const deleted = this.db
-        .prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
-        .run(input.runId, input.interruptId).changes;
-      if (deleted !== 1) {
-        throw new Error('agent_pending_interrupt_missing');
-      }
+      this.interruptProjection.consume({ runId: input.runId, interruptId: input.interruptId });
       if (input.audit.type === 'human_question_answered') {
         this.insertEvent({
           id: `event_${randomUUID()}`,
@@ -870,7 +856,7 @@ export class AgentSessionRepository {
         status: 'waiting_user',
         updatedAt: new Date().toISOString()
       });
-      if (!this.hasPendingInterruptRows(input.runId)) {
+      if (this.interruptProjection.readPending({ runId: input.runId, threadId: transition.run.threadId }).interrupts.length === 0) {
         throw new Error('agent_pending_interrupt_collection_empty');
       }
       return transition;
@@ -893,7 +879,11 @@ export class AgentSessionRepository {
         status: 'cancelled',
         updatedAt: input.endedAt
       });
-      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+      this.interruptProjection.record({
+        runId: input.runId,
+        threadId: transition.run.threadId,
+        interrupts: []
+      });
       this.saveTelemetryForRunState(input.telemetry, transition.run, input.endedAt);
       const event: TaskEvent = {
         id: `event_${randomUUID()}`,
@@ -942,28 +932,9 @@ export class AgentSessionRepository {
     })();
   }
 
-  getPendingInterrupts(runId: string): PendingInterruptProjection {
-    const run = this.getRun(runId);
-    const rows = this.db
-      .prepare(
-        `SELECT run_id, thread_id, interrupt_id, position, payload_json
-         FROM agent_pending_interrupts
-         WHERE run_id = ?
-         ORDER BY position ASC`
-      )
-      .all(runId) as PendingInterruptRow[];
-    return {
-      runId,
-      threadId: run.threadId,
-      interrupts: rows.map((row) => ({
-        interruptId: row.interrupt_id,
-        payload: this.parsePendingInterruptPayload(row.payload_json)
-      }))
-    };
-  }
-
   clearPendingInterrupts(runId: string): void {
-    this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
+    const run = this.getRun(runId);
+    this.interruptProjection.record({ runId, threadId: run.threadId, interrupts: [] });
   }
 
   getRecordedResumePayload(runId: string): Record<string, RecordedResumeValue> {
@@ -1244,7 +1215,11 @@ export class AgentSessionRepository {
       status: input.status,
       updatedAt: input.endedAt
     });
-    this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(input.runId);
+    this.interruptProjection.record({
+      runId: input.runId,
+      threadId: transition.run.threadId,
+      interrupts: []
+    });
     if (telemetry !== null) {
       this.saveTelemetryForRunState(telemetry, transition.run, input.endedAt);
     }
@@ -1398,93 +1373,11 @@ export class AgentSessionRepository {
   }
 
   private readRecoverableCheckpointInterrupts(runId: string, threadId: string): PendingInterrupt[] | null {
-    const rows = this.db
-      .prepare(
-        `SELECT value_type, value_blob
-         FROM langgraph_checkpoint_writes
-         WHERE thread_id = ?
-           AND checkpoint_ns = ''
-           AND checkpoint_id = (
-             SELECT checkpoint_id
-             FROM langgraph_checkpoints
-             WHERE thread_id = ? AND checkpoint_ns = ''
-             ORDER BY checkpoint_id DESC
-             LIMIT 1
-           )
-           AND channel = '__interrupt__'
-         ORDER BY rowid ASC`
-      )
-      .all(threadId, threadId) as CheckpointInterruptWriteRow[];
-    if (rows.length === 0 || rows.some((row) => row.value_type !== 'json')) {
-      return null;
-    }
-    try {
-      const values = rows.flatMap((row) => {
-        const value = JSON.parse(row.value_blob.toString('utf8')) as unknown;
-        return Array.isArray(value) ? value : [value];
-      });
-      const interrupts = values.map((value): PendingInterrupt => {
-        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-          throw new Error('agent_checkpoint_interrupt_invalid');
-        }
-        const interruptId = Reflect.get(value, 'id');
-        if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
-          throw new Error('agent_checkpoint_interrupt_id_invalid');
-        }
-        return {
-          interruptId,
-          payload: normalizeChatInterruptPayload(Reflect.get(value, 'value'))
-        };
-      });
-      validatePendingInterrupts(interrupts);
-      const answeredInterruptIds = this.readAnsweredInterruptIds(runId);
-      if (answeredInterruptIds === null) {
-        return null;
-      }
-      const pendingInterrupts = interrupts.filter((interrupt) => !answeredInterruptIds.has(interrupt.interruptId));
-      if (pendingInterrupts.length === 0) {
-        return null;
-      }
-      return pendingInterrupts;
-    } catch {
-      return null;
-    }
-  }
-
-  private restorePendingInterruptProjection(runId: string, threadId: string, interrupts: readonly PendingInterrupt[]): void {
-    let existing: PendingInterrupt[];
-    try {
-      existing = this.getPendingInterrupts(runId).interrupts;
-    } catch (error) {
-      if (!isInvalidPendingInterruptPayloadError(error)) {
-        throw error;
-      }
-      existing = [];
-    }
-    if (pendingInterruptCollectionsEqual(existing, interrupts)) {
-      return;
-    }
-    validatePendingInterrupts(interrupts);
-    const now = new Date().toISOString();
-    this.db.transaction(() => {
-      this.db.prepare('DELETE FROM agent_pending_interrupts WHERE run_id = ?').run(runId);
-      const insert = this.db.prepare(
-        `INSERT INTO agent_pending_interrupts
-         (run_id, thread_id, interrupt_id, position, payload_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const [position, interrupt] of interrupts.entries()) {
-        insert.run(runId, threadId, interrupt.interruptId, position, JSON.stringify(interrupt.payload), now, now);
-      }
-    })();
-  }
-
-  private parsePendingInterruptPayload(payloadJson: string): ChatInterruptPayload {
-    try {
-      return normalizeChatInterruptPayload(JSON.parse(payloadJson) as unknown);
-    } catch {
-      throw new Error('agent_pending_interrupt_payload_invalid');
-    }
+    return this.interruptProjection.recoverFromCheckpoint({
+      runId,
+      threadId,
+      answeredInterruptIds: this.readAnsweredInterruptIds(runId)
+    });
   }
 
   private readAnsweredInterruptIds(runId: string): Set<string> | null {
@@ -1493,22 +1386,6 @@ export class AgentSessionRepository {
     } catch {
       return null;
     }
-  }
-
-  private requirePendingInterrupt(runId: string, interruptId: string): void {
-    const row = this.db
-      .prepare('SELECT 1 FROM agent_pending_interrupts WHERE run_id = ? AND interrupt_id = ?')
-      .get(runId, interruptId) as { 1: number } | undefined;
-    if (row === undefined) {
-      throw new Error('agent_pending_interrupt_missing');
-    }
-  }
-
-  private hasPendingInterruptRows(runId: string): boolean {
-    const row = this.db
-      .prepare('SELECT 1 FROM agent_pending_interrupts WHERE run_id = ? LIMIT 1')
-      .get(runId) as { 1: number } | undefined;
-    return row !== undefined;
   }
 
   private readRestartEvidence(candidate: StartupRunRow): RestartEvidence {
@@ -1674,23 +1551,6 @@ function mapSessionMessage(row: SessionMessageRow): SessionMessageEntry {
   };
 }
 
-function validatePendingInterrupts(interrupts: readonly PendingInterrupt[]): void {
-  if (interrupts.length === 0) {
-    throw new Error('agent_pending_interrupt_collection_empty');
-  }
-  const interruptIds = new Set<string>();
-  for (const interrupt of interrupts) {
-    const interruptId = interrupt.interruptId.trim();
-    if (interruptId.length === 0) {
-      throw new Error('agent_pending_interrupt_id_empty');
-    }
-    if (interruptIds.has(interruptId)) {
-      throw new Error('agent_pending_interrupt_id_duplicate');
-    }
-    interruptIds.add(interruptId);
-  }
-}
-
 function parseRecordedResumePayload(input: {
   type: 'approval_decision' | 'human_question_answered';
   payload_json: string;
@@ -1726,24 +1586,6 @@ function parseRecordedResumePayload(input: {
     interruptId,
     value: { answer }
   };
-}
-
-function pendingInterruptCollectionsEqual(
-  left: readonly PendingInterrupt[],
-  right: readonly PendingInterrupt[]
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (interrupt, index) =>
-        interrupt.interruptId === right[index]?.interruptId &&
-        JSON.stringify(interrupt.payload) === JSON.stringify(right[index]?.payload)
-    )
-  );
-}
-
-function isInvalidPendingInterruptPayloadError(error: unknown): boolean {
-  return error instanceof Error && error.message === 'agent_pending_interrupt_payload_invalid';
 }
 
 function requireNonEmpty(value: string | null, code: string): string {

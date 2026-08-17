@@ -1,8 +1,10 @@
+import { createTestAgentExecution, readPendingInterrupts } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
+import { createAgentDeepAgentExecution } from '../../../../src/main/plugins/agent/agent-execution';
 import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
@@ -58,7 +60,8 @@ describe('AgentPluginRuntime', () => {
     let executorCalledWith: ChatStartRunRequest | null = null;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           executorCalledWith = createChatStartRunRequestFromSnapshot(input.snapshot, input.run);
           yield createToolBlock(input.run.id, {
             kind: 'tool_call',
@@ -71,7 +74,8 @@ describe('AgentPluginRuntime', () => {
             }
           });
           yield createTextBlock(input.run.id, 'DeepAgent executor response.');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory: {
@@ -146,7 +150,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           input.observeModelUsage({
             callCount: 2,
             inputTokens: 120,
@@ -231,7 +236,8 @@ describe('AgentPluginRuntime', () => {
             persistedChars: 2000
           } satisfies ChatRunEvent;
           yield createTextBlock(input.run.id, 'Telemetry response.');
-        }
+        })());
+}
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
@@ -396,10 +402,12 @@ describe('AgentPluginRuntime', () => {
     let validatedAttachments: unknown = null;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           validatedAttachments = Reflect.get(input, 'validatedAttachments');
           yield createTextBlock(input.run.id, '图片里有图表。');
-        }
+        })());
+}
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
@@ -456,7 +464,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'run_interrupted',
             runId: input.run.id,
@@ -464,7 +473,8 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_approval_1',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -519,10 +529,58 @@ describe('AgentPluginRuntime', () => {
     expect(events.some((event) => event.type === 'agent.run.failed' && readPayloadRunId(event.payload) === result.runId)).toBe(false);
   });
 
+  it('uses the structured execution outcome instead of inferring interruption from events', async () => {
+    const repository = new AgentSessionRepository(db);
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute(input) {
+          return createAgentDeepAgentExecution({
+            events: (async function* () {
+              yield {
+                type: 'run_interrupted',
+                runId: input.run.id,
+                threadId: input.run.threadId,
+                interruptId: 'event_only_interrupt',
+                payload: {
+                  kind: 'question',
+                  question: 'This event must not control the run outcome.'
+                }
+              } satisfies ChatRunEvent;
+              yield createTextBlock(input.run.id, 'Completed despite the event.');
+            })(),
+            outcome: { status: 'completed' }
+          });
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun({
+      ...startRequest,
+      input: 'Complete this run.',
+      mode: 'task'
+    });
+
+    await waitForEvent(() => repository.getRun(result.runId).status === 'completed');
+
+    expect(repository.getRun(result.runId).status).toBe('completed');
+    expect(repository.listSessionMessages({ threadId: result.threadId! })).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'Completed despite the event.'
+      })
+    );
+    expect(readPendingInterrupts(repository, result.runId).interrupts).toEqual([]);
+    expect(events.some((event) => event.type === 'agent.chat.run-event' && readChatRunEvent(event.payload)?.type === 'run_interrupted')).toBe(false);
+  });
+
   it('rejects resume after restart when the required telemetry row is missing', async () => {
     const repository = new AgentSessionRepository(db);
     const deepAgentExecutor: NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> = {
-      execute: async function* (input) {
+      execute(input) {
+  return createTestAgentExecution(() => (async function* () {
         if (input.resumePayload === undefined) {
           yield {
             type: 'run_interrupted',
@@ -537,7 +595,8 @@ describe('AgentPluginRuntime', () => {
           return;
         }
         yield createTextBlock(input.run.id, 'resumed');
-      }
+      })());
+}
     };
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor,
@@ -568,7 +627,7 @@ describe('AgentPluginRuntime', () => {
       })
     ).rejects.toThrow('agent_run_telemetry_missing');
     expect(repository.getRun(started.runId).status).toBe('waiting_user');
-    expect(repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+    expect(readPendingInterrupts(repository, started.runId).interrupts).toEqual([
       expect.objectContaining({ interruptId: 'interrupt_missing_telemetry' })
     ]);
   });
@@ -579,7 +638,8 @@ describe('AgentPluginRuntime', () => {
     const resumePayloads: unknown[] = [];
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           requests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           if (input.resumePayload === undefined) {
@@ -613,7 +673,8 @@ describe('AgentPluginRuntime', () => {
             cacheCreationTokens: 1
           });
           yield createTextBlock(input.run.id, 'continued');
-        }
+        })());
+}
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
       eventBus,
@@ -677,9 +738,11 @@ describe('AgentPluginRuntime', () => {
 
 function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    }
+    })());
+}
   };
 }
 

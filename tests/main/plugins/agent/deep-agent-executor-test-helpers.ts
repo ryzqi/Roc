@@ -22,6 +22,7 @@ import type {
   Workspace
 } from '../../../../src/shared/types';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from '../../../../src/main/kernel/types';
+import type { AgentDeepAgentExecution } from '../../../../src/main/plugins/agent/agent-execution';
 import {
   createAgentDeepAgentExecutor,
   type AgentDeepAgentExecutorOptions
@@ -98,10 +99,13 @@ export async function buildExecutorOnce(
 }
 
 export async function collectExecutorEvents(input: ExecutorEventsInput): Promise<ChatRunEvent[]> {
-  return await collectEvents(await startExecutorExecution(input));
+  const execution = await startExecutorExecution(input);
+  const events = await collectEvents(execution.events);
+  await execution.outcome;
+  return events;
 }
 
-export async function startExecutorExecution(input: ExecutorEventsInput): Promise<AsyncIterable<ChatRunEvent>> {
+export async function startExecutorExecution(input: ExecutorEventsInput): Promise<AgentDeepAgentExecution> {
   mocked.buildDeepAgent.mockReset();
   lastStreamEventsCall = null;
   mocked.buildDeepAgent.mockReturnValue({
@@ -656,19 +660,23 @@ export function createControlledAsyncStream<T>(): ControlledAsyncStream<T> {
 
 interface Deferred<T> {
   promise: Promise<T>;
+  reject: (reason: unknown) => void;
   resolve: (value: T) => void;
 }
 
 export function createDeferred<T>(): Deferred<T> {
+  let reject: ((reason: unknown) => void) | null = null;
   let resolve: ((value: T) => void) | null = null;
-  const promise = new Promise<T>((promiseResolve) => {
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    reject = promiseReject;
     resolve = promiseResolve;
   });
-  if (resolve === null) {
-    throw new Error('deferred_resolve_missing');
+  if (resolve === null || reject === null) {
+    throw new Error('deferred_settlement_missing');
   }
   return {
     promise,
+    reject,
     resolve
   };
 }

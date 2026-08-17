@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
@@ -190,7 +191,8 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'hook_started',
             runId: input.run.id,
@@ -231,7 +233,8 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
               commandDisplay: 'node hook.js'
             }
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -280,7 +283,8 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'assistant_block',
             runId: input.run.id,
@@ -306,7 +310,8 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
               commandDisplay: 'node session-start.js'
             }
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -333,7 +338,8 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
 
 function createTextDeepAgentExecutor(text: string): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield {
         type: 'assistant_block',
         runId: input.run.id,
@@ -344,15 +350,18 @@ function createTextDeepAgentExecutor(text: string): NonNullable<ConstructorParam
           text
         }
       };
-    }
+    })());
+}
   };
 }
 
 function createFailingDeepAgentExecutor(): NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> {
   return {
-    execute: async function* () {
+    execute() {
+  return createTestAgentExecution(() => (async function* () {
       throw new Error('executor_failed');
-    }
+    })());
+}
   };
 }
 

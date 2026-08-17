@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './agent/test-execution';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -139,7 +140,8 @@ function safeStorage(): SafeStorageBackend {
 
 function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
   return {
-    execute: async function* (input) {
+    execute(input) {
+  return createTestAgentExecution(() => (async function* () {
       yield {
         type: 'assistant_block',
         runId: input.run.id,
@@ -150,6 +152,7 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           text: 'Static DeepAgent response.'
         }
       };
-    }
+    })());
+}
   };
 }

@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -57,7 +58,8 @@ describe('AgentPluginRuntime', () => {
     const seenInputs: ChatStartRunRequest[] = [];
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           seenInputs.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           yield {
             type: 'assistant_block',
@@ -105,7 +107,8 @@ describe('AgentPluginRuntime', () => {
               text: '后台任务已创建。'
             }
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -149,7 +152,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield createToolBlock(input.run.id, {
             kind: 'tool_call',
             blockId: 'tool-call-write',
@@ -168,7 +172,8 @@ describe('AgentPluginRuntime', () => {
             phase: 'error',
             error: 'Permission denied.'
           });
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -201,10 +206,12 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield createReasoningBlock(input.run.id, '先判断用户意图。');
           yield createTextBlock(input.run.id, '可以，先从今天金价开始。');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory: {
@@ -299,7 +306,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'subagent_event',
             runId: input.run.id,
@@ -318,7 +326,8 @@ describe('AgentPluginRuntime', () => {
             }
           } satisfies ChatRunEvent;
           yield createTextBlock(input.run.id, '研究完成。');
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,

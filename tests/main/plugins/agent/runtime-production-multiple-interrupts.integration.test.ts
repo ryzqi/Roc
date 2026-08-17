@@ -17,6 +17,7 @@ import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/t
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { RocPaths } from '../../../../src/main/services/paths';
 import { createTestCapabilityPreviewProvider } from './runtime-capability-preview-test-helpers';
+import { readPendingInterrupts } from './test-execution';
 import type { ChatRunEvent } from '../../../../src/shared/types';
 
 const toolCalls = [
@@ -65,7 +66,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
     const threadId = requireThreadId(started.threadId);
     await waitFor(() => readChatEvents('run_interrupted').length === 2);
 
-    const firstPending = first.repository.getPendingInterrupts(started.runId).interrupts;
+    const firstPending = readPendingInterrupts(first.repository, started.runId).interrupts;
     expect(firstPending.map((interrupt) => interrupt.payload)).toEqual([
       {
         kind: 'question',
@@ -88,7 +89,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
 
     const restarted = createRuntime(db, 1);
     restarted.repository.reconcileStartupRuns();
-    expect(restarted.repository.getPendingInterrupts(started.runId).interrupts).toHaveLength(2);
+    expect(readPendingInterrupts(restarted.repository, started.runId).interrupts).toHaveLength(2);
 
     await restarted.runtime.resumeRun({
       kind: 'question',
@@ -99,7 +100,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
     });
     await waitFor(() => readChatEvents('run_interrupted').length === 3);
     expect(restarted.repository.getRun(started.runId).status).toBe('waiting_user');
-    expect(restarted.repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+    expect(readPendingInterrupts(restarted.repository, started.runId).interrupts).toEqual([
       expect.objectContaining({ interruptId: secondInterruptId })
     ]);
 
@@ -109,7 +110,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
     db.pragma('foreign_keys = ON');
     const restartedAfterPartialResume = createRuntime(db, 1);
     restartedAfterPartialResume.repository.reconcileStartupRuns();
-    expect(restartedAfterPartialResume.repository.getPendingInterrupts(started.runId).interrupts).toEqual([
+    expect(readPendingInterrupts(restartedAfterPartialResume.repository, started.runId).interrupts).toEqual([
       expect.objectContaining({ interruptId: secondInterruptId })
     ]);
 
@@ -123,7 +124,7 @@ describe('AgentPluginRuntime production multiple interrupts', () => {
     await waitFor(() => readChatEvents('run_completed').length === 1);
 
     expect(restartedAfterPartialResume.repository.getRun(started.runId).status).toBe('completed');
-    expect(restartedAfterPartialResume.repository.getPendingInterrupts(started.runId).interrupts).toEqual([]);
+    expect(readPendingInterrupts(restartedAfterPartialResume.repository, started.runId).interrupts).toEqual([]);
     const assistantText = restartedAfterPartialResume.repository
       .listSessionMessages({ threadId })
       .filter((message) => message.role === 'assistant')

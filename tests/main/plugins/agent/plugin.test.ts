@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import type { BaseStore } from '@langchain/langgraph';
 import { Client } from 'langsmith';
@@ -17,7 +18,9 @@ import { RocPaths } from '../../../../src/main/services/paths';
 
 const mocked = vi.hoisted(() => ({
   createAgentDeepAgentExecutor: vi.fn((_options: { store: BaseStore }) => ({
-    execute: async function* () {}
+    execute() {
+  return createTestAgentExecution(() => (async function* () {})());
+}
   }))
 }));
 

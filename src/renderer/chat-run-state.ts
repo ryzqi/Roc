@@ -9,6 +9,7 @@ import type {
   SubagentIdentity,
   SubagentStatus
 } from '../shared/types';
+import { applyPendingInterruptProjection, readLiveInterruptProjection } from './chat/interrupt-projection';
 
 type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
 
@@ -177,30 +178,25 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   if (event.type === 'run_interrupted') {
-    const pendingInterrupt: ChatPendingInterrupt =
-      event.payload.kind === 'approval'
-        ? {
-            kind: 'approval',
-            interruptId: event.interruptId,
-            ...event.payload.request
-          }
-        : {
-            interruptId: event.interruptId,
-            ...event.payload
-          };
+    const projection = readLiveInterruptProjection(event);
+    if (projection === null || projection.kind !== 'record') {
+      throw new Error('chat_interrupt_projection_missing');
+    }
     return {
       ...state,
       threadId: event.threadId,
       status: 'waiting_user',
-      pendingInterrupts: upsertPendingInterrupt(state.pendingInterrupts, pendingInterrupt),
+      pendingInterrupts: applyPendingInterruptProjection(state.pendingInterrupts, projection),
       resumeBusy: false
     };
   }
 
   if (event.type === 'run_resumed') {
-    const pendingInterrupts = state.pendingInterrupts.filter(
-      (interrupt) => interrupt.interruptId !== event.interruptId
-    );
+    const projection = readLiveInterruptProjection(event);
+    if (projection === null || projection.kind !== 'consume') {
+      throw new Error('chat_interrupt_projection_missing');
+    }
+    const pendingInterrupts = applyPendingInterruptProjection(state.pendingInterrupts, projection);
     return {
       ...state,
       threadId: event.threadId,
@@ -259,19 +255,6 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
   }
 
   return state;
-}
-
-function upsertPendingInterrupt(
-  interrupts: readonly ChatPendingInterrupt[],
-  pendingInterrupt: ChatPendingInterrupt
-): ChatPendingInterrupt[] {
-  const existingIndex = interrupts.findIndex(
-    (interrupt) => interrupt.interruptId === pendingInterrupt.interruptId
-  );
-  if (existingIndex === -1) {
-    return [...interrupts, pendingInterrupt];
-  }
-  return interrupts.map((interrupt, index) => (index === existingIndex ? pendingInterrupt : interrupt));
 }
 
 function applyAssistantBlock(state: ChatRunState, block: ChatAssistantBlock): ChatRunState {

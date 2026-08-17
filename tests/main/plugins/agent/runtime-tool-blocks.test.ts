@@ -1,3 +1,4 @@
+import { createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -55,9 +56,11 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* () {
+        execute() {
+  return createTestAgentExecution(() => (async function* () {
           return;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -100,7 +103,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield {
             type: 'assistant_block',
             runId: input.run.id,
@@ -127,7 +131,8 @@ describe('AgentPluginRuntime', () => {
               output: 'Successfully wrote to /workspace/hello.txt'
             }
           } satisfies ChatRunEvent;
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,
@@ -180,7 +185,8 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
-        execute: async function* (input) {
+        execute(input) {
+  return createTestAgentExecution(() => (async function* () {
           yield createToolBlock(input.run.id, {
             kind: 'tool_call',
             blockId: 'tool-call-schedule',
@@ -202,7 +208,8 @@ describe('AgentPluginRuntime', () => {
               taskId: 'background-1'
             }
           });
-        }
+        })());
+}
       },
       eventBus,
       modelFactory,

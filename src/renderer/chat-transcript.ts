@@ -10,6 +10,7 @@ import type {
   TaskSnapshot
 } from '../shared/types';
 import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentBlock, ChatRunSubagentNode } from './chat-run-state';
+import { applyPendingInterruptProjection, readPersistedInterruptProjection } from './chat/interrupt-projection';
 
 export type ChatTranscriptSubagentBlock =
   | {
@@ -111,23 +112,6 @@ type GuardrailPayload = {
   content: string;
   tier?: number;
   toolName?: string;
-};
-
-type ApprovalDecisionPayload = {
-  interruptId: string;
-  decisions: unknown[];
-};
-
-type ApprovalRequestedPayload = Omit<Extract<ChatPendingInterrupt, { kind: 'approval' }>, 'kind'>;
-
-type HumanQuestionRequestedEvent = TaskEvent & {
-  type: 'human_question_requested';
-  payload: {
-    interruptId: string;
-    question: string;
-    context: string | null;
-    suggestedResponses: string[];
-  };
 };
 
 type AssistantDraft = {
@@ -333,35 +317,6 @@ function isGuardrailPayload(payload: unknown): payload is GuardrailPayload {
   );
 }
 
-function isApprovalPayload(payload: unknown): payload is ApprovalRequestedPayload {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const interruptId = Reflect.get(payload, 'interruptId');
-  const actionRequests = Reflect.get(payload, 'actionRequests');
-  const reviewConfigs = Reflect.get(payload, 'reviewConfigs');
-  return typeof interruptId === 'string' && Array.isArray(actionRequests) && Array.isArray(reviewConfigs);
-}
-
-function isHumanQuestionRequestedEvent(event: TaskEvent): event is HumanQuestionRequestedEvent {
-  if (event.type !== 'human_question_requested') {
-    return false;
-  }
-  if (typeof event.payload !== 'object' || event.payload === null) {
-    return false;
-  }
-  return typeof Reflect.get(event.payload, 'interruptId') === 'string' && typeof Reflect.get(event.payload, 'question') === 'string';
-}
-
-function isApprovalDecisionPayload(payload: unknown): payload is ApprovalDecisionPayload {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const interruptId = Reflect.get(payload, 'interruptId');
-  const decisions = Reflect.get(payload, 'decisions');
-  return typeof interruptId === 'string' && Array.isArray(decisions);
-}
-
 function resolveActiveThreadId(selectedThreadId: string | null, chatRunState: ChatRunState): string | null {
   if (selectedThreadId !== null) {
     return selectedThreadId;
@@ -425,19 +380,6 @@ function getAssistantDraft(
   drafts.set(runId, draft);
   messages.push(draft.message);
   return draft;
-}
-
-function appendPendingInterrupt(message: ChatTranscriptMessage, interrupt: ChatPendingInterrupt): void {
-  const existingIndex = message.interrupts.findIndex((candidate) => candidate.interruptId === interrupt.interruptId);
-  if (existingIndex === -1) {
-    message.interrupts.push(interrupt);
-    return;
-  }
-  message.interrupts[existingIndex] = interrupt;
-}
-
-function removePendingInterrupt(message: ChatTranscriptMessage, interruptId: string): void {
-  message.interrupts = message.interrupts.filter((interrupt) => interrupt.interruptId !== interruptId);
 }
 
 function applyAssistantBlock(draft: AssistantDraft, block: ChatAssistantBlock, isStreaming: boolean): void {
@@ -830,28 +772,11 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
       continue;
     }
 
-    if (event.type === 'approval_requested' && isApprovalPayload(event.payload)) {
-      appendPendingInterrupt(getAssistantDraft(drafts, messages, event.runId).message, {
-        kind: 'approval',
-        ...event.payload
-      });
-      continue;
-    }
-
-    if (isHumanQuestionRequestedEvent(event)) {
+    const interruptProjection = readPersistedInterruptProjection(event);
+    if (interruptProjection !== null) {
       const draft = getAssistantDraft(drafts, messages, event.runId);
-      appendPendingInterrupt(draft.message, {
-        kind: 'question',
-        interruptId: event.payload.interruptId,
-        question: event.payload.question,
-        ...(event.payload.context === null ? {} : { context: event.payload.context }),
-        suggestedResponses: event.payload.suggestedResponses
-      });
+      draft.message.interrupts = applyPendingInterruptProjection(draft.message.interrupts, interruptProjection);
       continue;
-    }
-
-    if (event.type === 'approval_decision' && isApprovalDecisionPayload(event.payload)) {
-      removePendingInterrupt(getAssistantDraft(drafts, messages, event.runId).message, event.payload.interruptId);
     }
   }
 
