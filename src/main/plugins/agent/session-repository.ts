@@ -326,7 +326,7 @@ export class AgentSessionRepository {
         const runStartedEvent: ChatRunEvent = {
           type: 'run_started',
           runId,
-          mode: snapshot.mode === 'run' ? 'chat' : snapshot.mode,
+          mode: snapshot.mode,
           threadId,
           providerId: snapshot.model.providerId,
           modelId: snapshot.model.modelId,

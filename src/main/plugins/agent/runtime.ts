@@ -3,7 +3,6 @@ import type { HITLResponse } from 'langchain';
 import type {
   AgentCapabilityPreview,
   AgentRuntimeStatus,
-  ChatAssistantBlock,
   ChatCancelRunResult,
   ChatRunEventsReplayRequest,
   ChatRunEventsReplayResult,
@@ -32,11 +31,16 @@ import { toRunFailure } from '../../services/deep-agent/error-mapping';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { prepareChatImageAttachments } from './chat-image-attachments';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
-import type { AgentDeepAgentExecution } from './agent-execution';
+import type { AgentDeepAgentExecution, RunOutcome } from './agent-execution';
 import { createRunInterruptedEvents, type PendingInterrupt } from './interrupt-projection';
 import type { AgentRunEventLog } from './run-event-log';
 import { compileRunCapabilityManifest } from './run-capability-manifest';
-import { createChatStartRunRequestFromSnapshot, createRunBudget, readWorkflowHintFromSnapshot } from './run-execution-snapshot';
+import {
+  createChatStartRunRequestFromSnapshot,
+  createRunBudget,
+  readWorkflowHintFromSnapshot,
+  toRunExecutionMode
+} from './run-execution-snapshot';
 import type { RunExecutionSnapshotSeed } from './run-execution-snapshot';
 import type { AgentSessionRepository, ResumeDispatchAudit } from './session-repository';
 import {
@@ -54,8 +58,7 @@ import type {
 import {
   createBlockedAgentRuntimeStatus,
   createTaskEventFromAssistantBlock,
-  resolveNewRunThreadKind,
-  updateSuccessfulToolBlocks
+  resolveNewRunThreadKind
 } from './runtime-helpers';
 
 export const agentChatRunEventType = 'agent.chat.run-event';
@@ -255,7 +258,12 @@ export class AgentPluginRuntime {
     });
     await this.publish(agentChatRunEventType, {
       type: 'run_started',
-      ...result
+      runId: result.runId,
+      mode: snapshot.mode,
+      threadId: result.threadId,
+      providerId: result.providerId,
+      modelId: result.modelId,
+      createdAt: result.createdAt
     });
     const timer = setTimeout(() => {
       this.scheduledRuns.delete(timer);
@@ -792,6 +800,9 @@ export class AgentPluginRuntime {
           telemetry,
           validatedAttachments: input.validatedAttachments
         });
+        if (execution === null) {
+          return;
+        }
         if (attempt > 0) {
           telemetry.recordRecovery();
           const recoveredAt = new Date().toISOString();
@@ -812,6 +823,7 @@ export class AgentPluginRuntime {
           });
         }
         if (execution.status === 'interrupted') {
+          telemetry.observeModelUsage(execution.usage);
           const interruptedAt = new Date().toISOString();
           telemetry.updateDuration(calculateAgentRunTelemetryDurationMs(input.run.startedAt, interruptedAt));
           await this.handleRunInterrupted({
@@ -828,6 +840,7 @@ export class AgentPluginRuntime {
         if (!this.activeRuns.has(input.runId)) {
           return;
         }
+        telemetry.observeModelUsage(execution.usage);
         const endedAt = new Date().toISOString();
         const terminalDurationMs = calculateAgentRunTelemetryDurationMs(input.run.startedAt, endedAt);
         telemetry.markTerminal({
@@ -839,10 +852,10 @@ export class AgentPluginRuntime {
         });
         await this.completeRun({
           runId: input.runId,
-          assistantMessage: execution.assistantMessage,
+          assistantMessage: execution.finalMessage,
           summary: buildCompletionSummary({
-            assistantMessage: execution.assistantMessage,
-            successfulToolNames: execution.successfulToolNames,
+            assistantMessage: execution.finalMessage,
+            successfulToolNames: execution.summarySource.successfulToolNames,
             workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint
           }),
           durationMs: terminalDurationMs,
@@ -1015,18 +1028,14 @@ export class AgentPluginRuntime {
     abortSignal: AbortSignal;
     validatedAttachments?: ChatValidatedImageAttachment[];
     telemetry: AgentRunTelemetryAccumulator;
-  }): Promise<DeepAgentExecutionResult> {
-    const assistantChunks: string[] = [];
-    const hookDisplayTexts: string[] = [];
-    const successfulToolBlockIds = new Set<string>();
-    const successfulToolNamesByBlockId = new Map<string, string>();
+  }): Promise<DeepAgentExecutionResult | null> {
     const execution =
       input.executionStream === undefined
         ? requireAgentExecution(
             await this.options.deepAgentExecutor!.execute({
               abortSignal: input.abortSignal,
-              modelHandle: input.modelHandle,
               observeModelUsage: usage => input.telemetry.observeModelUsage(usage),
+              modelHandle: input.modelHandle,
               run: input.run,
               snapshot: input.snapshot,
               ...(input.resumePayload === undefined ? {} : { resumePayload: input.resumePayload }),
@@ -1040,11 +1049,7 @@ export class AgentPluginRuntime {
       for await (const event of execution.events) {
         if (!this.activeRuns.has(input.run.id)) {
           void execution.outcome.catch(() => undefined);
-          return {
-            status: 'completed',
-            assistantMessage: '',
-            successfulToolNames: []
-          };
+          return null;
         }
         input.telemetry.observeEvent(event, Date.now() - input.runStartedAtMs);
         if (event.type === 'run_interrupted') {
@@ -1052,8 +1057,6 @@ export class AgentPluginRuntime {
         }
         await this.publishChatRunEvent(event);
         if (event.type === 'hook_started' || event.type === 'hook_completed') {
-          collectHookDisplayText(hookDisplayTexts, event.hook.additionalContext);
-          collectHookDisplayText(hookDisplayTexts, event.hook.requestContinue);
           await this.recordRunTaskEvent({
             runId: input.run.id,
             threadId: input.run.threadId,
@@ -1063,11 +1066,6 @@ export class AgentPluginRuntime {
           continue;
         }
         if (event.type === 'assistant_block') {
-          if (event.block.kind === 'text' && typeof event.block.text === 'string') {
-            assistantChunks.push(event.block.text);
-          }
-          updateSuccessfulToolBlocks(successfulToolBlockIds, event.block);
-          updateSuccessfulToolNames(successfulToolNamesByBlockId, event.block);
           const taskEvent = createTaskEventFromAssistantBlock(event.block);
           await this.recordRunTaskEvent({
             runId: input.run.id,
@@ -1091,26 +1089,17 @@ export class AgentPluginRuntime {
         }
       }
     } catch (error) {
-      void execution.outcome.catch(() => undefined);
+      await observeSettledOutcomeUsage(execution.outcome, input.telemetry);
       throw error;
     }
     const outcome = await execution.outcome;
     if (outcome.status === 'interrupted') {
       return {
-        status: 'interrupted',
-        interrupts: outcome.interrupts,
+        ...outcome,
         events: createRunInterruptedEvents(input.run.id, input.run.threadId, outcome.interrupts)
       };
     }
-    const assistantMessage = stripHookDisplayText(assistantChunks.join('').trim(), hookDisplayTexts);
-    if (assistantMessage.length === 0 && successfulToolBlockIds.size === 0 && hookDisplayTexts.length === 0) {
-      throw new Error('agent_model_response_empty');
-    }
-    return {
-      status: 'completed',
-      assistantMessage,
-      successfulToolNames: [...successfulToolNamesByBlockId.values()]
-    };
+    return outcome;
   }
 
   private getOrCreateRunTelemetry(
@@ -1266,6 +1255,7 @@ function createRunExecutionSnapshotSeed(input: {
   shellAllowedCommands?: readonly string[];
   workspace: Workspace | null;
 }): RunExecutionSnapshotSeed {
+  const mode = toRunExecutionMode(input.request.mode);
   return {
     schemaVersion: 2,
     runOrigin: resolveRunOrigin(input.request),
@@ -1273,7 +1263,7 @@ function createRunExecutionSnapshotSeed(input: {
       providerId: input.modelHandle.providerId,
       modelId: input.modelHandle.modelId
     },
-    mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
+    mode,
     workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
     capabilityManifest: input.capabilityManifest,
     shellAllowedCommands: input.shellAllowedCommands === undefined ? undefined : [...input.shellAllowedCommands],
@@ -1282,7 +1272,7 @@ function createRunExecutionSnapshotSeed(input: {
           input.modelHandle.langChainHandle === undefined
             ? null
             : input.modelHandle.langChainHandle.runtime.contextBudgetTokens,
-        mode: input.request.mode === 'chat' ? 'run' : input.request.mode,
+        mode,
         runOrigin: resolveRunOrigin(input.request)
       }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
@@ -1333,7 +1323,7 @@ function toExistingRunStartResult(repository: AgentSessionRepository, run: TaskR
   const snapshot = repository.getRunExecutionSnapshot(run.id);
   return {
     runId: run.id,
-    mode: snapshot.mode === 'run' ? 'chat' : snapshot.mode,
+    mode: createChatStartRunRequestFromSnapshot(snapshot, run).mode,
     threadId: run.threadId,
     providerId: snapshot.model.providerId,
     modelId: snapshot.model.modelId,
@@ -1396,31 +1386,14 @@ function buildCompletionSummary(input: {
   return summary;
 }
 
-function collectHookDisplayText(texts: string[], value: string | null): void {
-  if (value !== null && value.length > 0 && !texts.includes(value)) {
-    texts.push(value);
-  }
-}
-
-function stripHookDisplayText(content: string, hookDisplayTexts: readonly string[]): string {
-  let nextContent = content;
-  for (const text of [...hookDisplayTexts].sort((left, right) => right.length - left.length)) {
-    nextContent = nextContent.split(text).join('');
-  }
-  return nextContent === content ? content : nextContent.trimStart();
-}
-
-function updateSuccessfulToolNames(namesByBlockId: Map<string, string>, block: ChatAssistantBlock): void {
-  if (block.kind !== 'tool_call') {
-    return;
-  }
-  if (block.phase === 'end') {
-    namesByBlockId.set(block.blockId, block.name);
-    return;
-  }
-  if (block.phase === 'error') {
-    namesByBlockId.delete(block.blockId);
-  }
+async function observeSettledOutcomeUsage(
+  outcome: Promise<RunOutcome>,
+  telemetry: AgentRunTelemetryAccumulator
+): Promise<void> {
+  await outcome.then(
+    settledOutcome => telemetry.observeModelUsage(settledOutcome.usage),
+    () => undefined // Failed executions report partial usage through observeModelUsage.
+  );
 }
 
 function waitForRecoveryDelay(delayMs: number, abortSignal: AbortSignal): Promise<void> {

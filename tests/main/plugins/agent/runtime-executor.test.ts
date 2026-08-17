@@ -1,4 +1,4 @@
-import { createTestAgentExecution, readPendingInterrupts } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution, interruptedTestOutcome, readPendingInterrupts } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -74,7 +74,7 @@ describe('AgentPluginRuntime', () => {
             }
           });
           yield createTextBlock(input.run.id, 'DeepAgent executor response.');
-        })());
+        })(), completedTestOutcome({ finalMessage: 'DeepAgent executor response.' }));
 }
       },
       eventBus,
@@ -152,14 +152,6 @@ describe('AgentPluginRuntime', () => {
       deepAgentExecutor: {
         execute(input) {
   return createTestAgentExecution(() => (async function* () {
-          input.observeModelUsage({
-            callCount: 2,
-            inputTokens: 120,
-            outputTokens: 30,
-            totalTokens: 150,
-            cacheReadTokens: 40,
-            cacheCreationTokens: 10
-          });
           yield createToolBlock(input.run.id, {
             kind: 'tool_call',
             blockId: 'tool-secret-call',
@@ -236,7 +228,17 @@ describe('AgentPluginRuntime', () => {
             persistedChars: 2000
           } satisfies ChatRunEvent;
           yield createTextBlock(input.run.id, 'Telemetry response.');
-        })());
+        })(), completedTestOutcome({
+          finalMessage: 'Telemetry response.',
+          usage: {
+            callCount: 2,
+            inputTokens: 120,
+            outputTokens: 30,
+            totalTokens: 150,
+            cacheReadTokens: 40,
+            cacheCreationTokens: 10
+          }
+        }));
 }
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
@@ -406,7 +408,7 @@ describe('AgentPluginRuntime', () => {
   return createTestAgentExecution(() => (async function* () {
           validatedAttachments = Reflect.get(input, 'validatedAttachments');
           yield createTextBlock(input.run.id, '图片里有图表。');
-        })());
+        })(), completedTestOutcome({ finalMessage: '图片里有图表。' }));
 }
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
@@ -473,7 +475,9 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_approval_1',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        })());
+        })(), interruptedTestOutcome({
+          interrupts: [{ interruptId: 'interrupt_approval_1', payload: approvalPayload() }]
+        }));
 }
       },
       eventBus,
@@ -548,7 +552,7 @@ describe('AgentPluginRuntime', () => {
               } satisfies ChatRunEvent;
               yield createTextBlock(input.run.id, 'Completed despite the event.');
             })(),
-            outcome: { status: 'completed' }
+            outcome: completedTestOutcome({ finalMessage: 'Completed despite the event.' })
           });
         }
       },
@@ -580,6 +584,16 @@ describe('AgentPluginRuntime', () => {
     const repository = new AgentSessionRepository(db);
     const deepAgentExecutor: NonNullable<ConstructorParameters<typeof AgentPluginRuntime>[0]['deepAgentExecutor']> = {
       execute(input) {
+        const outcome = input.resumePayload === undefined
+          ? interruptedTestOutcome({
+              interrupts: [
+                {
+                  interruptId: 'interrupt_missing_telemetry',
+                  payload: { kind: 'question', question: 'Resume after restart?' }
+                }
+              ]
+            })
+          : completedTestOutcome({ finalMessage: 'resumed' });
   return createTestAgentExecution(() => (async function* () {
         if (input.resumePayload === undefined) {
           yield {
@@ -595,7 +609,7 @@ describe('AgentPluginRuntime', () => {
           return;
         }
         yield createTextBlock(input.run.id, 'resumed');
-      })());
+      })(), outcome);
 }
     };
     const runtime = new AgentPluginRuntime({
@@ -639,18 +653,42 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+  const outcome = input.resumePayload === undefined
+    ? interruptedTestOutcome({
+        interrupts: [
+          {
+            interruptId: 'interrupt-question',
+            payload: {
+              kind: 'question',
+              question: 'Which path should I inspect?',
+              context: 'Two paths match.'
+            }
+          }
+        ],
+        usage: {
+          callCount: 1,
+          inputTokens: 10,
+          outputTokens: 2,
+          totalTokens: 12,
+          cacheReadTokens: null,
+          cacheCreationTokens: null
+        }
+      })
+    : completedTestOutcome({
+        finalMessage: 'continued',
+        usage: {
+          callCount: 2,
+          inputTokens: 20,
+          outputTokens: 4,
+          totalTokens: 24,
+          cacheReadTokens: 5,
+          cacheCreationTokens: 1
+        }
+      });
   return createTestAgentExecution(() => (async function* () {
           requests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           if (input.resumePayload === undefined) {
-            input.observeModelUsage({
-              callCount: 1,
-              inputTokens: 10,
-              outputTokens: 2,
-              totalTokens: 12,
-              cacheReadTokens: null,
-              cacheCreationTokens: null
-            });
             yield {
               type: 'run_interrupted',
               runId: input.run.id,
@@ -664,16 +702,8 @@ describe('AgentPluginRuntime', () => {
             } satisfies ChatRunEvent;
             return;
           }
-          input.observeModelUsage({
-            callCount: 2,
-            inputTokens: 20,
-            outputTokens: 4,
-            totalTokens: 24,
-            cacheReadTokens: 5,
-            cacheCreationTokens: 1
-          });
           yield createTextBlock(input.run.id, 'continued');
-        })());
+        })(), outcome);
 }
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
@@ -741,7 +771,7 @@ function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullab
     execute(input) {
   return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    })());
+    })(), completedTestOutcome({ finalMessage: text }));
 }
   };
 }

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createCapabilities, createMcpTool } from './agent-capability-test-fixtures';
 import {
   buildExecutorOnce,
-  createCapabilities,
-  createMcpTool,
   findTool,
   invokeTool,
   readBuildInput,

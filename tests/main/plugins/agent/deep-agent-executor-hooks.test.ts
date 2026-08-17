@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HookRuntimeOutcome } from '../../../../src/main/services/hooks';
-import { collectExecutorEvents, createCapabilities, readBuildInput, workspacePath } from './deep-agent-executor-test-helpers';
+import { createCapabilities } from './agent-capability-test-fixtures';
+import { collectExecutorEvents, readBuildInput, startExecutorExecution, workspacePath } from './deep-agent-executor-test-helpers';
 
 function baseOutcome(input: Partial<HookRuntimeOutcome> = {}): HookRuntimeOutcome {
   return {
@@ -81,6 +82,33 @@ describe('createAgentDeepAgentExecutor hooks', () => {
     });
 
     expect(readBuildInput().hookMiddleware?.initialContexts).toEqual(['Use the project conventions.']);
+  });
+
+  it('preserves hook display text when it appears inside the assistant answer', async () => {
+    const hookText = '<EXTREMELY_IMPORTANT>Use the project conventions.</EXTREMELY_IMPORTANT>';
+    const execution = await startExecutorExecution({
+      capabilities: createCapabilities([]),
+      hookRuntime: {
+        runEvent: vi.fn(async () => baseOutcome({ additionalContexts: [hookText] }))
+      },
+      output: {
+        messages: [
+          {
+            type: 'ai',
+            content: `The hook marker ${hookText} remains part of this answer.`
+          }
+        ]
+      }
+    });
+
+    for await (const _event of execution.events) {
+      // Drain the UI stream before reading the authoritative outcome.
+    }
+
+    await expect(execution.outcome).resolves.toMatchObject({
+      status: 'completed',
+      finalMessage: `The hook marker ${hookText} remains part of this answer.`
+    });
   });
 
   it('blocks the run before DeepAgent streaming when SessionStart blocks', async () => {

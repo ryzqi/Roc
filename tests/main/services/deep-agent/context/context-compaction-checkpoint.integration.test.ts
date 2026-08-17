@@ -65,7 +65,7 @@ function createCompactionGraph(connection: Database.Database) {
       safetyMarginTokens: 0
     },
     emitEvent: () => {},
-    mode: 'chat',
+    mode: 'run',
     model: {} as never,
     runId: 'run_context_checkpoint',
     threadId: 'thread_context_checkpoint',

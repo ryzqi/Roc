@@ -12,7 +12,6 @@ import type {
   BackgroundTaskPreview,
   BackgroundTaskPreviewRequest,
   ChatRunEvent,
-  ChatRunMode,
   ChatValidatedImageAttachment,
   FileDeleteResult,
   RunCapabilityManifestV1,
@@ -60,7 +59,8 @@ import { CapacityService } from '../../services/memory/capacity';
 import { SecurityScanService } from '../../services/memory/security-scan';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
-import { createAgentDeepAgentExecution, type AgentDeepAgentExecutionOutcome } from './agent-execution';
+import type { AgentModelUsageTelemetry } from './run-telemetry';
+import { createAgentDeepAgentExecution, type RunOutcome } from './agent-execution';
 import type { AgentLangSmithTracingProvider } from '../../services/deep-agent/langsmith-tracing';
 import { runWithLangSmithTracing } from '../../services/deep-agent/langsmith-tracing';
 import { createChatRunEventQueue } from './chat-run-event-queue';
@@ -86,9 +86,10 @@ export type AgentDeepAgentExecutorOptions = {
 export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOptions): AgentDeepAgentExecutor {
   return {
     execute(input) {
-      let resolveOutcome: (outcome: AgentDeepAgentExecutionOutcome) => void = () => {};
+      let resolveOutcome: (outcome: RunOutcome) => void = () => {};
       let rejectOutcome: (error: unknown) => void = () => {};
-      const outcome = new Promise<AgentDeepAgentExecutionOutcome>((resolve, reject) => {
+      let outcomePublished = false;
+      const outcome = new Promise<RunOutcome>((resolve, reject) => {
         resolveOutcome = resolve;
         rejectOutcome = reject;
       });
@@ -98,7 +99,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       if (handle === undefined) {
         throw new Error('agent_deep_agent_model_handle_missing');
       }
-      const mode = readExecutorMode(input.snapshot);
+      const mode = input.snapshot.mode;
       const langSmithTracing =
         options.langSmithTracingProvider === undefined
           ? null
@@ -111,6 +112,9 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const workflowHint = input.snapshot.workflowHint;
       const assistantChunks: string[] = [];
       const reasoningChunks: string[] = [];
+      const hookDisplayTexts: string[] = [];
+      const outcomeText = createOutcomeTextCollector(hookDisplayTexts);
+      const successfulToolNamesByBlockId = new Map<string, string>();
       const usageAccumulator = createUsageAccumulator();
       const eventQueue = createChatRunEventQueue();
       const executionAbortController = new AbortController();
@@ -121,6 +125,14 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         input.abortSignal.addEventListener('abort', abortFromParent, { once: true });
       }
       const emitRuntimeEvent = (event: ChatRunEvent): void => {
+        collectOutcomeProjection({
+          event,
+          hookDisplayTexts,
+          successfulToolNamesByBlockId
+        });
+        if (event.type === 'assistant_block' && event.block.kind === 'text' && event.block.text !== undefined) {
+          outcomeText.push(event.block.text);
+        }
         if (eventQueue.push(event)) {
           return;
         }
@@ -414,7 +426,12 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             for (const event of createRunInterruptedEvents(input.run.id, input.run.threadId, interrupts)) {
               emitRuntimeEvent(event);
             }
-            resolveOutcome({ status: 'interrupted', interrupts });
+            outcomePublished = true;
+            resolveOutcome({
+              status: 'interrupted',
+              interrupts,
+              usage: snapshotUsage(usageAccumulator)
+            });
           } else {
             const [settledOutput] = await runOutputSettlement;
             if (settledOutput.status === 'rejected') {
@@ -434,21 +451,28 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
                 }
               });
             }
-            resolveOutcome({ status: 'completed' });
+            const finalMessage = outcomeText.finish().trim();
+            if (finalMessage.length === 0 && successfulToolNamesByBlockId.size === 0 && hookDisplayTexts.length === 0) {
+              throw new Error('agent_model_response_empty');
+            }
+            outcomePublished = true;
+            resolveOutcome({
+              status: 'completed',
+              finalMessage,
+              summarySource: {
+                successfulToolNames: [...successfulToolNamesByBlockId.values()]
+              },
+              usage: snapshotUsage(usageAccumulator)
+            });
           }
           eventQueue.close();
         } catch (error) {
           eventQueue.fail(error);
           throw error;
         } finally {
-          input.observeModelUsage({
-            callCount: usageAccumulator.callUsage.size,
-            inputTokens: usageAccumulator.promptTokens,
-            outputTokens: usageAccumulator.completionTokens,
-            totalTokens: usageAccumulator.totalTokens,
-            cacheReadTokens: usageAccumulator.cacheReadTokens,
-            cacheCreationTokens: usageAccumulator.cacheCreationTokens
-          });
+          if (!outcomePublished) {
+            input.observeModelUsage(snapshotUsage(usageAccumulator));
+          }
         }
       });
       try {
@@ -484,10 +508,95 @@ function selectConservativeContextBudgetProfile(profiles: readonly ContextBudget
   );
 }
 
+function snapshotUsage(usage: ReturnType<typeof createUsageAccumulator>): AgentModelUsageTelemetry {
+  return {
+    callCount: usage.callUsage.size,
+    inputTokens: usage.promptTokens,
+    outputTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheCreationTokens: usage.cacheCreationTokens
+  };
+}
+
+function collectOutcomeProjection(input: {
+  event: ChatRunEvent;
+  hookDisplayTexts: string[];
+  successfulToolNamesByBlockId: Map<string, string>;
+}): void {
+  if (input.event.type === 'hook_started' || input.event.type === 'hook_completed') {
+    collectHookDisplayText(input.hookDisplayTexts, input.event.hook.additionalContext);
+    collectHookDisplayText(input.hookDisplayTexts, input.event.hook.requestContinue);
+    return;
+  }
+  if (input.event.type !== 'assistant_block' || input.event.block.kind !== 'tool_call') {
+    return;
+  }
+  if (input.event.block.phase === 'end') {
+    input.successfulToolNamesByBlockId.set(input.event.block.blockId, input.event.block.name);
+    return;
+  }
+  if (input.event.block.phase === 'error') {
+    input.successfulToolNamesByBlockId.delete(input.event.block.blockId);
+  }
+}
+
+function collectHookDisplayText(texts: string[], value: string | null): void {
+  if (value !== null && value.length > 0 && !texts.includes(value)) {
+    texts.push(value);
+  }
+}
+
+function createOutcomeTextCollector(hookDisplayTexts: readonly string[]): {
+  finish: () => string;
+  push: (delta: string) => void;
+} {
+  const chunks: string[] = [];
+  let pendingPrefix = '';
+  let prefixResolved = false;
+
+  const consumePrefix = (): void => {
+    while (pendingPrefix.length > 0) {
+      const matchingHookText = [...hookDisplayTexts]
+        .sort((left, right) => right.length - left.length)
+        .find((text) => pendingPrefix.startsWith(text));
+      if (matchingHookText !== undefined) {
+        pendingPrefix = pendingPrefix.slice(matchingHookText.length).trimStart();
+        continue;
+      }
+      if (hookDisplayTexts.some((text) => text.startsWith(pendingPrefix))) {
+        return;
+      }
+      prefixResolved = true;
+      chunks.push(pendingPrefix);
+      pendingPrefix = '';
+    }
+  };
+
+  return {
+    finish: () => {
+      consumePrefix();
+      if (!prefixResolved && pendingPrefix.length > 0) {
+        chunks.push(pendingPrefix);
+        pendingPrefix = '';
+      }
+      return chunks.join('');
+    },
+    push: (delta) => {
+      if (prefixResolved) {
+        chunks.push(delta);
+        return;
+      }
+      pendingPrefix += delta;
+      consumePrefix();
+    }
+  };
+}
+
 function recordPromptCacheMetrics(input: {
   metricsService: Pick<MetricsService, 'recordPromptCacheMetrics'> | undefined;
   usageAccumulator: ReturnType<typeof createUsageAccumulator>;
-  mode: ChatRunMode;
+  mode: RunExecutionSnapshotV2['mode'];
   source: 'chat' | 'background_task';
   providerId: string;
   modelId: string;
@@ -607,7 +716,7 @@ async function createExecutorTools(input: {
   runtimeWorkspacePath: string | null;
   shellExecutionService: AgentExecuteAdapter;
   shellAllowedCommands?: readonly string[];
-  mode: ChatRunMode;
+  mode: RunExecutionSnapshotV2['mode'];
 }): Promise<{
   runTools: ClientTool[];
   webReadTool: StringDynamicStructuredTool;
@@ -746,10 +855,6 @@ function resolveManifestMcpToolName(
     }
   }
   return null;
-}
-
-function readExecutorMode(snapshot: RunExecutionSnapshotV2): ChatRunMode {
-  return snapshot.mode === 'run' ? 'chat' : snapshot.mode;
 }
 
 function isExaHostedWebSearchName(name: string): boolean {

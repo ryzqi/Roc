@@ -5,14 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
 import { loadExplicitSkillContexts } from '../../../../src/main/services/deep-agent/context/explicit-skills';
 import type { BackgroundTaskPreview } from '../../../../src/shared/types';
+import { createCapabilities, createMcpTool } from './agent-capability-test-fixtures';
 import {
   buildExecutorOnce,
   collectExecutorEvents,
   createAsyncIterable,
-  createCapabilities,
   createDeepAgents110V3MessageHandle,
   createDeepAgents110V3SubagentHandle,
-  createMcpTool,
   findTool,
   invokeTool,
   readBuildInput,
@@ -51,7 +50,7 @@ describe('createAgentDeepAgentExecutor', () => {
             ? []
             : callbackManager.handlers.map((handler) => handler.name);
         },
-        output: { messages: [] }
+        output: { messages: [{ content: 'done', type: 'ai' }] }
       });
     } finally {
       if (previousValue === undefined) {
@@ -70,7 +69,7 @@ describe('createAgentDeepAgentExecutor', () => {
     await collectExecutorEvents({
       capabilities: createCapabilities([]),
       langSmithTracingProvider,
-      output: { messages: [] }
+      output: { messages: [{ content: 'done', type: 'ai' }] }
     });
 
     expect(langSmithTracingProvider).toHaveBeenCalledWith({
@@ -128,7 +127,7 @@ describe('createAgentDeepAgentExecutor', () => {
     await collectExecutorEvents({
       capabilities: createCapabilities([]),
       langSmithTracingProvider,
-      output: { messages: [] }
+      output: { messages: [{ content: 'done', type: 'ai' }] }
     });
 
     expect(readStreamEventsCall().config).toEqual({
@@ -343,7 +342,7 @@ describe('createAgentDeepAgentExecutor', () => {
           ])
         })
       ]),
-      output: { messages: [] }
+      output: { messages: [{ content: 'done', type: 'ai' }] }
     });
 
     expect(recordPromptCacheMetrics).toHaveBeenCalledWith(

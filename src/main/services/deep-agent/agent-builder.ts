@@ -21,7 +21,7 @@ import {
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import type { ChatStartRunRequest, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, WorkflowHint } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshotV2, WorkflowHint } from '../../../shared/types';
 import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration';
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
@@ -43,7 +43,6 @@ import type { ContextArtifactStore } from './context/context-artifact-store';
 import type { ContextBudgetProfile, ContextTokenCounter } from './context/context-token-budget';
 import {
   createRocContextCompactionMiddleware,
-  type ContextCompactionMode,
   type RocContextCompactionOptions
 } from './context/context-compaction-pipeline';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
@@ -66,7 +65,7 @@ import { createToolProtocolMiddleware } from './tool-protocol';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 
 export type DeepAgentBuildInput = {
-  mode: ChatStartRunRequest['mode'];
+  mode: RunExecutionSnapshotV2['mode'];
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -97,7 +96,7 @@ export type DeepAgentBuildInput = {
     artifactRecoveryEnabled?: boolean;
     budgetProfile: ContextBudgetProfile;
     emitEvent: RocContextCompactionOptions['emitEvent'];
-    mode: ContextCompactionMode;
+    mode: RunExecutionSnapshotV2['mode'];
     runId: string;
     threadId: string;
     tokenCounter: ContextTokenCounter;

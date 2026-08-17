@@ -1,14 +1,12 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { tagForgeMessage } from '../../../../src/main/services/forge-guardrails';
-import {
-  collectExecutorEvents,
-  createCapabilities
-} from './deep-agent-executor-test-helpers';
+import { createCapabilities } from './agent-capability-test-fixtures';
+import { startExecutorExecution } from './deep-agent-executor-test-helpers';
 
 describe('createAgentDeepAgentExecutor', () => {
   it('does not synthesize earlier assistant output when the final message is not assistant text', async () => {
-    const events = await collectExecutorEvents({
+    const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       output: {
         messages: [
@@ -23,13 +21,15 @@ describe('createAgentDeepAgentExecutor', () => {
         ]
       }
     });
+    const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    expect(events).toEqual([]);
+    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
+    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
   });
 
 
   it('does not backfill a tool block from final ToolMessage content', async () => {
-    const events = await collectExecutorEvents({
+    const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       output: {
         messages: [
@@ -41,13 +41,15 @@ describe('createAgentDeepAgentExecutor', () => {
         ]
       }
     });
+    const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    expect(events).toEqual([]);
+    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
+    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
   });
 
 
   it('does not emit final tool blocks for Forge tagged ToolMessage output', async () => {
-    const events = await collectExecutorEvents({
+    const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       output: {
         messages: [
@@ -62,8 +64,10 @@ describe('createAgentDeepAgentExecutor', () => {
         ]
       }
     });
+    const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    expect(events).toEqual([]);
+    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
+    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
   });
 });
 

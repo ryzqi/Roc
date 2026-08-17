@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from '../agent/test-execution';
+import { completedTestOutcome, createTestAgentExecution } from '../agent/test-execution';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -478,7 +478,7 @@ function createTextDeepAgentExecutor(): NonNullable<ConstructorParameters<typeof
           text: 'Scheduled run completed.'
         }
       } satisfies ChatRunEvent;
-    })());
+    })(), completedTestOutcome({ finalMessage: 'Scheduled run completed.' }));
 }
   };
 }

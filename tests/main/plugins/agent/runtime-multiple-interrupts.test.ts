@@ -1,4 +1,4 @@
-import { createTestAgentExecution, readPendingInterrupts } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution, failedTestOutcome, interruptedTestOutcome, readPendingInterrupts } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -48,6 +48,18 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = input.resumePayload === undefined
+            ? interruptedTestOutcome({
+                interrupts: [
+                  { interruptId: 'interrupt-approval', payload: approvalPayload() },
+                  { interruptId: 'interrupt-question', payload: { kind: 'question', question: 'Which workspace should I use?' } }
+                ]
+              })
+            : 'interrupt-approval' in input.resumePayload && !('interrupt-question' in input.resumePayload)
+              ? interruptedTestOutcome({
+                  interrupts: [{ interruptId: 'interrupt-question', payload: { kind: 'question', question: 'Which workspace should I use?' } }]
+                })
+              : completedTestOutcome({ finalMessage: 'Both responses accepted.' });
   return createTestAgentExecution(() => (async function* () {
           if (input.resumePayload === undefined) {
             yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
@@ -66,7 +78,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
             return;
           }
           yield textBlock(input.run.id, 'Both responses accepted.');
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -134,9 +146,12 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = interruptedTestOutcome({
+            interrupts: [{ interruptId: 'interrupt-dispatch', payload: approvalPayload() }]
+          });
   return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-dispatch', approvalPayload());
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -182,9 +197,12 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = interruptedTestOutcome({
+            interrupts: [{ interruptId: 'interrupt-stream-dispatch', payload: approvalPayload() }]
+          });
   return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-stream-dispatch', approvalPayload());
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -204,7 +222,7 @@ describe('AgentPluginRuntime multiple interrupts', () => {
         execute() {
   return createTestAgentExecution(() => (async function* () {
           throw new Error('resume_stream_dispatch_failed');
-        })());
+        })(), failedTestOutcome('resume_stream_dispatch_failed'));
 }
       },
       eventBus,
@@ -231,12 +249,15 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const firstRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = interruptedTestOutcome({
+            interrupts: [{ interruptId: 'interrupt-audit-commit', payload: { kind: 'question', question: 'Which workspace should be recorded?' } }]
+          });
   return createTestAgentExecution(() => (async function* () {
           yield interrupted(input.run.id, input.run.threadId, 'interrupt-audit-commit', {
             kind: 'question',
             question: 'Which workspace should be recorded?'
           });
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -260,9 +281,17 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const rebuiltRuntime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = input.resumePayload === undefined
+            ? interruptedTestOutcome({
+                interrupts: [
+                  { interruptId: 'interrupt-approval', payload: approvalPayload() },
+                  { interruptId: 'interrupt-question', payload: { kind: 'question', question: 'Which workspace should I use?' } }
+                ]
+              })
+            : completedTestOutcome({ finalMessage: 'First resume completed.' });
   return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id, 'Resume dispatched.');
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -292,21 +321,35 @@ describe('AgentPluginRuntime multiple interrupts', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
-  return createTestAgentExecution(() => (async function* () {
-          if (input.resumePayload === undefined) {
-            yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
-            yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
-              kind: 'question',
-              question: 'Which workspace should I use?'
-            });
-            return;
-          }
-          await new Promise<void>((resolve) => {
-            firstResumeGate.release = resolve;
-          });
-          yield textBlock(input.run.id, 'First resume completed.');
-        })());
-}
+          const outcome = input.resumePayload === undefined
+            ? interruptedTestOutcome({
+                interrupts: [
+                  { interruptId: 'interrupt-approval', payload: approvalPayload() },
+                  {
+                    interruptId: 'interrupt-question',
+                    payload: { kind: 'question', question: 'Which workspace should I use?' }
+                  }
+                ]
+              })
+            : completedTestOutcome({ finalMessage: 'First resume completed.' });
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (input.resumePayload === undefined) {
+                yield interrupted(input.run.id, input.run.threadId, 'interrupt-approval', approvalPayload());
+                yield interrupted(input.run.id, input.run.threadId, 'interrupt-question', {
+                  kind: 'question',
+                  question: 'Which workspace should I use?'
+                });
+                return;
+              }
+              await new Promise<void>((resolve) => {
+                firstResumeGate.release = resolve;
+              });
+              yield textBlock(input.run.id, 'First resume completed.');
+            })(),
+            outcome
+          );
+        }
       },
       eventBus,
       modelFactory,

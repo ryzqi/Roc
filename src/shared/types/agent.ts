@@ -156,6 +156,8 @@ export type RunBudgetV2 = {
   toolThreadCallLimit: number;
 };
 
+export type RunExecutionMode = 'plan' | 'run' | 'task';
+
 type RunExecutionSnapshotFields = {
   runId: string;
   threadId: string;
@@ -164,7 +166,7 @@ type RunExecutionSnapshotFields = {
     providerId: string;
     modelId: string;
   };
-  mode: 'plan' | 'run' | 'task';
+  mode: RunExecutionMode;
   workspace: {
     path: string;
     hash: string;

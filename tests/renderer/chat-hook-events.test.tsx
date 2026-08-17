@@ -9,7 +9,7 @@ describe('renderer chat hook events', () => {
     const runStarted: ChatRunEvent = {
       type: 'run_started',
       runId: 'run-1',
-      mode: 'chat',
+      mode: 'run',
       threadId: 'thread-1',
       providerId: 'provider-a',
       modelId: 'model-a',

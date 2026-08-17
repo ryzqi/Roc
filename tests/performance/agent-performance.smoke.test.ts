@@ -757,7 +757,7 @@ function createPerformanceAgent(input: {
     filesystemPermissions: [],
     interruptOn: undefined,
     memorySources: [],
-    mode: 'chat',
+    mode: 'run',
     model: input.model,
     modelCallLimit: input.modelCallLimit === undefined ? 8 : input.modelCallLimit,
     modelThreadCallLimit: input.modelCallLimit === undefined ? 8 : input.modelCallLimit,
@@ -988,7 +988,7 @@ function performanceToolCall(sampleIndex: number, iterationIndex: number): Perfo
 function runStartedEvent(sampleIndex: number, eventIndex: number): ChatRunEvent {
   return {
     createdAt: '2026-07-27T00:00:00.000Z',
-    mode: 'chat',
+    mode: 'run',
     modelId: 'roc-performance-fake',
     providerId: 'deterministic-local',
     runId: `run_agent_performance_queue_${sampleIndex}_${eventIndex}`,

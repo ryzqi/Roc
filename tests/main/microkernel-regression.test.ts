@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './plugins/agent/test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './plugins/agent/test-execution';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -290,7 +290,9 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           text: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
         }
       } satisfies ChatRunEvent;
-    })());
+    })(), completedTestOutcome({
+      finalMessage: 'workspace_fact: roc.microkernel.static_response | high | tests/main/microkernel-regression.test.ts | Static DeepAgent response.'
+    }));
 }
   };
 }

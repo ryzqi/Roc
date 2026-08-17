@@ -81,7 +81,7 @@ describe('chat view', () => {
       {
         type: 'run_started' as const,
         runId: 'run_perf',
-        mode: 'chat' as const,
+        mode: 'run' as const,
         threadId: null,
         providerId: 'provider',
         modelId: 'model',

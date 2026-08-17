@@ -751,7 +751,7 @@ function createTestAgent(input: {
 }) {
   const backend = Object.assign(new StateBackend(), { routePrefixes: [] }) as RocCompositeBackend;
   const buildInput: DeepAgentBuildInput = {
-    mode: 'chat',
+    mode: 'run',
     model: input.model,
     systemPrompt: 'Use the requested tool once, then finish.',
     backend,

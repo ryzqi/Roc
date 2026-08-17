@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -107,7 +107,10 @@ describe('AgentPluginRuntime', () => {
               text: '后台任务已创建。'
             }
           } satisfies ChatRunEvent;
-        })());
+        })(), completedTestOutcome({
+          finalMessage: '后台任务已创建。',
+          successfulToolNames: ['schedule_background_task']
+        }));
 }
       },
       eventBus,
@@ -172,7 +175,7 @@ describe('AgentPluginRuntime', () => {
             phase: 'error',
             error: 'Permission denied.'
           });
-        })());
+        })(), Promise.reject(new Error('agent_model_response_empty')));
 }
       },
       eventBus,
@@ -210,7 +213,7 @@ describe('AgentPluginRuntime', () => {
   return createTestAgentExecution(() => (async function* () {
           yield createReasoningBlock(input.run.id, '先判断用户意图。');
           yield createTextBlock(input.run.id, '可以，先从今天金价开始。');
-        })());
+        })(), completedTestOutcome({ finalMessage: '可以，先从今天金价开始。' }));
 }
       },
       eventBus,
@@ -326,7 +329,7 @@ describe('AgentPluginRuntime', () => {
             }
           } satisfies ChatRunEvent;
           yield createTextBlock(input.run.id, '研究完成。');
-        })());
+        })(), completedTestOutcome({ finalMessage: '研究完成。' }));
 }
       },
       eventBus,

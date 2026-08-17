@@ -40,7 +40,7 @@
 | --- | --- | --- | --- |
 | 1 | Interrupt 生命周期收敛 | complete | 实现 -> 验证 -> Standards/Spec 子代理审查 -> 修复 -> 提交 |
 | 2 | session-repository 跨 seam 裸 SQL 收口 | complete | 同上 |
-| 3 | executor 返回结构化 RunOutcome | pending | 同上 |
+| 3 | executor 返回结构化 RunOutcome | complete | 同上 |
 | 4 | IPC 契约单源化 | pending | 同上 + `pnpm generate:ipc` / `pnpm check:ipc` |
 | 5 | Stream adapter 领域事件与投影合并 | pending | 同上 |
 | 6 | task-repository 聚合化与按名注册 | pending | 同上 |
@@ -50,7 +50,7 @@
 
 ## 当前步骤
 
-提交阶段 2；提交完成后读取阶段 3 计划并以新 HEAD 作为 fixed point。
+阶段 3 已完成实现、验证和双轴复审；按用户要求独立提交后停止，不进入阶段 4。
 
 ## Errors Encountered
 
@@ -72,3 +72,7 @@
 | 2026-08-17 | 双轴子代理 `wait_agent` 多次超时，但 agent 已完成 | 2 | 使用 `close_agent` 读取完成报告；修复后复审同样取得 PASS 报告 |
 | 2026-08-17 | projection 直测首次因 FK 夹具缺失失败，提前停止测试因 mock 不响应 abort 超时 | 1 | 补真实 thread/run 夹具；让受控 provider 显式 reject/close 后验证 outcome settle |
 | 2026-08-17 | 阶段 2 首次全量测试的 `terminal-session-service` 因 Node 25/ConPTY 关闭事件未到达并触发临时目录 EPERM | 1 | 单测复跑 4/4 通过；全量复跑 324 文件/1818 项通过，确认环境波动而非阶段回归 |
+| 2026-08-17 | 从 `git diff` 动态拼接 Vitest 路径时 PowerShell 将数组传成单一 filter，提示 `No test files found` | 1 | 改用显式目录与文件参数；聚焦 58 文件/358 项通过 |
+| 2026-08-17 | strict unused 检查发现 runtime 残留未使用 `toChatRunMode` import | 1 | 删除残留 import；typecheck 与 strict unused 复验通过 |
+| 2026-08-17 | 首次阶段 3 全量测试发现 `observeSettledOutcomeUsage` 空 `catch` 违反代码质量门禁 | 1 | 改为显式 Promise resolved/rejected 双分支；质量测试与全量测试复验通过 |
+| 2026-08-17 | Standards 复审发现 live `run_started` 仍发布 `chat`，与 shared/replay 的 `run` 不一致 | 1 | live 事件改用 `snapshot.mode`，新增 live/replay 等值断言；双轴最终复审 PASS |

@@ -14,7 +14,7 @@ function createRunStartedEvent(): ChatRunEvent {
   return {
     type: 'run_started',
     runId: 'chat_test',
-    mode: 'chat',
+    mode: 'run',
     threadId: 'thread_test',
     providerId: 'nvidia',
     modelId: 'moonshotai/kimi-k2.6',

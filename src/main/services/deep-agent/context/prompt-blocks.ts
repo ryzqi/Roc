@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { ChatStartRunRequest, WorkflowHint } from '../../../../shared/types';
+import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '../../../../shared/types';
 import { ROC_FILE_TOOL_PROMPT_LINES } from '../filesystem-tool-contract';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from '../prompt';
 
@@ -40,7 +40,7 @@ export type PromptBlock = {
 };
 
 export function buildPromptBlocks(input: {
-  mode: ChatStartRunRequest['mode'];
+  mode: RunExecutionSnapshotV2['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workspacePath: string | null;
   workflowHint: WorkflowHint;
@@ -90,7 +90,7 @@ function buildStaticPrompt(): string {
   ].join('\n');
 }
 
-function buildWorkspacePrompt(workspacePath: string | null, mode: ChatStartRunRequest['mode']): string {
+function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSnapshotV2['mode']): string {
   if (workspacePath === null) {
     if (mode === 'plan') {
       return [

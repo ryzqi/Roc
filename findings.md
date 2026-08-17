@@ -82,3 +82,22 @@
 - `storage-ownership.test.ts` 对生产源码执行 SQL ownership 静态扫描；schema DDL 与数据库 fast probe 不被误判为 operational SQL。
 - `session-repository.test.ts` 相对 `79d8aa0` 为 111 行新增、155 行删除，净减少 44 行。
 - 最终验证：聚焦 7 文件/29 项、全量 324 文件/1818 项、typecheck、strict unused、diff check 均通过；Standards/Spec 复审 PASS。
+
+## 阶段 3：结构化 RunOutcome
+
+### 设计决策
+
+- execution seam 继续使用阶段 1 建立的 `events + outcome`：events 只承载 UI 增量，outcome 是 completed/interrupted 业务结果的唯一来源。
+- completed outcome 持有 `finalMessage`、成功 tool name 摘要素材和 usage；interrupted outcome 持有领域 interrupt 与 usage；失败和取消均无 outcome 值。
+- hook echo 在 assistant delta 收集时只从前缀消费，禁止完成后的全局字符串替换。
+- 内部 mode 定为 `run | plan | task`；IPC request/result 保留 `chat | plan | task`，转换只发生在 snapshot 创建和请求重建边界。
+
+### 已验证
+
+- runtime 已删除 assistant 文本、成功 tool name 和 hook 文本的事件重放累积；摘要直接使用 outcome 的 `finalMessage` 与 `summarySource`。
+- event projection 失败时会等待已结算 outcome 并补记 completed usage；outcome rejection 不覆盖原始 projection error，失败部分 usage 由 callback 保留。
+- executor 的空模型响应检查使用权威文本与成功 tool/hook 投影；空结果失败码仍为 `agent_model_response_empty`。
+- live `run_started` 使用 snapshot mode，replay 读取同一内部 mode；测试证明二者完全相等，同时 `ChatStartRunResult.mode` 仍为入口 `chat`。
+- 生产代码中的 `toChatRunMode` 只剩 `run-execution-snapshot.ts` 的定义与 `createChatStartRunRequestFromSnapshot` 调用。
+- helper 行数从 735 降至 487，默认 outcome 被删除，测试 fake 必须显式声明 completed/interrupted/failed 语义。
+- 最终验证：聚焦 58 文件/358 项、全量 324 文件/1820 项、typecheck、strict unused、diff check 均通过；Standards/Spec 最终复审 PASS。

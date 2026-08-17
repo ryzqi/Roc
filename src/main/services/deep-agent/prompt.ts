@@ -25,7 +25,7 @@ export function buildSystemPrompt(input: {
 }): string {
   return serializePromptBlocks(
     buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: input.enabledCapabilities,
       workspacePath: input.workspacePath,
       workflowHint: input.workflowHint,

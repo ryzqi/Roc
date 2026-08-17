@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -59,7 +59,7 @@ describe('AgentPluginRuntime', () => {
         execute() {
   return createTestAgentExecution(() => (async function* () {
           return;
-        })());
+        })(), Promise.reject(new Error('agent_model_response_empty')));
 }
       },
       eventBus,
@@ -131,7 +131,7 @@ describe('AgentPluginRuntime', () => {
               output: 'Successfully wrote to /workspace/hello.txt'
             }
           } satisfies ChatRunEvent;
-        })());
+        })(), completedTestOutcome({ finalMessage: '', successfulToolNames: ['write_file'] }));
 }
       },
       eventBus,
@@ -208,7 +208,7 @@ describe('AgentPluginRuntime', () => {
               taskId: 'background-1'
             }
           });
-        })());
+        })(), completedTestOutcome({ finalMessage: '', successfulToolNames: ['schedule_background_task'] }));
 }
       },
       eventBus,

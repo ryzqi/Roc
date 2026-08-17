@@ -65,7 +65,7 @@ async function buildMiddleware(input?: Partial<DeepAgentBuildInput>): Promise<Mi
     skills: []
   }).manifest;
   buildDeepAgent({
-    mode: 'chat',
+    mode: 'run',
     model: 'model-ready' as never,
     systemPrompt: 'system prompt',
     backend: { routePrefixes: ['/memory/'] } as RocCompositeBackend,

@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './agent/test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './agent/test-execution';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -152,7 +152,7 @@ function createStaticDeepAgentExecutor(): AgentDeepAgentExecutor {
           text: 'Static DeepAgent response.'
         }
       };
-    })());
+    })(), completedTestOutcome({ finalMessage: 'Static DeepAgent response.' }));
 }
   };
 }

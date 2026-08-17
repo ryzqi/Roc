@@ -103,7 +103,7 @@ describe('Deep Agents native summarization conformance', () => {
         countTokens: async (messages) => countTokensApproximately(messages),
         emitEvent: (event) => rocEvents.push(event.type),
         messages: rocMessages,
-        mode: 'chat',
+        mode: 'run',
         model: {} as never,
         runId: 'run_native_conformance',
         summarize: async (input) => {
@@ -230,7 +230,7 @@ describe('Deep Agents native summarization conformance', () => {
         workflowHint: null
       }).manifest;
       buildDeepAgent({
-        mode: 'chat',
+        mode: 'run',
         model: model as never,
         systemPrompt: 'system',
         backend: {} as never,
@@ -265,7 +265,7 @@ describe('Deep Agents native summarization conformance', () => {
             safetyMarginTokens: 200
           },
           emitEvent: () => {},
-          mode: 'chat',
+          mode: 'run',
           runId: 'run_subagent_conformance',
           threadId: 'thread_subagent_conformance',
           tokenCounter: {

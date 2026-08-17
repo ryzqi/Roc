@@ -178,7 +178,7 @@ describe('deep agent tool retry policy', () => {
 
 function createBuildInput(): DeepAgentBuildInput {
   return {
-    mode: 'chat',
+    mode: 'run',
     model: {} as never,
     systemPrompt: 'system',
     backend: { routePrefixes: [] } as unknown as RocCompositeBackend,

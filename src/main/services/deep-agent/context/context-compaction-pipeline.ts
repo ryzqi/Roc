@@ -3,6 +3,8 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 
+import type { RunExecutionSnapshotV2 } from '../../../../shared/types';
+
 import { classifyProviderRequestFailure, isRetryableProviderHttpStatus } from '../../provider-request-retry';
 import {
   createForgeTieredCompactionEdits,
@@ -36,7 +38,7 @@ const SUMMARY_THRESHOLD = 0.9;
 const SUMMARY_RECENT_ITERATIONS = 2;
 const SUMMARY_RECENT_FALLBACK_MESSAGES = 6;
 
-export type ContextCompactionMode = 'chat' | 'task' | 'plan';
+export type ContextCompactionMode = RunExecutionSnapshotV2['mode'];
 
 export type ContextMaintenanceStage = 'persist' | 'deterministic' | 'summary';
 

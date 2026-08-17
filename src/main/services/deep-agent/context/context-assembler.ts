@@ -1,6 +1,6 @@
 import type { ClientTool } from '@langchain/core/tools';
 
-import type { ChatStartRunRequest, WorkflowHint } from '../../../../shared/types';
+import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '../../../../shared/types';
 import type { ExplicitSkillContext } from './explicit-skills';
 import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
@@ -21,7 +21,7 @@ export type ContextHarness = {
 
 export function assembleContextHarness(input: {
   artifactStore: ContextArtifactStore;
-  mode: ChatStartRunRequest['mode'];
+  mode: RunExecutionSnapshotV2['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];
   workflowHint: WorkflowHint;
   workspacePath: string | null;

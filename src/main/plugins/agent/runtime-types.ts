@@ -1,17 +1,11 @@
 import type { ChatRunEvent, ChatStartRunRequest, RocHookSessionEndStatus } from '../../../shared/types';
-import type { PendingInterrupt } from './interrupt-projection';
+import type { RunOutcome } from './agent-execution';
 
 export type DeepAgentExecutionResult =
-  | {
-      status: 'completed';
-      assistantMessage: string;
-      successfulToolNames: string[];
-    }
-  | {
-      status: 'interrupted';
-      interrupts: PendingInterrupt[];
+  | Extract<RunOutcome, { status: 'completed' }>
+  | (Extract<RunOutcome, { status: 'interrupted' }> & {
       events: Array<Extract<ChatRunEvent, { type: 'run_interrupted' }>>;
-    };
+    });
 
 export type AgentLifecycleHookEmitter = {
   emitSessionEnd(input: {

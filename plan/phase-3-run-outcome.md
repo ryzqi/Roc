@@ -49,3 +49,14 @@ RunOutcome {
 - mode 词汇只剩一种，转换点唯一。
 - runtime 测试不再构造事件流夹具验证最终消息；`deep-agent-executor-test-helpers.ts` 行数显著下降。
 - `pnpm typecheck` + `pnpm test` 全绿。
+
+## 完成证据
+
+- `RunOutcome` 以判别联合承载 completed 的 `finalMessage`、`summarySource`、`usage`，以及 interrupted 的 `interrupts`、`usage`；失败和取消不伪造半结果。
+- executor 在 assistant delta 产生时组装权威文本，只剔除开头 hook echo；正常回答中的同文文本由碰撞回归测试证明会保留。
+- runtime 不再累积 assistant 文本或成功 tool name；事件流只负责 UI 增量，最终消息、摘要素材、interrupt 和成功 usage 均读取 outcome。
+- completed outcome 已发布后若事件投影失败，runtime 会补记 outcome usage；失败执行的部分 usage 仍由 executor callback 记录，回归测试覆盖 recovery 累计值。
+- 内部事件、snapshot、持久化和 renderer 统一使用 `run | plan | task`；`toChatRunMode` 只在 snapshot 重建 IPC request 的出口调用，live/replay `run_started` 完全一致。
+- `deep-agent-executor-test-helpers.ts` 从阶段开始时的 735 行降至 487 行；capability fixture 拆到独立测试文件。
+- 聚焦测试 58 文件/358 项通过；`pnpm typecheck`、strict unused、全量 324 文件/1820 项、`git diff --check` 通过。
+- Standards 与 Spec 修复后最终复审均 PASS。

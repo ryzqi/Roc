@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -69,7 +69,7 @@ describe('AgentPluginRuntime terminal projection characterization', () => {
         execute(input) {
   return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id);
-        })());
+        })(), completedTestOutcome({ finalMessage: 'completed before projection failure' }));
 }
       },
       eventBus,
@@ -110,7 +110,7 @@ describe('AgentPluginRuntime terminal projection characterization', () => {
         execute(input) {
   return createTestAgentExecution(() => (async function* () {
           yield textBlock(input.run.id);
-        })());
+        })(), completedTestOutcome({ finalMessage: 'completed before projection failure' }));
 }
       },
       eventBus,

@@ -44,6 +44,18 @@
 - `pnpm typecheck`、strict unused tsc、`git diff --check` 通过。
 - 全量测试首次仅 `terminal-session-service` 受 Node 25/ConPTY 环境波动失败；该文件复跑 4/4 通过，随后全量复跑 324 文件/1818 项通过。
 - 修复后 Standards/Spec 子代理复审均 PASS；阶段 2 状态：Verified passing，准备独立提交。
+- 阶段 2 提交：`d8e4640 refactor(agent): enforce session repository ownership seams`。
+- 阶段 3 fixed point：`d8e4640`；usage 纳入 outcome，失败/取消不产生半结果，内部 mode 定为 `run | plan | task`。
+- 新增结构化 `RunOutcome`，executor 负责最终消息、summary source、interrupt 和成功 usage；runtime 删除最终消息与成功 tool name 的事件重放累积。
+- hook echo 改为 assistant delta 前缀消费；新增正常回答包含相同 hook 文本时不误删的回归测试。
+- 测试 execution helper 删除默认 outcome，所有 fake 显式声明结果；capability fixture 拆分后 helper 从 735 行降至 487 行。
+- 第一轮 Standards 审查发现 completed outcome 在事件投影失败后 usage 丢失；修复为异常边界消费已结算 outcome usage，并新增 provider recovery 累计回归。
+- 第一轮 Spec 审查发现 hook 全局删除、取消伪 completed outcome、mode 转换分散；全部修复，Spec 复审 PASS。
+- 聚焦测试首次扩大到 58 文件时发现 repository 持久事件仍断言旧 `chat`；迁移为内部 `run` 后 58 文件/358 项通过。
+- 首次全量测试发现 outcome usage helper 的空 `catch`；改为显式 Promise 双分支后质量测试 29 项通过。
+- Standards 最终复审发现 live `run_started` 仍使用请求态 `chat`；改为 `snapshot.mode` 并新增 live/replay 等值断言，相关 3 文件/33 项通过。
+- 最终 `pnpm typecheck`、strict unused、`git diff --check` 通过；全量 `pnpm test` 为 324 文件/1820 项通过，Node 25/node-pty `AttachConsole failed` 仅为非失败环境噪声。
+- Standards/Spec 最终复审均 PASS；阶段 3 状态：Verified passing，按用户要求提交后停止，不进入阶段 4。
 
 ## 阶段证据模板
 

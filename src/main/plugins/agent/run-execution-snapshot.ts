@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { ChatStartRunRequest, RunExecutionSnapshotV1, RunExecutionSnapshotV2, TaskRun, WorkflowHint } from '../../../shared/types';
+import type { ChatRunMode, ChatStartRunRequest, RunExecutionSnapshotV1, RunExecutionSnapshotV2, TaskRun, WorkflowHint } from '../../../shared/types';
 import { isRunCapabilityManifestIntegrityValid } from './run-capability-manifest';
 
 const enabledCapabilitiesSchema = z
@@ -126,6 +126,14 @@ export const runExecutionSnapshotV2Schema = z
 
 export type RunExecutionSnapshotSeed = Omit<RunExecutionSnapshotV2, 'runId' | 'threadId' | 'inputMessageId'>;
 
+export function toRunExecutionMode(mode: ChatRunMode): RunExecutionSnapshotV2['mode'] {
+  return mode === 'chat' ? 'run' : mode;
+}
+
+export function toChatRunMode(mode: RunExecutionSnapshotV2['mode']): ChatRunMode {
+  return mode === 'run' ? 'chat' : mode;
+}
+
 export function createRunExecutionSnapshot(input: {
   runId: string;
   threadId: string;
@@ -205,7 +213,7 @@ export function createChatStartRunRequestFromSnapshot(
 ): ChatStartRunRequest {
   const request: ChatStartRunRequest = {
     input: run.userInput,
-    mode: snapshot.mode === 'run' ? 'chat' : snapshot.mode,
+    mode: toChatRunMode(snapshot.mode),
     threadId: snapshot.threadId,
     enabledCapabilities: snapshot.capabilityManifest.resolvedCapabilities
   };

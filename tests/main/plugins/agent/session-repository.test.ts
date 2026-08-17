@@ -197,7 +197,7 @@ describe('AgentSessionRepository', () => {
         event_json: JSON.stringify({
           type: 'run_started',
           runId: run.id,
-          mode: 'chat',
+          mode: 'run',
           threadId: run.threadId,
           providerId: 'test-provider',
           modelId: 'openai:gpt-4.1',

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createCapabilities } from './agent-capability-test-fixtures';
 import {
   collectExecutorEvents,
   createAsyncIterable,
-  createCapabilities,
   createControlledAsyncStream,
   createDeepAgents110V3MessageHandle,
   createDeepAgents110V3ToolCallHandle,
@@ -253,7 +253,7 @@ describe('createAgentDeepAgentExecutor', () => {
   });
 
   it('does not backfill terminal tool blocks from final output after the tool stream closes', async () => {
-    const events = await collectExecutorEvents({
+    const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       output: {
         messages: [
@@ -267,8 +267,10 @@ describe('createAgentDeepAgentExecutor', () => {
         ]
       }
     });
+    const firstEvent = execution.events[Symbol.asyncIterator]().next();
 
-    expect(events).toEqual([]);
+    await expect(firstEvent).rejects.toThrow('agent_model_response_empty');
+    await expect(execution.outcome).rejects.toThrow('agent_model_response_empty');
   });
 
 });

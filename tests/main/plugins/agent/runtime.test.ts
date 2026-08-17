@@ -1,6 +1,6 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution, failedTestOutcome, interruptedTestOutcome } from './test-execution';
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
@@ -343,7 +343,7 @@ describe('AgentPluginRuntime', () => {
       {
         type: 'run_started',
         runId: result.runId,
-        mode: 'chat',
+        mode: 'run',
         threadId: result.threadId,
         providerId: 'openai',
         modelId: 'openai:gpt-4.1',
@@ -371,6 +371,9 @@ describe('AgentPluginRuntime', () => {
         assistantMessage: 'Static agent response.'
       }
     ]);
+    expect(new AgentRunEventLog(db).listRunEvents({ afterSequence: 0, runId: result.runId }).at(0)?.event).toEqual(
+      chatEvents[0]
+    );
   });
 
   it('records assistant session messages with workspace hash on completion', async () => {
@@ -457,11 +460,14 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
-  return createTestAgentExecution(() => (async function* () {
-          await releaseExecution.promise;
-          yield createTextBlock(input.run.id, 'Live event after replay capacity.');
-        })());
-}
+          return createTestAgentExecution(
+            () => (async function* () {
+              await releaseExecution.promise;
+              yield createTextBlock(input.run.id, 'Live event after replay capacity.');
+            })(),
+            completedTestOutcome({ finalMessage: 'Live event after replay capacity.' })
+          );
+        }
       },
       eventBus,
       modelFactory,
@@ -521,7 +527,7 @@ describe('AgentPluginRuntime', () => {
             });
             usageReported.resolve(undefined);
           }
-        })());
+        })(), completedTestOutcome({ finalMessage: '' }));
 }
       },
       eventBus,
@@ -595,7 +601,7 @@ describe('AgentPluginRuntime', () => {
           await new Promise<void>((resolve) => {
             input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
           });
-        })());
+        })(), completedTestOutcome({ finalMessage: '' }));
 }
       },
       eventBus,
@@ -631,7 +637,7 @@ describe('AgentPluginRuntime', () => {
         execute() {
   return createTestAgentExecution(() => (async function* () {
           throw new Error('provider_unavailable');
-        })());
+        })(), failedTestOutcome('provider_unavailable'));
 }
       },
       eventBus,
@@ -682,7 +688,7 @@ describe('AgentPluginRuntime', () => {
   return createTestAgentExecution(() => (async function* () {
           calls += 1;
           throw new Error('Model call limits exceeded: run level call limit reached with 20 model calls');
-        })());
+        })(), failedTestOutcome('Model call limits exceeded: run level call limit reached with 20 model calls'));
 }
       },
       eventBus,
@@ -726,7 +732,9 @@ describe('AgentPluginRuntime', () => {
           throw new Error(
             "Error invoking tool 'propose_background_task': Received tool input did not match expected schema kwargs {'goal':'daily review','forbiddenActions':[]} with error: Invalid input"
           );
-        })());
+        })(), failedTestOutcome(
+          "Error invoking tool 'propose_background_task': Received tool input did not match expected schema kwargs {'goal':'daily review','forbiddenActions':[]} with error: Invalid input"
+        ));
 }
       },
       eventBus,
@@ -760,15 +768,20 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
-  return createTestAgentExecution(() => (async function* () {
-          calls += 1;
-          if (calls === 1) {
-            yield createTextBlock(input.run.id, 'partial ');
-            throw new Error('Connection error.');
-          }
-          yield createTextBlock(input.run.id, 'done');
-        })());
-}
+          const attempt = ++calls;
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (attempt === 1) {
+                yield createTextBlock(input.run.id, 'partial ');
+                throw new Error('Connection error.');
+              }
+              yield createTextBlock(input.run.id, 'done');
+            })(),
+            attempt === 1
+              ? Promise.reject(new Error('Connection error.'))
+              : completedTestOutcome({ finalMessage: 'done' })
+          );
+        }
       },
       eventBus,
       modelFactory,
@@ -794,29 +807,91 @@ describe('AgentPluginRuntime', () => {
     expect(calls).toBe(2);
   });
 
+  it('retains completed outcome usage when event projection fails before provider recovery', async () => {
+    const repository = new AgentSessionRepository(db);
+    const releaseFirstEvent = createDeferred<void>();
+    let calls = 0;
+    const runtime = new AgentPluginRuntime({
+      deepAgentExecutor: {
+        execute(input) {
+          const attempt = ++calls;
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (attempt === 1) {
+                await releaseFirstEvent.promise;
+              }
+              yield createTextBlock(input.run.id, attempt === 1 ? 'first attempt' : 'recovered');
+            })(),
+            completedTestOutcome({
+              finalMessage: attempt === 1 ? 'first attempt' : 'recovered',
+              usage: {
+                callCount: attempt === 1 ? 2 : 3,
+                inputTokens: attempt === 1 ? 20 : 30,
+                outputTokens: attempt === 1 ? 4 : 6,
+                totalTokens: attempt === 1 ? 24 : 36,
+                cacheReadTokens: null,
+                cacheCreationTokens: null
+              }
+            })
+          );
+        }
+      },
+      eventBus,
+      modelFactory,
+      repository
+    });
+
+    const result = await runtime.startRun(startRequest);
+    vi.spyOn(repository, 'recordEvent').mockImplementationOnce(() => {
+      throw new Error('Connection error.');
+    });
+    releaseFirstEvent.resolve(undefined);
+
+    await waitForEvent(() => repository.getRun(result.runId).status === 'completed', 1500);
+
+    expect(calls).toBe(2);
+    expect(repository.getRunTelemetry(result.runId)?.model).toEqual({
+      callCount: 5,
+      inputTokens: 50,
+      outputTokens: 10,
+      totalTokens: 60,
+      cacheReadTokens: null,
+      cacheCreationTokens: null,
+      reportedCostUsd: null
+    });
+  });
+
   it('records a successful recovery before the retry waits for user input', async () => {
     const repository = new AgentSessionRepository(db);
     let calls = 0;
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
-  return createTestAgentExecution(() => (async function* () {
-          calls += 1;
-          if (calls === 1) {
-            throw new Error('Connection error.');
-          }
-          yield {
-            type: 'run_interrupted',
-            runId: input.run.id,
-            threadId: input.run.threadId,
+          const attempt = ++calls;
+          const interrupt = {
             interruptId: 'interrupt_after_recovery',
             payload: {
-              kind: 'question',
+              kind: 'question' as const,
               question: 'Continue after recovery?'
             }
-          } satisfies ChatRunEvent;
-        })());
-}
+          };
+          return createTestAgentExecution(
+            () => (async function* () {
+              if (attempt === 1) {
+                throw new Error('Connection error.');
+              }
+              yield {
+                type: 'run_interrupted',
+                runId: input.run.id,
+                threadId: input.run.threadId,
+                ...interrupt
+              } satisfies ChatRunEvent;
+            })(),
+            attempt === 1
+              ? Promise.reject(new Error('Connection error.'))
+              : interruptedTestOutcome({ interrupts: [interrupt] })
+          );
+        }
       },
       eventBus,
       modelFactory,
@@ -843,7 +918,7 @@ function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullab
     execute(input) {
   return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    })());
+    })(), completedTestOutcome({ finalMessage: text }));
 }
   };
 }

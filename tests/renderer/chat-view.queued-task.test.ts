@@ -110,7 +110,7 @@ describe('ChatView task boundary', () => {
       emitRunEvent({
         type: 'run_started',
         runId: 'run_waiting_first_byte',
-        mode: 'chat',
+        mode: 'run',
         threadId: null,
         providerId: 'nvidia',
         modelId: 'nvidia-model',

@@ -177,7 +177,7 @@ function createIntegrationAgent(model: BaseChatModel, checkpointer: RocSqliteChe
   }).manifest;
 
   return buildDeepAgent({
-    mode: 'chat',
+    mode: 'run',
     model,
     systemPrompt: 'Use tools only when the request requires them.',
     backend,

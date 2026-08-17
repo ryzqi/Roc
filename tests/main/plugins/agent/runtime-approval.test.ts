@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution, interruptedTestOutcome } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -62,6 +62,11 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = input.resumePayload === undefined
+            ? interruptedTestOutcome({
+                interrupts: [{ interruptId: 'interrupt_resume_1', payload: approvalPayload() }]
+              })
+            : completedTestOutcome({ finalMessage: 'Approved command finished.' });
   return createTestAgentExecution(() => (async function* () {
           if (input.resumePayload === undefined) {
             yield {
@@ -77,7 +82,7 @@ describe('AgentPluginRuntime', () => {
           resumedTaskSource = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).taskSource;
           resumedWorkflowHint = createChatStartRunRequestFromSnapshot(input.snapshot, input.run).workflowHint;
           yield createTextBlock(input.run.id, 'Approved command finished.');
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -167,7 +172,9 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_rebuilt_runtime',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        })());
+        })(), interruptedTestOutcome({
+          interrupts: [{ interruptId: 'interrupt_rebuilt_runtime', payload: approvalPayload() }]
+        }));
 }
       },
       capabilityPreviewProvider: createTestCapabilityPreviewProvider(),
@@ -201,7 +208,7 @@ describe('AgentPluginRuntime', () => {
           resumedRequests.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run));
           resumePayloads.push(input.resumePayload);
           yield createTextBlock(input.run.id, 'Rebuilt runtime approved.');
-        })());
+        })(), completedTestOutcome({ finalMessage: 'Rebuilt runtime approved.' }));
 }
       },
       eventBus,
@@ -255,7 +262,9 @@ describe('AgentPluginRuntime', () => {
             interruptId: 'interrupt_stale_runtime',
             payload: approvalPayload()
           } satisfies ChatRunEvent;
-        })());
+        })(), interruptedTestOutcome({
+          interrupts: [{ interruptId: 'interrupt_stale_runtime', payload: approvalPayload() }]
+        }));
 }
       },
       eventBus,
@@ -288,7 +297,7 @@ describe('AgentPluginRuntime', () => {
   return createTestAgentExecution(() => (async function* () {
           resumed = true;
           yield createTextBlock(started.runId, 'Should not resume.');
-        })());
+        })(), completedTestOutcome({ finalMessage: 'Should not resume.' }));
 }
       },
       eventBus,
@@ -314,6 +323,11 @@ describe('AgentPluginRuntime', () => {
     const runtime = new AgentPluginRuntime({
       deepAgentExecutor: {
         execute(input) {
+          const outcome = input.resumePayload === undefined
+            ? interruptedTestOutcome({
+                interrupts: [{ interruptId: 'interrupt-plan-approval', payload: approvalPayload() }]
+              })
+            : completedTestOutcome({ finalMessage: 'done' });
   return createTestAgentExecution(() => (async function* () {
           executedModes.push(createChatStartRunRequestFromSnapshot(input.snapshot, input.run).mode);
           if (input.resumePayload === undefined) {
@@ -327,7 +341,7 @@ describe('AgentPluginRuntime', () => {
             return;
           }
           yield createTextBlock(input.run.id, 'done');
-        })());
+        })(), outcome);
 }
       },
       eventBus,
@@ -450,7 +464,7 @@ function createTextDeepAgentExecutor(text = 'Static agent response.'): NonNullab
     execute(input) {
   return createTestAgentExecution(() => (async function* () {
       yield createTextBlock(input.run.id, text);
-    })());
+    })(), completedTestOutcome({ finalMessage: text }));
 }
   };
 }

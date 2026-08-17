@@ -5,6 +5,7 @@ import { StateBackend } from 'deepagents';
 import { z } from 'zod';
 
 import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
+import { toRunExecutionMode } from '../../../src/main/plugins/agent/run-execution-snapshot';
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
 import type { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
@@ -56,7 +57,7 @@ export function createEvalAgent(input: {
   }).manifest;
 
   return buildDeepAgent({
-    mode: input.mode,
+    mode: toRunExecutionMode(input.mode),
     model: input.model,
     systemPrompt: input.systemPrompt,
     backend,

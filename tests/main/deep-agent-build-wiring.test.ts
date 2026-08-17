@@ -5,6 +5,7 @@ import { createDeepAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { z } from 'zod';
 import { compileRunCapabilityManifest } from '../../src/main/plugins/agent/run-capability-manifest';
+import { toChatRunMode } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../src/main/services/deep-agent/agent-builder';
 import { ensureRocHarnessProfilesRegistered } from '../../src/main/services/deep-agent/harness-profiles';
 import { getSubagentMiddleware, getSubagentTools, isBuiltSubagent } from './deep-agent-test-helpers';
@@ -35,7 +36,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('registers Roc harness profiles before assembling the agent', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -73,7 +74,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('installs native model and tool call limit middleware from the frozen budget', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -145,7 +146,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('keeps Roc filesystem path policy before filesystem tool error classification', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -186,7 +187,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('does not add plan model tool exposure middleware for chat mode', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -308,7 +309,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('runs Roc shell path policy before RTK can rewrite or deny shell commands', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -335,7 +336,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('leaves prompt cache breakpoint injection to DeepAgents native middleware', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -368,7 +369,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires hook middleware before Roc guardrails when hook runtime is provided', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -420,7 +421,7 @@ describe('buildDeepAgent harness profile wiring', () => {
   it('wires tool-scoped hook middleware into DeepAgents subagents when hooks are enabled', () => {
     const inspectTool = createNamedTool('inspect_workspace');
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -503,7 +504,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires tool effects inside product error mapping and outside the tool handler', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -558,7 +559,7 @@ describe('buildDeepAgent harness profile wiring', () => {
 
   it('wires Roc context compaction pipeline in normal runs when context options are provided', () => {
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -576,7 +577,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       contextCompaction: {
         artifactStore: {} as never,
         emitEvent: vi.fn(),
-        mode: 'chat',
+        mode: 'run',
         runId: 'run_context_1',
         threadId: 'thread_context_1',
         workspaceHash: 'workspace_hash_context'
@@ -605,7 +606,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       query: z.string()
     });
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -676,7 +677,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       schema: inspectSchema
     });
     const input = {
-      mode: 'chat',
+      mode: 'run',
       model: {} as unknown,
       systemPrompt: 'system',
       backend: {} as unknown,
@@ -887,7 +888,7 @@ function buildFixtureAgent(input: BuildFixtureInput, customToolNames: string[]):
     deleteFileApprovalMode: 'fully_automatic',
     mcpApprovalMode: 'fully_automatic',
     mcpServers,
-    mode: input.mode,
+    mode: toChatRunMode(input.mode),
     workflowHint: input.workflowHint,
     requestedCapabilities: {
       mcpServers: customToolNames.length === 0 ? [] : ['fixture-mcp'],

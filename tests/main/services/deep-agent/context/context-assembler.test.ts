@@ -6,7 +6,7 @@ describe('assembleContextHarness', () => {
   it('adds session_search and serializes prompt markers', () => {
     const harness = assembleContextHarness({
       artifactStore: {} as never,
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workflowHint: null,
       workspacePath: 'F:\\Code\\Roc',
@@ -30,7 +30,7 @@ describe('assembleContextHarness', () => {
   it('exposes selected skills through /skills/', () => {
     const harness = assembleContextHarness({
       artifactStore: {} as never,
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
       workspacePath: null,
@@ -47,7 +47,7 @@ describe('assembleContextHarness', () => {
   it('keeps explicit skill prompt context compact while exposing /skills/', () => {
     const harness = assembleContextHarness({
       artifactStore: {} as never,
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workflowHint: null,
       workspacePath: 'F:\\Code\\Roc',

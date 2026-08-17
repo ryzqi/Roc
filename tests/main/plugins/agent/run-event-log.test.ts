@@ -56,7 +56,7 @@ describe('AgentRunEventLog', () => {
     const first = log.recordRunEvent({
       type: 'run_started',
       runId: 'run_1',
-      mode: 'chat',
+      mode: 'run',
       threadId: 'thread_1',
       providerId: 'openai',
       modelId: 'openai:gpt-4.1',

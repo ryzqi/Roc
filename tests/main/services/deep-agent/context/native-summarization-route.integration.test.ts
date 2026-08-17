@@ -83,7 +83,7 @@ describe('Deep Agents native summarization route integration', () => {
         workflowHint: null
       }).manifest;
       const agent = buildDeepAgent({
-        mode: 'chat',
+        mode: 'run',
         model,
         systemPrompt: 'Delegate the request to the research subagent.',
         backend,
@@ -117,7 +117,7 @@ describe('Deep Agents native summarization route integration', () => {
             safetyMarginTokens: 200
           },
           emitEvent: (event) => contextEvents.push(event.type),
-          mode: 'chat',
+          mode: 'run',
           runId: 'run_real_subagent_route',
           threadId: 'thread_real_subagent_route',
           tokenCounter: {

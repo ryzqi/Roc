@@ -12,7 +12,7 @@ describe('task run event filter', () => {
     const chatStart: ChatRunEvent = {
       type: 'run_started',
       runId: 'run-chat',
-      mode: 'chat',
+      mode: 'run',
       threadId: 'thread-chat',
       providerId: 'provider',
       modelId: 'model',

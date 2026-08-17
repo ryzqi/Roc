@@ -11,7 +11,7 @@ const enabledCapabilities = {
 describe('prompt blocks', () => {
   it('builds production blocks in stable order', () => {
     const blocks = buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities,
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,
@@ -36,7 +36,7 @@ describe('prompt blocks', () => {
 
   it('keeps stable prompt block ordering independent of runtime context summaries', () => {
     const blocks = buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,
@@ -58,7 +58,7 @@ describe('prompt blocks', () => {
   it('serializes production prompt with block markers', () => {
     const prompt = serializePromptBlocks(
       buildPromptBlocks({
-        mode: 'chat',
+        mode: 'run',
         enabledCapabilities,
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
@@ -84,7 +84,7 @@ describe('prompt blocks', () => {
   it('formats tools without descriptions without leaking undefined into the prompt', () => {
     const prompt = serializePromptBlocks(
       buildPromptBlocks({
-        mode: 'chat',
+        mode: 'run',
         enabledCapabilities,
         workspacePath: 'F:\\Code\\Roc',
         workflowHint: null,
@@ -135,7 +135,7 @@ describe('prompt blocks', () => {
 
   it('does not add plan mode instructions for normal chat', () => {
     const blocks = buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: {
         mcpServers: [],
         skills: []
@@ -153,7 +153,7 @@ describe('prompt blocks', () => {
 
   it('serializes explicit skills as an index without SKILL.md content', () => {
     const blocks = buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: ['typescript'] },
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,
@@ -177,7 +177,7 @@ describe('prompt blocks', () => {
 
   it('keeps memory prompt model-actionable without explaining storage internals', () => {
     const blocks = buildPromptBlocks({
-      mode: 'chat',
+      mode: 'run',
       enabledCapabilities: { mcpServers: [], skills: [] },
       workspacePath: 'F:\\Code\\Roc',
       workflowHint: null,

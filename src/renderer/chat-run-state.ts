@@ -2,13 +2,13 @@ import type {
   ChatAssistantBlock,
   ChatPendingInterrupt,
   ChatRunEvent,
-  ChatRunMode,
   ChatTodoItem,
   RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
   SubagentStatus
 } from '../shared/types';
+import type { RunExecutionMode } from '../shared/types';
 import { applyPendingInterruptProjection, readLiveInterruptProjection } from './chat/interrupt-projection';
 
 type ChatRunToolStatus = 'start' | 'progress' | 'end' | 'error';
@@ -62,7 +62,7 @@ export type ChatRunSubagentNode = {
 
 export type ChatRunState = {
   runId: string | null;
-  mode: ChatRunMode | null;
+  mode: RunExecutionMode | null;
   threadId: string | null;
   providerId: string | null;
   modelId: string | null;

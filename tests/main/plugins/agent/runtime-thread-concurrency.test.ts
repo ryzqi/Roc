@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,7 +63,7 @@ describe('AgentPluginRuntime thread concurrency characterization', () => {
           executorStarted.resolve();
           await releaseExecutors.promise;
           yield textBlock(input.run.id);
-        })());
+        })(), completedTestOutcome({ finalMessage: 'done' }));
 }
       },
       eventBus,

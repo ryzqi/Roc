@@ -1,4 +1,4 @@
-import { createTestAgentExecution } from './test-execution';
+import { completedTestOutcome, createTestAgentExecution, failedTestOutcome } from './test-execution';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
@@ -233,7 +233,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
               commandDisplay: 'node hook.js'
             }
           } satisfies ChatRunEvent;
-        })());
+        })(), completedTestOutcome({ finalMessage: 'done' }));
 }
       },
       eventBus,
@@ -310,7 +310,7 @@ describe('AgentPluginRuntime lifecycle hooks', () => {
               commandDisplay: 'node session-start.js'
             }
           } satisfies ChatRunEvent;
-        })());
+        })(), completedTestOutcome({ finalMessage: '' }));
 }
       },
       eventBus,
@@ -350,7 +350,7 @@ function createTextDeepAgentExecutor(text: string): NonNullable<ConstructorParam
           text
         }
       };
-    })());
+    })(), completedTestOutcome({ finalMessage: text }));
 }
   };
 }
@@ -360,7 +360,7 @@ function createFailingDeepAgentExecutor(): NonNullable<ConstructorParameters<typ
     execute() {
   return createTestAgentExecution(() => (async function* () {
       throw new Error('executor_failed');
-    })());
+    })(), failedTestOutcome('executor_failed'));
 }
   };
 }

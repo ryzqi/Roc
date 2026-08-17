@@ -31,7 +31,7 @@ describe('chat run state', () => {
   it('stores streamed failure state without dropping partial content', () => {
     let state = createEmptyChatRunState();
 
-    state = applyChatRunEvent(state, runStarted('chat_2', 'chat'));
+    state = applyChatRunEvent(state, runStarted('chat_2', 'run'));
     state = applyChatRunEvent(state, textBlock('chat_2', 'partial'));
     state = applyChatRunEvent(state, {
       type: 'run_failed',
@@ -50,7 +50,7 @@ describe('chat run state', () => {
 
   it('treats cancellation as a terminal state for live delivery and replay', () => {
     let state = createEmptyChatRunState();
-    state = applyChatRunEvent(state, runStarted('chat_cancelled', 'chat'));
+    state = applyChatRunEvent(state, runStarted('chat_cancelled', 'run'));
     state = applyChatRunEvent(state, textBlock('chat_cancelled', 'partial'));
     state = applyChatRunEvent(state, {
       type: 'run_recovering',
@@ -82,7 +82,7 @@ describe('chat run state', () => {
   it('keeps partial assistant content while recovering and resumes running after recovery', () => {
     let state = createEmptyChatRunState();
 
-    state = applyChatRunEvent(state, runStarted('chat_recovery', 'chat'));
+    state = applyChatRunEvent(state, runStarted('chat_recovery', 'run'));
     state = applyChatRunEvent(state, textBlock('chat_recovery', 'partial'));
     state = applyChatRunEvent(state, {
       type: 'run_recovering',
@@ -461,7 +461,7 @@ describe('chat run state', () => {
   });
 });
 
-function runStarted(runId: string, mode: 'chat' | 'task' = 'task'): ChatRunEvent {
+function runStarted(runId: string, mode: 'run' | 'task' = 'task'): ChatRunEvent {
   return {
     type: 'run_started',
     runId,

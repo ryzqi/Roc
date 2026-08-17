@@ -1,6 +1,6 @@
 import type { AsyncTaskStatus } from 'deepagents';
 import type { HITLRequest, HITLResponse } from 'langchain';
-import type { EnabledCapabilities } from './agent';
+import type { EnabledCapabilities, RunExecutionMode } from './agent';
 import type { RocHookRunEvent } from './hooks';
 
 export type ChatRunMode = 'chat' | 'task' | 'plan';
@@ -140,7 +140,7 @@ export type ChatRunEvent =
   | {
       type: 'run_started';
       runId: string;
-      mode: ChatRunMode;
+      mode: RunExecutionMode;
       threadId: string | null;
       providerId: string;
       modelId: string;
@@ -204,7 +204,7 @@ export type ChatRunEvent =
         | 'context_summary_completed'
         | 'context_summary_skipped'
         | 'context_compaction_failed';
-      mode: ChatRunMode;
+      mode: RunExecutionMode;
       stage: 'persist' | 'deterministic' | 'summary';
       persistedChars?: number;
       removedChars?: number;
