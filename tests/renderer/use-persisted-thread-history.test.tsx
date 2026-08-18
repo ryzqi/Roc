@@ -175,7 +175,12 @@ function page(
       threadId,
       runId: 'run-a',
       type: 'message',
-      payload: { role: 'assistant', content: `message-${sequence}` },
+      payload: {
+        role: 'assistant',
+        content: `message-${sequence}`,
+        providerId: 'test-provider',
+        modelId: 'test-model'
+      },
       createdAt: '2026-07-10T00:00:00.000Z',
       sequence
     });

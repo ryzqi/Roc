@@ -107,16 +107,16 @@ describe('AgentInterruptProjection', () => {
       .toThrow('agent_pending_interrupt_payload_invalid');
   });
 
-  it('rejects invalid question fields and strips unrelated properties', () => {
+  it('rejects invalid question fields and unrelated properties', () => {
     expect(() =>
       normalizeChatInterruptPayload({ kind: 'question', question: 'Continue?', context: null })
     ).toThrow('agent_interrupt_payload_invalid');
     expect(() =>
       normalizeChatInterruptPayload({ kind: 'question', question: 'Continue?', suggestedResponses: [1] })
     ).toThrow('agent_interrupt_payload_invalid');
-    expect(
+    expect(() =>
       normalizeChatInterruptPayload({ kind: 'question', question: 'Continue?', ignored: true })
-    ).toEqual({ kind: 'question', question: 'Continue?' });
+    ).toThrow('agent_interrupt_payload_invalid');
   });
 });
 

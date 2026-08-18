@@ -1,6 +1,7 @@
-import type { HITLRequest } from 'langchain';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
+import { chatInterruptPayloadSchema } from '../../../shared/schemas/chat';
+import { hitlRequestSchema } from '../../../shared/schemas/hitl';
 import type {
   ChatInterruptPayload,
   ChatRunEvent
@@ -10,7 +11,6 @@ import type {
   DeepAgents110V3Run
 } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
 import { RocSqliteCheckpointer, type RocCheckpointInterrupt } from '../../services/deep-agent/sqlite-checkpointer';
-import * as recordUtils from '../../services/deep-agent/record-utils';
 
 export type PendingInterrupt = {
   interruptId: string;
@@ -149,17 +149,15 @@ export function assertPendingInterrupts(interrupts: readonly PendingInterrupt[])
 }
 
 export function normalizeChatInterruptPayload(payload: unknown): ChatInterruptPayload {
-  const questionPayload = readQuestionInterruptPayload(payload);
-  if (questionPayload !== null) {
-    return questionPayload;
+  const chatPayload = chatInterruptPayloadSchema.safeParse(payload);
+  if (chatPayload.success) {
+    return chatPayload.data;
   }
-  if (isApprovalInterruptPayload(payload)) {
-    return payload;
-  }
-  if (isApprovalRequest(payload)) {
+  const approvalRequest = hitlRequestSchema.safeParse(payload);
+  if (approvalRequest.success) {
     return {
       kind: 'approval',
-      request: payload
+      request: approvalRequest.data
     };
   }
   throw new Error('agent_interrupt_payload_invalid');
@@ -225,51 +223,4 @@ function pendingInterruptCollectionsEqual(
         JSON.stringify(interrupt.payload) === JSON.stringify(right[index]?.payload)
     )
   );
-}
-
-function isApprovalInterruptPayload(value: unknown): value is ChatInterruptPayload {
-  if (!recordUtils.isRecord(value) || recordUtils.readRecordValue(value, 'kind') !== 'approval') {
-    return false;
-  }
-  return isApprovalRequest(recordUtils.readRecordValue(value, 'request'));
-}
-
-function readQuestionInterruptPayload(
-  value: unknown
-): Extract<ChatInterruptPayload, { kind: 'question' }> | null {
-  if (!recordUtils.isRecord(value)) {
-    return null;
-  }
-  if (recordUtils.readRecordValue(value, 'kind') !== 'question') {
-    return null;
-  }
-  const question = recordUtils.readRecordValue(value, 'question');
-  const context = recordUtils.readRecordValue(value, 'context');
-  const suggestedResponses = recordUtils.readRecordValue(value, 'suggestedResponses');
-  if (typeof question !== 'string') {
-    return null;
-  }
-  if (context !== undefined && typeof context !== 'string') {
-    return null;
-  }
-  if (
-    suggestedResponses !== undefined &&
-    (!Array.isArray(suggestedResponses) ||
-      !suggestedResponses.every((response): response is string => typeof response === 'string'))
-  ) {
-    return null;
-  }
-  return {
-    kind: 'question',
-    question,
-    ...(context === undefined ? {} : { context }),
-    ...(suggestedResponses === undefined ? {} : { suggestedResponses })
-  };
-}
-
-function isApprovalRequest(value: unknown): value is HITLRequest {
-  if (!recordUtils.isRecord(value)) {
-    return false;
-  }
-  return Array.isArray(recordUtils.readRecordValue(value, 'actionRequests')) && Array.isArray(recordUtils.readRecordValue(value, 'reviewConfigs'));
 }

@@ -50,7 +50,7 @@ describe('TaskDetailView', () => {
                 threadId: 'thread-1',
                 runId: 'run-1',
                 type: 'message',
-                payload: { role: 'assistant', content: '已经整理完成' },
+                payload: { role: 'assistant', content: '已经整理完成', providerId: 'test-provider', modelId: 'test-model' },
                 createdAt: '2026-05-16T07:05:00.000Z',
                 sequence: 2
               }
@@ -98,7 +98,7 @@ describe('TaskDetailView', () => {
                   threadId: 'thread-1',
                   runId: 'run-1',
                   type: 'message',
-                  payload: { role: 'assistant', content: '已经整理完成' },
+                  payload: { role: 'assistant', content: '已经整理完成', providerId: 'test-provider', modelId: 'test-model' },
                   createdAt: '2026-05-16T07:05:00.000Z'
                 }
               ]

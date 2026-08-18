@@ -49,7 +49,7 @@ export type OpenAICompatibleParams = CommonProviderParams & {
   serviceTier?: OpenAiServiceTier;
   verbosity?: OpenAiVerbosity;
   zdrEnabled?: boolean;
-  modelKwargs?: Record<string, unknown>;
+  modelKwargs?: ProviderOptions['modelKwargs'];
 };
 
 export type AnthropicCompatibleParams = CommonProviderParams & {
@@ -57,7 +57,7 @@ export type AnthropicCompatibleParams = CommonProviderParams & {
   stopSequences?: string[];
   thinking?: AnthropicThinkingOption;
   betas?: string[];
-  invocationKwargs?: Record<string, unknown>;
+  invocationKwargs?: ProviderOptions['invocationKwargs'];
 };
 
 export type NvidiaParams = CommonProviderParams & {
@@ -73,7 +73,7 @@ export type NvidiaParams = CommonProviderParams & {
   parallelToolCalls?: boolean;
   streamUsage?: boolean;
   toolChoice?: NvidiaToolChoice;
-  guidedJson?: Record<string, unknown>;
+  guidedJson?: ProviderOptions['guidedJson'];
   guidedRegex?: string;
   guidedChoice?: string[];
   guidedGrammar?: string;

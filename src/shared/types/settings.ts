@@ -1,192 +1,55 @@
-import type { RocHookConfigSnapshot, RocHookSaveConfigRequest, RocHookTrustRequest } from './hooks';
-import type { McpServerConfig, McpServerSnapshot } from './mcp';
-import type { SkillSnapshot } from './skill';
+import type { z } from 'zod';
 
-export type MemoryCharLimits = {
-  user: number;
-  agents: number;
-  memory: number;
-};
+import { defaultModelStateSchema } from '../schemas/agent';
+import {
+  appSettingsSchema,
+  hostIntegrationStatusSchema,
+  permissionsConfigSchema,
+  providerConfigSchema,
+  providerModelSchema,
+  providerOptionsSchema,
+  providerSecretClearResultSchema,
+  providerSecretSetRequestSchema,
+  providerSecretSetResultSchema,
+  providerSecretStatusSchema,
+  providersConfigSchema,
+  providerTestResultSchema,
+  settingsDocumentSchema,
+  settingsSaveHookConfigRequestSchema,
+  settingsSaveRequestSchema,
+  settingsSnapshotSchema,
+  settingsTrustHookRequestSchema,
+  shortcutsConfigSchema
+} from '../schemas/ipc-memory-settings';
+import { approvalModeSchema, mcpServersConfigSchema } from '../schemas/ipc-mcp-skills';
 
-export type MemorySecurityScanSettings = {
-  promptInjection: boolean;
-  credential: boolean;
-  sshBackdoor: boolean;
-  invisibleUnicode: boolean;
-};
+export type AppSettings = z.infer<typeof appSettingsSchema>;
+export type MemoryCharLimits = AppSettings['memory']['charLimits'];
+export type MemorySecurityScanSettings = AppSettings['memory']['securityScan'];
+export type AutoMemorySettings = AppSettings['memory']['autoMemory'];
 
-export type AutoMemorySettings = {
-  enabled: boolean;
-  lowConfidenceTtlDays: number;
-  auditRetentionDays: number;
-  maxCandidatesPerRun: number;
-};
+export type ApprovalMode = z.infer<typeof approvalModeSchema>;
+export type PermissionsConfig = z.infer<typeof permissionsConfigSchema>;
+export type ShortcutsConfig = z.infer<typeof shortcutsConfigSchema>;
 
-export type AppSettings = {
-  schemaVersion: 2;
-  defaultWorkspace: string | null;
-  startup: {
-    openAtLogin: boolean;
-    minimizeToTray: boolean;
-  };
-  globalHotkey: string | null;
-  memory: {
-    charLimits: MemoryCharLimits;
-    sessionRetentionDays: number;
-    securityScan: MemorySecurityScanSettings;
-    autoMemory: AutoMemorySettings;
-  };
-  tasks: {
-    longRunningThresholds: {
-      runningSeconds: number;
-      toolCallCount: number;
-      subagentCount: number;
-    };
-    scheduler: {
-      catchUpOnStartup: boolean;
-      maxRegisteredTasks: number;
-    };
-  };
-};
+export type ProviderOptions = z.infer<typeof providerOptionsSchema>;
+export type ProviderType = z.infer<typeof providerConfigSchema>['type'];
+export type ProviderModel = z.infer<typeof providerModelSchema>;
+export type ProviderConfig = z.infer<typeof providerConfigSchema>;
+export type ProviderTestResult = z.infer<typeof providerTestResultSchema>;
+export type ProvidersConfig = z.infer<typeof providersConfigSchema>;
+export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
 
-export type ApprovalMode = 'fully_automatic' | 'default';
-
-export type PermissionsConfig = {
-  schemaVersion: 3;
-  mode: ApprovalMode;
-  grants: unknown[];
-};
-
-export type ShortcutsConfig = {
-  schemaVersion: 1;
-  shortcuts: unknown[];
-};
-
-export type ProviderType =
-  | 'openai_compatible'
-  | 'anthropic_compatible'
-  | 'nvidia'
-  | 'openrouter'
-  | 'llama_cpp'
-  | 'ollama'
-  | 'custom';
-
-export type NvidiaToolChoice =
-  | 'auto'
-  | 'required'
-  | 'none'
-  | { type: 'function'; function: { name: string } };
-
-export type ProviderSamplingProfileOverrides = {
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  minP?: number;
-  presencePenalty?: number;
-  repeatPenalty?: number;
-};
+export type NvidiaToolChoice = NonNullable<ProviderOptions['toolChoice']>;
+export type ProviderSamplingProfileOverrides = NonNullable<ProviderOptions['samplingProfileOverrides']>;
+export type AnthropicThinkingOption = NonNullable<ProviderOptions['anthropicThinking']>;
+export type OpenAiReasoningOption = NonNullable<ProviderOptions['reasoning']>;
+export type OpenAiReasoningEffort = NonNullable<OpenAiReasoningOption['effort']>;
+export type OpenAiReasoningSummary = NonNullable<OpenAiReasoningOption['summary']>;
+export type OpenAiServiceTier = NonNullable<ProviderOptions['serviceTier']>;
+export type OpenAiVerbosity = NonNullable<ProviderOptions['verbosity']>;
 
 export const anthropicThinkingMinBudgetTokens = 1024;
-
-export type AnthropicThinkingOption =
-  | {
-      mode: 'disabled';
-    }
-  | {
-      mode: 'adaptive';
-    }
-  | {
-      mode: 'enabled';
-      budgetTokens: number;
-    };
-
-export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-
-export type OpenAiReasoningSummary = 'auto' | 'concise' | 'detailed';
-
-export type OpenAiReasoningOption = {
-  effort?: OpenAiReasoningEffort;
-  summary?: OpenAiReasoningSummary;
-};
-
-export type OpenAiServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority';
-
-export type OpenAiVerbosity = 'low' | 'medium' | 'high';
-
-export type ProviderOptions = {
-  temperature?: number;
-  maxTokens?: number;
-  thinking?: boolean;
-  topP?: number;
-  topK?: number;
-  minP?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  repetitionPenalty?: number;
-  seed?: number;
-  stop?: string[];
-  organization?: string;
-  useResponsesApi?: boolean;
-  reasoning?: OpenAiReasoningOption;
-  includeReasoning?: boolean;
-  parallelToolCalls?: boolean;
-  streamUsage?: boolean;
-  serviceTier?: OpenAiServiceTier;
-  timeoutMs?: number;
-  verbosity?: OpenAiVerbosity;
-  zdrEnabled?: boolean;
-  defaultHeaders?: Record<string, string>;
-  modelKwargs?: Record<string, unknown>;
-  anthropicThinking?: AnthropicThinkingOption;
-  toolChoice?: NvidiaToolChoice;
-  guidedJson?: Record<string, unknown>;
-  guidedRegex?: string;
-  guidedChoice?: string[];
-  guidedGrammar?: string;
-  endpointOverride?: string;
-  contextBudgetTokens?: number;
-  samplingProfileOverrides?: ProviderSamplingProfileOverrides;
-  /**
-   * 传递给 Anthropic API 的额外参数。
-   * 用于支持未来新增的 API 参数而无需修改类型定义。
-   */
-  invocationKwargs?: Record<string, unknown>;
-  /**
-   * Anthropic Beta 功能列表。
-   * 例如: ['prompt-caching-2024-07-31', 'pdfs-2024-09-25']。
-   */
-  anthropicBetas?: string[];
-};
-
-export type ProviderModel = {
-  id: string;
-  displayName: string;
-  enabled: boolean;
-  supportsStreaming: boolean;
-  supportsToolCalls: boolean;
-  supportsImages: boolean;
-};
-
-export type ProviderConfig = {
-  id: string;
-  name: string;
-  type: ProviderType;
-  endpoint: string;
-  credentialRef: string | null;
-  enabled: boolean;
-  models: ProviderModel[];
-  options?: ProviderOptions;
-};
-
-export type ProviderTestResult = {
-  providerId: string;
-  status: 'ready' | 'invalid';
-  defaultModelReady: boolean;
-  checked: string[];
-  modelId?: string | null;
-  error: string | null;
-  latencyMs: number | null;
-};
 
 export type ProviderExecutionUsage = {
   promptTokens: number | null;
@@ -209,86 +72,16 @@ export type ProviderExecutionResult = {
   summary: string;
 };
 
-export type ProvidersConfig = {
-  schemaVersion: 1;
-  defaultModelId: string | null;
-  providers: ProviderConfig[];
-};
+export type RocSettingsDocument = z.infer<typeof settingsDocumentSchema>;
 
-export type McpServersConfig = {
-  schemaVersion: 1;
-  approvalMode: ApprovalMode;
-  servers: McpServerConfig[];
-};
+export type DefaultModelState = z.infer<typeof defaultModelStateSchema>;
 
-export type RocSettingsDocument = {
-  schemaVersion: 4;
-  settings: AppSettings;
-  providers: ProvidersConfig;
-  mcp: McpServersConfig;
-  permissions: PermissionsConfig;
-  shortcuts: ShortcutsConfig;
-};
-
-export type DefaultModelState = {
-  status: 'missing' | 'invalid' | 'ready';
-  modelId: string | null;
-  providerId: string | null;
-  reason: string;
-};
-
-export type ProviderSecretStatus = {
-  providerId: string;
-  stored: boolean;
-};
-
-export type HostIntegrationStatus = {
-  startup: {
-    configuredOpenAtLogin: boolean;
-    effectiveOpenAtLogin: boolean;
-    syncError: string | null;
-  };
-  globalHotkey: {
-    accelerator: string | null;
-    registered: boolean;
-    registrationError: string | null;
-  };
-};
-
-export type SettingsSnapshot = {
-  settings: AppSettings;
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  providerSecretStatus: ProviderSecretStatus[];
-  permissions: PermissionsConfig;
-  mcpServers: McpServerSnapshot[];
-  skills: SkillSnapshot[];
-  hooks: RocHookConfigSnapshot;
-  hostIntegration: HostIntegrationStatus;
-};
-
-export type SettingsSaveHookConfigRequest = RocHookSaveConfigRequest;
-
-export type SettingsTrustHookRequest = RocHookTrustRequest;
-
-export type SettingsSaveRequest = {
-  settings: AppSettings;
-  providers: ProviderConfig[];
-  defaultModelId: string | null;
-  permissions: PermissionsConfig;
-};
-
-export type ProviderSecretSetRequest = {
-  providerId: string;
-  plaintext: string;
-};
-
-export type ProviderSecretSetResult = {
-  providerId: string;
-  stored: true;
-};
-
-export type ProviderSecretClearResult = {
-  providerId: string;
-  stored: false;
-};
+export type ProviderSecretStatus = z.infer<typeof providerSecretStatusSchema>;
+export type HostIntegrationStatus = z.infer<typeof hostIntegrationStatusSchema>;
+export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
+export type SettingsSaveRequest = z.infer<typeof settingsSaveRequestSchema>;
+export type SettingsSaveHookConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
+export type SettingsTrustHookRequest = z.infer<typeof settingsTrustHookRequestSchema>;
+export type ProviderSecretSetRequest = z.infer<typeof providerSecretSetRequestSchema>;
+export type ProviderSecretSetResult = z.infer<typeof providerSecretSetResultSchema>;
+export type ProviderSecretClearResult = z.infer<typeof providerSecretClearResultSchema>;

@@ -18,6 +18,11 @@ import type {
   TaskRun,
   TaskStatus
 } from '../../../shared/types';
+import {
+  approvalDecisionPayloadSchema,
+  humanQuestionAnsweredPayloadSchema,
+  taskEventSchema
+} from '../../../shared/schemas/task-event';
 import type { RunFailure } from '../../services/deep-agent/types';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
@@ -723,7 +728,7 @@ export class AgentSessionRepository {
         threadId: input.threadId,
         interrupts: input.interrupts
       });
-      const events = input.interrupts.map((interrupt): TaskEvent => ({
+      const events = input.interrupts.map((interrupt) => taskEventSchema.parse({
         id: `event_${randomUUID()}`,
         threadId: input.threadId,
         runId: input.runId,
@@ -825,14 +830,14 @@ export class AgentSessionRepository {
             createdAt
           );
       }
-      const event: TaskEvent = {
+      const event = taskEventSchema.parse({
         id: `event_${randomUUID()}`,
         threadId: transition.run.threadId,
         runId: transition.run.id,
         type: input.audit.type,
         payload: input.audit.payload,
         createdAt
-      };
+      });
       this.insertEvent(event);
       return {
         event,
@@ -966,14 +971,14 @@ export class AgentSessionRepository {
 
   recordEvent(input: { threadId: string; runId: string; type: TaskEvent['type']; payload: unknown }): TaskEvent {
     const createdAt = new Date().toISOString();
-    const event: TaskEvent = {
+    const event = taskEventSchema.parse({
       id: `event_${randomUUID()}`,
       threadId: input.threadId,
       runId: input.runId,
       type: input.type,
       payload: input.payload,
       createdAt
-    };
+    });
     this.db.transaction(() => {
       this.insertEvent(event);
     })();
@@ -1479,14 +1484,14 @@ function mapTaskRun(row: TaskRunRow): TaskRun {
 }
 
 function mapTaskEvent(row: TaskEventRow): TaskEvent {
-  return {
+  return taskEventSchema.parse({
     id: row.id,
     threadId: row.thread_id,
     runId: row.run_id,
     type: row.type,
-    payload: JSON.parse(row.payload_json) as unknown,
+    payload: JSON.parse(row.payload_json),
     createdAt: row.created_at
-  };
+  });
 }
 
 function mapSessionMessage(row: SessionMessageRow): SessionMessageEntry {
@@ -1513,30 +1518,23 @@ function parseRecordedResumePayload(input: {
   } catch {
     throw new Error('agent_resume_audit_payload_invalid');
   }
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-    throw new Error('agent_resume_audit_payload_invalid');
-  }
-  const interruptId = Reflect.get(payload, 'interruptId');
-  if (typeof interruptId !== 'string' || interruptId.trim().length === 0) {
-    throw new Error('agent_resume_audit_payload_invalid');
-  }
   if (input.type === 'approval_decision') {
-    const decisions = Reflect.get(payload, 'decisions');
-    if (!Array.isArray(decisions)) {
+    const parsed = approvalDecisionPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
       throw new Error('agent_resume_audit_payload_invalid');
     }
     return {
-      interruptId,
-      value: { decisions: decisions as ChatResumeDecision[] }
+      interruptId: parsed.data.interruptId,
+      value: { decisions: parsed.data.decisions }
     };
   }
-  const answer = Reflect.get(payload, 'answer');
-  if (typeof answer !== 'string') {
+  const parsed = humanQuestionAnsweredPayloadSchema.safeParse(payload);
+  if (!parsed.success) {
     throw new Error('agent_resume_audit_payload_invalid');
   }
   return {
-    interruptId,
-    value: { answer }
+    interruptId: parsed.data.interruptId,
+    value: { answer: parsed.data.answer }
   };
 }
 

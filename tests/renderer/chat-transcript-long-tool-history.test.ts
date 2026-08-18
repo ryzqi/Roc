@@ -143,7 +143,9 @@ describe('chat transcript helpers', () => {
           type: 'message',
           payload: {
             role: 'assistant',
-            content: '成都今日多云，气温 22-28°C。'
+            content: '成都今日多云，气温 22-28°C。',
+            providerId: 'test-provider',
+            modelId: 'test-model'
           },
           createdAt: '2026-05-09T08:20:04.000Z',
           sequence: 200

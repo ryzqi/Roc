@@ -1,12 +1,7 @@
+import type { TokenUsage } from '../../../shared/types';
 import * as recordUtils from './record-utils';
 
-export type DeepAgents110V3Usage = {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
-};
+export type DeepAgents110V3Usage = TokenUsage;
 
 export type DeepAgents110V3Message = {
   usageKey: string;

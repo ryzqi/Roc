@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyChatRunEvent, createEmptyChatRunState } from '../../src/renderer/chat-run-state';
 import { isTerminalChatRunEvent } from '../../src/renderer/chat/use-chat-run';
+import { chatRunEventSchema } from '../../src/shared/schemas/chat';
 import type { ChatRunEvent } from '../../src/shared/types';
 
 describe('chat run state', () => {
@@ -514,7 +515,7 @@ function reasoningBlock(runId: string, text: string): ChatRunEvent {
 }
 
 function toolBlock(runId: string, phase: 'start' | 'error', data: unknown): ChatRunEvent {
-  return {
+  return chatRunEventSchema.parse({
     type: 'assistant_block',
     runId,
     block: {
@@ -525,7 +526,7 @@ function toolBlock(runId: string, phase: 'start' | 'error', data: unknown): Chat
       phase,
       ...(phase === 'start' ? { input: data } : { error: data })
     }
-  };
+  });
 }
 
 function approvalPayload(): Extract<ChatRunEvent, { type: 'run_interrupted' }>['payload'] {

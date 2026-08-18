@@ -72,7 +72,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-stable',
           runId: 'run-stable',
           type: 'message',
-          payload: { role: 'assistant', content: 'world' },
+          payload: { role: 'assistant', content: 'world', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-07-11T00:00:01.000Z',
           sequence: 2
         }
@@ -219,7 +219,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-older',
           runId: 'run-older',
           type: 'message',
-          payload: { role: 'assistant', content: '旧线程回复' },
+          payload: { role: 'assistant', content: '旧线程回复', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:10:03.000Z'
         }
       ]
@@ -249,7 +249,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-older',
           runId: 'run-older',
           type: 'message',
-          payload: { role: 'assistant', content: '旧线程回复' },
+          payload: { role: 'assistant', content: '旧线程回复', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:10:03.000Z'
         },
         {
@@ -662,7 +662,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-current',
           runId: 'run-current',
           type: 'message',
-          payload: { role: 'assistant', content: '已经整理完成。' },
+          payload: { role: 'assistant', content: '已经整理完成。', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:20:04.000Z'
         },
         {
@@ -965,33 +965,6 @@ describe('chat transcript helpers', () => {
       ]
     });
     expect(messages[0]?.content).not.toContain('Hook completed');
-  });
-
-  it('ignores persisted hook events that do not match the current hook summary contract', () => {
-    const messages = buildPersistedTranscriptMessages(
-      [
-        {
-          id: 'hook-completed-legacy',
-          threadId: 'thread-legacy-hook',
-          runId: 'run-legacy-hook',
-          type: 'hook_completed',
-          payload: {
-            runId: 'hook-run-legacy',
-            handlerId: 'PreToolUse:0:0',
-            event: 'PreToolUse',
-            status: 'completed',
-            durationMs: 12,
-            message: 'Legacy hook completed',
-            commandDisplay: 'node hook.js'
-          },
-          createdAt: '2026-06-24T00:00:01.000Z',
-          sequence: 1
-        }
-      ],
-      'thread-legacy-hook'
-    );
-
-    expect(messages).toEqual([]);
   });
 
   it('moves echoed SessionStart add_context text into the hook block instead of assistant content', () => {

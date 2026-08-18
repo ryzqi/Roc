@@ -1,20 +1,13 @@
-import type { DeepAgents110V3Usage } from './deep-agents-1-10-stream-adapter';
+import type { TokenUsage } from '../../../shared/types';
 
-export type ProviderUsageAccumulator = {
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
-  callUsage: Map<string, ProviderUsageSnapshot>;
+export type ProviderUsageAccumulator = TokenUsage & {
+  callUsage: Map<string, TokenUsage>;
 };
-
-type ProviderUsageSnapshot = DeepAgents110V3Usage;
 
 export function createUsageAccumulator(): ProviderUsageAccumulator {
   return {
-    promptTokens: null,
-    completionTokens: null,
+    inputTokens: null,
+    outputTokens: null,
     totalTokens: null,
     cacheReadTokens: null,
     cacheCreationTokens: null,
@@ -25,7 +18,7 @@ export function createUsageAccumulator(): ProviderUsageAccumulator {
 export function updateUsageAccumulator(
   target: ProviderUsageAccumulator,
   usageKey: string,
-  usage: DeepAgents110V3Usage
+  usage: TokenUsage
 ): void {
   if (usageKey.length === 0) {
     throw new Error('provider_usage_key_missing');
@@ -36,18 +29,18 @@ export function updateUsageAccumulator(
   const previous = target.callUsage.get(usageKey);
   target.callUsage.set(usageKey, mergeUsage(previous, usage));
   const aggregate = aggregateUsage(target.callUsage.values());
-  target.promptTokens = aggregate.inputTokens;
-  target.completionTokens = aggregate.outputTokens;
+  target.inputTokens = aggregate.inputTokens;
+  target.outputTokens = aggregate.outputTokens;
   target.totalTokens = aggregate.totalTokens;
   target.cacheReadTokens = aggregate.cacheReadTokens;
   target.cacheCreationTokens = aggregate.cacheCreationTokens;
 }
 
-function hasUsage(usage: ProviderUsageSnapshot): boolean {
+function hasUsage(usage: TokenUsage): boolean {
   return Object.values(usage).some((value) => value !== null);
 }
 
-function mergeUsage(previous: ProviderUsageSnapshot | undefined, next: ProviderUsageSnapshot): ProviderUsageSnapshot {
+function mergeUsage(previous: TokenUsage | undefined, next: TokenUsage): TokenUsage {
   return {
     inputTokens: retainPreviousUsage(previous, next.inputTokens, 'inputTokens'),
     outputTokens: retainPreviousUsage(previous, next.outputTokens, 'outputTokens'),
@@ -58,9 +51,9 @@ function mergeUsage(previous: ProviderUsageSnapshot | undefined, next: ProviderU
 }
 
 function retainPreviousUsage(
-  previous: ProviderUsageSnapshot | undefined,
+  previous: TokenUsage | undefined,
   next: number | null,
-  field: keyof ProviderUsageSnapshot
+  field: keyof TokenUsage
 ): number | null {
   if (next !== null) {
     return next;
@@ -68,7 +61,7 @@ function retainPreviousUsage(
   return previous === undefined ? null : previous[field];
 }
 
-function aggregateUsage(usages: Iterable<ProviderUsageSnapshot>): ProviderUsageSnapshot {
+function aggregateUsage(usages: Iterable<TokenUsage>): TokenUsage {
   const values = [...usages];
   return {
     inputTokens: sumUsage(values, 'inputTokens'),
@@ -79,7 +72,7 @@ function aggregateUsage(usages: Iterable<ProviderUsageSnapshot>): ProviderUsageS
   };
 }
 
-function sumUsage(usages: readonly ProviderUsageSnapshot[], field: keyof ProviderUsageSnapshot): number | null {
+function sumUsage(usages: readonly TokenUsage[], field: keyof TokenUsage): number | null {
   let total = 0;
   let observed = false;
   for (const usage of usages) {

@@ -1,80 +1,31 @@
-export type GitStatusResult = {
-  workspacePath: string;
-  isRepository: true;
-  branch: string;
-  porcelain: string[];
-  changes: GitStatusChange[];
-  changedFiles: number;
-};
+import type { z } from 'zod';
 
-export type GitStatusChange = {
-  porcelain: string;
-  index: string;
-  worktree: string;
-  relativePath: string;
-  originalPath?: string;
-};
+import {
+  gitBatchFileOperationRequestSchema,
+  gitBranchListResultSchema,
+  gitBranchMutationResultSchema,
+  gitCheckoutBranchRequestSchema,
+  gitCommitRequestSchema,
+  gitCommitResultSchema,
+  gitCreateBranchRequestSchema,
+  gitDiffStatResultSchema,
+  gitFileDiffResultSchema,
+  gitFileOperationRequestSchema,
+  gitPushResultSchema,
+  gitStatusResultSchema
+} from '../schemas/ipc-workspace';
 
-export type GitDiffStatResult = {
-  workspacePath: string;
-  stat: string;
-};
-
-export type GitFileDiffResult = {
-  workspacePath: string;
-  relativePath: string;
-  patch: string;
-};
-
-export type GitFileOperationRequest = {
-  relativePath: string;
-};
-
-export type GitBatchFileOperationRequest = {
-  relativePaths: string[];
-};
-
-export type GitCommitRequest = {
-  message: string;
-};
-
-export type GitBranchSummary = {
-  name: string;
-  current: boolean;
-};
-
-export type GitBranchListResult = {
-  workspacePath: string;
-  currentBranch: string;
-  branches: GitBranchSummary[];
-};
-
-export type GitCreateBranchRequest = {
-  name: string;
-  checkoutAfterCreate: boolean;
-};
-
-export type GitCheckoutBranchRequest = {
-  name: string;
-};
-
-export type GitBranchMutationResult = {
-  workspacePath: string;
-  branchInfo: GitBranchListResult;
-  status: GitStatusResult;
-};
-
-export type GitCommitResult = {
-  workspacePath: string;
-  commitMessage: string;
-  commitSha: string;
-  status: GitStatusResult;
-};
-
-export type GitPushResult = {
-  workspacePath: string;
-  remoteName: string;
-  branch: string;
-  status: GitStatusResult;
-  output: string;
-};
+export type GitStatusResult = z.infer<typeof gitStatusResultSchema>;
+export type GitStatusChange = GitStatusResult['changes'][number];
+export type GitDiffStatResult = z.infer<typeof gitDiffStatResultSchema>;
+export type GitFileDiffResult = z.infer<typeof gitFileDiffResultSchema>;
+export type GitFileOperationRequest = z.infer<typeof gitFileOperationRequestSchema>;
+export type GitBatchFileOperationRequest = z.infer<typeof gitBatchFileOperationRequestSchema>;
+export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
+export type GitBranchListResult = z.infer<typeof gitBranchListResultSchema>;
+export type GitBranchSummary = GitBranchListResult['branches'][number];
+export type GitCreateBranchRequest = z.infer<typeof gitCreateBranchRequestSchema>;
+export type GitCheckoutBranchRequest = z.infer<typeof gitCheckoutBranchRequestSchema>;
+export type GitBranchMutationResult = z.infer<typeof gitBranchMutationResultSchema>;
+export type GitCommitResult = z.infer<typeof gitCommitResultSchema>;
+export type GitPushResult = z.infer<typeof gitPushResultSchema>;

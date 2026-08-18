@@ -342,7 +342,12 @@ function seedHistoryEvents(count: number): void {
       insert.run(
         `event-page-${sequence}`,
         sequence,
-        JSON.stringify({ role: 'assistant', content: `message-${sequence}` }),
+        JSON.stringify({
+          role: 'assistant',
+          content: `message-${sequence}`,
+          providerId: 'test-provider',
+          modelId: 'test-model'
+        }),
         `2026-07-10T00:00:${String(sequence % 60).padStart(2, '0')}.000Z`
       );
     }

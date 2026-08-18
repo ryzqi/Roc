@@ -261,7 +261,7 @@ describe('ConfigService unified settings document', () => {
     expect((missingBudgetError as ZodError).issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: ['providers', 0, 'options', 'anthropicThinking']
+          path: ['providers', 0, 'options', 'anthropicThinking', 'budgetTokens']
         })
       ])
     );
@@ -424,53 +424,59 @@ describe('ConfigService unified settings document', () => {
     });
   });
 
-  it('drops retired Anthropic cache-control provider options during config validation', () => {
+  it('rejects retired Anthropic cache-control provider options during config validation', () => {
     const configService = new ConfigService(paths);
     configService.initialize();
 
-    configService.saveProviders({
-      schemaVersion: 1,
-      defaultModelId: 'anthropic-cache-control:claude-cache-control',
-      providers: [
-        {
-          id: 'anthropic-cache-control',
-          name: 'Anthropic Cache Control',
-          type: 'anthropic_compatible',
-          endpoint: 'https://anthropic.example.test',
-          credentialRef: 'secret:anthropic-cache-control',
-          enabled: true,
-          models: [
-            {
-              id: 'claude-cache-control',
-              displayName: 'Claude Cache Control',
-              enabled: true,
-              supportsStreaming: true,
-              supportsToolCalls: true,
-              supportsImages: false
-            }
-          ],
-          options: {
-            anthropicThinking: {
-              mode: 'adaptive'
-            },
-            anthropicCacheControl: {
-              type: 'ephemeral',
-              ttl: '5m'
-            }
-          } as unknown as ProviderConfig['options']
-        }
-      ]
-    });
+    let retiredOptionError: unknown;
+    try {
+      configService.saveProviders({
+        schemaVersion: 1,
+        defaultModelId: 'anthropic-cache-control:claude-cache-control',
+        providers: [
+          {
+            id: 'anthropic-cache-control',
+            name: 'Anthropic Cache Control',
+            type: 'anthropic_compatible',
+            endpoint: 'https://anthropic.example.test',
+            credentialRef: 'secret:anthropic-cache-control',
+            enabled: true,
+            models: [
+              {
+                id: 'claude-cache-control',
+                displayName: 'Claude Cache Control',
+                enabled: true,
+                supportsStreaming: true,
+                supportsToolCalls: true,
+                supportsImages: false
+              }
+            ],
+            options: {
+              anthropicThinking: {
+                mode: 'adaptive'
+              },
+              anthropicCacheControl: {
+                type: 'ephemeral',
+                ttl: '5m'
+              }
+            } as unknown as ProviderConfig['options']
+          }
+        ]
+      });
+    } catch (error) {
+      retiredOptionError = error;
+    }
 
-    const provider = configService
-      .getProviders()
-      .providers.find((item) => item.id === 'anthropic-cache-control');
-
-    expect(provider?.options).toEqual({
-      anthropicThinking: {
-        mode: 'adaptive'
-      }
-    });
+    expect(retiredOptionError).toBeInstanceOf(ZodError);
+    expect((retiredOptionError as ZodError).issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unrecognized_keys',
+          keys: ['anthropicCacheControl'],
+          path: ['providers', 0, 'options']
+        })
+      ])
+    );
     expect(JSON.stringify(readSettingsDocument())).not.toContain('anthropicCacheControl');
   });
 });

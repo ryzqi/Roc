@@ -9,6 +9,12 @@ import type {
   TaskEvent,
   TaskSnapshot
 } from '../shared/types';
+import {
+  taskEventSchema,
+  type GuardrailTaskEventPayload as GuardrailPayload,
+  type MessageTaskEvent,
+  type SubagentTaskEventPayload as SubagentEventRecord
+} from '../shared/schemas/task-event';
 import type { ChatRunActivityBlock, ChatRunState, ChatRunSubagentBlock, ChatRunSubagentNode } from './chat-run-state';
 import { applyPendingInterruptProjection, readPersistedInterruptProjection } from './chat/interrupt-projection';
 
@@ -95,25 +101,6 @@ export type ChatTranscriptMessage = {
   isStreaming: boolean;
 };
 
-type MessagePayload = {
-  role: 'user' | 'assistant';
-  content: string;
-  attachments?: ChatPersistedAttachment[];
-};
-
-type SubagentEventRecord = {
-  sequence: number;
-  identity: SubagentIdentity;
-  event: SubagentEventPayload;
-};
-
-type GuardrailPayload = {
-  nudgeKind: string;
-  content: string;
-  tier?: number;
-  toolName?: string;
-};
-
 type AssistantDraft = {
   message: ChatTranscriptMessage;
   reasoningBlock: Extract<ChatTranscriptActivityBlock, { kind: 'reasoning' }> | null;
@@ -121,201 +108,6 @@ type AssistantDraft = {
   hookBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'hook_call' }>>;
   subagentBlocks: Array<Extract<ChatTranscriptActivityBlock, { kind: 'subagent' }>>;
 };
-
-type MessageTaskEvent = TaskEvent & {
-  type: 'message';
-  payload: MessagePayload;
-};
-
-function isMessagePayload(payload: unknown): payload is MessagePayload {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const role = Reflect.get(payload, 'role');
-  const content = Reflect.get(payload, 'content');
-  const attachments = Reflect.get(payload, 'attachments');
-  return (
-    (role === 'user' || role === 'assistant') &&
-    typeof content === 'string' &&
-    (attachments === undefined || (Array.isArray(attachments) && attachments.every(isPersistedAttachment)))
-  );
-}
-
-function isPersistedAttachment(value: unknown): value is ChatPersistedAttachment {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const kind = Reflect.get(value, 'kind');
-  const name = Reflect.get(value, 'name');
-  const mediaType = Reflect.get(value, 'mediaType');
-  const sizeBytes = Reflect.get(value, 'sizeBytes');
-  return (
-    kind === 'image' &&
-    typeof name === 'string' &&
-    (mediaType === 'image/png' || mediaType === 'image/jpeg' || mediaType === 'image/webp') &&
-    typeof sizeBytes === 'number'
-  );
-}
-
-function isMessageTaskEvent(event: TaskEvent, threadId: string): event is MessageTaskEvent {
-  return event.threadId === threadId && event.type === 'message' && isMessagePayload(event.payload);
-}
-
-function isAssistantBlockPayload(payload: unknown): payload is ChatAssistantBlock {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const kind = Reflect.get(payload, 'kind');
-  const blockId = Reflect.get(payload, 'blockId');
-  const phase = Reflect.get(payload, 'phase');
-  if (typeof blockId !== 'string') {
-    return false;
-  }
-  if (kind === 'text' || kind === 'reasoning') {
-    const text = Reflect.get(payload, 'text');
-    return (phase === 'delta' || phase === 'end') && (text === undefined || typeof text === 'string');
-  }
-  if (kind !== 'tool_call') {
-    return false;
-  }
-  const callId = Reflect.get(payload, 'callId');
-  const name = Reflect.get(payload, 'name');
-  return typeof callId === 'string' && typeof name === 'string' && isToolPhase(phase);
-}
-
-function isToolPhase(value: unknown): value is Extract<ChatRunActivityBlock, { kind: 'tool_call' }>['status'] {
-  return value === 'start' || value === 'progress' || value === 'end' || value === 'error';
-}
-
-function isHookRunStatus(value: unknown): value is RocHookRunSummary['status'] {
-  return value === 'skipped' || value === 'running' || value === 'completed' || value === 'failed' || value === 'blocked';
-}
-
-function isHookEventName(value: unknown): value is RocHookRunSummary['event'] {
-  return value === 'SessionStart' || value === 'UserPromptSubmit' || value === 'PreToolUse' || value === 'PostToolUse' || value === 'Stop' || value === 'SessionEnd';
-}
-
-function readHookRunSummary(payload: unknown): RocHookRunSummary | null {
-  if (typeof payload !== 'object' || payload === null) {
-    return null;
-  }
-  const runId = Reflect.get(payload, 'runId');
-  const handlerId = Reflect.get(payload, 'handlerId');
-  const event = Reflect.get(payload, 'event');
-  const status = Reflect.get(payload, 'status');
-  const durationMs = Reflect.get(payload, 'durationMs');
-  const message = Reflect.get(payload, 'message');
-  const additionalContext = Reflect.get(payload, 'additionalContext');
-  const requestContinue = Reflect.get(payload, 'requestContinue');
-  const commandDisplay = Reflect.get(payload, 'commandDisplay');
-  if (
-    typeof runId !== 'string' ||
-    typeof handlerId !== 'string' ||
-    !isHookEventName(event) ||
-    !isHookRunStatus(status) ||
-    (durationMs !== null && typeof durationMs !== 'number') ||
-    (message !== null && typeof message !== 'string') ||
-    (additionalContext !== null && typeof additionalContext !== 'string') ||
-    (requestContinue !== null && typeof requestContinue !== 'string') ||
-    typeof commandDisplay !== 'string'
-  ) {
-    return null;
-  }
-  return {
-    runId,
-    handlerId,
-    event,
-    status,
-    durationMs,
-    message,
-    additionalContext,
-    requestContinue,
-    commandDisplay
-  };
-}
-
-function isSubagentEventRecord(payload: unknown): payload is SubagentEventRecord {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const sequence = Reflect.get(payload, 'sequence');
-  const identity = Reflect.get(payload, 'identity');
-  const event = Reflect.get(payload, 'event');
-  return typeof sequence === 'number' && isSubagentIdentity(identity) && isSubagentEventPayload(event);
-}
-
-function isSubagentIdentity(value: unknown): value is SubagentIdentity {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const subagentId = Reflect.get(value, 'subagentId');
-  const parentSubagentId = Reflect.get(value, 'parentSubagentId');
-  const name = Reflect.get(value, 'name');
-  const depth = Reflect.get(value, 'depth');
-  const path = Reflect.get(value, 'path');
-  const execution = Reflect.get(value, 'execution');
-  const taskInput = Reflect.get(value, 'taskInput');
-  const asyncTaskId = Reflect.get(value, 'asyncTaskId');
-  return (
-    typeof subagentId === 'string' &&
-    (parentSubagentId === null || typeof parentSubagentId === 'string') &&
-    typeof name === 'string' &&
-    typeof depth === 'number' &&
-    Array.isArray(path) &&
-    path.every((item) => typeof item === 'string') &&
-    (execution === 'sync' || execution === 'async') &&
-    (taskInput === null || typeof taskInput === 'string') &&
-    (asyncTaskId === undefined || typeof asyncTaskId === 'string')
-  );
-}
-
-function isSubagentEventPayload(value: unknown): value is SubagentEventPayload {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const kind = Reflect.get(value, 'kind');
-  if (kind === 'started') {
-    return true;
-  }
-  if (kind === 'assistant_block') {
-    return isAssistantBlockPayload(Reflect.get(value, 'block'));
-  }
-  if (kind === 'tool_call') {
-    const block = Reflect.get(value, 'block');
-    return isAssistantBlockPayload(block) && Reflect.get(block, 'kind') === 'tool_call';
-  }
-  if (kind === 'async_status') {
-    return typeof Reflect.get(value, 'status') === 'string';
-  }
-  if (kind === 'completed') {
-    const summary = Reflect.get(value, 'summary');
-    return summary === null || typeof summary === 'string';
-  }
-  if (kind === 'failed') {
-    return typeof Reflect.get(value, 'error') === 'string';
-  }
-  if (kind === 'cancelled') {
-    const reason = Reflect.get(value, 'reason');
-    return reason === undefined || typeof reason === 'string';
-  }
-  return false;
-}
-
-function isGuardrailPayload(payload: unknown): payload is GuardrailPayload {
-  if (typeof payload !== 'object' || payload === null) {
-    return false;
-  }
-  const nudgeKind = Reflect.get(payload, 'nudgeKind');
-  const content = Reflect.get(payload, 'content');
-  const tier = Reflect.get(payload, 'tier');
-  const toolName = Reflect.get(payload, 'toolName');
-  return (
-    typeof nudgeKind === 'string' &&
-    typeof content === 'string' &&
-    (tier === undefined || typeof tier === 'number') &&
-    (toolName === undefined || typeof toolName === 'string')
-  );
-}
 
 function resolveActiveThreadId(selectedThreadId: string | null, chatRunState: ChatRunState): string | null {
   if (selectedThreadId !== null) {
@@ -332,13 +124,16 @@ function compareTaskEventsAscending(left: TaskEvent, right: TaskEvent): number {
   return (left.sequence === undefined ? 0 : left.sequence) - (right.sequence === undefined ? 0 : right.sequence);
 }
 
-function createUserMessage(event: MessageTaskEvent): ChatTranscriptMessage {
+function createUserMessage(
+  runId: string,
+  payload: Extract<MessageTaskEvent['payload'], { role: 'user' }>
+): ChatTranscriptMessage {
   return {
-    key: `user-${event.runId}`,
+    key: `user-${runId}`,
     source: 'persisted',
     role: 'user',
-    content: event.payload.content,
-    attachments: event.payload.attachments === undefined ? [] : event.payload.attachments,
+    content: payload.content,
+    attachments: payload.attachments === undefined ? [] : payload.attachments,
     reasoning: null,
     blocks: [],
     interrupts: [],
@@ -734,13 +529,18 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
   const messages: ChatTranscriptMessage[] = [];
   const drafts = new Map<string, AssistantDraft>();
 
-  for (const event of recentEvents
+  for (const candidate of recentEvents
     .filter((candidate) => candidate.threadId === threadId)
     .slice()
     .sort(compareTaskEventsAscending)) {
-    if (isMessageTaskEvent(event, threadId)) {
+    const parsedEvent = taskEventSchema.safeParse(candidate);
+    if (!parsedEvent.success) {
+      continue;
+    }
+    const event = parsedEvent.data;
+    if (event.type === 'message') {
       if (event.payload.role === 'user') {
-        messages.push(createUserMessage(event));
+        messages.push(createUserMessage(event.runId, event.payload));
         continue;
       }
 
@@ -749,25 +549,22 @@ export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], thre
       continue;
     }
 
-    if (event.type === 'assistant_block' && isAssistantBlockPayload(event.payload)) {
+    if (event.type === 'assistant_block') {
       applyAssistantBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, false);
       continue;
     }
 
     if (event.type === 'hook_started' || event.type === 'hook_completed') {
-      const hook = readHookRunSummary(event.payload);
-      if (hook !== null) {
-        applyHookBlock(getAssistantDraft(drafts, messages, event.runId), hook);
-      }
+      applyHookBlock(getAssistantDraft(drafts, messages, event.runId), event.payload);
       continue;
     }
 
-    if (event.type === 'subagent_event' && isSubagentEventRecord(event.payload)) {
+    if (event.type === 'subagent_event') {
       applyStructuredSubagentBlock(getAssistantDraft(drafts, messages, event.runId), event.payload);
       continue;
     }
 
-    if (event.type === 'guardrail_nudge' && isGuardrailPayload(event.payload)) {
+    if (event.type === 'guardrail_nudge') {
       appendGuardrailBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, `guardrail-${event.runId}`);
       continue;
     }

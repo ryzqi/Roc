@@ -1,4 +1,5 @@
 import type { ChatAssistantBlock, ChatRunEvent, SubagentEventPayload, SubagentIdentity } from '../../../shared/types';
+import { toolCallAssistantBlockSchema } from '../../../shared/schemas/task-event';
 import {
   DeepAgents110V3ContractError,
   type DeepAgents110V3Message,
@@ -182,14 +183,14 @@ async function consumeToolCalls(
   for await (const call of calls) {
     const outcomeSettlement = Promise.allSettled([call.outcome] as const);
     const input = redactUnknown(call.input);
-    const startBlock: Extract<ChatAssistantBlock, { kind: 'tool_call' }> = {
+    const startBlock: Extract<ChatAssistantBlock, { kind: 'tool_call' }> = toolCallAssistantBlockSchema.parse({
       kind: 'tool_call',
       blockId: `${identity.subagentId}-tool-${call.callId}`,
       callId: call.callId,
       name: call.name,
       phase: 'start',
       input
-    };
+    });
     emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: startBlock });
     callbacks.emitTodoEvent(input);
 
@@ -215,11 +216,11 @@ async function consumeToolCalls(
       });
       emit(callbacks, runId, nextSequence(), identity, {
         kind: 'tool_call',
-        block: {
+        block: toolCallAssistantBlockSchema.parse({
           ...startBlock,
           phase: 'error',
           error: message
-        }
+        })
       });
       callbacks.recordSessionToolCall?.(call.name, input, { error: message });
       continue;
@@ -231,11 +232,11 @@ async function consumeToolCalls(
     });
     emit(callbacks, runId, nextSequence(), identity, {
       kind: 'tool_call',
-      block: {
+      block: toolCallAssistantBlockSchema.parse({
         ...startBlock,
         phase: 'end',
         output
-      }
+      })
     });
     callbacks.recordSessionToolCall?.(call.name, input, output);
   }

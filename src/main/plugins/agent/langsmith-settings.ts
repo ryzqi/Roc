@@ -1,9 +1,8 @@
-import { z } from 'zod';
-
 import type {
   AgentLangSmithConfigV1,
   AgentLangSmithSettings
 } from '../../../shared/types';
+import { agentLangSmithConfigSchema } from '../../../shared/schemas/agent';
 
 const configKey = 'langsmith.settings';
 const apiKeySecretKey = 'langsmith.apiKey';
@@ -19,13 +18,7 @@ type SecretFacade = {
   clear(key: string): void;
 };
 
-export const agentLangSmithConfigSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    enabled: z.boolean(),
-    projectName: z.string().trim().min(1).max(128)
-  })
-  .strict() satisfies z.ZodType<AgentLangSmithConfigV1>;
+export { agentLangSmithConfigSchema };
 
 export const defaultAgentLangSmithConfig: AgentLangSmithConfigV1 = {
   schemaVersion: 1,

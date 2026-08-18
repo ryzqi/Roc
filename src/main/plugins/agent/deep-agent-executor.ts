@@ -509,13 +509,10 @@ function selectConservativeContextBudgetProfile(profiles: readonly ContextBudget
 }
 
 function snapshotUsage(usage: ReturnType<typeof createUsageAccumulator>): AgentModelUsageTelemetry {
+  const { callUsage, ...tokenUsage } = usage;
   return {
-    callCount: usage.callUsage.size,
-    inputTokens: usage.promptTokens,
-    outputTokens: usage.completionTokens,
-    totalTokens: usage.totalTokens,
-    cacheReadTokens: usage.cacheReadTokens,
-    cacheCreationTokens: usage.cacheCreationTokens
+    callCount: callUsage.size,
+    ...tokenUsage
   };
 }
 
@@ -601,11 +598,11 @@ function recordPromptCacheMetrics(input: {
   providerId: string;
   modelId: string;
 }): void {
-  if (input.metricsService === undefined || input.usageAccumulator.promptTokens === null) {
+  if (input.metricsService === undefined || input.usageAccumulator.inputTokens === null) {
     return;
   }
   const usage: Parameters<MetricsService['recordPromptCacheMetrics']>[0] = {
-    input_tokens: input.usageAccumulator.promptTokens
+    input_tokens: input.usageAccumulator.inputTokens
   };
   if (input.usageAccumulator.cacheReadTokens !== null) {
     usage.cache_read_tokens = input.usageAccumulator.cacheReadTokens;

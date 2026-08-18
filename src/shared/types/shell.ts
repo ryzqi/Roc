@@ -1,11 +1,9 @@
-export type ShellConfirmationRequest = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  cancelLabel: string;
-};
+import type { z } from 'zod';
 
-export type ShellConfirmationResult = {
-  confirmed: boolean;
-  response: number;
-};
+import {
+  shellConfirmationRequestSchema,
+  shellConfirmationResultSchema
+} from '../schemas/ipc-workspace';
+
+export type ShellConfirmationRequest = z.infer<typeof shellConfirmationRequestSchema>;
+export type ShellConfirmationResult = z.infer<typeof shellConfirmationResultSchema>;

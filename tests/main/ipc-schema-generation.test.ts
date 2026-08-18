@@ -7,21 +7,7 @@ import {
   ipcRequestChannelKeys,
   ipcSchemaVersion
 } from '../../src/shared/ipc';
-
-type IpcSchemaEntry = {
-  key: string;
-  channel: string;
-};
-
-type IpcSchema = {
-  version: number;
-  requests: IpcSchemaEntry[];
-  events: IpcSchemaEntry[];
-};
-
-function readIpcSchema(): IpcSchema {
-  return JSON.parse(readFileSync('src/shared/ipc-schema.json', 'utf8')) as IpcSchema;
-}
+import { ipcRegistry } from '../../src/shared/ipc-registry';
 
 describe('IPC schema generation', () => {
   it('keeps generated IPC channels in sync with the schema', () => {
@@ -33,7 +19,7 @@ describe('IPC schema generation', () => {
   });
 
   it('exports generated request and event channel metadata from the shared IPC contract', () => {
-    const schema = readIpcSchema();
+    const schema = ipcRegistry;
     const expectedChannels = Object.fromEntries(
       [...schema.requests, ...schema.events].map((entry) => [entry.key, entry.channel])
     );
@@ -45,29 +31,29 @@ describe('IPC schema generation', () => {
   });
 
   it('declares explicit LangSmith settings and secret request channels', () => {
-    const schema = readIpcSchema();
+    const schema = ipcRegistry;
 
     expect(schema.requests).toEqual(
       expect.arrayContaining([
-        { key: 'agentLangSmithSettingsGet', channel: 'roc:agent:langsmith:settings:get' },
-        { key: 'agentLangSmithSettingsSave', channel: 'roc:agent:langsmith:settings:save' },
-        { key: 'agentLangSmithSecretSet', channel: 'roc:agent:langsmith:secret:set' },
-        { key: 'agentLangSmithSecretClear', channel: 'roc:agent:langsmith:secret:clear' }
+        expect.objectContaining({ key: 'agentLangSmithSettingsGet', channel: 'roc:agent:langsmith:settings:get' }),
+        expect.objectContaining({ key: 'agentLangSmithSettingsSave', channel: 'roc:agent:langsmith:settings:save' }),
+        expect.objectContaining({ key: 'agentLangSmithSecretSet', channel: 'roc:agent:langsmith:secret:set' }),
+        expect.objectContaining({ key: 'agentLangSmithSecretClear', channel: 'roc:agent:langsmith:secret:clear' })
       ])
     );
   });
 
   it('keeps preload on generated channels without raw capability or wildcard IPC', () => {
-    const schema = readIpcSchema();
-    const preloadSource = readFileSync('src/preload/index.ts', 'utf8');
-    const schemaKeys = new Set([...schema.requests, ...schema.events].map((entry) => entry.key));
+    const schema = ipcRegistry;
+    const preloadSource = readFileSync('src/preload/ipc-api-generated.ts', 'utf8');
     const preloadChannelKeys = Array.from(preloadSource.matchAll(/ipcChannels\.([A-Za-z0-9_]+)/gu), (match) => match[1]!);
+    const expectedPreloadChannelKeys = [
+      ...schema.requests.map((entry) => entry.key),
+      ...schema.events.flatMap((entry) => [entry.key, entry.key])
+    ];
 
-    expect(preloadChannelKeys.length).toBeGreaterThan(0);
-    expect(new Set(preloadChannelKeys)).toEqual(new Set(preloadChannelKeys.filter((key) => schemaKeys.has(key))));
+    expect(preloadChannelKeys.sort()).toEqual(expectedPreloadChannelKeys.sort());
     expect(preloadSource).not.toContain('invokeCapability');
     expect(preloadSource).not.toContain("ipcRenderer.invoke('*'");
-    expect(JSON.stringify(schema)).not.toContain('invokeCapability');
-    expect(JSON.stringify(schema)).not.toContain('"*"');
   });
 });

@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ZodError } from 'zod';
 
 import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, ChatRunEvent, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
@@ -34,6 +35,32 @@ describe('AgentSessionRepository', () => {
     expect(columnNames('agent_events')).toContain('run_id');
     expect(columnNames('agent_events')).toContain('payload_json');
     expect(columnNames('session_messages')).toContain('phase');
+  });
+
+  it('rejects malformed recorded approval decisions at the resume boundary', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Reject malformed resume audit payload'
+    });
+
+    db.prepare(
+      `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'event-malformed-resume',
+      run.threadId,
+      run.id,
+      999,
+      'approval_decision',
+      JSON.stringify({ interruptId: 'interrupt-1', decisions: [{}] }),
+      '2026-08-18T00:00:00.000Z'
+    );
+
+    expect(() => repository.getRecordedResumePayload(run.id)).toThrow('agent_resume_audit_payload_invalid');
   });
 
   it('migrates a persisted V1 execution snapshot to the frozen V2 call budget', () => {
@@ -228,6 +255,27 @@ describe('AgentSessionRepository', () => {
       thread_id: run.threadId,
       token_count: 12
     });
+  });
+
+  it('fails explicitly when a persisted task event payload violates the shared contract', () => {
+    applyAgentPluginSchema(db);
+    const repository = new AgentSessionRepository(db);
+    const run = createRun(repository, {
+      enabledCapabilities,
+      modelId: 'openai:gpt-4.1',
+      threadKind: 'chat',
+      userInput: 'Read the corrupt event'
+    });
+    db.prepare("UPDATE agent_events SET payload_json = ? WHERE run_id = ? AND type = 'message'").run(
+      JSON.stringify({
+        role: 'user',
+        content: 'Read the corrupt event',
+        enabledCapabilities: { mcpServers: [42], skills: [] }
+      }),
+      run.id
+    );
+
+    expect(() => repository.listThreadEvents(run.threadId)).toThrow(ZodError);
   });
 
   it('marks interrupted runs waiting for the user while persisting only interrupt UI data', () => {

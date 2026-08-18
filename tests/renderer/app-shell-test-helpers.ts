@@ -4,6 +4,7 @@ import type { AppBootstrap } from '../../src/renderer/app/use-app-bootstrap';
 import type { LoadedState } from '../../src/renderer/loaded-state';
 import type { RocClient } from '../../src/renderer/shared/roc-client';
 import type { RocPreloadApi } from '../../src/shared/ipc';
+import { backgroundTaskSchema } from '../../src/shared/schemas/ipc-core';
 import type { ActiveTaskItem, TaskDetail, TaskStatus } from '../../src/shared/types';
 import { createLoadedState } from './view-test-helpers';
 
@@ -137,7 +138,7 @@ export function createBackgroundTaskDetail(task: ActiveTaskItem): TaskDetail {
       threadId: task.threadId,
       runId: detail.lastRunId ?? 'run-created',
       goal: task.goal,
-      status: task.status,
+      status: backgroundTaskSchema.shape.status.parse(task.status),
       scheduled: true,
       triggerType: 'manual',
       triggerDescription: '手动触发',

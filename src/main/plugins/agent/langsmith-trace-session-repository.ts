@@ -1,24 +1,7 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
-import { z } from 'zod';
 
-import type { AgentLangSmithTraceSessionV1 } from '../../services/deep-agent/langsmith-tracing';
-
-const traceSessionSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    runId: z.string().min(1),
-    threadId: z.string().min(1),
-    runOrigin: z.enum(['background_schedule', 'chat', 'manual_task_run', 'workbench_creation']),
-    manifestHash: z.string().length(64),
-    appVersion: z.string().trim().min(1),
-    projectName: z.string().trim().min(1),
-    rootId: z.string().uuid(),
-    traceId: z.string().uuid(),
-    dottedOrder: z.string().min(1),
-    startTime: z.number().int().nonnegative()
-  })
-  .strict()
-  .refine((session) => session.rootId === session.traceId) satisfies z.ZodType<AgentLangSmithTraceSessionV1>;
+import { agentLangSmithTraceSessionSchema } from '../../../shared/schemas/agent';
+import type { AgentLangSmithTraceSessionV1 } from '../../../shared/types';
 
 type TraceSessionRow = {
   run_id: string;
@@ -35,7 +18,7 @@ export class AgentLangSmithTraceSessionRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
   create(value: unknown, createdAt: string): AgentLangSmithTraceSessionV1 {
-    const parsed = traceSessionSchema.safeParse(value);
+    const parsed = agentLangSmithTraceSessionSchema.safeParse(value);
     if (!parsed.success) {
       throw new Error('agent_langsmith_trace_session_invalid');
     }
@@ -66,7 +49,7 @@ export class AgentLangSmithTraceSessionRepository {
     } catch {
       throw new Error('agent_langsmith_trace_session_corrupt');
     }
-    const parsed = traceSessionSchema.safeParse(value);
+    const parsed = agentLangSmithTraceSessionSchema.safeParse(value);
     if (
       !parsed.success ||
       row.schema_version !== 1 ||

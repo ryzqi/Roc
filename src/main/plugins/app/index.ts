@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { appStatusSchema } from '../../../shared/schemas/ipc-core';
 import type { AppStatus } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
 
@@ -8,7 +9,7 @@ const capabilityVersion = '1.0.0';
 const emptyInputSchema = z.object({});
 
 const appCapabilityDescriptors = [
-  descriptor('app.status.get', emptyInputSchema, z.custom<AppStatus>())
+  descriptor('app.status.get', emptyInputSchema, appStatusSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type AppPluginOptions = {

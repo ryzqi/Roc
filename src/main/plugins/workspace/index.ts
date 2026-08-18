@@ -1,36 +1,43 @@
 import { z } from 'zod';
 
+import {
+  closedResultSchema,
+  deliveredResultSchema
+} from '../../../shared/schemas/ipc-core';
+import {
+  filePdfPreviewRequestSchema,
+  filePdfPreviewResultSchema,
+  filePreviewRequestSchema,
+  filePreviewResultSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  fileTreeRequestSchema,
+  fileTreeResultSchema,
+  fileWriteResultSchema,
+  fileWriteTextRequestSchema,
+  gitBatchFileOperationRequestSchema,
+  gitBranchListResultSchema,
+  gitBranchMutationResultSchema,
+  gitCheckoutBranchRequestSchema,
+  gitCommitRequestSchema,
+  gitCommitResultSchema,
+  gitCreateBranchRequestSchema,
+  gitDiffStatResultSchema,
+  gitFileDiffResultSchema,
+  gitFileOperationRequestSchema,
+  gitPushResultSchema,
+  gitStatusResultSchema,
+  terminalSessionCloseRequestSchema,
+  terminalSessionCreateRequestSchema,
+  terminalSessionInputRequestSchema,
+  terminalSessionResizeRequestSchema,
+  terminalSessionSnapshotSchema,
+  workspaceSchema,
+  workspaceSelectRequestSchema
+} from '../../../shared/schemas/ipc-workspace';
 import type {
   FileDeleteResult,
-  FilePreviewRequest,
-  FilePreviewResult,
-  FileSearchRequest,
-  FileSearchResult,
-  FileTreeRequest,
-  FileTreeResult,
-  FilesWorkbenchPdfPreviewRequest,
-  FilesWorkbenchPdfPreviewResult,
-  FileWriteResult,
-  FileWriteTextRequest,
-  GitBatchFileOperationRequest,
-  GitBranchListResult,
-  GitBranchMutationResult,
-  GitCheckoutBranchRequest,
-  GitCommitRequest,
-  GitCommitResult,
-  GitCreateBranchRequest,
-  GitDiffStatResult,
-  GitFileDiffResult,
-  GitFileOperationRequest,
-  GitPushResult,
-  GitStatusResult,
   RocSettingsDocument,
-  TerminalSessionCloseRequest,
-  TerminalSessionCreateRequest,
-  TerminalSessionInputRequest,
-  TerminalSessionResizeRequest,
-  TerminalSessionSnapshot,
-  Workspace,
   WorkspaceSelectRequest
 } from '../../../shared/types';
 import { applyWorkspaceDatabaseSchema } from '../../infrastructure/database-schemas';
@@ -54,106 +61,37 @@ const pluginId = '@roc/plugin-workspace';
 const capabilityVersion = '1.0.0';
 export const workspaceChangedEventType = 'workspace.changed';
 
-const workspaceSelectRequestSchema = z.object({
-  path: z.string()
-}) satisfies z.ZodType<WorkspaceSelectRequest>;
-
-const fileTreeRequestSchema = z.object({
-  relativePath: z.string(),
-  limit: z.number().int().optional()
-}) satisfies z.ZodType<FileTreeRequest>;
-
-const fileSearchRequestSchema = z.object({
-  query: z.string(),
-  maxResults: z.number().int().optional()
-}) satisfies z.ZodType<FileSearchRequest>;
-
-const filePreviewRequestSchema = z.object({
-  relativePath: z.string(),
-  maxBytes: z.number().int().optional()
-}) satisfies z.ZodType<FilePreviewRequest>;
-
-const fileWriteTextRequestSchema = z.object({
-  relativePath: z.string(),
-  content: z.string(),
-  source: z.string(),
-  threadId: z.string().optional(),
-  runId: z.string().optional()
-}) satisfies z.ZodType<FileWriteTextRequest>;
-
-const gitFileOperationRequestSchema = z.object({
-  relativePath: z.string()
-}) satisfies z.ZodType<GitFileOperationRequest>;
-
-const gitBatchFileOperationRequestSchema = z.object({
-  relativePaths: z.array(z.string())
-}) satisfies z.ZodType<GitBatchFileOperationRequest>;
-
-const gitCommitRequestSchema = z.object({
-  message: z.string()
-}) satisfies z.ZodType<GitCommitRequest>;
-
-const gitCreateBranchRequestSchema = z.object({
-  name: z.string(),
-  checkoutAfterCreate: z.boolean()
-}) satisfies z.ZodType<GitCreateBranchRequest>;
-
-const gitCheckoutBranchRequestSchema = z.object({
-  name: z.string()
-}) satisfies z.ZodType<GitCheckoutBranchRequest>;
-
-const terminalSessionCreateRequestSchema = z.object({
-  cwd: z.string().optional(),
-  cols: z.number(),
-  rows: z.number()
-}) satisfies z.ZodType<TerminalSessionCreateRequest>;
-
-const terminalSessionInputRequestSchema = z.object({
-  sessionId: z.string(),
-  data: z.string()
-}) satisfies z.ZodType<TerminalSessionInputRequest>;
-
-const terminalSessionResizeRequestSchema = z.object({
-  sessionId: z.string(),
-  cols: z.number(),
-  rows: z.number()
-}) satisfies z.ZodType<TerminalSessionResizeRequest>;
-
-const terminalSessionCloseRequestSchema = z.object({
-  sessionId: z.string()
-}) satisfies z.ZodType<TerminalSessionCloseRequest>;
-
 const relativePathRequestSchema = z.object({
   relativePath: z.string()
-});
+}).strict();
 
 const emptyInputSchema = z.object({});
 
 const workspaceCapabilityDescriptors = [
-  descriptor('workspace.getCurrent', emptyInputSchema, z.custom<Workspace | null>()),
-  descriptor('workspace.select', workspaceSelectRequestSchema, z.custom<Workspace>()),
-  descriptor('files.listTree', fileTreeRequestSchema, z.custom<FileTreeResult>()),
-  descriptor('files.search', fileSearchRequestSchema, z.custom<FileSearchResult>()),
-  descriptor('files.preview', filePreviewRequestSchema, z.custom<FilePreviewResult>()),
-  descriptor('files.previewPdf', relativePathRequestSchema satisfies z.ZodType<FilesWorkbenchPdfPreviewRequest>, z.custom<FilesWorkbenchPdfPreviewResult>()),
-  descriptor('files.writeText', fileWriteTextRequestSchema, z.custom<FileWriteResult>()),
+  descriptor('workspace.getCurrent', emptyInputSchema, workspaceSchema.nullable()),
+  descriptor('workspace.select', workspaceSelectRequestSchema, workspaceSchema),
+  descriptor('files.listTree', fileTreeRequestSchema, fileTreeResultSchema),
+  descriptor('files.search', fileSearchRequestSchema, fileSearchResultSchema),
+  descriptor('files.preview', filePreviewRequestSchema, filePreviewResultSchema),
+  descriptor('files.previewPdf', filePdfPreviewRequestSchema, filePdfPreviewResultSchema),
+  descriptor('files.writeText', fileWriteTextRequestSchema, fileWriteResultSchema),
   descriptor('files.delete', relativePathRequestSchema, z.custom<FileDeleteResult>()),
-  descriptor('git.status', emptyInputSchema, z.custom<GitStatusResult>()),
-  descriptor('git.diffStat', emptyInputSchema, z.custom<GitDiffStatResult>()),
-  descriptor('git.fileDiff', gitFileOperationRequestSchema, z.custom<GitFileDiffResult>()),
-  descriptor('git.stageFile', gitFileOperationRequestSchema, z.custom<GitStatusResult>()),
-  descriptor('git.stageFiles', gitBatchFileOperationRequestSchema, z.custom<GitStatusResult>()),
-  descriptor('git.unstageFile', gitFileOperationRequestSchema, z.custom<GitStatusResult>()),
-  descriptor('git.discardFile', gitFileOperationRequestSchema, z.custom<GitStatusResult>()),
-  descriptor('git.commit', gitCommitRequestSchema, z.custom<GitCommitResult>()),
-  descriptor('git.push', emptyInputSchema, z.custom<GitPushResult>()),
-  descriptor('git.listBranches', emptyInputSchema, z.custom<GitBranchListResult>()),
-  descriptor('git.createBranch', gitCreateBranchRequestSchema, z.custom<GitBranchMutationResult>()),
-  descriptor('git.checkoutBranch', gitCheckoutBranchRequestSchema, z.custom<GitBranchMutationResult>()),
-  descriptor('terminal.createSession', terminalSessionCreateRequestSchema, z.custom<TerminalSessionSnapshot>()),
-  descriptor('terminal.writeInput', terminalSessionInputRequestSchema, z.object({ delivered: z.literal(true) })),
-  descriptor('terminal.resize', terminalSessionResizeRequestSchema, z.custom<TerminalSessionSnapshot>()),
-  descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, z.object({ closed: z.literal(true) })),
+  descriptor('git.status', emptyInputSchema, gitStatusResultSchema),
+  descriptor('git.diffStat', emptyInputSchema, gitDiffStatResultSchema),
+  descriptor('git.fileDiff', gitFileOperationRequestSchema, gitFileDiffResultSchema),
+  descriptor('git.stageFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.stageFiles', gitBatchFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.unstageFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.discardFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.commit', gitCommitRequestSchema, gitCommitResultSchema),
+  descriptor('git.push', emptyInputSchema, gitPushResultSchema),
+  descriptor('git.listBranches', emptyInputSchema, gitBranchListResultSchema),
+  descriptor('git.createBranch', gitCreateBranchRequestSchema, gitBranchMutationResultSchema),
+  descriptor('git.checkoutBranch', gitCheckoutBranchRequestSchema, gitBranchMutationResultSchema),
+  descriptor('terminal.createSession', terminalSessionCreateRequestSchema, terminalSessionSnapshotSchema),
+  descriptor('terminal.writeInput', terminalSessionInputRequestSchema, deliveredResultSchema),
+  descriptor('terminal.resize', terminalSessionResizeRequestSchema, terminalSessionSnapshotSchema),
+  descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, closedResultSchema),
   descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>())
 ] as const satisfies readonly CapabilityDescriptor[];
 

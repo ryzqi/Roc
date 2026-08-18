@@ -1,15 +1,21 @@
 import { z } from 'zod';
 
+import { deletedResultSchema } from '../../../shared/schemas/ipc-core';
+import {
+  mcpApprovalModeRequestSchema,
+  mcpServerConfigSchema,
+  mcpServerEnabledRequestSchema,
+  mcpServerSnapshotSchema,
+  mcpServerTestResultSchema,
+  mcpServersConfigSchema
+} from '../../../shared/schemas/ipc-mcp-skills';
 import type {
   ApprovalMode,
   McpServerConfig,
-  McpServerSnapshot,
-  McpServerTestResult,
   McpServersConfig
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { defaultMcpConfig } from '../../services/config/defaults';
-import { McpServerSchema } from '../../services/config/schema';
 import { McpService, type McpConfigService } from '../../services/mcp-service';
 import { createMcpClientAdapter, type McpClientAdapter } from './mcp-client-adapter';
 
@@ -17,26 +23,19 @@ const pluginId = '@roc/plugin-mcp';
 const capabilityVersion = '1.0.0';
 
 const emptyInputSchema = z.object({});
-const serverEnabledRequestSchema = z.object({
-  id: z.string(),
-  enabled: z.boolean()
-});
-const approvalModeRequestSchema = z.object({
-  approvalMode: z.enum(['fully_automatic', 'default'])
-});
 const idInputSchema = z.object({
   id: z.string()
-});
+}).strict();
 
 const mcpCapabilityDescriptors = [
-  descriptor('mcp.listServers', emptyInputSchema, z.custom<McpServerSnapshot[]>()),
-  descriptor('mcp.ensureExaPreset', emptyInputSchema, z.custom<McpServerConfig>()),
-  descriptor('mcp.upsertServer', McpServerSchema, z.custom<McpServerConfig>()),
-  descriptor('mcp.setServerEnabled', serverEnabledRequestSchema, z.custom<McpServerConfig>()),
-  descriptor('mcp.deleteServer', idInputSchema, z.object({ deleted: z.literal(true) })),
-  descriptor('mcp.testServer', idInputSchema, z.custom<McpServerTestResult>()),
-  descriptor('mcp.getConfig', emptyInputSchema, z.custom<McpServersConfig>()),
-  descriptor('mcp.setApprovalMode', approvalModeRequestSchema, z.custom<McpServersConfig>()),
+  descriptor('mcp.listServers', emptyInputSchema, mcpServerSnapshotSchema.array()),
+  descriptor('mcp.ensureExaPreset', emptyInputSchema, mcpServerConfigSchema),
+  descriptor('mcp.upsertServer', mcpServerConfigSchema, mcpServerConfigSchema),
+  descriptor('mcp.setServerEnabled', mcpServerEnabledRequestSchema, mcpServerConfigSchema),
+  descriptor('mcp.deleteServer', idInputSchema, deletedResultSchema),
+  descriptor('mcp.testServer', idInputSchema, mcpServerTestResultSchema),
+  descriptor('mcp.getConfig', emptyInputSchema, mcpServersConfigSchema),
+  descriptor('mcp.setApprovalMode', mcpApprovalModeRequestSchema, mcpServersConfigSchema),
   descriptor('mcp.tools.get', emptyInputSchema, z.array(z.unknown()))
 ] as const satisfies readonly CapabilityDescriptor[];
 

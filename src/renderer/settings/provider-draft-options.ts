@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import {
   anthropicThinkingMinBudgetTokens,
   type NvidiaToolChoice,
@@ -95,17 +97,15 @@ function parseNvidiaToolChoice(draft: ProviderDraft): NvidiaToolChoice | undefin
   };
 }
 
-function parseOptionalJsonObject(value: string, label: string): Record<string, unknown> | undefined {
+const jsonObjectSchema = z.record(z.string(), z.json());
+
+function parseOptionalJsonObject(value: string, label: string): z.infer<typeof jsonObjectSchema> | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
     return undefined;
   }
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`${label} 必须是 JSON 对象。`);
-    }
-    return parsed as Record<string, unknown>;
+    return jsonObjectSchema.parse(JSON.parse(trimmed) as unknown);
   } catch {
     throw new Error(`${label} 必须是合法 JSON 对象。`);
   }

@@ -2,9 +2,9 @@ import type {
   AgentCapabilityPreview,
   ChatStartRunRequest,
   EnabledCapabilities,
-  TaskEvent,
   TaskKind
 } from '../../../shared/types';
+import { agentTaskEventPayloadSchema } from '../../../shared/schemas/task-event';
 
 export function readAgentRunCompletedPayload(payload: unknown): {
   runId: string;
@@ -95,32 +95,11 @@ export function readAgentRunFailedPayload(payload: unknown): {
 export function readAgentTaskEventPayload(payload: unknown): {
   runId: string;
   threadId: string;
-  type: TaskEvent['type'];
+  type: 'approval_decision' | 'approval_requested' | 'assistant_block' | 'guardrail_nudge' | 'hook_completed' | 'hook_started' | 'subagent_event' | 'tool_call';
   payload: Record<string, unknown>;
 } | null {
-  if (payload === null || typeof payload !== 'object') {
-    return null;
-  }
-  const runId = Reflect.get(payload, 'runId');
-  const threadId = Reflect.get(payload, 'threadId');
-  const type = Reflect.get(payload, 'type');
-  const eventPayload = Reflect.get(payload, 'payload');
-  if (
-    typeof runId !== 'string' ||
-    typeof threadId !== 'string' ||
-    !isAgentTaskEventType(type) ||
-    eventPayload === null ||
-    typeof eventPayload !== 'object' ||
-    Array.isArray(eventPayload)
-  ) {
-    return null;
-  }
-  return {
-    runId,
-    threadId,
-    type,
-    payload: eventPayload as Record<string, unknown>
-  };
+  const parsed = agentTaskEventPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : null;
 }
 
 export function readAgentRunStartedPayload(payload: unknown): {
@@ -183,19 +162,6 @@ export function resolveAgentRunThreadKind(input: {
     return 'background';
   }
   return 'chat';
-}
-
-function isAgentTaskEventType(value: unknown): value is TaskEvent['type'] {
-  return (
-    value === 'tool_call' ||
-    value === 'assistant_block' ||
-    value === 'guardrail_nudge' ||
-    value === 'subagent_event' ||
-    value === 'hook_started' ||
-    value === 'hook_completed' ||
-    value === 'approval_requested' ||
-    value === 'approval_decision'
-  );
 }
 
 function isChatRunMode(value: unknown): value is ChatStartRunRequest['mode'] {

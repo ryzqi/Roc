@@ -403,7 +403,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-older',
           runId: 'run-older',
           type: 'message',
-          payload: { role: 'assistant', content: '旧线程回复' },
+          payload: { role: 'assistant', content: '旧线程回复', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:10:03.000Z'
         }
       ]
@@ -448,7 +448,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-current',
           runId: 'run-current',
           type: 'message',
-          payload: { role: 'assistant', content: '当前线程回复' },
+          payload: { role: 'assistant', content: '当前线程回复', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:30:03.000Z'
         },
         {
@@ -456,7 +456,7 @@ describe('chat transcript helpers', () => {
           threadId: 'thread-older',
           runId: 'run-older',
           type: 'message',
-          payload: { role: 'assistant', content: '历史线程回复' },
+          payload: { role: 'assistant', content: '历史线程回复', providerId: 'test-provider', modelId: 'test-model' },
           createdAt: '2026-05-09T08:20:03.000Z'
         },
         {

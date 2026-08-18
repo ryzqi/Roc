@@ -1,4 +1,5 @@
 import type { ChatRunEvent, TaskRun } from '../../../shared/types';
+import { toolCallAssistantBlockSchema } from '../../../shared/schemas/task-event';
 import {
   DeepAgents110V3ContractError,
   type DeepAgents110V3Message,
@@ -110,14 +111,14 @@ export async function consumeToolCallStream(input: {
     input.callbacks.emitRuntimeEvent({
       type: 'assistant_block',
       runId: input.context.runId,
-      block: {
+      block: toolCallAssistantBlockSchema.parse({
         kind: 'tool_call',
         blockId: `tool-${call.callId}`,
         callId: call.callId,
         name: call.name,
         phase: 'start',
         input: callInput
-      }
+      })
     });
     input.callbacks.emitTodoEvent(callInput);
 
@@ -145,7 +146,7 @@ export async function consumeToolCallStream(input: {
       input.callbacks.emitRuntimeEvent({
         type: 'assistant_block',
         runId: input.context.runId,
-        block: {
+        block: toolCallAssistantBlockSchema.parse({
           kind: 'tool_call',
           blockId: `tool-${call.callId}`,
           callId: call.callId,
@@ -153,7 +154,7 @@ export async function consumeToolCallStream(input: {
           phase: 'error',
           input: callInput,
           error: message
-        }
+        })
       });
       input.callbacks.recordSessionToolCall?.(call.name, callInput, { error: message });
       continue;
@@ -167,7 +168,7 @@ export async function consumeToolCallStream(input: {
     input.callbacks.emitRuntimeEvent({
       type: 'assistant_block',
       runId: input.context.runId,
-      block: {
+      block: toolCallAssistantBlockSchema.parse({
         kind: 'tool_call',
         blockId: `tool-${call.callId}`,
         callId: call.callId,
@@ -175,7 +176,7 @@ export async function consumeToolCallStream(input: {
         phase: 'end',
         input: callInput,
         output
-      }
+      })
     });
     input.callbacks.recordSessionToolCall?.(call.name, callInput, output);
     input.callbacks.emitTodoEvent(output);

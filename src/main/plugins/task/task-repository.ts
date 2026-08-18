@@ -1172,7 +1172,7 @@ type BackgroundTaskRecord = {
   thread_id: string;
   run_id: string;
   goal: string;
-  status: TaskStatus;
+  status: BackgroundTask['status'];
   scheduled: 0 | 1;
   trigger_type: BackgroundTaskTrigger['type'];
   trigger_description: string;

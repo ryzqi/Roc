@@ -1,35 +1,20 @@
-export type RocRunMode = 'development' | 'packaged' | 'smoke' | 'test';
+import type { z } from 'zod';
 
-export type RocErrorCategory =
-  | 'validation'
-  | 'permission'
-  | 'not_found'
-  | 'conflict'
-  | 'external'
-  | 'degraded'
-  | 'internal';
+import {
+  ipcResultSchema,
+  rocErrorCategorySchema,
+  rocErrorSchema,
+  rocPathsSnapshotSchema,
+  rocRunModeSchema,
+  serviceStatusSchema
+} from '../schemas/ipc-core';
 
-export type RocError = {
-  code: string;
-  message: string;
-  category: RocErrorCategory;
-  retryable: boolean;
-  userAction?: string;
-  auditEventId?: string;
-};
+export type RocRunMode = z.infer<typeof rocRunModeSchema>;
+export type RocErrorCategory = z.infer<typeof rocErrorCategorySchema>;
+export type RocError = z.infer<typeof rocErrorSchema>;
 
-export type IpcResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: RocError };
+type IpcResultSchema<T> = ReturnType<typeof ipcResultSchema<z.ZodType<T>>>;
+export type IpcResult<T> = z.infer<IpcResultSchema<T>>;
 
-export type ServiceStatus = 'ready' | 'blocked' | 'degraded';
-
-export type RocPathsSnapshot = {
-  root: string;
-  configDir: string;
-  memoryDir: string;
-  logsDir: string;
-  diagnosticsDir: string;
-  skillsDir: string;
-  artifactsDir: string;
-};
+export type ServiceStatus = z.infer<typeof serviceStatusSchema>;
+export type RocPathsSnapshot = z.infer<typeof rocPathsSnapshotSchema>;

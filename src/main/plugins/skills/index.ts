@@ -1,12 +1,19 @@
 import { z } from 'zod';
 
+import { deletedResultSchema } from '../../../shared/schemas/ipc-core';
+import {
+  skillEnabledRequestSchema,
+  skillFilePreviewRequestSchema,
+  skillFilePreviewResultSchema,
+  skillFileTreeRequestSchema,
+  skillFileTreeResultSchema,
+  skillImportRequestSchema,
+  skillSnapshotSchema
+} from '../../../shared/schemas/ipc-mcp-skills';
 import type {
   SkillFilePreviewRequest,
-  SkillFilePreviewResult,
   SkillFileTreeRequest,
-  SkillFileTreeResult,
-  SkillImportRequest,
-  SkillSnapshot
+  SkillImportRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
 import { RocPaths } from '../../services/paths';
@@ -16,34 +23,17 @@ const pluginId = '@roc/plugin-skills';
 const capabilityVersion = '1.0.0';
 
 const emptyInputSchema = z.object({});
-const skillImportRequestSchema = z.object({
-  sourcePath: z.string(),
-  id: z.string().optional()
-}) satisfies z.ZodType<SkillImportRequest>;
-const skillSetEnabledRequestSchema = z.object({
-  id: z.string(),
-  enabled: z.boolean()
-});
 const idInputSchema = z.object({
   id: z.string()
-});
-const skillFileTreeRequestSchema = z.object({
-  id: z.string(),
-  relativePath: z.string()
-}) satisfies z.ZodType<SkillFileTreeRequest>;
-const skillFilePreviewRequestSchema = z.object({
-  id: z.string(),
-  relativePath: z.string(),
-  maxBytes: z.number().int().optional()
-}) satisfies z.ZodType<SkillFilePreviewRequest>;
+}).strict();
 
 const skillsCapabilityDescriptors = [
-  descriptor('skills.list', emptyInputSchema, z.custom<SkillSnapshot[]>()),
-  descriptor('skills.import', skillImportRequestSchema, z.custom<SkillSnapshot>()),
-  descriptor('skills.setEnabled', skillSetEnabledRequestSchema, z.custom<SkillSnapshot>()),
-  descriptor('skills.delete', idInputSchema, z.object({ deleted: z.literal(true) })),
-  descriptor('skills.files.list', skillFileTreeRequestSchema, z.custom<SkillFileTreeResult>()),
-  descriptor('skills.file.read', skillFilePreviewRequestSchema, z.custom<SkillFilePreviewResult>())
+  descriptor('skills.list', emptyInputSchema, skillSnapshotSchema.array()),
+  descriptor('skills.import', skillImportRequestSchema, skillSnapshotSchema),
+  descriptor('skills.setEnabled', skillEnabledRequestSchema, skillSnapshotSchema),
+  descriptor('skills.delete', idInputSchema, deletedResultSchema),
+  descriptor('skills.files.list', skillFileTreeRequestSchema, skillFileTreeResultSchema),
+  descriptor('skills.file.read', skillFilePreviewRequestSchema, skillFilePreviewResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 export type SkillsPluginOptions = {

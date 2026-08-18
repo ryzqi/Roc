@@ -119,7 +119,7 @@ describe('ChatFeature', () => {
             threadId: 'thread-current',
             runId: 'run-current',
             type: 'message',
-            payload: { role: 'assistant', content: '截断回复' },
+            payload: { role: 'assistant', content: '截断回复', providerId: 'test-provider', modelId: 'test-model' },
             createdAt: '2026-05-09T08:30:00.000Z'
           }
         ]
@@ -299,7 +299,7 @@ function createChatClient(input: { agentStatus?: AgentRuntimeStatus; settingsSna
             threadId: 'thread-current',
             runId: 'run-current',
             type: 'message',
-            payload: { role: 'assistant', content: '完整回复' },
+            payload: { role: 'assistant', content: '完整回复', providerId: 'test-provider', modelId: 'test-model' },
             createdAt: '2026-05-09T08:30:00.000Z',
             sequence: 1
           }],

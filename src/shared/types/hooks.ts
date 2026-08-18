@@ -1,56 +1,26 @@
-export const rocHookEventNames = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionEnd'] as const;
+import type { z } from 'zod';
 
-export type RocHookEventName = (typeof rocHookEventNames)[number];
+import { chatRunEventSchema } from '../schemas/chat';
+import {
+  rocHookConfigSchema,
+  rocHookConfigSnapshotSchema,
+  rocHookEventNameSchema,
+  settingsSaveHookConfigRequestSchema,
+  settingsTrustHookRequestSchema
+} from '../schemas/ipc-memory-settings';
+import { hookRunSummarySchema } from '../schemas/task-event';
 
-export type RocHookFailureMode = 'continue' | 'block';
+export const rocHookEventNames = rocHookEventNameSchema.options;
 
-export type RocHookHandlerType = 'command';
-
-export type RocHookCommandHandler = {
-  type: 'command';
-  command: string;
-  commandWindows?: string;
-  timeoutSeconds: number;
-  statusMessage?: string;
-  enabled: boolean;
-  failureMode: RocHookFailureMode;
-};
-
-export type RocHookMatcherGroup = {
-  matcher?: string;
-  hooks: RocHookCommandHandler[];
-};
-
-export type RocHookConfig = {
-  schemaVersion: 1;
-  hooks: Partial<Record<RocHookEventName, RocHookMatcherGroup[]>>;
-};
-
-export type RocHookTrustState = 'trusted' | 'review_required' | 'disabled' | 'invalid';
-
-export type RocHookConfiguredHandlerSnapshot = {
-  id: string;
-  event: RocHookEventName;
-  matcher: string | null;
-  command: string;
-  commandWindows: string | null;
-  timeoutSeconds: number;
-  statusMessage: string | null;
-  enabled: boolean;
-  failureMode: RocHookFailureMode;
-  hash: string;
-  trustState: RocHookTrustState;
-  validationError: string | null;
-  lastRun: RocHookRunSummary | null;
-};
-
-export type RocHookConfigSnapshot = {
-  configPath: string;
-  exists: boolean;
-  config: RocHookConfig;
-  handlers: RocHookConfiguredHandlerSnapshot[];
-  validationErrors: string[];
-};
+export type RocHookEventName = z.infer<typeof rocHookEventNameSchema>;
+export type RocHookConfig = z.infer<typeof rocHookConfigSchema>;
+export type RocHookMatcherGroup = NonNullable<RocHookConfig['hooks'][RocHookEventName]>[number];
+export type RocHookCommandHandler = RocHookMatcherGroup['hooks'][number];
+export type RocHookFailureMode = RocHookCommandHandler['failureMode'];
+export type RocHookHandlerType = RocHookCommandHandler['type'];
+export type RocHookConfigSnapshot = z.infer<typeof rocHookConfigSnapshotSchema>;
+export type RocHookConfiguredHandlerSnapshot = RocHookConfigSnapshot['handlers'][number];
+export type RocHookTrustState = RocHookConfiguredHandlerSnapshot['trustState'];
 
 export const emptyRocHookConfigSnapshot: RocHookConfigSnapshot = {
   configPath: '',
@@ -63,40 +33,14 @@ export const emptyRocHookConfigSnapshot: RocHookConfigSnapshot = {
   validationErrors: []
 };
 
-export type RocHookTrustRequest = {
-  handlerId: string;
-  hash: string;
-};
-
-export type RocHookSaveConfigRequest = {
-  config: RocHookConfig;
-};
-
-export type RocHookRunStatus = 'skipped' | 'running' | 'completed' | 'failed' | 'blocked';
-
-export type RocHookRunSummary = {
-  runId: string;
-  handlerId: string;
-  event: RocHookEventName;
-  status: RocHookRunStatus;
-  durationMs: number | null;
-  message: string | null;
-  additionalContext: string | null;
-  requestContinue: string | null;
-  commandDisplay: string;
-};
-
-export type RocHookRunEvent =
-  | {
-      type: 'hook_started';
-      runId: string;
-      hook: RocHookRunSummary;
-    }
-  | {
-      type: 'hook_completed';
-      runId: string;
-      hook: RocHookRunSummary;
-    };
+export type RocHookTrustRequest = z.infer<typeof settingsTrustHookRequestSchema>;
+export type RocHookSaveConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
+export type RocHookRunSummary = z.infer<typeof hookRunSummarySchema>;
+export type RocHookRunStatus = RocHookRunSummary['status'];
+export type RocHookRunEvent = Extract<
+  z.infer<typeof chatRunEventSchema>,
+  { type: 'hook_started' | 'hook_completed' }
+>;
 
 export type RocHookSessionSource = 'chat' | 'background_task';
 

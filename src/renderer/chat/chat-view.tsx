@@ -170,10 +170,7 @@ export function ChatView({
       if (event.threadId !== selectedThreadId || event.type !== 'message') {
         return false;
       }
-      if (typeof event.payload !== 'object' || event.payload === null) {
-        return false;
-      }
-      return Reflect.get(event.payload, 'role') === 'user' && Reflect.get(event.payload, 'content') === pendingUserInput;
+      return event.payload.role === 'user' && event.payload.content === pendingUserInput;
     });
     if (hasPersistedUserMessage) {
       setPendingUserInput(null);

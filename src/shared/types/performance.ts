@@ -1,49 +1,11 @@
-export type PerformancePhase =
-  | 'main_ready'
-  | 'services_created'
-  | 'services_initialized'
-  | 'services_critical_initialized'
-  | 'services_deferred_initialized'
-  | 'window_created'
-  | 'renderer_loaded'
-  | 'ready_to_show'
-  | 'renderer_first_paint'
-  | 'renderer_interactive'
-  | 'ipc_call'
-  | 'db_query'
-  | 'file_io'
-  | 'provider_first_token'
-  | 'provider_failed'
-  | 'provider_completed';
+import type { z } from 'zod';
 
-export type PerformanceTimingSample = {
-  id: string;
-  phase: PerformancePhase;
-  label: string;
-  startedAtMs: number;
-  durationMs: number;
-  metadata: Record<string, string | number | boolean | null>;
-};
+import { performanceSampleSchema } from '../schemas/ipc-core';
 
-export type PerformanceSnapshot = {
-  generatedAt: string;
-  samples: PerformanceTimingSample[];
-};
+type PerformanceSample = z.infer<typeof performanceSampleSchema>;
 
-export type PerformanceIpcChannelSummary = {
-  channel: string;
-  count: number;
-  totalDurationMs: number;
-  averageDurationMs: number;
-  maxDurationMs: number;
-  lastOk: boolean | null;
-};
-
-export type PerformanceIpcSummary = {
-  generatedFromSamples: number;
-  totalCalls: number;
-  topLimit: number;
-  topSlowCalls: PerformanceIpcChannelSummary[];
-  topFrequentCalls: PerformanceIpcChannelSummary[];
-  windowSetBoundsCalls: number;
-};
+export type PerformanceSnapshot = PerformanceSample['timing'];
+export type PerformanceTimingSample = PerformanceSnapshot['samples'][number];
+export type PerformancePhase = PerformanceTimingSample['phase'];
+export type PerformanceIpcSummary = PerformanceSample['ipc'];
+export type PerformanceIpcChannelSummary = PerformanceIpcSummary['topSlowCalls'][number];

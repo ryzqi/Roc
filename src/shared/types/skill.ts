@@ -1,51 +1,18 @@
-export type SkillSnapshot = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  path: string;
-  description: string;
-  status: 'ready' | 'invalid';
-  lastError?: string | null;
-};
+import type { z } from 'zod';
 
-export type SkillFileEntry = {
-  name: string;
-  relativePath: string;
-  type: 'file' | 'directory';
-  size: number;
-  updatedAt: string;
-};
+import {
+  skillFilePreviewRequestSchema,
+  skillFilePreviewResultSchema,
+  skillFileTreeRequestSchema,
+  skillFileTreeResultSchema,
+  skillImportRequestSchema,
+  skillSnapshotSchema
+} from '../schemas/ipc-mcp-skills';
 
-export type SkillFileTreeRequest = {
-  id: string;
-  relativePath: string;
-};
-
-export type SkillFileTreeResult = {
-  id: string;
-  rootPath: string;
-  relativePath: string;
-  entries: SkillFileEntry[];
-  truncated: boolean;
-};
-
-export type SkillFilePreviewRequest = {
-  id: string;
-  relativePath: string;
-  maxBytes?: number;
-};
-
-export type SkillFilePreviewResult = {
-  id: string;
-  relativePath: string;
-  kind: 'text' | 'image' | 'binary';
-  content: string;
-  truncated: boolean;
-  sizeBytes: number;
-  mediaType?: string;
-};
-
-export type SkillImportRequest = {
-  sourcePath: string;
-  id?: string;
-};
+export type SkillSnapshot = z.infer<typeof skillSnapshotSchema>;
+export type SkillFileTreeRequest = z.infer<typeof skillFileTreeRequestSchema>;
+export type SkillFileTreeResult = z.infer<typeof skillFileTreeResultSchema>;
+export type SkillFileEntry = SkillFileTreeResult['entries'][number];
+export type SkillFilePreviewRequest = z.infer<typeof skillFilePreviewRequestSchema>;
+export type SkillFilePreviewResult = z.infer<typeof skillFilePreviewResultSchema>;
+export type SkillImportRequest = z.infer<typeof skillImportRequestSchema>;

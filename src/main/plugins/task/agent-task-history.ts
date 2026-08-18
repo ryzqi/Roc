@@ -16,6 +16,7 @@ import type {
   TaskStatus,
   TaskThread
 } from '../../../shared/types';
+import { taskEventSchema } from '../../../shared/schemas/task-event';
 import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
 const recentEventLimit = 50;
@@ -88,14 +89,14 @@ export class AgentTaskHistoryReader {
 
   recordBackgroundTaskEvent(task: BackgroundTask, type: TaskEvent['type'], payload: Record<string, unknown>): TaskEvent {
     const createdAt = new Date().toISOString();
-    const event: TaskEvent = {
+    const event = taskEventSchema.parse({
       id: `event_${randomUUID()}`,
       threadId: task.threadId,
       runId: task.runId,
       type,
       payload,
       createdAt
-    };
+    });
     this.agentDb.transaction(() => {
       const sequence = this.nextEventSequence(task.threadId);
       this.agentDb
@@ -558,15 +559,15 @@ type TaskThreadRow = {
 };
 
 function mapTaskEvent(row: TaskEventRow & { rowid?: number }): TaskEvent {
-  return {
+  return taskEventSchema.parse({
     id: row.id,
     threadId: row.thread_id,
     runId: row.run_id,
     type: row.type,
-    payload: JSON.parse(row.payload_json) as unknown,
+    payload: JSON.parse(row.payload_json),
     createdAt: row.created_at,
     sequence: row.rowid
-  };
+  });
 }
 
 function mapTaskRun(row: TaskRunRow): TaskRun {

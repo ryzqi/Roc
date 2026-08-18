@@ -1,19 +1,10 @@
-import { z } from 'zod';
+import {
+  mcpServerConfigSchema,
+  mcpServersConfigSchema
+} from '../../shared/schemas/ipc-mcp-skills';
 import type { ApprovalMode, McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
 import { RocDomainError } from './errors';
 import { requireText } from './validation';
-
-const McpServerSchema: z.ZodType<McpServerConfig> = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  enabled: z.boolean(),
-  transport: z.enum(['stdio', 'http', 'sse']),
-  preset: z.boolean(),
-  riskLevel: z.enum(['low', 'medium', 'high']),
-  url: z.string().min(1).optional(),
-  command: z.string().min(1).optional(),
-  allowedTools: z.array(z.string().min(1))
-});
 
 export type McpConfigService = {
   getMcpConfig(): McpServersConfig;
@@ -75,7 +66,7 @@ export class McpService {
   }
 
   upsertServer(server: McpServerConfig): McpServerConfig {
-    const parsed = McpServerSchema.parse(server);
+    const parsed = mcpServerConfigSchema.parse(server);
     this.validateTransportFields(parsed);
     const config = this.readConfig();
     const existingIndex = config.servers.findIndex((item) => item.id === parsed.id);
@@ -155,11 +146,7 @@ export class McpService {
   }
 
   private writeConfig(config: McpServersConfig): void {
-    const parsed = {
-      schemaVersion: 1 as const,
-      approvalMode: config.approvalMode,
-      servers: z.array(McpServerSchema).parse(config.servers)
-    };
+    const parsed = mcpServersConfigSchema.parse(config);
     this.configService.saveMcpConfig(parsed);
   }
 

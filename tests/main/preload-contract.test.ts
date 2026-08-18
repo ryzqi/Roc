@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ipcChannels, type RocPreloadApi } from '../../src/shared/ipc';
+import { ipcRegistry } from '../../src/shared/ipc-registry';
 
 const electronMock = vi.hoisted(() => ({
   exposed: new Map<string, unknown>(),
@@ -27,56 +28,21 @@ describe('preload contract', () => {
     await import('../../src/preload/index');
 
     const api = electronMock.exposed.get('roc') as RocPreloadApi;
-    expect(Object.keys(api).sort()).toEqual([
-      'agent',
-      'app',
-      'chat',
-      'diagnostics',
-      'files',
-      'git',
-      'lifecycle',
-      'mcp',
-      'memory',
-      'rtk',
-      'sessions',
-      'settings',
-      'shell',
-      'skills',
-      'tasks',
-      'terminal',
-      'window',
-      'workspace'
-    ]);
-    expect(Object.keys(api.window).sort()).toEqual(['close', 'getBounds', 'getState', 'minimize', 'toggleMaximize']);
-    expect(Object.keys(api.shell).sort()).toEqual(['confirm', 'execute']);
-    expect(Object.keys(api.diagnostics).sort()).toEqual([
-      'createDiagnosticPackage',
-      'getMetricsSnapshot',
-      'runChecks',
-      'runHealthCheck',
-      'samplePerformance'
-    ]);
-    expect(Object.keys(api.memory).sort()).toEqual(['readFile', 'snapshotPreview', 'status', 'writeFile']);
-    expect(Object.keys(api.sessions).sort()).toEqual(['list', 'search']);
-    expect(Object.keys(api.settings).sort()).toEqual([
-      'clearProviderSecret',
-      'get',
-      'getHooks',
-      'save',
-      'saveHooks',
-      'setProviderSecret',
-      'testProvider',
-      'trustHook'
-    ]);
-    expect(Object.keys(api.agent).sort()).toEqual([
-      'clearLangSmithApiKey',
-      'getCapabilityPreview',
-      'getConfigPreview',
-      'getLangSmithSettings',
-      'getStatus',
-      'saveLangSmithSettings',
-      'setLangSmithApiKey'
-    ]);
+    const registryEntries = [...ipcRegistry.requests, ...ipcRegistry.events];
+    const expectedMethodsByDomain = Object.fromEntries(
+      [...new Set(registryEntries.map((entry) => entry.domain))].map((domain) => [
+        domain,
+        registryEntries
+          .filter((entry) => entry.domain === domain)
+          .map((entry) => entry.method)
+          .sort()
+      ])
+    );
+    const actualMethodsByDomain = Object.fromEntries(
+      Object.entries(api).map(([domain, methods]) => [domain, Object.keys(methods).sort()])
+    );
+
+    expect(actualMethodsByDomain).toEqual(expectedMethodsByDomain);
 
     electronMock.ipcRenderer.invoke.mockClear();
     const config = { schemaVersion: 1 as const, enabled: false, projectName: 'roc' };

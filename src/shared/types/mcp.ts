@@ -1,33 +1,11 @@
-export type McpServerSnapshot = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  transport: 'stdio' | 'http' | 'sse';
-  status: 'not_connected' | 'ready' | 'error';
-  tools: number;
-  preset?: boolean;
-  riskLevel?: 'low' | 'medium' | 'high';
-  url?: string;
-  command?: string;
-  allowedTools?: string[];
-  lastError?: string | null;
-};
+import type { z } from 'zod';
 
-export type McpServerConfig = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  transport: 'stdio' | 'http' | 'sse';
-  preset: boolean;
-  riskLevel: 'low' | 'medium' | 'high';
-  url?: string;
-  command?: string;
-  allowedTools: string[];
-};
+import {
+  mcpServerConfigSchema,
+  mcpServerSnapshotSchema,
+  mcpServerTestResultSchema
+} from '../schemas/ipc-mcp-skills';
 
-export type McpServerTestResult = {
-  serverId: string;
-  status: 'ready' | 'invalid';
-  checked: string[];
-  error: string | null;
-};
+export type McpServerSnapshot = z.infer<typeof mcpServerSnapshotSchema>;
+export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
+export type McpServerTestResult = z.infer<typeof mcpServerTestResultSchema>;

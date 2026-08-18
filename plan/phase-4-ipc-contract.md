@@ -52,3 +52,21 @@ zod schema 为唯一事实源：
 - 新增一个 channel 只改 schema 一处，`pnpm generate:ipc` 后 preload/映射/类型全部就位。
 - 全仓 grep：`z.unknown()` 不再出现在事件 payload；usage 五元组只有一处定义；`Reflect.get` 在 `chat-transcript.ts` 的 guard 段删除。
 - `pnpm check:ipc`、`pnpm typecheck`、`pnpm test` 全绿；preload-contract 测试变为推导式。
+
+## 执行记录（2026-08-18）
+
+- fixed point：`fc6b95e`；当前变更仍在工作树，尚未提交。
+- 内容与传输契约已统一到 shared Zod registry：100 个 request、7 个 event，request args、成功 data、event payload 均在真实边界 parse；生成器改为 esbuild bundle，preload 与 capability mapping 从 registry 生成。
+- 迁移覆盖 agent/chat/task/settings/config/hooks/MCP/skills/workspace/runtime-tools，以及 usage 五元组；删除旧 JSON schema、手写 preload API/映射、renderer `Reflect.get` guard 和重复类型。
+- 目标验证：聚焦 136 文件/850 项通过；串行全量 327 文件/1832 项通过；`pnpm generate:ipc`、`pnpm check:ipc`、strict unused tsc、`pnpm typecheck`、`pnpm build`、`git diff --check` 均通过。
+- 两项过时 config 断言和一项绕过真实边界的 adapter 断言已修正；新增 chat/shell main-only 字段在 IPC 边界拒绝的回归测试。
+- 首轮 Standards/Spec 审查问题已修复：恢复 task 有效约束，所有 IPC-facing shared type 改为 schema 转导，IPC 成功/失败 envelope 统一 runtime parse，边界异常转受控 `IpcResult`，删除生成器死分支并同步事实源文档。
+- 修复后门禁：聚焦 29 文件/117 项、串行全量 328 文件/1837 项通过；`pnpm generate:ipc`、`pnpm check:ipc`、strict unused tsc、`pnpm typecheck`、`pnpm build`、`git diff --check` 均通过。
+- 复审追加修复：`DefaultModelState` 收回共享 schema；HITL request/decision 提取为 chat/task/main 共用 schema，renderer 删除 persisted interrupt 鸭子 guard，并新增畸形 approval 负例。
+- 最终修复门禁：相关 5 文件/18 项、串行全量 328 文件/1838 项通过；`pnpm check:ipc`、strict unused tsc、`pnpm typecheck`、`pnpm build`、`git diff --check` 均通过。
+- 决策集合复审修复：`hitlDecisionTypeSchema` 成为 `approve/edit/reject` 唯一事实源，agent policy/manifest 与 `InterruptDecisionType` 复用/推导；6 文件/24 项聚焦及最终串行全量 328 文件/1838 项通过。
+- Spec 旁路复审修复：recorded resume 审计 payload 现在使用共享 HITL decision schema parse；`chat-view.tsx` 直接访问已解析 TaskEvent message，不再保留 Reflect guard；新增两项回归。
+- 最终旁路门禁：4 文件/45 项聚焦、`pnpm typecheck`、strict unused、`pnpm check:ipc`、`pnpm build`、`git diff --check` 通过；串行全量 328 文件/1839 项通过。
+- Standards 追加修复：session repository 删除局部 resume payload schema，直接复用 task-event 导出的 `approvalDecisionPayloadSchema` 与 `humanQuestionAnsweredPayloadSchema`；5 文件/50 项聚焦及最终串行全量 328 文件/1839 项通过。
+- 最终复审：Standards PASS，Spec PASS；未发现剩余标准违规、异味、规格缺失、scope creep 或行为错误。
+- 当前阶段状态：Verified passing，等待创建阶段 4 独立提交。

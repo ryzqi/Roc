@@ -1,11 +1,15 @@
 import { z } from 'zod';
 
+import {
+  rtkStatusSchema,
+  shellConfirmationRequestSchema,
+  shellConfirmationResultSchema,
+  shellExecutionResultSchema
+} from '../../../shared/schemas/ipc-workspace';
 import type {
-  RtkStatus,
   ShellConfirmationRequest,
   ShellConfirmationResult,
-  ShellExecutionRequest,
-  ShellExecutionResult
+  ShellExecutionRequest
 } from '../../../shared/types';
 import type { RTKBinaryManager } from '../../../rtk-integration';
 import type { CapabilityDescriptor, RocPlugin } from '../../kernel/types';
@@ -31,17 +35,7 @@ const shellExecutionRequestSchema = z.object({
   runId: z.string().optional(),
   signal: z.custom<AbortSignal>().optional(),
   allowedCommands: z.array(z.string().trim().min(1)).optional()
-}) satisfies z.ZodType<ShellExecutionRequest>;
-const shellConfirmationRequestSchema = z.object({
-  title: z.string(),
-  message: z.string(),
-  confirmLabel: z.string(),
-  cancelLabel: z.string()
-}) satisfies z.ZodType<ShellConfirmationRequest>;
-const shellConfirmationResultSchema = z.object({
-  confirmed: z.boolean(),
-  response: z.number().int()
-}) satisfies z.ZodType<ShellConfirmationResult>;
+}).strict() satisfies z.ZodType<ShellExecutionRequest>;
 const webReadResultSchema = z.object({
   content: z.string().min(1),
   source: z.string().url(),
@@ -52,8 +46,8 @@ const webReadResultSchema = z.object({
 }) satisfies z.ZodType<WebReadResult>;
 
 const runtimeToolsCapabilityDescriptors = [
-  descriptor('rtk.status', emptyInputSchema, z.custom<RtkStatus>()),
-  descriptor('shell.execute', shellExecutionRequestSchema, z.custom<ShellExecutionResult>()),
+  descriptor('rtk.status', emptyInputSchema, rtkStatusSchema),
+  descriptor('shell.execute', shellExecutionRequestSchema, shellExecutionResultSchema),
   descriptor('shell.confirm', shellConfirmationRequestSchema, shellConfirmationResultSchema),
   descriptor('web.read', webReadExecutionRequestSchema, webReadResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];

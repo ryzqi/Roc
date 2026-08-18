@@ -1,30 +1,11 @@
-export type MetricType = 'counter' | 'gauge' | 'histogram';
+import type { z } from 'zod';
 
-export type Metric = {
-  name: string;
-  type: MetricType;
-  value: number;
-  timestamp: string;
-  labels: Record<string, string>;
-};
+import { metricFilterSchema, metricsSnapshotSchema } from '../schemas/ipc-core';
 
-export type MetricFilter = {
-  name?: string;
-  type?: MetricType;
-  labels?: Record<string, string>;
-  since?: string;
-};
-
-export type MetricsSnapshot = {
-  generatedAt: string;
-  metrics: Metric[];
-  summary: {
-    totalMetrics: number;
-    counterCount: number;
-    gaugeCount: number;
-    histogramCount: number;
-  };
-};
+export type MetricsSnapshot = z.infer<typeof metricsSnapshotSchema>;
+export type Metric = MetricsSnapshot['metrics'][number];
+export type MetricType = Metric['type'];
+export type MetricFilter = z.infer<typeof metricFilterSchema>;
 
 export type HistogramStats = {
   count: number;

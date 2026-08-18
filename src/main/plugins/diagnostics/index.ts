@@ -5,6 +5,17 @@ import { performance } from 'node:perf_hooks';
 
 import { z } from 'zod';
 
+import {
+  diagnosticCheckSchema,
+  diagnosticPackageRequestSchema,
+  diagnosticPackageSchema,
+  healthCheckResultSchema,
+  metricFilterSchema,
+  metricsSnapshotSchema,
+  performanceSampleRequestSchema,
+  performanceSampleSchema,
+  traySummarySchema
+} from '../../../shared/schemas/ipc-core';
 import type {
   BackgroundTaskSummary,
   DiagnosticCheck,
@@ -12,13 +23,10 @@ import type {
   DiagnosticPackageRequest,
   HealthCheckResult,
   MetricFilter,
-  MetricsSnapshot,
-  PerformanceSample,
   PerformanceSampleRequest,
   RtkStatus,
   SchedulerStatus,
-  TaskSnapshot,
-  TraySummary
+  TaskSnapshot
 } from '../../../shared/types';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { requireText } from '../../services/validation';
@@ -35,32 +43,15 @@ const pluginId = '@roc/plugin-diagnostics';
 const capabilityVersion = '1.0.0';
 
 const emptyInputSchema = z.object({});
-const performanceSampleRequestSchema = z.object({
-  mode: z.enum(['development', 'packaged', 'smoke', 'test']),
-  memoryBudgetMb: z.number()
-}) satisfies z.ZodType<PerformanceSampleRequest>;
-const diagnosticPackageRequestSchema = z.object({
-  taskId: z.string(),
-  errorSummary: z.string()
-}) satisfies z.ZodType<DiagnosticPackageRequest>;
-const metricFilterSchema = z
-  .object({
-    name: z.string().optional(),
-    type: z.enum(['counter', 'gauge', 'histogram']).optional(),
-    labels: z.record(z.string(), z.string()).optional(),
-    since: z.string().optional()
-  })
-  .optional() satisfies z.ZodType<MetricFilter | undefined>;
-
 const diagnosticsCapabilityDescriptors = [
-  descriptor('diagnostics.samplePerformance', performanceSampleRequestSchema, z.custom<PerformanceSample>()),
-  descriptor('diagnostics.createPackage', diagnosticPackageRequestSchema, z.custom<DiagnosticPackage>()),
-  descriptor('diagnostics.runChecks', emptyInputSchema, z.custom<DiagnosticCheck[]>()),
-  descriptor('diagnostics.getMetricsSnapshot', metricFilterSchema, z.custom<MetricsSnapshot>()),
-  descriptor('diagnostics.runHealthCheck', emptyInputSchema, z.custom<HealthCheckResult>()),
-  descriptor('lifecycle.getTraySummary', emptyInputSchema, z.custom<TraySummary>()),
-  descriptor('lifecycle.pauseBackgroundExecution', emptyInputSchema, z.custom<TraySummary>()),
-  descriptor('lifecycle.resumeBackgroundExecution', emptyInputSchema, z.custom<TraySummary>())
+  descriptor('diagnostics.samplePerformance', performanceSampleRequestSchema, performanceSampleSchema),
+  descriptor('diagnostics.createPackage', diagnosticPackageRequestSchema, diagnosticPackageSchema),
+  descriptor('diagnostics.runChecks', emptyInputSchema, diagnosticCheckSchema.array()),
+  descriptor('diagnostics.getMetricsSnapshot', metricFilterSchema, metricsSnapshotSchema),
+  descriptor('diagnostics.runHealthCheck', emptyInputSchema, healthCheckResultSchema),
+  descriptor('lifecycle.getTraySummary', emptyInputSchema, traySummarySchema),
+  descriptor('lifecycle.pauseBackgroundExecution', emptyInputSchema, traySummarySchema),
+  descriptor('lifecycle.resumeBackgroundExecution', emptyInputSchema, traySummarySchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 type DiagnosticsValueProvider<T> = () => T | Promise<T>;

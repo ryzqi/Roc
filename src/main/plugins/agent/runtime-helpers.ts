@@ -7,6 +7,7 @@ import type {
   TaskEvent,
   TaskKind
 } from '../../../shared/types';
+import { toolCallTaskEventPayloadSchema } from '../../../shared/schemas/task-event';
 
 const backgroundTaskToolNames = new Set([
   'resolve_background_task_time',
@@ -39,7 +40,7 @@ export function createTaskEventFromAssistantBlock(block: ChatAssistantBlock): Pi
   }
   return {
     type: 'tool_call',
-    payload
+    payload: toolCallTaskEventPayloadSchema.parse(payload)
   };
 }
 

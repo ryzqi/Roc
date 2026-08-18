@@ -1,30 +1,38 @@
 import { z } from 'zod';
 
 import type {
-  AgentCapabilityPreview,
-  AgentLangSmithSetApiKeyRequest,
-  AgentLangSmithSettings,
   AgentRuntimeStatus,
   AppSettings,
   ApprovalMode,
-  ActiveChatRun,
-  ChatCancelRunResult,
-  ChatRunEventsReplayRequest,
-  ChatRunEventsReplayResult,
-  ChatResumeDecision,
-  ChatResumeRunRequest,
-  ChatResumeRunResult,
-  ChatStartRunRequest,
-  ChatStartRunResult,
-  DeepAgentConfigPreview,
   McpServerSnapshot,
-  SessionMessageEntry,
-  SessionMessageSearchRequest,
-  SessionMessageSearchResult,
-  SequencedChatRunEvent,
   SkillSnapshot,
   Workspace
 } from '../../../shared/types';
+import {
+  agentCapabilityPreviewRequestSchema,
+  agentCapabilityPreviewSchema,
+  agentLangSmithConfigSchema,
+  agentLangSmithSetApiKeyRequestSchema,
+  agentLangSmithSettingsSchema,
+  agentRuntimeStatusSchema,
+  deepAgentConfigPreviewSchema,
+  sessionListInputSchema,
+  sessionMessageSchema,
+  sessionMessageSearchRequestSchema,
+  sessionMessageSearchResultSchema
+} from '../../../shared/schemas/agent';
+import {
+  activeChatRunSchema,
+  chatActiveRunRequestSchema,
+  chatCancelRunRequestSchema,
+  chatCancelRunResultSchema,
+  chatResumeRunRequestSchema,
+  chatResumeRunResultSchema,
+  chatRunEventsReplayRequestSchema,
+  chatRunEventsReplayResultSchema,
+  chatStartRunRequestSchema,
+  chatStartRunResultSchema
+} from '../../../shared/schemas/chat';
 import { applyMemoryDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
@@ -37,10 +45,7 @@ import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
-import {
-  agentLangSmithConfigSchema,
-  AgentLangSmithSettingsStore
-} from './langsmith-settings';
+import { AgentLangSmithSettingsStore } from './langsmith-settings';
 import { AgentLangSmithTraceSessionRepository } from './langsmith-trace-session-repository';
 import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
 import { AgentRunEventLog } from './run-event-log';
@@ -53,202 +58,11 @@ import { AgentSessionRepository } from './session-repository';
 const pluginId = '@roc/plugin-agent';
 const capabilityVersion = '1.0.0';
 
-const enabledCapabilitiesSchema = z.object({
-  mcpServers: z.array(z.string()),
-  skills: z.array(z.string())
-});
-
-const agentCapabilityPreviewInputSchema = enabledCapabilitiesSchema.extend({
-  mode: z.enum(['chat', 'task', 'plan'])
-});
-
-const chatImageAttachmentSchema = z.object({
-  kind: z.literal('image'),
-  source: z.enum(['file', 'clipboard', 'drop']),
-  name: z.string().min(1),
-  mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
-  sizeBytes: z.number().int().positive(),
-  path: z.string().min(1).optional(),
-  data: z.string().min(1).optional()
-}).refine(
-  (value) => (value.path === undefined) !== (value.data === undefined),
-  'Image attachment must provide exactly one source.'
-);
-
-const chatStartRunRequestSchema = z.object({
-  input: z.string(),
-  mode: z.enum(['chat', 'task', 'plan']),
-  enabledCapabilities: enabledCapabilitiesSchema,
-  threadId: z.string().nullable().optional(),
-  workflowHint: z.enum(['propose_background_task', 'background_task_change']).nullable().optional(),
-  taskSource: z.enum(['background_schedule', 'workbench']).nullable().optional(),
-  workspacePath: z.string().nullable().optional(),
-  shellAllowedCommands: z.array(z.string().trim().min(1)).optional(),
-  attachments: z.array(chatImageAttachmentSchema).max(4).optional(),
-  dispatchKey: z.string().trim().min(1).optional(),
-  explicitSkillIds: z.array(z.string().trim().min(1)).optional()
-}) satisfies z.ZodType<ChatStartRunRequest>;
-
-const chatStartRunResultSchema = z.object({
-  runId: z.string(),
-  mode: z.enum(['chat', 'task', 'plan']),
-  threadId: z.string().nullable(),
-  providerId: z.string(),
-  modelId: z.string(),
-  createdAt: z.string()
-}) satisfies z.ZodType<ChatStartRunResult>;
-
-const hitlActionSchema = z
-  .object({
-    name: z.string().trim().min(1),
-    args: z.record(z.string(), z.unknown())
-  })
-  .strict();
-
-const chatResumeDecisionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('approve') }).strict(),
-  z
-    .object({
-      type: z.literal('reject'),
-      message: z.string().trim().min(1).optional()
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal('edit'),
-      editedAction: hitlActionSchema
-    })
-    .strict()
-]) satisfies z.ZodType<ChatResumeDecision>;
-
-const approvalResumeRunRequestSchema = z
-  .object({
-    kind: z.literal('approval'),
-    runId: z.string().trim().min(1),
-    threadId: z.string().trim().min(1),
-    interruptId: z.string().trim().min(1),
-    decisions: z.array(chatResumeDecisionSchema).min(1)
-  })
-  .strict();
-
-const questionResumeRunRequestSchema = z
-  .object({
-    kind: z.literal('question'),
-    runId: z.string().trim().min(1),
-    threadId: z.string().trim().min(1),
-    interruptId: z.string().trim().min(1),
-    answer: z.string().trim().min(1)
-  })
-  .strict();
-
-const chatResumeRunRequestSchema = z.discriminatedUnion('kind', [
-  approvalResumeRunRequestSchema,
-  questionResumeRunRequestSchema
-]) satisfies z.ZodType<ChatResumeRunRequest>;
-
-const chatResumeRunResultSchema = z.object({
-  runId: z.string(),
-  threadId: z.string(),
-  resumedAt: z.string()
-}) satisfies z.ZodType<ChatResumeRunResult>;
-
-const chatCancelRunResultSchema = z.object({
-  runId: z.string(),
-  cancelled: z.boolean()
-}) satisfies z.ZodType<ChatCancelRunResult>;
-
-const chatRunEventsReplayRequestSchema = z.object({
-  runId: z.string().trim().min(1),
-  afterSequence: z.number().int().min(0)
-}) satisfies z.ZodType<ChatRunEventsReplayRequest>;
-
-const sequencedChatRunEventSchema = z.custom<SequencedChatRunEvent>();
-
-const chatRunEventsReplayResultSchema = z.object({
-  runId: z.string(),
-  events: z.array(sequencedChatRunEventSchema)
-}) satisfies z.ZodType<ChatRunEventsReplayResult>;
-
-const activeChatRunSchema = z.object({
-  runId: z.string(),
-  threadId: z.string(),
-  status: z.enum(['running', 'recovering', 'waiting_user'])
-}) satisfies z.ZodType<ActiveChatRun>;
-
-const chatActiveRunRequestSchema = z.object({
-  threadId: z.string().trim().min(1)
-});
-
-const sessionListInputSchema = z.object({
-  threadId: z.string(),
-  limit: z.number().int().positive().optional()
-});
-
-const sessionMessageSchema = z.object({
-  id: z.string(),
-  threadId: z.string(),
-  threadTitle: z.string().nullable(),
-  role: z.enum(['user', 'assistant', 'tool', 'system']),
-  content: z.string(),
-  phase: z.enum(['visible', 'pre_compaction_flush']),
-  tokenCount: z.number().int().nullable(),
-  workspaceHash: z.string().nullable(),
-  createdAt: z.string()
-}) satisfies z.ZodType<SessionMessageEntry>;
-
-const sessionSearchInputSchema = z.object({
-  query: z.string(),
-  workspaceScope: z.enum(['current', 'all']),
-  workspaceHash: z.string().nullable().optional(),
-  threadId: z.string().optional(),
-  sinceDays: z.number().int().positive().optional(),
-  limit: z.number().int().positive().optional()
-}) satisfies z.ZodType<SessionMessageSearchRequest>;
-
-const sessionSearchResultSchema = z.object({
-  query: z.string(),
-  total: z.number().int(),
-  items: z.array(
-    sessionMessageSchema.extend({
-      snippet: z.string()
-    })
-  )
-}) satisfies z.ZodType<SessionMessageSearchResult>;
-
-const agentRuntimeStatusSchema = z.object({
-  deepAgentsPackage: z.enum(['available', 'missing']),
-  deepAgentsApi: z.object({
-    createDeepAgent: z.boolean()
-  }),
-  defaultModelConfigured: z.boolean(),
-  defaultModelState: z.object({
-    status: z.enum(['missing', 'invalid', 'ready']),
-    modelId: z.string().nullable(),
-    providerId: z.string().nullable(),
-    reason: z.string()
-  }),
-  memoryAccess: z.literal('store_backend'),
-  execution: z.enum(['blocked_until_provider_configured', 'ready'])
-}) satisfies z.ZodType<AgentRuntimeStatus>;
-
-const agentCapabilityPreviewSchema = z.custom<AgentCapabilityPreview>();
-
-const agentLangSmithSettingsSchema = z
-  .object({
-    config: agentLangSmithConfigSchema,
-    apiKeyStored: z.boolean()
-  })
-  .strict() satisfies z.ZodType<AgentLangSmithSettings>;
-
-const agentLangSmithSetApiKeySchema = z
-  .object({
-    apiKey: z.string().trim().min(1)
-  })
-  .strict() satisfies z.ZodType<AgentLangSmithSetApiKeyRequest>;
+const emptyInputSchema = z.object({}).strict();
 
 const agentLangSmithSettingsGetDescriptor = descriptor(
   'agent.langsmith.settings.get',
-  z.object({}),
+  emptyInputSchema,
   agentLangSmithSettingsSchema
 );
 
@@ -260,26 +74,26 @@ const agentLangSmithSettingsSaveDescriptor = descriptor(
 
 const agentLangSmithSecretSetDescriptor = descriptor(
   'agent.langsmith.secret.set',
-  agentLangSmithSetApiKeySchema,
+  agentLangSmithSetApiKeyRequestSchema,
   agentLangSmithSettingsSchema
 );
 
 const agentLangSmithSecretClearDescriptor = descriptor(
   'agent.langsmith.secret.clear',
-  z.object({}),
+  emptyInputSchema,
   agentLangSmithSettingsSchema
 );
 
 const baseAgentCapabilityDescriptors = [
-  descriptor('agent.status.get', z.object({}), agentRuntimeStatusSchema),
-  descriptor('agent.config.preview', z.object({}), z.custom<DeepAgentConfigPreview>()),
+  descriptor('agent.status.get', emptyInputSchema, agentRuntimeStatusSchema),
+  descriptor('agent.config.preview', emptyInputSchema, deepAgentConfigPreviewSchema),
   descriptor('agent.run.start', chatStartRunRequestSchema, chatStartRunResultSchema),
-  descriptor('agent.run.cancel', z.object({ runId: z.string() }), chatCancelRunResultSchema),
+  descriptor('agent.run.cancel', chatCancelRunRequestSchema, chatCancelRunResultSchema),
   descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
   descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
   descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
   descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
-  descriptor('agent.sessions.search', sessionSearchInputSchema, sessionSearchResultSchema),
+  descriptor('agent.sessions.search', sessionMessageSearchRequestSchema, sessionMessageSearchResultSchema),
   agentLangSmithSettingsGetDescriptor,
   agentLangSmithSettingsSaveDescriptor,
   agentLangSmithSecretSetDescriptor,
@@ -288,7 +102,7 @@ const baseAgentCapabilityDescriptors = [
 
 const agentCapabilityPreviewDescriptor = descriptor(
   'agent.capability.preview',
-  agentCapabilityPreviewInputSchema,
+  agentCapabilityPreviewRequestSchema,
   agentCapabilityPreviewSchema
 );
 
@@ -531,8 +345,12 @@ function registerAgentCapabilities(
       mode: 'chat'
     })
   );
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) => runtime.startRun(input as ChatStartRunRequest));
-  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[3], async (input) => runtime.cancelRun(input as { runId: string }));
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[2], async (input) =>
+    runtime.startRun(chatStartRunRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[3], async (input) =>
+    runtime.cancelRun(chatCancelRunRequestSchema.parse(input))
+  );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[4], async (input) =>
     runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
   );
@@ -543,10 +361,10 @@ function registerAgentCapabilities(
     runtime.getActiveRun(chatActiveRunRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[7], async (input) =>
-    runtime.listSessionMessages(input as { threadId: string; limit?: number })
+    runtime.listSessionMessages(sessionListInputSchema.parse(input))
   );
   context.capabilities.register(pluginId, baseAgentCapabilityDescriptors[8], async (input) =>
-    runtime.searchSessionMessages(input as SessionMessageSearchRequest)
+    runtime.searchSessionMessages(sessionMessageSearchRequestSchema.parse(input))
   );
   context.capabilities.register(pluginId, agentLangSmithSettingsGetDescriptor, async () =>
     langSmithSettings.getSnapshot()
@@ -555,14 +373,14 @@ function registerAgentCapabilities(
     langSmithSettings.saveConfig(agentLangSmithConfigSchema.parse(input))
   );
   context.capabilities.register(pluginId, agentLangSmithSecretSetDescriptor, async (input) =>
-    langSmithSettings.setApiKey(agentLangSmithSetApiKeySchema.parse(input).apiKey)
+    langSmithSettings.setApiKey(agentLangSmithSetApiKeyRequestSchema.parse(input).apiKey)
   );
   context.capabilities.register(pluginId, agentLangSmithSecretClearDescriptor, async () =>
     langSmithSettings.clearApiKey()
   );
   if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
     context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) => {
-      const request = agentCapabilityPreviewInputSchema.parse(input);
+      const request = agentCapabilityPreviewRequestSchema.parse(input);
       return await runtime.getCapabilityPreview({
         mode: request.mode,
         requestedCapabilities: {

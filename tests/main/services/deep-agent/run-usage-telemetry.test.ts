@@ -29,8 +29,8 @@ describe('ProviderUsageAccumulator', () => {
     });
 
     expect(accumulator).toMatchObject({
-      promptTokens: 140,
-      completionTokens: 34,
+      inputTokens: 140,
+      outputTokens: 34,
       totalTokens: 174,
       cacheReadTokens: 50,
       cacheCreationTokens: 25
@@ -56,8 +56,8 @@ describe('ProviderUsageAccumulator', () => {
     });
 
     expect(accumulator).toMatchObject({
-      promptTokens: 80,
-      completionTokens: 15,
+      inputTokens: 80,
+      outputTokens: 15,
       totalTokens: 95,
       cacheReadTokens: 30,
       cacheCreationTokens: null

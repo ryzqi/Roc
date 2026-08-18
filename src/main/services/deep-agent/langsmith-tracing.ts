@@ -4,27 +4,18 @@ import { Client } from 'langsmith';
 import { RunTree } from 'langsmith/run_trees';
 import { AsyncLocalStorageProviderSingleton } from 'langsmith/singletons/traceable';
 
-import type { RunExecutionSnapshotV2 } from '../../../shared/types';
+import type {
+  AgentLangSmithRunCorrelation,
+  AgentLangSmithTraceCorrelation,
+  AgentLangSmithTraceSessionV1,
+  RunExecutionSnapshotV2
+} from '../../../shared/types';
 
-export type AgentLangSmithRunCorrelation = {
-  runId: string;
-  threadId: string;
-  runOrigin: RunExecutionSnapshotV2['runOrigin'];
-  manifestHash: string;
-};
-
-export type AgentLangSmithTraceCorrelation = AgentLangSmithRunCorrelation & {
-  appVersion: string;
-};
-
-export type AgentLangSmithTraceSessionV1 = AgentLangSmithTraceCorrelation & {
-  schemaVersion: 1;
-  projectName: string;
-  rootId: string;
-  traceId: string;
-  dottedOrder: string;
-  startTime: number;
-};
+export type {
+  AgentLangSmithRunCorrelation,
+  AgentLangSmithTraceCorrelation,
+  AgentLangSmithTraceSessionV1
+} from '../../../shared/types';
 
 export type AgentLangSmithTraceSessionStore = {
   create(value: AgentLangSmithTraceSessionV1, createdAt: string): AgentLangSmithTraceSessionV1;

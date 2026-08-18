@@ -31,7 +31,7 @@ describe('WindowWorkband', () => {
             threadId: 'thread-1',
             runId: 'run-1',
             type: 'message',
-            payload: { role: 'assistant', content: '已检查。' },
+            payload: { role: 'assistant', content: '已检查。', providerId: 'test-provider', modelId: 'test-model' },
             createdAt: '2026-05-25T08:00:01.000Z'
           }
         ]

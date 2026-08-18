@@ -13,7 +13,7 @@ import type {
 import type { MainKernelBootstrap } from '../main-kernel-bootstrap';
 import { toLogError, wrapIpc } from '../services/errors';
 import { registerFilesDialogIpc } from './files-ipc';
-import type { IpcHandler, IpcMainHandler } from './ipc-common';
+import { executeIpcRequest, type IpcHandler, type IpcMainHandler } from './ipc-common';
 import { registerPluginCapabilityIpc } from './plugin-capability-adapter';
 import { registerSettingsIpc } from './settings-ipc';
 import { registerShellConfirmIpc } from './shell-ipc';
@@ -97,7 +97,9 @@ export function registerIpc(
   }
 
   function timedHandle(channel: string, handler: IpcMainHandler): void {
-    ipcMain.handle(channel, (...args: unknown[]) => timedIpc(channel, args.length, () => handler(...args)));
+    ipcMain.handle(channel, (event: unknown, ...args: unknown[]) =>
+      timedIpc(channel, args.length, () => executeIpcRequest(channel, event, args, handler))
+    );
   }
 
   registerPluginCapabilityIpc(timedHandle, kernel);

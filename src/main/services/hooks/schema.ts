@@ -1,40 +1,13 @@
 import { z } from 'zod';
+import { rocHookConfigSchema } from '../../../shared/schemas/ipc-memory-settings';
 import {
-  rocHookEventNames,
   type RocHookCommandOutput,
   type RocHookCommandOutputAction,
   type RocHookConfig,
   type RocHookEventName
 } from '../../../shared/types';
 
-const HookFailureModeSchema = z.enum(['continue', 'block']);
-
-const CommandHandlerSchema = z.object({
-  type: z.literal('command'),
-  command: z.string().trim().min(1),
-  commandWindows: z.string().trim().min(1).optional(),
-  timeoutSeconds: z.number().int().min(1).max(600).default(30),
-  statusMessage: z.string().trim().min(1).optional(),
-  enabled: z.boolean().default(true),
-  failureMode: HookFailureModeSchema.default('continue')
-}).strict();
-
-const MatcherGroupSchema = z.object({
-  matcher: z.string().optional(),
-  hooks: z.array(CommandHandlerSchema).min(1)
-}).strict();
-
-const HooksRecordSchema = z.object(
-  Object.fromEntries(rocHookEventNames.map((eventName) => [eventName, z.array(MatcherGroupSchema).optional()])) as Record<
-    RocHookEventName,
-    z.ZodOptional<z.ZodArray<typeof MatcherGroupSchema>>
-  >
-).strict();
-
-export const HookConfigSchema: z.ZodType<RocHookConfig> = z.object({
-  schemaVersion: z.literal(1),
-  hooks: HooksRecordSchema
-}).strict();
+export const HookConfigSchema = rocHookConfigSchema;
 
 export const EmptyHookConfig: RocHookConfig = {
   schemaVersion: 1,

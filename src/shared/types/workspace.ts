@@ -1,81 +1,36 @@
-export type WorkspaceTrustState = 'trusted' | 'limited' | 'blocked';
+import type { z } from 'zod';
 
-export type Workspace = {
-  id: string;
-  path: string;
-  displayName: string;
-  lastOpenedAt: string;
-  trustState: WorkspaceTrustState;
-  defaultShell?: string;
-};
+import {
+  fileDialogSelectionSchema,
+  filePdfPreviewRequestSchema,
+  filePdfPreviewResultSchema,
+  filePreviewRequestSchema,
+  filePreviewResultSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  fileTreeRequestSchema,
+  fileTreeResultSchema,
+  fileWriteResultSchema,
+  fileWriteTextRequestSchema,
+  workspaceChangedEventSchema,
+  workspaceSchema,
+  workspaceSelectRequestSchema
+} from '../schemas/ipc-workspace';
 
-export type WorkspaceSelectRequest = {
-  path: string;
-};
-
-export type WorkspaceChangedEvent = {
-  workspacePath: string;
-  relativePath: string | null;
-  eventType: 'rename' | 'change';
-};
-
-export type FileDialogSelection = {
-  filePaths: string[];
-};
-
-export type FileEntry = {
-  name: string;
-  relativePath: string;
-  type: 'file' | 'directory';
-  size: number;
-  updatedAt: string;
-};
-
+export type Workspace = z.infer<typeof workspaceSchema>;
+export type WorkspaceTrustState = Workspace['trustState'];
+export type WorkspaceSelectRequest = z.infer<typeof workspaceSelectRequestSchema>;
+export type WorkspaceChangedEvent = z.infer<typeof workspaceChangedEventSchema>;
+export type FileDialogSelection = z.infer<typeof fileDialogSelectionSchema>;
+export type FileTreeRequest = z.infer<typeof fileTreeRequestSchema>;
+export type FileTreeResult = z.infer<typeof fileTreeResultSchema>;
+export type FileEntry = FileTreeResult['entries'][number];
 export type FileEntryShape = Pick<FileEntry, 'name' | 'relativePath' | 'type'>;
-
-export type FileTreeRequest = {
-  relativePath: string;
-  limit?: number;
-};
-
-export type FileTreeResult = {
-  workspacePath: string;
-  relativePath: string;
-  entries: FileEntry[];
-  truncated: boolean;
-};
-
-export type FileSearchRequest = {
-  query: string;
-  maxResults?: number;
-};
-
-export type FileSearchMatch = {
-  relativePath: string;
-  line: number;
-  column: number;
-  preview: string;
-};
-
-export type FileSearchResult = {
-  query: string;
-  matches: FileSearchMatch[];
-  truncated: boolean;
-};
-
-export type FilePreviewRequest = {
-  relativePath: string;
-  maxBytes?: number;
-};
-
-export type FilePreviewResult = {
-  relativePath: string;
-  kind: 'text' | 'image' | 'binary';
-  content: string;
-  truncated: boolean;
-  sizeBytes: number;
-  mediaType?: string;
-};
+export type FileSearchRequest = z.infer<typeof fileSearchRequestSchema>;
+export type FileSearchResult = z.infer<typeof fileSearchResultSchema>;
+export type FileSearchMatch = FileSearchResult['matches'][number];
+export type FilePreviewRequest = z.infer<typeof filePreviewRequestSchema>;
+export type FilePreviewResult = z.infer<typeof filePreviewResultSchema>;
 
 export type FilePreviewLike = {
   relativePath: string;
@@ -86,42 +41,12 @@ export type FilePreviewLike = {
   truncated?: boolean;
 };
 
-export type FilesWorkbenchPdfPreview = {
-  relativePath: string;
-  resourceUrl: string;
-  sizeBytes: number;
-  mediaType: 'application/pdf';
-};
-
-export type FilesWorkbenchPdfPreviewRequest = {
-  relativePath: string;
-};
-
-export type FilesWorkbenchPdfPreviewResult = FilesWorkbenchPdfPreview;
-
-export type FileWriteTextRequest = {
-  relativePath: string;
-  content: string;
-  source: string;
-  threadId?: string;
-  runId?: string;
-};
-
-export type RecoveryPoint = {
-  id: string;
-  relativePath: string;
-  snapshotPath: string;
-  contentSha256: string;
-  source: string;
-  createdAt: string;
-  restored: boolean;
-};
-
-export type FileWriteResult = {
-  relativePath: string;
-  recoveryPoint: RecoveryPoint;
-  bytesWritten: number;
-};
+export type FilesWorkbenchPdfPreviewRequest = z.infer<typeof filePdfPreviewRequestSchema>;
+export type FilesWorkbenchPdfPreviewResult = z.infer<typeof filePdfPreviewResultSchema>;
+export type FilesWorkbenchPdfPreview = FilesWorkbenchPdfPreviewResult;
+export type FileWriteTextRequest = z.infer<typeof fileWriteTextRequestSchema>;
+export type FileWriteResult = z.infer<typeof fileWriteResultSchema>;
+export type RecoveryPoint = FileWriteResult['recoveryPoint'];
 
 export type FileDeleteResult = {
   relativePath: string;

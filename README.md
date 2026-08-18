@@ -194,7 +194,7 @@ Forge 模块说明见 `src/main/services/forge-guardrails/`。目标是把“模
 
 ### 4. 类型安全 IPC
 
-- 合同定义：`src/shared/ipc.ts`（Zod）
+- 合同注册：`src/shared/ipc-registry.ts`；payload Zod schema 位于 `src/shared/schemas/`
 - 生成：`pnpm generate:ipc`
 - 漂移检查：`pnpm check:ipc`
 - preload 只暴露受控 bridge

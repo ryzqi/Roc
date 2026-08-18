@@ -41,6 +41,15 @@ describe('window messaging', () => {
     expect(window.send).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid event payload before sending it', () => {
+    const window = createWindow();
+
+    expect(() =>
+      sendToWindow(window, 'roc:terminal:output', { sessionId: '1', data: 42 })
+    ).toThrow();
+    expect(window.send).not.toHaveBeenCalled();
+  });
+
   it('broadcasts only to live windows', () => {
     const liveWindow = createWindow();
     const destroyedWindow = createWindow({ windowDestroyed: true });
@@ -65,13 +74,18 @@ describe('window messaging', () => {
     broadcastToWindows(
       [mainWindow, quickWindow, trayWindow],
       'roc:chat:run-event',
-      { runId: 'chat_1', type: 'message' },
+      { type: 'run_cancelled', runId: 'chat_1', threadId: 'thread_1', reason: 'user_cancelled' },
       {
         include: (_window, index) => index === 0
       }
     );
 
-    expect(mainWindow.send).toHaveBeenCalledWith('roc:chat:run-event', { runId: 'chat_1', type: 'message' });
+    expect(mainWindow.send).toHaveBeenCalledWith('roc:chat:run-event', {
+      type: 'run_cancelled',
+      runId: 'chat_1',
+      threadId: 'thread_1',
+      reason: 'user_cancelled'
+    });
     expect(quickWindow.send).not.toHaveBeenCalled();
     expect(trayWindow.send).not.toHaveBeenCalled();
   });

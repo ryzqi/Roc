@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { chatRunEventSchema } from '../../src/shared/schemas/chat';
 import type { ChatRunEvent, Workspace, WorkspaceChangedEvent } from '../../src/shared/types';
 import {
   createWorkspaceRefreshController,
@@ -414,7 +415,7 @@ describe('workspace refresh helpers', () => {
 });
 
 function toolEndEvent(runId: string, name: string, input: unknown): ChatRunEvent {
-  return {
+  return chatRunEventSchema.parse({
     type: 'assistant_block',
     runId,
     block: {
@@ -426,7 +427,7 @@ function toolEndEvent(runId: string, name: string, input: unknown): ChatRunEvent
       input,
       output: input
     }
-  };
+  });
 }
 
 function createDeferred<T>(): {

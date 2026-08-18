@@ -1,19 +1,27 @@
 import { z } from 'zod';
 
+import {
+  activeTaskItemSchema,
+  backgroundTaskSchema,
+  scheduledTaskRunSchema,
+  scheduledTaskRunsRequestSchema,
+  schedulerStatusSchema,
+  taskDeleteBackgroundResultSchema,
+  taskDeleteThreadRequestSchema,
+  taskDeleteThreadResultSchema,
+  taskDetailSchema,
+  taskIdRequestSchema,
+  taskRunNowResultSchema,
+  taskSnapshotSchema
+} from '../../../shared/schemas/ipc-core';
 import type {
-  ActiveTaskItem,
-  BackgroundTask,
   BackgroundTaskSummary,
   ChatStartRunRequest,
   ChatStartRunResult,
-  SchedulerStatus,
-  ScheduledTaskRun,
   TaskDeleteThreadRequest,
   TaskDeleteThreadResult,
-  TaskDetail,
   TaskMessageHistoryRequest,
-  TaskSnapshot,
-  TaskUpdateEvent,
+  TaskUpdateEvent
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import {
@@ -25,7 +33,6 @@ import { AgentTaskHistoryReader } from './agent-task-history';
 import {
   backgroundTaskPreviewRequestSchema,
   backgroundTaskPreviewSchema,
-  backgroundTaskSchema,
   taskMessageHistoryPageSchema,
   taskMessageHistoryRequestSchema,
   updateBackgroundTaskRequestSchema
@@ -44,32 +51,27 @@ const idInputSchema = z.object({
   id: z.string()
 });
 
-const taskRunNowResultSchema = z.object({
-  taskId: z.string(),
-  runId: z.string()
-});
-
 const taskCapabilityDescriptors = [
-  descriptor('task.snapshot.get', z.object({}), z.custom<TaskSnapshot>()),
+  descriptor('task.snapshot.get', z.object({}), taskSnapshotSchema),
   descriptor('task.background.preview', backgroundTaskPreviewRequestSchema, backgroundTaskPreviewSchema),
   descriptor('task.background.create', backgroundTaskPreviewRequestSchema, backgroundTaskSchema),
   descriptor('task.background.update', updateBackgroundTaskRequestSchema, backgroundTaskSchema),
   descriptor('task.background.runNow', idInputSchema, taskRunNowResultSchema),
-  descriptor('task.background.pause', idInputSchema, z.custom<BackgroundTask>()),
-  descriptor('task.background.resume', idInputSchema, z.custom<BackgroundTask>()),
-  descriptor('task.background.cancel', idInputSchema, z.custom<BackgroundTask>()),
-  descriptor('task.background.delete', idInputSchema, z.object({ deleted: z.literal(true), taskId: z.string() })),
-  descriptor('task.scheduler.status', z.object({}), z.custom<SchedulerStatus>()),
+  descriptor('task.background.pause', idInputSchema, backgroundTaskSchema),
+  descriptor('task.background.resume', idInputSchema, backgroundTaskSchema),
+  descriptor('task.background.cancel', idInputSchema, backgroundTaskSchema),
+  descriptor('task.background.delete', idInputSchema, taskDeleteBackgroundResultSchema),
+  descriptor('task.scheduler.status', z.object({}), schedulerStatusSchema),
   descriptor('task.scheduler.suspend', z.object({}), z.object({ suspended: z.literal(true) })),
   descriptor('task.scheduler.resume', z.object({}), z.object({ resumed: z.literal(true) })),
   descriptor('task.scheduler.handlePowerResume', z.object({}), z.object({ handled: z.literal(true) })),
   descriptor('task.background.summary', z.object({}), z.custom<BackgroundTaskSummary>()),
   descriptor('task.thread.messages.list', taskMessageHistoryRequestSchema, taskMessageHistoryPageSchema),
-  descriptor('task.background.list', z.object({}), z.array(z.custom<BackgroundTask>())),
-  descriptor('task.thread.delete', z.object({ threadId: z.string() }), z.object({ deleted: z.literal(true), threadId: z.string() })),
-  descriptor('task.active.list', z.object({}), z.array(z.custom<ActiveTaskItem>())),
-  descriptor('task.detail.get', z.object({ taskId: z.string() }), z.custom<TaskDetail>()),
-  descriptor('task.scheduledRuns.list', z.object({ taskId: z.string(), limit: z.number().int().positive().optional() }), z.array(z.custom<ScheduledTaskRun>())),
+  descriptor('task.background.list', z.object({}), backgroundTaskSchema.array()),
+  descriptor('task.thread.delete', taskDeleteThreadRequestSchema, taskDeleteThreadResultSchema),
+  descriptor('task.active.list', z.object({}), activeTaskItemSchema.array()),
+  descriptor('task.detail.get', taskIdRequestSchema, taskDetailSchema),
+  descriptor('task.scheduledRuns.list', scheduledTaskRunsRequestSchema, scheduledTaskRunSchema.array()),
   descriptor('task.outbox.replay', z.object({}), z.object({ appliedCount: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative() }))
 ] as const satisfies readonly CapabilityDescriptor[];
 

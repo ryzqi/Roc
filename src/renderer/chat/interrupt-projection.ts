@@ -14,8 +14,6 @@ export type ChatInterruptProjectionEvent =
       interruptId: string;
     };
 
-type PersistedApprovalInterrupt = Omit<Extract<ChatPendingInterrupt, { kind: 'approval' }>, 'kind'>;
-
 export function readLiveInterruptProjection(event: ChatRunEvent): ChatInterruptProjectionEvent | null {
   if (event.type === 'run_interrupted') {
     return {
@@ -43,7 +41,7 @@ export function readLiveInterruptProjection(event: ChatRunEvent): ChatInterruptP
 }
 
 export function readPersistedInterruptProjection(event: TaskEvent): ChatInterruptProjectionEvent | null {
-  if (event.type === 'approval_requested' && isApprovalRequestedPayload(event.payload)) {
+  if (event.type === 'approval_requested') {
     return {
       kind: 'record',
       interrupt: {
@@ -52,7 +50,7 @@ export function readPersistedInterruptProjection(event: TaskEvent): ChatInterrup
       }
     };
   }
-  if (event.type === 'human_question_requested' && isHumanQuestionPayload(event.payload)) {
+  if (event.type === 'human_question_requested') {
     return {
       kind: 'record',
       interrupt: {
@@ -64,7 +62,7 @@ export function readPersistedInterruptProjection(event: TaskEvent): ChatInterrup
       }
     };
   }
-  if ((event.type === 'approval_decision' || event.type === 'human_question_answered') && isConsumedInterruptPayload(event.payload)) {
+  if (event.type === 'approval_decision' || event.type === 'human_question_answered') {
     return {
       kind: 'consume',
       interruptId: event.payload.interruptId
@@ -85,37 +83,4 @@ export function applyPendingInterruptProjection(
     return [...interrupts, event.interrupt];
   }
   return interrupts.map((interrupt, index) => (index === existingIndex ? event.interrupt : interrupt));
-}
-
-function isApprovalRequestedPayload(payload: unknown): payload is PersistedApprovalInterrupt {
-  return (
-    isRecord(payload) &&
-    typeof payload.interruptId === 'string' &&
-    Array.isArray(payload.actionRequests) &&
-    Array.isArray(payload.reviewConfigs)
-  );
-}
-
-function isHumanQuestionPayload(payload: unknown): payload is {
-  interruptId: string;
-  question: string;
-  context: string | null;
-  suggestedResponses: string[];
-} {
-  return (
-    isRecord(payload) &&
-    typeof payload.interruptId === 'string' &&
-    typeof payload.question === 'string' &&
-    (payload.context === null || typeof payload.context === 'string') &&
-    Array.isArray(payload.suggestedResponses) &&
-    payload.suggestedResponses.every((response): response is string => typeof response === 'string')
-  );
-}
-
-function isConsumedInterruptPayload(payload: unknown): payload is { interruptId: string } {
-  return isRecord(payload) && typeof payload.interruptId === 'string';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

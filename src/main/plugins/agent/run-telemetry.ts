@@ -1,7 +1,8 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import { z } from 'zod';
 
-import type { ChatAssistantBlock, ChatRunEvent, RunExecutionSnapshotV2, TaskRun } from '../../../shared/types';
+import type { ChatAssistantBlock, ChatRunEvent, RunExecutionSnapshotV2, TaskRun, TokenUsage } from '../../../shared/types';
+import { tokenUsageSchema } from '../../../shared/schemas/token-usage';
 
 const nullableCountSchema = z.number().int().nonnegative().nullable();
 
@@ -23,11 +24,7 @@ const runTelemetrySchema = z
     model: z
       .object({
         callCount: z.number().int().nonnegative(),
-        inputTokens: nullableCountSchema,
-        outputTokens: nullableCountSchema,
-        totalTokens: nullableCountSchema,
-        cacheReadTokens: nullableCountSchema,
-        cacheCreationTokens: nullableCountSchema,
+        ...tokenUsageSchema.shape,
         reportedCostUsd: z.number().nonnegative().nullable()
       })
       .strict(),
@@ -77,13 +74,8 @@ const runTelemetrySchema = z
 
 export type AgentRunTelemetryV1 = z.infer<typeof runTelemetrySchema>;
 
-export type AgentModelUsageTelemetry = {
+export type AgentModelUsageTelemetry = TokenUsage & {
   callCount: number;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  totalTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheCreationTokens: number | null;
 };
 
 type AgentRunTelemetryRow = {
