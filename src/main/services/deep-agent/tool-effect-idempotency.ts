@@ -10,6 +10,7 @@ import type {
 import { RocToolResolutionError } from '../forge-guardrails/errors';
 import { unwrapMiddlewareError } from '../forge-guardrails/middleware/middleware-error';
 import { toRunFailure } from './error-mapping';
+import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
 import { AgentToolEffectStore, hashToolInput, type ToolEffectKey } from './tool-effect-store';
 
 type ToolEffectIdempotencyOptions = {
@@ -58,7 +59,7 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
       if (toolCallId === null) {
         return createEffectErrorMessage(typedRequest.toolCall.name, 'unknown-tool-call', 'agent_tool_effect_call_id_missing');
       }
-      const executionIdentity = readExecutionIdentity(typedRequest);
+      const executionIdentity = readDeepAgentsExecutionIdentity(typedRequest.runtime?.configurable);
       if (executionIdentity === null) {
         return createEffectErrorMessage(typedRequest.toolCall.name, toolCallId, 'agent_tool_effect_execution_info_missing');
       }
@@ -151,53 +152,6 @@ function resolveLegacyReconcileStrategy(
   effectClass: RunCapabilityManifestToolV1['effectClass']
 ): Exclude<RunCapabilityReconcileStrategyV1, 'none'> {
   return effectClass === 'network_read' ? 'retry_safe' : 'manual_confirmation';
-}
-
-function readExecutionIdentity(request: ToolCallRequest): { executionPath: string; checkpointId: string } | null {
-  const configurable = request.runtime?.configurable;
-  if (!isRecord(configurable)) {
-    return null;
-  }
-  const checkpointNamespace = configurable.checkpoint_ns;
-  const checkpointMap = configurable.checkpoint_map;
-  const agentType = configurable.ls_agent_type;
-  if (
-    typeof checkpointNamespace !== 'string' ||
-    !isRecord(checkpointMap) ||
-    typeof agentType !== 'string'
-  ) {
-    return null;
-  }
-  const agentNamespace = readAgentNamespace(checkpointNamespace);
-  if (agentNamespace === null) {
-    return null;
-  }
-  const expectedAgentType = agentNamespace.length === 0 ? 'root' : 'subagent';
-  if (agentType !== expectedAgentType) {
-    return null;
-  }
-  const checkpointId = checkpointMap[agentNamespace];
-  if (typeof checkpointId !== 'string' || checkpointId.length === 0) {
-    return null;
-  }
-  return {
-    executionPath: agentNamespace.length === 0 ? 'main' : `subagent/${agentNamespace}`,
-    checkpointId
-  };
-}
-
-function readAgentNamespace(checkpointNamespace: string): string | null {
-  const separatorIndex = checkpointNamespace.lastIndexOf('|');
-  if (separatorIndex === 0) {
-    return null;
-  }
-  const toolSegment = separatorIndex === -1
-    ? checkpointNamespace
-    : checkpointNamespace.slice(separatorIndex + 1);
-  if (!toolSegment.startsWith('tools:') || toolSegment.length === 'tools:'.length) {
-    return null;
-  }
-  return separatorIndex === -1 ? '' : checkpointNamespace.slice(0, separatorIndex);
 }
 
 function createEffectErrorMessage(toolName: string, toolCallId: string, content: string): ToolMessage {

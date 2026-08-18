@@ -23,8 +23,12 @@ import type {
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
-import { adaptDeepAgents110V3Run } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
-import { consumeMessageStream, consumeSubagentStream, consumeToolCallStream, createUsageAccumulator } from '../../services/deep-agent/stream-consumers';
+import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
+import {
+  consumeDeepAgentEventStream,
+  createStreamConsumerState,
+  createUsageAccumulator
+} from '../../services/deep-agent/stream-consumers';
 import { createRunSubagents } from '../../services/deep-agent/tools';
 import { defaultErrorTracker, PreviewStore } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
@@ -51,7 +55,7 @@ import {
 import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
-import { createToolOutputProjector, type ToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
+import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
 import type { HookRuntime } from '../../services/hooks';
 import type { LangChainChatModelHandle } from '../../services/langchain-model-factory';
@@ -64,10 +68,6 @@ import { createAgentDeepAgentExecution, type RunOutcome } from './agent-executio
 import type { AgentLangSmithTracingProvider } from '../../services/deep-agent/langsmith-tracing';
 import { runWithLangSmithTracing } from '../../services/deep-agent/langsmith-tracing';
 import { createChatRunEventQueue } from './chat-run-event-queue';
-import {
-  readFinalAssistantText,
-  readInterrupted
-} from './deep-agent-final-output';
 import { createRunInterruptedEvents, projectDeepAgentInterrupts } from './interrupt-projection';
 
 export type AgentDeepAgentExecutorOptions = {
@@ -369,50 +369,30 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
           signal: executionAbortController.signal
         })
       );
-      const run = adaptDeepAgents110V3Run(rawRun);
+      const projectToolOutput = createToolOutputProjector({
+        artifactStore: options.contextArtifactStore,
+        runId: input.run.id,
+        threadId: input.run.threadId,
+        workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
+      });
+      const run = adaptDeepAgentRun(rawRun, { projectToolOutput });
       const runOutputSettlement = Promise.allSettled([run.output] as const);
-      const taskRun = input.run;
       const callbacks = createExecutorCallbacks({
-        emitRuntimeEvent,
-        projectToolOutput: createToolOutputProjector({
-          artifactStore: options.contextArtifactStore,
-          runId: input.run.id,
-          threadId: input.run.threadId,
-          workspaceHash: contextHarness.workspaceIdentity === null ? null : contextHarness.workspaceIdentity.hash
-        })
+        emitRuntimeEvent
+      });
+      const streamState = createStreamConsumerState({
+        assistantChunks,
+        reasoningChunks,
+        usageAccumulator
       });
       const consumeRun = runWithLangSmithTracing(langSmithTracing, async () => {
         try {
-          await Promise.all([
-            consumeToolCallStream({
-              calls: run.toolCalls,
-              context: {
-                runId: input.run.id,
-                taskRun
-              },
-              callbacks
-            }),
-            consumeMessageStream({
-              messages: run.messages,
-              context: {
-                runId: input.run.id,
-                taskRun
-              },
-              assistantChunks,
-              reasoningChunks,
-              usageAccumulator,
-              callbacks
-            }),
-            consumeSubagentStream({
-              subagents: run.subagents,
-              context: {
-                runId: input.run.id,
-                taskRun
-              },
-              usageAccumulator,
-              callbacks
-            })
-          ]);
+          await consumeDeepAgentEventStream({
+            events: run.events,
+            runId: input.run.id,
+            state: streamState,
+            callbacks
+          });
           recordPromptCacheMetrics({
             metricsService: options.metricsService,
             modelId: input.modelHandle.modelId,
@@ -421,8 +401,9 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             source: hookRunContext.source,
             usageAccumulator
           });
-          if (readInterrupted(run)) {
-            const interrupts = projectDeepAgentInterrupts(run);
+          const domainInterrupts = streamState.interrupted;
+          if (domainInterrupts !== null) {
+            const interrupts = projectDeepAgentInterrupts(domainInterrupts);
             for (const event of createRunInterruptedEvents(input.run.id, input.run.threadId, interrupts)) {
               emitRuntimeEvent(event);
             }
@@ -437,7 +418,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             if (settledOutput.status === 'rejected') {
               throw settledOutput.reason;
             }
-            const finalAssistantText = readFinalAssistantText(settledOutput.value);
+            const finalAssistantText = settledOutput.value;
             if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
               assistantChunks.push(finalAssistantText);
               emitRuntimeEvent({
@@ -695,14 +676,11 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshotV2): Workspac
 
 function createExecutorCallbacks(input: {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
-  projectToolOutput: ToolOutputProjector;
-}): Parameters<typeof consumeMessageStream>[0]['callbacks'] {
+}): Parameters<typeof consumeDeepAgentEventStream>[0]['callbacks'] {
   return {
     emitRuntimeEvent: (event) => {
       input.emitRuntimeEvent(event);
-    },
-    emitTodoEvent: () => {},
-    projectToolOutput: input.projectToolOutput
+    }
   };
 }
 

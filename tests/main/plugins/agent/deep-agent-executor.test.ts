@@ -10,8 +10,8 @@ import {
   buildExecutorOnce,
   collectExecutorEvents,
   createAsyncIterable,
-  createDeepAgents110V3MessageHandle,
-  createDeepAgents110V3SubagentHandle,
+  createVendorMessageHandle,
+  createVendorSubagentHandle,
   findTool,
   invokeTool,
   readBuildInput,
@@ -279,7 +279,7 @@ describe('createAgentDeepAgentExecutor', () => {
       capabilities: createCapabilities([]),
       metricsService: { recordPromptCacheMetrics },
       messages: createAsyncIterable([
-        createDeepAgents110V3MessageHandle({
+        createVendorMessageHandle({
           usage: createAsyncIterable([{
             input_tokens: 600,
             input_token_details: {
@@ -321,7 +321,7 @@ describe('createAgentDeepAgentExecutor', () => {
       capabilities: createCapabilities([]),
       metricsService: { recordPromptCacheMetrics },
       messages: createAsyncIterable([
-        createDeepAgents110V3MessageHandle({
+        createVendorMessageHandle({
           usage: createAsyncIterable([{
             input_tokens: 100,
             input_token_details: { cache_read: 40 }
@@ -329,10 +329,10 @@ describe('createAgentDeepAgentExecutor', () => {
         })
       ]),
       subagents: createAsyncIterable([
-        createDeepAgents110V3SubagentHandle({
+        createVendorSubagentHandle({
           name: 'researcher',
           messages: createAsyncIterable([
-            createDeepAgents110V3MessageHandle({
+            createVendorMessageHandle({
               namespace: ['tools:fixture', 'model_request:fixture'],
               usage: createAsyncIterable([{
                 input_tokens: 60,

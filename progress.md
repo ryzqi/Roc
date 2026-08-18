@@ -130,6 +130,34 @@
 - 重复 validator 修复后 5 文件/50 项聚焦、`pnpm typecheck`、strict unused、`pnpm check:ipc`、`pnpm build`、`git diff --check` 均通过；最终串行全量仍为 328 文件/1839 项通过。进入最终双轴复审。
 - 阶段 4 最终 Standards/Spec 复审均 PASS：无剩余标准违规、smell、规格缺失、scope creep 或行为错误。阶段状态为 Verified passing，准备独立提交。
 
+## 2026-08-18（阶段 5）
+
+- 阶段 4 已以 `28b7e89 refactor(ipc): centralize runtime contracts` 独立提交；阶段 5 fixed point 固定为 `28b7e89`。
+- session catchup 无未同步上下文；`main` 相对 `origin/main` ahead 42，工作树开始时干净。
+- 阶段 5 状态切换为 `in_progress`。目标行为：adapter 输出主进程领域事件，vendor 前缀类型不泄漏；tool-call 生命周期只有一个实现；execution identity 解析进入显式 vendor adapter；永久空 `emitTodoEvent` callback 删除。
+- 验收：翻译测试与 vendor 升级哨兵测试通过；`DeepAgents110V3*` 仅存在于 adapter 文件；`consumeToolCalls` 仅一个实现；`pnpm typecheck`、`pnpm test` 通过；Standards/Spec 子代理审查问题全部闭环后独立提交。
+- 设计已定案为 adapter 领域事件与 IPC wire 两层；adapter 暴露单一并发事件流，root/subagent tool call 共用一个 lifecycle 翻译器，interrupt 作为流终态领域事件，execution identity 使用独立 vendor adapter。
+- 红测已确认：`deep-agent-domain-events.test.ts` 因 `run.events` 不存在失败；`deep-agents-execution-identity-adapter.test.ts` 因目标 adapter 模块不存在失败。两项均为预期的未实现接口，而非夹具或环境错误。
+- execution identity 已迁入独立 adapter；版本/形状哨兵与原幂等 middleware 共 14 项通过。
+- stream adapter 已输出单一 `DeepAgentDomainEvent` 并在内部并发合并 vendor 三流；root/subagent tool lifecycle 使用同一 generator，final output 直接为 `string | null`，obsolete `deep-agent-final-output.ts` 已删除。
+- 新领域翻译与 execution identity 两组聚焦测试 2 文件/4 项通过；消费层已切换为领域事件 dispatcher，永久 `emitTodoEvent` 生产 callback 已删除。当前剩余 typecheck 错误仅来自三份待重写的 vendor 镜像测试。
+- 三份旧 vendor DTO/consumer 测试已重写为领域翻译与事件外壳断言；`pnpm typecheck` fresh 通过。
+- adapter/consumer/subagent/identity/幂等/executor 聚焦集 8 文件/55 项全部通过；真实安装包 conformance、nested subagent scope、tool terminal error、interrupt state 与 executor streaming 均无回归。
+- 等价性修复：subagent reasoning 恢复为只 drain、不发 UI；scoped 事件的 `markVisibleOutput` 收敛为每个可见事件一次。新增对应断言后聚焦 8 文件/54 项通过，`pnpm typecheck` 通过。
+- 验收扫描：`DeepAgents110V3` 30 个匹配全部仅在版本 adapter 文件内；生产代码无 `consumeToolCalls`，全仓无 `emitTodoEvent`。公共入口已改为领域名 `adaptDeepAgentRun`，executor raw fixture helper 改为 `createVendor*Handle`。
+- 阶段宽验证：deep-agent 与 agent plugin 目录 71 文件/463 项通过；strict unused tsc、`git diff --check` 通过。
+- fixed point 与当前 adapter 的唯一 vendor contract error code 均为 51 个且集合一致；计划中的“42”是旧计数，实际防御未减少。
+- 本轮恢复已确认 fixed point 解析为 `28b7e894b9c975f709479a86548b78d1b913ec82`，阶段 5 diff 非空且 HEAD 仍位于该 fixed point；`git diff --check 28b7e89` 通过。
+- 首次嵌套 PowerShell 定点读取因变量提前展开失败，已切换为 CodeGraph 与无变量切片命令；本地自审定位 `mergeAsyncIterables` 对 `undefined` rejection 的判别缺口，待子代理结论汇总后测试先行修复。
+- 阶段 5 Standards/Spec 子代理两轮共四次均因服务端 429 未启动成功；未获得有效审查结论，阶段仍为 `in_progress`，禁止提交。
+- 轻量 Spec 子代理完成初审并报告 2 项 P1：merge 吞掉 `undefined` rejection、interrupt 在构造期读取过早。两项均先新增失败测试，再分别改为显式 settlement 判别和仅在三流结束后读取终态；`deep-agent-domain-events.test.ts` 3/3 通过。
+- 首次红测命令因字面量 `--` 误跑 330 个文件，除预期领域红测外出现未改动 `log-service` 时序失败；改用直接 Vitest 文件命令后目标结果明确，最终仍需串行全量门禁。
+- Standards 初审的 cleanup await 建议经反例复核后撤回：Node 25 实测 pending `next()` 时 `iterator.return()` 在 50ms 内仍 pending；当前触发并观察 cleanup、不阻塞 consumer cancellation 的策略符合阶段规格。最新 Standards/Spec 复审均 PASS。
+- 修复后聚焦 8 文件/56 项、阶段宽 71 文件/465 项、typecheck、strict unused 与 diff check 均通过。首次串行全量因 360 秒外层预算耗尽而未完成，已确认无残留本批次进程，准备加长预算重跑。
+- 加长外层预算后串行全量门禁退出码 0：330 文件/1815 项通过，耗时 439.5 秒；既有 permission/React act/ConPTY 日志未造成失败。
+- 最终 `pnpm build`、`pnpm typecheck`、strict unused tsc、`git diff --check 28b7e89` 全部退出码 0。Standards/Spec 对最新工作树最终复审均 PASS，阶段 5 状态更新为 Verified passing，准备独立提交。
+- `maintaining-agents-md` 收尾检查确认原单文件测试命令与当前工具行为冲突；本地 `AGENTS.md` 已改为已验证的 `pnpm exec vitest run <file>`。该文件由 `.gitignore:16` 明确排除，不强制加入阶段提交；没有发现其他需要新增的项目级规则。
+
 ## 阶段证据模板
 
 每阶段记录：

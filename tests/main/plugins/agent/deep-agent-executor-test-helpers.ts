@@ -322,7 +322,7 @@ export async function* createAsyncIterable<T>(values: readonly T[]): AsyncIterab
   }
 }
 
-export function createDeepAgents110V3MessageHandle(
+export function createVendorMessageHandle(
   overrides: Record<string, unknown> = {}
 ): Record<string, unknown> {
   return {
@@ -337,7 +337,7 @@ export function createDeepAgents110V3MessageHandle(
   };
 }
 
-export function createDeepAgents110V3ToolCallHandle(
+export function createVendorToolCallHandle(
   overrides: Record<string, unknown> = {}
 ): Record<string, unknown> {
   return {
@@ -351,7 +351,7 @@ export function createDeepAgents110V3ToolCallHandle(
   };
 }
 
-export function createDeepAgents110V3SubagentHandle(
+export function createVendorSubagentHandle(
   overrides: Record<string, unknown> = {}
 ): Record<string, unknown> {
   return {

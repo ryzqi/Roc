@@ -4,8 +4,8 @@ import {
   collectExecutorEvents,
   createAsyncIterable,
   createControlledAsyncStream,
-  createDeepAgents110V3MessageHandle,
-  createDeepAgents110V3ToolCallHandle,
+  createVendorMessageHandle,
+  createVendorToolCallHandle,
   createDeferred,
   drainIterator,
   isChatRunEventBuffer,
@@ -19,7 +19,7 @@ describe('createAgentDeepAgentExecutor', () => {
     const events = await collectExecutorEvents({
       capabilities: createCapabilities([]),
       messages: createAsyncIterable([
-        createDeepAgents110V3MessageHandle({
+        createVendorMessageHandle({
           text: createAsyncIterable(['实时回答'])
         })
       ]),
@@ -48,7 +48,7 @@ describe('createAgentDeepAgentExecutor', () => {
     const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       messages: createAsyncIterable([
-        createDeepAgents110V3MessageHandle({
+        createVendorMessageHandle({
           reasoning: reasoning.iterable,
           text: text.iterable
         })
@@ -89,7 +89,7 @@ describe('createAgentDeepAgentExecutor', () => {
     const execution = await startExecutorExecution({
       capabilities: createCapabilities([]),
       messages: createAsyncIterable([
-        createDeepAgents110V3MessageHandle({
+        createVendorMessageHandle({
           text: text.iterable
         })
       ]),
@@ -123,7 +123,7 @@ describe('createAgentDeepAgentExecutor', () => {
       await expect(collectExecutorEvents({
         capabilities: createCapabilities([]),
         messages: createAsyncIterable([
-          createDeepAgents110V3MessageHandle({
+          createVendorMessageHandle({
             text: (async function* () {
               failureGate.resolve(undefined);
               throw new Error('message stream failed');
@@ -160,7 +160,7 @@ describe('createAgentDeepAgentExecutor', () => {
       const events = await collectExecutorEvents({
         capabilities: createCapabilities([]),
         messages: createAsyncIterable([
-          createDeepAgents110V3MessageHandle({
+          createVendorMessageHandle({
             text: createAsyncIterable(chunks)
           })
         ]),
@@ -190,7 +190,7 @@ describe('createAgentDeepAgentExecutor', () => {
       try {
         for (let index = 0; index < 2_000; index += 1) {
           yieldedCalls += 1;
-          yield createDeepAgents110V3ToolCallHandle({
+          yield createVendorToolCallHandle({
             callId: `call-${index}`,
             name: 'read_file',
             input: { path: `/workspace/${index}.txt` },

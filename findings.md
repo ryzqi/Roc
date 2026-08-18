@@ -183,3 +183,52 @@
 - Standards 最终复审补充指出 agent policy/manifest 与 HITL review config 各自维护 `approve/edit/reject`。决策集合现在由 `hitlDecisionTypeSchema` 唯一拥有，agent policy 与 `InterruptDecisionType` 直接复用/推导。
 - Spec 最终复审追加旁路：`session-repository.ts` 的 recorded resume payload 和 `chat-view.tsx` 仍绕过共享解析。前者现用 approval/question payload Zod schemas（approval decisions 复用 `hitlResumeDecisionSchema`），后者消费 `TaskEvent` message 判别联合；两个红测已验证修复前可复现、修复后通过。
 - Standards 最终复审最后指出 session repository 的 recorded resume validator 与 task-event payload schema 重复。`approvalDecisionPayloadSchema`、`humanQuestionAnsweredPayloadSchema` 现由 task-event 导出并作为 DB 审计读取的唯一 parser。
+
+## 阶段 5：Stream adapter 领域事件与投影合并
+
+- fixed point 为 `28b7e89`；恢复时工作树干净，阶段 4 已提交。
+- 权威规格要求 vendor stream 只在 adapter 内出现；adapter 应翻译为主进程领域事件，而不是镜像透传 messages/toolCalls/subagents/output/interrupts。
+- 两个 `consumeToolCalls` 当前被规格识别为近克隆：共同负责 `Promise.allSettled`、contract error rethrow、redact/project 与 start/end/error 三相发射；目标是单一 lifecycle 投影器，调用方只提供事件外壳。
+- `readExecutionIdentity` 当前读取 LangGraph/Deep Agents 未承诺的 configurable 内部形状；目标是显式 vendor adapter，并用升级哨兵测试锁定依赖版本及内部形状。
+- 当前阶段不升级 vendor、不改变 IPC wire contract、不新增兼容路径或静默 fallback。
+- CodeGraph fresh 调用图：`adaptDeepAgents110V3Run` 有 3 个 executor 调用点；`DeepAgents110V3Message`、`DeepAgents110V3ToolCall`、`DeepAgents110V3Subagent` 分别泄漏到 `stream-consumers.ts` 与 `subagent-projection.ts` 及其测试。
+- 当前 adapter 已集中执行 vendor 字段读取、async iterable/promise 断言、usage 翻译、tool outcome 终态校验与 output text 提取，但返回值仍按 `messages/toolCalls/subagents/output/interrupted/interrupts` 镜像 vendor 层级；领域分类和 UI 事件组装仍散落在下游。
+- 既有 `adaptToolCallOutcome` 明确区分 contract error、vendor output rejection 和 terminal error；迁移为领域事件时必须保留这些错误传播及已注册的 rejection observation，不能因投影合并吞错。
+- 运行时版本事实：Node `25.7.0`、TypeScript `7.0.2`、`deepagents` `1.10.8`、`@langchain/langgraph` `1.4.7`；本阶段升级哨兵应锁定仓库实际安装契约，不做依赖升级。
+- vendor 类型还泄漏到 `src/main/plugins/agent/deep-agent-final-output.ts` 与 `interrupt-projection.ts`，不仅是两份 stream consumer；阶段验收扫描必须覆盖这两个 executor 辅助模块和测试 helper。
+- `emitTodoEvent` 同时存在于两个 consumer callback interface，主 executor 永久传入空函数；规格要求从接口和调用链删除，测试中的 spy 也应随之移除，不能换成另一个 no-op。
+- executor 当前并行消费 `run.toolCalls`、`run.messages`、`run.subagents`，消费结束后才读取 live getter `interrupted/interrupts` 与 output；领域事件迁移必须保持三流并发、晚读 interrupt terminal state、output rejection observation 和 outcome 发布顺序。
+- 主消息消费者把 reasoning/text/usage 分类成 UI delta 与 accumulator；subagent 消费者又递归处理 messages/toolCalls/subagents，并以 runId + ordinal path 生成 UI identity/sequence。领域层可输出不含 IPC 外壳的语义事件，runId、ChatRunEvent 与 UI sequence 仍应由 executor/投影层拥有。
+- 两份 tool-call 实现除非 contract error 的普通 rejection 文案略有差异（主流固定中文，subagent `String(error)`），其余 settlement、redact、project、三相 block、session recording 基本同构。统一实现时应显式选择并测试一套错误规范，避免无意改变主流文案。
+- `deep-agent-final-output.ts` 仅是两行 vendor 类型 pass-through，删除后复杂度不会回到调用方，属于零深度模块候选；但本阶段只应在其确因领域 Run 替代而 obsolete 时删除。
+- `projectDeepAgentInterrupts` 只依赖 `interruptId/payload`，应改为消费 adapter 输出的领域 interrupt；DB normalization 与 Chat interrupt schema 仍留在 interrupt projection module。
+- execution identity 依赖 `checkpoint_ns`、`checkpoint_map`、`ls_agent_type` 三个 runtime configurable 字段，并从最后一个 `|` 后的 `tools:` 段区分 root/subagent。现有 middleware 对缺失或冲突形状返回受控 ToolMessage error，显式 adapter 必须保持此失败边界。
+- 现有 stream/subagent 测试的关键行为不是 DTO 镜像，而是并发安全：start/output 投影先失败时，已取得的 outcome/output Promise 仍必须被观察，不能产生 unhandled rejection；领域事件 adapter 必须继续在同步 sibling 验证前注册 rejection observer。
+- 普通 tool outcome rejection 当前转为可见 `error` block，`DeepAgents110V3ContractError` 则原样抛出；subagent output 普通 rejection 转为 `failed` 生命周期事件，contract error 原样抛出。两类 failure boundary 均需保留。
+- output projector 失败必须原样传播，不能伪装成 tool failure；终态 error 可以不等待永不 settle 的 output。统一 tool lifecycle projector 的测试必须覆盖这两条。
+- conformance 文件 1013 行，其中前两项直接运行安装的 `deepagents@1.10.8` 并 pin vendor handle 形状，后续大量用例又镜像 adapter DTO。目标应保留小型真实 vendor 哨兵，把其余重写为 vendor fixture 到领域事件/终态的翻译断言。
+- `deepagents@1.10.8` 与 `@langchain/langgraph@1.4.7` 已由 `package.json`/lockfile共同确认；哨兵可显式断言 package version 与必需 handle 字段，避免 vendor 升级后旧内部形状静默运行。
+
+### 阶段 5 设计定案
+
+- 领域事件与 `ChatRunEvent` 保持两层：adapter 输出主进程内部判别联合，executor/投影层补 runId、blockId、sequence 与 IPC wire 外壳。不会让 adapter 直接依赖 IPC schema。
+- adapter 对外改为一个并发合并的 `events: AsyncIterable<DeepAgentDomainEvent>`，隐藏 vendor 的 messages/toolCalls/subagents 三流拓扑；另保留 `output: Promise<string | null>` 作为终态文本。interrupt 在三流消费结束后以终态领域事件输出。
+- 领域事件只含真实消费者字段：assistant 的 text/reasoning delta、usageKey + canonical usage、tool call 的 start/completed/failed、subagent ordinal/name path 生命周期、interruptId/payload；删除未消费的 namespace/node/cause/subagent final text 镜像。
+- root 与 subagent 的 tool call 均调用 adapter 内同一个 lifecycle generator；该 generator 负责立即观察 outcome、contract error 重抛、普通 rejection 规范化、输入脱敏、output projector 与三相领域事件生成。下游只负责事件外壳、session 记录与 visible-output 标记。
+- generic async stream merge 保持 root 三流及每个 subagent 的 message/tool/nested-subagent 并发；所有 in-flight `next()` promise 先转为 fulfilled outcome，早退/错误路径调用 iterator `return()` 并观察清理 Promise，避免新增 unhandled rejection。
+- execution identity 另建显式 `deep-agents-execution-identity-adapter.ts`；middleware 只消费 `{ executionPath, checkpointId } | null`，vendor 字段解析和版本哨兵集中在该文件及专测。
+- 首轮产品迁移后 typecheck 从 97 项降至 81 项；产品侧 4 项已修复，剩余错误全部位于旧 `deep-agent-stream-shape-conformance`、`stream-consumers`、`subagent-projection` 测试，它们仍导入已删除的 vendor DTO/旧 consumer。按无兼容层约束直接重写测试。
+- `toolCallAssistantBlockSchema` 的 input/output/error 都是 JSON；domain lifecycle 已在输入使用 `redactUnknown`、输出使用既有 `ToolOutputProjector`，consumer 仍以同一 shared schema parse，保持阶段 4 runtime contract。
+- 真实 vendor 哨兵只需保留安装包实际 root message/tool handle 的一条端到端翻译；named-subagent 与 42 个错误码可用紧凑 raw fixture/表驱动测试，避免恢复 1000 行镜像观察 helper。
+- 验收扫描 fresh 结果：生产代码无 `consumeToolCalls`，全仓无 `emitTodoEvent`；conformance 1013→317 行，stream consumer 505→145 行，subagent projection 410→124 行。
+- 聚焦 8 文件/55 项通过后人工等价检查发现两个测试未覆盖的细节：旧 subagent reasoning 只 drain、不发 UI；新 scoped dispatcher 在外层和 envelope 内重复调用 `markVisibleOutput`。两项均需按旧行为修正并加断言后才能进入全量门禁。
+- `DeepAgents110V3` 当前在 adapter 外只剩公共适配函数名、测试 fixture helper 名和一个测试用 contract error class import；为让防腐 seam 更清晰，公共函数改用领域名 `adaptDeepAgentRun`，contract error 保持 adapter 私有，测试 helper 改为 vendor-neutral 名称。
+- 规格问题段写“42 个错误码”，但 fixed point `28b7e89` 的 adapter 实际唯一 `deep_agents_1_10_v3_*` code 为 51 个；当前文件也是同一 51 个且集合逐项一致。以 fixed point 源码为单一事实源，保留全部 51 个，不按过时计数删减防御。
+- 本轮定点审查发现 `mergeAsyncIterables` 以 `settled.error !== undefined` 区分 rejection；若异步迭代器以 `undefined` 作为拒绝原因，该分支会把 rejection 当作无结果静默跳过。需要用显式判别字段建模 settlement，并增加回归测试。
+- `mergeAsyncIterables` 已把所有 in-flight `next()` 的 rejection 转成 fulfilled settlement，早退时也用 `Promise.allSettled` 观察 `return()` 清理，因此未观察 rejection 风险已覆盖；是否等待清理完成需要避免阻塞永不 settle 的 iterator。
+- `interrupted/interrupts` 在 adapter 构造时校验并在三流结束后再次读取，与 fixed point 的 live getter 终态语义一致；不能提前快照成初始值。
+- Spec 子代理确认提前校验本身也违反终态读取边界：动态 getter 在流完成前可能尚未形成合法 interrupt 状态。领域 adapter 不暴露这些字段，故应只在 `events` 流结束边界读取并验证一次；同步预读没有独立消费者价值。
+- 两项 Spec P1 均有稳定复现：`undefined` stream rejection 曾被 merge 吞掉；动态 interrupt getter 曾在 adapter 构造时抛出。显式 settlement status 与删除构造期预读后，领域事件目标测试 3/3 通过。
+- Standards 对 cleanup 的初始 P1 经复核撤回：Node 25 证明 pending `next()` 会让 async generator 的 `return()` 继续 pending；无通用 `AbortSignal` 时，调用全部 `return()` 并用 `Promise.allSettled` 观察、但不阻塞 consumer cancellation，是当前接口下符合规格的终态。
+- 阶段 5 最终证据：聚焦 8 文件/56 项、阶段宽 71 文件/465 项、串行全量 330 文件/1815 项、typecheck、strict unused、build、diff check 全部通过；Standards/Spec 最新工作树复审均 PASS。
+- 目标单文件测试命令应使用 `pnpm exec vitest run <file>`；`pnpm test -- <file>` 会把字面量 `--` 交给当前 Vitest 并扩大测试范围。该事实已同步到本地 `AGENTS.md`；文件由 `.gitignore` 明确排除，不强制纳入阶段提交。

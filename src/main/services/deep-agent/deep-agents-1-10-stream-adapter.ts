@@ -1,21 +1,89 @@
 import type { TokenUsage } from '../../../shared/types';
 import * as recordUtils from './record-utils';
+import { redact } from './redact';
+import { redactUnknown } from './stream-tool-utils';
+import type { ToolOutputProjector } from './tool-output-projection';
 
-export type DeepAgents110V3Usage = TokenUsage;
+export type DeepAgentSubagentScope = {
+  name: string;
+  ordinalPath: readonly number[];
+  path: readonly string[];
+};
 
-export type DeepAgents110V3Message = {
+type ScopedDomainEvent = {
+  scope: DeepAgentSubagentScope | null;
+};
+
+export type DeepAgentDomainEvent =
+  | (ScopedDomainEvent & {
+      type: 'assistant_delta';
+      kind: 'text' | 'reasoning';
+      text: string;
+    })
+  | {
+      type: 'usage';
+      usageKey: string;
+      usage: TokenUsage;
+    }
+  | (ScopedDomainEvent & {
+      type: 'tool_call_started';
+      callId: string;
+      name: string;
+      input: unknown;
+    })
+  | (ScopedDomainEvent & {
+      type: 'tool_call_completed';
+      callId: string;
+      name: string;
+      input: unknown;
+      output: unknown;
+    })
+  | (ScopedDomainEvent & {
+      type: 'tool_call_failed';
+      callId: string;
+      name: string;
+      input: unknown;
+      error: unknown;
+    })
+  | {
+      type: 'subagent_started';
+      scope: DeepAgentSubagentScope;
+    }
+  | {
+      type: 'subagent_completed';
+      scope: DeepAgentSubagentScope;
+    }
+  | {
+      type: 'subagent_failed';
+      scope: DeepAgentSubagentScope;
+      error: string;
+    }
+  | {
+      type: 'run_interrupted';
+      interrupts: readonly DeepAgentInterrupt[];
+    };
+
+export type DeepAgentInterrupt = {
+  interruptId: string;
+  payload: unknown;
+};
+
+export type DeepAgentDomainRun = {
+  events: AsyncIterable<DeepAgentDomainEvent>;
+  output: Promise<string | null>;
+};
+
+type DeepAgents110V3Message = {
   usageKey: string;
-  namespace: readonly string[];
-  node: string;
   text: AsyncIterable<string>;
   reasoning: AsyncIterable<string>;
   trailingReasoning: Promise<string | null>;
-  usage: AsyncIterable<DeepAgents110V3Usage>;
+  usage: AsyncIterable<TokenUsage>;
 };
 
-export type DeepAgents110V3ToolCallStatus = 'running' | 'finished' | 'error';
+type DeepAgents110V3ToolCallStatus = 'running' | 'finished' | 'error';
 
-export type DeepAgents110V3ToolCallOutcome =
+type DeepAgents110V3ToolCallOutcome =
   | {
       status: 'finished';
       output: unknown;
@@ -25,53 +93,37 @@ export type DeepAgents110V3ToolCallOutcome =
       error: string;
     };
 
-export type DeepAgents110V3ToolCall = {
+type DeepAgents110V3ToolCall = {
   name: string;
   callId: string;
   input: unknown;
   outcome: Promise<DeepAgents110V3ToolCallOutcome>;
 };
 
-export type DeepAgents110V3Output = {
-  finalAssistantText: string | null;
-};
-
-export type DeepAgents110V3SubagentCause = {
+type DeepAgents110V3SubagentCause = {
   type: 'toolCall';
   toolCallId: string;
 };
 
-export type DeepAgents110V3Subagent = {
+type DeepAgents110V3Subagent = {
   name: string;
-  cause: DeepAgents110V3SubagentCause | null;
-  output: Promise<DeepAgents110V3Output>;
+  output: Promise<string | null>;
   messages: AsyncIterable<DeepAgents110V3Message>;
   toolCalls: AsyncIterable<DeepAgents110V3ToolCall>;
   subagents: AsyncIterable<DeepAgents110V3Subagent>;
 };
 
-export type DeepAgents110V3Interrupt = {
-  interruptId: string;
-  payload: unknown;
-};
-
-export type DeepAgents110V3Run = {
-  messages: AsyncIterable<DeepAgents110V3Message>;
-  toolCalls: AsyncIterable<DeepAgents110V3ToolCall>;
-  subagents: AsyncIterable<DeepAgents110V3Subagent>;
-  output: Promise<DeepAgents110V3Output>;
-  interrupted: boolean;
-  interrupts: readonly DeepAgents110V3Interrupt[];
-};
-
-export class DeepAgents110V3ContractError extends Error {
+class DeepAgents110V3ContractError extends Error {
   constructor(code: string) {
     super(code);
     this.name = 'DeepAgents110V3ContractError';
   }
 }
 
-export function adaptDeepAgents110V3Run(run: unknown): DeepAgents110V3Run {
+export function adaptDeepAgentRun(
+  run: unknown,
+  options: { projectToolOutput: ToolOutputProjector }
+): DeepAgentDomainRun {
   const rawRun = requireRecord(run, 'deep_agents_1_10_v3_run_invalid');
   const outputPromise = observePromiseField(rawRun, 'output');
   const messages = requireAsyncIterable(
@@ -86,8 +138,6 @@ export function adaptDeepAgents110V3Run(run: unknown): DeepAgents110V3Run {
     readRequiredField(rawRun, 'subagents', 'deep_agents_1_10_v3_run_subagents_async_iterable_missing'),
     'deep_agents_1_10_v3_run_subagents_async_iterable_missing'
   );
-  readRunInterrupted(rawRun);
-  readRunInterrupts(rawRun);
   const output = adaptObservedPromise(
     outputPromise,
     'deep_agents_1_10_v3_run_output_promise_missing',
@@ -95,17 +145,296 @@ export function adaptDeepAgents110V3Run(run: unknown): DeepAgents110V3Run {
   );
 
   return {
-    messages: adaptMessages(messages, 'run'),
-    toolCalls: adaptToolCalls(toolCalls),
-    subagents: adaptSubagents(subagents, 'run'),
-    output,
-    get interrupted() {
-      return readRunInterrupted(rawRun);
-    },
-    get interrupts() {
-      return readRunInterrupts(rawRun);
-    }
+    events: translateRunEvents({
+      messages,
+      projectToolOutput: options.projectToolOutput,
+      rawRun,
+      subagents,
+      toolCalls
+    }),
+    output
   };
+}
+
+async function* translateRunEvents(input: {
+  rawRun: Record<string, unknown>;
+  messages: AsyncIterable<unknown>;
+  toolCalls: AsyncIterable<unknown>;
+  subagents: AsyncIterable<unknown>;
+  projectToolOutput: ToolOutputProjector;
+}): AsyncGenerator<DeepAgentDomainEvent> {
+  const messages = adaptMessages(input.messages, 'run');
+  const toolCalls = adaptToolCalls(input.toolCalls);
+  const subagents = adaptSubagents(input.subagents, 'run');
+  yield* mergeAsyncIterables([
+    translateMessages(messages, null),
+    translateToolCalls(toolCalls, null, input.projectToolOutput),
+    translateSubagents(subagents, input.projectToolOutput)
+  ]);
+
+  if (readRunInterrupted(input.rawRun)) {
+    yield {
+      type: 'run_interrupted',
+      interrupts: readRunInterrupts(input.rawRun)
+    };
+  }
+}
+
+async function* translateMessages(
+  messages: AsyncIterable<DeepAgents110V3Message>,
+  scope: DeepAgentSubagentScope | null
+): AsyncGenerator<DeepAgentDomainEvent> {
+  let reasoningObserved = false;
+  for await (const message of messages) {
+    let messageReasoningObserved = false;
+    const streams: AsyncIterable<DeepAgentDomainEvent>[] = [
+      translateUsage(message.usageKey, message.usage),
+      scope === null
+        ? translateVisibleText(message.reasoning, 'reasoning', scope)
+        : drainStrings(message.reasoning),
+      translateVisibleText(message.text, 'text', scope)
+    ];
+    for await (const event of mergeAsyncIterables(streams)) {
+      if (event.type === 'assistant_delta' && event.scope === scope && event.kind === 'reasoning') {
+        messageReasoningObserved = true;
+        reasoningObserved = true;
+      }
+      yield event;
+    }
+    const trailingReasoning = await message.trailingReasoning;
+    if (scope === null && !reasoningObserved && !messageReasoningObserved && trailingReasoning !== null) {
+      yield* translateVisibleText(singleString(trailingReasoning), 'reasoning', scope);
+    }
+  }
+}
+
+async function* translateUsage(
+  usageKey: string,
+  usage: AsyncIterable<TokenUsage>
+): AsyncGenerator<DeepAgentDomainEvent> {
+  for await (const observation of usage) {
+    yield {
+      type: 'usage',
+      usageKey,
+      usage: observation
+    };
+  }
+}
+
+async function* drainStrings(
+  values: AsyncIterable<string>
+): AsyncGenerator<DeepAgentDomainEvent> {
+  for await (const _value of values) {
+    void _value;
+  }
+}
+
+async function* translateVisibleText(
+  stream: AsyncIterable<string>,
+  kind: 'text' | 'reasoning',
+  scope: DeepAgentSubagentScope | null
+): AsyncGenerator<DeepAgentDomainEvent> {
+  let pending = '';
+  let released = false;
+  let suppressMessage = false;
+
+  for await (const delta of stream) {
+    if (delta.length === 0 || suppressMessage) {
+      continue;
+    }
+    if (released) {
+      yield { type: 'assistant_delta', scope, kind, text: delta };
+      continue;
+    }
+    pending += delta;
+    const classification = recordUtils.classifyStreamedAssistantText(pending);
+    if (classification === 'non_assistant') {
+      pending = '';
+      suppressMessage = true;
+      continue;
+    }
+    if (classification === 'pending') {
+      continue;
+    }
+    released = true;
+    if (pending.length > 0) {
+      yield { type: 'assistant_delta', scope, kind, text: pending };
+    }
+    pending = '';
+  }
+
+  if (!released && !suppressMessage && pending.length > 0) {
+    yield { type: 'assistant_delta', scope, kind, text: pending };
+  }
+}
+
+async function* translateToolCalls(
+  calls: AsyncIterable<DeepAgents110V3ToolCall>,
+  scope: DeepAgentSubagentScope | null,
+  projectToolOutput: ToolOutputProjector
+): AsyncGenerator<DeepAgentDomainEvent> {
+  for await (const call of calls) {
+    yield* projectToolCallLifecycle(call, scope, projectToolOutput);
+  }
+}
+
+async function* projectToolCallLifecycle(
+  call: DeepAgents110V3ToolCall,
+  scope: DeepAgentSubagentScope | null,
+  projectToolOutput: ToolOutputProjector
+): AsyncGenerator<DeepAgentDomainEvent> {
+  const outcomeSettlement = Promise.allSettled([call.outcome] as const);
+  const input = redactUnknown(call.input);
+  yield {
+    type: 'tool_call_started',
+    scope,
+    callId: call.callId,
+    name: call.name,
+    input
+  };
+
+  const [settledOutcome] = await outcomeSettlement;
+  if (settledOutcome.status === 'rejected') {
+    const error = settledOutcome.reason;
+    if (error instanceof DeepAgents110V3ContractError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : 'Tool 执行失败。';
+    yield {
+      type: 'tool_call_failed',
+      scope,
+      callId: call.callId,
+      name: call.name,
+      input,
+      error: projectToolOutput({
+        callId: call.callId,
+        name: call.name,
+        output: redact(message)
+      })
+    };
+    return;
+  }
+  const outcome = settledOutcome.value;
+  if (outcome.status === 'error') {
+    yield {
+      type: 'tool_call_failed',
+      scope,
+      callId: call.callId,
+      name: call.name,
+      input,
+      error: projectToolOutput({
+        callId: call.callId,
+        name: call.name,
+        output: redact(outcome.error)
+      })
+    };
+    return;
+  }
+  yield {
+    type: 'tool_call_completed',
+    scope,
+    callId: call.callId,
+    name: call.name,
+    input,
+    output: projectToolOutput({
+      callId: call.callId,
+      name: call.name,
+      output: outcome.output
+    })
+  };
+}
+
+async function* translateSubagents(
+  subagents: AsyncIterable<DeepAgents110V3Subagent>,
+  projectToolOutput: ToolOutputProjector,
+  parentScope: DeepAgentSubagentScope | null = null
+): AsyncGenerator<DeepAgentDomainEvent> {
+  let ordinal = 0;
+  for await (const subagent of subagents) {
+    const ordinalPath = parentScope === null
+      ? [ordinal]
+      : [...parentScope.ordinalPath, ordinal];
+    const path = parentScope === null
+      ? [`${subagent.name}#${ordinal}`]
+      : [...parentScope.path, `${subagent.name}#${ordinal}`];
+    const scope: DeepAgentSubagentScope = {
+      name: subagent.name,
+      ordinalPath,
+      path
+    };
+    const outputSettlement = Promise.allSettled([subagent.output] as const);
+    yield { type: 'subagent_started', scope };
+    yield* mergeAsyncIterables([
+      translateMessages(subagent.messages, scope),
+      translateToolCalls(subagent.toolCalls, scope, projectToolOutput),
+      translateSubagents(subagent.subagents, projectToolOutput, scope)
+    ]);
+    const [settledOutput] = await outputSettlement;
+    if (settledOutput.status === 'rejected') {
+      const error = settledOutput.reason;
+      if (error instanceof DeepAgents110V3ContractError) {
+        throw error;
+      }
+      yield {
+        type: 'subagent_failed',
+        scope,
+        error: redact(error instanceof Error ? error.message : String(error))
+      };
+    } else {
+      yield { type: 'subagent_completed', scope };
+    }
+    ordinal += 1;
+  }
+}
+
+type SettledIteratorResult<T> =
+  | { index: number; status: 'fulfilled'; result: IteratorResult<T> }
+  | { index: number; status: 'rejected'; reason: unknown };
+
+async function* mergeAsyncIterables<T>(
+  streams: readonly AsyncIterable<T>[]
+): AsyncGenerator<T> {
+  const iterators = streams.map((stream) => stream[Symbol.asyncIterator]());
+  const pending = new Map<number, Promise<SettledIteratorResult<T>>>();
+  const schedule = (index: number): void => {
+    const iterator = iterators[index];
+    if (iterator === undefined) {
+      return;
+    }
+    pending.set(
+      index,
+      Promise.resolve()
+        .then(() => iterator.next())
+        .then(
+          (result) => ({ index, status: 'fulfilled' as const, result }),
+          (reason: unknown) => ({ index, status: 'rejected' as const, reason })
+        )
+    );
+  };
+  iterators.forEach((_iterator, index) => schedule(index));
+  let completed = false;
+  try {
+    while (pending.size > 0) {
+      const settled = await Promise.race(pending.values());
+      pending.delete(settled.index);
+      if (settled.status === 'rejected') {
+        throw settled.reason;
+      }
+      if (settled.result.done) {
+        continue;
+      }
+      yield settled.result.value;
+      schedule(settled.index);
+    }
+    completed = true;
+  } finally {
+    if (!completed) {
+      const cleanups = iterators.map((iterator) =>
+        typeof iterator.return === 'function' ? Promise.resolve(iterator.return()) : Promise.resolve()
+      );
+      void Promise.allSettled(cleanups);
+    }
+  }
 }
 
 function adaptMessages(
@@ -128,7 +457,7 @@ function adaptMessage(message: unknown, usageKey: string): DeepAgents110V3Messag
   if (!Array.isArray(namespaceValue) || !namespaceValue.every((segment) => isNonEmptyString(segment))) {
     throw contractError('deep_agents_1_10_v3_message_namespace_invalid');
   }
-  const node = requireNonEmptyString(
+  requireNonEmptyString(
     readRequiredField(rawMessage, 'node', 'deep_agents_1_10_v3_message_node_missing'),
     'deep_agents_1_10_v3_message_node_missing'
   );
@@ -158,8 +487,6 @@ function adaptMessage(message: unknown, usageKey: string): DeepAgents110V3Messag
 
   return {
     usageKey,
-    namespace: [...namespaceValue],
-    node,
     text: adaptStringStream(text, 'deep_agents_1_10_v3_message_text_value_invalid'),
     reasoning: adaptStringStream(reasoning, 'deep_agents_1_10_v3_message_reasoning_value_invalid'),
     trailingReasoning,
@@ -256,7 +583,7 @@ function adaptSubagent(subagent: unknown, path: string): DeepAgents110V3Subagent
     readRequiredField(rawSubagent, 'name', 'deep_agents_1_10_v3_subagent_name_missing'),
     'deep_agents_1_10_v3_subagent_name_missing'
   );
-  const cause = adaptSubagentCause(
+  adaptSubagentCause(
     readRequiredField(rawSubagent, 'cause', 'deep_agents_1_10_v3_subagent_cause_missing')
   );
   const messages = requireAsyncIterable(
@@ -279,7 +606,6 @@ function adaptSubagent(subagent: unknown, path: string): DeepAgents110V3Subagent
 
   return {
     name,
-    cause,
     output,
     messages: adaptMessages(messages, path),
     toolCalls: adaptToolCalls(toolCalls),
@@ -306,14 +632,14 @@ function adaptSubagentCause(value: unknown): DeepAgents110V3SubagentCause | null
   return { type: 'toolCall', toolCallId };
 }
 
-function adaptUsage(value: unknown): DeepAgents110V3Usage {
+function adaptUsage(value: unknown): TokenUsage {
   const usage = requireRecord(value, 'deep_agents_1_10_v3_usage_invalid');
   const inputDetailsValue = readField(usage, 'input_token_details');
   const inputDetails =
     inputDetailsValue === undefined
       ? null
       : requireRecord(inputDetailsValue, 'deep_agents_1_10_v3_usage_input_token_details_invalid');
-  const result: DeepAgents110V3Usage = {
+  const result: TokenUsage = {
     inputTokens: readOptionalNonNegativeInteger(
       usage,
       'input_tokens',
@@ -352,7 +678,7 @@ function adaptUsage(value: unknown): DeepAgents110V3Usage {
   return result;
 }
 
-function adaptOutput(value: unknown, owner: 'run' | 'subagent'): DeepAgents110V3Output {
+function adaptOutput(value: unknown, owner: 'run' | 'subagent'): string | null {
   const output = requireRecord(value, `deep_agents_1_10_v3_${owner}_output_invalid`);
   const messages = readRequiredField(
     output,
@@ -366,9 +692,7 @@ function adaptOutput(value: unknown, owner: 'run' | 'subagent'): DeepAgents110V3
     requireRecord(message, `deep_agents_1_10_v3_${owner}_output_message_invalid`)
   );
   const lastMessage = adaptedMessages.at(-1);
-  return {
-    finalAssistantText: lastMessage === undefined ? null : readAssistantMessageText(lastMessage)
-  };
+  return lastMessage === undefined ? null : readAssistantMessageText(lastMessage);
 }
 
 function readAssistantMessageText(message: Record<string, unknown>): string | null {
@@ -403,7 +727,7 @@ function readLowercaseString(value: unknown): string | null {
   return text === null ? null : text.toLowerCase();
 }
 
-function adaptInterrupt(value: unknown): DeepAgents110V3Interrupt {
+function adaptInterrupt(value: unknown): DeepAgentInterrupt {
   const interrupt = requireRecord(value, 'deep_agents_1_10_v3_run_interrupt_invalid');
   const interruptId = requireNonEmptyString(
     readRequiredField(interrupt, 'interruptId', 'deep_agents_1_10_v3_run_interrupt_id_missing'),
@@ -429,7 +753,7 @@ function readRunInterrupted(run: Record<string, unknown>): boolean {
   return interrupted;
 }
 
-function readRunInterrupts(run: Record<string, unknown>): readonly DeepAgents110V3Interrupt[] {
+function readRunInterrupts(run: Record<string, unknown>): readonly DeepAgentInterrupt[] {
   const interrupts = readRequiredField(
     run,
     'interrupts',
@@ -563,6 +887,10 @@ function isObjectLike(value: unknown): value is object {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+async function* singleString(value: string): AsyncGenerator<string> {
+  yield value;
 }
 
 function contractError(code: string): DeepAgents110V3ContractError {

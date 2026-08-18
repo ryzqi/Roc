@@ -7,8 +7,7 @@ import type {
   ChatRunEvent
 } from '../../../shared/types';
 import type {
-  DeepAgents110V3Interrupt,
-  DeepAgents110V3Run
+  DeepAgentInterrupt
 } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
 import { RocSqliteCheckpointer, type RocCheckpointInterrupt } from '../../services/deep-agent/sqlite-checkpointer';
 
@@ -164,12 +163,12 @@ export function normalizeChatInterruptPayload(payload: unknown): ChatInterruptPa
 }
 
 export function projectDeepAgentInterrupts(
-  run: Pick<DeepAgents110V3Run, 'interrupts'>
+  interrupts: readonly DeepAgentInterrupt[]
 ): PendingInterrupt[] {
-  if (run.interrupts.length === 0) {
+  if (interrupts.length === 0) {
     throw new Error('agent_interrupt_payload_missing');
   }
-  return run.interrupts.map((interrupt: DeepAgents110V3Interrupt) => ({
+  return interrupts.map((interrupt) => ({
     interruptId: interrupt.interruptId,
     payload: normalizeChatInterruptPayload(interrupt.payload)
   }));

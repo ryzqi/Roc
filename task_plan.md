@@ -42,7 +42,7 @@
 | 2 | session-repository 跨 seam 裸 SQL 收口 | complete | 同上 |
 | 3 | executor 返回结构化 RunOutcome | complete | 同上 |
 | 4 | IPC 契约单源化 | complete | 同上 + `pnpm generate:ipc` / `pnpm check:ipc` |
-| 5 | Stream adapter 领域事件与投影合并 | pending | 同上 |
+| 5 | Stream adapter 领域事件与投影合并 | complete | 同上 |
 | 6 | task-repository 聚合化与按名注册 | pending | 同上 |
 | 7 | Shell 安全 policy 单源 | pending | 同上 |
 | 8 | 插件 DB 隔离 seam 修复 | pending | 同上 |
@@ -50,9 +50,16 @@
 
 ## 当前步骤
 
-阶段 4 已 Verified passing：fixed point `fc6b95e`；最终 Standards/Spec 双轴复审均 PASS，串行全量 328 文件/1839 项与全部专项门禁通过。下一步创建阶段 4 独立提交，再以该提交为阶段 5 fixed point。
+阶段 5 已 Verified passing：fixed point `28b7e89`，Standards/Spec 最终复审均 PASS，聚焦、阶段宽、串行全量、typecheck、strict unused、build 与 diff check 均通过。本次提交为阶段 5 独立提交；下一阶段为阶段 6：task-repository 聚合化与按名注册。
 
 ## Errors Encountered
+
+> 2026-08-18：阶段 5 adapter 首次接入后 `pnpm typecheck` 报 97 项，全部集中在已删除的 vendor DTO 导出、executor 旧三流消费、旧 conformance/consumer 测试及 adapter 内 4 个旧别名/`singleString` 遗留；未出现新的业务错误。按计划继续迁移调用方与测试，不添加兼容导出。
+> 2026-08-18：阶段 5 首次行数盘点命令中 PowerShell `$count`/`$_` 被外层展开，且沿用规格简称误写了不存在的 `src/main/services/deep-agent/final-output.ts`；命令 exit 1。已用 `rg --files` 确认真正文件为 `src/main/plugins/agent/deep-agent-final-output.ts`，后续文件统计改用 Node UTF-8 脚本，避免嵌套 PowerShell 变量。
+> 2026-08-18：阶段 5 本轮定点读取再次因嵌套 PowerShell 中 `$p`/`$i` 被外层提前展开而 parser error；已改用不含临时变量的 `Get-Content | Select-Object -Skip` 与 CodeGraph 定点查询，不重复该命令形态。
+> 2026-08-18：阶段 5 Standards/Spec 子代理共两轮、四个任务均在启动阶段因服务端 `429 Too Many Requests` 超过重试上限，未产生审查结论、未改工作树。审查门禁保持未放行，改用新轻量子代理继续重试。
+> 2026-08-19：首次执行新红测时沿用 `pnpm test -- <file>`，Vitest 收到字面量 `--` 并误跑全量；除预期领域事件红测外，未改动的 `log-service` 异步 flush 时序测试失败。后续聚焦测试统一使用 `pnpm exec vitest run <file>`，全量按计划使用串行命令重新裁决。
+> 2026-08-19：阶段 5 串行全量首次使用 360 秒外层预算，Vitest 在 364 秒被工具终止且未返回摘要；进程检查未发现该批次残留 Node 进程。`vitest.config.ts` 仅有单测试/Hook 20 秒限制，330 文件串行总时长可能超过 6 分钟；改用 15 分钟预算与 verbose reporter 重跑，不把外层 timeout 当作测试失败或通过。
 
 > 2026-08-18：恢复阶段 4 时首次使用 `rtk cat` 读取技能与 RTK 规则，但 Windows PATH 中不存在 `cat`；已改用 `rtk powershell.exe -NoProfile -Command "Get-Content ..."`，不重复 Unix 命令。
 >

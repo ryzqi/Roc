@@ -1,245 +1,122 @@
 import type { ChatAssistantBlock, ChatRunEvent, SubagentEventPayload, SubagentIdentity } from '../../../shared/types';
 import { toolCallAssistantBlockSchema } from '../../../shared/schemas/task-event';
-import {
-  DeepAgents110V3ContractError,
-  type DeepAgents110V3Message,
-  type DeepAgents110V3Subagent,
-  type DeepAgents110V3ToolCall,
-  type DeepAgents110V3Usage
+import type {
+  DeepAgentDomainEvent,
+  DeepAgentSubagentScope
 } from './deep-agents-1-10-stream-adapter';
-import { redact } from './redact';
-import { redactUnknown } from './stream-tool-utils';
-import type { ToolOutputProjector } from './tool-output-projection';
 
 export type SubagentProjectionCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;
-  emitTodoEvent: (candidate: unknown) => void;
   markVisibleOutput?: () => void;
-  observeMessageUsage?: (usageKey: string, usage: DeepAgents110V3Usage) => void;
-  projectToolOutput: ToolOutputProjector;
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
 };
 
-type ProjectionContext = {
-  idSegments: number[];
-  nextSequence: () => number;
-  parent: SubagentIdentity | null;
-  path: string[];
-  runId: string;
-};
+type DomainToolCallEvent = Extract<
+  DeepAgentDomainEvent,
+  { type: 'tool_call_started' | 'tool_call_completed' | 'tool_call_failed' }
+>;
 
-export async function projectSubagentStream(input: {
-  subagents: AsyncIterable<DeepAgents110V3Subagent>;
+type DomainSubagentEvent = Exclude<DeepAgentDomainEvent, { type: 'usage' | 'run_interrupted' }>;
+
+export function projectSubagentEvent(input: {
+  event: DomainSubagentEvent & { scope: DeepAgentSubagentScope };
   runId: string;
+  sequence: number;
   callbacks: SubagentProjectionCallbacks;
-}): Promise<void> {
-  let sequence = 0;
-  await consumeSubagents(
-    input.subagents,
-    {
-      idSegments: [],
-      nextSequence: () => {
-        sequence += 1;
-        return sequence;
-      },
-      parent: null,
-      path: [],
-      runId: input.runId
-    },
-    input.callbacks
-  );
-}
-
-async function consumeSubagents(
-  subagents: AsyncIterable<DeepAgents110V3Subagent>,
-  context: ProjectionContext,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  let ordinal = 0;
-  for await (const subagent of subagents) {
-    await consumeOneSubagent(subagent, ordinal, context, callbacks);
-    ordinal += 1;
+}): void {
+  const identity = toSubagentIdentity(input.runId, input.event.scope);
+  if (input.event.type === 'subagent_started') {
+    emit(input.callbacks, input.runId, input.sequence, identity, { kind: 'started' });
+    return;
   }
-}
-
-async function consumeOneSubagent(
-  subagent: DeepAgents110V3Subagent,
-  ordinal: number,
-  context: ProjectionContext,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  const outputSettlement = Promise.allSettled([subagent.output] as const);
-  const idSegments = [...context.idSegments, ordinal];
-  const subagentId = `subagent-${context.runId}-${idSegments.join('-')}`;
-  const path = [...context.path, `${subagent.name}#${ordinal}`];
-  const identity: SubagentIdentity = {
-    subagentId,
-    parentSubagentId: context.parent === null ? null : context.parent.subagentId,
-    name: subagent.name,
-    depth: context.path.length,
-    path,
-    execution: 'sync',
-    taskInput: null
-  };
-
-  emit(callbacks, context.runId, context.nextSequence(), identity, { kind: 'started' });
-
-  await Promise.all([
-    consumeMessages(subagent.messages, context.runId, identity, context.nextSequence, callbacks),
-    consumeToolCalls(subagent.toolCalls, context.runId, identity, context.nextSequence, callbacks),
-    consumeSubagents(
-      subagent.subagents,
-      {
-        idSegments,
-        nextSequence: context.nextSequence,
-        parent: identity,
-        path,
-        runId: context.runId
-      },
-      callbacks
-    )
-  ]);
-
-  const [settledOutput] = await outputSettlement;
-  if (settledOutput.status === 'rejected') {
-    const error = settledOutput.reason;
-    if (error instanceof DeepAgents110V3ContractError) {
-      throw error;
-    }
-    emit(callbacks, context.runId, context.nextSequence(), identity, {
+  if (input.event.type === 'subagent_completed') {
+    emit(input.callbacks, input.runId, input.sequence, identity, { kind: 'completed', summary: null });
+    return;
+  }
+  if (input.event.type === 'subagent_failed') {
+    emit(input.callbacks, input.runId, input.sequence, identity, {
       kind: 'failed',
-      error: redact(error instanceof Error ? error.message : String(error))
+      error: input.event.error
     });
     return;
   }
-  emit(callbacks, context.runId, context.nextSequence(), identity, {
-    kind: 'completed',
-    summary: null
+  if (input.event.type === 'assistant_delta') {
+    emit(input.callbacks, input.runId, input.sequence, identity, {
+      kind: 'assistant_block',
+      block: {
+        kind: input.event.kind,
+        blockId: `${identity.subagentId}-${input.event.kind}`,
+        phase: 'delta',
+        text: input.event.text
+      }
+    });
+    return;
+  }
+  projectToolCallEvent({
+    blockId: `${identity.subagentId}-tool-${input.event.callId}`,
+    callbacks: input.callbacks,
+    event: input.event,
+    emit: (block) => {
+      emit(input.callbacks, input.runId, input.sequence, identity, { kind: 'tool_call', block });
+    }
   });
 }
 
-async function consumeMessages(
-  messages: AsyncIterable<DeepAgents110V3Message>,
-  runId: string,
-  identity: SubagentIdentity,
-  nextSequence: () => number,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  for await (const message of messages) {
-    await Promise.all([
-      consumeMessageText(message, runId, identity, nextSequence, callbacks),
-      consumeMessageUsage(message, callbacks),
-      drainStrings(message.reasoning),
-      message.trailingReasoning.then(() => undefined)
-    ]);
-  }
-}
-
-async function consumeMessageText(
-  message: DeepAgents110V3Message,
-  runId: string,
-  identity: SubagentIdentity,
-  nextSequence: () => number,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  for await (const text of message.text) {
-    if (text.length === 0) {
-      continue;
-    }
-    emit(callbacks, runId, nextSequence(), identity, {
-      kind: 'assistant_block',
-      block: {
-        kind: 'text',
-        blockId: `${identity.subagentId}-text`,
-        phase: 'delta',
-        text
-      }
-    });
-  }
-}
-
-async function consumeMessageUsage(
-  message: DeepAgents110V3Message,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  for await (const usage of message.usage) {
-    callbacks.observeMessageUsage?.(message.usageKey, usage);
-  }
-}
-
-async function drainStrings(values: AsyncIterable<string>): Promise<void> {
-  for await (const _value of values) {
-    void _value;
-  }
-}
-
-async function consumeToolCalls(
-  calls: AsyncIterable<DeepAgents110V3ToolCall>,
-  runId: string,
-  identity: SubagentIdentity,
-  nextSequence: () => number,
-  callbacks: SubagentProjectionCallbacks
-): Promise<void> {
-  for await (const call of calls) {
-    const outcomeSettlement = Promise.allSettled([call.outcome] as const);
-    const input = redactUnknown(call.input);
-    const startBlock: Extract<ChatAssistantBlock, { kind: 'tool_call' }> = toolCallAssistantBlockSchema.parse({
+export function projectToolCallEvent(input: {
+  event: DomainToolCallEvent;
+  blockId: string;
+  callbacks: SubagentProjectionCallbacks;
+  emit: (block: Extract<ChatAssistantBlock, { kind: 'tool_call' }>) => void;
+}): void {
+  if (input.event.type === 'tool_call_started') {
+    input.emit(toolCallAssistantBlockSchema.parse({
       kind: 'tool_call',
-      blockId: `${identity.subagentId}-tool-${call.callId}`,
-      callId: call.callId,
-      name: call.name,
+      blockId: input.blockId,
+      callId: input.event.callId,
+      name: input.event.name,
       phase: 'start',
-      input
-    });
-    emit(callbacks, runId, nextSequence(), identity, { kind: 'tool_call', block: startBlock });
-    callbacks.emitTodoEvent(input);
-
-    let outcome: Awaited<DeepAgents110V3ToolCall['outcome']>;
-    const [settledOutcome] = await outcomeSettlement;
-    if (settledOutcome.status === 'rejected') {
-      const error = settledOutcome.reason;
-      if (error instanceof DeepAgents110V3ContractError) {
-        throw error;
-      }
-      outcome = {
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error)
-      };
-    } else {
-      outcome = settledOutcome.value;
-    }
-    if (outcome.status === 'error') {
-      const message = callbacks.projectToolOutput({
-        callId: call.callId,
-        name: call.name,
-        output: redact(outcome.error)
-      });
-      emit(callbacks, runId, nextSequence(), identity, {
-        kind: 'tool_call',
-        block: toolCallAssistantBlockSchema.parse({
-          ...startBlock,
-          phase: 'error',
-          error: message
-        })
-      });
-      callbacks.recordSessionToolCall?.(call.name, input, { error: message });
-      continue;
-    }
-    const output = callbacks.projectToolOutput({
-      callId: call.callId,
-      name: call.name,
-      output: outcome.output
-    });
-    emit(callbacks, runId, nextSequence(), identity, {
-      kind: 'tool_call',
-      block: toolCallAssistantBlockSchema.parse({
-        ...startBlock,
-        phase: 'end',
-        output
-      })
-    });
-    callbacks.recordSessionToolCall?.(call.name, input, output);
+      input: input.event.input
+    }));
+    return;
   }
+  if (input.event.type === 'tool_call_completed') {
+    const block = toolCallAssistantBlockSchema.parse({
+      kind: 'tool_call',
+      blockId: input.blockId,
+      callId: input.event.callId,
+      name: input.event.name,
+      phase: 'end',
+      input: input.event.input,
+      output: input.event.output
+    });
+    input.emit(block);
+    input.callbacks.recordSessionToolCall?.(input.event.name, input.event.input, input.event.output);
+    return;
+  }
+  const block = toolCallAssistantBlockSchema.parse({
+    kind: 'tool_call',
+    blockId: input.blockId,
+    callId: input.event.callId,
+    name: input.event.name,
+    phase: 'error',
+    input: input.event.input,
+    error: input.event.error
+  });
+  input.emit(block);
+  input.callbacks.recordSessionToolCall?.(input.event.name, input.event.input, { error: input.event.error });
+}
+
+function toSubagentIdentity(runId: string, scope: DeepAgentSubagentScope): SubagentIdentity {
+  const parentPath = scope.ordinalPath.slice(0, -1);
+  return {
+    subagentId: `subagent-${runId}-${scope.ordinalPath.join('-')}`,
+    parentSubagentId: parentPath.length === 0 ? null : `subagent-${runId}-${parentPath.join('-')}`,
+    name: scope.name,
+    depth: scope.ordinalPath.length - 1,
+    path: [...scope.path],
+    execution: 'sync',
+    taskInput: null
+  };
 }
 
 function emit(
