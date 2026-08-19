@@ -152,12 +152,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         modelId: input.modelHandle.modelId,
         workflowHint
       };
-      const shellAllowedCommands =
-        input.snapshot.runOrigin === 'background_schedule'
-          ? input.snapshot.shellAllowedCommands === undefined
-            ? []
-            : input.snapshot.shellAllowedCommands
-          : input.snapshot.shellAllowedCommands;
+      const shellAllowedCommands = input.snapshot.shellAllowedCommands;
       const shellExecutionService = createShellExecutionAdapter({
         capabilities: options.capabilities,
         defaultCwd: runtimeWorkspace === null ? null : runtimeWorkspace.path,

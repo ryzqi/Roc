@@ -22,8 +22,10 @@ describe('createAgentDeepAgentExecutor', () => {
     expect(buildInput.systemPrompt).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
     expect(buildInput.systemPrompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
     expect(buildInput.systemPrompt).toContain('write_file only creates new files. To change an existing file, read it first, then use edit_file with an exact replacement.');
-    expect(buildInput.systemPrompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
-    expect(buildInput.systemPrompt).toContain('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
+    expect(buildInput.systemPrompt).toContain('在当前 Roc Windows 工作区执行 PowerShell 命令。');
+    expect(buildInput.systemPrompt).toContain('默认 cwd 是用户选择的真实 Windows 工作区。');
+    expect(buildInput.systemPrompt).toContain('禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。');
+    expect(buildInput.systemPrompt).toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
     expect(buildInput.systemPrompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.');
     expect(buildInput.systemPrompt).not.toContain('current directory means /workspace/.');
     expect(buildInput.systemPrompt).not.toContain('schedule_background_task({ previewId })');

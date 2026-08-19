@@ -185,7 +185,7 @@ describe('forge guardrails full stack', () => {
   it('wires guardrails without step enforcement and keeps iteration tracking before compaction', async () => {
     const middleware = await buildMiddleware();
     expect(middlewareNames(middleware)).toEqual([
-      'RocShellPathPolicyMiddleware',
+      'RocShellPolicyMiddleware',
       'RTKMiddleware',
       'RocToolProtocolMiddleware',
       'RocSubagentStateIsolationMiddleware',

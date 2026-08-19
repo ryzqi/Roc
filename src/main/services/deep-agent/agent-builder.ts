@@ -54,7 +54,7 @@ import {
 } from './model-tool-exposure';
 import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
 import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
-import { createRocShellPathPolicyMiddleware } from './shell-path-policy';
+import { createRocShellPolicyMiddleware } from './shell-policy';
 import {
   createRocSubagentBudgetStateInitializationMiddleware,
   createRocSubagentStateIsolationMiddleware
@@ -398,7 +398,7 @@ function createRunModeSubagentMiddleware(input: DeepAgentBuildInput) {
 function createExecutionSafetyMiddleware(input: DeepAgentBuildInput, executionScope: RunCapabilityExecutionScopeV1) {
   const budgetMiddleware = createNativeBudgetMiddleware(input);
   return [
-    createRocShellPathPolicyMiddleware({ workspacePath: input.workspacePath }),
+    createRocShellPolicyMiddleware({ workspacePath: input.workspacePath }),
     createRTKMiddleware(new RTKBinaryManager()),
     createToolProtocolMiddleware({
       capabilityManifest: input.capabilityManifest,

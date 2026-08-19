@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { ChatStartRunRequest, RunExecutionSnapshotV2, WorkflowHint } from '../../../../shared/types';
 import { ROC_FILE_TOOL_PROMPT_LINES } from '../filesystem-tool-contract';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from '../prompt';
+import { ROC_SHELL_TOOL_DESCRIPTION_LINES } from '../shell-policy';
 
 export enum BlockStability {
   STATIC = 'static',
@@ -117,6 +118,7 @@ function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSn
   return [
     `Workspace: ${workspacePath}`,
     ...ROC_FILE_TOOL_PROMPT_LINES,
+    ...ROC_SHELL_TOOL_DESCRIPTION_LINES,
     'After write_file or edit_file, verify the target via read_file or ls before saying the file was created or changed.'
   ].join('\n');
 }

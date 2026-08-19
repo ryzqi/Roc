@@ -60,6 +60,7 @@ import {
   createTaskEventFromAssistantBlock,
   resolveNewRunThreadKind
 } from './runtime-helpers';
+import { parseShellAllowedCommands } from '../../services/deep-agent/shell-policy';
 
 export const agentChatRunEventType = 'agent.chat.run-event';
 
@@ -184,7 +185,11 @@ export class AgentPluginRuntime {
       }
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle();
-    const shellAllowedCommands = resolveShellAllowedCommands(request);
+    const shellAllowedCommands = parseShellAllowedCommands({
+      commands: request.shellAllowedCommands,
+      mode: request.mode,
+      taskSource: request.taskSource === undefined ? null : request.taskSource
+    });
     const capabilityPreview = await this.getRunCapabilityPreview({
       explicitSkillIds: request.explicitSkillIds,
       mode: request.mode,
@@ -1280,30 +1285,6 @@ function createRunExecutionSnapshotSeed(input: {
     dispatchKey: input.dispatchKey
   };
 }
-
-function resolveShellAllowedCommands(request: ChatStartRunRequest): string[] | undefined {
-  if (request.shellAllowedCommands === undefined) {
-    return request.taskSource === 'background_schedule' ? [] : undefined;
-  }
-  if (request.mode !== 'task' || (request.taskSource !== 'background_schedule' && request.taskSource !== 'workbench')) {
-    throw new Error('agent_shell_preauthorization_source_invalid');
-  }
-  const commands: string[] = [];
-  const seen = new Set<string>();
-  for (const command of request.shellAllowedCommands) {
-    const value = command.trim();
-    if (value.length === 0) {
-      throw new Error('agent_shell_preauthorization_command_empty');
-    }
-    if (seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    commands.push(value);
-  }
-  return commands;
-}
-
 
 function resolveDispatchKey(request: ChatStartRunRequest): string | null {
   if (request.dispatchKey === undefined) {

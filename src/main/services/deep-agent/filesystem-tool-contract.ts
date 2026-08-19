@@ -22,8 +22,6 @@ export const ROC_FILE_TOOL_PROMPT_LINES = [
   'DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.',
   'Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.',
   'write_file only creates new files. To change an existing file, read it first, then use edit_file with an exact replacement.',
-  'Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.',
-  'Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.',
   'Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.'
 ] as const;
 

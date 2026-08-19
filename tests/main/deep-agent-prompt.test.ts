@@ -54,8 +54,10 @@ describe('deep agent prompt', () => {
     expect(prompt).toContain('Workspace: F:\\Code\\Roc');
     expect(prompt).toContain('DeepAgents file tools accept only Roc virtual routes: /workspace/, /memory/, and /skills/.');
     expect(prompt).toContain('Agent memory files live under /memory/.../AGENTS.md, matching DeepAgents memory-source semantics.');
-    expect(prompt).toContain('Use run_shell_command for local Windows commands; its default cwd is the selected Roc workspace root.');
-    expect(prompt).toContain('Never pass /workspace/... to run_shell_command; use a relative path from the default cwd or a real Windows path.');
+    expect(prompt).toContain('在当前 Roc Windows 工作区执行 PowerShell 命令。');
+    expect(prompt).toContain('默认 cwd 是用户选择的真实 Windows 工作区。');
+    expect(prompt).toContain('禁止在 command 或 cwd 中使用 /workspace 或 /workspace/...；/workspace 只属于 DeepAgents 文件工具。');
+    expect(prompt).toContain('禁止使用 /home/user、/tmp 等 Linux 本地路径。');
     expect(prompt).toContain('Do not pass Windows absolute paths or Linux paths to read_file, write_file, edit_file, ls, glob, grep, or delete_file.');
     expect(prompt).not.toContain('current directory means /workspace/.');
     expect(prompt).toContain(

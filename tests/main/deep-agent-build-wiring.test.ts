@@ -68,7 +68,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       ]
     });
     expect(createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name'))).toEqual(
-      expect.arrayContaining(['RocFilesystemPathPolicyMiddleware', 'RocShellPathPolicyMiddleware'])
+      expect.arrayContaining(['RocFilesystemPathPolicyMiddleware', 'RocShellPolicyMiddleware'])
     );
   });
 
@@ -331,7 +331,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     const createDeepAgentInput = vi.mocked(createDeepAgent).mock.calls[0]?.[0];
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
 
-    expect(middlewareNames.indexOf('RocShellPathPolicyMiddleware')).toBeLessThan(middlewareNames.indexOf('RTKMiddleware'));
+    expect(middlewareNames.indexOf('RocShellPolicyMiddleware')).toBeLessThan(middlewareNames.indexOf('RTKMiddleware'));
   });
 
   it('leaves prompt cache breakpoint injection to DeepAgents native middleware', () => {
@@ -415,7 +415,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     const middlewareNames = createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name')) ?? [];
 
     expect(middlewareNames.indexOf('RocHookMiddleware')).toBeGreaterThanOrEqual(0);
-    expect(middlewareNames.indexOf('RocHookMiddleware')).toBeLessThan(middlewareNames.indexOf('RocShellPathPolicyMiddleware'));
+    expect(middlewareNames.indexOf('RocHookMiddleware')).toBeLessThan(middlewareNames.indexOf('RocShellPolicyMiddleware'));
   });
 
   it('wires tool-scoped hook middleware into DeepAgents subagents when hooks are enabled', () => {
@@ -717,7 +717,7 @@ describe('buildDeepAgent harness profile wiring', () => {
     expect(getSubagentTools(generalPurposeSubagent)).toEqual([inspectTool]);
     expect(middlewareNames).toContain('SkillsMiddleware');
     expect(middlewareNames).toEqual(expect.arrayContaining([
-      'RocShellPathPolicyMiddleware',
+      'RocShellPolicyMiddleware',
       'RocToolProtocolMiddleware',
       'ForgeErrorBudgetMiddleware',
       'RocFilesystemPathPolicyMiddleware'

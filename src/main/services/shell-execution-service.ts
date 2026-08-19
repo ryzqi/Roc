@@ -1,16 +1,14 @@
-import type { ExecuteResponse } from 'deepagents';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createWriteStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ShellExecutionRequest, ShellExecutionResult, TaskEvent } from '../../shared/types';
-import { containsVirtualWorkspacePath } from './deep-agent/shell-path-guard';
+import { evaluateShellPolicy, normalizeShellCommand } from './deep-agent/shell-policy';
 import type { RtkExecutionMetadata, RtkService } from './rtk-service';
 import {
   buildAgentExecutePayload,
   buildRtkEnvironment,
   combineOutput,
-  normalizeShellCommand,
   resolveRtkRoute,
   resolveRtkRouteAsync,
   toText
@@ -66,10 +64,11 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.authorizeAgentCommand(request) ?? this.rejectVirtualWorkspacePath({
+        ? (this.rejectAgentShellPolicy({
             command: request.command,
             cwd,
-            fallbackCwd: this.readFallbackCwd()
+            defaultCwd: this.readFallbackCwd(),
+            allowedCommands: request.allowedCommands
           }) ?? this.runAgentCommand(request.command, cwd))
         : this.executeTerminalCommand(request.command, cwd);
     const cappedExecution = this.capExecutionOutput(execution);
@@ -117,10 +116,11 @@ export class ShellExecutionService {
     const startedAt = Date.now();
     const execution =
       request.source === 'agent'
-        ? (this.authorizeAgentCommand(request) ?? this.rejectVirtualWorkspacePath({
+        ? (this.rejectAgentShellPolicy({
             command: request.command,
             cwd,
-            fallbackCwd: this.readFallbackCwd()
+            defaultCwd: this.readFallbackCwd(),
+            allowedCommands: request.allowedCommands
           }) ?? (await this.runAgentCommandAsync(request.command, cwd, request.signal)))
         : await this.executeTerminalCommandAsync(request.command, cwd, request.signal);
     const cappedExecution = this.capExecutionOutput(execution);
@@ -159,165 +159,13 @@ export class ShellExecutionService {
     return result;
   }
 
-  executeAgentCommand(input: {
-    command: string;
-    cwd?: string;
-    threadId?: string;
-    runId?: string;
-  }): ExecuteResponse & {
-    command: string;
-    cwd: string;
-    usedRtk: boolean;
-    bypassReason?: ShellExecutionResult['bypassReason'];
-  } {
-    const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
-    const workspaceRouteViolation = this.rejectVirtualWorkspacePath({
-      command: input.command,
-      cwd,
-      fallbackCwd: input.cwd === undefined ? cwd : this.readFallbackCwd()
-    });
-    if (workspaceRouteViolation !== null) {
-      if (input.threadId !== undefined && input.runId !== undefined) {
-        this.taskService.recordEvent({
-          threadId: input.threadId,
-          runId: input.runId,
-          type: 'agent_execute',
-          payload: buildAgentExecutePayload({
-            command: input.command,
-            cwd,
-            exitCode: workspaceRouteViolation.exitCode,
-            durationMs: 0,
-            usedRtk: false,
-            bypassReason: workspaceRouteViolation.bypassReason,
-            output: workspaceRouteViolation.stderr
-          })
-        });
-      }
-
-      return {
-        command: input.command,
-        cwd,
-        output: workspaceRouteViolation.stderr,
-        exitCode: workspaceRouteViolation.exitCode,
-        truncated: false,
-        usedRtk: false,
-        bypassReason: workspaceRouteViolation.bypassReason
-      };
-    }
-    const startedAt = Date.now();
-    const execution = this.runAgentCommand(input.command, cwd);
-    const output = combineOutput(execution.stdout, execution.stderr);
-
-    if (input.threadId !== undefined && input.runId !== undefined) {
-      this.taskService.recordEvent({
-        threadId: input.threadId,
-        runId: input.runId,
-        type: 'agent_execute',
-        payload: buildAgentExecutePayload({
-          command: input.command,
-          cwd,
-          exitCode: execution.exitCode,
-          durationMs: Date.now() - startedAt,
-          usedRtk: execution.usedRtk,
-          bypassReason: execution.bypassReason,
-          output
-        })
-      });
-    }
-
-    return {
-      command: input.command,
-      cwd,
-      output,
-      exitCode: execution.exitCode,
-      truncated: false,
-      usedRtk: execution.usedRtk,
-      bypassReason: execution.bypassReason
-    };
-  }
-
-  async executeAgentCommandAsync(input: {
-    command: string;
-    cwd?: string;
-    threadId?: string;
-    runId?: string;
-  }): Promise<
-    ExecuteResponse & {
-      command: string;
-      cwd: string;
-      usedRtk: boolean;
-      bypassReason?: ShellExecutionResult['bypassReason'];
-    }
-  > {
-    const cwd = input.cwd ?? this.workspaceService.requireWorkspace().path;
-    const workspaceRouteViolation = this.rejectVirtualWorkspacePath({
-      command: input.command,
-      cwd,
-      fallbackCwd: input.cwd === undefined ? cwd : this.readFallbackCwd()
-    });
-    if (workspaceRouteViolation !== null) {
-      if (input.threadId !== undefined && input.runId !== undefined) {
-        this.taskService.recordEvent({
-          threadId: input.threadId,
-          runId: input.runId,
-          type: 'agent_execute',
-          payload: buildAgentExecutePayload({
-            command: input.command,
-            cwd,
-            exitCode: workspaceRouteViolation.exitCode,
-            durationMs: 0,
-            usedRtk: false,
-            bypassReason: workspaceRouteViolation.bypassReason,
-            output: workspaceRouteViolation.stderr
-          })
-        });
-      }
-
-      return {
-        command: input.command,
-        cwd,
-        output: workspaceRouteViolation.stderr,
-        exitCode: workspaceRouteViolation.exitCode,
-        truncated: false,
-        usedRtk: false,
-        bypassReason: workspaceRouteViolation.bypassReason
-      };
-    }
-    const startedAt = Date.now();
-    const execution = await this.runAgentCommandAsync(input.command, cwd);
-    const output = combineOutput(execution.stdout, execution.stderr);
-
-    if (input.threadId !== undefined && input.runId !== undefined) {
-      this.taskService.recordEvent({
-        threadId: input.threadId,
-        runId: input.runId,
-        type: 'agent_execute',
-        payload: buildAgentExecutePayload({
-          command: input.command,
-          cwd,
-          exitCode: execution.exitCode,
-          durationMs: Date.now() - startedAt,
-          usedRtk: execution.usedRtk,
-          bypassReason: execution.bypassReason,
-          output
-        })
-      });
-    }
-
-    return {
-      command: input.command,
-      cwd,
-      output,
-      exitCode: execution.exitCode,
-      truncated: false,
-      usedRtk: execution.usedRtk,
-      bypassReason: execution.bypassReason
-    };
-  }
-
   private runAgentCommand(command: string, cwd: string): ExecutedShellCommand {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
+      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
+      if (policyDenial !== null) {
+        return policyDenial;
+      }
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -328,6 +176,10 @@ export class ShellExecutionService {
 
     const rtkRoute = resolveRtkRoute(command);
     if (rtkRoute.kind === 'fallback') {
+      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
+      if (policyDenial !== null) {
+        return policyDenial;
+      }
       const fallback = this.executePowerShell(command, cwd);
       return {
         ...fallback,
@@ -336,6 +188,10 @@ export class ShellExecutionService {
       };
     }
 
+    const policyDenial = this.rejectFinalAgentCommand(formatRtkPolicyCommand(rtkRoute.args), cwd);
+    if (policyDenial !== null) {
+      return policyDenial;
+    }
     const execution = this.executeRtk(rtkRoute.args, cwd, rtk);
     return {
       ...execution,
@@ -346,6 +202,10 @@ export class ShellExecutionService {
   private async runAgentCommandAsync(command: string, cwd: string, signal?: AbortSignal): Promise<ExecutedShellCommand> {
     const rtk = this.rtkService.getExecutionMetadata();
     if (rtk.resourceState !== 'ready') {
+      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
+      if (policyDenial !== null) {
+        return policyDenial;
+      }
       const fallback = await this.executePowerShellAsync(command, cwd, signal);
       return {
         ...fallback,
@@ -367,6 +227,10 @@ export class ShellExecutionService {
       throw new Error('shell_execution_aborted');
     }
     if (rtkRoute.kind === 'fallback') {
+      const policyDenial = this.rejectFinalAgentCommand(command, cwd);
+      if (policyDenial !== null) {
+        return policyDenial;
+      }
       const fallback = await this.executePowerShellAsync(command, cwd, signal);
       return {
         ...fallback,
@@ -375,6 +239,10 @@ export class ShellExecutionService {
       };
     }
 
+    const policyDenial = this.rejectFinalAgentCommand(formatRtkPolicyCommand(rtkRoute.args), cwd);
+    if (policyDenial !== null) {
+      return policyDenial;
+    }
     const execution = await this.executeRtkAsync(rtkRoute.args, cwd, rtk, signal);
     return {
       ...execution,
@@ -576,23 +444,6 @@ export class ShellExecutionService {
     });
   }
 
-  private authorizeAgentCommand(request: ShellExecutionRequest): ExecutedShellCommand | null {
-    if (request.allowedCommands === undefined) {
-      return null;
-    }
-    const normalized = normalizeShellCommand(request.command);
-    if (request.allowedCommands.some((allowed) => normalizeShellCommand(allowed) === normalized)) {
-      return null;
-    }
-    return {
-      stdout: '',
-      stderr: 'Error: this background shell command is not durably pre-authorized.',
-      exitCode: 1,
-      usedRtk: false,
-      bypassReason: request.allowedCommands.length === 0 ? 'background_shell_command_not_pre_authorized' : 'shell_run_not_authorized'
-    };
-  }
-
   private capExecutionOutput(execution: ExecutedShellCommand): ExecutedShellCommand {
     const stdout = capText(execution.stdout, maxOutputBytes);
     const stderr = capText(execution.stderr, maxOutputBytes);
@@ -622,17 +473,27 @@ export class ShellExecutionService {
     return this.workspaceService.requireWorkspace().path;
   }
 
-  private rejectVirtualWorkspacePath(input: { command: string; cwd: string; fallbackCwd: string }): ExecutedShellCommand | null {
-    if (!containsVirtualWorkspacePath(input.command) && !containsVirtualWorkspacePath(input.cwd)) {
+  private rejectFinalAgentCommand(command: string, cwd: string): ExecutedShellCommand | null {
+    // RTK routing may rewrite the command. The host-execution boundary checks that final representation too.
+    return this.rejectAgentShellPolicy({ command, cwd, defaultCwd: this.readFallbackCwd() });
+  }
+
+  private rejectAgentShellPolicy(input: {
+    command: string;
+    cwd: string;
+    defaultCwd: string;
+    allowedCommands?: readonly string[];
+  }): ExecutedShellCommand | null {
+    const verdict = evaluateShellPolicy(input);
+    if (verdict.verdict === 'allow') {
       return null;
     }
-
     return {
       stdout: '',
       exitCode: 1,
-      stderr: `Error: /workspace is a Deep Agents file-tool route, not a shell directory. Use the selected workspace root on Windows: ${input.fallbackCwd}`,
+      stderr: verdict.message,
       usedRtk: false,
-      bypassReason: 'virtual_workspace_path'
+      bypassReason: verdict.reason
     };
   }
 
@@ -640,6 +501,10 @@ export class ShellExecutionService {
     return this.workspaceService.getCurrentWorkspace()?.path ?? 'selected workspace root';
   }
 
+}
+
+function formatRtkPolicyCommand(args: readonly string[]): string {
+  return `rtk ${args.join(' ')}`;
 }
 
 function buildShellEnvironment(extraEnv: Record<string, string>, inheritProcessEnvironment: boolean): NodeJS.ProcessEnv {

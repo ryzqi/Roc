@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createRuntimeToolsPlugin } from '../../../../src/main/plugins/runtime-tools';
+import { CommandRewriter } from '../../../../src/rtk-integration';
 import type { ShellExecutionResult } from '../../../../src/shared/types';
 
 let root: string;
@@ -22,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   db.close();
   rmSync(root, { recursive: true, force: true });
 });
@@ -121,49 +123,26 @@ describe('runtime tools shell adapter', () => {
       usedRtk: false,
       bypassReason: 'virtual_workspace_path'
     });
-    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
+    expect(result.stderr).toContain('run_shell_command 使用真实 Windows cwd，不接受 DeepAgents 文件工具路由 /workspace/...。');
     expect(commandCalls).toHaveLength(0);
   });
 
-  it('rejects agent shell commands that pass the Deep Agents route as an option value', async () => {
+  it('rejects Linux local paths at the shell service boundary', async () => {
     const { capabilities, commandCalls } = await initializePlugin();
 
     const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'python .\\main.py --input=/workspace/gold_price_scheduler/main.py',
+      command: 'python /home/user/project/main.py',
       cwd: workspaceRoot,
       source: 'agent'
     });
 
     expect(result).toMatchObject({
-      command: 'python .\\main.py --input=/workspace/gold_price_scheduler/main.py',
-      cwd: workspaceRoot,
       stdout: '',
       exitCode: 1,
       usedRtk: false,
-      bypassReason: 'virtual_workspace_path'
+      bypassReason: 'linux_local_path'
     });
-    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
-    expect(commandCalls).toHaveLength(0);
-  });
-
-  it('rejects agent shell cwd that uses the Deep Agents /workspace route', async () => {
-    const { capabilities, commandCalls } = await initializePlugin();
-
-    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
-      command: 'python .\\main.py',
-      cwd: '/workspace/gold_price_scheduler',
-      source: 'agent'
-    });
-
-    expect(result).toMatchObject({
-      command: 'python .\\main.py',
-      cwd: '/workspace/gold_price_scheduler',
-      stdout: '',
-      exitCode: 1,
-      usedRtk: false,
-      bypassReason: 'virtual_workspace_path'
-    });
-    expect(result.stderr).toContain('/workspace is a Deep Agents file-tool route, not a shell directory.');
+    expect(result.stderr).toContain('run_shell_command 在 Windows 本地执行，不接受 Linux 本地路径。');
     expect(commandCalls).toHaveLength(0);
   });
 
@@ -219,6 +198,32 @@ describe('runtime tools shell adapter', () => {
       args: ['git', 'status'],
       cwd: workspaceRoot
     });
+  });
+
+  it('applies shell policy to the final command after RTK rewrite', async () => {
+    vi.spyOn(CommandRewriter.prototype, 'rewrite').mockResolvedValue({
+      rewritten: 'rtk git /tmp/status.txt',
+      rtkArgs: ['git', '/tmp/status.txt'],
+      exitCode: 0
+    });
+    const { capabilities, commandCalls } = await initializePlugin();
+
+    const result = await capabilities.invoke<unknown, ShellExecutionResult>('shell.execute', {
+      command: 'git status',
+      cwd: workspaceRoot,
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      command: 'git status',
+      normalizedCommand: 'git status',
+      cwd: workspaceRoot,
+      stdout: '',
+      exitCode: 1,
+      usedRtk: false,
+      bypassReason: 'linux_local_path'
+    });
+    expect(commandCalls).toHaveLength(0);
   });
 
   it('keeps the /workspace route rejection scoped to agent shell commands', async () => {

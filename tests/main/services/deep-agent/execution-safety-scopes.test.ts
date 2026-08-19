@@ -93,7 +93,7 @@ describe('execution safety middleware scopes', () => {
       throw new Error('Expected DeepAgents input.');
     }
     const expectedSafetyMiddleware = [
-      'RocShellPathPolicyMiddleware',
+      'RocShellPolicyMiddleware',
       'RTKMiddleware',
       'RocToolProtocolMiddleware',
       'ModelCallLimitMiddleware',

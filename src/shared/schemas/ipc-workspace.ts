@@ -241,6 +241,7 @@ const rtkBypassReasonSchema = z.enum([
   'user_terminal_raw_output',
   'command_not_supported',
   'virtual_workspace_path',
+  'linux_local_path',
   'windows_shell_alias',
   'shell_run_not_authorized',
   'background_shell_command_not_pre_authorized'

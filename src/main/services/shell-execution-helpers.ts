@@ -2,12 +2,9 @@ import type { ShellExecutionResult } from '../../shared/types';
 import { CommandRewriter, isWindowsRtkDeniedSubcommand, parseRtkArgs } from '../../rtk-integration';
 import type { RtkExecutionMetadata } from './rtk-service';
 import { redact } from './deep-agent/redact';
+import { normalizeShellCommand } from './deep-agent/shell-policy';
 
 const maxPersistedAgentOutputChars = 4096;
-
-export function normalizeShellCommand(command: string): string {
-  return command.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
-}
 
 export type RtkRoutingDecision =
   | {
