@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
-import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
+import type { CapabilityDescriptor, RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
@@ -77,6 +77,32 @@ describe('task plugin', () => {
     expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-agent', '@roc/plugin-workspace']);
     expect(plugin.manifest.loadPhase).toBe('critical');
     expect(plugin.manifest.capabilities.map((capability) => capability.name)).toEqual(taskCapabilities);
+  });
+
+  it('binds task handlers by capability name instead of descriptor position', async () => {
+    const plugin = createTaskPlugin();
+    const descriptors = plugin.manifest.capabilities as CapabilityDescriptor[];
+    const firstDescriptor = descriptors[0];
+    const secondDescriptor = descriptors[1];
+    if (firstDescriptor === undefined || secondDescriptor === undefined) {
+      throw new Error('task_capability_fixture_incomplete');
+    }
+    descriptors[0] = secondDescriptor;
+    descriptors[1] = firstDescriptor;
+    const capabilities = declarePluginCapabilities(plugin);
+    try {
+      await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
+
+      await expect(capabilities.invoke<{}, TaskSnapshot>('task.snapshot.get', {})).resolves.toMatchObject({
+        counts: expect.any(Object),
+        recentEvents: expect.any(Array),
+        threads: expect.any(Array)
+      });
+    } finally {
+      await plugin.shutdown();
+      descriptors[0] = firstDescriptor;
+      descriptors[1] = secondDescriptor;
+    }
   });
 
 

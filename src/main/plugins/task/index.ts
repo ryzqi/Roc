@@ -51,29 +51,50 @@ const idInputSchema = z.object({
   id: z.string()
 });
 
-const taskCapabilityDescriptors = [
-  descriptor('task.snapshot.get', z.object({}), taskSnapshotSchema),
-  descriptor('task.background.preview', backgroundTaskPreviewRequestSchema, backgroundTaskPreviewSchema),
-  descriptor('task.background.create', backgroundTaskPreviewRequestSchema, backgroundTaskSchema),
-  descriptor('task.background.update', updateBackgroundTaskRequestSchema, backgroundTaskSchema),
-  descriptor('task.background.runNow', idInputSchema, taskRunNowResultSchema),
-  descriptor('task.background.pause', idInputSchema, backgroundTaskSchema),
-  descriptor('task.background.resume', idInputSchema, backgroundTaskSchema),
-  descriptor('task.background.cancel', idInputSchema, backgroundTaskSchema),
-  descriptor('task.background.delete', idInputSchema, taskDeleteBackgroundResultSchema),
-  descriptor('task.scheduler.status', z.object({}), schedulerStatusSchema),
-  descriptor('task.scheduler.suspend', z.object({}), z.object({ suspended: z.literal(true) })),
-  descriptor('task.scheduler.resume', z.object({}), z.object({ resumed: z.literal(true) })),
-  descriptor('task.scheduler.handlePowerResume', z.object({}), z.object({ handled: z.literal(true) })),
-  descriptor('task.background.summary', z.object({}), z.custom<BackgroundTaskSummary>()),
-  descriptor('task.thread.messages.list', taskMessageHistoryRequestSchema, taskMessageHistoryPageSchema),
-  descriptor('task.background.list', z.object({}), backgroundTaskSchema.array()),
-  descriptor('task.thread.delete', taskDeleteThreadRequestSchema, taskDeleteThreadResultSchema),
-  descriptor('task.active.list', z.object({}), activeTaskItemSchema.array()),
-  descriptor('task.detail.get', taskIdRequestSchema, taskDetailSchema),
-  descriptor('task.scheduledRuns.list', scheduledTaskRunsRequestSchema, scheduledTaskRunSchema.array()),
-  descriptor('task.outbox.replay', z.object({}), z.object({ appliedCount: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative() }))
-] as const satisfies readonly CapabilityDescriptor[];
+const taskCapabilityDescriptorByName = {
+  'task.snapshot.get': descriptor('task.snapshot.get', z.object({}), taskSnapshotSchema),
+  'task.background.preview': descriptor('task.background.preview', backgroundTaskPreviewRequestSchema, backgroundTaskPreviewSchema),
+  'task.background.create': descriptor('task.background.create', backgroundTaskPreviewRequestSchema, backgroundTaskSchema),
+  'task.background.update': descriptor('task.background.update', updateBackgroundTaskRequestSchema, backgroundTaskSchema),
+  'task.background.runNow': descriptor('task.background.runNow', idInputSchema, taskRunNowResultSchema),
+  'task.background.pause': descriptor('task.background.pause', idInputSchema, backgroundTaskSchema),
+  'task.background.resume': descriptor('task.background.resume', idInputSchema, backgroundTaskSchema),
+  'task.background.cancel': descriptor('task.background.cancel', idInputSchema, backgroundTaskSchema),
+  'task.background.delete': descriptor('task.background.delete', idInputSchema, taskDeleteBackgroundResultSchema),
+  'task.scheduler.status': descriptor('task.scheduler.status', z.object({}), schedulerStatusSchema),
+  'task.scheduler.suspend': descriptor('task.scheduler.suspend', z.object({}), z.object({ suspended: z.literal(true) })),
+  'task.scheduler.resume': descriptor('task.scheduler.resume', z.object({}), z.object({ resumed: z.literal(true) })),
+  'task.scheduler.handlePowerResume': descriptor(
+    'task.scheduler.handlePowerResume',
+    z.object({}),
+    z.object({ handled: z.literal(true) })
+  ),
+  'task.background.summary': descriptor('task.background.summary', z.object({}), z.custom<BackgroundTaskSummary>()),
+  'task.thread.messages.list': descriptor(
+    'task.thread.messages.list',
+    taskMessageHistoryRequestSchema,
+    taskMessageHistoryPageSchema
+  ),
+  'task.background.list': descriptor('task.background.list', z.object({}), backgroundTaskSchema.array()),
+  'task.thread.delete': descriptor('task.thread.delete', taskDeleteThreadRequestSchema, taskDeleteThreadResultSchema),
+  'task.active.list': descriptor('task.active.list', z.object({}), activeTaskItemSchema.array()),
+  'task.detail.get': descriptor('task.detail.get', taskIdRequestSchema, taskDetailSchema),
+  'task.scheduledRuns.list': descriptor(
+    'task.scheduledRuns.list',
+    scheduledTaskRunsRequestSchema,
+    scheduledTaskRunSchema.array()
+  ),
+  'task.outbox.replay': descriptor(
+    'task.outbox.replay',
+    z.object({}),
+    z.object({ appliedCount: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative() })
+  )
+} as const satisfies Record<string, CapabilityDescriptor>;
+
+type TaskCapabilityName = keyof typeof taskCapabilityDescriptorByName;
+type TaskCapabilityHandler = (input: unknown) => Promise<unknown>;
+
+const taskCapabilityDescriptors = Object.values(taskCapabilityDescriptorByName);
 
 export function createTaskPlugin(): RocPlugin {
   let scheduler: TaskScheduler | null = null;
@@ -221,117 +242,123 @@ function registerTaskCapabilities(
   scheduler: TaskScheduler,
   replayAgentOutbox: () => { appliedCount: number; lastSequence: number }
 ): void {
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[0], async () => repository.getSnapshot());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[1], async (input) =>
-    repository.createBackgroundTaskPreview(backgroundTaskPreviewRequestSchema.parse(input))
-  );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[2], async (input) => {
-    const task = repository.createBackgroundTask(backgroundTaskPreviewRequestSchema.parse(input));
-    scheduler.registerTask(task);
-    await publishTaskUpdated(context, { kind: 'task_created', taskId: task.id });
-    return task;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[3], async (input) => {
-    const task = repository.updateBackgroundTask(updateBackgroundTaskRequestSchema.parse(input));
-    scheduler.registerTask(task);
-    await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
-    return task;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[4], async (input) => {
-    const { id } = input as { id: string };
-    const task = repository.findBackgroundTask(id);
-    if (task === null) {
-      throw new Error('background_task_not_found');
-    }
-    const startResult = await context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', {
-      input: task.goal,
-      mode: 'task',
-      taskSource: 'workbench',
-      threadId: task.threadId,
-      enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities,
-      shellAllowedCommands: [...task.allowedActions],
-      workspacePath: task.workspacePath
-    });
-    const result = scheduler.runNow(id, startResult.runId);
-    await publishTaskUpdated(context, { kind: 'task_run_fired', taskId: result.taskId, runId: result.runId });
-    return result;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[5], async (input) => {
-    const task = repository.pauseBackgroundTask((input as { id: string }).id);
-    scheduler.registerTask(task);
-    await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
-    return task;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[6], async (input) => {
-    const task = repository.resumeBackgroundTask((input as { id: string }).id);
-    scheduler.registerTask(task);
-    await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
-    return task;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[7], async (input) => {
-    const task = repository.cancelBackgroundTask((input as { id: string }).id);
-    scheduler.unregisterTask(task.id);
-    await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
-    return task;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[8], async (input) => {
-    const result = repository.deleteBackgroundTask((input as { id: string }).id);
-    scheduler.unregisterTask(result.taskId);
-    await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: result.taskId, status: 'archived' });
-    return result;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[9], async () => scheduler.getStatus());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[10], async () => {
-    scheduler.suspendAll();
-    return { suspended: true as const };
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[11], async () => {
-    scheduler.resumeAll();
-    return { resumed: true as const };
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[12], async () => {
-    scheduler.handlePowerResume();
-    return { handled: true as const };
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[13], async () => repository.getBackgroundTaskSummary());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[14], async (input) =>
-    repository.listThreadMessages(input as TaskMessageHistoryRequest)
-  );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[15], async () => repository.listBackgroundTasks());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[16], async (input) => {
-    const { threadId } = input as TaskDeleteThreadRequest;
-    const linkedTaskIds = repository.listBackgroundTasks()
-      .filter((task) => task.threadId === threadId)
-      .map((task) => task.id);
-    let result: TaskDeleteThreadResult;
-    try {
-      result = repository.deleteThread(threadId);
-    } catch (error) {
-      if (repository.listIncompleteThreadDeletions().some((record) => record.threadId === threadId)) {
-        for (const taskId of linkedTaskIds) {
-          scheduler.unregisterTask(taskId);
-        }
-        await publishTaskUpdated(context, { kind: 'thread_deletion_started', threadId });
+  const handlers = {
+    'task.snapshot.get': async () => repository.getSnapshot(),
+    'task.background.preview': async (input) =>
+      repository.createBackgroundTaskPreview(backgroundTaskPreviewRequestSchema.parse(input)),
+    'task.background.create': async (input) => {
+      const task = repository.createBackgroundTask(backgroundTaskPreviewRequestSchema.parse(input));
+      scheduler.registerTask(task);
+      await publishTaskUpdated(context, { kind: 'task_created', taskId: task.id });
+      return task;
+    },
+    'task.background.update': async (input) => {
+      const task = repository.updateBackgroundTask(updateBackgroundTaskRequestSchema.parse(input));
+      scheduler.registerTask(task);
+      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
+      return task;
+    },
+    'task.background.runNow': async (input) => {
+      const { id } = input as { id: string };
+      const task = repository.findBackgroundTask(id);
+      if (task === null) {
+        throw new Error('background_task_not_found');
       }
-      throw error;
+      const startResult = await context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', {
+        input: task.goal,
+        mode: 'task',
+        taskSource: 'workbench',
+        threadId: task.threadId,
+        enabledCapabilities: task.enabledCapabilities === null ? { mcpServers: [], skills: [] } : task.enabledCapabilities,
+        shellAllowedCommands: [...task.allowedActions],
+        workspacePath: task.workspacePath
+      });
+      const result = scheduler.runNow(id, startResult.runId);
+      await publishTaskUpdated(context, { kind: 'task_run_fired', taskId: result.taskId, runId: result.runId });
+      return result;
+    },
+    'task.background.pause': async (input) => {
+      const task = repository.pauseBackgroundTask((input as { id: string }).id);
+      scheduler.registerTask(task);
+      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
+      return task;
+    },
+    'task.background.resume': async (input) => {
+      const task = repository.resumeBackgroundTask((input as { id: string }).id);
+      scheduler.registerTask(task);
+      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
+      return task;
+    },
+    'task.background.cancel': async (input) => {
+      const task = repository.cancelBackgroundTask((input as { id: string }).id);
+      scheduler.unregisterTask(task.id);
+      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: task.id, status: task.status });
+      return task;
+    },
+    'task.background.delete': async (input) => {
+      const result = repository.deleteBackgroundTask((input as { id: string }).id);
+      scheduler.unregisterTask(result.taskId);
+      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId: result.taskId, status: 'archived' });
+      return result;
+    },
+    'task.scheduler.status': async () => scheduler.getStatus(),
+    'task.scheduler.suspend': async () => {
+      scheduler.suspendAll();
+      return { suspended: true as const };
+    },
+    'task.scheduler.resume': async () => {
+      scheduler.resumeAll();
+      return { resumed: true as const };
+    },
+    'task.scheduler.handlePowerResume': async () => {
+      scheduler.handlePowerResume();
+      return { handled: true as const };
+    },
+    'task.background.summary': async () => repository.getBackgroundTaskSummary(),
+    'task.thread.messages.list': async (input) => repository.listThreadMessages(input as TaskMessageHistoryRequest),
+    'task.background.list': async () => repository.listBackgroundTasks(),
+    'task.thread.delete': async (input) => {
+      const { threadId } = input as TaskDeleteThreadRequest;
+      const linkedTaskIds = repository.listBackgroundTasks()
+        .filter((task) => task.threadId === threadId)
+        .map((task) => task.id);
+      let result: TaskDeleteThreadResult;
+      try {
+        result = repository.deleteThread(threadId);
+      } catch (error) {
+        if (repository.listIncompleteThreadDeletions().some((record) => record.threadId === threadId)) {
+          for (const taskId of linkedTaskIds) {
+            scheduler.unregisterTask(taskId);
+          }
+          await publishTaskUpdated(context, { kind: 'thread_deletion_started', threadId });
+        }
+        throw error;
+      }
+      for (const taskId of linkedTaskIds) {
+        scheduler.unregisterTask(taskId);
+        await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });
+      }
+      return result;
+    },
+    'task.active.list': async () => repository.getActiveTasks(),
+    'task.detail.get': async (input) =>
+      repository.getTaskDetail({
+        taskId: (input as { taskId: string }).taskId,
+        schedulerRegistered: scheduler.getStatus().registeredTaskCount > 0
+      }),
+    'task.scheduledRuns.list': async (input) =>
+      repository.listScheduledRuns(input as { taskId: string; limit?: number }),
+    'task.outbox.replay': async () => replayAgentOutbox()
+  } satisfies Record<TaskCapabilityName, TaskCapabilityHandler>;
+
+  const registeredNames = new Set<TaskCapabilityName>();
+  for (const descriptor of taskCapabilityDescriptors) {
+    if (registeredNames.has(descriptor.name)) {
+      throw new Error(`task_capability_descriptor_duplicate:${descriptor.name}`);
     }
-    for (const taskId of linkedTaskIds) {
-      scheduler.unregisterTask(taskId);
-      await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });
-    }
-    return result;
-  });
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[17], async () => repository.getActiveTasks());
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[18], async (input) =>
-    repository.getTaskDetail({
-      taskId: (input as { taskId: string }).taskId,
-      schedulerRegistered: scheduler.getStatus().registeredTaskCount > 0
-    })
-  );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[19], async (input) =>
-    repository.listScheduledRuns(input as { taskId: string; limit?: number })
-  );
-  context.capabilities.register(pluginId, taskCapabilityDescriptors[20], async () => replayAgentOutbox());
+    registeredNames.add(descriptor.name);
+    context.capabilities.register(pluginId, descriptor, handlers[descriptor.name]);
+  }
 }
 
 async function publishTaskUpdated(context: RocPluginContext, payload: TaskUpdateEvent): Promise<void> {
@@ -343,11 +370,11 @@ async function publishTaskUpdated(context: RocPluginContext, payload: TaskUpdate
   });
 }
 
-function descriptor<TInput, TOutput>(
-  name: string,
+function descriptor<TName extends string, TInput, TOutput>(
+  name: TName,
   inputSchema: z.ZodType<TInput>,
   outputSchema: z.ZodType<TOutput>
-): CapabilityDescriptor<TInput, TOutput> {
+): CapabilityDescriptor<TInput, TOutput> & { readonly name: TName } {
   return {
     name,
     version: capabilityVersion,
