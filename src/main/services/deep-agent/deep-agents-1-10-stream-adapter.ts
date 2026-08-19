@@ -1,7 +1,6 @@
 import type { TokenUsage } from '../../../shared/types';
 import * as recordUtils from './record-utils';
-import { redact } from './redact';
-import { redactUnknown } from './stream-tool-utils';
+import { redact, redactUnknown } from './redaction';
 import type { ToolOutputProjector } from './tool-output-projection';
 
 export type DeepAgentSubagentScope = {

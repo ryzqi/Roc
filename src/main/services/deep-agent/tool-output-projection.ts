@@ -1,5 +1,5 @@
 import { ContextArtifactStore } from './context/context-artifact-store';
-import { redactUnknown } from './stream-tool-utils';
+import { redactUnknown } from './redaction';
 
 const maxInlineToolOutputChars = 4_096;
 

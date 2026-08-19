@@ -4,7 +4,7 @@ import {
   isRetryableProviderHttpStatus,
   providerRequestTimeoutMessage
 } from '../provider-request-retry';
-import { redact } from './redact';
+import { redact } from './redaction';
 import type { RunFailure } from './types';
 
 const KNOWN_TRIGGER_KEYS = new Set(['type', 'description', 'cronExpression', 'nextRunAt']);
