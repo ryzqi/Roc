@@ -6,8 +6,7 @@ import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
 import type { SessionSearchAdapter } from './session-search-tool';
 import type { RuntimeWorkspaceIdentity } from './workspace-scope';
-import { buildPromptBlocks } from './prompt-blocks';
-import { serializePromptBlocks } from './prompt-serialization';
+import { buildPromptBlocks, serializePromptBlocks } from './prompt-blocks';
 import { createSessionSearchTool } from './session-search-tool';
 import { resolveRuntimeWorkspaceIdentity } from './workspace-scope';
 

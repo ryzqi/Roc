@@ -40,6 +40,10 @@ export type PromptBlock = {
   hash: string;
 };
 
+export function serializePromptBlocks(blocks: readonly PromptBlock[]): string {
+  return blocks.map((block) => [`<!-- BLOCK:${block.type}:${block.stability}:${block.hash} -->`, block.content].join('\n')).join('\n');
+}
+
 export function buildPromptBlocks(input: {
   mode: RunExecutionSnapshotV2['mode'];
   enabledCapabilities: ChatStartRunRequest['enabledCapabilities'];

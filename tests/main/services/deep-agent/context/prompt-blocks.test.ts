@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildPromptBlocks } from '../../../../../src/main/services/deep-agent/context/prompt-blocks';
-import { serializePromptBlocks } from '../../../../../src/main/services/deep-agent/context/prompt-serialization';
+import { serializePromptBlocks } from '../../../../../src/main/services/deep-agent/context/prompt-blocks';
 
 const enabledCapabilities = {
   mcpServers: ['filesystem'],

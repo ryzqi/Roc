@@ -1,6 +1,5 @@
 import type { ChatStartRunRequest, WorkflowHint } from '../../../shared/types';
-import { buildPromptBlocks } from './context/prompt-blocks';
-import { serializePromptBlocks } from './context/prompt-serialization';
+import { buildPromptBlocks, serializePromptBlocks } from './context/prompt-blocks';
 
 export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
   '',
