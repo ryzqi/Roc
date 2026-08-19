@@ -6,7 +6,7 @@ import type { Client } from 'langsmith';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import {
   AgentLangSmithRunTracingManager,
   createLangSmithRunTracing

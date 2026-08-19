@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BackgroundTaskRepository } from '../../../../src/main/plugins/task/background-task-repository';
-import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
+import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { ScheduledOccurrenceRepository } from '../../../../src/main/plugins/task/scheduled-occurrence-repository';
 
 let db: Database.Database;

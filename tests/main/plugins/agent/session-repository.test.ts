@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, ChatRunEvent, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';

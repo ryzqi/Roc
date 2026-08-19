@@ -20,7 +20,7 @@ import { toolRetryMiddleware } from 'langchain';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import {
   buildDeepAgent,
   type DeepAgentBuildInput

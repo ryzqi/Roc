@@ -8,7 +8,7 @@ import { FakeToolCallingModel } from 'langchain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentPluginSchema } from '../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
 import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';

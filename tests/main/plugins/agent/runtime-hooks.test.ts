@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 

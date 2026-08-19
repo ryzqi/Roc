@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentCapabilityPreview, AgentRuntimeStatus, EnabledCapabilities, TaskRun } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 
-import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
+import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { createTerminalRunTelemetry } from '../agent/run-telemetry-test-helpers';

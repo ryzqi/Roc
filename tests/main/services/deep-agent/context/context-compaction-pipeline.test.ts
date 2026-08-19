@@ -10,7 +10,7 @@ import {
 import { REMOVE_ALL_MESSAGES, messagesStateReducer } from '@langchain/langgraph';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applyAgentPluginSchema } from '../../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import {
   createRocContextCompactionMiddleware,

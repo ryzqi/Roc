@@ -6,7 +6,7 @@ import { FakeToolCallingModel } from 'langchain';
 import { describe, expect, it } from 'vitest';
 
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../../src/main/services/deep-agent/backend';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';

@@ -6,7 +6,7 @@ import {
   normalizeChatInterruptPayload,
   type PendingInterrupt
 } from '../../../../src/main/plugins/agent/interrupt-projection';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 let projection: AgentInterruptProjection;

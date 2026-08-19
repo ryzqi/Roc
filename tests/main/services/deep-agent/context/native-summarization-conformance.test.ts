@@ -4,7 +4,7 @@ import { countTokensApproximately } from 'langchain';
 import { createDeepAgent, createSummarizationMiddleware, getHarnessProfile } from 'deepagents';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyAgentPluginSchema } from '../../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';

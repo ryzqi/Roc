@@ -26,9 +26,9 @@ import {
   compileRunCapabilityManifest,
   isRunCapabilityManifestIntegrityValid
 } from '../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentPluginSchema } from '../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskPluginSchema } from '../../src/main/plugins/task/schema';
+import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../src/main/plugins/task/task-repository';
 import {
   buildDeepAgent,

@@ -5,7 +5,7 @@ import { StateBackend } from 'deepagents';
 import { FakeToolCallingModel } from 'langchain';
 import { describe, expect, it } from 'vitest';
 
-import { applyAgentPluginSchema } from '../../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent } from '../../../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../../../src/main/services/deep-agent/backend';

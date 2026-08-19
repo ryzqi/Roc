@@ -9,7 +9,7 @@ import { FakeToolCallingModel } from 'langchain';
 import type { RocCapabilityRegistry, RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import { createAgentDeepAgentExecutor } from '../../../../src/main/plugins/agent/deep-agent-executor';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import { ContextArtifactStore } from '../../../../src/main/services/deep-agent/context/context-artifact-store';

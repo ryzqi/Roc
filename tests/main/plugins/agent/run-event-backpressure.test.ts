@@ -6,7 +6,7 @@ import {
   createChatRunEventQueue
 } from '../../../../src/main/plugins/agent/chat-run-event-queue';
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 
 describe('agent run event backpressure', () => {
   it('coalesces 100k adjacent text deltas and stops a 10k non-coalescible producer at its high-water mark', async () => {

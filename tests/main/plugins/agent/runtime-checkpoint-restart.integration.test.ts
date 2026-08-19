@@ -8,7 +8,7 @@ import { createDeepAgent } from 'deepagents';
 import { FakeToolCallingModel, HumanMessage, tool } from 'langchain';
 import { z } from 'zod';
 
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 

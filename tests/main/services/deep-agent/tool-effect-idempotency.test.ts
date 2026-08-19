@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { ToolMessage } from '@langchain/core/messages';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
+import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
 import { createToolEffectIdempotencyMiddleware } from '../../../../src/main/services/deep-agent/tool-effect-idempotency';
 import { RocToolResolutionError } from '../../../../src/main/services/forge-guardrails';

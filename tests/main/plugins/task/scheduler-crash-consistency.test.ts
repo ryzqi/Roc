@@ -16,7 +16,7 @@ import { AgentSessionRepository } from '../../../../src/main/plugins/agent/sessi
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
-import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
+import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import type { AgentCapabilityPreview, ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
