@@ -18,7 +18,7 @@ import {
   type AgentDeepAgentExecutorOptions
 } from '../../../../src/main/plugins/agent/deep-agent-executor';
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import type { DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../src/main/services/deep-agent/context/context-artifact-store';
 import type { ContextMaintenanceEvent } from '../../../../src/main/services/deep-agent/context/context-compaction-pipeline';
@@ -37,7 +37,7 @@ vi.mock('../../../../src/main/services/deep-agent/agent-builder', () => ({
 
 export const workspacePath = process.cwd();
 const toolEffectDb = new Database(':memory:');
-applyAgentPluginSchema(toolEffectDb);
+applyAgentDatabaseSchema(toolEffectDb);
 
 afterAll(() => {
   toolEffectDb.close();

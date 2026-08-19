@@ -9,7 +9,7 @@ import {
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 
 type SaverFixture = {
@@ -29,7 +29,7 @@ const saverFactories: Array<[string, () => SaverFixture]> = [
     'RocSqliteCheckpointer',
     () => {
       const db = new Database(':memory:');
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       return {
         saver: new RocSqliteCheckpointer(db),
         close: () => db.close()
@@ -178,7 +178,7 @@ describe('RocSqliteCheckpointer filtered list paging', () => {
       }
     });
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const saver = new RocSqliteCheckpointer(db);
       const config = configurable('thread_filter_paging', 'scope');
       for (let index = 0; index < 130; index += 1) {

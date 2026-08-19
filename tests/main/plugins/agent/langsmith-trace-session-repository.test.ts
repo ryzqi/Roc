@@ -2,14 +2,14 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   const now = '2026-07-26T00:00:00.000Z';
   db.prepare(
     `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)

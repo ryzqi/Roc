@@ -16,7 +16,7 @@ import { AgentSessionRepository } from '../../../../src/main/plugins/agent/sessi
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import type { AgentCapabilityPreview, ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
@@ -43,7 +43,7 @@ const eventBus: RocEventBus = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyTaskPluginSchema(db);
+  applyTaskDatabaseSchema(db);
   agentDb = new Database(':memory:');
   agentDb.pragma('foreign_keys = ON');
   applyAgentDatabaseSchema(agentDb);
@@ -145,7 +145,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstTaskDb.pragma('foreign_keys = ON');
       firstAgentDb = new Database(agentPath);
       firstAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(firstTaskDb);
+      applyTaskDatabaseSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
       const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const task = firstRepository.createBackgroundTask({
@@ -183,7 +183,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedTaskDb.pragma('foreign_keys = ON');
       restartedAgentDb = new Database(agentPath);
       restartedAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(restartedTaskDb);
+      applyTaskDatabaseSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
       const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       const restartedAgentRepository = new AgentSessionRepository(restartedAgentDb);
@@ -235,7 +235,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstTaskDb.pragma('foreign_keys = ON');
       firstAgentDb = new Database(agentPath);
       firstAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(firstTaskDb);
+      applyTaskDatabaseSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
       const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const firstAgentRepository = new AgentSessionRepository(firstAgentDb);
@@ -301,7 +301,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedTaskDb.pragma('foreign_keys = ON');
       restartedAgentDb = new Database(agentPath);
       restartedAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(restartedTaskDb);
+      applyTaskDatabaseSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
       const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       const restartedAgentRepository = new AgentSessionRepository(restartedAgentDb);
@@ -356,7 +356,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstTaskDb.pragma('foreign_keys = ON');
       firstAgentDb = new Database(agentPath);
       firstAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(firstTaskDb);
+      applyTaskDatabaseSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
       const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const firstAgentRepository = new AgentSessionRepository(firstAgentDb);
@@ -415,7 +415,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedTaskDb.pragma('foreign_keys = ON');
       restartedAgentDb = new Database(agentPath);
       restartedAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(restartedTaskDb);
+      applyTaskDatabaseSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
       const outbox = restartedAgentDb
         .prepare('SELECT sequence FROM agent_outbox WHERE run_id = ?')
@@ -435,7 +435,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedTaskDb = null;
       replayedTaskDb = new Database(taskPath);
       replayedTaskDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(replayedTaskDb);
+      applyTaskDatabaseSchema(replayedTaskDb);
       const replayedPlugin = await initializePersistentTaskPlugin(replayedTaskDb, restartedAgentDb);
       const replayedRepository = new TaskRepository(replayedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       expect(replayedRepository.getAgentOutboxCursor('task_background_status')).toBe(outbox.sequence);

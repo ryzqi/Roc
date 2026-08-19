@@ -6,7 +6,7 @@ import { FakeToolCallingModel } from 'langchain';
 import { describe, expect, it } from 'vitest';
 
 import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../../src/main/services/deep-agent/backend';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
@@ -81,7 +81,7 @@ describe('subagent budget state isolation', () => {
   it('completes three concurrent task branches without merging their native counters into parent state', async () => {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const subagentNames = ['budget-a', 'budget-b', 'budget-c'] as const;
       const taskCallIds = subagentNames.map((name) => `call_${name}`);
       const subagentModels = subagentNames.map(() =>
@@ -169,7 +169,7 @@ describe('subagent budget state isolation', () => {
   it('gives a delegated subagent its own native model budget and blocks the third call', async () => {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const subagentModel = new FakeToolCallingModel({
         toolCalls: [
           [
@@ -249,7 +249,7 @@ describe('subagent budget state isolation', () => {
   it('gives a delegated subagent its own native tool budget and rejects an oversized batch', async () => {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const subagentModel = new FakeToolCallingModel({
         toolCalls: [
           [0, 1, 2].map((index) => ({

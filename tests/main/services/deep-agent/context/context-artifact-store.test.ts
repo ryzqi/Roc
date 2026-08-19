@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import {
   ContextArtifactStore,
   formatContextArtifactReference
@@ -11,7 +11,7 @@ let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
 });
 
 afterEach(() => {

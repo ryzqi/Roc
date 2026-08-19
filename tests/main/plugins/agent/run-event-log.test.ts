@@ -2,13 +2,13 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   db.prepare(
     `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`

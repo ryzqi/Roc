@@ -6,14 +6,14 @@ import {
   normalizeChatInterruptPayload,
   type PendingInterrupt
 } from '../../../../src/main/plugins/agent/interrupt-projection';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 
 let db: Database.Database;
 let projection: AgentInterruptProjection;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   projection = new AgentInterruptProjection(db);
 });
 

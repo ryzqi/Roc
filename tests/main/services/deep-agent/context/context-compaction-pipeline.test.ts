@@ -10,7 +10,7 @@ import {
 import { REMOVE_ALL_MESSAGES, messagesStateReducer } from '@langchain/langgraph';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
 import {
   createRocContextCompactionMiddleware,
@@ -26,7 +26,7 @@ let db: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
 });
 
 afterEach(() => {

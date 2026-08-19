@@ -7,7 +7,7 @@ import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agen
 import { createAgentDeepAgentExecution } from '../../../../src/main/plugins/agent/agent-execution';
 import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 import { createTestCapabilityPreviewProvider } from './runtime-capability-preview-test-helpers';
@@ -45,7 +45,7 @@ const startRequest: ChatStartRunRequest = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   events = [];
 });
 

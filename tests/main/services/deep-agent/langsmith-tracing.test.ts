@@ -6,7 +6,7 @@ import type { Client } from 'langsmith';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import {
   AgentLangSmithRunTracingManager,
   createLangSmithRunTracing
@@ -24,7 +24,7 @@ describe('LangSmith run tracing', () => {
   it('reconstructs the same native root after a process restart', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const sessions = new AgentLangSmithTraceSessionRepository(db);
     const createManager = (projectName: string, appVersion: string) => new AgentLangSmithRunTracingManager({
@@ -95,7 +95,7 @@ describe('LangSmith run tracing', () => {
   it('reuses one native root trace for repeated invocations of the same Roc run', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const manager = new AgentLangSmithRunTracingManager({
       appVersion: correlation.appVersion,
@@ -174,7 +174,7 @@ describe('LangSmith run tracing', () => {
   it('releases active tracing and deletes the session when the persisted identity read fails during finish', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const sessions = new AgentLangSmithTraceSessionRepository(db);
     const manager = new AgentLangSmithRunTracingManager({
@@ -215,7 +215,7 @@ describe('LangSmith run tracing', () => {
   it('waits for active client batches and cleans up the client before manager shutdown completes', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const manager = new AgentLangSmithRunTracingManager({
       appVersion: correlation.appVersion,
@@ -262,7 +262,7 @@ describe('LangSmith run tracing', () => {
   it('disposes the active client when tracing is disabled between invocations', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const sessions = new AgentLangSmithTraceSessionRepository(db);
     let enabled = true;
@@ -410,7 +410,7 @@ describe('LangSmith run tracing', () => {
   it('finishes an interrupted root with a redacted terminal error', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const sessions = new AgentLangSmithTraceSessionRepository(db);
     const manager = new AgentLangSmithRunTracingManager({
@@ -539,7 +539,7 @@ describe('LangSmith run tracing', () => {
   it('keeps root business and terminal results unchanged when POST and PATCH exporters reject', async () => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     seedRun(db);
     const sessions = new AgentLangSmithTraceSessionRepository(db);
     const manager = new AgentLangSmithRunTracingManager({

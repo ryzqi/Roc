@@ -6,7 +6,7 @@ import type { CapabilityDescriptor, RocEventBus, RocEventEnvelope, RocPluginCont
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 import type {
@@ -602,7 +602,7 @@ function createSeededRepository(): {
   journal: ThreadDeletionJournal;
   repository: TaskRepository;
 } {
-  applyTaskPluginSchema(db);
+  applyTaskDatabaseSchema(db);
   const agentHistory = new AgentTaskHistoryContract(agentDb);
   const journal = new ThreadDeletionJournal({ agentHistory, db });
   return {

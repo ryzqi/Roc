@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 import type { BackgroundTaskPreviewRequest, EnabledCapabilities } from '../../../../src/shared/types';
@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('TaskRepository', () => {
   it('creates proposal run requests from description input and background-task workflow hint', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
 
     expect(
@@ -62,7 +62,7 @@ describe('TaskRepository', () => {
   });
 
   it('writes and reads current background task rows', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
 
     const preview = repository.createBackgroundTaskPreview(manualPreviewRequest);
@@ -100,7 +100,7 @@ describe('TaskRepository', () => {
   });
 
   it('re-derives risk fields from the raw create request', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
 
     const task = repository.createBackgroundTask({
@@ -113,7 +113,7 @@ describe('TaskRepository', () => {
   });
 
   it('rejects non-positive scheduled run limits before querying sqlite', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
     const task = repository.createBackgroundTask(manualPreviewRequest);
 
@@ -122,7 +122,7 @@ describe('TaskRepository', () => {
   });
 
   it('preserves current background task status names across lifecycle mutations', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
     const task = repository.createBackgroundTask(manualPreviewRequest);
 
@@ -137,7 +137,7 @@ describe('TaskRepository', () => {
   });
 
   it('reflects thread history and task projection rows deleted by the journal operation', async () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const repository = createRepository();
     const journal = new ThreadDeletionJournal({
       agentHistory: new AgentTaskHistoryContract(agentDb),
@@ -216,7 +216,7 @@ describe('TaskRepository', () => {
   });
 
   it('keeps an agent-delete failure pending, hidden, and retryable', async () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const agentHistory = new AgentTaskHistoryContract(agentDb);
     const journal = new ThreadDeletionJournal({
       agentHistory,
@@ -247,7 +247,7 @@ describe('TaskRepository', () => {
   });
 
   it('resumes projection deletion after agent history has already been deleted', async () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const agentHistory = new AgentTaskHistoryContract(agentDb);
     const journal = new ThreadDeletionJournal({
       agentHistory,
@@ -280,7 +280,7 @@ describe('TaskRepository', () => {
   });
 
   it('hides every public task surface as soon as deletion is journaled', () => {
-    applyTaskPluginSchema(db);
+    applyTaskDatabaseSchema(db);
     const agentHistory = new AgentTaskHistoryContract(agentDb);
     const journal = new ThreadDeletionJournal({ agentHistory, db });
     const repository = new TaskRepository(db, agentHistory, journal);

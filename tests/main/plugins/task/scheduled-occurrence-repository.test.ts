@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 
 let taskDb: Database.Database;
@@ -18,7 +18,7 @@ beforeEach(() => {
   agentDb = new Database(':memory:');
   agentDb.pragma('foreign_keys = ON');
   applyAgentDatabaseSchema(agentDb);
-  applyTaskPluginSchema(taskDb);
+  applyTaskDatabaseSchema(taskDb);
 });
 
 afterEach(() => {
@@ -440,7 +440,7 @@ describe('scheduled occurrence repository', () => {
       firstTaskDb.pragma('foreign_keys = ON');
       firstAgentDb = new Database(agentPath);
       firstAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(firstTaskDb);
+      applyTaskDatabaseSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
       const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const task = firstRepository.createBackgroundTask({
@@ -473,7 +473,7 @@ describe('scheduled occurrence repository', () => {
       restartedTaskDb.pragma('foreign_keys = ON');
       restartedAgentDb = new Database(agentPath);
       restartedAgentDb.pragma('foreign_keys = ON');
-      applyTaskPluginSchema(restartedTaskDb);
+      applyTaskDatabaseSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
       const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       restartedRepository.reconcileScheduledOccurrences({ now: '2026-07-17T00:01:01.000Z' });

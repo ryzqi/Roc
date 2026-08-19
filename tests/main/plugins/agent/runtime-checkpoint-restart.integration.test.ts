@@ -8,7 +8,7 @@ import { createDeepAgent } from 'deepagents';
 import { FakeToolCallingModel, HumanMessage, tool } from 'langchain';
 import { z } from 'zod';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { createAskUserTool } from '../../../../src/main/services/deep-agent/ask-user-tool';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 
@@ -30,7 +30,7 @@ beforeEach(() => {
   databasePath = join(tempDir, 'agent.db');
   db = new Database(databasePath);
   db.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
 });
 
 afterEach(() => {

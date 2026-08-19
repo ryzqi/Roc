@@ -2,7 +2,7 @@ import { completedTestOutcome, createTestAgentExecution } from './test-execution
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { createChatStartRunRequestFromSnapshot } from '../../../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
@@ -43,7 +43,7 @@ const startRequest: ChatStartRunRequest = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   events = [];
 });
 

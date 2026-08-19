@@ -8,7 +8,7 @@ import { FakeToolCallingModel } from 'langchain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { buildDeepAgent } from '../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../src/main/services/deep-agent/backend';
 import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';
@@ -58,7 +58,7 @@ describe('Roc Deep Agent offline integration', () => {
     const db = new Database(':memory:');
 
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const result = await runWithLangSmithTracing(null, async () => {
         const agent = createIntegrationAgent(
@@ -120,7 +120,7 @@ describe.skipIf(process.env.ROC_AGENT_INTEGRATION_LIVE !== '1')('Roc Deep Agent 
     const threadId = 'thread_agent_integration_live_anthropic';
 
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const result = await runWithLangSmithTracing(null, async () => {
         const agent = createIntegrationAgent(

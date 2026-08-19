@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RocEventBus, RocEventEnvelope } from '../../../../src/main/kernel/types';
 import type { AgentModelFactoryAdapter } from '../../../../src/main/plugins/agent/model-factory-adapter';
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import type { ChatRunEvent, ChatStartRunRequest } from '../../../../src/shared/types';
 
@@ -45,7 +45,7 @@ const startRequest: ChatStartRunRequest = {
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   events = [];
 });
 

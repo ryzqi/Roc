@@ -26,9 +26,9 @@ import {
   compileRunCapabilityManifest,
   isRunCapabilityManifestIntegrityValid
 } from '../../src/main/plugins/agent/run-capability-manifest';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../src/main/plugins/task/task-repository';
 import {
   buildDeepAgent,
@@ -292,7 +292,7 @@ async function measureAgentBuild(workspacePath: string): Promise<MetricMeasureme
   for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const startedAt = performance.now();
       createPerformanceAgent({
         checkpointer: new RocSqliteCheckpointer(db),
@@ -317,7 +317,7 @@ async function measureSimpleCompletion(workspacePath: string): Promise<{
   for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const model = new RocPerformanceFakeModel({ responses: [[]] });
       const agent = createPerformanceAgent({
         checkpointer: new RocSqliteCheckpointer(db),
@@ -366,7 +366,7 @@ async function measureSingleToolRoundtrip(workspacePath: string): Promise<{
     const db = new Database(':memory:');
     let toolExecutionCount = 0;
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const performanceStep = createPerformanceStepTool(() => {
         toolExecutionCount += 1;
       });
@@ -420,7 +420,7 @@ async function measureRestartResume(workspacePath: string): Promise<MetricMeasur
     let db: Database.Database | null = null;
     try {
       db = new Database(databasePath);
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const firstModel = new RocPerformanceFakeModel({ responses: [[]] });
       const firstAgent = createPerformanceAgent({
         checkpointer: new RocSqliteCheckpointer(db),
@@ -509,7 +509,7 @@ async function measureIterations(
     const db = new Database(':memory:');
     let toolExecutionCount = 0;
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const responses: Array<readonly PerformanceToolCall[]> = Array.from(
         { length: iterationCount },
         (_, iterationIndex) => [performanceToolCall(sampleIndex, iterationIndex)]
@@ -570,7 +570,7 @@ async function measureSubagentFanOut(workspacePath: string): Promise<MetricMeasu
   for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const subagentNames = ['performance-a', 'performance-b', 'performance-c'] as const;
       const subagentModels = subagentNames.map(() =>
         new RocPerformanceFakeModel({ responses: [[]] })
@@ -682,8 +682,8 @@ async function measureOutboxProjection(): Promise<MetricMeasurement> {
     const agentDb = new Database(':memory:');
     const taskDb = new Database(':memory:');
     try {
-      applyAgentPluginSchema(agentDb);
-      applyTaskPluginSchema(taskDb);
+      applyAgentDatabaseSchema(agentDb);
+      applyTaskDatabaseSchema(taskDb);
       const createdAt = new Date().toISOString();
       const insert = agentDb.prepare(
         `INSERT INTO agent_outbox

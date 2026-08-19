@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 
@@ -17,7 +17,7 @@ beforeEach(() => {
   agentDb = new Database(':memory:');
   agentDb.pragma('foreign_keys = ON');
   applyAgentDatabaseSchema(agentDb);
-  applyTaskPluginSchema(db);
+  applyTaskDatabaseSchema(db);
 });
 
 afterEach(() => {

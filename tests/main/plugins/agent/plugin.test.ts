@@ -11,7 +11,7 @@ import type { RocPluginContext } from '../../../../src/main/kernel/types';
 import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import {
   applyAgentDatabaseSchema,
@@ -318,7 +318,7 @@ describe('agent plugin manifest', () => {
     const coreDb = new Database(':memory:');
     try {
       applyAgentDatabaseSchema(agentDb);
-      applyTaskPluginSchema(taskDb);
+      applyTaskDatabaseSchema(taskDb);
       const task = new TaskRepository(taskDb, new AgentTaskHistoryContract(agentDb)).createBackgroundTask({
         goal: 'Review the workspace every morning',
         trigger: {

@@ -6,7 +6,7 @@ import { FakeToolCallingModel } from 'langchain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { runWithLangSmithTracing } from '../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../src/main/services/forge-guardrails';
@@ -107,7 +107,7 @@ describe('deterministic Roc agent trajectory evals', () => {
     const threadId = `thread_agent_eval_${scenario.id}`;
 
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const result = await runWithLangSmithTracing(null, async () => {
         const agent = createEvalAgent({

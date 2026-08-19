@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentCapabilityPreview, AgentRuntimeStatus, EnabledCapabilities, TaskRun } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { createTerminalRunTelemetry } from '../agent/run-telemetry-test-helpers';
@@ -23,13 +23,13 @@ const enabledCapabilities: EnabledCapabilities = {
 beforeEach(() => {
   agentDb = new Database(':memory:');
   agentDb.pragma('foreign_keys = ON');
-  applyAgentPluginSchema(agentDb);
+  applyAgentDatabaseSchema(agentDb);
   taskDb = new Database(':memory:');
   taskDb.pragma('foreign_keys = ON');
-  applyTaskPluginSchema(taskDb);
+  applyTaskDatabaseSchema(taskDb);
   shadowTaskDb = new Database(':memory:');
   shadowTaskDb.pragma('foreign_keys = ON');
-  applyTaskPluginSchema(shadowTaskDb);
+  applyTaskDatabaseSchema(shadowTaskDb);
 });
 
 afterEach(() => {

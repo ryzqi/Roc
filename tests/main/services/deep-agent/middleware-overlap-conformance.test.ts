@@ -20,7 +20,7 @@ import { toolRetryMiddleware } from 'langchain';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import {
   buildDeepAgent,
   type DeepAgentBuildInput
@@ -735,7 +735,7 @@ describe('Deep Agents 1.10.8 middleware overlap conformance', () => {
 
 function createAgentDatabase(): Database.Database {
   const db = new Database(':memory:');
-  applyAgentPluginSchema(db);
+  applyAgentDatabaseSchema(db);
   return db;
 }
 

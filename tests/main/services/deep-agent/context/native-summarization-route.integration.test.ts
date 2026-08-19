@@ -5,7 +5,7 @@ import { StateBackend } from 'deepagents';
 import { FakeToolCallingModel } from 'langchain';
 import { describe, expect, it } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent } from '../../../../../src/main/services/deep-agent/agent-builder';
 import type { RocCompositeBackend } from '../../../../../src/main/services/deep-agent/backend';
@@ -23,7 +23,7 @@ describe('Deep Agents native summarization route integration', () => {
   it('runs the real main-to-compiled-subagent task route with only Roc compaction', async () => {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       db.prepare(
         `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`

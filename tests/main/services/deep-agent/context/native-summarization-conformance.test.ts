@@ -4,7 +4,7 @@ import { countTokensApproximately } from 'langchain';
 import { createDeepAgent, createSummarizationMiddleware, getHarnessProfile } from 'deepagents';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../../src/main/infrastructure/database-schemas';
 import { compileRunCapabilityManifest } from '../../../../../src/main/plugins/agent/run-capability-manifest';
 import { buildDeepAgent, type DeepAgentBuildInput } from '../../../../../src/main/services/deep-agent/agent-builder';
 import { ContextArtifactStore } from '../../../../../src/main/services/deep-agent/context/context-artifact-store';
@@ -83,7 +83,7 @@ describe('Deep Agents native summarization conformance', () => {
 
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       seedThread(db, 'thread_native_conformance');
       const artifactStore = new ContextArtifactStore(db);
       const rocEvents: string[] = [];
@@ -214,7 +214,7 @@ describe('Deep Agents native summarization conformance', () => {
   it('keeps compiled subagents on one Roc compaction producer and preserves cache', async () => {
     const db = new Database(':memory:');
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const artifactStore = new ContextArtifactStore(db);
       const model = {
         getName: () => 'ChatAnthropic',

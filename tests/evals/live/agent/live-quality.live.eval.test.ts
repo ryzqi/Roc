@@ -6,7 +6,7 @@ import { HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/m
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { runWithLangSmithTracing } from '../../../../src/main/services/deep-agent/langsmith-tracing';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { defaultErrorTracker } from '../../../../src/main/services/forge-guardrails';
@@ -176,7 +176,7 @@ describe.runIf(hasLiveAnthropicApiKey())('Roc live agent quality eval', () => {
     const threadId = `thread_agent_live_eval_${scenario.id}`;
 
     try {
-      applyAgentPluginSchema(db);
+      applyAgentDatabaseSchema(db);
       const checkpointer = new RocSqliteCheckpointer(db);
       const agentModel = createLiveAnthropicModel(dataset.agentModel, apiKey, guardedFetch);
       const result = await runWithLangSmithTracing(null, async () => {

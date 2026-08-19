@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import type { AgentCapabilityPreview, AgentRuntimeStatus, ChatPersistedAttachment, ChatRunEvent, EnabledCapabilities, TaskKind, TaskStatus } from '../../../../src/shared/types';
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { agentRunEventLogMaxEvents, AgentRunEventLog } from '../../../../src/main/plugins/agent/run-event-log';
-import { applyAgentDatabaseSchema as applyAgentPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { RocSqliteCheckpointer } from '../../../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentToolEffectStore } from '../../../../src/main/services/deep-agent/tool-effect-store';
@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe('AgentSessionRepository', () => {
   it('applies the migrated agent tables with current column names', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
 
     expect(columnNames('agent_runs')).toContain('thread_id');
     expect(columnNames('agent_events')).toContain('run_id');
@@ -38,7 +38,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rejects malformed recorded approval decisions at the resume boundary', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -64,7 +64,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('migrates a persisted V1 execution snapshot to the frozen V2 call budget', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -96,7 +96,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('composes replaceable checkpoint, tool-effect, and run-event owners', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const checkpointThreads: string[] = [];
     const restartedEffectRuns: string[] = [];
     const recordedEvents: ChatRunEvent[] = [];
@@ -146,7 +146,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('reads and writes agent threads, agent runs, agent events, and session messages', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
 
     const run = createRun(repository, {
@@ -258,7 +258,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('fails explicitly when a persisted task event payload violates the shared contract', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -279,7 +279,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('marks interrupted runs waiting for the user while persisting only interrupt UI data', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -422,7 +422,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rolls back the waiting-user transition when telemetry persistence fails', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -464,7 +464,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rebuilds a missing projection from the current checkpoint after a partial resume crash', async () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -548,7 +548,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rebuilds an incomplete projection when no durable resume audit answers the missing interrupt', async () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -578,7 +578,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rejects a corrupt persisted interrupt payload explicitly', async () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -610,7 +610,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rolls back question audit and session message writes as one resume transaction', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -696,7 +696,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('does not restore a stale waiting projection when the latest checkpoint has no interrupt', async () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -729,7 +729,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('orders question resume message and audit events after the requested event', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -789,7 +789,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('applies run status transitions with status and state-version CAS', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -829,7 +829,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('atomically records a completed run, its terminal timeline, and its task outbox event', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -907,7 +907,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rejects terminal telemetry whose frozen correlation differs from the run snapshot', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -948,7 +948,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rejects persisted telemetry whose frozen correlation differs from the run snapshot', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -988,7 +988,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('does not overwrite corrupt telemetry while committing a terminal run', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1032,7 +1032,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('trims the oldest timeline event before accepting more streamed events', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1102,7 +1102,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('atomically records a failed run, its terminal timeline, and its task outbox event', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1181,7 +1181,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('rejects a second active run for one thread', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const first = createRun(repository, {
       enabledCapabilities,
@@ -1202,7 +1202,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('reconciles interrupted startup runs into durable terminal records without replaying them', async () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const waitingNextTurn = createRun(repository, {
       enabledCapabilities,
@@ -1368,7 +1368,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('quarantines a corrupt execution snapshot without reusing it for a run', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1394,7 +1394,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('persists workspace hash on session messages', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1434,7 +1434,7 @@ describe('AgentSessionRepository', () => {
       VALUES ('smsg_legacy', 'thread_legacy', 'assistant', 'Legacy context', 8, 'visible', '2026-06-24T00:00:00.000Z');
     `);
 
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
 
     expect(columnNames('session_messages')).toContain('workspace_hash');
     expect(rawRow('session_messages', 'smsg_legacy')).toMatchObject({
@@ -1444,7 +1444,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('stores user image attachment metadata without base64 data', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1480,7 +1480,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('filters current workspace search by workspace hash and keeps unscoped rows only in all scope', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const runA = createRun(repository, {
       enabledCapabilities,
@@ -1533,7 +1533,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('includes pre-compaction flush rows in workspace-scoped session search', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,
@@ -1571,7 +1571,7 @@ describe('AgentSessionRepository', () => {
   });
 
   it('treats punctuation-heavy session_search queries as plain text instead of FTS syntax', () => {
-    applyAgentPluginSchema(db);
+    applyAgentDatabaseSchema(db);
     const repository = new AgentSessionRepository(db);
     const run = createRun(repository, {
       enabledCapabilities,

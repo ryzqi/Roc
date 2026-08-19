@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BackgroundTaskRepository } from '../../../../src/main/plugins/task/background-task-repository';
-import { applyTaskDatabaseSchema as applyTaskPluginSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import { ScheduledOccurrenceRepository } from '../../../../src/main/plugins/task/scheduled-occurrence-repository';
 
 let db: Database.Database;
@@ -10,7 +10,7 @@ let db: Database.Database;
 beforeEach(() => {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyTaskPluginSchema(db);
+  applyTaskDatabaseSchema(db);
 });
 
 afterEach(() => {
