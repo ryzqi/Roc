@@ -121,25 +121,6 @@ export const runCapabilityManifestSchema = z
   })
   .strict();
 
-const agentCapabilityManifestToolCardSchema = agentCapabilityCardSchema.pick({
-  id: true,
-  name: true,
-  capabilityType: true,
-  riskLevel: true,
-  scope: true,
-  requiresApproval: true
-});
-
-export const agentCapabilityManifestSchema = z
-  .object({
-    requestedCapabilities: enabledCapabilitiesSchema,
-    resolvedCapabilities: enabledCapabilitiesSchema,
-    skippedCapabilities: z.array(skippedCapabilitySchema),
-    toolCards: z.array(agentCapabilityManifestToolCardSchema),
-    untrustedContextPolicy: z.literal('external_content_reference_only')
-  })
-  .strict();
-
 export const agentCapabilityPreviewSchema = z
   .object({
     runnable: z.literal(false),
@@ -355,7 +336,6 @@ export type AgentCapabilityCard = z.infer<typeof agentCapabilityCardSchema>;
 export type SkippedCapability = z.infer<typeof skippedCapabilitySchema>;
 export type AgentSubagentPreview = z.infer<typeof agentSubagentPreviewSchema>;
 export type AgentCapabilityPreview = z.infer<typeof agentCapabilityPreviewSchema>;
-export type AgentCapabilityManifest = z.infer<typeof agentCapabilityManifestSchema>;
 export type RunCapabilityExecutionScopeV1 = z.infer<typeof runCapabilityManifestToolSchema>['executionScopes'][number];
 export type RunCapabilityProvenanceV1 = z.infer<typeof runCapabilityManifestToolSchema>['provenance'];
 export type RunCapabilityEffectClassV1 = z.infer<typeof runCapabilityManifestToolSchema>['effectClass'];

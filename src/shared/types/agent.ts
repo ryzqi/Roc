@@ -1,6 +1,5 @@
 export type {
   AgentCapabilityCard,
-  AgentCapabilityManifest,
   AgentCapabilityPreview,
   AgentCapabilityPreviewRequest,
   AgentCapabilityRisk,
