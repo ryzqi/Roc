@@ -2,7 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { AsyncSubAgent } from 'deepagents';
-import { createRunSubagents, validateRuntimeSubagents } from '../../../../src/main/services/deep-agent/tools';
+import { createRunSubagents, validateRuntimeSubagents } from '../../../../src/main/services/deep-agent/subagents';
 
 describe('deep agent runtime subagents', () => {
   it('defines the focused research subagent', () => {

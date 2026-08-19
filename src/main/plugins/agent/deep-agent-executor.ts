@@ -29,7 +29,7 @@ import {
   createStreamConsumerState,
   createUsageAccumulator
 } from '../../services/deep-agent/stream-consumers';
-import { createRunSubagents } from '../../services/deep-agent/tools';
+import { createRunSubagents } from '../../services/deep-agent/subagents';
 import { defaultErrorTracker, PreviewStore } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
 import type { WebReadExecutionRequest, WebReadRequest, WebReadResult } from '../../services/web-read-service';
