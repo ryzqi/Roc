@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { CapabilityDescriptor, RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe('task plugin', () => {
   it('declares the Phase 2 critical task plugin contract', () => {
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
 
     expect(plugin.manifest.id).toBe('@roc/plugin-task');
     expect(plugin.manifest.dependencies).toEqual(['@roc/plugin-agent', '@roc/plugin-workspace']);
@@ -80,7 +80,7 @@ describe('task plugin', () => {
   });
 
   it('binds task handlers by capability name instead of descriptor position', async () => {
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const descriptors = plugin.manifest.capabilities as CapabilityDescriptor[];
     const firstDescriptor = descriptors[0];
     const secondDescriptor = descriptors[1];
@@ -107,7 +107,7 @@ describe('task plugin', () => {
 
 
   it('creates task projection tables without duplicating agent history tables', async () => {
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -134,7 +134,7 @@ describe('task plugin', () => {
 
   it('binds handlers and publishes task.updated after mutations', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -175,7 +175,7 @@ describe('task plugin', () => {
 
   it('mirrors agent chat run events into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -340,7 +340,7 @@ describe('task plugin', () => {
 
   it('isolates outbox projection failure and lets a manual replay recover without a new agent event', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
     await plugin.initialize(createContext({ capabilities, eventBus }));
     const task = await capabilities.invoke<BackgroundTaskPreviewRequest, { id: string; runId: string; threadId: string }>(
@@ -388,7 +388,7 @@ describe('task plugin', () => {
     const { journal, repository } = createSeededRepository();
     const task = repository.createBackgroundTask(previewRequest);
     journal.ensurePending(task.threadId);
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
 
     await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
@@ -405,7 +405,7 @@ describe('task plugin', () => {
     journal.ensurePending(task.threadId);
     agentHistory.deleteThread(task.threadId);
     journal.markAgentDeleted(task.threadId);
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
 
     await plugin.initialize(createContext({ capabilities, eventBus: createTestEventBus() }));
@@ -433,7 +433,7 @@ describe('task plugin', () => {
       END;
     `);
     const warn = vi.fn<(message: string, metadata?: Record<string, unknown>) => void>();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
 
     await expect(
@@ -467,7 +467,7 @@ describe('task plugin', () => {
       END;
     `);
     const warn = vi.fn<(message: string, metadata?: Record<string, unknown>) => void>();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
 
     await expect(
@@ -488,7 +488,7 @@ describe('task plugin', () => {
   });
 
   it('unregisters a live task immediately when deletion becomes journaled but fails', async () => {
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
     const eventBus = createTestEventBus();
     await plugin.initialize(createContext({ capabilities, eventBus }));
@@ -524,14 +524,14 @@ describe('task plugin', () => {
         threadId: task.threadId
       }
     });
-    expect(new ThreadDeletionJournal(db).require(task.threadId)).toMatchObject({
+    expect(new ThreadDeletionJournal({ agentHistory: new AgentTaskHistoryContract(agentDb), db }).require(task.threadId)).toMatchObject({
       state: 'pending',
       attemptCount: 1
     });
   });
 
   it('publishes a refresh event when a chat-only thread deletion becomes journaled but fails', async () => {
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = declarePluginCapabilities(plugin);
     const eventBus = createTestEventBus();
     await plugin.initialize(createContext({ capabilities, eventBus }));
@@ -596,13 +596,13 @@ function createTestEventBus(): RocEventBus & { published: RocEventEnvelope[] } {
 }
 
 function createSeededRepository(): {
-  agentHistory: AgentTaskHistoryReader;
+  agentHistory: AgentTaskHistoryContract;
   journal: ThreadDeletionJournal;
   repository: TaskRepository;
 } {
   applyTaskPluginSchema(db);
-  const agentHistory = new AgentTaskHistoryReader(agentDb);
-  const journal = new ThreadDeletionJournal(db);
+  const agentHistory = new AgentTaskHistoryContract(agentDb);
+  const journal = new ThreadDeletionJournal({ agentHistory, db });
   return {
     agentHistory,
     journal,

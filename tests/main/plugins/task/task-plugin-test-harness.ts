@@ -1,18 +1,16 @@
 import type Database from 'better-sqlite3';
 
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
+import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import type { EnabledCapabilities, TaskEvent, TaskKind, TaskStatus } from '../../../../src/shared/types';
 
 export function createTaskPluginTestDatabaseFacade(
   taskDb: Database.Database,
-  agentDb: Database.Database
+  _agentDb: Database.Database
 ): RocPluginContext['database'] {
+  applyTaskDatabaseSchema(taskDb);
   return {
     getConnection: () => taskDb,
-    getCoreConnection: () => taskDb,
-    getAgentConnection: () => agentDb,
-    getMemoryConnection: () => taskDb,
-    getTaskConnection: () => taskDb
   };
 }
 

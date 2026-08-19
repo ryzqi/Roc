@@ -5,9 +5,9 @@ import type { AgentCapabilityPreview, AgentRuntimeStatus, EnabledCapabilities, T
 import { buildAgentCapabilityPreview } from '../../../../src/main/plugins/agent/capability-preview';
 import { applyAgentPluginSchema } from '../../../../src/main/plugins/agent/schema';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
-import { deleteAgentThreadHistory } from '../../../../src/main/infrastructure/agent-history-deletion';
+
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { createTerminalRunTelemetry } from '../agent/run-telemetry-test-helpers';
 
@@ -67,10 +67,10 @@ describe('agent outbox projector', () => {
       workspaceHash: null
     });
 
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const taskId = seedBackgroundTask(repository, taskDb, run);
-    const shadowRepository = new TaskRepository(shadowTaskDb, new AgentTaskHistoryReader(agentDb));
+    const shadowRepository = new TaskRepository(shadowTaskDb, new AgentTaskHistoryContract(agentDb));
     const shadowTaskId = seedBackgroundTask(shadowRepository, shadowTaskDb, run);
     const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
     const event = events[0];
@@ -97,7 +97,7 @@ describe('agent outbox projector', () => {
       lastRunStatus: shadowRepository.findBackgroundTask(shadowTaskId)?.lastRunStatus
     });
 
-    const restartedRepository = new TaskRepository(taskDb, new AgentTaskHistoryReader(agentDb));
+    const restartedRepository = new TaskRepository(taskDb, new AgentTaskHistoryContract(agentDb));
     expect(restartedRepository.projectAgentOutboxEvents({ events, projectorName: 'task_background_status' })).toEqual({
       appliedCount: 0,
       lastSequence: event.sequence
@@ -136,7 +136,7 @@ describe('agent outbox projector', () => {
       })
     });
 
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const taskId = seedBackgroundTask(repository, taskDb, run);
     const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
@@ -188,7 +188,7 @@ describe('agent outbox projector', () => {
   it('marks the linked occurrence failed without letting an older run pause a newer task projection', () => {
     const agentRepository = new AgentSessionRepository(agentDb);
     const run = createRun(agentRepository, 'Fail an older scheduled occurrence');
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const scheduledAt = '2026-07-17T01:00:00.000Z';
     const task = repository.createBackgroundTask({
@@ -283,7 +283,7 @@ describe('agent outbox projector', () => {
       })
     });
 
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const taskId = seedBackgroundTask(repository, taskDb, run);
     const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
@@ -337,13 +337,13 @@ describe('agent outbox projector', () => {
        (run_id, schema_version, session_json, created_at, updated_at)
        VALUES (?, 1, '{}', ?, ?)`
     ).run(deletedRun.id, deletedRun.startedAt, deletedRun.startedAt);
-    deleteAgentThreadHistory(agentDb, deletedRun.threadId);
+    new AgentTaskHistoryContract(agentDb).deleteThread( deletedRun.threadId);
     expect(agentDb.prepare('SELECT COUNT(*) FROM agent_run_telemetry WHERE run_id = ?').pluck().get(deletedRun.id)).toBe(0);
     expect(
       agentDb.prepare('SELECT COUNT(*) FROM agent_langsmith_trace_sessions WHERE run_id = ?').pluck().get(deletedRun.id)
     ).toBe(0);
 
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const tombstone = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });
 
@@ -439,7 +439,7 @@ describe('agent outbox projector', () => {
       }),
       workspaceHash: null
     });
-    const history = new AgentTaskHistoryReader(agentDb);
+    const history = new AgentTaskHistoryContract(agentDb);
     const repository = new TaskRepository(taskDb, history);
     const secondTaskId = seedBackgroundTask(repository, taskDb, secondRun);
     const events = history.listOutboxEventsAfter({ afterSequence: 0, limit: 20 });

@@ -1,5 +1,6 @@
-import { assertPluginId, type DatabasePool } from './database-pool';
-import { applyCoreDatabaseSchema } from './database-schemas';
+import type { Database as DatabaseConnection } from 'better-sqlite3';
+
+import { assertPluginId } from './database-pool';
 
 export type SafeStorageBackend = {
   isEncryptionAvailable(): boolean;
@@ -15,7 +16,7 @@ type PluginSecretFacade = {
 
 export class SecretManager {
   constructor(
-    private readonly databasePool: DatabasePool,
+    private readonly coreDb: DatabaseConnection,
     private readonly safeStorage: SafeStorageBackend
   ) {}
 
@@ -35,9 +36,7 @@ export class SecretManager {
   private get(pluginId: string, key: string): string | null {
     this.requireEncryption();
     assertPluginId(pluginId);
-    this.ensureTable();
-    const ciphertext = this.databasePool
-      .getCoreConnection()
+    const ciphertext = this.coreDb
       .prepare('SELECT ciphertext_base64 FROM plugin_secrets WHERE plugin_id = ? AND key = ?')
       .pluck()
       .get(pluginId, key);
@@ -50,10 +49,8 @@ export class SecretManager {
   private set(pluginId: string, key: string, plaintext: string): void {
     this.requireEncryption();
     assertPluginId(pluginId);
-    this.ensureTable();
     const ciphertext = this.safeStorage.encryptString(plaintext).toString('base64');
-    this.databasePool
-      .getCoreConnection()
+    this.coreDb
       .prepare(
         `INSERT OR REPLACE INTO plugin_secrets (plugin_id, key, ciphertext_base64, updated_at)
          VALUES (?, ?, ?, ?)`
@@ -63,15 +60,9 @@ export class SecretManager {
 
   private clear(pluginId: string, key: string): void {
     assertPluginId(pluginId);
-    this.ensureTable();
-    this.databasePool
-      .getCoreConnection()
+    this.coreDb
       .prepare('DELETE FROM plugin_secrets WHERE plugin_id = ? AND key = ?')
       .run(pluginId, key);
-  }
-
-  private ensureTable(): void {
-    applyCoreDatabaseSchema(this.databasePool.getCoreConnection());
   }
 
   private requireEncryption(): void {

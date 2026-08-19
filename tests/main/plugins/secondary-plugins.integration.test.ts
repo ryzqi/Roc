@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SafeStorageBackend } from '../../../src/main/infrastructure/secret-manager';
 import { KernelRuntime } from '../../../src/main/kernel/kernel-runtime';
 import { createAgentPlugin } from '../../../src/main/plugins/agent';
+import { AgentTaskHistoryContract } from '../../../src/main/plugins/agent/agent-task-history-contract';
 import { StaticAgentModelFactoryAdapter } from '../../../src/main/plugins/agent/model-factory-adapter';
 import { createDiagnosticsPlugin } from '../../../src/main/plugins/diagnostics';
 import { createMcpPlugin } from '../../../src/main/plugins/mcp';
@@ -62,7 +63,7 @@ describe('secondary plugins integration', () => {
     runtime = new KernelRuntime({
       rootDir: root,
       safeStorage: safeStorage(),
-      plugins: [
+      createPlugins: (databasePool) => [
         createAgentPlugin({
           modelFactory: new StaticAgentModelFactoryAdapter({
             providerId: 'openai',
@@ -88,7 +89,9 @@ describe('secondary plugins integration', () => {
             label: 'Secondary Workspace'
           }
         }),
-        createTaskPlugin(),
+        createTaskPlugin({
+          agentTaskHistory: new AgentTaskHistoryContract(databasePool.getConnection('@roc/plugin-agent'))
+        }),
         createWorkspacePlugin({ rootDir: root }),
         createMcpPlugin(),
         createSkillsPlugin({ rootDir: root }),

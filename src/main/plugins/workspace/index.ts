@@ -40,7 +40,6 @@ import type {
   RocSettingsDocument,
   WorkspaceSelectRequest
 } from '../../../shared/types';
-import { applyWorkspaceDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { defaultSettings } from '../../services/config/defaults';
 import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
@@ -120,7 +119,6 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
     initialize: async (context) => {
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
-      applyWorkspaceDatabaseSchema(context.database.getConnection());
       const workspaceService = new WorkspaceService(options.workspaceConfigService ?? createWorkspaceConfigAdapter(context));
       const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService);
       const gitService = new GitService(workspaceService);

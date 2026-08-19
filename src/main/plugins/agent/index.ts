@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BaseStore } from '@langchain/langgraph';
 
 import type {
   AgentRuntimeStatus,
@@ -33,7 +34,6 @@ import {
   chatStartRunRequestSchema,
   chatStartRunResultSchema
 } from '../../../shared/schemas/chat';
-import { applyMemoryDatabaseSchema } from '../../infrastructure/database-schemas';
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { AgentLangSmithRunTracingManager } from '../../services/deep-agent/langsmith-tracing';
@@ -41,7 +41,6 @@ import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpoi
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { HookRuntime } from '../../services/hooks';
 import type { MetricsService } from '../../services/metrics-service';
-import { RocSqliteStore } from '../../services/memory/sqlite-store';
 import type { RocPaths } from '../../services/paths';
 import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
 import { createAgentDeepAgentExecutor } from './deep-agent-executor';
@@ -52,7 +51,6 @@ import { AgentRunEventLog } from './run-event-log';
 import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor } from './runtime';
 import { AgentPluginRuntime } from './runtime';
 import type { AgentLifecycleHookEmitter } from './runtime-types';
-import { applyAgentPluginSchema } from './schema';
 import { AgentSessionRepository } from './session-repository';
 
 const pluginId = '@roc/plugin-agent';
@@ -118,6 +116,7 @@ export type AgentPluginOptions = {
   };
   deepAgentExecutor?: {
     appVersion: string;
+    memoryStore: BaseStore;
     paths: RocPaths;
     getMemorySettings?: () => AppSettings['memory'];
     hookRuntime?: Pick<HookRuntime, 'runEvent'>;
@@ -149,8 +148,7 @@ export function createAgentPlugin(options: AgentPluginOptions = {}): RocPlugin {
     initialize: async (context) => {
       const langSmithSettings = new AgentLangSmithSettingsStore(context.config, context.secrets);
       langSmithSettings.initialize();
-      const db = context.database.getAgentConnection();
-      applyAgentPluginSchema(db);
+      const db = context.database.getConnection();
       const langSmithTraceSessions = new AgentLangSmithTraceSessionRepository(db);
       const langSmithTracingManager = createAgentLangSmithTracingManager(
         langSmithSettings,
@@ -251,9 +249,7 @@ function resolveDeepAgentExecutor(
   if (langSmithTracingManager === null) {
     throw new Error('agent_langsmith_tracing_manager_missing');
   }
-  const agentDb = context.database.getAgentConnection();
-  const memoryDb = context.database.getMemoryConnection();
-  applyMemoryDatabaseSchema(memoryDb);
+  const agentDb = context.database.getConnection();
   return createAgentDeepAgentExecutor({
     capabilities: context.capabilities,
     checkpointer: new RocSqliteCheckpointer(agentDb),
@@ -263,7 +259,7 @@ function resolveDeepAgentExecutor(
     langSmithTracingProvider: (correlation) => langSmithTracingManager.getRunTracing(correlation),
     metricsService: option.metricsService,
     paths: option.paths,
-    store: new RocSqliteStore(memoryDb),
+    store: option.memoryStore,
     toolEffectStore: new AgentToolEffectStore(agentDb)
   });
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ConfigStore } from '../../../src/main/infrastructure/config-store';
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
+import { applyCoreDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 
 let root: string;
 let pool: DatabasePool;
@@ -12,6 +13,7 @@ let pool: DatabasePool;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-config-store-test-'));
   pool = new DatabasePool(root);
+  applyCoreDatabaseSchema(pool.getCoreConnection());
   mkdirSync(join(root, 'config'), { recursive: true });
 });
 
@@ -44,7 +46,7 @@ describe('ConfigStore', () => {
       }
     };
     writeFileSync(join(root, 'config', 'settings.json'), `${JSON.stringify(document, null, 2)}\n`, 'utf8');
-    const store = new ConfigStore(pool, join(root, 'config'));
+    const store = new ConfigStore(pool.getCoreConnection(), join(root, 'config'));
 
     store.migrateCurrentSettings('@roc/plugin-agent');
     const agentConfig = store.createPluginConfigFacade('@roc/plugin-agent');
@@ -73,7 +75,7 @@ describe('ConfigStore', () => {
   });
 
   it('rejects invalid plugin ids instead of writing unscoped config', () => {
-    const store = new ConfigStore(pool, join(root, 'config'));
+    const store = new ConfigStore(pool.getCoreConnection(), join(root, 'config'));
 
     expect(() => store.createPluginConfigFacade('plugin-agent')).toThrow(/invalid_plugin_id/u);
   });

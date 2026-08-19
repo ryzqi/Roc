@@ -8,6 +8,7 @@ import {
 } from '../../../src/main/infrastructure/database-maintenance';
 import type { RocDatabaseRetentionResult } from '../../../src/main/infrastructure/database-retention';
 import { applyCoreDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
+import type { DatabasePool } from '../../../src/main/infrastructure/database-pool';
 
 let coreDb: Database.Database;
 
@@ -154,7 +155,7 @@ function createService(input: {
   return {
     jobs,
     service: new DatabaseMaintenanceService({
-      coreDb,
+      pool: { getCoreConnection: () => coreDb } as DatabasePool,
       jobs,
       logger: {
         warn: input.warn === undefined ? () => {} : input.warn

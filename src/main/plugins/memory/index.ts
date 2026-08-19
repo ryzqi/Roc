@@ -17,7 +17,6 @@ import {
   type MemoryStoreRepositorySettings,
   type MemoryWorkspaceContext
 } from './memory-store-repository';
-import { applyMemoryPluginSchema } from './schema';
 
 const pluginId = '@roc/plugin-memory';
 const capabilityVersion = '1.0.0';
@@ -159,8 +158,7 @@ export function createMemoryPlugin(options: MemoryPluginOptions = {}): RocPlugin
       capabilities: memoryCapabilityDescriptors
     },
     initialize: async (context) => {
-      const db = context.database.getMemoryConnection();
-      applyMemoryPluginSchema(db);
+      const db = context.database.getConnection();
       const auditRepository = new AutoMemoryAuditRepository(db);
       const getWorkspace = createMemoryWorkspaceProvider(options);
       const getMemorySettings =

@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Database as DatabaseConnection } from 'better-sqlite3';
-
 import type { RocDatabaseHealthReport } from './database-health';
+import type { DatabasePool } from './database-pool';
 import type { RocDatabaseRetentionResult } from './database-retention';
 
 const fullCheckInitialDelayMs = 2 * 60 * 1000;
@@ -18,7 +17,7 @@ export type DatabaseMaintenanceJobs = {
 };
 
 export type DatabaseMaintenanceServiceInput = {
-  coreDb: DatabaseConnection;
+  pool: DatabasePool;
   logger: {
     warn(message: string, metadata?: Record<string, unknown>): void;
   };
@@ -99,7 +98,7 @@ export class DatabaseMaintenanceService {
     const startedAt = this.input.now();
     let runningPersisted = false;
     try {
-      this.input.coreDb
+      this.input.pool.getCoreConnection()
         .prepare(
           `INSERT INTO database_maintenance_runs
            (id, kind, status, started_at, finished_at, detail_json, error_message)
@@ -114,7 +113,7 @@ export class DatabaseMaintenanceService {
         this.warnFailure(kind, 'database_full_health_unhealthy');
         return;
       }
-      this.input.coreDb
+      this.input.pool.getCoreConnection()
         .prepare(
           `UPDATE database_maintenance_runs
            SET status = 'complete', finished_at = ?, detail_json = ?, error_message = NULL
@@ -131,7 +130,7 @@ export class DatabaseMaintenanceService {
   }
 
   private finishFailed(id: string, detailJson: string, errorMessage: string): void {
-    this.input.coreDb
+    this.input.pool.getCoreConnection()
       .prepare(
         `UPDATE database_maintenance_runs
          SET status = 'failed', finished_at = ?, detail_json = ?, error_message = ?

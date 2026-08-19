@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { CapabilityRegistry } from '../../src/main/kernel/capability-registry';
 import { createTaskPlugin } from '../../src/main/plugins/task';
+import type { AgentTaskHistoryContract } from '../../src/main/plugins/agent/agent-task-history-contract';
 import { MINIMAL_BACKGROUND_TASK_PROPOSE_EXAMPLE } from '../../src/shared/background-task-tool-contract';
 import type { BackgroundTaskPreviewRequest } from '../../src/shared/types';
 import { invalidProposeInput, minimalProposeToolInput, validProposeInput } from '../_factories/background-task';
@@ -159,7 +160,7 @@ describe('background task capability schemas', () => {
 });
 
 async function expectTaskCapabilityInputRejected(name: string, input: unknown): Promise<void> {
-  const plugin = createTaskPlugin();
+  const plugin = createTaskPlugin({ agentTaskHistory: {} as AgentTaskHistoryContract });
   const descriptor = plugin.manifest.capabilities.find((capability) => capability.name === name);
   if (descriptor === undefined) {
     throw new Error(`Missing task capability descriptor: ${name}`);

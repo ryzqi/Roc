@@ -159,7 +159,7 @@ describe('main kernel bootstrap integration', () => {
   it('releases the maintenance lease when activation fails before databases open', async () => {
     const runtime = new KernelRuntime({
       rootDir: join(root, 'plugin-data'),
-      plugins: [],
+      createPlugins: () => [],
       safeStorage: safeStorage(),
       activateMigration: () => {
         throw new Error('activation_injected');

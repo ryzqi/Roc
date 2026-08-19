@@ -58,10 +58,6 @@ export type RocPluginContext = {
   readonly capabilities: RocCapabilityRegistry;
   readonly database: {
     getConnection(): Database;
-    getCoreConnection(): Database;
-    getAgentConnection(): Database;
-    getMemoryConnection(): Database;
-    getTaskConnection(): Database;
   };
   readonly config: { get<T>(key: string): T | null; set<T>(key: string, value: T): void };
   readonly secrets: { get(key: string): string | null; set(key: string, plaintext: string): void; clear(key: string): void };

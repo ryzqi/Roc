@@ -14,7 +14,7 @@ import { compileRunCapabilityManifest } from '../../../../src/main/plugins/agent
 import { AgentPluginRuntime } from '../../../../src/main/plugins/agent/runtime';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe('TaskScheduler crash consistency characterization', () => {
   it('claims the occurrence before it starts the agent and links the resulting run', async () => {
-    const repository = new TaskRepository(db, new AgentTaskHistoryReader(agentDb));
+    const repository = new TaskRepository(db, new AgentTaskHistoryContract(agentDb));
     const task = repository.createBackgroundTask({
       goal: 'Run a due background task',
       trigger: {
@@ -147,7 +147,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
-      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryReader(firstAgentDb));
+      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const task = firstRepository.createBackgroundTask({
         goal: 'Recover a claim before agent start',
         trigger: {
@@ -185,7 +185,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
-      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryReader(restartedAgentDb));
+      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       const restartedAgentRepository = new AgentSessionRepository(restartedAgentDb);
       const restartedRuntime = createSchedulerAgentRuntime(restartedAgentRepository);
       const linked = createDeferred();
@@ -237,7 +237,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
-      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryReader(firstAgentDb));
+      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const firstAgentRepository = new AgentSessionRepository(firstAgentDb);
       const firstRuntime = createSchedulerAgentRuntime(firstAgentRepository);
       const task = firstRepository.createBackgroundTask({
@@ -303,7 +303,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       restartedAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
-      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryReader(restartedAgentDb));
+      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       const restartedAgentRepository = new AgentSessionRepository(restartedAgentDb);
       const restartedRuntime = createSchedulerAgentRuntime(restartedAgentRepository);
       const restartedDispatchKeys: string[] = [];
@@ -358,7 +358,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       firstAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
-      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryReader(firstAgentDb));
+      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const firstAgentRepository = new AgentSessionRepository(firstAgentDb);
       const firstRuntime = createSchedulerAgentRuntime(firstAgentRepository);
       const task = firstRepository.createBackgroundTask({
@@ -424,7 +424,7 @@ describe('TaskScheduler crash consistency characterization', () => {
         throw new Error('terminal_outbox_missing_after_restart');
       }
       const restartedPlugin = await initializePersistentTaskPlugin(restartedTaskDb, restartedAgentDb);
-      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryReader(restartedAgentDb));
+      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       expect(restartedRepository.getAgentOutboxCursor('task_background_status')).toBe(outbox.sequence);
       expect(
         restartedTaskDb.prepare('SELECT status, terminal_at FROM scheduled_occurrences WHERE occurrence_key = ?').get(occurrence.occurrence_key)
@@ -437,7 +437,7 @@ describe('TaskScheduler crash consistency characterization', () => {
       replayedTaskDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(replayedTaskDb);
       const replayedPlugin = await initializePersistentTaskPlugin(replayedTaskDb, restartedAgentDb);
-      const replayedRepository = new TaskRepository(replayedTaskDb, new AgentTaskHistoryReader(restartedAgentDb));
+      const replayedRepository = new TaskRepository(replayedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       expect(replayedRepository.getAgentOutboxCursor('task_background_status')).toBe(outbox.sequence);
       expect(
         replayedTaskDb.prepare('SELECT status, terminal_at FROM scheduled_occurrences WHERE occurrence_key = ?').get(occurrence.occurrence_key)
@@ -531,7 +531,7 @@ function createDeferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 async function initializePersistentTaskPlugin(taskDb: Database.Database, agentDb: Database.Database) {
-  const plugin = createTaskPlugin();
+  const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
   const capabilities = new CapabilityRegistry();
   for (const descriptor of plugin.manifest.capabilities) {
     capabilities.declare(plugin.manifest.id, descriptor);

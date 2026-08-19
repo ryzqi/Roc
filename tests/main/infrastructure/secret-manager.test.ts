@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
+import { applyCoreDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { SecretManager, type SafeStorageBackend } from '../../../src/main/infrastructure/secret-manager';
 
 let root: string;
@@ -26,6 +27,7 @@ function createBackend(available = true): SafeStorageBackend {
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-secret-manager-test-'));
   pool = new DatabasePool(root);
+  applyCoreDatabaseSchema(pool.getCoreConnection());
 });
 
 afterEach(() => {
@@ -35,7 +37,7 @@ afterEach(() => {
 
 describe('SecretManager', () => {
   it('stores safeStorage-encrypted secrets in plugin scope', () => {
-    const manager = new SecretManager(pool, createBackend());
+    const manager = new SecretManager(pool.getCoreConnection(), createBackend());
     const agentSecrets = manager.createPluginSecretFacade('@roc/plugin-agent');
     const taskSecrets = manager.createPluginSecretFacade('@roc/plugin-task');
 
@@ -63,7 +65,7 @@ describe('SecretManager', () => {
   });
 
   it('fails secret calls when safeStorage encryption is unavailable', () => {
-    const manager = new SecretManager(pool, createBackend(false));
+    const manager = new SecretManager(pool.getCoreConnection(), createBackend(false));
     const secrets = manager.createPluginSecretFacade('@roc/plugin-agent');
 
     expect(() => secrets.set('apiKey', 'sk-test')).toThrow(/secret_storage_unavailable/u);
@@ -71,7 +73,7 @@ describe('SecretManager', () => {
   });
 
   it('clears plugin-scoped secrets', () => {
-    const manager = new SecretManager(pool, createBackend());
+    const manager = new SecretManager(pool.getCoreConnection(), createBackend());
     const secrets = manager.createPluginSecretFacade('@roc/plugin-agent');
 
     secrets.set('apiKey', 'sk-test');

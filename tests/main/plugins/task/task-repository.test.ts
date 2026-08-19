@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
@@ -75,7 +75,7 @@ describe('TaskRepository', () => {
       status: 'running',
       triggerType: 'manual'
     });
-    expect(new AgentTaskHistoryReader(agentDb).listEventsForThread(task.threadId)).toContainEqual(
+    expect(new AgentTaskHistoryContract(agentDb).listEventsForThread(task.threadId)).toContainEqual(
       expect.objectContaining({
         runId: task.runId,
         type: 'background_task_created',
@@ -136,9 +136,13 @@ describe('TaskRepository', () => {
     expect(repository.findBackgroundTask(task.id)?.status).toBe('archived');
   });
 
-  it('physically deletes background thread history and task projection rows', () => {
+  it('reflects thread history and task projection rows deleted by the journal operation', async () => {
     applyTaskPluginSchema(db);
     const repository = createRepository();
+    const journal = new ThreadDeletionJournal({
+      agentHistory: new AgentTaskHistoryContract(agentDb),
+      db
+    });
     const task = repository.createBackgroundTask(manualPreviewRequest);
     const now = '2026-07-06T00:00:00.000Z';
     repository.recordScheduledTaskRun({
@@ -191,10 +195,7 @@ describe('TaskRepository', () => {
     expect(countRows(agentDb, 'agent_tool_effects')).toBe(1);
     expect(countRows(agentDb, 'context_artifacts')).toBe(1);
 
-    expect(repository.deleteThread(task.threadId)).toEqual({
-      deleted: true,
-      threadId: task.threadId
-    });
+    await expect(journal.deleteThread(task.threadId)).resolves.toEqual({ deleted: true, threadId: task.threadId });
 
     expect(repository.findBackgroundTask(task.id)).toBeNull();
     expect(countRows(db, 'scheduled_task_runs')).toBe(0);
@@ -211,20 +212,24 @@ describe('TaskRepository', () => {
     expect(countRows(agentDb, 'langgraph_checkpoint_writes')).toBe(0);
     expect(countRows(agentDb, 'agent_tool_effects')).toBe(0);
     expect(countRows(agentDb, 'context_artifacts')).toBe(0);
-    expect(new ThreadDeletionJournal(db).require(task.threadId).state).toBe('complete');
+    expect(journal.require(task.threadId).state).toBe('complete');
   });
 
-  it('keeps an agent-delete failure pending, hidden, and retryable', () => {
+  it('keeps an agent-delete failure pending, hidden, and retryable', async () => {
     applyTaskPluginSchema(db);
-    const journal = new ThreadDeletionJournal(db, () => '2026-07-10T02:00:00.000Z');
-    const agentHistory = new AgentTaskHistoryReader(agentDb);
+    const agentHistory = new AgentTaskHistoryContract(agentDb);
+    const journal = new ThreadDeletionJournal({
+      agentHistory,
+      db,
+      now: () => '2026-07-10T02:00:00.000Z'
+    });
     const repository = new TaskRepository(db, agentHistory, journal);
     const task = repository.createBackgroundTask(manualPreviewRequest);
     const deleteSpy = vi.spyOn(agentHistory, 'deleteThread').mockImplementationOnce(() => {
       throw new Error('agent_delete_injected');
     });
 
-    expect(() => repository.deleteThread(task.threadId)).toThrow('agent_delete_injected');
+    await expect(journal.deleteThread(task.threadId)).rejects.toThrow('agent_delete_injected');
     expect(journal.require(task.threadId)).toMatchObject({
       state: 'pending',
       attemptCount: 1,
@@ -235,16 +240,21 @@ describe('TaskRepository', () => {
     expect(repository.getSnapshot().threads.some((thread) => thread.id === task.threadId)).toBe(false);
 
     deleteSpy.mockRestore();
-    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    await expect(journal.deleteThread(task.threadId)).resolves.toEqual({ deleted: true, threadId: task.threadId });
     expect(journal.require(task.threadId).state).toBe('complete');
-    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    await expect(journal.deleteThread(task.threadId)).resolves.toEqual({ deleted: true, threadId: task.threadId });
     expect(journal.require(task.threadId).attemptCount).toBe(1);
   });
 
-  it('resumes projection deletion after agent history has already been deleted', () => {
+  it('resumes projection deletion after agent history has already been deleted', async () => {
     applyTaskPluginSchema(db);
-    const journal = new ThreadDeletionJournal(db, () => '2026-07-10T02:00:00.000Z');
-    const repository = new TaskRepository(db, new AgentTaskHistoryReader(agentDb), journal);
+    const agentHistory = new AgentTaskHistoryContract(agentDb);
+    const journal = new ThreadDeletionJournal({
+      agentHistory,
+      db,
+      now: () => '2026-07-10T02:00:00.000Z'
+    });
+    const repository = new TaskRepository(db, agentHistory, journal);
     const task = repository.createBackgroundTask(manualPreviewRequest);
     db.exec(`
       CREATE TRIGGER fail_background_task_delete
@@ -254,7 +264,7 @@ describe('TaskRepository', () => {
       END;
     `);
 
-    expect(() => repository.deleteThread(task.threadId)).toThrow('projection_delete_injected');
+    await expect(journal.deleteThread(task.threadId)).rejects.toThrow('projection_delete_injected');
     expect(journal.require(task.threadId)).toMatchObject({
       state: 'agent_deleted',
       attemptCount: 1
@@ -264,15 +274,16 @@ describe('TaskRepository', () => {
     expect(countRows(db, 'background_tasks')).toBe(1);
 
     db.exec('DROP TRIGGER fail_background_task_delete;');
-    expect(repository.deleteThread(task.threadId)).toEqual({ deleted: true, threadId: task.threadId });
+    await expect(journal.deleteThread(task.threadId)).resolves.toEqual({ deleted: true, threadId: task.threadId });
     expect(journal.require(task.threadId).state).toBe('complete');
     expect(countRows(db, 'background_tasks')).toBe(0);
   });
 
   it('hides every public task surface as soon as deletion is journaled', () => {
     applyTaskPluginSchema(db);
-    const journal = new ThreadDeletionJournal(db);
-    const repository = new TaskRepository(db, new AgentTaskHistoryReader(agentDb), journal);
+    const agentHistory = new AgentTaskHistoryContract(agentDb);
+    const journal = new ThreadDeletionJournal({ agentHistory, db });
+    const repository = new TaskRepository(db, agentHistory, journal);
     const request: BackgroundTaskPreviewRequest = {
       ...manualPreviewRequest,
       trigger: {
@@ -314,7 +325,7 @@ function rawRow(tableName: string, id: string): Record<string, unknown> {
 }
 
 function createRepository(): TaskRepository {
-  return new TaskRepository(db, new AgentTaskHistoryReader(agentDb));
+  return new TaskRepository(db, new AgentTaskHistoryContract(agentDb));
 }
 
 function columnNames(tableName: string): string[] {

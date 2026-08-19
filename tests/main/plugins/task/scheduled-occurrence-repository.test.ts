@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 
@@ -442,7 +442,7 @@ describe('scheduled occurrence repository', () => {
       firstAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(firstTaskDb);
       applyAgentDatabaseSchema(firstAgentDb);
-      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryReader(firstAgentDb));
+      const firstRepository = new TaskRepository(firstTaskDb, new AgentTaskHistoryContract(firstAgentDb));
       const task = firstRepository.createBackgroundTask({
         goal: 'Reclaim after restart',
         trigger: {
@@ -475,7 +475,7 @@ describe('scheduled occurrence repository', () => {
       restartedAgentDb.pragma('foreign_keys = ON');
       applyTaskPluginSchema(restartedTaskDb);
       applyAgentDatabaseSchema(restartedAgentDb);
-      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryReader(restartedAgentDb));
+      const restartedRepository = new TaskRepository(restartedTaskDb, new AgentTaskHistoryContract(restartedAgentDb));
       restartedRepository.reconcileScheduledOccurrences({ now: '2026-07-17T00:01:01.000Z' });
 
       expect(
@@ -496,7 +496,7 @@ describe('scheduled occurrence repository', () => {
 });
 
 function createRepository(): TaskRepository {
-  return new TaskRepository(taskDb, new AgentTaskHistoryReader(agentDb));
+  return new TaskRepository(taskDb, new AgentTaskHistoryContract(agentDb));
 }
 
 function createDueTask(repository: TaskRepository, scheduledAt: string, triggerType: 'cron' | 'once' = 'once') {

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   BackgroundTask,
@@ -48,7 +49,7 @@ afterEach(() => {
 describe('task plugin', () => {
   it('runs background tasks in their existing thread and waits for completion before marking success', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     const startRequests: ChatStartRunRequest[] = [];
     registerAgentRunStart(capabilities, eventBus, startRequests);
@@ -105,7 +106,7 @@ describe('task plugin', () => {
 
   it('pauses background tasks after failed agent runs and records the failure status', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     const startRequests: ChatStartRunRequest[] = [];
     registerAgentRunStart(capabilities, eventBus, startRequests);
@@ -162,7 +163,7 @@ describe('task plugin', () => {
 
   it('keeps background runs active during agent recovery and preserves saved run context', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     const startRequests: ChatStartRunRequest[] = [];
     registerAgentRunStart(capabilities, eventBus, startRequests);

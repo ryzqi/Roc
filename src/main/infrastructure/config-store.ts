@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Database as DatabaseConnection } from 'better-sqlite3';
 
-import { assertPluginId, type DatabasePool } from './database-pool';
-import { applyCoreDatabaseSchema } from './database-schemas';
+import { assertPluginId } from './database-pool';
 
 type PluginConfigFacade = {
   get<T>(key: string): T | null;
@@ -11,7 +11,7 @@ type PluginConfigFacade = {
 
 export class ConfigStore {
   constructor(
-    private readonly databasePool: DatabasePool,
+    private readonly coreDb: DatabaseConnection,
     private readonly configDir: string
   ) {}
 
@@ -33,9 +33,7 @@ export class ConfigStore {
 
   private get<T>(pluginId: string, key: string): T | null {
     assertPluginId(pluginId);
-    this.ensureTable();
-    const value = this.databasePool
-      .getCoreConnection()
+    const value = this.coreDb
       .prepare('SELECT value_json FROM plugin_config WHERE plugin_id = ? AND key = ?')
       .pluck()
       .get(pluginId, key);
@@ -47,17 +45,11 @@ export class ConfigStore {
 
   private set<T>(pluginId: string, key: string, value: T): void {
     assertPluginId(pluginId);
-    this.ensureTable();
-    this.databasePool
-      .getCoreConnection()
+    this.coreDb
       .prepare(
         `INSERT OR REPLACE INTO plugin_config (plugin_id, key, value_json, updated_at)
          VALUES (?, ?, ?, ?)`
       )
       .run(pluginId, key, JSON.stringify(value), new Date().toISOString());
-  }
-
-  private ensureTable(): void {
-    applyCoreDatabaseSchema(this.databasePool.getCoreConnection());
   }
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type { TaskMessageHistoryPage, TaskMessageHistoryRequest } from '../../../../src/shared/types';
 import { createTaskPluginTestDatabaseFacade, createTaskPluginTestEventBus } from './task-plugin-test-harness';
@@ -28,7 +29,7 @@ afterEach(() => {
 describe('task plugin', () => {
   it('returns enough thread history to rebuild a tool run after many streamed deltas', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -221,7 +222,7 @@ describe('task plugin', () => {
 
   it('returns bounded latest, before, and after pages in ascending sequence order', async () => {
     const capabilities = new CapabilityRegistry();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
     }
@@ -267,7 +268,7 @@ describe('task plugin', () => {
     { threadId: 'thread-page', limit: 100, cursor: null, extra: true }
   ])('rejects an invalid history page request %#', async (request) => {
     const capabilities = new CapabilityRegistry();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
     }

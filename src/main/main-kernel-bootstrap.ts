@@ -4,11 +4,13 @@ import type { AgentRuntimeStatus, AppStatus, SettingsSaveRequest, SystemAppearan
 import { setLogService } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/secret-manager';
 import { deleteLegacyMonolithData } from './infrastructure/legacy-data-cleanup';
+import type { DatabasePool } from './infrastructure/database-pool';
 import { KernelRuntime } from './kernel/kernel-runtime';
 import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';
 import { createAppPlugin } from './plugins/app';
 import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
 import { createAgentPlugin } from './plugins/agent';
+import { AgentTaskHistoryContract } from './plugins/agent/agent-task-history-contract';
 import { createDiagnosticsPlugin } from './plugins/diagnostics';
 import type { RuntimeMetricsProvider } from './plugins/diagnostics/runtime-metrics';
 import { createMcpPlugin } from './plugins/mcp';
@@ -17,6 +19,7 @@ import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
 import { createSkillsPlugin } from './plugins/skills';
 import { createTaskPlugin } from './plugins/task';
 import { createWorkspacePlugin } from './plugins/workspace';
+import { RocSqliteStore } from './services/memory/sqlite-store';
 import { ConfigService } from './services/config-service';
 import { HookCommandRunner, HookConfigService, HookRuntime, HookTrustService } from './services/hooks';
 import { LangChainModelFactory } from './services/langchain-model-factory';
@@ -80,26 +83,26 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
   const metricsService = new MetricsService();
   const modelFactory = new LangChainModelFactory(configService, secretService, logService);
   const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
-  const plugins =
-    options.plugins ??
-    createDefaultMainKernelPlugins({
-      configService,
-      hookRuntime,
-      metricsService,
-      modelFactory,
-      paths,
-      performanceObserverService,
-      runtimeMetricsProvider: options.runtimeMetricsProvider,
-      version: requireMainKernelVersion(options.version),
-      isPackaged: options.isPackaged,
-      getAppearance: options.getAppearance
-    });
   const runtime = new KernelRuntime({
     activateMigration: async () => {
       await deleteLegacyMonolithData(paths.root);
     },
     rootDir: pluginDataDir,
-    plugins,
+    createPlugins: (databasePool) =>
+      options.plugins ??
+      createDefaultMainKernelPlugins({
+        configService,
+        databasePool,
+        hookRuntime,
+        metricsService,
+        modelFactory,
+        paths,
+        performanceObserverService,
+        runtimeMetricsProvider: options.runtimeMetricsProvider,
+        version: requireMainKernelVersion(options.version),
+        isPackaged: options.isPackaged,
+        getAppearance: options.getAppearance
+      }),
     safeStorage: options.safeStorage
   });
 
@@ -145,6 +148,7 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
 }
 
 function createDefaultMainKernelPlugins(input: {
+  databasePool: DatabasePool;
   paths: RocPaths;
   configService: ConfigService;
   hookRuntime: HookRuntime;
@@ -192,6 +196,7 @@ function createDefaultMainKernelPlugins(input: {
         },
         hookRuntime: input.hookRuntime,
         metricsService: input.metricsService,
+        memoryStore: new RocSqliteStore(input.databasePool.getConnection('@roc/plugin-memory')),
         paths: input.paths
       },
       modelFactory: new LangChainAgentModelFactoryAdapter(input.modelFactory, {
@@ -215,7 +220,9 @@ function createDefaultMainKernelPlugins(input: {
         return configService.getSettings().memory;
       }
     }),
-    createTaskPlugin(),
+    createTaskPlugin({
+      agentTaskHistory: new AgentTaskHistoryContract(input.databasePool.getConnection('@roc/plugin-agent'))
+    }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceConfigService: configService }),
     createMcpPlugin({ configService }),
     createSkillsPlugin({ rootDir: input.paths.root }),

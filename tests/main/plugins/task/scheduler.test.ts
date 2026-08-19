@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskScheduler } from '../../../../src/main/plugins/task/scheduler';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
@@ -430,7 +430,7 @@ describe('TaskScheduler', () => {
       failurePolicy: 'pause_and_report',
       notificationPolicy: 'failures_and_confirmations'
     });
-    new ThreadDeletionJournal(db).ensurePending(task.threadId);
+    new ThreadDeletionJournal({ agentHistory: new AgentTaskHistoryContract(agentDb), db }).ensurePending(task.threadId);
     const startRun = vi.fn();
     const scheduler = new TaskScheduler(repository, { startRun });
 
@@ -443,7 +443,7 @@ describe('TaskScheduler', () => {
 });
 
 function createRepository(): TaskRepository {
-  return new TaskRepository(db, new AgentTaskHistoryReader(agentDb));
+  return new TaskRepository(db, new AgentTaskHistoryContract(agentDb));
 }
 
 function seedAgentRun(runId: string, task: { createdAt: string; goal: string; threadId: string; workspacePath: string }): void {

@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
+import { applyMemoryDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createMemoryPlugin, type MemoryPluginOptions } from '../../../../src/main/plugins/memory';
 import { buildWorkspaceHash } from '../../../../src/main/services/paths';
@@ -25,6 +26,7 @@ let coreDb: Database.Database;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'roc-memory-plugin-test-'));
   pluginDb = new Database(':memory:');
+  applyMemoryDatabaseSchema(pluginDb);
   coreDb = new Database(':memory:');
 });
 
@@ -534,10 +536,6 @@ function createContext(input: { capabilities: CapabilityRegistry; eventBus: RocE
     capabilities: input.capabilities,
     database: {
       getConnection: () => pluginDb,
-      getCoreConnection: () => coreDb,
-      getAgentConnection: () => pluginDb,
-      getMemoryConnection: () => pluginDb,
-      getTaskConnection: () => pluginDb
     },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },

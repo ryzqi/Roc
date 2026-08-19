@@ -77,18 +77,10 @@ export class DatabasePool {
 
   createPluginDatabaseFacade(pluginId: string): {
     getConnection(): DatabaseConnection;
-    getCoreConnection(): DatabaseConnection;
-    getAgentConnection(): DatabaseConnection;
-    getMemoryConnection(): DatabaseConnection;
-    getTaskConnection(): DatabaseConnection;
   } {
     assertPluginId(pluginId);
     return {
-      getConnection: () => this.getConnection(pluginId),
-      getCoreConnection: () => this.getCoreConnection(),
-      getAgentConnection: () => this.getConnection('@roc/plugin-agent'),
-      getMemoryConnection: () => this.getConnection('@roc/plugin-memory'),
-      getTaskConnection: () => this.getConnection('@roc/plugin-task')
+      getConnection: () => this.getConnection(pluginId)
     };
   }
 

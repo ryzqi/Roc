@@ -1,5 +1,8 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
+import type { TaskDeleteThreadResult } from '../../../shared/types';
+import type { AgentTaskHistoryContract } from '../agent/agent-task-history-contract';
+
 export type ThreadDeletionState = 'pending' | 'agent_deleted' | 'complete';
 
 export type ThreadDeletionRecord = {
@@ -22,11 +25,79 @@ type ThreadDeletionRow = {
   completed_at: string | null;
 };
 
+type ThreadDeletionLifecycleInput = {
+  linkedTaskIds: string[];
+  threadId: string;
+};
+
+type ThreadDeletionRecoveryFailure = {
+  error: unknown;
+  record: ThreadDeletionRecord;
+};
+
+export type ThreadDeletionLifecycle = {
+  onDeletionStarted(input: ThreadDeletionLifecycleInput): Promise<void>;
+  onDeletionCompleted(input: ThreadDeletionLifecycleInput): Promise<void>;
+  onRecoveryFailed(input: ThreadDeletionRecoveryFailure): void;
+};
+
+export type ThreadDeletionJournalInput = {
+  agentHistory: AgentTaskHistoryContract;
+  db: DatabaseConnection;
+  lifecycle?: ThreadDeletionLifecycle;
+  now?: () => string;
+};
+
+const noOpLifecycle: ThreadDeletionLifecycle = {
+  onDeletionStarted: async () => {},
+  onDeletionCompleted: async () => {},
+  onRecoveryFailed: () => {}
+};
+
 export class ThreadDeletionJournal {
-  constructor(
-    private readonly db: DatabaseConnection,
-    private readonly now: () => string = () => new Date().toISOString()
-  ) {}
+  private readonly agentHistory: AgentTaskHistoryContract;
+  private readonly db: DatabaseConnection;
+  private readonly lifecycle: ThreadDeletionLifecycle;
+  private readonly now: () => string;
+
+  constructor(input: ThreadDeletionJournalInput) {
+    this.agentHistory = input.agentHistory;
+    this.db = input.db;
+    this.lifecycle = input.lifecycle === undefined ? noOpLifecycle : input.lifecycle;
+    this.now = input.now === undefined ? () => new Date().toISOString() : input.now;
+  }
+
+  async deleteThread(threadId: string): Promise<TaskDeleteThreadResult> {
+    const existing = this.find(threadId);
+    if (existing !== null && existing.state === 'complete') {
+      return { deleted: true, threadId };
+    }
+    const linkedTaskIds = this.listLinkedTaskIds(threadId);
+    if (existing === null) {
+      this.agentHistory.requireActiveThread(threadId);
+      this.ensurePending(threadId);
+      await this.lifecycle.onDeletionStarted({ linkedTaskIds, threadId });
+    }
+    this.advance(threadId);
+    await this.lifecycle.onDeletionCompleted({ linkedTaskIds, threadId });
+    return { deleted: true, threadId };
+  }
+
+  async recoverIncomplete(): Promise<void> {
+    for (const record of this.listIncomplete()) {
+      const linkedTaskIds = this.listLinkedTaskIds(record.threadId);
+      try {
+        await this.lifecycle.onDeletionStarted({ linkedTaskIds, threadId: record.threadId });
+        this.advance(record.threadId);
+        await this.lifecycle.onDeletionCompleted({ linkedTaskIds, threadId: record.threadId });
+      } catch (error) {
+        this.lifecycle.onRecoveryFailed({
+          error,
+          record: this.require(record.threadId)
+        });
+      }
+    }
+  }
 
   ensurePending(threadId: string): ThreadDeletionRecord {
     const now = this.now();
@@ -116,6 +187,57 @@ export class ThreadDeletionJournal {
     if (result.changes !== 1) {
       throw new Error('thread_deletion_not_found');
     }
+  }
+
+  private advance(threadId: string): void {
+    let record = this.require(threadId);
+    if (record.state === 'pending') {
+      try {
+        this.agentHistory.deleteThread(threadId);
+        this.markAgentDeleted(threadId);
+      } catch (error) {
+        this.recordFailure(threadId, error);
+        throw error;
+      }
+      record = this.require(threadId);
+    }
+    if (record.state === 'agent_deleted') {
+      try {
+        this.db.transaction(() => {
+          this.deleteTaskProjectionInCurrentTransaction(threadId);
+          this.markCompleteInCurrentTransaction(threadId);
+        })();
+      } catch (error) {
+        this.recordFailure(threadId, error);
+        throw error;
+      }
+    }
+    if (this.require(threadId).state !== 'complete') {
+      throw new Error('thread_deletion_state_incomplete');
+    }
+  }
+
+  private deleteTaskProjectionInCurrentTransaction(threadId: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM scheduled_task_runs
+         WHERE background_task_id IN (SELECT id FROM background_tasks WHERE thread_id = ?)`
+      )
+      .run(threadId);
+    this.db
+      .prepare(
+        `DELETE FROM scheduled_occurrences
+         WHERE background_task_id IN (SELECT id FROM background_tasks WHERE thread_id = ?)`
+      )
+      .run(threadId);
+    this.db.prepare('DELETE FROM background_tasks WHERE thread_id = ?').run(threadId);
+  }
+
+  private listLinkedTaskIds(threadId: string): string[] {
+    return this.db
+      .prepare('SELECT id FROM background_tasks WHERE thread_id = ? ORDER BY id ASC')
+      .pluck()
+      .all(threadId) as string[];
   }
 }
 

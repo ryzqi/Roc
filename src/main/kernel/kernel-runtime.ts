@@ -19,7 +19,7 @@ import type { EventSubscription, RocEventEnvelope, RocPlugin, RocPluginHealth } 
 
 export type KernelRuntimeOptions = {
   rootDir: string;
-  plugins: readonly RocPlugin[];
+  createPlugins(databasePool: DatabasePool): readonly RocPlugin[];
   safeStorage: SafeStorageBackend;
   activateMigration?: () => Promise<void> | void;
 };
@@ -76,12 +76,13 @@ export class KernelRuntime {
         throw new Error('database_fast_probe_unhealthy');
       }
 
-      const configStore = new ConfigStore(databasePool, join(this.options.rootDir, 'config'));
-      const secretManager = new SecretManager(databasePool, this.options.safeStorage);
+      const coreDb = databasePool.getCoreConnection();
+      const configStore = new ConfigStore(coreDb, join(this.options.rootDir, 'config'));
+      const secretManager = new SecretManager(coreDb, this.options.safeStorage);
       const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
       loggerToClose = logger;
       const maintenanceService = new DatabaseMaintenanceService({
-        coreDb: databasePool.getCoreConnection(),
+        pool: databasePool,
         jobs: {
           runFullHealthCheck: () =>
             checkRocDatabases({
@@ -124,7 +125,7 @@ export class KernelRuntime {
         maintenanceLease,
         maintenanceService
       };
-      await loader.load(this.options.plugins);
+      await loader.load(this.options.createPlugins(databasePool));
       this.started = true;
     } catch (error) {
       if (loggerToClose !== null) {

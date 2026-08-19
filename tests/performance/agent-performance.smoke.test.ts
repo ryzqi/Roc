@@ -27,7 +27,7 @@ import {
   isRunCapabilityManifestIntegrityValid
 } from '../../src/main/plugins/agent/run-capability-manifest';
 import { applyAgentPluginSchema } from '../../src/main/plugins/agent/schema';
-import { AgentTaskHistoryReader } from '../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskPluginSchema } from '../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../src/main/plugins/task/task-repository';
 import {
@@ -702,7 +702,7 @@ async function measureOutboxProjection(): Promise<MetricMeasurement> {
         }
       })();
 
-      const history = new AgentTaskHistoryReader(agentDb);
+      const history = new AgentTaskHistoryContract(agentDb);
       const repository = new TaskRepository(taskDb, history);
       const events = history.listOutboxEventsAfter({
         afterSequence: 0,

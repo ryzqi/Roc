@@ -10,10 +10,14 @@ import { CapabilityRegistry } from '../../../../src/main/kernel/capability-regis
 import type { RocPluginContext } from '../../../../src/main/kernel/types';
 import { AgentLangSmithTraceSessionRepository } from '../../../../src/main/plugins/agent/langsmith-trace-session-repository';
 import { AgentSessionRepository } from '../../../../src/main/plugins/agent/session-repository';
-import { AgentTaskHistoryReader } from '../../../../src/main/plugins/task/agent-task-history';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { applyTaskPluginSchema } from '../../../../src/main/plugins/task/schema';
 import { TaskRepository } from '../../../../src/main/plugins/task/task-repository';
-import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import {
+  applyAgentDatabaseSchema,
+  applyMemoryDatabaseSchema
+} from '../../../../src/main/infrastructure/database-schemas';
+import { RocSqliteStore } from '../../../../src/main/services/memory/sqlite-store';
 import { RocPaths } from '../../../../src/main/services/paths';
 
 const mocked = vi.hoisted(() => ({
@@ -76,6 +80,7 @@ describe('agent plugin manifest', () => {
     const plugin = createAgentPlugin({
       deepAgentExecutor: {
         appVersion: '0.1.0',
+        memoryStore: {} as BaseStore,
         paths: new RocPaths('F:\\Code\\Roc')
       }
     });
@@ -98,6 +103,7 @@ describe('agent plugin manifest', () => {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
           appVersion: '0.1.0',
+          memoryStore: new RocSqliteStore(memoryDb),
           paths: new RocPaths('F:\\Code\\Roc')
         }
       });
@@ -182,6 +188,7 @@ describe('agent plugin manifest', () => {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
           appVersion: '0.1.0',
+          memoryStore: new RocSqliteStore(memoryDb),
           paths: new RocPaths('F:\\Code\\Roc')
         }
       });
@@ -259,6 +266,7 @@ describe('agent plugin manifest', () => {
       const plugin = createAgentPlugin({
         deepAgentExecutor: {
           appVersion: '0.1.0',
+          memoryStore: new RocSqliteStore(memoryDb),
           paths: new RocPaths('F:\\Code\\Roc')
         }
       });
@@ -311,7 +319,7 @@ describe('agent plugin manifest', () => {
     try {
       applyAgentDatabaseSchema(agentDb);
       applyTaskPluginSchema(taskDb);
-      const task = new TaskRepository(taskDb, new AgentTaskHistoryReader(agentDb)).createBackgroundTask({
+      const task = new TaskRepository(taskDb, new AgentTaskHistoryContract(agentDb)).createBackgroundTask({
         goal: 'Review the workspace every morning',
         trigger: {
           type: 'manual',
@@ -483,9 +491,11 @@ function approvalResumeRequest(decisions: unknown[]) {
 function createContext(
   agentDb: Database.Database,
   memoryDb: Database.Database,
-  taskDb: Database.Database,
-  coreDb: Database.Database
+  _taskDb: Database.Database,
+  _coreDb: Database.Database
 ): RocPluginContext {
+  applyAgentDatabaseSchema(agentDb);
+  applyMemoryDatabaseSchema(memoryDb);
   return {
     pluginId: '@roc/plugin-agent',
     eventBus: {
@@ -495,10 +505,6 @@ function createContext(
     capabilities: new CapabilityRegistry(),
     database: {
       getConnection: () => agentDb,
-      getCoreConnection: () => coreDb,
-      getAgentConnection: () => agentDb,
-      getMemoryConnection: () => memoryDb,
-      getTaskConnection: () => taskDb
     },
     config: { get: () => null, set: () => {} },
     secrets: { get: () => null, set: () => {}, clear: () => {} },

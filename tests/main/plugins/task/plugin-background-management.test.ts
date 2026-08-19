@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   ActiveTaskItem,
@@ -48,7 +49,7 @@ afterEach(() => {
 describe('task plugin', () => {
   it('records proposal run starts without creating background tasks deterministically', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     registerWorkspaceGetCurrent(capabilities);
     for (const descriptor of plugin.manifest.capabilities) {
@@ -105,7 +106,7 @@ describe('task plugin', () => {
 
   it('excludes background tasks whose thread was archived from the active list', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -130,7 +131,7 @@ describe('task plugin', () => {
 
   it('returns a not_found domain error from task.detail.get when the task thread was archived', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);

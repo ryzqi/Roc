@@ -17,11 +17,13 @@ import type {
   TaskThread
 } from '../../../shared/types';
 import { taskEventSchema } from '../../../shared/schemas/task-event';
-import { deleteAgentThreadHistory } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
+import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import { AgentRunEventLog } from './run-event-log';
 const recentEventLimit = 50;
 
-export class AgentTaskHistoryReader {
+export class AgentTaskHistoryContract {
   constructor(private readonly agentDb: DatabaseConnection) {}
 
   ensureBackgroundTaskThread(task: BackgroundTask): void {
@@ -84,7 +86,47 @@ export class AgentTaskHistoryReader {
   }
 
   deleteThread(threadId: string): void {
-    deleteAgentThreadHistory(this.agentDb, threadId);
+    const targetThreadId = requireHistoryThreadId(threadId);
+    this.agentDb.transaction(() => {
+      const runIds = this.agentDb
+        .prepare('SELECT id FROM agent_runs WHERE thread_id = ?')
+        .pluck()
+        .all(targetThreadId) as string[];
+      this.agentDb
+        .prepare('DELETE FROM agent_run_leases WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId, targetThreadId);
+      this.agentDb
+        .prepare('DELETE FROM agent_pending_interrupts WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId, targetThreadId);
+      this.agentDb
+        .prepare(
+          `UPDATE agent_outbox
+           SET event_type = 'run_deleted', payload_json = '{}'
+           WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)`
+        )
+        .run(targetThreadId, targetThreadId);
+      new AgentRunEventLog(this.agentDb).deleteForRunIds(runIds);
+      const toolEffects = new AgentToolEffectStore(this.agentDb);
+      toolEffects.deleteForThread(targetThreadId);
+      toolEffects.deleteForRunIds(runIds);
+      this.agentDb
+        .prepare('DELETE FROM context_artifacts WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId, targetThreadId);
+      new RocSqliteCheckpointer(this.agentDb).deleteThreadCheckpoints(targetThreadId);
+      this.agentDb.prepare('DELETE FROM session_messages WHERE thread_id = ?').run(targetThreadId);
+      this.agentDb
+        .prepare('DELETE FROM agent_events WHERE thread_id = ? OR run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId, targetThreadId);
+      this.agentDb.prepare('DELETE FROM agent_thread_event_cursors WHERE thread_id = ?').run(targetThreadId);
+      this.agentDb
+        .prepare('DELETE FROM agent_run_telemetry WHERE run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId);
+      this.agentDb
+        .prepare('DELETE FROM agent_langsmith_trace_sessions WHERE run_id IN (SELECT id FROM agent_runs WHERE thread_id = ?)')
+        .run(targetThreadId);
+      this.agentDb.prepare('DELETE FROM agent_runs WHERE thread_id = ?').run(targetThreadId);
+      this.agentDb.prepare('DELETE FROM agent_threads WHERE id = ?').run(targetThreadId);
+    })();
   }
 
   recordBackgroundTaskEvent(task: BackgroundTask, type: TaskEvent['type'], payload: Record<string, unknown>): TaskEvent {
@@ -525,6 +567,13 @@ function emptyCapabilities(): EnabledCapabilities {
     mcpServers: [],
     skills: []
   };
+}
+
+function requireHistoryThreadId(threadId: string): string {
+  if (threadId.length === 0) {
+    throw new Error('agent_history_thread_id_empty');
+  }
+  return threadId;
 }
 
 type TaskEventRow = {

@@ -11,6 +11,7 @@ import { createPluginCapabilityAdapter } from '../../src/main/ipc/plugin-capabil
 import { KernelRuntime } from '../../src/main/kernel/kernel-runtime';
 import { createAppPlugin } from '../../src/main/plugins/app';
 import { createAgentPlugin } from '../../src/main/plugins/agent';
+import { AgentTaskHistoryContract } from '../../src/main/plugins/agent/agent-task-history-contract';
 import { StaticAgentModelFactoryAdapter } from '../../src/main/plugins/agent/model-factory-adapter';
 import type { AgentDeepAgentExecutor } from '../../src/main/plugins/agent/runtime';
 import { createDiagnosticsPlugin } from '../../src/main/plugins/diagnostics';
@@ -67,7 +68,7 @@ describe('microkernel regression', () => {
     runtime = new KernelRuntime({
       rootDir: root,
       safeStorage: safeStorage(),
-      plugins: [
+      createPlugins: (databasePool) => [
         createAppPlugin({
           statusProvider: () => ({
             appName: 'Roc',
@@ -149,7 +150,9 @@ describe('microkernel regression', () => {
             label: 'Regression Workspace'
           }
         }),
-        createTaskPlugin(),
+        createTaskPlugin({
+          agentTaskHistory: new AgentTaskHistoryContract(databasePool.getConnection('@roc/plugin-agent'))
+        }),
         createWorkspacePlugin({ rootDir: root }),
         createMcpPlugin(),
         createSkillsPlugin({ rootDir: root }),

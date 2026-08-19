@@ -216,10 +216,6 @@ function createContext(capabilities: CapabilityRegistry): RocPluginContext {
     capabilities,
     database: {
       getConnection: () => db,
-      getCoreConnection: () => db,
-      getAgentConnection: () => db,
-      getMemoryConnection: () => db,
-      getTaskConnection: () => db
     },
     config: {
       get: <T>(key: string) => {

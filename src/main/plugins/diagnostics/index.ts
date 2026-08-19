@@ -33,7 +33,6 @@ import { requireText } from '../../services/validation';
 import { RocPaths } from '../../services/paths';
 import { createDiagnosticsLifecycleAdapter, type DiagnosticsLifecycleAdapter, type DiagnosticsLifecycleScheduler } from './lifecycle-adapter';
 import {
-  applyDiagnosticsPluginSchema,
   createDiagnosticsPerformanceAdapter,
   type DiagnosticsPerformanceAdapter,
   type DiagnosticsPerformanceAdapterOptions
@@ -84,7 +83,6 @@ export function createDiagnosticsPlugin(options: DiagnosticsPluginOptions = {}):
     },
     initialize: async (context) => {
       const db = context.database.getConnection();
-      applyDiagnosticsPluginSchema(db);
       const paths = new RocPaths(options.rootDir);
       paths.ensureTree();
       const performanceAdapter =

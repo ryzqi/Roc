@@ -45,10 +45,6 @@ function createLoader(): PluginLoader {
       capabilities,
       database: {
         getConnection: () => undefined as never,
-        getCoreConnection: () => undefined as never,
-        getAgentConnection: () => undefined as never,
-        getMemoryConnection: () => undefined as never,
-        getTaskConnection: () => undefined as never
       },
       config: { get: () => null, set: () => {} },
       secrets: { get: () => null, set: () => {}, clear: () => {} },

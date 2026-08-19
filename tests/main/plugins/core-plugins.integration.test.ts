@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SafeStorageBackend } from '../../../src/main/infrastructure/secret-manager';
 import { KernelRuntime } from '../../../src/main/kernel/kernel-runtime';
 import { createAgentPlugin } from '../../../src/main/plugins/agent';
+import { AgentTaskHistoryContract } from '../../../src/main/plugins/agent/agent-task-history-contract';
 import { StaticAgentModelFactoryAdapter } from '../../../src/main/plugins/agent/model-factory-adapter';
 import type { AgentDeepAgentExecutor } from '../../../src/main/plugins/agent/runtime';
 import { createMemoryPlugin } from '../../../src/main/plugins/memory';
@@ -40,7 +41,7 @@ describe('core plugins integration', () => {
     runtime = new KernelRuntime({
       rootDir: root,
       safeStorage: safeStorage(),
-      plugins: [
+      createPlugins: (databasePool) => [
         createAgentPlugin({
           deepAgentExecutor: createStaticDeepAgentExecutor(),
           modelFactory: new StaticAgentModelFactoryAdapter({
@@ -68,7 +69,9 @@ describe('core plugins integration', () => {
           }
         }),
         createWorkspacePlugin({ rootDir: root }),
-        createTaskPlugin()
+        createTaskPlugin({
+          agentTaskHistory: new AgentTaskHistoryContract(databasePool.getConnection('@roc/plugin-agent'))
+        })
       ]
     });
 

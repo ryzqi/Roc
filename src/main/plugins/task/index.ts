@@ -19,17 +19,16 @@ import type {
   ChatStartRunRequest,
   ChatStartRunResult,
   TaskDeleteThreadRequest,
-  TaskDeleteThreadResult,
   TaskMessageHistoryRequest,
   TaskUpdateEvent
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { AgentTaskHistoryContract } from '../agent/agent-task-history-contract';
 import {
   readAgentRunStartedPayload,
   readAgentTaskEventPayload,
   resolveAgentRunThreadKind
 } from './agent-run-payloads';
-import { AgentTaskHistoryReader } from './agent-task-history';
 import {
   backgroundTaskPreviewRequestSchema,
   backgroundTaskPreviewSchema,
@@ -38,7 +37,6 @@ import {
   updateBackgroundTaskRequestSchema
 } from './contracts';
 import { TaskScheduler } from './scheduler';
-import { applyTaskPluginSchema } from './schema';
 import { TaskRepository } from './task-repository';
 import { ThreadDeletionJournal } from './thread-deletion-journal';
 
@@ -96,7 +94,11 @@ type TaskCapabilityHandler = (input: unknown) => Promise<unknown>;
 
 const taskCapabilityDescriptors = Object.values(taskCapabilityDescriptorByName);
 
-export function createTaskPlugin(): RocPlugin {
+export type TaskPluginOptions = {
+  agentTaskHistory: AgentTaskHistoryContract;
+};
+
+export function createTaskPlugin(options: TaskPluginOptions): RocPlugin {
   let scheduler: TaskScheduler | null = null;
   let unsubscribeAgentRunStarted: EventSubscription | null = null;
   let unsubscribeAgentRunCompleted: EventSubscription | null = null;
@@ -116,10 +118,34 @@ export function createTaskPlugin(): RocPlugin {
       capabilities: taskCapabilityDescriptors
     },
     initialize: async (context) => {
-      const db = context.database.getTaskConnection();
-      applyTaskPluginSchema(db);
-      const deletionJournal = new ThreadDeletionJournal(db);
-      const agentHistory = new AgentTaskHistoryReader(context.database.getAgentConnection());
+      const db = context.database.getConnection();
+      const agentHistory = options.agentTaskHistory;
+      const deletionJournal = new ThreadDeletionJournal({
+        agentHistory,
+        db,
+        lifecycle: {
+          onDeletionStarted: async ({ linkedTaskIds, threadId }) => {
+            for (const taskId of linkedTaskIds) {
+              scheduler?.unregisterTask(taskId);
+            }
+            await publishTaskUpdated(context, { kind: 'thread_deletion_started', threadId });
+          },
+          onDeletionCompleted: async ({ linkedTaskIds }) => {
+            for (const taskId of linkedTaskIds) {
+              scheduler?.unregisterTask(taskId);
+              await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });
+            }
+          },
+          onRecoveryFailed: ({ error, record }) => {
+            context.logger.warn('Task thread deletion recovery failed.', {
+              component: 'task.initialize',
+              threadId: record.threadId,
+              state: record.state,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      });
       const repository = new TaskRepository(db, agentHistory, deletionJournal);
       const projectAgentOutboxBestEffort = (): void => {
         try {
@@ -131,25 +157,19 @@ export function createTaskPlugin(): RocPlugin {
           });
         }
       };
-      for (const record of repository.listIncompleteThreadDeletions()) {
-        try {
-          repository.deleteThread(record.threadId);
-        } catch (error) {
-          const failedRecord = deletionJournal.require(record.threadId);
-          context.logger.warn('Task thread deletion recovery failed.', {
-            component: 'task.initialize',
-            threadId: record.threadId,
-            state: failedRecord.state,
-            error: error instanceof Error ? error.message : String(error)
-          });
-        }
-      }
+      await deletionJournal.recoverIncomplete();
       projectAgentOutboxBestEffort();
       scheduler = new TaskScheduler(repository, {
         startRun: (request) => context.capabilities.invoke<ChatStartRunRequest, ChatStartRunResult>('agent.run.start', request)
       });
       scheduler.start();
-      registerTaskCapabilities(context, repository, scheduler, () => projectAgentOutbox({ agentHistory, repository }));
+      registerTaskCapabilities(
+        context,
+        repository,
+        scheduler,
+        deletionJournal,
+        () => projectAgentOutbox({ agentHistory, repository })
+      );
       unsubscribeAgentRunStarted = context.eventBus.subscribe('agent.run.started', async (event) => {
         const payload = readAgentRunStartedPayload(event.payload);
         if (payload === null) {
@@ -213,7 +233,7 @@ export function createTaskPlugin(): RocPlugin {
   };
 }
 
-function projectAgentOutbox(input: { agentHistory: AgentTaskHistoryReader; repository: TaskRepository }): { appliedCount: number; lastSequence: number } {
+function projectAgentOutbox(input: { agentHistory: AgentTaskHistoryContract; repository: TaskRepository }): { appliedCount: number; lastSequence: number } {
   let lastSequence = input.repository.getAgentOutboxCursor(agentOutboxProjectorName);
   let appliedCount = 0;
   while (true) {
@@ -240,6 +260,7 @@ function registerTaskCapabilities(
   context: RocPluginContext,
   repository: TaskRepository,
   scheduler: TaskScheduler,
+  deletionJournal: ThreadDeletionJournal,
   replayAgentOutbox: () => { appliedCount: number; lastSequence: number }
 ): void {
   const handlers = {
@@ -319,26 +340,7 @@ function registerTaskCapabilities(
     'task.background.list': async () => repository.listBackgroundTasks(),
     'task.thread.delete': async (input) => {
       const { threadId } = input as TaskDeleteThreadRequest;
-      const linkedTaskIds = repository.listBackgroundTasks()
-        .filter((task) => task.threadId === threadId)
-        .map((task) => task.id);
-      let result: TaskDeleteThreadResult;
-      try {
-        result = repository.deleteThread(threadId);
-      } catch (error) {
-        if (repository.listIncompleteThreadDeletions().some((record) => record.threadId === threadId)) {
-          for (const taskId of linkedTaskIds) {
-            scheduler.unregisterTask(taskId);
-          }
-          await publishTaskUpdated(context, { kind: 'thread_deletion_started', threadId });
-        }
-        throw error;
-      }
-      for (const taskId of linkedTaskIds) {
-        scheduler.unregisterTask(taskId);
-        await publishTaskUpdated(context, { kind: 'task_status_changed', taskId, status: 'archived' });
-      }
-      return result;
+      return await deletionJournal.deleteThread(threadId);
     },
     'task.active.list': async () => repository.getActiveTasks(),
     'task.detail.get': async (input) =>

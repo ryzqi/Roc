@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
 import type { RocEventBus, RocEventEnvelope, RocPluginContext } from '../../../../src/main/kernel/types';
 import { applyAgentDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { createTaskPlugin } from '../../../../src/main/plugins/task';
 import type {
   TaskSnapshot
@@ -30,7 +31,7 @@ afterEach(() => {
 describe('task plugin', () => {
   it('mirrors agent task tool-call events into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -94,7 +95,7 @@ describe('task plugin', () => {
 
   it('mirrors streamed reasoning and message deltas into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -184,7 +185,7 @@ describe('task plugin', () => {
 
   it('mirrors hook run events into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);
@@ -255,7 +256,7 @@ describe('task plugin', () => {
 
   it('mirrors plan mode run events into the task snapshot contract', async () => {
     const eventBus = createTestEventBus();
-    const plugin = createTaskPlugin();
+    const plugin = createTaskPlugin({ agentTaskHistory: new AgentTaskHistoryContract(agentDb) });
     const capabilities = new CapabilityRegistry();
     for (const descriptor of plugin.manifest.capabilities) {
       capabilities.declare(plugin.manifest.id, descriptor);

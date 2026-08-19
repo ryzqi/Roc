@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CapabilityRegistry } from '../../../../src/main/kernel/capability-registry';
+import { applyWorkspaceDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
 import type { RocEventBus, RocPluginContext } from '../../../../src/main/kernel/types';
 import { createWorkspacePlugin } from '../../../../src/main/plugins/workspace';
 import type { TerminalSessionCreateRequest, TerminalSessionSnapshot, WorkspaceSelectRequest } from '../../../../src/shared/types';
@@ -22,6 +23,7 @@ beforeEach(() => {
   outsideRoot = mkdtempSync(join(tmpdir(), 'roc-workspace-plugin-terminal-outside-'));
   mkdirSync(workspaceRoot, { recursive: true });
   db = new Database(':memory:');
+  applyWorkspaceDatabaseSchema(db);
   plugin = null;
 });
 
@@ -94,10 +96,6 @@ function createContext(capabilities: CapabilityRegistry): RocPluginContext {
     capabilities,
     database: {
       getConnection: () => db,
-      getCoreConnection: () => db,
-      getAgentConnection: () => db,
-      getMemoryConnection: () => db,
-      getTaskConnection: () => db
     },
     config: {
       get: <T>(key: string) => (config.has(key) ? (config.get(key) as T) : null),

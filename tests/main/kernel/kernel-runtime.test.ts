@@ -62,7 +62,7 @@ describe('KernelRuntime', () => {
     };
     const runtime = new KernelRuntime({
       rootDir: root,
-      plugins: [plugin],
+      createPlugins: () => [plugin],
       safeStorage: safeStorage()
     });
 
@@ -97,9 +97,7 @@ describe('KernelRuntime', () => {
         capabilities: []
       },
       initialize: async (context) => {
-        expect(
-          context.database.getCoreConnection().prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'core'").pluck().get()
-        ).toBe(2);
+        expect(Object.keys(context.database)).toEqual(['getConnection']);
         expect(
           context.database.getConnection().prepare("SELECT current_version FROM schema_metadata WHERE db_name = 'agent'").pluck().get()
         ).toBe(13);
@@ -109,7 +107,7 @@ describe('KernelRuntime', () => {
     };
     const runtime = new KernelRuntime({
       rootDir: root,
-      plugins: [plugin],
+      createPlugins: () => [plugin],
       safeStorage: safeStorage()
     });
 

@@ -11,7 +11,6 @@ import type {
   ChatStartRunRequest,
   EnabledCapabilities,
   ScheduledTaskRun,
-  TaskDeleteThreadResult,
   TaskDetail,
   TaskEvent,
   TaskKind,
@@ -22,15 +21,14 @@ import type {
   TaskThread,
   UpdateBackgroundTaskRequest
 } from '../../../shared/types';
-import { deleteTaskProjectionForThread } from '../../infrastructure/agent-history-deletion';
 import { RocDomainError } from '../../services/errors';
-import { AgentTaskHistoryReader } from './agent-task-history';
+import { AgentTaskHistoryContract } from '../agent/agent-task-history-contract';
 import { BackgroundTaskRepository } from './background-task-repository';
 import {
   ScheduledOccurrenceRepository,
   type ClaimedScheduledOccurrence
 } from './scheduled-occurrence-repository';
-import { ThreadDeletionJournal, type ThreadDeletionRecord } from './thread-deletion-journal';
+import { ThreadDeletionJournal } from './thread-deletion-journal';
 
 export type { ClaimedScheduledOccurrence } from './scheduled-occurrence-repository';
 
@@ -43,8 +41,8 @@ export class TaskRepository {
 
   constructor(
     private readonly db: DatabaseConnection,
-    private readonly agentHistory: AgentTaskHistoryReader,
-    private readonly deletionJournal: ThreadDeletionJournal = new ThreadDeletionJournal(db)
+    private readonly agentHistory: AgentTaskHistoryContract,
+    private readonly deletionJournal: ThreadDeletionJournal = new ThreadDeletionJournal({ agentHistory, db })
   ) {
     this.backgroundTasks = new BackgroundTaskRepository(db);
     this.occurrences = new ScheduledOccurrenceRepository(db, this.backgroundTasks, {
@@ -98,50 +96,6 @@ export class TaskRepository {
 
   listBackgroundTasks(): BackgroundTask[] {
     return this.backgroundTasks.list();
-  }
-
-  deleteThread(threadId: string): TaskDeleteThreadResult {
-    const existing = this.deletionJournal.find(threadId);
-    if (existing !== null && existing.state === 'complete') {
-      return { deleted: true, threadId };
-    }
-    if (existing === null) {
-      this.agentHistory.requireActiveThread(threadId);
-      this.deletionJournal.ensurePending(threadId);
-    }
-
-    let record = this.deletionJournal.require(threadId);
-    if (record.state === 'pending') {
-      try {
-        this.agentHistory.deleteThread(threadId);
-        this.deletionJournal.markAgentDeleted(threadId);
-      } catch (error) {
-        this.deletionJournal.recordFailure(threadId, error);
-        throw error;
-      }
-      record = this.deletionJournal.require(threadId);
-    }
-
-    if (record.state === 'agent_deleted') {
-      try {
-        this.db.transaction(() => {
-          deleteTaskProjectionForThread(this.db, threadId);
-          this.deletionJournal.markCompleteInCurrentTransaction(threadId);
-        })();
-      } catch (error) {
-        this.deletionJournal.recordFailure(threadId, error);
-        throw error;
-      }
-    }
-
-    if (this.deletionJournal.require(threadId).state !== 'complete') {
-      throw new Error('thread_deletion_state_incomplete');
-    }
-    return { deleted: true, threadId };
-  }
-
-  listIncompleteThreadDeletions(): ThreadDeletionRecord[] {
-    return this.deletionJournal.listIncomplete();
   }
 
   listSchedulableBackgroundTasks(): BackgroundTask[] {

@@ -1,23 +1,28 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { applyAgentDatabaseSchema, applyTaskDatabaseSchema } from '../../../../src/main/infrastructure/database-schemas';
+import { AgentTaskHistoryContract } from '../../../../src/main/plugins/agent/agent-task-history-contract';
 import { ThreadDeletionJournal } from '../../../../src/main/plugins/task/thread-deletion-journal';
 
 let db: Database.Database;
+let agentDb: Database.Database;
 
 beforeEach(() => {
   db = new Database(':memory:');
+  agentDb = new Database(':memory:');
+  applyAgentDatabaseSchema(agentDb);
   applyTaskDatabaseSchema(db);
 });
 
 afterEach(() => {
+  agentDb.close();
   db.close();
 });
 
 describe('ThreadDeletionJournal', () => {
   it('persists one pending record and advances through explicit states', () => {
-    const journal = new ThreadDeletionJournal(db, () => '2026-07-10T01:00:00.000Z');
+    const journal = createJournal(() => '2026-07-10T01:00:00.000Z');
 
     expect(journal.ensurePending('thread-1')).toMatchObject({
       threadId: 'thread-1',
@@ -47,7 +52,7 @@ describe('ThreadDeletionJournal', () => {
   });
 
   it('rejects pending to complete and complete to agent-deleted transitions', () => {
-    const journal = new ThreadDeletionJournal(db);
+    const journal = createJournal();
     journal.ensurePending('thread-1');
 
     expect(() => journal.markCompleteInCurrentTransaction('thread-1')).toThrow(
@@ -63,7 +68,7 @@ describe('ThreadDeletionJournal', () => {
   });
 
   it('keeps complete records idempotent and permanently hidden', () => {
-    const journal = new ThreadDeletionJournal(db);
+    const journal = createJournal();
     journal.ensurePending('thread-1');
     journal.markAgentDeleted('thread-1');
     journal.markCompleteInCurrentTransaction('thread-1');
@@ -74,3 +79,11 @@ describe('ThreadDeletionJournal', () => {
     expect(journal.listHiddenThreadIds()).toEqual(new Set(['thread-1']));
   });
 });
+
+function createJournal(now?: () => string): ThreadDeletionJournal {
+  return new ThreadDeletionJournal({
+    agentHistory: new AgentTaskHistoryContract(agentDb),
+    db,
+    ...(now === undefined ? {} : { now })
+  });
+}
