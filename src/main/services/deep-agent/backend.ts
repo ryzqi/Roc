@@ -2,6 +2,7 @@ import {
   CompositeBackend,
   FilesystemBackend,
   StoreBackend,
+  applyGrepMaxCount,
   type AnyBackendProtocol,
   type EditResult,
   type FileDownloadResponse,
@@ -51,7 +52,12 @@ class RocRouteRejectingFilesystemBackend {
     return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
-  grep(_pattern: string, _path?: string | null, _glob?: string | null): Promise<GrepResult> {
+  grep(
+    _pattern: string,
+    _path?: string | null,
+    _glob?: string | null,
+    _maxCount?: number | null
+  ): Promise<GrepResult> {
     return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
   }
 
@@ -106,8 +112,13 @@ class ReadOnlyFilesystemBackend {
     return this.delegate.readRaw(filePath);
   }
 
-  grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
-    return this.delegate.grep(pattern, path ?? undefined, glob);
+  grep(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+    maxCount?: number | null
+  ): Promise<GrepResult> {
+    return this.delegate.grep(pattern, path ?? undefined, glob, maxCount);
   }
 
   glob(pattern: string, path?: string): Promise<GlobResult> {
@@ -151,7 +162,12 @@ class WorkspaceMemoryRequiredBackend {
     return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
   }
 
-  grep(_pattern: string, _path?: string | null, _glob?: string | null): Promise<GrepResult> {
+  grep(
+    _pattern: string,
+    _path?: string | null,
+    _glob?: string | null,
+    _maxCount?: number | null
+  ): Promise<GrepResult> {
     return Promise.resolve({ error: WORKSPACE_MEMORY_REQUIRED_ERROR });
   }
 
@@ -220,24 +236,33 @@ class SelectedSkillsFilesystemBackend {
     return this.delegate.readRaw(filePath);
   }
 
-  async grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+  async grep(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+    maxCount?: number | null
+  ): Promise<GrepResult> {
     const targetPath = path ?? '/';
     if (targetPath === '/') {
       const result = await this.delegate.grep(pattern, targetPath, glob);
       if (result.error || result.matches === undefined) {
         return result;
       }
-      return {
-        matches: result.matches.filter((entry) => {
-          const skillId = this.extractSkillId(entry.path);
-          return skillId !== null && this.selectedSkillIds.has(skillId);
-        })
-      };
+      return applyGrepMaxCount({
+        result: {
+          ...result,
+          matches: result.matches.filter((entry) => {
+            const skillId = this.extractSkillId(entry.path);
+            return skillId !== null && this.selectedSkillIds.has(skillId);
+          })
+        },
+        maxCount
+      });
     }
     if (!this.isAllowedSkillPath(targetPath)) {
       return { error: SKILL_ACCESS_DENIED_ERROR };
     }
-    return this.delegate.grep(pattern, targetPath, glob);
+    return this.delegate.grep(pattern, targetPath, glob, maxCount);
   }
 
   async glob(pattern: string, path?: string): Promise<GlobResult> {
@@ -248,6 +273,7 @@ class SelectedSkillsFilesystemBackend {
         return result;
       }
       return {
+        ...result,
         files: result.files.filter((entry) => {
           const skillId = this.extractSkillId(entry.path);
           return skillId !== null && this.selectedSkillIds.has(skillId);
@@ -341,7 +367,12 @@ class RocNonExecutingCompositeBackend {
     return this.delegate.readRaw(filePath);
   }
 
-  grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+  grep(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+    maxCount?: number | null
+  ): Promise<GrepResult> {
     if (typeof path !== 'string') {
       return Promise.resolve({ error: ROC_FILE_TOOL_ROUTE_ERROR });
     }
@@ -349,7 +380,7 @@ class RocNonExecutingCompositeBackend {
     if (!validation.ok) {
       return Promise.resolve({ error: validation.error });
     }
-    return this.delegate.grep(pattern, path, glob);
+    return this.delegate.grep(pattern, path, glob, maxCount);
   }
 
   glob(pattern: string, path?: string): Promise<GlobResult> {

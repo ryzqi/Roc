@@ -1,3 +1,4 @@
+import { applyGrepMaxCount } from 'deepagents';
 import type {
   EditResult,
   FileDownloadResponse,
@@ -59,14 +60,23 @@ export class RocStoreMemoryBackend {
     return this.delegate.readRaw(filePath);
   }
 
-  async grep(pattern: string, path?: string | null, glob?: string | null): Promise<GrepResult> {
+  async grep(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+    maxCount?: number | null
+  ): Promise<GrepResult> {
     const result = await this.delegate.grep(pattern, path ?? undefined, glob ?? undefined);
     if (result.error !== undefined || result.matches === undefined) {
       return result;
     }
-    return {
-      matches: result.matches.filter((match) => this.allowedKeys.has(match.path))
-    };
+    return applyGrepMaxCount({
+      result: {
+        ...result,
+        matches: result.matches.filter((match) => this.allowedKeys.has(match.path))
+      },
+      maxCount
+    });
   }
 
   async glob(pattern: string, path?: string): Promise<GlobResult> {
@@ -75,6 +85,7 @@ export class RocStoreMemoryBackend {
       return result;
     }
     return {
+      ...result,
       files: result.files.filter((file) => file.is_dir || this.allowedKeys.has(file.path))
     };
   }

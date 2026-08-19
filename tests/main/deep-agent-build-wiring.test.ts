@@ -68,7 +68,7 @@ describe('buildDeepAgent harness profile wiring', () => {
       ]
     });
     expect(createDeepAgentInput?.middleware?.map((middleware) => Reflect.get(middleware as object, 'name'))).toEqual(
-      expect.arrayContaining(['RocFilesystemPathPolicyMiddleware', 'RocShellPolicyMiddleware'])
+      expect.arrayContaining(['todoListMiddleware', 'RocFilesystemPathPolicyMiddleware', 'RocShellPolicyMiddleware'])
     );
   });
 

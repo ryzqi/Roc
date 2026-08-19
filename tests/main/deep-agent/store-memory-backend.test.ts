@@ -1,6 +1,6 @@
 import { InMemoryStore } from '@langchain/langgraph';
 import { StoreBackend } from 'deepagents';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createBackend } from '../../../src/main/services/deep-agent/backend';
 import { RocStoreMemoryBackend } from '../../../src/main/services/deep-agent/store-memory-backend';
@@ -28,6 +28,7 @@ function createMemoryBackend(input: { limits?: { user: number; agents: number; m
       new CapacityService(input.limits === undefined ? defaultSettings.memory.charLimits : input.limits),
       kindByKey
     ),
+    delegate,
     store
   };
 }
@@ -44,6 +45,14 @@ describe('RocStoreMemoryBackend', () => {
       created_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/u),
       modified_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/u)
     });
+  });
+
+  it('overwrites existing memory files through write', async () => {
+    const { backend } = createMemoryBackend();
+    await backend.write('/MEMORY.md', 'before');
+
+    await expect(backend.write('/MEMORY.md', 'after')).resolves.not.toHaveProperty('error');
+    await expect(backend.read('/MEMORY.md')).resolves.toMatchObject({ content: 'after' });
   });
 
   it('reads markdown through StoreBackend', async () => {
@@ -97,6 +106,39 @@ describe('RocStoreMemoryBackend', () => {
       error: expect.stringContaining('security scan')
     });
     await expect(backend.read('/MEMORY.md')).resolves.toMatchObject({ content: 'safe' });
+  });
+
+  it('filters memory grep matches before applying maxCount', async () => {
+    const { backend, delegate } = createMemoryBackend();
+    const grep = vi.spyOn(delegate, 'grep').mockResolvedValue({
+      matches: [
+        { path: '/notes.md', line: 1, text: 'needle' },
+        { path: '/AGENTS.md', line: 1, text: 'needle' },
+        { path: '/MEMORY.md', line: 1, text: 'needle' }
+      ]
+    });
+
+    await expect(backend.grep('needle', '/', null, 1)).resolves.toEqual({
+      matches: [{ path: '/AGENTS.md', line: 1, text: 'needle' }],
+      truncated: true
+    });
+    expect(grep).toHaveBeenCalledWith('needle', '/', undefined);
+  });
+
+  it('preserves glob truncation metadata after filtering memory files', async () => {
+    const { backend, delegate } = createMemoryBackend();
+    vi.spyOn(delegate, 'glob').mockResolvedValue({
+      files: [
+        { path: '/notes.md', is_dir: false },
+        { path: '/MEMORY.md', is_dir: false }
+      ],
+      truncated: true
+    });
+
+    await expect(backend.glob('**/*', '/')).resolves.toEqual({
+      files: [{ path: '/MEMORY.md', is_dir: false }],
+      truncated: true
+    });
   });
 
   it('uses separate global and workspace route prefixes', () => {

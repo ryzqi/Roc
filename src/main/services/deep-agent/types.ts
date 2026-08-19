@@ -36,7 +36,7 @@ export type AgentExecuteAdapter = {
 /**
  * Roc-visible built-in DeepAgents tool allowlist.
  *
- * Deep Agents 1.10.8 also has a native `execute` filesystem tool, but Roc must not expose it:
+ * Deep Agents can also expose a native `execute` filesystem tool, but Roc must not expose it:
  * filesystem permissions do not constrain shell commands. Roc shell access is only
  * `run_shell_command`, guarded by createRocShellPolicyMiddleware and ShellExecutionService.
  */

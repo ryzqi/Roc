@@ -1,5 +1,5 @@
 import type { ChatRunEvent } from '../../../shared/types';
-import type { DeepAgentDomainEvent, DeepAgentInterrupt } from './deep-agents-1-10-stream-adapter';
+import type { DeepAgentDomainEvent, DeepAgentInterrupt } from './deep-agent-stream-adapter';
 import { projectSubagentEvent, projectToolCallEvent } from './subagent-projection';
 import { updateUsageAccumulator, type ProviderUsageAccumulator } from './stream-usage-accumulator';
 

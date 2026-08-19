@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/types';
 import type {
   DeepAgentInterrupt
-} from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
+} from '../../services/deep-agent/deep-agent-stream-adapter';
 import { RocSqliteCheckpointer, type RocCheckpointInterrupt } from '../../services/deep-agent/sqlite-checkpointer';
 
 export type PendingInterrupt = {

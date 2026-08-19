@@ -100,10 +100,10 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
     expect((result as ToolMessage).status).toBe('success');
   });
 
-  it('marks DeepAgents write_file existing-file conflicts as hard tool errors', async () => {
+  it('marks DeepAgents write_file symlink rejections as hard tool errors', async () => {
     const result = await runWrapToolCall({
       toolName: 'write_file',
-      content: 'Cannot write to /frontend/index.html because it already exists. Read and then make an edit, or write to a new path.'
+      content: 'Cannot write to /workspace/link.txt because it is a symlink. Symlinks are not allowed.'
     });
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -111,7 +111,7 @@ describe('ForgeFilesystemToolErrorMiddleware', () => {
       tool_call_id: 'call-write_file',
       name: 'write_file',
       status: 'error',
-      content: 'Cannot write to /frontend/index.html because it already exists. Read and then make an edit, or write to a new path.'
+      content: 'Cannot write to /workspace/link.txt because it is a symlink. Symlinks are not allowed.'
     });
   });
 

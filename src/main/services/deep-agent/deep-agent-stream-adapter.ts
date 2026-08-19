@@ -72,7 +72,7 @@ export type DeepAgentDomainRun = {
   output: Promise<string | null>;
 };
 
-type DeepAgents110V3Message = {
+type DeepAgentsV3Message = {
   usageKey: string;
   text: AsyncIterable<string>;
   reasoning: AsyncIterable<string>;
@@ -80,9 +80,9 @@ type DeepAgents110V3Message = {
   usage: AsyncIterable<TokenUsage>;
 };
 
-type DeepAgents110V3ToolCallStatus = 'running' | 'finished' | 'error';
+type DeepAgentsV3ToolCallStatus = 'running' | 'finished' | 'error';
 
-type DeepAgents110V3ToolCallOutcome =
+type DeepAgentsV3ToolCallOutcome =
   | {
       status: 'finished';
       output: unknown;
@@ -92,30 +92,30 @@ type DeepAgents110V3ToolCallOutcome =
       error: string;
     };
 
-type DeepAgents110V3ToolCall = {
+type DeepAgentsV3ToolCall = {
   name: string;
   callId: string;
   input: unknown;
-  outcome: Promise<DeepAgents110V3ToolCallOutcome>;
+  outcome: Promise<DeepAgentsV3ToolCallOutcome>;
 };
 
-type DeepAgents110V3SubagentCause = {
+type DeepAgentsV3SubagentCause = {
   type: 'toolCall';
   toolCallId: string;
 };
 
-type DeepAgents110V3Subagent = {
+type DeepAgentsV3Subagent = {
   name: string;
   output: Promise<string | null>;
-  messages: AsyncIterable<DeepAgents110V3Message>;
-  toolCalls: AsyncIterable<DeepAgents110V3ToolCall>;
-  subagents: AsyncIterable<DeepAgents110V3Subagent>;
+  messages: AsyncIterable<DeepAgentsV3Message>;
+  toolCalls: AsyncIterable<DeepAgentsV3ToolCall>;
+  subagents: AsyncIterable<DeepAgentsV3Subagent>;
 };
 
-class DeepAgents110V3ContractError extends Error {
+class DeepAgentsV3ContractError extends Error {
   constructor(code: string) {
     super(code);
-    this.name = 'DeepAgents110V3ContractError';
+    this.name = 'DeepAgentsV3ContractError';
   }
 }
 
@@ -123,23 +123,23 @@ export function adaptDeepAgentRun(
   run: unknown,
   options: { projectToolOutput: ToolOutputProjector }
 ): DeepAgentDomainRun {
-  const rawRun = requireRecord(run, 'deep_agents_1_10_v3_run_invalid');
+  const rawRun = requireRecord(run, 'deep_agents_v3_run_invalid');
   const outputPromise = observePromiseField(rawRun, 'output');
   const messages = requireAsyncIterable(
-    readRequiredField(rawRun, 'messages', 'deep_agents_1_10_v3_run_messages_async_iterable_missing'),
-    'deep_agents_1_10_v3_run_messages_async_iterable_missing'
+    readRequiredField(rawRun, 'messages', 'deep_agents_v3_run_messages_async_iterable_missing'),
+    'deep_agents_v3_run_messages_async_iterable_missing'
   );
   const toolCalls = requireAsyncIterable(
-    readRequiredField(rawRun, 'toolCalls', 'deep_agents_1_10_v3_run_tool_calls_async_iterable_missing'),
-    'deep_agents_1_10_v3_run_tool_calls_async_iterable_missing'
+    readRequiredField(rawRun, 'toolCalls', 'deep_agents_v3_run_tool_calls_async_iterable_missing'),
+    'deep_agents_v3_run_tool_calls_async_iterable_missing'
   );
   const subagents = requireAsyncIterable(
-    readRequiredField(rawRun, 'subagents', 'deep_agents_1_10_v3_run_subagents_async_iterable_missing'),
-    'deep_agents_1_10_v3_run_subagents_async_iterable_missing'
+    readRequiredField(rawRun, 'subagents', 'deep_agents_v3_run_subagents_async_iterable_missing'),
+    'deep_agents_v3_run_subagents_async_iterable_missing'
   );
   const output = adaptObservedPromise(
     outputPromise,
-    'deep_agents_1_10_v3_run_output_promise_missing',
+    'deep_agents_v3_run_output_promise_missing',
     (value) => adaptOutput(value, 'run')
   );
 
@@ -180,7 +180,7 @@ async function* translateRunEvents(input: {
 }
 
 async function* translateMessages(
-  messages: AsyncIterable<DeepAgents110V3Message>,
+  messages: AsyncIterable<DeepAgentsV3Message>,
   scope: DeepAgentSubagentScope | null
 ): AsyncGenerator<DeepAgentDomainEvent> {
   let reasoningObserved = false;
@@ -268,7 +268,7 @@ async function* translateVisibleText(
 }
 
 async function* translateToolCalls(
-  calls: AsyncIterable<DeepAgents110V3ToolCall>,
+  calls: AsyncIterable<DeepAgentsV3ToolCall>,
   scope: DeepAgentSubagentScope | null,
   projectToolOutput: ToolOutputProjector
 ): AsyncGenerator<DeepAgentDomainEvent> {
@@ -278,7 +278,7 @@ async function* translateToolCalls(
 }
 
 async function* projectToolCallLifecycle(
-  call: DeepAgents110V3ToolCall,
+  call: DeepAgentsV3ToolCall,
   scope: DeepAgentSubagentScope | null,
   projectToolOutput: ToolOutputProjector
 ): AsyncGenerator<DeepAgentDomainEvent> {
@@ -295,7 +295,7 @@ async function* projectToolCallLifecycle(
   const [settledOutcome] = await outcomeSettlement;
   if (settledOutcome.status === 'rejected') {
     const error = settledOutcome.reason;
-    if (error instanceof DeepAgents110V3ContractError) {
+    if (error instanceof DeepAgentsV3ContractError) {
       throw error;
     }
     const message = error instanceof Error ? error.message : 'Tool 执行失败。';
@@ -344,7 +344,7 @@ async function* projectToolCallLifecycle(
 }
 
 async function* translateSubagents(
-  subagents: AsyncIterable<DeepAgents110V3Subagent>,
+  subagents: AsyncIterable<DeepAgentsV3Subagent>,
   projectToolOutput: ToolOutputProjector,
   parentScope: DeepAgentSubagentScope | null = null
 ): AsyncGenerator<DeepAgentDomainEvent> {
@@ -371,7 +371,7 @@ async function* translateSubagents(
     const [settledOutput] = await outputSettlement;
     if (settledOutput.status === 'rejected') {
       const error = settledOutput.reason;
-      if (error instanceof DeepAgents110V3ContractError) {
+      if (error instanceof DeepAgentsV3ContractError) {
         throw error;
       }
       yield {
@@ -439,91 +439,91 @@ async function* mergeAsyncIterables<T>(
 function adaptMessages(
   messages: AsyncIterable<unknown>,
   parentPath: string
-): AsyncIterable<DeepAgents110V3Message> {
+): AsyncIterable<DeepAgentsV3Message> {
   return mapAsyncIterable(messages, (message, ordinal) =>
     adaptMessage(message, `${parentPath}/messages/${ordinal}`)
   );
 }
 
-function adaptMessage(message: unknown, usageKey: string): DeepAgents110V3Message {
-  const rawMessage = requireRecord(message, 'deep_agents_1_10_v3_message_invalid');
+function adaptMessage(message: unknown, usageKey: string): DeepAgentsV3Message {
+  const rawMessage = requireRecord(message, 'deep_agents_v3_message_invalid');
   const outputPromise = observePromiseField(rawMessage, 'output');
   const namespaceValue = readRequiredField(
     rawMessage,
     'namespace',
-    'deep_agents_1_10_v3_message_namespace_invalid'
+    'deep_agents_v3_message_namespace_invalid'
   );
   if (!Array.isArray(namespaceValue) || !namespaceValue.every((segment) => isNonEmptyString(segment))) {
-    throw contractError('deep_agents_1_10_v3_message_namespace_invalid');
+    throw contractError('deep_agents_v3_message_namespace_invalid');
   }
   requireNonEmptyString(
-    readRequiredField(rawMessage, 'node', 'deep_agents_1_10_v3_message_node_missing'),
-    'deep_agents_1_10_v3_message_node_missing'
+    readRequiredField(rawMessage, 'node', 'deep_agents_v3_message_node_missing'),
+    'deep_agents_v3_message_node_missing'
   );
   const text = requireAsyncIterable(
-    readRequiredField(rawMessage, 'text', 'deep_agents_1_10_v3_message_text_async_iterable_missing'),
-    'deep_agents_1_10_v3_message_text_async_iterable_missing'
+    readRequiredField(rawMessage, 'text', 'deep_agents_v3_message_text_async_iterable_missing'),
+    'deep_agents_v3_message_text_async_iterable_missing'
   );
   requireAsyncIterable(
-    readRequiredField(rawMessage, 'toolCalls', 'deep_agents_1_10_v3_message_tool_calls_async_iterable_missing'),
-    'deep_agents_1_10_v3_message_tool_calls_async_iterable_missing'
+    readRequiredField(rawMessage, 'toolCalls', 'deep_agents_v3_message_tool_calls_async_iterable_missing'),
+    'deep_agents_v3_message_tool_calls_async_iterable_missing'
   );
   const reasoning = requireAsyncIterable(
-    readRequiredField(rawMessage, 'reasoning', 'deep_agents_1_10_v3_message_reasoning_async_iterable_missing'),
-    'deep_agents_1_10_v3_message_reasoning_async_iterable_missing'
+    readRequiredField(rawMessage, 'reasoning', 'deep_agents_v3_message_reasoning_async_iterable_missing'),
+    'deep_agents_v3_message_reasoning_async_iterable_missing'
   );
   const usage = requireAsyncIterable(
-    readRequiredField(rawMessage, 'usage', 'deep_agents_1_10_v3_message_usage_async_iterable_missing'),
-    'deep_agents_1_10_v3_message_usage_async_iterable_missing'
+    readRequiredField(rawMessage, 'usage', 'deep_agents_v3_message_usage_async_iterable_missing'),
+    'deep_agents_v3_message_usage_async_iterable_missing'
   );
   const trailingReasoning = adaptObservedPromise(
     outputPromise,
-    'deep_agents_1_10_v3_message_output_promise_missing',
+    'deep_agents_v3_message_output_promise_missing',
     (value) => recordUtils.readReasoningFromMessageOutput(
-      requireRecord(value, 'deep_agents_1_10_v3_message_output_invalid')
+      requireRecord(value, 'deep_agents_v3_message_output_invalid')
     )
   );
 
   return {
     usageKey,
-    text: adaptStringStream(text, 'deep_agents_1_10_v3_message_text_value_invalid'),
-    reasoning: adaptStringStream(reasoning, 'deep_agents_1_10_v3_message_reasoning_value_invalid'),
+    text: adaptStringStream(text, 'deep_agents_v3_message_text_value_invalid'),
+    reasoning: adaptStringStream(reasoning, 'deep_agents_v3_message_reasoning_value_invalid'),
     trailingReasoning,
     usage: mapAsyncIterable(usage, (value) => adaptUsage(value)),
   };
 }
 
-function adaptToolCalls(calls: AsyncIterable<unknown>): AsyncIterable<DeepAgents110V3ToolCall> {
+function adaptToolCalls(calls: AsyncIterable<unknown>): AsyncIterable<DeepAgentsV3ToolCall> {
   return mapAsyncIterable(calls, (call) => adaptToolCall(call));
 }
 
-function adaptToolCall(call: unknown): DeepAgents110V3ToolCall {
-  const rawCall = requireRecord(call, 'deep_agents_1_10_v3_tool_call_invalid');
+function adaptToolCall(call: unknown): DeepAgentsV3ToolCall {
+  const rawCall = requireRecord(call, 'deep_agents_v3_tool_call_invalid');
   const outputPromise = observePromiseField(rawCall, 'output');
   const statusPromise = observePromiseField(rawCall, 'status');
   const errorPromise = observePromiseField(rawCall, 'error');
   const name = requireNonEmptyString(
-    readRequiredField(rawCall, 'name', 'deep_agents_1_10_v3_tool_call_name_missing'),
-    'deep_agents_1_10_v3_tool_call_name_missing'
+    readRequiredField(rawCall, 'name', 'deep_agents_v3_tool_call_name_missing'),
+    'deep_agents_v3_tool_call_name_missing'
   );
   const callId = requireNonEmptyString(
-    readRequiredField(rawCall, 'callId', 'deep_agents_1_10_v3_tool_call_id_missing'),
-    'deep_agents_1_10_v3_tool_call_id_missing'
+    readRequiredField(rawCall, 'callId', 'deep_agents_v3_tool_call_id_missing'),
+    'deep_agents_v3_tool_call_id_missing'
   );
-  const input = readRequiredField(rawCall, 'input', 'deep_agents_1_10_v3_tool_call_input_missing');
+  const input = readRequiredField(rawCall, 'input', 'deep_agents_v3_tool_call_input_missing');
   const output = adaptObservedPromise(
     outputPromise,
-    'deep_agents_1_10_v3_tool_call_output_promise_missing',
+    'deep_agents_v3_tool_call_output_promise_missing',
     (value) => value
   );
   const status = adaptObservedPromise(
     statusPromise,
-    'deep_agents_1_10_v3_tool_call_status_promise_missing',
+    'deep_agents_v3_tool_call_status_promise_missing',
     (value) => adaptToolCallStatus(value)
   );
   const error = adaptObservedPromise(
     errorPromise,
-    'deep_agents_1_10_v3_tool_call_error_promise_missing',
+    'deep_agents_v3_tool_call_error_promise_missing',
     (value) => adaptToolCallError(value)
   );
   const outcome = adaptToolCallOutcome(output, status, error);
@@ -539,9 +539,9 @@ function adaptToolCall(call: unknown): DeepAgents110V3ToolCall {
 
 async function adaptToolCallOutcome(
   output: Promise<unknown>,
-  status: Promise<DeepAgents110V3ToolCallStatus>,
+  status: Promise<DeepAgentsV3ToolCallStatus>,
   error: Promise<string | undefined>
-): Promise<DeepAgents110V3ToolCallOutcome> {
+): Promise<DeepAgentsV3ToolCallOutcome> {
   const outputOutcome = output.then(
     (value) => ({ status: 'fulfilled' as const, value }),
     (reason: unknown) => ({ status: 'rejected' as const, reason })
@@ -549,15 +549,15 @@ async function adaptToolCallOutcome(
   const [terminalStatus, terminalError] = await Promise.all([status, error]);
   if (terminalStatus === 'error') {
     if (terminalError === undefined) {
-      throw contractError('deep_agents_1_10_v3_tool_call_terminal_error_missing');
+      throw contractError('deep_agents_v3_tool_call_terminal_error_missing');
     }
     return { status: 'error', error: terminalError };
   }
   if (terminalStatus !== 'finished') {
-    throw contractError('deep_agents_1_10_v3_tool_call_status_not_terminal');
+    throw contractError('deep_agents_v3_tool_call_status_not_terminal');
   }
   if (terminalError !== undefined) {
-    throw contractError('deep_agents_1_10_v3_tool_call_terminal_error_unexpected');
+    throw contractError('deep_agents_v3_tool_call_terminal_error_unexpected');
   }
   const settledOutput = await outputOutcome;
   if (settledOutput.status === 'rejected') {
@@ -569,37 +569,37 @@ async function adaptToolCallOutcome(
 function adaptSubagents(
   subagents: AsyncIterable<unknown>,
   parentPath: string
-): AsyncIterable<DeepAgents110V3Subagent> {
+): AsyncIterable<DeepAgentsV3Subagent> {
   return mapAsyncIterable(subagents, (subagent, ordinal) =>
     adaptSubagent(subagent, `${parentPath}/subagents/${ordinal}`)
   );
 }
 
-function adaptSubagent(subagent: unknown, path: string): DeepAgents110V3Subagent {
-  const rawSubagent = requireRecord(subagent, 'deep_agents_1_10_v3_subagent_invalid');
+function adaptSubagent(subagent: unknown, path: string): DeepAgentsV3Subagent {
+  const rawSubagent = requireRecord(subagent, 'deep_agents_v3_subagent_invalid');
   const outputPromise = observePromiseField(rawSubagent, 'output');
   const name = requireNonEmptyString(
-    readRequiredField(rawSubagent, 'name', 'deep_agents_1_10_v3_subagent_name_missing'),
-    'deep_agents_1_10_v3_subagent_name_missing'
+    readRequiredField(rawSubagent, 'name', 'deep_agents_v3_subagent_name_missing'),
+    'deep_agents_v3_subagent_name_missing'
   );
   adaptSubagentCause(
-    readRequiredField(rawSubagent, 'cause', 'deep_agents_1_10_v3_subagent_cause_missing')
+    readRequiredField(rawSubagent, 'cause', 'deep_agents_v3_subagent_cause_missing')
   );
   const messages = requireAsyncIterable(
-    readRequiredField(rawSubagent, 'messages', 'deep_agents_1_10_v3_subagent_messages_async_iterable_missing'),
-    'deep_agents_1_10_v3_subagent_messages_async_iterable_missing'
+    readRequiredField(rawSubagent, 'messages', 'deep_agents_v3_subagent_messages_async_iterable_missing'),
+    'deep_agents_v3_subagent_messages_async_iterable_missing'
   );
   const toolCalls = requireAsyncIterable(
-    readRequiredField(rawSubagent, 'toolCalls', 'deep_agents_1_10_v3_subagent_tool_calls_async_iterable_missing'),
-    'deep_agents_1_10_v3_subagent_tool_calls_async_iterable_missing'
+    readRequiredField(rawSubagent, 'toolCalls', 'deep_agents_v3_subagent_tool_calls_async_iterable_missing'),
+    'deep_agents_v3_subagent_tool_calls_async_iterable_missing'
   );
   const nestedSubagents = requireAsyncIterable(
-    readRequiredField(rawSubagent, 'subagents', 'deep_agents_1_10_v3_subagent_subagents_async_iterable_missing'),
-    'deep_agents_1_10_v3_subagent_subagents_async_iterable_missing'
+    readRequiredField(rawSubagent, 'subagents', 'deep_agents_v3_subagent_subagents_async_iterable_missing'),
+    'deep_agents_v3_subagent_subagents_async_iterable_missing'
   );
   const output = adaptObservedPromise(
     outputPromise,
-    'deep_agents_1_10_v3_subagent_output_promise_missing',
+    'deep_agents_v3_subagent_output_promise_missing',
     (value) => adaptOutput(value, 'subagent')
   );
 
@@ -612,47 +612,47 @@ function adaptSubagent(subagent: unknown, path: string): DeepAgents110V3Subagent
   };
 }
 
-function adaptSubagentCause(value: unknown): DeepAgents110V3SubagentCause | null {
+function adaptSubagentCause(value: unknown): DeepAgentsV3SubagentCause | null {
   if (value === undefined) {
     return null;
   }
-  const cause = requireRecord(value, 'deep_agents_1_10_v3_subagent_cause_invalid');
-  if (readRequiredField(cause, 'type', 'deep_agents_1_10_v3_subagent_cause_type_invalid') !== 'toolCall') {
-    throw contractError('deep_agents_1_10_v3_subagent_cause_type_invalid');
+  const cause = requireRecord(value, 'deep_agents_v3_subagent_cause_invalid');
+  if (readRequiredField(cause, 'type', 'deep_agents_v3_subagent_cause_type_invalid') !== 'toolCall') {
+    throw contractError('deep_agents_v3_subagent_cause_type_invalid');
   }
   const toolCallId = requireNonEmptyString(
     readRequiredField(
       cause,
       'tool_call_id',
-      'deep_agents_1_10_v3_subagent_cause_tool_call_id_missing'
+      'deep_agents_v3_subagent_cause_tool_call_id_missing'
     ),
-    'deep_agents_1_10_v3_subagent_cause_tool_call_id_missing'
+    'deep_agents_v3_subagent_cause_tool_call_id_missing'
   );
   return { type: 'toolCall', toolCallId };
 }
 
 function adaptUsage(value: unknown): TokenUsage {
-  const usage = requireRecord(value, 'deep_agents_1_10_v3_usage_invalid');
+  const usage = requireRecord(value, 'deep_agents_v3_usage_invalid');
   const inputDetailsValue = readField(usage, 'input_token_details');
   const inputDetails =
     inputDetailsValue === undefined
       ? null
-      : requireRecord(inputDetailsValue, 'deep_agents_1_10_v3_usage_input_token_details_invalid');
+      : requireRecord(inputDetailsValue, 'deep_agents_v3_usage_input_token_details_invalid');
   const result: TokenUsage = {
     inputTokens: readOptionalNonNegativeInteger(
       usage,
       'input_tokens',
-      'deep_agents_1_10_v3_usage_input_tokens_invalid'
+      'deep_agents_v3_usage_input_tokens_invalid'
     ),
     outputTokens: readOptionalNonNegativeInteger(
       usage,
       'output_tokens',
-      'deep_agents_1_10_v3_usage_output_tokens_invalid'
+      'deep_agents_v3_usage_output_tokens_invalid'
     ),
     totalTokens: readOptionalNonNegativeInteger(
       usage,
       'total_tokens',
-      'deep_agents_1_10_v3_usage_total_tokens_invalid'
+      'deep_agents_v3_usage_total_tokens_invalid'
     ),
     cacheReadTokens:
       inputDetails === null
@@ -660,7 +660,7 @@ function adaptUsage(value: unknown): TokenUsage {
         : readOptionalNonNegativeInteger(
             inputDetails,
             'cache_read',
-            'deep_agents_1_10_v3_usage_cache_read_tokens_invalid'
+            'deep_agents_v3_usage_cache_read_tokens_invalid'
           ),
     cacheCreationTokens:
       inputDetails === null
@@ -668,27 +668,27 @@ function adaptUsage(value: unknown): TokenUsage {
         : readOptionalNonNegativeInteger(
             inputDetails,
             'cache_creation',
-            'deep_agents_1_10_v3_usage_cache_creation_tokens_invalid'
+            'deep_agents_v3_usage_cache_creation_tokens_invalid'
           )
   };
   if (Object.values(result).every((tokenCount) => tokenCount === null)) {
-    throw contractError('deep_agents_1_10_v3_usage_empty');
+    throw contractError('deep_agents_v3_usage_empty');
   }
   return result;
 }
 
 function adaptOutput(value: unknown, owner: 'run' | 'subagent'): string | null {
-  const output = requireRecord(value, `deep_agents_1_10_v3_${owner}_output_invalid`);
+  const output = requireRecord(value, `deep_agents_v3_${owner}_output_invalid`);
   const messages = readRequiredField(
     output,
     'messages',
-    `deep_agents_1_10_v3_${owner}_output_messages_missing`
+    `deep_agents_v3_${owner}_output_messages_missing`
   );
   if (!Array.isArray(messages)) {
-    throw contractError(`deep_agents_1_10_v3_${owner}_output_messages_missing`);
+    throw contractError(`deep_agents_v3_${owner}_output_messages_missing`);
   }
   const adaptedMessages = messages.map((message) =>
-    requireRecord(message, `deep_agents_1_10_v3_${owner}_output_message_invalid`)
+    requireRecord(message, `deep_agents_v3_${owner}_output_message_invalid`)
   );
   const lastMessage = adaptedMessages.at(-1);
   return lastMessage === undefined ? null : readAssistantMessageText(lastMessage);
@@ -727,15 +727,15 @@ function readLowercaseString(value: unknown): string | null {
 }
 
 function adaptInterrupt(value: unknown): DeepAgentInterrupt {
-  const interrupt = requireRecord(value, 'deep_agents_1_10_v3_run_interrupt_invalid');
+  const interrupt = requireRecord(value, 'deep_agents_v3_run_interrupt_invalid');
   const interruptId = requireNonEmptyString(
-    readRequiredField(interrupt, 'interruptId', 'deep_agents_1_10_v3_run_interrupt_id_missing'),
-    'deep_agents_1_10_v3_run_interrupt_id_missing'
+    readRequiredField(interrupt, 'interruptId', 'deep_agents_v3_run_interrupt_id_missing'),
+    'deep_agents_v3_run_interrupt_id_missing'
   );
   const payload = readRequiredField(
     interrupt,
     'payload',
-    'deep_agents_1_10_v3_run_interrupt_payload_missing'
+    'deep_agents_v3_run_interrupt_payload_missing'
   );
   return { interruptId, payload };
 }
@@ -744,10 +744,10 @@ function readRunInterrupted(run: Record<string, unknown>): boolean {
   const interrupted = readRequiredField(
     run,
     'interrupted',
-    'deep_agents_1_10_v3_run_interrupted_boolean_missing'
+    'deep_agents_v3_run_interrupted_boolean_missing'
   );
   if (typeof interrupted !== 'boolean') {
-    throw contractError('deep_agents_1_10_v3_run_interrupted_boolean_missing');
+    throw contractError('deep_agents_v3_run_interrupted_boolean_missing');
   }
   return interrupted;
 }
@@ -756,10 +756,10 @@ function readRunInterrupts(run: Record<string, unknown>): readonly DeepAgentInte
   const interrupts = readRequiredField(
     run,
     'interrupts',
-    'deep_agents_1_10_v3_run_interrupts_array_missing'
+    'deep_agents_v3_run_interrupts_array_missing'
   );
   if (!Array.isArray(interrupts)) {
-    throw contractError('deep_agents_1_10_v3_run_interrupts_array_missing');
+    throw contractError('deep_agents_v3_run_interrupts_array_missing');
   }
   return interrupts.map((interrupt) => adaptInterrupt(interrupt));
 }
@@ -773,16 +773,16 @@ function adaptStringStream(values: AsyncIterable<unknown>, errorCode: string): A
   });
 }
 
-function adaptToolCallStatus(value: unknown): DeepAgents110V3ToolCallStatus {
+function adaptToolCallStatus(value: unknown): DeepAgentsV3ToolCallStatus {
   if (value !== 'running' && value !== 'finished' && value !== 'error') {
-    throw contractError('deep_agents_1_10_v3_tool_call_status_invalid');
+    throw contractError('deep_agents_v3_tool_call_status_invalid');
   }
   return value;
 }
 
 function adaptToolCallError(value: unknown): string | undefined {
   if (value !== undefined && typeof value !== 'string') {
-    throw contractError('deep_agents_1_10_v3_tool_call_error_invalid');
+    throw contractError('deep_agents_v3_tool_call_error_invalid');
   }
   return value;
 }
@@ -892,6 +892,6 @@ async function* singleString(value: string): AsyncGenerator<string> {
   yield value;
 }
 
-function contractError(code: string): DeepAgents110V3ContractError {
-  return new DeepAgents110V3ContractError(code);
+function contractError(code: string): DeepAgentsV3ContractError {
+  return new DeepAgentsV3ContractError(code);
 }

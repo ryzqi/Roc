@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { InMemoryStore } from '@langchain/langgraph';
-import { afterEach, describe, expect, it } from 'vitest';
+import { FilesystemBackend } from 'deepagents';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBackend } from '../../../../src/main/services/deep-agent/backend';
 import {
   ROC_FILE_TOOL_ROUTE_ERROR,
@@ -24,20 +25,26 @@ type TestBackend = ReturnType<typeof createBackend>['backend'] & {
   write: (filePath: string, content: string) => Promise<unknown>;
   edit: (filePath: string, oldString: string, newString: string) => Promise<unknown>;
   glob: (pattern: string, path?: string) => Promise<unknown>;
-  grep: (pattern: string, path?: string | null, glob?: string | null) => Promise<unknown>;
+  grep: (pattern: string, path?: string | null, glob?: string | null, maxCount?: number | null) => Promise<unknown>;
 };
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   const roots = cleanupRoots.splice(0);
   await Promise.all(roots.map(async (root) => await rm(root, { recursive: true, force: true })));
 });
 
-function createTestBackend(input: { paths?: RocPaths; selectedSkillIds?: readonly string[] } = {}) {
+function createTestBackend(input: {
+  paths?: RocPaths;
+  selectedSkillIds?: readonly string[];
+  workspacePath?: string;
+} = {}) {
   const paths = input.paths === undefined ? new RocPaths('F:\\Code\\Roc\\.test-data') : input.paths;
   const selectedSkillIds = input.selectedSkillIds === undefined ? [] : input.selectedSkillIds;
+  const selectedWorkspacePath = input.workspacePath === undefined ? workspacePath : input.workspacePath;
   return createBackend({
     workspaceService: {
-      getCurrentWorkspace: () => ({ path: workspacePath, label: 'Roc' })
+      getCurrentWorkspace: () => ({ path: selectedWorkspacePath, label: 'Roc' })
     } as unknown as Parameters<typeof createBackend>[0]['workspaceService'],
     paths,
     store: new InMemoryStore(),
@@ -123,6 +130,17 @@ describe('DeepAgents Roc backend', () => {
     await expect((backend as TestBackend).ls('/workspace/')).resolves.toHaveProperty('files');
   });
 
+  it('overwrites existing workspace files through write', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'roc-workspace-'));
+    cleanupRoots.push(root);
+    const targetPath = join(root, 'notes.md');
+    await writeFile(targetPath, 'before', 'utf8');
+    const { backend } = createTestBackend({ workspacePath: root });
+
+    await expect((backend as TestBackend).write('/workspace/notes.md', 'after')).resolves.not.toHaveProperty('error');
+    await expect(readFile(targetPath, 'utf8')).resolves.toBe('after');
+  });
+
   it('denies skill files when no skills are enabled for the run', async () => {
     const paths = await createSkillsFixture(['typescript']);
     const { backend } = createTestBackend({ paths, selectedSkillIds: [] });
@@ -130,6 +148,41 @@ describe('DeepAgents Roc backend', () => {
     await expect((backend as TestBackend).ls('/skills/')).resolves.toEqual({ files: [] });
     await expect((backend as TestBackend).read('/skills/typescript/SKILL.md')).resolves.toEqual({
       error: 'Roc 当前回合未启用这个 skill。'
+    });
+  });
+
+  it('filters selected skill grep matches before applying maxCount', async () => {
+    const paths = await createSkillsFixture(['a-disabled', 'z-enabled']);
+    const grep = vi.spyOn(FilesystemBackend.prototype, 'grep').mockResolvedValue({
+      matches: [
+        { path: '/a-disabled/SKILL.md', line: 1, text: 'needle' },
+        { path: '/z-enabled/SKILL.md', line: 1, text: 'needle' },
+        { path: '/z-enabled/REFERENCE.md', line: 1, text: 'needle' }
+      ]
+    });
+    const { backend } = createTestBackend({ paths, selectedSkillIds: ['z-enabled'] });
+
+    await expect((backend as TestBackend).grep('needle', '/skills/', null, 1)).resolves.toEqual({
+      matches: [{ path: '/skills/z-enabled/SKILL.md', line: 1, text: 'needle' }],
+      truncated: true
+    });
+    expect(grep).toHaveBeenCalledWith('needle', '/', null);
+  });
+
+  it('preserves glob truncation metadata after filtering selected skills', async () => {
+    const paths = await createSkillsFixture(['disabled', 'enabled']);
+    vi.spyOn(FilesystemBackend.prototype, 'glob').mockResolvedValue({
+      files: [
+        { path: '/disabled/SKILL.md', is_dir: false },
+        { path: '/enabled/SKILL.md', is_dir: false }
+      ],
+      truncated: true
+    });
+    const { backend } = createTestBackend({ paths, selectedSkillIds: ['enabled'] });
+
+    await expect((backend as TestBackend).glob('**/*', '/skills/')).resolves.toEqual({
+      files: [{ path: '/skills/enabled/SKILL.md', is_dir: false }],
+      truncated: true
     });
   });
 

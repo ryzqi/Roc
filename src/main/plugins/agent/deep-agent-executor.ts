@@ -23,7 +23,7 @@ import type {
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
-import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agents-1-10-stream-adapter';
+import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agent-stream-adapter';
 import {
   consumeDeepAgentEventStream,
   createStreamConsumerState,

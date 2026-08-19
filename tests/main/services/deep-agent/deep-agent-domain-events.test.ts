@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   adaptDeepAgentRun,
   type DeepAgentDomainEvent
-} from '../../../../src/main/services/deep-agent/deep-agents-1-10-stream-adapter';
+} from '../../../../src/main/services/deep-agent/deep-agent-stream-adapter';
 
 describe('adaptDeepAgentRun domain translation', () => {
   it('translates vendor streams into domain events without exposing vendor handles', async () => {

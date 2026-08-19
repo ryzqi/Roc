@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { DeepAgentDomainEvent } from '../../../../src/main/services/deep-agent/deep-agents-1-10-stream-adapter';
+import type { DeepAgentDomainEvent } from '../../../../src/main/services/deep-agent/deep-agent-stream-adapter';
 import {
   consumeDeepAgentEventStream,
   createStreamConsumerState,

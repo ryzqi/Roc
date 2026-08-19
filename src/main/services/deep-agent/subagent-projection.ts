@@ -3,7 +3,7 @@ import { toolCallAssistantBlockSchema } from '../../../shared/schemas/task-event
 import type {
   DeepAgentDomainEvent,
   DeepAgentSubagentScope
-} from './deep-agents-1-10-stream-adapter';
+} from './deep-agent-stream-adapter';
 
 export type SubagentProjectionCallbacks = {
   emitRuntimeEvent: (event: ChatRunEvent) => void;

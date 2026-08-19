@@ -138,6 +138,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): ReturnType<typeof cr
         ]
       : [];
   const guardrails = [
+    todoListMiddleware(),
     ...hookMiddleware,
     ...planModeMiddleware,
     ...createExecutionSafetyMiddleware(input, 'main'),

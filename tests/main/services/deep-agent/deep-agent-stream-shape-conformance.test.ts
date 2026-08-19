@@ -14,7 +14,7 @@ import { z } from 'zod';
 import {
   adaptDeepAgentRun,
   type DeepAgentDomainEvent
-} from '../../../../src/main/services/deep-agent/deep-agents-1-10-stream-adapter';
+} from '../../../../src/main/services/deep-agent/deep-agent-stream-adapter';
 
 type ScriptedModelState = {
   nextResponseIndex: number;
@@ -57,7 +57,7 @@ class StreamShapeModel extends BaseChatModel {
   }
 }
 
-describe('Deep Agents 1.10.8 stream v3 conformance', () => {
+describe('Deep Agents stream v3 conformance', () => {
   it('translates the installed message, usage, tool, and output handles into domain events', async () => {
     const rawRun = await createRootShapeAgent().streamEvents(
       { messages: [new HumanMessage('Inspect the fixture.')] },
@@ -165,7 +165,7 @@ describe('Deep Agents 1.10.8 stream v3 conformance', () => {
   it('fails explicitly when required vendor stream boundaries drift', async () => {
     expect(() => adaptDeepAgentRun({}, {
       projectToolOutput: ({ output }) => output
-    })).toThrow('deep_agents_1_10_v3_run_messages_async_iterable_missing');
+    })).toThrow('deep_agents_v3_run_messages_async_iterable_missing');
 
     const invalidStatus = adaptDeepAgentRun(createRawRun({
       toolCalls: asyncValues([createRawToolCall({ status: Promise.resolve('finished-v2') })])
@@ -173,7 +173,7 @@ describe('Deep Agents 1.10.8 stream v3 conformance', () => {
       projectToolOutput: ({ output }) => output
     });
     await expect(collect(invalidStatus.events)).rejects.toThrow(
-      'deep_agents_1_10_v3_tool_call_status_invalid'
+      'deep_agents_v3_tool_call_status_invalid'
     );
 
     const invalidUsage = adaptDeepAgentRun(createRawRun({
@@ -182,7 +182,7 @@ describe('Deep Agents 1.10.8 stream v3 conformance', () => {
       projectToolOutput: ({ output }) => output
     });
     await expect(collect(invalidUsage.events)).rejects.toThrow(
-      'deep_agents_1_10_v3_usage_empty'
+      'deep_agents_v3_usage_empty'
     );
   });
 
@@ -194,7 +194,7 @@ describe('Deep Agents 1.10.8 stream v3 conformance', () => {
         output
       }), {
         projectToolOutput: ({ output: value }) => value
-      })).toThrow('deep_agents_1_10_v3_run_messages_async_iterable_missing');
+      })).toThrow('deep_agents_v3_run_messages_async_iterable_missing');
     });
   });
 
