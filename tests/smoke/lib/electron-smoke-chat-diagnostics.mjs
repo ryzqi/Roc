@@ -57,8 +57,8 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
       throw new Error('agent_capability_preview_chat_mode_surface_missing');
     }
     return {
-      selected: preview.data.selectedCapabilities,
-      skipped: preview.data.skippedCapabilities,
+      selected: preview.data.manifest.resolvedCapabilities,
+      skipped: preview.data.manifest.skippedCapabilities,
       cards: preview.data.toolCards.map((card) => card.id),
       skills: preview.data.skillCards.map((card) => card.id),
       subagents: preview.data.subagents.map((subagent) => ({
@@ -66,7 +66,7 @@ export async function runSmokeChatDiagnosticsChecks(ctx) {
         skills: subagent.skills,
         tools: subagent.tools
       })),
-      policy: preview.data.untrustedContextPolicy
+      policy: preview.data.manifest.untrustedContextPolicy
     };
   });
   const typedChatPrompt = `Smoke typed user prompt ${Date.now()}`;
