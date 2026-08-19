@@ -199,15 +199,18 @@ describe('task plugin', () => {
           skills: ['smoke-skill']
         },
         capabilityPreview: {
-          requestedCapabilities: {
-            mcpServers: ['smoke-mcp', 'missing-mcp'],
-            skills: ['smoke-skill']
+          manifest: {
+            requestedCapabilities: {
+              mcpServers: ['smoke-mcp', 'missing-mcp'],
+              skills: ['smoke-skill']
+            },
+            resolvedCapabilities: {
+              mcpServers: ['smoke-mcp'],
+              skills: ['smoke-skill']
+            },
+            skippedCapabilities: [{ id: 'missing-mcp', type: 'mcp_server', reason: 'not_found' }],
+            untrustedContextPolicy: 'external_content_reference_only'
           },
-          selectedCapabilities: {
-            mcpServers: ['smoke-mcp'],
-            skills: ['smoke-skill']
-          },
-          skippedCapabilities: [{ id: 'missing-mcp', type: 'mcp_server', reason: 'not_found' }],
           toolCards: [
             {
               id: 'mcp:smoke-mcp:smoke_tool',
@@ -218,8 +221,7 @@ describe('task plugin', () => {
               requiresApproval: false
             }
           ],
-          skillCards: [],
-          untrustedContextPolicy: 'external_content_reference_only'
+          skillCards: []
         }
       }
     });

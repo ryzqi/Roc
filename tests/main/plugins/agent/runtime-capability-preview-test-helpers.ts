@@ -40,15 +40,11 @@ export function createTestCapabilityPreview(
     runnable: false,
     modelId: 'test-model',
     builtInTools: [],
-    selectedCapabilities: compiled.manifest.resolvedCapabilities,
-    requestedCapabilities: compiled.manifest.requestedCapabilities,
-    skippedCapabilities: compiled.manifest.skippedCapabilities,
     toolCards: compiled.toolCards,
     skillCards: compiled.skillCards,
     subagents: compiled.subagents,
     interruptOn: compiled.interruptOn,
     manifest: compiled.manifest,
-    untrustedContextPolicy: compiled.manifest.untrustedContextPolicy,
     reason: 'test'
   };
 }

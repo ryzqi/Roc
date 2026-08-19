@@ -113,18 +113,20 @@ function persistRunStarted(db: Database.Database, event: RocEventEnvelope): void
     );
     insertAgentEvent(db, threadId, runId, 'message', { role: 'user', content: userInput, enabledCapabilities }, createdAt);
     if (capabilityPreview !== null) {
+      const manifest = readRecord(capabilityPreview, 'manifest');
       insertAgentEvent(
         db,
         threadId,
         runId,
         'context_manifest',
         {
-          requestedCapabilities: readUnknown(capabilityPreview, 'requestedCapabilities'),
-          resolvedCapabilities: readUnknown(capabilityPreview, 'selectedCapabilities'),
-          skippedCapabilities: readUnknown(capabilityPreview, 'skippedCapabilities'),
+          manifest,
+          requestedCapabilities: readUnknown(manifest, 'requestedCapabilities'),
+          resolvedCapabilities: readUnknown(manifest, 'resolvedCapabilities'),
+          skippedCapabilities: readUnknown(manifest, 'skippedCapabilities'),
           toolCards: readUnknown(capabilityPreview, 'toolCards'),
           skillCards: readUnknown(capabilityPreview, 'skillCards'),
-          untrustedContextPolicy: readUnknown(capabilityPreview, 'untrustedContextPolicy')
+          untrustedContextPolicy: readUnknown(manifest, 'untrustedContextPolicy')
         },
         createdAt
       );

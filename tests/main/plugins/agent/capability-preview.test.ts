@@ -40,6 +40,11 @@ describe('agent capability preview', () => {
       auditCategory: 'agent_execute'
     });
     expect(preview.subagents.map((subagent) => subagent.id)).toEqual(['general-purpose', 'research']);
+    expect(preview).not.toHaveProperty('selectedCapabilities');
+    expect(preview).not.toHaveProperty('requestedCapabilities');
+    expect(preview).not.toHaveProperty('skippedCapabilities');
+    expect(preview).not.toHaveProperty('untrustedContextPolicy');
+    expect(preview.manifest.resolvedCapabilities).toEqual({ mcpServers: [], skills: [] });
   });
 
   it('uses delete_file and MCP approval modes independently', () => {

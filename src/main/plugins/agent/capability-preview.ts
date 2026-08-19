@@ -34,15 +34,11 @@ export function buildAgentCapabilityPreview(input: {
     runnable: false,
     modelId: defaultModelState.modelId,
     builtInTools: [...DEEP_AGENT_BUILT_IN_TOOLS],
-    selectedCapabilities: compiled.manifest.resolvedCapabilities,
-    requestedCapabilities: compiled.manifest.requestedCapabilities,
-    skippedCapabilities: compiled.manifest.skippedCapabilities,
     toolCards: compiled.toolCards,
     skillCards: compiled.skillCards,
     subagents: compiled.subagents,
     interruptOn: compiled.interruptOn,
     manifest: compiled.manifest,
-    untrustedContextPolicy: compiled.manifest.untrustedContextPolicy,
     reason: '当前仅生成本轮能力清单预览，实际运行时才会装配 Deep Agents。'
   };
 }

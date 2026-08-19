@@ -1185,15 +1185,11 @@ export class AgentPluginRuntime {
       runnable: false,
       modelId: input.modelHandle.modelId,
       builtInTools: [],
-      selectedCapabilities: compiled.manifest.resolvedCapabilities,
-      requestedCapabilities: compiled.manifest.requestedCapabilities,
-      skippedCapabilities: compiled.manifest.skippedCapabilities,
       toolCards: compiled.toolCards,
       skillCards: compiled.skillCards,
       subagents: compiled.subagents,
       interruptOn: compiled.interruptOn,
       manifest: compiled.manifest,
-      untrustedContextPolicy: compiled.manifest.untrustedContextPolicy,
       reason: '当前运行未配置能力预览提供者；仅装配内置工具。'
     };
   }

@@ -501,15 +501,11 @@ function createCapabilityPreview(
     runnable: false,
     modelId: 'openai:gpt-4.1',
     builtInTools: [],
-    selectedCapabilities: compiled.manifest.resolvedCapabilities,
-    requestedCapabilities: compiled.manifest.requestedCapabilities,
-    skippedCapabilities: compiled.manifest.skippedCapabilities,
     toolCards: compiled.toolCards,
     skillCards: compiled.skillCards,
     subagents: compiled.subagents,
     interruptOn: compiled.interruptOn,
     manifest: compiled.manifest,
-    untrustedContextPolicy: 'external_content_reference_only',
     reason: 'test'
   };
 }

@@ -185,12 +185,16 @@ function readAgentCapabilityPreview(value: unknown): AgentCapabilityPreview | un
   if (value === null || typeof value !== 'object') {
     return undefined;
   }
-  const requestedCapabilities = readEnabledCapabilities(Reflect.get(value, 'requestedCapabilities'));
-  const selectedCapabilities = readEnabledCapabilities(Reflect.get(value, 'selectedCapabilities'));
-  const skippedCapabilities = Reflect.get(value, 'skippedCapabilities');
+  const manifest = Reflect.get(value, 'manifest');
+  if (manifest === null || typeof manifest !== 'object') {
+    return undefined;
+  }
+  const requestedCapabilities = readEnabledCapabilities(Reflect.get(manifest, 'requestedCapabilities'));
+  const selectedCapabilities = readEnabledCapabilities(Reflect.get(manifest, 'resolvedCapabilities'));
+  const skippedCapabilities = Reflect.get(manifest, 'skippedCapabilities');
   const toolCards = Reflect.get(value, 'toolCards');
   const skillCards = Reflect.get(value, 'skillCards');
-  const untrustedContextPolicy = Reflect.get(value, 'untrustedContextPolicy');
+  const untrustedContextPolicy = Reflect.get(manifest, 'untrustedContextPolicy');
   if (
     requestedCapabilities === null ||
     selectedCapabilities === null ||

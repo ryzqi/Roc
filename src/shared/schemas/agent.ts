@@ -145,15 +145,11 @@ export const agentCapabilityPreviewSchema = z
     runnable: z.literal(false),
     modelId: z.string(),
     builtInTools: z.array(z.string()),
-    selectedCapabilities: enabledCapabilitiesSchema,
-    requestedCapabilities: enabledCapabilitiesSchema,
-    skippedCapabilities: z.array(skippedCapabilitySchema),
     toolCards: z.array(agentCapabilityCardSchema),
     skillCards: z.array(agentCapabilityCardSchema),
     subagents: z.array(agentSubagentPreviewSchema),
     interruptOn: agentInterruptPolicySchema,
     manifest: runCapabilityManifestSchema,
-    untrustedContextPolicy: z.literal('external_content_reference_only'),
     reason: z.string()
   })
   .strict();
