@@ -60,8 +60,10 @@ describe('query plan helpers', () => {
     const listSql = taskSql.find(
       (statement) => statement.includes('FROM background_tasks') && statement.includes('ORDER BY updated_at DESC')
     );
-    expect(listSql).toBeDefined();
-    assertUsesIndex(explainQueryPlan(taskDb, listSql as string), 'idx_task_plugin_background_tasks_updated');
+    if (listSql === undefined) {
+      throw new Error('background_task_list_query_not_executed');
+    }
+    assertUsesIndex(explainQueryPlan(taskDb, listSql), 'idx_task_plugin_background_tasks_updated');
 
     taskSql = [];
     occurrences.claimDue({
@@ -75,8 +77,10 @@ describe('query plan helpers', () => {
         statement.includes("status = 'pending'") &&
         statement.includes('ORDER BY scheduled_at DESC')
     );
-    expect(claimSql).toBeDefined();
-    assertUsesIndex(explainQueryPlan(taskDb, claimSql as string), 'idx_scheduled_occurrences_task_status_scheduled');
+    if (claimSql === undefined) {
+      throw new Error('scheduled_occurrence_claim_query_not_executed');
+    }
+    assertUsesIndex(explainQueryPlan(taskDb, claimSql), 'idx_scheduled_occurrences_task_status_scheduled');
   });
 
   it('keeps scheduled run history queries on their production index', () => {
