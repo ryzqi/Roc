@@ -111,7 +111,7 @@ export function createActiveTask(partial: {
 export function createTaskDetail(task: ActiveTaskItem): TaskDetail {
   return {
     threadId: task.threadId,
-    taskId: task.taskId ?? 'task-created',
+    taskId: task.taskId,
     lastRunId: 'run-created',
     schedulerRegistered: true,
     thread: {
@@ -134,7 +134,7 @@ export function createBackgroundTaskDetail(task: ActiveTaskItem): TaskDetail {
   return {
     ...detail,
     backgroundTask: {
-      id: task.taskId ?? 'task-created',
+      id: task.taskId,
       threadId: task.threadId,
       runId: detail.lastRunId ?? 'run-created',
       goal: task.goal,

@@ -7,6 +7,7 @@ import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
 import { usePersistedThreadHistory } from '../../chat/use-persisted-thread-history';
 import type { LoadedState } from '../../loaded-state';
 import type { RocClient } from '../../shared/roc-client';
+import { getTaskActionAvailability } from './task-view-model';
 import type { TaskActions } from './use-task-actions';
 
 export type TaskDetailApprovalRequest = {
@@ -95,7 +96,9 @@ export function TaskDetailView({
 
   const loadedDetail = detail;
   const waitingUser = loadedDetail.thread.status === 'waiting_user';
-  const actionItem = loadedDetail.backgroundTask === null ? null : createTaskActionItem(loadedDetail);
+  const actionItem = loadedDetail.backgroundTask === null
+    ? null
+    : createTaskActionItem(loadedDetail);
 
   async function submitFollowup(): Promise<void> {
     const input = followupInput.trim();
@@ -289,39 +292,44 @@ function TaskActionControls({
   item: ActiveTaskItem;
   taskActions: TaskActions;
 }): React.JSX.Element {
-  const terminal = item.status === 'cancelled' || item.status === 'completed' || item.status === 'archived';
-  const paused = item.status === 'paused';
+  const availability = getTaskActionAvailability(item.status);
 
   return (
     <div className="task-detail-actions" data-testid="task-detail-actions">
       <span className="task-detail-kicker task-detail-actions-label">Task Actions</span>
-      {terminal ? null : paused ? (
+      {availability.resume ? (
         <button className="action-button task-action-button" data-testid="task-detail-action-resume" type="button" onClick={() => taskActions.resumeTask(item)}>
           <Play aria-hidden="true" size={15} />
           <span>恢复</span>
         </button>
-      ) : (
+      ) : availability.pause ? (
         <button className="action-button task-action-button" data-testid="task-detail-action-pause" type="button" onClick={() => taskActions.pauseTask(item)}>
           <Pause aria-hidden="true" size={15} />
           <span>暂停</span>
         </button>
-      )}
-      {terminal ? null : (
+      ) : null}
+      {availability.runNow || availability.cancel ? (
         <>
-          <button className="action-button task-action-button" data-testid="task-detail-action-run-now" type="button" onClick={() => taskActions.runNow(item)}>
-            <RotateCw aria-hidden="true" size={15} />
-            <span>立即运行</span>
-          </button>
-          <button className="action-button task-action-button task-action-button--warn" data-testid="task-detail-action-cancel" type="button" onClick={() => taskActions.cancelTask(item)}>
-            <XCircle aria-hidden="true" size={15} />
-            <span>取消任务</span>
-          </button>
+          {availability.runNow ? (
+            <button className="action-button task-action-button" data-testid="task-detail-action-run-now" type="button" onClick={() => taskActions.runNow(item)}>
+              <RotateCw aria-hidden="true" size={15} />
+              <span>立即运行</span>
+            </button>
+          ) : null}
+          {availability.cancel ? (
+            <button className="action-button task-action-button task-action-button--warn" data-testid="task-detail-action-cancel" type="button" onClick={() => taskActions.cancelTask(item)}>
+              <XCircle aria-hidden="true" size={15} />
+              <span>取消任务</span>
+            </button>
+          ) : null}
         </>
-      )}
-      <button className="action-button task-action-button task-action-button--danger" data-testid="task-detail-action-delete" type="button" onClick={() => taskActions.deleteTask(item)}>
-        <Trash2 aria-hidden="true" size={15} />
-        <span>删除</span>
-      </button>
+      ) : null}
+      {availability.delete ? (
+        <button className="action-button task-action-button task-action-button--danger" data-testid="task-detail-action-delete" type="button" onClick={() => taskActions.deleteTask(item)}>
+          <Trash2 aria-hidden="true" size={15} />
+          <span>删除</span>
+        </button>
+      ) : null}
     </div>
   );
 }

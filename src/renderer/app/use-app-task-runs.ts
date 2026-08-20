@@ -147,11 +147,7 @@ export function useAppTaskRuns({
       if (!existingActiveTasksResult.ok) {
         return { ok: false, error: existingActiveTasksResult.error.message };
       }
-      const existingTaskIds = new Set(
-        existingActiveTasksResult.data
-          .map((task) => task.taskId)
-          .filter((taskId): taskId is string => taskId !== null)
-      );
+      const existingTaskIds = new Set(existingActiveTasksResult.data.map((task) => task.taskId));
       const result = await startTaskRun({
         input: payload.input,
         workflowHint: payload.workflowHint,

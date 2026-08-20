@@ -182,7 +182,7 @@ describe('TasksFeature', () => {
   it('returns to the task board after deleting from standalone task detail without reloading deleted detail', async () => {
     const client = createTasksClient();
     const onBackToBoard = vi.fn();
-    const task = createBackgroundItem({ taskId: 'task-1', threadId: 'thread-1', status: 'running' });
+    const task = createBackgroundItem({ taskId: 'task-1', threadId: 'thread-1', status: 'failed' });
 
     await act(async () => {
       root.render(

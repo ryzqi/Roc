@@ -9,7 +9,7 @@ import type { RocClient } from '../../shared/roc-client';
 import { TaskBoardColumn } from './TaskBoardColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { restoreDialogFocus } from '../../dialog-focus';
-import { buildTaskBoardLanes } from './task-board-model';
+import { buildTaskBoardLanes } from './task-view-model';
 
 type TaskBoardUiState = {
   railId: 'all' | 'todo' | 'running' | 'paused' | 'done';

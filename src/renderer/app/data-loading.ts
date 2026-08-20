@@ -141,7 +141,7 @@ export async function loadTaskSurfaceData(selectedTaskId?: string | null, client
   const activeTasks = unwrap<ActiveTaskItem[]>('active tasks', activeTasksResult);
   const schedulerStatus = unwrap('scheduler status', schedulerStatusResult);
   const traySummary = unwrap<TraySummary>('tray summary', traySummaryResult);
-  const firstBackgroundTaskId = activeTasks.find((task) => task.taskId !== null)?.taskId ?? null;
+  const firstBackgroundTaskId = activeTasks[0]?.taskId ?? null;
   const selectedTaskStillActive =
     typeof selectedTaskId === 'string' && activeTasks.some((task) => task.taskId === selectedTaskId);
   const primaryTaskId =

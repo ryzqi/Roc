@@ -384,13 +384,13 @@ describe('TaskDetailView', () => {
       queryButton('task-detail-action-pause').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       queryButton('task-detail-action-run-now').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       queryButton('task-detail-action-cancel').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      queryButton('task-detail-action-delete').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(taskActions.pauseTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
     expect(taskActions.runNow).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
     expect(taskActions.cancelTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
-    expect(taskActions.deleteTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', threadId: 'thread-1' }));
+    expect(container.querySelector('[data-testid="task-detail-action-delete"]')).toBeNull();
+    expect(taskActions.deleteTask).not.toHaveBeenCalled();
   });
 
   it('renders resume action for paused tasks', async () => {

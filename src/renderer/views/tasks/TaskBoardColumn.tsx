@@ -22,18 +22,15 @@ export function TaskBoardColumn({
         {items.length === 0 ? (
           <p className="task-board-column-empty">此列暂无任务</p>
         ) : (
-          items.map((item) => {
-            const itemId = item.taskId ?? item.threadId;
-            return (
-              <TaskBoardCard
-                key={itemId}
-                item={item}
-                onOpenTask={() => {
-                  onOpenTask(itemId);
-                }}
-              />
-            );
-          })
+          items.map((item) => (
+            <TaskBoardCard
+              key={item.taskId}
+              item={item}
+              onOpenTask={() => {
+                onOpenTask(item.taskId);
+              }}
+            />
+          ))
         )}
       </div>
     </section>

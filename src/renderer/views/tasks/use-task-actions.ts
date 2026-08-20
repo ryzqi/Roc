@@ -19,31 +19,26 @@ export function createTaskActions(input: {
   onTaskDeleteStarted?: (item: ActiveTaskItem) => void;
   refreshTaskSurface: (selectedTaskId?: string | null) => Promise<void>;
 }): TaskActions {
-  function requireTaskId(item: ActiveTaskItem): string | null {
-    return item.taskId;
-  }
-
   function resolveClient(): RocClient {
     return input.client ?? createRocClient();
   }
 
+  function executeAndRefresh(
+    item: ActiveTaskItem,
+    operation: (client: RocClient, taskId: string) => Promise<unknown>
+  ): void {
+    const client = resolveClient();
+    void operation(client, item.taskId).then(async () => input.refreshTaskSurface(item.taskId));
+  }
+
   return {
     cancelTask: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        return;
-      }
-      const client = resolveClient();
-      void client.api.tasks.cancelBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      executeAndRefresh(item, async (client, taskId) => await client.api.tasks.cancelBackgroundTask(taskId));
     },
     deleteTask: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        return;
-      }
       const client = resolveClient();
       input.onTaskDeleteStarted?.(item);
-      void client.api.tasks.deleteBackgroundTask(taskId).then(async (result) => {
+      void client.api.tasks.deleteBackgroundTask(item.taskId).then(async (result) => {
         if (!result.ok) {
           return;
         }
@@ -52,32 +47,18 @@ export function createTaskActions(input: {
       });
     },
     pauseTask: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        return;
-      }
-      const client = resolveClient();
-      void client.api.tasks.pauseBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      executeAndRefresh(item, async (client, taskId) => await client.api.tasks.pauseBackgroundTask(taskId));
     },
     resumeTask: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        return;
-      }
-      const client = resolveClient();
-      void client.api.tasks.resumeBackgroundTask(taskId).then(async () => input.refreshTaskSurface(taskId));
+      executeAndRefresh(item, async (client, taskId) => await client.api.tasks.resumeBackgroundTask(taskId));
     },
     runNow: (item) => {
-      const taskId = requireTaskId(item);
-      if (taskId === null) {
-        return;
-      }
       const client = resolveClient();
-      void client.api.tasks.runBackgroundNow(taskId).then(async (result) => {
+      void client.api.tasks.runBackgroundNow(item.taskId).then(async (result) => {
         if (!result.ok) {
           return;
         }
-        await input.refreshTaskSurface(taskId);
+        await input.refreshTaskSurface(item.taskId);
       });
     }
   };

@@ -598,7 +598,7 @@ describe('AppShell', () => {
       taskId: 'task-delete',
       threadId: 'thread-delete',
       goal: '删除后返回任务工作台',
-      status: 'running'
+      status: 'failed'
     });
     vi.mocked(client.api.tasks.onUpdated).mockImplementation((listener) => {
       taskUpdateListener = listener;
