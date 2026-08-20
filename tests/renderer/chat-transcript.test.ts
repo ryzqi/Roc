@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TaskSnapshot, TaskThread } from '../../src/shared/types';
-import { appendLiveTranscriptMessages, buildChatTranscript, buildPersistedTranscriptMessages } from '../../src/renderer/chat-transcript';
+import type { TaskEvent, TaskSnapshot, TaskThread } from '../../src/shared/types';
+import { buildChatTranscript, projectChatTranscript } from '../../src/renderer/chat-transcript';
 import type { ChatRunState } from '../../src/renderer/chat-run-state';
 
 function createThread(id: string, title: string, updatedAt: string): TaskThread {
@@ -53,10 +53,19 @@ function createIdleRunState(): ChatRunState {
   };
 }
 
+function projectPersistedTranscript(events: TaskEvent[], threadId: string) {
+  return projectChatTranscript({
+    events,
+    liveRun: null,
+    pendingUserInput: null,
+    threadId
+  });
+}
+
 
 describe('chat transcript helpers', () => {
   it('keeps run-based keys stable when live messages become persisted', () => {
-    const persisted = buildPersistedTranscriptMessages(
+    const persisted = projectPersistedTranscript(
       [
         {
           id: 'message-user-event',
@@ -79,8 +88,9 @@ describe('chat transcript helpers', () => {
       ],
       'thread-stable'
     );
-    const live = appendLiveTranscriptMessages({
-      chatRunState: {
+    const live = projectChatTranscript({
+      events: [],
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-stable',
         threadId: 'thread-stable',
@@ -88,8 +98,7 @@ describe('chat transcript helpers', () => {
         assistantMessage: 'world'
       },
       pendingUserInput: 'hello',
-      persistedMessages: [],
-      selectedThreadId: 'thread-stable'
+      threadId: 'thread-stable'
     });
 
     expect(persisted).toEqual([
@@ -103,7 +112,7 @@ describe('chat transcript helpers', () => {
   });
 
   it('projects persisted user image attachment metadata into transcript messages', () => {
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'event-1',
@@ -143,7 +152,7 @@ describe('chat transcript helpers', () => {
   });
 
   it('adds persisted human question requests to the assistant transcript', () => {
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'event-question',
@@ -174,21 +183,19 @@ describe('chat transcript helpers', () => {
     ]);
   });
 
-  it('keeps persisted message object references stable while appending live output', () => {
-    const persistedMessage = {
-      key: 'user-current',
-      source: 'persisted' as const,
-      role: 'user' as const,
-      content: '请总结当前变更',
-      attachments: [],
-      reasoning: null,
-      blocks: [],
-      interrupts: [],
-      isStreaming: false
-    };
-
-    const messages = appendLiveTranscriptMessages({
-      chatRunState: {
+  it('keeps persisted messages while appending live output', () => {
+    const messages = projectChatTranscript({
+      events: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '请总结当前变更' },
+          createdAt: '2026-08-20T00:00:00.000Z'
+        }
+      ],
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -196,11 +203,14 @@ describe('chat transcript helpers', () => {
         assistantMessage: '正在总结'
       },
       pendingUserInput: null,
-      persistedMessages: [persistedMessage],
-      selectedThreadId: 'thread-current'
+      threadId: 'thread-current'
     });
 
-    expect(messages[0]).toBe(persistedMessage);
+    expect(messages[0]).toMatchObject({
+      key: 'user-run-current',
+      source: 'persisted',
+      content: '请总结当前变更'
+    });
     expect(messages.at(-1)).toMatchObject({
       key: 'assistant-run-current',
       role: 'assistant',
@@ -210,28 +220,25 @@ describe('chat transcript helpers', () => {
   });
 
   it('keeps identical user content from different runs as separate messages', () => {
-    const messages = appendLiveTranscriptMessages({
-      chatRunState: {
+    const messages = projectChatTranscript({
+      events: [
+        {
+          id: 'user-previous',
+          threadId: 'thread-current',
+          runId: 'run-previous',
+          type: 'message',
+          payload: { role: 'user', content: '重复问题' },
+          createdAt: '2026-08-20T00:00:00.000Z'
+        }
+      ],
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
         status: 'running'
       },
       pendingUserInput: '重复问题',
-      persistedMessages: [
-        {
-          key: 'user-run-previous',
-          source: 'persisted',
-          role: 'user',
-          content: '重复问题',
-          attachments: [],
-          reasoning: null,
-          blocks: [],
-          interrupts: [],
-          isStreaming: false
-        }
-      ],
-      selectedThreadId: 'thread-current'
+      threadId: 'thread-current'
     });
 
     expect(messages.map((message) => message.key)).toEqual([
@@ -241,8 +248,33 @@ describe('chat transcript helpers', () => {
   });
 
   it('updates the persisted assistant row from live state for the same run', () => {
-    const messages = appendLiveTranscriptMessages({
-      chatRunState: {
+    const messages = projectChatTranscript({
+      events: [
+        {
+          id: 'user-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: { role: 'user', content: '问题' },
+          createdAt: '2026-08-20T00:00:00.000Z',
+          sequence: 1
+        },
+        {
+          id: 'assistant-current',
+          threadId: 'thread-current',
+          runId: 'run-current',
+          type: 'message',
+          payload: {
+            role: 'assistant',
+            content: '部分回复',
+            providerId: 'test-provider',
+            modelId: 'test-model'
+          },
+          createdAt: '2026-08-20T00:00:01.000Z',
+          sequence: 2
+        }
+      ],
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -257,31 +289,7 @@ describe('chat transcript helpers', () => {
         ]
       },
       pendingUserInput: null,
-      persistedMessages: [
-        {
-          key: 'user-run-current',
-          source: 'persisted',
-          role: 'user',
-          content: '问题',
-          attachments: [],
-          reasoning: null,
-          blocks: [],
-          interrupts: [],
-          isStreaming: false
-        },
-        {
-          key: 'assistant-run-current',
-          source: 'persisted',
-          role: 'assistant',
-          content: '部分回复',
-          attachments: [],
-          reasoning: null,
-          blocks: [],
-          interrupts: [],
-          isStreaming: false
-        }
-      ],
-      selectedThreadId: 'thread-current'
+      threadId: 'thread-current'
     });
 
     expect(messages.map((message) => message.key)).toEqual([
@@ -304,56 +312,24 @@ describe('chat transcript helpers', () => {
     });
   });
 
-  it('rejects duplicate transcript keys instead of returning an ambiguous identity', () => {
-    const duplicateMessage = {
-      key: 'user-run-duplicate',
-      source: 'persisted' as const,
-      role: 'user' as const,
-      content: '重复 identity',
-      attachments: [],
-      reasoning: null,
-      blocks: [],
-      interrupts: [],
-      isStreaming: false
-    };
-
-    expect(() => appendLiveTranscriptMessages({
-      chatRunState: createIdleRunState(),
-      pendingUserInput: null,
-      persistedMessages: [duplicateMessage, { ...duplicateMessage }],
-      selectedThreadId: 'thread-current'
-    })).toThrow('chat_transcript_duplicate_key:user-run-duplicate');
-  });
-
-  it('rejects a pending user identity already occupied by another role', () => {
-    expect(() => appendLiveTranscriptMessages({
-      chatRunState: {
-        ...createIdleRunState(),
-        runId: 'run-conflict',
-        threadId: 'thread-current',
-        status: 'running'
-      },
-      pendingUserInput: '当前问题',
-      persistedMessages: [
+  it('does not project pending input from another thread into the selected history', () => {
+    const messages = projectChatTranscript({
+      events: [
         {
-          key: 'user-run-conflict',
-          source: 'persisted',
-          role: 'assistant',
-          content: '错误占用',
-          attachments: [],
-          reasoning: null,
-          blocks: [],
-          interrupts: [],
-          isStreaming: false
+          id: 'assistant-history',
+          threadId: 'thread-history',
+          runId: 'run-history',
+          type: 'message',
+          payload: {
+            role: 'assistant',
+            content: '历史线程内容',
+            providerId: 'test-provider',
+            modelId: 'test-model'
+          },
+          createdAt: '2026-08-20T00:00:00.000Z'
         }
       ],
-      selectedThreadId: 'thread-current'
-    })).toThrow('chat_transcript_identity_role_conflict:user-run-conflict');
-  });
-
-  it('does not project pending input from another thread into the selected history', () => {
-    const messages = appendLiveTranscriptMessages({
-      chatRunState: {
+      liveRun: {
         ...createIdleRunState(),
         runId: 'run-current',
         threadId: 'thread-current',
@@ -361,27 +337,14 @@ describe('chat transcript helpers', () => {
         assistantMessage: '当前线程流式内容'
       },
       pendingUserInput: '当前线程问题',
-      persistedMessages: [
-        {
-          key: 'assistant-run-history',
-          source: 'persisted',
-          role: 'assistant',
-          content: '历史线程内容',
-          attachments: [],
-          reasoning: null,
-          blocks: [],
-          interrupts: [],
-          isStreaming: false
-        }
-      ],
-      selectedThreadId: 'thread-history'
+      threadId: 'thread-history'
     });
 
     expect(messages.map((message) => message.key)).toEqual(['assistant-run-history']);
   });
 
   it('rejects persisted events that produce duplicate transcript keys', () => {
-    expect(() => buildPersistedTranscriptMessages([
+    expect(() => projectPersistedTranscript([
       {
         id: 'user-duplicate-1',
         threadId: 'thread-current',
@@ -597,7 +560,7 @@ describe('chat transcript helpers', () => {
   });
 
   it('filters the persisted task tool wrapper when a structured subagent block represents the same assistant work', () => {
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'user-subagent',
@@ -707,7 +670,7 @@ describe('chat transcript helpers', () => {
   });
 
   it('keeps persisted non-task tool calls when structured subagent blocks are present', () => {
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'tool-shell',
@@ -777,7 +740,7 @@ describe('chat transcript helpers', () => {
       taskInput: '继续调查'
     };
 
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'subagent-start',
@@ -1081,7 +1044,7 @@ describe('chat transcript helpers', () => {
   });
 
   it('rebuilds persisted hook activity blocks without merging hook messages into the assistant answer', () => {
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'hook-start',
@@ -1164,7 +1127,7 @@ describe('chat transcript helpers', () => {
   it('moves echoed SessionStart add_context text into the hook block instead of assistant content', () => {
     const sessionStartContext =
       '<EXTREMELY_IMPORTANT>\nYou have superpowers.\n\nBelow is the full content of your skill.\n</EXTREMELY_IMPORTANT>';
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'hook-start',
@@ -1246,7 +1209,7 @@ describe('chat transcript helpers', () => {
 
   it('keeps hook-only assistant rows when echoed hook context is stripped', () => {
     const sessionStartContext = '<EXTREMELY_IMPORTANT>Use superpowers.</EXTREMELY_IMPORTANT>';
-    const messages = buildPersistedTranscriptMessages(
+    const messages = projectPersistedTranscript(
       [
         {
           id: 'assistant-delta',

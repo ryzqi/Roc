@@ -525,7 +525,7 @@ function appendGuardrailBlock(draft: AssistantDraft, payload: GuardrailPayload, 
   });
 }
 
-export function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
+function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: string): ChatTranscriptMessage[] {
   const messages: ChatTranscriptMessage[] = [];
   const drafts = new Map<string, AssistantDraft>();
 
@@ -698,7 +698,7 @@ function buildLiveAssistantMessage(chatRunState: ChatRunState): ChatTranscriptMe
   };
 }
 
-export function appendLiveTranscriptMessages(input: {
+function appendLiveTranscriptMessages(input: {
   chatRunState: ChatRunState;
   pendingUserInput: string | null;
   persistedMessages: ChatTranscriptMessage[];
@@ -771,6 +771,34 @@ function assertUniqueTranscriptKeys(messages: readonly ChatTranscriptMessage[]):
   }
 }
 
+export function projectChatTranscript(input: {
+  events: TaskEvent[];
+  liveRun: ChatRunState | null;
+  pendingUserInput: string | null;
+  threadId: string | null;
+}): ChatTranscriptMessage[] {
+  const activeThreadId = input.threadId ?? input.liveRun?.threadId ?? null;
+  if (activeThreadId === null) {
+    const messages = input.pendingUserInput === null
+      ? []
+      : [createPendingUserMessage(input.pendingUserInput, input.liveRun?.runId ?? null)];
+    assertUniqueTranscriptKeys(messages);
+    return messages;
+  }
+
+  const persistedMessages = buildPersistedTranscriptMessages(input.events, activeThreadId);
+  if (input.liveRun === null) {
+    return persistedMessages;
+  }
+
+  return appendLiveTranscriptMessages({
+    chatRunState: input.liveRun,
+    pendingUserInput: input.pendingUserInput,
+    persistedMessages,
+    selectedThreadId: input.threadId
+  });
+}
+
 export function buildChatTranscript(input: {
   promotedThreadIds: Set<string>;
   chatRunState: ChatRunState;
@@ -785,15 +813,19 @@ export function buildChatTranscript(input: {
   }
 
   const persistedMessageEvents = input.persistedMessages ?? input.taskSnapshot.recentEvents;
-  const messages = buildPersistedTranscriptMessages(persistedMessageEvents, activeThreadId);
   if (input.promotedThreadIds.has(activeThreadId) && input.chatRunState.threadId !== activeThreadId) {
-    return messages;
+    return projectChatTranscript({
+      events: persistedMessageEvents,
+      liveRun: null,
+      pendingUserInput: null,
+      threadId: activeThreadId
+    });
   }
 
-  return appendLiveTranscriptMessages({
-    chatRunState: input.chatRunState,
+  return projectChatTranscript({
+    events: persistedMessageEvents,
+    liveRun: input.chatRunState,
     pendingUserInput: input.pendingUserInput,
-    persistedMessages: messages,
-    selectedThreadId: input.selectedThreadId
+    threadId: input.selectedThreadId
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendLiveTranscriptMessages } from '../../src/renderer/chat-transcript';
+import { projectChatTranscript } from '../../src/renderer/chat-transcript';
 import { applyChatRunEvent, createEmptyChatRunState } from '../../src/renderer/chat-run-state';
 import type { ChatRunEvent } from '../../src/shared/types';
 
@@ -72,11 +72,11 @@ describe('renderer chat hook events', () => {
     const afterAssistant = applyChatRunEvent(afterHookStarted, assistantBlock);
     const afterHookCompleted = applyChatRunEvent(afterAssistant, hookCompleted);
     const completed = applyChatRunEvent(afterHookCompleted, runCompleted);
-    const transcript = appendLiveTranscriptMessages({
-      chatRunState: afterHookCompleted,
+    const transcript = projectChatTranscript({
+      events: [],
+      liveRun: afterHookCompleted,
       pendingUserInput: null,
-      persistedMessages: [],
-      selectedThreadId: 'thread-1'
+      threadId: 'thread-1'
     });
 
     expect(afterHookStarted).not.toEqual(running);

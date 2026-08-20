@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import type { LoadedState } from '../loaded-state';
-import { appendLiveTranscriptMessages, buildPersistedTranscriptMessages } from '../chat-transcript';
+import { projectChatTranscript } from '../chat-transcript';
 import { useChatRun } from './use-chat-run';
 import { ChatTranscriptPanel } from './chat-transcript-panel';
 import { ChatComposer } from './chat-composer';
@@ -108,28 +108,17 @@ export function ChatView({
     latestPersistedThreadEventId
   });
 
-  const persistedTranscript = useMemo(
-    () =>
-      activeThreadId === null
-        ? []
-        : buildPersistedTranscriptMessages(history.events, activeThreadId),
-    [
-      activeThreadId,
-      history.events,
-    ]
-  );
-
   const chatTranscript = useMemo(
     () =>
-      appendLiveTranscriptMessages({
-        chatRunState: {
+      projectChatTranscript({
+        events: history.events,
+        liveRun: {
           ...chatRun.state,
           assistantMessage: deferredAssistantMessage,
           activityBlocks: deferredActivityBlocks
         },
         pendingUserInput,
-        persistedMessages: persistedTranscript,
-        selectedThreadId
+        threadId: selectedThreadId
       }),
     [
       chatRun.state.runId,
@@ -150,8 +139,8 @@ export function ChatView({
       chatRun.state.subagents,
       deferredAssistantMessage,
       deferredActivityBlocks,
+      history.events,
       pendingUserInput,
-      persistedTranscript,
       selectedThreadId
     ]
   );

@@ -2,7 +2,7 @@ import { ArrowLeft, Pause, Play, RotateCw, Trash2, XCircle } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react';
 import type { ActiveTaskItem, BackgroundTask, ChatResumeDecision } from '../../../shared/types';
 import type { ChatRunState } from '../../chat-run-state';
-import { appendLiveTranscriptMessages, buildPersistedTranscriptMessages } from '../../chat-transcript';
+import { projectChatTranscript } from '../../chat-transcript';
 import { ChatTranscriptPanel } from '../../chat/chat-transcript-panel';
 import { usePersistedThreadHistory } from '../../chat/use-persisted-thread-history';
 import type { LoadedState } from '../../loaded-state';
@@ -64,15 +64,11 @@ export function TaskDetailView({
     if (detail === null) {
       return [];
     }
-    const persistedMessages = buildPersistedTranscriptMessages(history.events, detail.threadId);
-    if (liveTaskRun === null) {
-      return persistedMessages;
-    }
-    return appendLiveTranscriptMessages({
-      chatRunState: liveTaskRun,
+    return projectChatTranscript({
+      events: history.events,
+      liveRun: liveTaskRun,
       pendingUserInput: null,
-      persistedMessages,
-      selectedThreadId: detail.threadId
+      threadId: detail.threadId
     });
   }, [detail, history.events, liveTaskRun]);
 
