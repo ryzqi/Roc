@@ -2,12 +2,8 @@ import type { PerformanceSample } from '../../../shared/types';
 import { Metric } from '../../components/Metric';
 
 export function PerformancePanel({ performanceSample }: { performanceSample: PerformanceSample }): React.JSX.Element {
-  const firstTokenSample = [...performanceSample.timing.samples]
-    .reverse()
-    .find((sample) => sample.phase === 'provider_first_token');
-  const completedSample = [...performanceSample.timing.samples]
-    .reverse()
-    .find((sample) => sample.phase === 'provider_completed');
+  const firstTokenSample = findLatestSample(performanceSample.timing.samples, 'provider_first_token');
+  const completedSample = findLatestSample(performanceSample.timing.samples, 'provider_completed');
   const privateNote =
     performanceSample.memoryMeasurement === 'complete'
       ? performanceSample.exceedsBudget
@@ -36,4 +32,17 @@ export function PerformancePanel({ performanceSample }: { performanceSample: Per
       </div>
     </section>
   );
+}
+
+function findLatestSample(
+  samples: readonly PerformanceSample['timing']['samples'][number][],
+  phase: PerformanceSample['timing']['samples'][number]['phase']
+): PerformanceSample['timing']['samples'][number] | undefined {
+  for (let index = samples.length - 1; index >= 0; index -= 1) {
+    const sample = samples[index];
+    if (sample?.phase === phase) {
+      return sample;
+    }
+  }
+  return undefined;
 }

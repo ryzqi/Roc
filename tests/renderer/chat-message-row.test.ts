@@ -22,6 +22,13 @@ describe('chat message row', () => {
     expect(html).toContain('data-testid="streaming-markdown"');
   });
 
+  it('does not add a second per-token CSS animation on top of Streamdown', () => {
+    const css = readFileSync('src/renderer/styles/animations.css', 'utf8');
+
+    expect(css).not.toContain('chat-token-fade');
+    expect(css).not.toContain('.chat-bubble--assistant.is-streaming > *:last-child');
+  });
+
   it('renders completed reasoning as a collapsed details block without timeline or Markdown conversion', () => {
     const html = renderToStaticMarkup(
       React.createElement(ChatMessageRow, {

@@ -10,17 +10,6 @@
   }
 }
 
-@keyframes chat-token-fade {
-  from {
-    opacity: 0;
-    transform: translateY(1px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes fade-up-in {
   from {
     opacity: 0;
@@ -64,11 +53,6 @@
   background: var(--ink);
   border-radius: 1px;
   animation: chat-cursor-blink 1.2s ease-in-out infinite;
-}
-
-/* 流式期间末段平滑淡入 */
-.chat-bubble--assistant.is-streaming > *:last-child {
-  animation: chat-token-fade var(--duration-base) var(--ease-soft) both;
 }
 
 /* 系统级减弱动效兼容 */

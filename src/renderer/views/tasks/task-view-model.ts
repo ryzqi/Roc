@@ -15,9 +15,13 @@ const activeStatuses: ReadonlySet<TaskStatus> = new Set([
 ]);
 
 export function countTaskNavMeta(items: ActiveTaskItem[]): TaskNavMetaCounts {
-  return {
-    activeCount: items.filter((item) => activeStatuses.has(item.status)).length,
-    pendingApprovalCount: items.filter((item) => item.status === 'pending_confirmation').length,
-    scheduledCount: items.filter((item) => item.nextRunAt !== null && item.lastRunAt === null).length
-  };
+  let activeCount = 0;
+  let pendingApprovalCount = 0;
+  let scheduledCount = 0;
+  for (const item of items) {
+    if (activeStatuses.has(item.status)) activeCount += 1;
+    if (item.status === 'pending_confirmation') pendingApprovalCount += 1;
+    if (item.nextRunAt !== null && item.lastRunAt === null) scheduledCount += 1;
+  }
+  return { activeCount, pendingApprovalCount, scheduledCount };
 }

@@ -111,21 +111,25 @@ export function buildSkillManagementViewModel(
   _selectedSkillId: string | null
 ): SkillManagementViewModel {
   const rows = skills.map(mapSkillRow);
-  const visibleSkills = rows.filter((row) => filterSkill(row, filter));
-  const summary: SkillSummary = {
-    total: skills.length,
-    enabled: skills.filter((skill) => skill.enabled).length,
-    ready: skills.filter((skill) => skill.enabled && skill.status === 'ready').length,
-    invalid: skills.filter((skill) => skill.status === 'invalid').length
-  };
+  let enabled = 0;
+  let ready = 0;
+  let invalid = 0;
+  const visibleSkills: SkillViewRow[] = [];
+  for (const row of rows) {
+    if (row.enabled) enabled += 1;
+    if (row.enabled && row.status === 'ready') ready += 1;
+    if (row.status === 'invalid') invalid += 1;
+    if (filterSkill(row, filter)) visibleSkills.push(row);
+  }
+  const summary: SkillSummary = { total: rows.length, enabled, ready, invalid };
 
   return {
     filter,
     filters: [
-      { id: 'all', label: '全部', count: skills.length },
-      { id: 'enabled', label: '已启用', count: skills.filter((skill) => skill.enabled).length },
-      { id: 'disabled', label: '已禁用', count: skills.filter((skill) => !skill.enabled).length },
-      { id: 'invalid', label: '失效', count: skills.filter((skill) => skill.status === 'invalid').length }
+      { id: 'all', label: '全部', count: rows.length },
+      { id: 'enabled', label: '已启用', count: enabled },
+      { id: 'disabled', label: '已禁用', count: rows.length - enabled },
+      { id: 'invalid', label: '失效', count: invalid }
     ],
     summary,
     visibleSkills,

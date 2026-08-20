@@ -39,6 +39,8 @@
   display: grid;
   gap: 10px;
   min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 240px;
 }
 
 .task-board-column-empty {

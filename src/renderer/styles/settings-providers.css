@@ -269,7 +269,7 @@
   height: 16px;
   border-radius: 50%;
   background: #fff;
-  transition: left var(--transition-fast);
+  transition: transform var(--transition-fast);
 }
 
 .provider-detail-toggle input:checked + .provider-detail-toggle-track {
@@ -277,7 +277,7 @@
 }
 
 .provider-detail-toggle input:checked + .provider-detail-toggle-track .provider-detail-toggle-thumb {
-  left: 18px;
+  transform: translateX(16px);
 }
 
 .provider-type-section {
